@@ -1,6 +1,6 @@
 import { PluginBuilder } from '../../sdk/plugin-builder'
 import { Plugin } from '@sonicjs-cms/core'
-// import { createSeedDataAdminRoutes } from './admin-routes'
+import { createSeedDataAdminRoutes } from './admin-routes'
 import { SeedDataService } from './services/seed-data-service'
 
 export function createSeedDataPlugin(): Plugin {
@@ -15,6 +15,12 @@ export function createSeedDataPlugin(): Plugin {
     license: 'MIT',
     compatibility: '^1.0.0',
     dependencies: []
+  })
+
+  // Add admin routes
+  builder.addRoute('/admin/seed-data', createSeedDataAdminRoutes() as any, {
+    description: 'Seed data tool routes',
+    requiresAuth: true
   })
 
   // Add admin page

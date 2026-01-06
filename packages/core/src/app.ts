@@ -37,6 +37,7 @@ import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
 import { faviconSvg } from './assets/favicon'
+import { seedDataPlugin } from './plugins/core-plugins/seed-data-plugin'
 
 // ============================================================================
 // Type Definitions
@@ -246,6 +247,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       }
     })
   })
+
+  // Plugin routes - Seed Data (generate test data for development)
+  if (seedDataPlugin.routes && seedDataPlugin.routes.length > 0) {
+    for (const route of seedDataPlugin.routes) {
+      app.route(route.path, route.handler)
+    }
+  }
 
   // Serve files from R2 storage (public file access)
   app.get('/files/*', async (c) => {

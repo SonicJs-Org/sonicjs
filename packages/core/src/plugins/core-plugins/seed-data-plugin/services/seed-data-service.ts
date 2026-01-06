@@ -97,14 +97,14 @@ export class SeedDataService {
     return new Date(randomTime)
   }
 
-  // Create 20 example users
-  async createUsers(): Promise<number> {
+  // Create example users
+  async createUsers(userCount: number = 20): Promise<number> {
     const roles = ['admin', 'editor', 'author', 'viewer']
     // const hashedPassword = await bcrypt.hash('password123', 10)
     const hashedPassword = 'password123' // TODO: Use actual bcrypt hash
 
     let count = 0
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < userCount; i++) {
       const firstName = this.firstNames[Math.floor(Math.random() * this.firstNames.length)] || 'John'
       const lastName = this.lastNames[Math.floor(Math.random() * this.lastNames.length)] || 'Doe'
       const username = `${firstName.toLowerCase()}${lastName.toLowerCase()}${i}`
@@ -137,8 +137,8 @@ export class SeedDataService {
     return count
   }
 
-  // Create 200 content items across different types
-  async createContent(): Promise<number> {
+  // Create content items across different types
+  async createContent(contentCount: number = 200): Promise<number> {
     // Get all users and collections
     const usersStmt = this.db.prepare('SELECT * FROM users')
     const { results: allUsers } = await usersStmt.all()
@@ -156,9 +156,9 @@ export class SeedDataService {
 
     const statuses = ['draft', 'published', 'archived']
 
-    // Create 200 content items
+    // Create content items
     let count = 0
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < contentCount; i++) {
       const collection: any = allCollections[Math.floor(Math.random() * allCollections.length)]
       const author: any = allUsers[Math.floor(Math.random() * allUsers.length)]
       const status = statuses[Math.floor(Math.random() * statuses.length)]
@@ -243,13 +243,13 @@ export class SeedDataService {
   }
 
   // Seed all data
-  async seedAll(): Promise<{ users: number; content: number }> {
-    const userCount = await this.createUsers()
-    const contentCount = await this.createContent()
+  async seedAll(userCount: number = 20, contentCount: number = 200): Promise<{ users: number; content: number }> {
+    const actualUserCount = await this.createUsers(userCount)
+    const actualContentCount = await this.createContent(contentCount)
 
     return {
-      users: userCount,
-      content: contentCount
+      users: actualUserCount,
+      content: actualContentCount
     }
   }
 

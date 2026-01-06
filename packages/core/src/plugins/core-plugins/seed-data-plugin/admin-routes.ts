@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { D1Database } from '@cloudflare/workers-types'
 import { SeedDataService } from './services/seed-data-service'
 
 type Bindings = {
@@ -10,6 +11,16 @@ export function createSeedDataAdminRoutes() {
 
   // Get seed data status/info
   routes.get('/', async (c) => {
+    const db = c.env.DB
+    const settingsResult = await db
+      .prepare('SELECT settings FROM plugins WHERE id = ?')
+      .bind('seed-data')
+      .first<{ settings: string }>()
+    
+    const settings = settingsResult?.settings ? JSON.parse(settingsResult.settings) : {}
+    const userCount = settings.userCount || 20
+    const contentCount = settings.contentCount || 200
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -133,7 +144,7 @@ export function createSeedDataAdminRoutes() {
             <a href="/admin/plugins/seed-data" class="back-link">← Back to Plugin Settings</a>
             <h1>🌱 Seed Data Generator</h1>
             <p class="description">
-              Generate realistic example data for testing and development. This will create 20 users and 200 content items with realistic data.
+              Generate realistic example data for testing and development. This will create ${userCount} users and ${contentCount} content items with realistic data.
             </p>
 
             <div class="warning">
@@ -146,12 +157,15 @@ export function createSeedDataAdminRoutes() {
             <div class="card">
               <h2>What will be created?</h2>
               <ul>
-                <li><strong>20 Users:</strong> With realistic names, emails, and various roles (admin, editor, author, viewer)</li>
-                <li><strong>200 Content Items:</strong> Including blog posts, pages, and products with realistic titles and data</li>
+                <li><strong>${userCount} Users:</strong> With realistic names, emails, and various roles (admin, editor, author, viewer)</li>
+                <li><strong>${contentCount} Content Items:</strong> Including blog posts, pages, and products with realistic titles and data</li>
                 <li><strong>All passwords:</strong> Set to "password123" for testing</li>
                 <li><strong>Random dates:</strong> Created within the last year</li>
                 <li><strong>Various statuses:</strong> Draft, published, and archived content</li>
               </ul>
+              <p style="margin-top: 1rem; color: #666; font-size: 0.9rem;">
+                💡 To change these numbers, go to <a href="/admin/plugins/seed-data" style="color: #3b82f6; text-decoration: none;">Plugin Settings</a>
+              </p>
             </div>
 
             <div class="card">
@@ -260,9 +274,18 @@ export function createSeedDataAdminRoutes() {
   routes.post('/generate', async (c) => {
     try {
       const db = c.env.DB
-      const seedService = new SeedDataService(db)
+      
+      const settingsResult = await db
+        .prepare('SELECT settings FROM plugins WHERE id = ?')
+        .bind('seed-data')
+        .first<{ settings: string }>()
+      
+      const settings = settingsResult?.settings ? JSON.parse(settingsResult.settings) : {}
+      const userCount = settings.userCount || 20
+      const contentCount = settings.contentCount || 200
 
-      const result = await seedService.seedAll()
+      const seedService = new SeedDataService(db)
+      const result = await seedService.seedAll(userCount, contentCount)
 
       return c.json({
         success: true,

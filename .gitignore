@@ -62,6 +62,12 @@ Thumbs.db
 *.temp
 .release-content.json
 
+# Temporary AI-generated docs (per-session, not permanent documentation)
+docs/PR_*.md
+docs/READY_*.md
+docs/SIMILARITY_*.md
+docs/PROJECT_STATE_*.md
+
 # Vitest
 coverage/
 

@@ -64,11 +64,6 @@ ENVIRONMENT = "preview"
 [observability]
 enabled = true
 
-# R2 bucket for media storage (auto-created by CI)
-[[r2_buckets]]
-binding = "MEDIA_BUCKET"
-bucket_name = "sonicjs-preview-media"
-
 # Optional bindings (commented out for preview - add when needed)
 # [[kv_namespaces]]
 # binding = "CACHE_KV"

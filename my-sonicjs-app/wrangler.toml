@@ -4,7 +4,8 @@ compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat"]
 
 # Cloudflare account
-account_id = "f9d6328dc3115e621758a741dda3d5c4"
+# Note: account_id is set via CLOUDFLARE_ACCOUNT_ID environment variable in CI
+# For local dev, set your account_id here or use wrangler login
 
 # Cloudflare Workers settings
 workers_dev = true

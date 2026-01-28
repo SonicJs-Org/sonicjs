@@ -222,10 +222,11 @@ test.describe('Slug Generation', () => {
     
     // Navigate to content list and find the item
     await page.goto('/admin/content?collection=pages-collection')
-    await page.waitForTimeout(1000)
+    await page.waitForLoadState('networkidle', { timeout: 15000 })
     
-    // Click on the content to edit it
+    // Wait for the content to appear in the list (CI can be slow)
     const contentLink = page.locator(`a:has-text("Edit Mode Test Page")`).first()
+    await contentLink.waitFor({ state: 'visible', timeout: 10000 })
     await contentLink.click()
     await page.waitForTimeout(1000)
     
@@ -258,9 +259,11 @@ test.describe('Slug Generation', () => {
     
     // Navigate to edit
     await page.goto('/admin/content?collection=pages-collection')
-    await page.waitForTimeout(1000)
+    await page.waitForLoadState('networkidle', { timeout: 15000 })
     
+    // Wait for the content to appear in the list (CI can be slow)
     const contentLink = page.locator(`a:has-text("Regen Test Page")`).first()
+    await contentLink.waitFor({ state: 'visible', timeout: 10000 })
     await contentLink.click()
     await page.waitForTimeout(1000)
     

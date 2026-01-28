@@ -18,22 +18,24 @@ database_name = "temp-will-be-replaced-by-ci"
 database_id = "temp-will-be-replaced-by-ci"
 migrations_dir = "./migrations"
 
-# R2 Bucket for media storage (using CI bucket)
-[[r2_buckets]]
-binding = "MEDIA_BUCKET"
-bucket_name = "sonicjs-ci-media"
+# R2 Bucket for media storage
+# Note: Commented out for CI - will be created on-demand or skipped
+# [[r2_buckets]]
+# binding = "MEDIA_BUCKET"
+# bucket_name = "sonicjs-pr-media"
 
-# KV Cache (using CI namespace)
-[[kv_namespaces]]
-binding = "CACHE_KV"
-id = "a16f8246fc294d809c90b0fb2df6d363"
+# KV Cache
+# Note: Commented out for CI - will be created on-demand or skipped
+# [[kv_namespaces]]
+# binding = "CACHE_KV"
+# id = "temp-will-be-replaced-by-ci"
 
 # Workers AI for embeddings (AI Search Plugin)
 [ai]
 binding = "AI"
 
 # Vectorize for vector search (AI Search Plugin)
-# Note: Vectorize doesn't support local dev, must run remote
+# Note: Will be created automatically in CI if not exists
 [[vectorize]]
 binding = "VECTORIZE_INDEX"
 index_name = "sonicjs-ai-search"

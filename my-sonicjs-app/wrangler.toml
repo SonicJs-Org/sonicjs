@@ -39,6 +39,7 @@ database_id = "temp-will-be-replaced-by-ci"
 migrations_dir = "./migrations"
 
 # Workers AI for embeddings (AI Search Plugin)
+# Note: AI binding is defined once at top-level and automatically available to all environments
 [ai]
 binding = "AI"
 
@@ -86,9 +87,6 @@ database_name = "sonicjs-local"
 database_id = ""  # Empty = auto-provisioning by wrangler
 migrations_dir = "./migrations"
 
-[ai]
-binding = "AI"
-
 [[env.local.vectorize]]
 binding = "VECTORIZE_INDEX"
 index_name = "sonicjs-ai-search-local"
@@ -111,9 +109,6 @@ enabled = true
 # database_name = "sonicjs-staging"
 # database_id = "staging-database-id"  # Update with actual ID
 # migrations_dir = "./migrations"
-# 
-# [ai]
-# binding = "AI"
 # 
 # [[env.staging.vectorize]]
 # binding = "VECTORIZE_INDEX"
@@ -146,9 +141,6 @@ enabled = true
 # database_name = "sonicjs-production"
 # database_id = "production-database-id"  # Update with actual ID
 # migrations_dir = "./migrations"
-# 
-# [ai]
-# binding = "AI"
 # 
 # [[env.production.vectorize]]
 # binding = "VECTORIZE_INDEX"

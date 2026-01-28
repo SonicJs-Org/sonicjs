@@ -154,6 +154,30 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Create R2 bucket if needed
+        if: github.actor != 'dependabot[bot]'
+        run: |
+          cd my-sonicjs-app
+          BUCKET_NAME="sonicjs-preview-media"
+          
+          echo "Checking if R2 bucket exists: $BUCKET_NAME"
+          
+          # Check if bucket exists
+          set +e
+          EXISTING_BUCKET=$(npx wrangler r2 bucket list 2>&1 | grep -w "$BUCKET_NAME" || echo "")
+          set -e
+          
+          if [ -n "$EXISTING_BUCKET" ]; then
+            echo "✓ R2 bucket $BUCKET_NAME already exists"
+          else
+            echo "Creating R2 bucket: $BUCKET_NAME"
+            npx wrangler r2 bucket create "$BUCKET_NAME"
+            echo "✓ R2 bucket created"
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy to Cloudflare Workers Preview
         if: github.actor != 'dependabot[bot]'
         id: deploy

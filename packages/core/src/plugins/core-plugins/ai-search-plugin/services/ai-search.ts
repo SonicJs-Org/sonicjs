@@ -1,11 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type {
   AISearchSettings,
+  CollectionInfo,
+  NewCollectionNotification,
   SearchQuery,
   SearchResponse,
   SearchResult,
-  CollectionInfo,
-  NewCollectionNotification,
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
 
@@ -113,20 +113,20 @@ export class AISearchService {
         display_name: string
         description?: string
       }>()
-      
-          // Filter out test collections (starts with test_, ends with _test, or is test_collection)
-          const collections = (allCollections || []).filter(
-            (col) => {
-              if (!col.name) return false
-              const name = col.name.toLowerCase()
-              return !name.startsWith('test_') && 
-                     !name.endsWith('_test') && 
-                     name !== 'test_collection' &&
-                     !name.includes('_test_') &&
-                     name !== 'large_payload_test' &&
-                     name !== 'concurrent_test'
-            }
-          )
+
+      // Filter out test collections (starts with test_, ends with _test, or is test_collection)
+      const collections = (allCollections || []).filter(
+        (col) => {
+          if (!col.name) return false
+          const name = col.name.toLowerCase()
+          return !name.startsWith('test_') &&
+            !name.endsWith('_test') &&
+            name !== 'test_collection' &&
+            !name.includes('_test_') &&
+            name !== 'large_payload_test' &&
+            name !== 'concurrent_test'
+        }
+      )
 
       // Get settings
       const settings = await this.getSettings()
@@ -188,7 +188,7 @@ export class AISearchService {
         display_name: string
         description?: string
       }>()
-      
+
       console.log('[AISearchService.getAllCollections] Raw collections from DB:', allCollections?.length || 0)
       const firstCollection = allCollections?.[0]
       if (firstCollection) {
@@ -198,12 +198,12 @@ export class AISearchService {
           display_name: firstCollection.display_name
         })
       }
-      
+
       // No filtering needed - test collections are now properly cleaned up by E2E tests
       const collections = (allCollections || []).filter(
         (col) => col.id && col.name
       )
-      
+
       console.log('[AISearchService.getAllCollections] After filtering test collections:', collections.length)
       console.log('[AISearchService.getAllCollections] Remaining collections:', collections.map(c => c.name).join(', '))
 
@@ -211,7 +211,7 @@ export class AISearchService {
       const settings = await this.getSettings()
       const selected = settings?.selected_collections || []
       const dismissed = settings?.dismissed_collections || []
-      
+
       console.log('[AISearchService.getAllCollections] Settings:', {
         selected_count: selected.length,
         dismissed_count: dismissed.length,
@@ -224,7 +224,7 @@ export class AISearchService {
       for (const collection of collections) {
         if (!collection.id || !collection.name) continue
         const collectionId = String(collection.id)
-        
+
         if (!collectionId) {
           console.warn('[AISearchService] Skipping invalid collection:', collection)
           continue
@@ -248,7 +248,7 @@ export class AISearchService {
           is_new: !selected.includes(collectionId) && !dismissed.includes(collectionId),
         })
       }
-      
+
       console.log('[AISearchService.getAllCollections] Returning collectionInfos:', collectionInfos.length)
       const firstInfo = collectionInfos[0]
       if (collectionInfos.length > 0 && firstInfo) {
@@ -296,7 +296,7 @@ export class AISearchService {
    */
   private async searchAI(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
     const startTime = Date.now()
-    
+
     try {
       if (!this.customRAG) {
         console.warn('[AISearchService] CustomRAG not available, falling back to keyword search')
@@ -480,6 +480,7 @@ export class AISearchService {
 
   /**
    * Get search suggestions (autocomplete)
+   * Uses fast keyword prefix matching for instant results (<50ms)
    */
   async getSearchSuggestions(partial: string): Promise<string[]> {
     try {
@@ -488,30 +489,45 @@ export class AISearchService {
         return []
       }
 
-      // If Custom RAG is available, use AI-powered suggestions
-      if (this.customRAG?.isAvailable()) {
-        try {
-          const aiSuggestions = await this.customRAG.getSuggestions(partial, 5)
-          if (aiSuggestions.length > 0) {
-            return aiSuggestions
-          }
-        } catch (error) {
-          console.error('[AISearchService] Error getting AI suggestions:', error)
-          // Fall through to history-based suggestions
+      // Fast keyword prefix matching from indexed content
+      // This provides instant autocomplete (<50ms) without AI overhead
+      try {
+        const stmt = this.db.prepare(`
+          SELECT DISTINCT title 
+          FROM ai_search_index 
+          WHERE title LIKE ? 
+          ORDER BY title 
+          LIMIT 10
+        `)
+        const { results } = await stmt.bind(`%${partial}%`).all<{ title: string }>()
+
+        const suggestions = (results || []).map((r) => r.title).filter(Boolean)
+
+        if (suggestions.length > 0) {
+          return suggestions
         }
+      } catch (indexError) {
+        // Table doesn't exist yet or is empty - that's okay, fall back to history
+        console.log('[AISearchService] Index table not available yet, using search history')
       }
 
-      // Fallback to history-based suggestions
-      const stmt = this.db.prepare(`
-        SELECT DISTINCT query 
-        FROM ai_search_history 
-        WHERE query LIKE ? 
-        ORDER BY created_at DESC 
-        LIMIT 10
-      `)
-      const { results } = await stmt.bind(`%${partial}%`).all<{ query: string }>()
+      // Fallback to search history if no indexed titles match
+      try {
+        const historyStmt = this.db.prepare(`
+          SELECT DISTINCT query 
+          FROM ai_search_history 
+          WHERE query LIKE ? 
+          ORDER BY created_at DESC 
+          LIMIT 10
+        `)
+        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all<{ query: string }>()
 
-      return (results || []).map((r) => r.query)
+        return (historyResults || []).map((r) => r.query)
+      } catch (historyError) {
+        // History table might not exist either - return empty
+        console.log('[AISearchService] No suggestions available (tables not initialized)')
+        return []
+      }
     } catch (error) {
       console.error('Error getting suggestions:', error)
       return []

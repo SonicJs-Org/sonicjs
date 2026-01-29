@@ -74,8 +74,8 @@ coverage/
 /blob-report/
 /playwright/.cache/
 
-# Claude AI memory (shared across developers)
-!docs/ai/claude-memory.json
+# Docs (fork-only, do not push upstream)
+docs/
 
 # Test installation (for development testing)
 test-install/my-sonicjs-app/node_modules/

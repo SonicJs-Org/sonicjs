@@ -6,4 +6,5 @@
  */
 
 export { default as contactFormPlugin } from './contact-form/index'
+export { default as redirectManagementPlugin } from './redirect-management/index'
 

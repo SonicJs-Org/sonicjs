@@ -15,6 +15,9 @@ import contactMessagesCollection from './collections/contact-messages.collection
 
 // Import plugins (manual mounting until auto-loading is implemented)
 import contactFormPlugin from './plugins/contact-form/index'
+import redirectManagementPlugin from './plugins/redirect-management/index'
+import { createRedirectMiddleware } from './plugins/redirect-management/middleware/redirect'
+import { createRedirectAdminRoutes } from './plugins/redirect-management/routes/admin'
 
 // Register all custom collections
 registerCollections([
@@ -32,7 +35,7 @@ const config: SonicJSConfig = {
     directory: './src/plugins',
     autoLoad: false,  // Set to true to auto-load custom plugins
     disableAll: false,  // Enable plugins
-    enabled: ['email', 'contact-form']  // Enable specific plugins
+    enabled: ['email', 'contact-form', 'redirect-management']  // Enable specific plugins
   }
 }
 
@@ -43,12 +46,19 @@ const coreApp = createSonicJSApp(config)
 // (Plugin auto-mounting not yet implemented in core)
 const app = new Hono()
 
+// Mount redirect middleware early (intercepts before routing)
+app.use('*', createRedirectMiddleware())
+
 // Mount plugin routes
 if (contactFormPlugin.routes) {
   for (const route of contactFormPlugin.routes) {
     app.route(route.path, route.handler)
   }
 }
+
+// Mount redirect management admin routes
+const redirectAdminRoutes = createRedirectAdminRoutes()
+app.route('/admin/redirects', redirectAdminRoutes)
 
 // Mount core app last (catch-all)
 app.route('/', coreApp)

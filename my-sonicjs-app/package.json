@@ -23,7 +23,8 @@
     "setup:db": "bash scripts/setup-worktree-db.sh"
   },
   "dependencies": {
-    "@sonicjs-cms/core": "file:../packages/core"
+    "@sonicjs-cms/core": "file:../packages/core",
+    "tiny-lru": "^11.4.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250620.0",

@@ -1,0 +1,31 @@
+{
+  "id": "redirect-management",
+  "name": "Redirect Management",
+  "version": "1.0.0",
+  "description": "URL redirect management with exact, partial, and regex matching",
+  "author": "SonicJS Community",
+  "homepage": "https://sonicjs.com/plugins/redirect-management",
+  "license": "MIT",
+  "category": "utilities",
+  "tags": ["redirects", "seo", "urls", "utilities"],
+  "dependencies": [],
+  "settings": {
+    "enabled": {
+      "type": "boolean",
+      "label": "Enable Redirects",
+      "description": "Enable or disable redirect processing",
+      "default": true
+    }
+  },
+  "permissions": {
+    "redirect.manage": "Manage redirects and settings",
+    "redirect.view": "View redirects"
+  },
+  "routes": [],
+  "adminMenu": {
+    "label": "Redirects",
+    "icon": "arrow-right",
+    "path": "/admin/redirect-management/settings",
+    "order": 85
+  }
+}

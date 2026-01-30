@@ -271,16 +271,24 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
     <script>
       // Handle HTMX form submission
       document.body.addEventListener('htmx:afterRequest', function(event) {
-        if (event.detail.successful) {
-          // Redirect to list page on successful create/update
-          window.location.href = '/admin/redirects';
+        // Only redirect on successful responses (2xx status codes)
+        // The server returns 302 redirect for success, 400/500 for errors
+        if (event.detail.successful && event.detail.xhr.status >= 200 && event.detail.xhr.status < 300) {
+          // If server returns redirect, let HTMX handle it normally
+          // Otherwise redirect to list page
+          if (event.detail.xhr.status !== 302) {
+            window.location.href = '/admin/redirects';
+          }
         }
       });
 
-      // Handle form validation errors
+      // Handle form validation errors (4xx, 5xx responses)
+      // HTMX will automatically swap the error HTML into #form-messages
+      // No additional handling needed - the error stays visible
       document.body.addEventListener('htmx:responseError', function(event) {
+        // Only show generic error if no error HTML was returned
         const messagesDiv = document.getElementById('form-messages');
-        if (messagesDiv) {
+        if (messagesDiv && !messagesDiv.innerHTML.trim()) {
           messagesDiv.innerHTML = '<div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 p-4 mb-4"><p class="text-sm">Failed to save redirect. Please check your input and try again.</p></div>';
         }
       });

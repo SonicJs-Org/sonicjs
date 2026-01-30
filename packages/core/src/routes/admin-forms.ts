@@ -4,6 +4,7 @@ import { renderFormsListPage } from '../templates/pages/admin-forms-list.templat
 import { renderFormBuilderPage, type FormBuilderPageData } from '../templates/pages/admin-forms-builder.template'
 import { renderFormCreatePage } from '../templates/pages/admin-forms-create.template'
 import { TurnstileService } from '../plugins/core-plugins/turnstile-plugin/services/turnstile'
+import { syncFormCollection } from '../services/form-collection-sync'
 
 // Type definitions for forms
 interface Form {
@@ -268,6 +269,20 @@ adminFormsRoutes.post('/', async (c) => {
       now
     ).run()
 
+    // Create shadow collection for this form
+    try {
+      await syncFormCollection(db, {
+        id: formId,
+        name,
+        display_name: displayName,
+        description,
+        formio_schema: emptySchema,
+        is_active: 1
+      })
+    } catch (syncError) {
+      console.error('[AdminForms] Error syncing form collection on create:', syncError)
+    }
+
     // Redirect to builder
     return c.redirect(`/admin/forms/${formId}/builder`)
   } catch (error: any) {
@@ -333,7 +348,7 @@ adminFormsRoutes.put('/:id', async (c) => {
     const body = await c.req.json()
 
     // Check if form exists
-    const form = await db.prepare('SELECT id FROM forms WHERE id = ?')
+    const form = await db.prepare('SELECT id, name, display_name, description, is_active FROM forms WHERE id = ?')
       .bind(formId)
       .first()
 
@@ -345,9 +360,9 @@ adminFormsRoutes.put('/:id', async (c) => {
 
     // Update form
     await db.prepare(`
-      UPDATE forms 
-      SET formio_schema = ?, 
-          updated_by = ?, 
+      UPDATE forms
+      SET formio_schema = ?,
+          updated_by = ?,
           updated_at = ?
       WHERE id = ?
     `).bind(
@@ -356,6 +371,20 @@ adminFormsRoutes.put('/:id', async (c) => {
       now,
       formId
     ).run()
+
+    // Update shadow collection schema
+    try {
+      await syncFormCollection(db, {
+        id: form.id as string,
+        name: form.name as string,
+        display_name: form.display_name as string,
+        description: form.description as string | null,
+        formio_schema: body.formio_schema,
+        is_active: form.is_active as number
+      })
+    } catch (syncError) {
+      console.error('[AdminForms] Error syncing form collection on update:', syncError)
+    }
 
     return c.json({ success: true, message: 'Form saved successfully' })
   } catch (error: any) {
@@ -397,15 +426,14 @@ adminFormsRoutes.delete('/:id', async (c) => {
   }
 })
 
-// View form submissions
+// View form submissions — redirect to unified content listing
 adminFormsRoutes.get('/:id/submissions', async (c) => {
   try {
-    const user = c.get('user')
     const db = c.env.DB
     const formId = c.req.param('id')
 
-    // Get form
-    const form = await db.prepare('SELECT * FROM forms WHERE id = ?')
+    // Get form name to build redirect URL
+    const form = await db.prepare('SELECT name FROM forms WHERE id = ?')
       .bind(formId)
       .first()
 
@@ -413,56 +441,8 @@ adminFormsRoutes.get('/:id/submissions', async (c) => {
       return c.html('<p>Form not found</p>', 404)
     }
 
-    // Get submissions
-    const submissions = await db.prepare(
-      'SELECT * FROM form_submissions WHERE form_id = ? ORDER BY submitted_at DESC'
-    ).bind(formId).all()
-
-    // Simple submissions page for now
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Submissions - ${form.display_name}</title>
-        <style>
-          body { font-family: system-ui; padding: 20px; }
-          h1 { margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-          th { background: #f5f5f5; font-weight: 600; }
-          .back-link { display: inline-block; margin-bottom: 20px; color: #0066cc; text-decoration: none; }
-          .back-link:hover { text-decoration: underline; }
-        </style>
-      </head>
-      <body>
-        <a href="/admin/forms" class="back-link">← Back to Forms</a>
-        <h1>Submissions: ${form.display_name}</h1>
-        <p>Total submissions: ${submissions.results.length}</p>
-        ${submissions.results.length > 0 ? `
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Submitted</th>
-                <th>Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${submissions.results.map((sub: any) => `
-                <tr>
-                  <td>${sub.id.substring(0, 8)}</td>
-                  <td>${new Date(sub.submitted_at).toLocaleString()}</td>
-                  <td><pre>${JSON.stringify(JSON.parse(sub.submission_data), null, 2)}</pre></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        ` : '<p>No submissions yet.</p>'}
-      </body>
-      </html>
-    `
-    
-    return c.html(html)
+    // Redirect to content listing filtered by form collection
+    return c.redirect(`/admin/content?model=form_${form.name}`)
   } catch (error: any) {
     console.error('Error loading submissions:', error)
     return c.html('<p>Error loading submissions</p>', 500)

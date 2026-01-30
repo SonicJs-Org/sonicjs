@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { TurnstileService } from '../plugins/core-plugins/turnstile-plugin/services/turnstile'
+import { createContentFromSubmission } from '../services/form-collection-sync'
 
 type Bindings = {
   DB: D1Database
@@ -560,16 +561,35 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
 
     // Update submission count
     await db.prepare(`
-      UPDATE forms 
+      UPDATE forms
       SET submission_count = submission_count + 1,
           updated_at = ?
       WHERE id = ?
     `).bind(now, form.id).run()
 
-    return c.json({ 
-      success: true, 
+    // Dual-write: create content item for this submission
+    try {
+      await createContentFromSubmission(
+        db,
+        body.data,
+        { id: form.id as string, name: form.name as string, display_name: form.display_name as string },
+        submissionId,
+        {
+          ipAddress: c.req.header('cf-connecting-ip') || null,
+          userAgent: c.req.header('user-agent') || null,
+          userEmail: body.data?.email || null,
+          userId: null // anonymous submission
+        }
+      )
+    } catch (contentError) {
+      // Don't fail the submission if content creation fails
+      console.error('[FormSubmit] Error creating content from submission:', contentError)
+    }
+
+    return c.json({
+      success: true,
       submissionId,
-      message: 'Form submitted successfully' 
+      message: 'Form submitted successfully'
     })
   } catch (error: any) {
     console.error('Error submitting form:', error)

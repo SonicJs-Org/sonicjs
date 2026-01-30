@@ -26,6 +26,8 @@ export const collections = sqliteTable('collections', {
   schema: text('schema', { mode: 'json' }).notNull(), // JSON schema definition
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   managed: integer('managed', { mode: 'boolean' }).notNull().default(false), // Config-managed collections cannot be edited in UI
+  sourceType: text('source_type').default('user'), // 'user' (normal), 'form' (form-derived)
+  sourceId: text('source_id'), // stores the form ID for form-derived collections
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
@@ -403,7 +405,10 @@ export const formSubmissions = sqliteTable('form_submissions', {
   // Flags
   isSpam: integer('is_spam', { mode: 'boolean' }).notNull().default(false),
   isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
-  
+
+  // Content integration
+  contentId: text('content_id').references(() => content.id), // Links submission to its content item
+
   // Timestamps
   submittedAt: integer('submitted_at').notNull(),
   updatedAt: integer('updated_at').notNull(),

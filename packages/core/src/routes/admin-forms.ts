@@ -358,7 +358,7 @@ adminFormsRoutes.put('/:id', async (c) => {
 
     const now = Date.now()
 
-    // Update form
+    // Update form schema
     await db.prepare(`
       UPDATE forms
       SET formio_schema = ?,
@@ -371,6 +371,28 @@ adminFormsRoutes.put('/:id', async (c) => {
       now,
       formId
     ).run()
+
+    // Optionally update turnstile settings
+    if (body.turnstile_enabled !== undefined || body.turnstile_settings !== undefined) {
+      const updates: string[] = []
+      const values: any[] = []
+
+      if (body.turnstile_enabled !== undefined) {
+        updates.push('turnstile_enabled = ?')
+        values.push(body.turnstile_enabled ? 1 : 0)
+      }
+      if (body.turnstile_settings !== undefined) {
+        updates.push('turnstile_settings = ?')
+        values.push(JSON.stringify(body.turnstile_settings))
+      }
+
+      if (updates.length > 0) {
+        values.push(formId)
+        await db.prepare(`UPDATE forms SET ${updates.join(', ')} WHERE id = ?`)
+          .bind(...values)
+          .run()
+      }
+    }
 
     // Update shadow collection schema
     try {

@@ -70,36 +70,45 @@ jobs:
         if: github.actor != 'dependabot[bot]'
         run: |
           cd my-sonicjs-app
+          set +e
 
           # Replace hardcoded account_id with the CI account from secrets
           sed -i "s/account_id = \"[^\"]*\"/account_id = \"$CLOUDFLARE_ACCOUNT_ID\"/" wrangler.toml
 
           # Ensure KV namespace exists on this account
           KV_NAME="sonicjs-ci-cache"
-          EXISTING_KV=$(npx wrangler kv namespace list --json 2>/dev/null | jq -r ".[] | select(.title == \"$KV_NAME\") | .id" || echo "")
-          if [ -z "$EXISTING_KV" ]; then
+          echo "Checking for KV namespace: $KV_NAME"
+          KV_LIST=$(npx wrangler kv namespace list 2>&1)
+          KV_ID=""
+
+          # Try to find existing namespace by grepping the text output
+          if echo "$KV_LIST" | grep -q "$KV_NAME"; then
+            echo "KV namespace '$KV_NAME' found"
+            # Extract ID - wrangler list output has JSON with "id" fields
+            KV_ID=$(echo "$KV_LIST" | grep -oP '"id"\s*:\s*"\K[^"]+' | head -1)
+          fi
+
+          if [ -z "$KV_ID" ]; then
+            echo "Creating KV namespace: $KV_NAME"
             KV_OUTPUT=$(npx wrangler kv namespace create "$KV_NAME" 2>&1)
             echo "$KV_OUTPUT"
             KV_ID=$(echo "$KV_OUTPUT" | grep -oP 'id\s*=\s*"\K[^"]+' || echo "")
-          else
-            KV_ID="$EXISTING_KV"
           fi
+
           if [ -n "$KV_ID" ]; then
             sed -i "s/id = \"[^\"]*\"/id = \"$KV_ID\"/" wrangler.toml
             echo "Updated KV namespace ID: $KV_ID"
           else
-            echo "Warning: Could not configure KV namespace"
+            echo "Warning: Could not configure KV namespace, deployment may fail"
           fi
 
           # Ensure R2 bucket exists on this account
           R2_NAME="sonicjs-ci-media"
-          EXISTING_R2=$(npx wrangler r2 bucket list 2>/dev/null | grep -c "$R2_NAME" || echo "0")
-          if [ "$EXISTING_R2" = "0" ]; then
-            npx wrangler r2 bucket create "$R2_NAME" 2>&1 || echo "R2 bucket may already exist"
-          fi
-          echo "R2 bucket configured: $R2_NAME"
+          echo "Ensuring R2 bucket exists: $R2_NAME"
+          npx wrangler r2 bucket create "$R2_NAME" 2>&1 || echo "R2 bucket already exists or creation skipped"
 
-          echo "Updated wrangler.toml for CI account"
+          set -e
+          echo "=== Final wrangler.toml ==="
           cat wrangler.toml
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -348,6 +348,10 @@ var collections = sqliteCore.sqliteTable("collections", {
   isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
   managed: sqliteCore.integer("managed", { mode: "boolean" }).notNull().default(false),
   // Config-managed collections cannot be edited in UI
+  sourceType: sqliteCore.text("source_type").default("user"),
+  // 'user' (normal), 'form' (form-derived)
+  sourceId: sqliteCore.text("source_id"),
+  // stores the form ID for form-derived collections
   createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
   updatedAt: sqliteCore.integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
@@ -660,6 +664,9 @@ var formSubmissions = sqliteCore.sqliteTable("form_submissions", {
   // Flags
   isSpam: sqliteCore.integer("is_spam", { mode: "boolean" }).notNull().default(false),
   isArchived: sqliteCore.integer("is_archived", { mode: "boolean" }).notNull().default(false),
+  // Content integration
+  contentId: sqliteCore.text("content_id").references(() => content.id),
+  // Links submission to its content item
   // Timestamps
   submittedAt: sqliteCore.integer("submitted_at").notNull(),
   updatedAt: sqliteCore.integer("updated_at").notNull()
@@ -1506,5 +1513,5 @@ exports.selectWorkflowHistorySchema = selectWorkflowHistorySchema;
 exports.systemLogs = systemLogs;
 exports.users = users;
 exports.workflowHistory = workflowHistory;
-//# sourceMappingURL=chunk-VNLR35GO.cjs.map
-//# sourceMappingURL=chunk-VNLR35GO.cjs.map
+//# sourceMappingURL=chunk-IDBAYTYB.cjs.map
+//# sourceMappingURL=chunk-IDBAYTYB.cjs.map

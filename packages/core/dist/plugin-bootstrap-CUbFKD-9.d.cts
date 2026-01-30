@@ -1,4 +1,4 @@
-import { c as CollectionConfig, e as CollectionSyncResult } from './collection-config-BF95LgQb.js';
+import { c as CollectionConfig, e as CollectionSyncResult } from './collection-config-BF95LgQb.cjs';
 import { D1Database as D1Database$1 } from '@cloudflare/workers-types';
 import * as drizzle_zod from 'drizzle-zod';
 import * as drizzle_orm_sqlite_core from 'drizzle-orm/sqlite-core';
@@ -515,6 +515,44 @@ declare const collections: drizzle_orm_sqlite_core.SQLiteTableWithColumns<{
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        sourceType: drizzle_orm_sqlite_core.SQLiteColumn<{
+            name: "source_type";
+            tableName: "collections";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        sourceId: drizzle_orm_sqlite_core.SQLiteColumn<{
+            name: "source_id";
+            tableName: "collections";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
         createdAt: drizzle_orm_sqlite_core.SQLiteColumn<{
             name: "created_at";
             tableName: "collections";
@@ -3068,6 +3106,44 @@ declare const insertCollectionSchema: drizzle_zod.BuildSchema<"insert", {
         identity: undefined;
         generated: undefined;
     }, {}, {}>;
+    sourceType: drizzle_orm_sqlite_core.SQLiteColumn<{
+        name: "source_type";
+        tableName: "collections";
+        dataType: "string";
+        columnType: "SQLiteText";
+        data: string;
+        driverParam: string;
+        notNull: false;
+        hasDefault: true;
+        isPrimaryKey: false;
+        isAutoincrement: false;
+        hasRuntimeDefault: false;
+        enumValues: [string, ...string[]];
+        baseColumn: never;
+        identity: undefined;
+        generated: undefined;
+    }, {}, {
+        length: number | undefined;
+    }>;
+    sourceId: drizzle_orm_sqlite_core.SQLiteColumn<{
+        name: "source_id";
+        tableName: "collections";
+        dataType: "string";
+        columnType: "SQLiteText";
+        data: string;
+        driverParam: string;
+        notNull: false;
+        hasDefault: false;
+        isPrimaryKey: false;
+        isAutoincrement: false;
+        hasRuntimeDefault: false;
+        enumValues: [string, ...string[]];
+        baseColumn: never;
+        identity: undefined;
+        generated: undefined;
+    }, {}, {
+        length: number | undefined;
+    }>;
     createdAt: drizzle_orm_sqlite_core.SQLiteColumn<{
         name: "created_at";
         tableName: "collections";
@@ -3234,6 +3310,44 @@ declare const selectCollectionSchema: drizzle_zod.BuildSchema<"select", {
         identity: undefined;
         generated: undefined;
     }, {}, {}>;
+    sourceType: drizzle_orm_sqlite_core.SQLiteColumn<{
+        name: "source_type";
+        tableName: "collections";
+        dataType: "string";
+        columnType: "SQLiteText";
+        data: string;
+        driverParam: string;
+        notNull: false;
+        hasDefault: true;
+        isPrimaryKey: false;
+        isAutoincrement: false;
+        hasRuntimeDefault: false;
+        enumValues: [string, ...string[]];
+        baseColumn: never;
+        identity: undefined;
+        generated: undefined;
+    }, {}, {
+        length: number | undefined;
+    }>;
+    sourceId: drizzle_orm_sqlite_core.SQLiteColumn<{
+        name: "source_id";
+        tableName: "collections";
+        dataType: "string";
+        columnType: "SQLiteText";
+        data: string;
+        driverParam: string;
+        notNull: false;
+        hasDefault: false;
+        isPrimaryKey: false;
+        isAutoincrement: false;
+        hasRuntimeDefault: false;
+        enumValues: [string, ...string[]];
+        baseColumn: never;
+        identity: undefined;
+        generated: undefined;
+    }, {}, {
+        length: number | undefined;
+    }>;
     createdAt: drizzle_orm_sqlite_core.SQLiteColumn<{
         name: "created_at";
         tableName: "collections";
@@ -8728,6 +8842,25 @@ declare const formSubmissions: drizzle_orm_sqlite_core.SQLiteTableWithColumns<{
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        contentId: drizzle_orm_sqlite_core.SQLiteColumn<{
+            name: "content_id";
+            tableName: "form_submissions";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
         submittedAt: drizzle_orm_sqlite_core.SQLiteColumn<{
             name: "submitted_at";
             tableName: "form_submissions";
@@ -9884,6 +10017,25 @@ declare const insertFormSubmissionSchema: drizzle_zod.BuildSchema<"insert", {
         identity: undefined;
         generated: undefined;
     }, {}, {}>;
+    contentId: drizzle_orm_sqlite_core.SQLiteColumn<{
+        name: "content_id";
+        tableName: "form_submissions";
+        dataType: "string";
+        columnType: "SQLiteText";
+        data: string;
+        driverParam: string;
+        notNull: false;
+        hasDefault: false;
+        isPrimaryKey: false;
+        isAutoincrement: false;
+        hasRuntimeDefault: false;
+        enumValues: [string, ...string[]];
+        baseColumn: never;
+        identity: undefined;
+        generated: undefined;
+    }, {}, {
+        length: number | undefined;
+    }>;
     submittedAt: drizzle_orm_sqlite_core.SQLiteColumn<{
         name: "submitted_at";
         tableName: "form_submissions";
@@ -10252,6 +10404,25 @@ declare const selectFormSubmissionSchema: drizzle_zod.BuildSchema<"select", {
         identity: undefined;
         generated: undefined;
     }, {}, {}>;
+    contentId: drizzle_orm_sqlite_core.SQLiteColumn<{
+        name: "content_id";
+        tableName: "form_submissions";
+        dataType: "string";
+        columnType: "SQLiteText";
+        data: string;
+        driverParam: string;
+        notNull: false;
+        hasDefault: false;
+        isPrimaryKey: false;
+        isAutoincrement: false;
+        hasRuntimeDefault: false;
+        enumValues: [string, ...string[]];
+        baseColumn: never;
+        identity: undefined;
+        generated: undefined;
+    }, {}, {
+        length: number | undefined;
+    }>;
     submittedAt: drizzle_orm_sqlite_core.SQLiteColumn<{
         name: "submitted_at";
         tableName: "form_submissions";

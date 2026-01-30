@@ -327,13 +327,44 @@ export async function createContentFromSubmission(
 ): Promise<string | null> {
   try {
     // Find the shadow collection
-    const collection = await db.prepare(
+    let collection = await db.prepare(
       'SELECT id FROM collections WHERE source_type = ? AND source_id = ?'
     ).bind('form', form.id).first() as any
 
     if (!collection) {
-      console.warn(`[FormSync] No shadow collection found for form ${form.name}`)
-      return null
+      // Shadow collection missing — try to create it on the fly
+      console.warn(`[FormSync] No shadow collection found for form ${form.name}, attempting to create...`)
+      try {
+        const fullForm = await db.prepare(
+          'SELECT id, name, display_name, description, formio_schema, is_active FROM forms WHERE id = ?'
+        ).bind(form.id).first() as any
+
+        if (fullForm) {
+          const schema = typeof fullForm.formio_schema === 'string'
+            ? JSON.parse(fullForm.formio_schema)
+            : fullForm.formio_schema
+          const result = await syncFormCollection(db, {
+            id: fullForm.id,
+            name: fullForm.name,
+            display_name: fullForm.display_name,
+            description: fullForm.description,
+            formio_schema: schema,
+            is_active: fullForm.is_active ?? 1
+          })
+          // Re-query the collection
+          collection = await db.prepare(
+            'SELECT id FROM collections WHERE source_type = ? AND source_id = ?'
+          ).bind('form', form.id).first() as any
+          console.log(`[FormSync] On-the-fly sync result: ${result.status}, collectionId: ${result.collectionId}`)
+        }
+      } catch (syncErr) {
+        console.error('[FormSync] On-the-fly shadow collection creation failed:', syncErr)
+      }
+
+      if (!collection) {
+        console.error(`[FormSync] Still no shadow collection for form ${form.name} after recovery attempt`)
+        return null
+      }
     }
 
     const contentId = crypto.randomUUID()

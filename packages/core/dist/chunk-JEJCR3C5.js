@@ -346,6 +346,10 @@ var collections = sqliteTable("collections", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   managed: integer("managed", { mode: "boolean" }).notNull().default(false),
   // Config-managed collections cannot be edited in UI
+  sourceType: text("source_type").default("user"),
+  // 'user' (normal), 'form' (form-derived)
+  sourceId: text("source_id"),
+  // stores the form ID for form-derived collections
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
@@ -658,6 +662,9 @@ var formSubmissions = sqliteTable("form_submissions", {
   // Flags
   isSpam: integer("is_spam", { mode: "boolean" }).notNull().default(false),
   isArchived: integer("is_archived", { mode: "boolean" }).notNull().default(false),
+  // Content integration
+  contentId: text("content_id").references(() => content.id),
+  // Links submission to its content item
   // Timestamps
   submittedAt: integer("submitted_at").notNull(),
   updatedAt: integer("updated_at").notNull()
@@ -1455,5 +1462,5 @@ function createInstallationIdentity(projectName) {
 }
 
 export { CACHE_CONFIGS, CacheService, Logger, SettingsService, TelemetryService, apiTokens, collections, content, contentVersions, createInstallationIdentity, getCacheService, getLogger, getTelemetryService, initLogger, initTelemetry, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, schema_exports, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory };
-//# sourceMappingURL=chunk-G44QUVNM.js.map
-//# sourceMappingURL=chunk-G44QUVNM.js.map
+//# sourceMappingURL=chunk-JEJCR3C5.js.map
+//# sourceMappingURL=chunk-JEJCR3C5.js.map

@@ -237,7 +237,7 @@ async function isCollectionManaged(db, collectionName) {
 }
 async function getManagedCollections(db) {
   try {
-    const stmt = db.prepare("SELECT name FROM collections WHERE managed = 1");
+    const stmt = db.prepare("SELECT name FROM collections WHERE managed = 1 AND (source_type IS NULL OR source_type = 'user')");
     const { results } = await stmt.all();
     return (results || []).map((row) => row.name);
   } catch (error) {
@@ -829,5 +829,5 @@ exports.registerCollections = registerCollections;
 exports.syncCollection = syncCollection;
 exports.syncCollections = syncCollections;
 exports.validateCollectionConfig = validateCollectionConfig;
-//# sourceMappingURL=chunk-MPT5PA6U.cjs.map
-//# sourceMappingURL=chunk-MPT5PA6U.cjs.map
+//# sourceMappingURL=chunk-XEITDGR3.cjs.map
+//# sourceMappingURL=chunk-XEITDGR3.cjs.map

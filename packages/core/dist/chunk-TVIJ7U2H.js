@@ -235,7 +235,7 @@ async function isCollectionManaged(db, collectionName) {
 }
 async function getManagedCollections(db) {
   try {
-    const stmt = db.prepare("SELECT name FROM collections WHERE managed = 1");
+    const stmt = db.prepare("SELECT name FROM collections WHERE managed = 1 AND (source_type IS NULL OR source_type = 'user')");
     const { results } = await stmt.all();
     return (results || []).map((row) => row.name);
   } catch (error) {
@@ -815,5 +815,5 @@ var PluginBootstrapService = class {
 };
 
 export { PluginBootstrapService, PluginService, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig };
-//# sourceMappingURL=chunk-YFJJU26H.js.map
-//# sourceMappingURL=chunk-YFJJU26H.js.map
+//# sourceMappingURL=chunk-TVIJ7U2H.js.map
+//# sourceMappingURL=chunk-TVIJ7U2H.js.map

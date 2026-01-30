@@ -27,10 +27,20 @@ bucket_name = "sonicjs-ci-media"
 binding = "CACHE_KV"
 id = "a16f8246fc294d809c90b0fb2df6d363"
 
+# AI binding for Workers AI (AI Search Plugin)
+[ai]
+binding = "AI"
+
+# Vectorize for semantic search (AI Search Plugin)
+[[vectorize]]
+binding = "VECTORIZE_INDEX"
+index_name = "sonicjs-ai-search"
+remote = true
+
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
 
 # Observability
 [observability]
-enabled = true
+enabled = false

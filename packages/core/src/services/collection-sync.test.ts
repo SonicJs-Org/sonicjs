@@ -435,7 +435,7 @@ describe('getManagedCollections', () => {
     const result = await getManagedCollections(mockDb as any)
 
     expect(result).toEqual(['collection1', 'collection2', 'collection3'])
-    expect(mockDb._mocks.prepare).toHaveBeenCalledWith('SELECT name FROM collections WHERE managed = 1')
+    expect(mockDb._mocks.prepare).toHaveBeenCalledWith("SELECT name FROM collections WHERE managed = 1 AND (source_type IS NULL OR source_type = 'user')")
   })
 
   it('should return empty array when no managed collections', async () => {

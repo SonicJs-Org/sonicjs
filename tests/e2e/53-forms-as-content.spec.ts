@@ -337,10 +337,10 @@ test.describe('Forms as Content - Submissions', () => {
     }
   });
 
-  test('should default content status to draft', async ({ page }) => {
+  test('should default submission content status to published', async ({ page }) => {
     if (!submissionsCreated) { test.skip(); return; }
 
-    await page.goto(`/admin/content?model=form_${contactFormName}&status=draft`);
+    await page.goto(`/admin/content?model=form_${contactFormName}&status=published`);
     await page.waitForLoadState('networkidle');
 
     const rows = page.locator('tbody tr');

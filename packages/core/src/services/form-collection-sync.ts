@@ -170,16 +170,18 @@ export function deriveSubmissionTitle(data: Record<string, any>, formDisplayName
 }
 
 /**
- * Map form submission status to content status
+ * Map form submission status to content status.
+ * Form submissions are complete data — they default to 'published'.
+ * Only rejected/spam submissions get demoted.
  */
 export function mapFormStatusToContentStatus(formStatus: string): string {
   switch (formStatus) {
-    case 'pending': return 'draft'
+    case 'pending': return 'published'
     case 'reviewed': return 'published'
     case 'approved': return 'published'
     case 'rejected': return 'archived'
     case 'spam': return 'deleted'
-    default: return 'draft'
+    default: return 'published'
   }
 }
 
@@ -359,7 +361,7 @@ export async function createContentFromSubmission(
 
     await db.prepare(`
       INSERT INTO content (id, collection_id, slug, title, data, status, author_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, 'published', ?, ?, ?)
     `).bind(
       contentId,
       collection.id,

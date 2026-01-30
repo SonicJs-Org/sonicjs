@@ -66,6 +66,16 @@ jobs:
         run: npm run build:core
 
       # Skip Cloudflare deployment and E2E tests for Dependabot PRs (no access to secrets)
+      - name: Configure wrangler for CI account
+        if: github.actor != 'dependabot[bot]'
+        run: |
+          cd my-sonicjs-app
+          # Replace hardcoded account_id with the CI account from secrets
+          sed -i "s/account_id = \"[^\"]*\"/account_id = \"$CLOUDFLARE_ACCOUNT_ID\"/" wrangler.toml
+          echo "Updated wrangler.toml account_id for CI"
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Create fresh D1 database for PR
         if: github.actor != 'dependabot[bot]'
         id: create-db

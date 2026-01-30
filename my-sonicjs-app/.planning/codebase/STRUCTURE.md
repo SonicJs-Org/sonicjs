@@ -7,314 +7,217 @@
 ```
 my-sonicjs-app/
 ├── src/                          # Application source code
-│   ├── index.ts                  # Worker entry point, app initialization
-│   ├── collections/              # Content type definitions
-│   ├── db/                        # Database schema extensions
-│   ├── plugins/                   # Custom plugin implementations
-│   └── routes/                    # Additional route handlers
-├── migrations/                    # SQL migration files for database schema
-├── scripts/                       # Build and setup scripts
-├── .planning/                     # GSD planning documents (this directory)
-├── .wrangler/                     # Wrangler development state (generated)
-├── wrangler.toml                  # Cloudflare Workers configuration
-├── tsconfig.json                  # TypeScript compiler configuration
-├── package.json                   # Node.js dependencies and scripts
-└── vitest.config.ts               # Test runner configuration (if present)
+│   ├── index.ts                  # Entry point: creates Hono app, registers collections, mounts plugins
+│   ├── collections/              # Collection schema definitions
+│   │   ├── blog-posts.collection.ts
+│   │   ├── contact-messages.collection.ts
+│   │   └── page-blocks.collection.ts
+│   ├── db/                       # Database schema and ORM definitions
+│   │   └── schema/
+│   │       ├── index.ts
+│   │       └── user-profiles.ts
+│   ├── routes/                   # Custom API routes
+│   │   └── profile.ts
+│   └── plugins/                  # Custom plugins (extensible features)
+│       ├── index.ts              # Plugin exports
+│       └── contact-form/         # Contact form plugin module
+│           ├── index.ts          # Plugin registration and builder
+│           ├── types.ts          # TypeScript interfaces
+│           ├── manifest.json
+│           ├── services/
+│           │   └── contact.ts    # ContactService with database logic
+│           ├── routes/
+│           │   ├── public.ts     # Public form routes
+│           │   └── admin.ts      # Admin settings routes
+│           ├── components/
+│           │   └── settings-page.ts
+│           └── test/
+│               └── contact.spec.ts
+├── migrations/                   # Database migration files (SQL)
+│   ├── 001_initial_schema.sql
+│   ├── 002_faq_plugin.sql
+│   ├── ...
+│   └── 031_contact_form_plugin.sql
+├── scripts/                      # Utility and setup scripts
+│   ├── seed-admin.ts
+│   └── setup-worktree-db.sh
+├── package.json
+├── pnpm-lock.yaml
+├── tsconfig.json
+├── wrangler.toml                 # Cloudflare Workers configuration
+├── README.md
+└── .planning/                    # Planning documents (auto-generated)
+    └── codebase/
+        ├── ARCHITECTURE.md
+        └── STRUCTURE.md
 ```
 
 ## Directory Purposes
 
-**src:**
-- Purpose: All application source code
-- Contains: TypeScript files for routes, collections, plugins, database schemas
-- Key files: `index.ts` (entry point), `collections/*.ts` (content definitions)
+**`src/`:**
+- Purpose: All application code compiled from TypeScript
+- Contains: Collections, routes, plugins, database schemas
+- Key files: `index.ts` (app entry), all collection and plugin definitions
 
-**src/collections:**
-- Purpose: Content type definitions as configuration
-- Contains: CollectionConfig objects defining schemas, fields, admin UI settings
+**`src/collections/`:**
+- Purpose: Content type schemas (configuration-as-code)
+- Contains: Collection definitions with name, display name, schema, UI config
 - Key files:
-  - `blog-posts.collection.ts`: Blog post content type with rich editor, featured image, publish workflow
-  - `contact-messages.collection.ts`: Auto-populated by contact form plugin, stores submitted messages
-  - `page-blocks.collection.ts`: Pages with flexible content blocks (text, images, CTA, team sections)
+  - `blog-posts.collection.ts`: Blog content type with title, slug, content, author, status, difficulty
+  - `contact-messages.collection.ts`: Submitted contact form messages (name, email, message)
+  - `page-blocks.collection.ts`: Flexible page builder with nested content blocks and team section
 
-**src/db:**
-- Purpose: Database schema extensions specific to this application
-- Contains: Drizzle ORM table definitions that extend core SonicJS schema
-- Key files: `schema/index.ts` (barrel export), `schema/user-profiles.ts` (extended user data)
+**`src/db/schema/`:**
+- Purpose: Database table definitions using Drizzle ORM
+- Contains: TypeScript definitions of custom database tables
+- Key files:
+  - `user-profiles.ts`: Extends core users table with profile fields (displayName, bio, company, jobTitle, website, location)
+  - `index.ts`: Exports all schema definitions
 
-**src/db/schema:**
-- Purpose: Application-specific database table definitions
-- Contains: Drizzle sqliteTable definitions with relations and TypeScript types
-- Customization: Add new tables here for app-specific entities (profiles, preferences, etc.)
+**`src/routes/`:**
+- Purpose: Custom HTTP endpoints beyond core CMS
+- Contains: Hono route definitions with business logic
+- Key files:
+  - `profile.ts`: User profile CRUD API (GET, PUT, PATCH, DELETE /api/profile) with dynamic schema filtering
 
-**src/plugins:**
-- Purpose: Custom plugin implementations extending core CMS features
-- Contains: Self-contained plugin packages with routes, services, components
-- Key plugins:
-  - `contact-form/`: Full-featured contact form with Google Maps, Turnstile, settings management
+**`src/plugins/`:**
+- Purpose: Modular features with routes, services, and settings
+- Contains: Plugin-specific logic organized in subdirectories
+- Key files:
+  - `index.ts`: Plugin exports (currently minimal)
+  - `contact-form/index.ts`: Plugin registration via PluginBuilder
 
-**src/plugins/contact-form:**
-- Purpose: Contact form feature plugin
-- Structure:
-  - `index.ts`: Plugin definition using PluginBuilder API
-  - `manifest.json`: Plugin metadata (id, version, author, description)
-  - `types.ts`: TypeScript interfaces for ContactSettings and ContactMessage
-  - `routes/`: HTTP endpoint handlers (public.ts, admin.ts)
-  - `services/`: Business logic (ContactService for form operations)
-  - `components/`: UI components (settings-page.ts for admin interface)
-  - `test/`: Test files (contact.spec.ts using Playwright)
-  - `migrations/`: SQL migrations for plugin tables (if any)
+**`src/plugins/contact-form/`:**
+- Purpose: Complete plugin module for contact form feature
+- Contains: Plugin definition, routes (public/admin), service layer, components, tests
+- Key files:
+  - `index.ts`: PluginBuilder with lifecycle hooks, routes, menu items, services
+  - `types.ts`: ContactSettings, ContactMessage interfaces
+  - `services/contact.ts`: ContactService (getSettings, saveMessage, saveMessages, lifecycle methods)
+  - `routes/public.ts`: GET /contact (form page), POST /api/contact (submit form with Turnstile support)
+  - `routes/admin.ts`: Admin routes for plugin management
 
-**src/plugins/index.ts:**
-- Purpose: Barrel export of all custom plugins
-- Contains: Re-exports for plugin discovery and initialization
-- Pattern: `export { default as contactFormPlugin } from './contact-form/index'`
+**`migrations/`:**
+- Purpose: Database schema versioning and evolution
+- Contains: SQL migration files numbered 001-031
+- Key files:
+  - `001_initial_schema.sql`: Base schema (users, content, collections, plugins)
+  - `031_contact_form_plugin.sql`: Latest migration for contact form table
 
-**src/routes:**
-- Purpose: Application-level route handlers not part of plugins
-- Contains: Additional API routes and page routes
-- Key files: `profile.ts` (user profile CRUD API with authentication)
-
-**migrations:**
-- Purpose: SQL database schema initialization and updates
-- Contains: Numbered .sql files that execute in order during database setup
-- Pattern: 001_initial_schema.sql, 002_faq_plugin.sql, etc.
-- Execution: Via `wrangler d1 migrations apply DB` command
-- Key migrations:
-  - `001_initial_schema.sql`: Core tables (content, collections, users, plugins)
-  - `018_user_profiles.sql`: user_profiles table extension
-  - `031_contact_form_plugin.sql`: Contact form plugin database setup
-
-**scripts:**
-- Purpose: Setup and utility scripts
-- Contains: Bash scripts, TypeScript build scripts
-- Key files: `seed-admin.ts` (creates initial admin user), `setup-worktree-db.sh` (DB setup)
+**`scripts/`:**
+- Purpose: Build-time and development utilities
+- Contains: Seed data, database setup
+- Key files:
+  - `seed-admin.ts`: Creates initial admin user
+  - `setup-worktree-db.sh`: Local development database initialization
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/index.ts`: Cloudflare Worker entry point - loads collections, creates core app, mounts plugins
+- `src/index.ts`: Application entry point for Wrangler worker
 
 **Configuration:**
-- `wrangler.toml`: Cloudflare Workers deployment config (account, D1 database, R2 bucket, KV cache bindings)
-- `tsconfig.json`: TypeScript compiler settings (strict mode, ES2022 target, path aliases)
-- `package.json`: Dependencies (Hono, Drizzle, Zod, Wrangler), scripts (dev, test, db commands)
+- `package.json`: NPM dependencies, scripts
+- `tsconfig.json`: TypeScript compiler options
+- `wrangler.toml`: Cloudflare Workers config (D1, R2, KV, environment)
 
 **Core Logic:**
-- `src/plugins/contact-form/services/contact.ts`: ContactService class - handles form submission, settings persistence
-- `src/plugins/contact-form/routes/public.ts`: Public form page and submission endpoint (/contact, /api/contact)
-- `src/plugins/contact-form/routes/admin.ts`: Admin settings page for contact form configuration
+- `src/collections/`: All content type definitions (3 collections)
+- `src/plugins/contact-form/services/contact.ts`: Plugin business logic (database operations)
+- `src/routes/profile.ts`: Custom API route with Drizzle ORM
 
-**Database Schema:**
-- `src/db/schema/user-profiles.ts`: User profile extension with displayName, bio, company, location, etc.
-- `migrations/031_contact_form_plugin.sql`: Contact form database initialization
-
-**Tests:**
-- `src/plugins/contact-form/test/contact.spec.ts`: E2E tests using Playwright (form submission, settings toggle)
+**Testing:**
+- `src/plugins/contact-form/test/contact.spec.ts`: Contact form unit tests
 
 ## Naming Conventions
 
 **Files:**
-- Collections: `{entity-name}.collection.ts` (kebab-case entity, .collection suffix)
-  - Examples: `blog-posts.collection.ts`, `contact-messages.collection.ts`
-- Services: `{entity-name}.ts` (simple entity name in PascalCase class)
-  - Examples: `contact.ts` exports ContactService class
-- Routes: `{type}.ts` where type is public, admin, api
-  - Examples: `public.ts`, `admin.ts`
-- Database schemas: `{table-name}.ts` (kebab-case or camelCase matching table name)
-  - Examples: `user-profiles.ts`
-- Migrations: `{number}_{description}.sql` (zero-padded number, snake_case description)
-  - Examples: `001_initial_schema.sql`, `031_contact_form_plugin.sql`
-- Plugins: Directory name in kebab-case (`contact-form`), main file is `index.ts`
+- Collections: `[name].collection.ts` (kebab-case name, .collection suffix)
+  - Example: `blog-posts.collection.ts`, `contact-messages.collection.ts`
+- Routes: `[name].ts` (kebab-case)
+  - Example: `public.ts`, `admin.ts`, `profile.ts`
+- Services: `[name].ts` (PascalCase class inside)
+  - Example: `contact.ts` contains `class ContactService`
+- Tests: `[name].spec.ts` or `[name].test.ts`
+  - Example: `contact.spec.ts`
+- Plugin directories: `[kebab-case-name]/`
+  - Example: `contact-form/`
 
 **Directories:**
-- Collections: `collections/` (plural)
-- Database schema: `db/schema/` (nested structure)
-- Plugins: `plugins/{plugin-name}/` (kebab-case plugin name)
-- Routes: `routes/` or `routes/{type}/` (organized by access level)
-- Tests: `test/` or `__tests__/` within module (adjacent to code)
-- Scripts: `scripts/` (root level)
+- Plugins: `[kebab-case-name]/` containing `index.ts` and subdirectories
+  - Example: `contact-form/`
+- Schema layers: `schema/`, `services/`, `routes/`, `components/`, `test/`
+- Core layers: `collections/`, `db/`, `routes/`, `plugins/`, `migrations/`, `scripts/`
 
-**Database Tables:**
-- Collections table: `collections` (stores content type definitions)
-- Content table: `content` (stores actual content items with collection_id)
-- Users table: `users` (core authentication and user management)
-- Plugins table: `plugins` (plugin metadata and settings as JSON)
-- User profiles table: `user_profiles` (extended user data)
-
-**Class Names:**
-- Service classes: PascalCase with Service suffix (ContactService)
-- Plugin ID: kebab-case (contact-form, email)
+**TypeScript:**
+- Interfaces/Types: PascalCase (e.g., `ContactSettings`, `ContactMessage`, `ContactServiceResponse`)
+- Classes: PascalCase (e.g., `ContactService`)
+- Functions: camelCase (e.g., `createContactPlugin()`, `generateId()`)
+- Variables: camelCase (e.g., `config`, `profileData`, `turnstileEnabled`)
+- Constants: UPPER_SNAKE_CASE (not extensively used in current code)
 
 ## Where to Add New Code
 
-**New Feature (e.g., FAQ Plugin):**
-- Primary code: `src/plugins/{feature-name}/` directory structure
-  - `index.ts`: Plugin definition with PluginBuilder
-  - `routes/public.ts`: Public-facing endpoints
-  - `routes/admin.ts`: Admin panel endpoints
-  - `services/{feature-name}.ts`: Business logic class
-  - `types.ts`: TypeScript interfaces
-  - `manifest.json`: Plugin metadata
-- Tests: `src/plugins/{feature-name}/test/*.spec.ts`
-- Database: `src/plugins/{feature-name}/migrations/*.sql`
-- Export: Add to `src/plugins/index.ts` barrel export
-- Register in: `src/index.ts` config.plugins.enabled array and manual route mounting
+**New Collection:**
+1. Create file: `src/collections/[name].collection.ts`
+2. Export default object satisfying `CollectionConfig` type
+3. Import and register in `src/index.ts` via `registerCollections([...])`
+4. Create migration: `migrations/NNN_add_[name]_collection.sql` if custom table needed
 
-**New Component/Module:**
-- Implementation: `src/routes/{module-name}.ts` for route handlers
-- Or: `src/plugins/{parent-plugin}/components/{component-name}.ts` for plugin sub-components
-- Database schema: `src/db/schema/{table-name}.ts` (Drizzle ORM definition)
-- Export schema: In `src/db/schema/index.ts` barrel export
+**New Plugin:**
+1. Create directory: `src/plugins/[kebab-case-name]/`
+2. Create `index.ts` using `PluginBuilder.create()` pattern
+3. Create `manifest.json` with plugin metadata
+4. Create `types.ts` for TypeScript interfaces
+5. Create subdirectories as needed: `routes/`, `services/`, `components/`
+6. Register in core app within `src/index.ts` if not auto-loaded
+7. Add routes to plugin builder: `builder.addRoute(path, handler)`
 
-**New Collection Type:**
-- File: `src/collections/{entity-name}.collection.ts`
-- Pattern: Export satisfies CollectionConfig
-- Register: Add import and include in `registerCollections([...])` in `src/index.ts`
-- Example pattern from `blog-posts.collection.ts`:
-  ```typescript
-  export default {
-    name: "entity_name",        // snake_case, matches DB table
-    displayName: "Display Name",
-    icon: "emoji",
-    schema: {
-      type: "object",
-      properties: { /* field definitions */ },
-      required: [/* field names */]
-    },
-    listFields: [/* admin list view columns */],
-    searchFields: [/* full-text search fields */],
-    managed: true,
-    isActive: true
-  } satisfies CollectionConfig
-  ```
+**New Route:**
+1. Create file: `src/routes/[name].ts` OR `src/plugins/[name]/routes/[purpose].ts`
+2. Create Hono router: `const router = new Hono<{ Bindings, Variables }>()`
+3. Implement handlers with proper auth/middleware
+4. Mount in app via `app.route(path, router)` or plugin builder
 
-**Utilities and Helpers:**
-- Shared helpers: `src/utils/` directory (create if needed)
-- Service utilities: Methods within service class
-- Route utilities: Helper functions in route file or separate utils file
-- Type utilities: In `src/db/schema/index.ts` or service types.ts file
+**New Service:**
+1. Create file: `src/plugins/[name]/services/[name].ts` OR `src/routes/[name].service.ts`
+2. Create class with constructor taking `D1Database`
+3. Implement async methods for database operations
+4. Use prepared statements: `db.prepare(sql).bind(...).first()` or Drizzle ORM
+
+**Utilities & Helpers:**
+- Shared utilities: Not currently used in this app
+- Plugin-specific utilities: Place in plugin directory alongside services
+- Note: Core utilities are in `@sonicjs-cms/core` package
 
 ## Special Directories
 
-**migrations/:**
+**`migrations/`:**
 - Purpose: Track database schema changes over time
-- Generated: Manually created, not auto-generated
-- Committed: Yes, version controlled for reproducible deployments
-- Execution: Manual via `npm run db:migrate` (development) or GitHub Actions (production)
-- Order: Numbered sequentially, applied in order
-- Example content: CREATE TABLE, ALTER TABLE, INSERT default data
+- Generated: No (hand-written SQL)
+- Committed: Yes (must be in version control)
+- Naming: `NNN_description.sql` where NNN is sequential number
+- Usage: Applied via `wrangler d1 migrations apply DB --local` or on deployment
 
-**.wrangler/:**
-- Purpose: Wrangler development runtime state
-- Generated: Yes, automatically by Wrangler CLI during dev/build
-- Committed: No, in .gitignore
-- Contents: Local worker state, D1 database files, temporary files
+**`node_modules/`:**
+- Purpose: Installed dependencies
+- Generated: Yes (by pnpm/npm)
+- Committed: No (in .gitignore)
 
-**.planning/:**
-- Purpose: GSD planning documents and analysis
-- Generated: Created by GSD commands (/gsd:map-codebase, /gsd:plan-phase, etc.)
-- Committed: Yes, documents are version controlled
-- Subdir: `codebase/` contains architecture/structure/conventions docs
+**`.wrangler/`:**
+- Purpose: Wrangler local development database and build artifacts
+- Generated: Yes (by Wrangler CLI)
+- Committed: No (in .gitignore)
 
-## Module Organization Pattern
+**`test-results/`:**
+- Purpose: Test output and reports
+- Generated: Yes (by test runner)
+- Committed: No
 
-**Plugin Module (contact-form as example):**
-
-```
-src/plugins/contact-form/
-├── index.ts                    # Plugin definition
-├── manifest.json              # Metadata
-├── types.ts                   # TS interfaces
-├── routes/
-│   ├── public.ts              # User-facing routes (no auth)
-│   └── admin.ts               # Admin routes (requiresAuth)
-├── services/
-│   └── contact.ts             # Business logic class
-├── components/
-│   └── settings-page.ts       # UI components (Web Components or HTML generation)
-├── test/
-│   └── contact.spec.ts        # E2E tests
-└── migrations/
-    └── 031_contact_form_plugin.sql
-```
-
-**Route Handler Pattern (from `src/routes/profile.ts`):**
-
-```typescript
-// 1. Imports
-import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
-import { requireAuth } from '@sonicjs-cms/core'
-
-// 2. Create router
-const router = new Hono<{ Bindings: Bindings; Variables: Variables }>()
-
-// 3. Apply middleware
-router.use('*', requireAuth())
-
-// 4. Define handlers
-router.get('/', async (c) => {
-  const user = c.get('user')
-  const db = drizzle(c.env.DB)
-  // ... implementation
-  return c.json(result)
-})
-
-// 5. Export
-export default router as unknown as Hono
-```
-
-**Collection Definition Pattern (from `blog-posts.collection.ts`):**
-
-```typescript
-import type { CollectionConfig } from "@sonicjs-cms/core"
-
-export default {
-  name: "blog_posts",            // Matches DB collection name
-  displayName: "Blog Posts",
-  schema: {
-    type: "object",
-    properties: {
-      title: { type: "string", required: true },
-      slug: { type: "slug", required: true },
-      content: { type: "quill", required: true }
-    },
-    required: ["title", "slug", "content"]
-  },
-  listFields: ["title", "author", "status"],
-  searchFields: ["title", "content"],
-  managed: true,
-  isActive: true
-} satisfies CollectionConfig
-```
-
-**Service Class Pattern (from `contact.ts`):**
-
-```typescript
-import type { D1Database } from '@cloudflare/workers-types'
-
-export class ContactService {
-  constructor(private db: D1Database) {}
-
-  async getSettings() {
-    try {
-      const record = await this.db
-        .prepare(`SELECT settings FROM plugins WHERE id = ?`)
-        .bind('contact-form')
-        .first()
-      return { status: 'active', data: record.settings }
-    } catch (error) {
-      console.error('Error:', error)
-      throw error
-    }
-  }
-
-  async saveMessage(data: ContactMessage) {
-    // ... implementation
-  }
-}
-```
+**`.planning/codebase/`:**
+- Purpose: GSD codebase analysis documents
+- Generated: Yes (by GSD analysis tools)
+- Committed: Yes (helpful for team reference)
 
 ---
 

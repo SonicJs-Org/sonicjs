@@ -5,103 +5,131 @@
 ## Languages
 
 **Primary:**
-- TypeScript 5.8.3+ - Full application codebase including server, plugins, schemas, routes
-- HTML/CSS - Admin UI templates rendered server-side via Hono
-- JavaScript (ES2022) - Build output and runtime execution
+- TypeScript 5.8.3 - All source code, strict type checking enabled
+- JavaScript (runtime) - Cloudflare Workers environment
 
 **Secondary:**
-- SQL - SQLite via Drizzle ORM for database queries (`packages/core/src/db/schema.ts`)
-- TOML - Wrangler configuration (`wrangler.toml`)
+- SQL - SQLite database queries (via Drizzle ORM abstraction)
+- HTML/CSS - Template rendering in `src/templates/`
 
 ## Runtime
 
 **Environment:**
-- Node.js 18+ (specified in `package.json` engines field)
-- Cloudflare Workers (edge runtime) - Primary deployment target
-- Hono.js handles HTTP requests at Workers edge
+- Cloudflare Workers (Edge computing platform)
+- Node.js >= 18.0.0 (development and tooling)
+- Compatibility date: 2025-05-05 with nodejs_compat flag
 
 **Package Manager:**
-- npm 10.9.4+ (specified in volta config at workspace root)
-- Lockfile: `package-lock.json` present (monorepo with npm workspaces)
+- npm (v10+)
+- Lockfile: package-lock.json (committed)
+- Monorepo structure: `my-sonicjs-app/` (consumer) and `packages/core/` (library)
 
 ## Frameworks
 
 **Core:**
-- **Hono 4.11.7** - Lightweight web framework for Cloudflare Workers, used as main HTTP router in `src/index.ts` and `packages/core/src/app.ts`
-- **@sonicjs-cms/core 2.7.0** - Internal headless CMS framework (file-based dependency in `my-sonicjs-app/package.json`)
-
-**Database/ORM:**
-- **Drizzle ORM 0.44.2** - TypeScript-first ORM for D1 database access (`packages/core/src/db/schema.ts`)
-- **Drizzle-Kit 0.30.0** - Schema management and migrations (`src/db/migrations-bundle.ts`)
-- **Drizzle-Zod 0.8.3** - Schema validation integration (bundled in core build)
-
-**Validation:**
-- **Zod 3.25.67** - Runtime schema validation for request/response bodies and configuration
-
-**Markdown/Content:**
-- **Marked 16.4.1** - Markdown parsing (bundled in core, used for content rendering)
-- **highlight.js 11.11.1** - Syntax highlighting for code blocks in markdown content
-
-**Build/Dev:**
-- **Wrangler 4.59.1** - Cloudflare Workers CLI and dev server (`wrangler dev` for local development)
-- **tsup 8.5.0** - TypeScript bundler for `@sonicjs-cms/core` package builds (`packages/core/tsup.config.ts`)
+- Hono 4.11.7 - Web framework for Cloudflare Workers, routing and middleware
+- Drizzle ORM 0.44.2+ - Database ORM for SQLite (D1) with type safety
+- Zod 3.25.67+ - Schema validation and TypeScript type inference
 
 **Testing:**
-- **Vitest 2.1.8** - Unit and integration tests (`vitest.config.ts`)
-- **Playwright 1.53.1** - E2E testing (configured in `tests/playwright.config.ts`)
+- Vitest 2.1.8 / 4.0.5 - Unit and integration test runner
+- @vitest/coverage-v8 - Code coverage reporting
+
+**Build/Dev:**
+- Tsup 8.5.0 - TypeScript bundler for library compilation
+- Wrangler 4.59.1 - Cloudflare Workers CLI for deployment and local dev
+- TypeScript 5.8.3 / 5.9.3 - Compiler and type checking
+- tsx - TypeScript script executor (for seed scripts)
 
 ## Key Dependencies
 
 **Critical:**
-- **@cloudflare/workers-types 4.20250620.0** - TypeScript type definitions for Cloudflare Workers bindings (D1, KV, R2, Vectorize)
-- **hono 4.11.7** - HTTP routing and middleware in `src/index.ts` and throughout the application
-- **drizzle-orm 0.44.2** - Database access layer for all data persistence
-- **zod 3.25.67** - Runtime validation for plugins, collections, and API requests
+- `@cloudflare/workers-types` 4.20250620.0 - Type definitions for Cloudflare bindings (D1, R2, KV, etc.)
+- `drizzle-orm` 0.44.2+ - ORM core for database operations
+- `drizzle-zod` 0.8.3 - Integration between Drizzle schemas and Zod for type-safe schema generation
+- `hono` 4.11.7 - HTTP framework, routing, context/middleware handling
 
 **Infrastructure:**
-- **semver 7.7.3** - Version parsing and comparison for plugin compatibility checks (`packages/core/src/plugins`)
-- **glob 10.5.0** - File pattern matching for migrations and plugin discovery
-- **tsx 4.20.3** - TypeScript executor for scripts (seed data, database setup)
+- `marked` 16.4.1 - Markdown parsing and HTML rendering (used in content templates)
+- `highlight.js` 11.11.1 - Syntax highlighting for code blocks in content
+- `semver` 7.7.3 - Version comparison and parsing utilities
+- `glob` 10.5.0 - File pattern matching for plugin discovery
 
 ## Configuration
 
 **Environment:**
-- **Wrangler configuration:** `wrangler.toml` in app root
-  - Cloudflare account_id: `f9d6328dc3115e621758a741dda3d5c4`
-  - D1 Database binding: `DB` (sonicjs-worktree-lane711-otp-email-branding)
-  - R2 Bucket binding: `MEDIA_BUCKET` (sonicjs-ci-media)
-  - KV Cache binding: `CACHE_KV` (a16f8246fc294d809c90b0fb2df6d363)
-  - Environment variable: `ENVIRONMENT = "development"`
-  - Observability: enabled
+- `.env` files not used; all config via `wrangler.toml`
+- Environment variables set in `wrangler.toml` under `[vars]` section
+- Secrets handled via Cloudflare Workers secrets (not in source)
+- Development database uses local D1 instance via Wrangler
 
-- **TypeScript configuration:** `tsconfig.json`
+**Build:**
+- `tsconfig.json` - TypeScript configuration with strict mode enabled
   - Target: ES2022
   - Module resolution: bundler
-  - Strict mode enabled with exact optional property types
   - Path alias: `@/*` → `./src/*`
-  - Types from `@cloudflare/workers-types` and `@types/node`
-
-- **Build system:** `tsup.config.ts` in core package
-  - Multiple entry points: index, services, middleware, routes, templates, plugins, utils, types
-  - Output formats: ESM and CommonJS
-  - External: `@cloudflare/workers-types`, `hono`, `drizzle-orm`, `zod` (not bundled)
-  - Bundled: `drizzle-zod`, `marked`, `highlight.js`, `semver`
+  - Type checking for Cloudflare Workers and Node.js
+- `tsup.config.ts` - Entry points for library distribution
+  - Outputs: ESM and CommonJS formats
+  - External dependencies: hono, drizzle-orm, zod, @cloudflare/workers-types
+  - Bundled dependencies: drizzle-zod, marked, highlight.js, semver
+  - Tree-shaking enabled
+- `vitest.config.ts` - Test runner configuration
+  - Environment: node
+  - Coverage provider: v8
+  - Test file patterns: `**/*.{test,spec}.{js,ts}`
 
 ## Platform Requirements
 
 **Development:**
-- Node.js 18 or higher
-- Cloudflare account (free tier supported)
-- Wrangler CLI (npm installed)
-- Local SQLite database for migrations
+- Node.js 18.0.0 or higher
+- npm with package-lock.json
+- Cloudflare account for D1, R2, KV, and Workers AI (optional features)
+- Wrangler CLI configured with account_id
 
 **Production:**
-- Cloudflare Workers edge runtime (deployable via `npm run deploy`)
-- Cloudflare D1 (SQLite database service)
-- Cloudflare R2 (object storage for media)
-- Cloudflare KV (key-value cache for performance)
-- Cloudflare Vectorize (optional, for AI search semantic indexing)
-- Cloudflare Workers AI (optional, for embedding generation)
+- Deployment target: Cloudflare Workers global edge network
+- Database: Cloudflare D1 (SQLite)
+- File storage: Cloudflare R2 (S3-compatible object storage)
+- Caching: Cloudflare KV (distributed key-value store)
+- Optional: Cloudflare AI (Workers AI for embeddings and search)
+- Optional: Cloudflare Turnstile (bot protection)
+
+## Database
+
+**Type:** SQLite via Cloudflare D1
+
+**Connection:**
+- Binding: `DB` (exposed in Hono context as `c.env.DB`)
+- ORM: Drizzle ORM
+- Migrations: `migrations/` directory, auto-applied on worker startup
+
+**Schema Location:** `packages/core/src/db/schema.ts`
+- Users table - authentication and user management
+- Collections table - dynamic content schema definitions
+- Content table - actual content items
+- ContentVersions table - version history tracking
+- Media table - file metadata and R2 references
+- ApiTokens table - programmatic API access
+- WorkflowHistory table - content workflow tracking
+- PluginSettings table - plugin configurations
+
+## Storage & Caching
+
+**File Storage:**
+- Cloudflare R2 bucket (S3-compatible)
+- Binding: `MEDIA_BUCKET`
+- Bucket name: `sonicjs-ci-media` (CI environment)
+- Accessible via `/files/*` endpoint with CDN caching
+
+**Caching:**
+- Cloudflare KV namespace
+- Binding: `CACHE_KV`
+- Used by cache plugin and content caching
+
+**Optional Features:**
+- Cloudflare Workers AI - for semantic search embeddings
+- Cloudflare Vectorize - for vector search storage
 
 ---
 

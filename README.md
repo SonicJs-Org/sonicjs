@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 [![PR Tests](https://github.com/lane711/sonicjs/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/lane711/sonicjs/actions/workflows/pr-tests.yml)
-[![codecov](https://codecov.io/gh/lane711/sonicjs/branch/main/graph/badge.svg)](https://codecov.io/gh/lane711/sonicjs)
+[![codecov](https://codecov.io/gh/SonicJs-Org/sonicjs/branch/main/graph/badge.svg)](https://codecov.io/gh/SonicJs-Org/sonicjs)
 [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Flane711%2F4fc1969ff683812bc49788d43fb4d7e2%2Fraw%2Ftest-count.json)](https://github.com/lane711/sonicjs)
 [![npm version](https://img.shields.io/npm/v/@sonicjs-cms/core.svg)](https://www.npmjs.com/package/@sonicjs-cms/core)
 

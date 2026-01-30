@@ -1,6 +1,7 @@
 import { html } from 'hono/html'
 import type { HtmlEscapedString } from 'hono/utils/html'
 import type { Redirect } from '../types'
+import { renderAdminLayoutCatalyst } from '@sonicjs-cms/core/templates'
 
 export interface RedirectListPageData {
   redirects: Redirect[]
@@ -798,51 +799,21 @@ function getConfirmationDialogScript(): HtmlEscapedString | Promise<HtmlEscapedS
 }
 
 /**
- * Render page layout
+ * Render page layout using shared admin layout template
  */
-function renderLayout(title: string, content: any): HtmlEscapedString | Promise<HtmlEscapedString> {
-  return html`
-    <!DOCTYPE html>
-    <html lang="en" class="dark">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${title} - SonicJS</title>
-      <script src="https://cdn.tailwindcss.com"></script>
-      <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { zinc: { 50: '#fafafa', 100: '#f4f4f5', 200: '#e4e4e7', 300: '#d4d4d8', 400: '#a1a1aa', 500: '#71717a', 600: '#52525b', 700: '#3f3f46', 800: '#27272a', 900: '#18181b', 950: '#09090b' } } } } }</script>
-      <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'); body { font-family: 'Inter', sans-serif; } dialog::backdrop { background: rgba(0, 0, 0, 0.5); }</style>
-    </head>
-    <body class="min-h-screen bg-white dark:bg-zinc-900">
-      <div class="relative isolate flex min-h-svh w-full max-lg:flex-col lg:bg-zinc-100 dark:lg:bg-zinc-950">
-        <div class="fixed inset-y-0 left-0 w-64 max-lg:hidden">
-          <nav class="flex h-full min-h-0 flex-col bg-white shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
-            <div class="flex flex-col border-b border-zinc-950/5 p-4 dark:border-white/5">
-              <a href="/admin" class="flex items-center gap-2 font-bold text-xl dark:text-white">SonicJS</a>
-            </div>
-            <div class="flex flex-1 flex-col overflow-y-auto p-4 gap-0.5">
-               <a href="/admin" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">Dashboard</a>
-               <a href="/admin/collections" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">Collections</a>
-               <a href="/admin/content" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">Content</a>
-               <a href="/admin/media" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">Media</a>
-               <a href="/admin/users" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">Users</a>
-               <a href="/admin/redirects" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 bg-zinc-100 dark:bg-zinc-800 dark:text-white">
-                 <span class="absolute inset-y-2 -left-4 w-0.5 rounded-full bg-cyan-500"></span>
-                 Redirects
-               </a>
-               <a href="/admin/plugins" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">Plugins</a>
-            </div>
-             <div class="border-t border-zinc-950/5 p-4 dark:border-white/5">
-               <a href="/admin/settings" class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">Settings</a>
-             </div>
-          </nav>
-        </div>
-        <main class="flex flex-1 flex-col pb-2 lg:min-w-0 lg:pl-64 lg:pr-2">
-          <div class="grow p-6 lg:rounded-lg lg:bg-white lg:p-10 lg:shadow-sm lg:ring-1 lg:ring-zinc-950/5 dark:lg:bg-zinc-900 dark:lg:ring-white/10">
-            ${content}
-          </div>
-        </main>
-      </div>
-    </body>
-    </html>
+function renderLayout(title: string, content: any): string {
+  // Add custom styles for dialog backdrop
+  const customStyles = `
+    <style>
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.5);
+      }
+    </style>
   `
+
+  return renderAdminLayoutCatalyst({
+    title,
+    currentPath: '/admin/redirects',
+    content: customStyles + content.toString()
+  })
 }

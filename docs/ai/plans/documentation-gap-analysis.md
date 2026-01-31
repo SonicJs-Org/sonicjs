@@ -98,9 +98,8 @@ Docs
 │   │   ├── EasyMDE (exists)
 │   │   ├── TinyMCE (exists)
 │   │   └── Quill (exists)
-│   ├── Auth Plugins
-│   │   ├── OTP Login (exists)
-│   │   └── Magic Link (exists)
+│   ├── Auth (Better Auth)
+│   │   └── Magic Link / Email OTP via config (see authentication docs)
 │   └── Plugin Development (exists)
 ├── Reference
 │   ├── API Reference (exists - needs expansion)

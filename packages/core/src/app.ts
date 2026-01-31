@@ -32,11 +32,10 @@ import { metricsMiddleware } from './middleware/metrics'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
-import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
-import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
 import { faviconSvg } from './assets/favicon'
+import { createAuth } from './auth/config'
 
 // ============================================================================
 // Type Definitions
@@ -47,6 +46,8 @@ export interface Bindings {
   CACHE_KV: KVNamespace
   MEDIA_BUCKET: R2Bucket
   ASSETS: Fetcher
+  BETTER_AUTH_SECRET?: string
+  BETTER_AUTH_URL?: string
   EMAIL_QUEUE?: Queue
   SENDGRID_API_KEY?: string
   DEFAULT_FROM_EMAIL?: string
@@ -65,6 +66,7 @@ export interface Variables {
     exp: number
     iat: number
   }
+  session?: { id: string; userId: string; token: string; expiresAt: number; createdAt: number; updatedAt: number }
   requestId?: string
   startTime?: number
   appVersion?: string
@@ -89,6 +91,21 @@ export interface SonicJSConfig {
     path: string
     handler: Hono
   }>
+
+  /**
+   * Better Auth configuration override.
+   * Use extendBetterAuth to add social providers, magic link, 2FA, or other login methods.
+   * @example
+   * auth: {
+   *   extendBetterAuth: (defaults) => ({
+   *     ...defaults,
+   *     socialProviders: { google: { clientId: '...', clientSecret: '...' } },
+   *   }),
+   * }
+   */
+  auth?: {
+    extendBetterAuth?: import('./auth/config').ExtendBetterAuth
+  }
 
   // Custom middleware
   middleware?: {
@@ -176,6 +193,45 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     }
   }
 
+  // Better Auth session middleware: set c.set('user') from Better Auth session for compatibility
+  type AppEnv = { Bindings: Bindings; Variables: Variables }
+  app.use('*', async (c: Context<AppEnv>, next) => {
+    try {
+      const auth = createAuth(c.env, config.auth?.extendBetterAuth)
+      const session = await auth.api.getSession({ headers: c.req.raw.headers })
+      if (session) {
+        const user = session.user as { id: string; email: string; role?: string }
+        const exp = typeof session.session.expiresAt === 'number' ? session.session.expiresAt : (session.session.expiresAt as Date).getTime()
+        const iat = typeof session.session.createdAt === 'number' ? session.session.createdAt : (session.session.createdAt as Date).getTime()
+        ;(c.set as (key: keyof Variables, value: Variables[keyof Variables]) => void)('user', {
+          userId: user.id,
+          email: user.email,
+          role: user.role ?? 'viewer',
+          exp,
+          iat
+        })
+        const expiresAt = typeof session.session.expiresAt === 'number' ? session.session.expiresAt : (session.session.expiresAt as Date).getTime()
+        const createdAt = typeof session.session.createdAt === 'number' ? session.session.createdAt : (session.session.createdAt as Date).getTime()
+        const updatedAt = typeof session.session.updatedAt === 'number' ? session.session.updatedAt : (session.session.updatedAt as Date).getTime()
+        ;(c.set as (key: keyof Variables, value: Variables[keyof Variables]) => void)('session', {
+          id: session.session.id,
+          userId: session.session.userId,
+          token: session.session.token,
+          expiresAt,
+          createdAt,
+          updatedAt
+        })
+      } else {
+        ;(c.set as (key: keyof Variables, value: Variables[keyof Variables]) => void)('user', undefined)
+        ;(c.set as (key: keyof Variables, value: Variables[keyof Variables]) => void)('session', undefined)
+      }
+    } catch {
+      ;(c.set as (key: keyof Variables, value: Variables[keyof Variables]) => void)('user', undefined)
+      ;(c.set as (key: keyof Variables, value: Variables[keyof Variables]) => void)('session', undefined)
+    }
+    await next()
+  })
+
   // Core routes
   // Routes are being imported incrementally from routes/*
   // Each route is tested and migrated one-by-one
@@ -206,18 +262,15 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Fixes GitHub Issue #461: Cache routes were not registered
   app.route('/admin/cache', cachePlugin.getRoutes())
 
-  // Plugin routes - OTP Login (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  // Register OTP Login routes first so they take precedence over the generic /:id handler
-  if (otpLoginPlugin.routes && otpLoginPlugin.routes.length > 0) {
-    for (const route of otpLoginPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
   app.route('/admin/plugins', adminPluginRoutes)
   app.route('/admin/logs', adminLogsRoutes)
   app.route('/admin', adminUsersRoutes)
   app.route('/auth', authRoutes)
+  // Better Auth handler for /auth/sign-in/*, /auth/sign-up/*, /auth/sign-out, /auth/get-session, etc.
+  app.on(['GET', 'POST'], '/auth/*', async (c) => {
+    const auth = createAuth(c.env, config.auth?.extendBetterAuth)
+    return auth.handler(c.req.raw)
+  })
 
   // Test cleanup routes (only for development/test environments)
   app.route('/', testCleanupRoutes)
@@ -225,14 +278,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin routes - Email
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - Magic Link Auth (passwordless authentication via email links)
-  const magicLinkPlugin = createMagicLinkAuthPlugin()
-  if (magicLinkPlugin.routes && magicLinkPlugin.routes.length > 0) {
-    for (const route of magicLinkPlugin.routes) {
       app.route(route.path, route.handler as any)
     }
   }

@@ -6,7 +6,7 @@ export const metadata = {
 export const sections = [
   { title: 'Overview', id: 'overview' },
   { title: 'Core Plugins', id: 'core-plugins' },
-  { title: 'Authentication Plugins', id: 'authentication-plugins' },
+  { title: 'Authentication (Better Auth)', id: 'authentication-better-auth' },
   { title: 'Editor Plugins', id: 'editor-plugins' },
   { title: 'Utility Plugins', id: 'utility-plugins' },
   { title: 'Plugin Management', id: 'plugin-management' },
@@ -25,7 +25,7 @@ SonicJS plugins provide modular functionality that can be enabled or disabled wi
 **Plugin Types:**
 
 - **Core Plugins** - Built-in plugins installed with SonicJS
-- **Authentication Plugins** - Passwordless login, OTP, magic links
+- **Authentication** - Magic link and email OTP via Better Auth config
 - **Editor Plugins** - Rich text and markdown editors
 - **Utility Plugins** - Email, workflows, database tools
 
@@ -103,8 +103,7 @@ Send transactional emails via Resend, SendGrid, or other email services.
 3. Test with "Send Test Email" button
 
 **Required for:**
-- OTP Login Plugin
-- Magic Link Authentication
+- Better Auth magic link / email OTP (when configured)
 - Password reset emails
 
 ---
@@ -143,59 +142,14 @@ This plugin is **automatically disabled in production** for security.
 
 ---
 
-## Authentication Plugins
+## Authentication (Better Auth)
 
-Extend authentication with passwordless login methods.
+Passwordless login (magic link, email OTP) is added via **Better Auth plugins** in your app config, not as admin-activated plugins.
 
-### OTP Login Plugin
+- **Magic link** — Add the `magicLink` plugin in `SonicJSConfig.auth.extendBetterAuth` and implement `sendMagicLink`. See [Authentication - Magic Link](/authentication#magic-link--email-otp).
+- **Email OTP** — Add the `emailOtp` plugin in `auth.extendBetterAuth` and implement `sendVerificationOTP`. See [Authentication - Email OTP](/authentication#magic-link--email-otp).
 
-**Status:** Inactive by default
-**Version:** 1.0.0-beta.1
-
-One-time password authentication via email.
-
-**Features:**
-- Configurable OTP code length (4-8 digits)
-- Code expiration (5-60 minutes, default: 10)
-- Rate limiting (default: 5 codes per hour)
-- Max verification attempts (default: 3)
-- Optional new user registration
-
-**Database Migration:** `021_add_otp_login.sql`
-
-**Installation:**
-
-1. Navigate to **Admin** → **Plugins**
-2. Find **OTP Login** plugin
-3. Click **Activate**
-4. Configure settings
-5. Ensure **Email Plugin** is configured
-
-**Usage:** See [Authentication - OTP Login](/authentication#passwordless-authentication)
-
----
-
-### Magic Link Authentication
-
-**Status:** Inactive by default
-**Version:** 1.0.0-beta.1
-
-Passwordless login via email magic links.
-
-**Features:**
-- One-click email authentication
-- No password required
-- Secure token-based links
-- Optional user registration
-
-**Installation:**
-
-1. Navigate to **Admin** → **Plugins**
-2. Find **Magic Link Auth** plugin
-3. Click **Activate**
-4. Ensure **Email Plugin** is configured
-
-**Usage:** See [Authentication - Magic Link](/authentication#passwordless-authentication)
+Configure your Email Plugin so Better Auth can send magic link and OTP emails when those methods are enabled.
 
 ---
 

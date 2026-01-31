@@ -15,19 +15,20 @@ http://localhost:8787/api
 
 ## Authentication
 
-Most API endpoints require authentication. SonicJS AI uses JWT (JSON Web Tokens) for authentication with HTTP-only cookies for web clients and Bearer tokens for API clients.
+Most API endpoints require authentication. SonicJS uses **Better Auth** for sign-in and sessions. Authentication is session-cookie based (HTTP-only cookie `better-auth.session_token`).
 
-### Getting an Access Token
+### Sign-in (Better Auth)
 
-**Endpoint:** `POST /auth/login`
+**Endpoint:** `POST /auth/sign-in/email`
 
 ```bash
-curl -X POST "http://localhost:8787/auth/login" \
+curl -X POST "http://localhost:8787/auth/sign-in/email" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@sonicjs.com",
     "password": "sonicjs!"
-  }'
+  }' \
+  -c cookies.txt
 ```
 
 **Request Body:**
@@ -38,62 +39,32 @@ curl -X POST "http://localhost:8787/auth/login" \
 }
 ```
 
-**Response (200 OK):**
-```json
-{
-  "user": {
-    "id": "admin-user-id",
-    "email": "admin@sonicjs.com",
-    "username": "admin",
-    "firstName": "Admin",
-    "lastName": "User",
-    "role": "admin"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZG1pbi11c2VyLWlkIiwiZW1haWwiOiJhZG1pbkBzb25pY2pzLmNvbSIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTczMDk0MDAwMCwiaWF0IjoxNzMwODUzNjAwfQ.xyz"
-}
+On success, Better Auth sets a session cookie. Use `-c cookies.txt` (and `-b cookies.txt` on subsequent requests) to send the cookie with curl. In browsers, use `credentials: 'include'` so the cookie is sent automatically.
+
+### Using the Session
+
+Include the session cookie on authenticated requests. In browsers, send credentials so the cookie is attached:
+
+```javascript
+fetch('/api/...', { credentials: 'include' })
 ```
 
-**Error Response (401 Unauthorized):**
-```json
-{
-  "error": "Invalid email or password"
-}
-```
-
-### Using the Token
-
-Include the token in the Authorization header for all authenticated requests:
-
-```http
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-For browser-based applications, the token is automatically stored as an HTTP-only cookie named `auth_token`.
-
-### Token Refresh
-
-**Endpoint:** `POST /auth/refresh`
-
-Requires existing valid authentication.
+With curl, use the cookie file saved at sign-in:
 
 ```bash
-curl -X POST "http://localhost:8787/auth/refresh" \
-  -H "Authorization: Bearer {token}"
+curl -b cookies.txt "http://localhost:8787/auth/me"
 ```
 
-**Response (200 OK):**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+### Session Refresh
+
+Session refresh is handled automatically by Better Auth. The endpoint `POST /auth/refresh` returns a message to that effect; no new token is issued.
 
 ### User Registration
 
-**Endpoint:** `POST /auth/register`
+**Endpoint:** `POST /auth/sign-up/email` (Better Auth)
 
 ```bash
-curl -X POST "http://localhost:8787/auth/register" \
+curl -X POST "http://localhost:8787/auth/sign-up/email" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "newuser@example.com",
@@ -109,36 +80,21 @@ curl -X POST "http://localhost:8787/auth/register" \
 {
   "email": "newuser@example.com",
   "password": "securepassword123",
-  "username": "newuser",
-  "firstName": "John",
-  "lastName": "Doe"
+  "name": "John Doe"
 }
 ```
 
-**Response (201 Created):**
-```json
-{
-  "user": {
-    "id": "uuid-generated-id",
-    "email": "newuser@example.com",
-    "username": "newuser",
-    "firstName": "John",
-    "lastName": "Doe",
-    "role": "viewer"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+Optional fields (e.g. `username`, `firstName`, `lastName`) depend on your Better Auth user config. On success, Better Auth sets a session cookie. Use `-c cookies.txt` with curl to save it. See [authentication](authentication.md).
 
 ### Get Current User
 
 **Endpoint:** `GET /auth/me`
 
-Requires authentication.
+Requires authentication (session cookie).
 
 ```bash
 curl -X GET "http://localhost:8787/auth/me" \
-  -H "Authorization: Bearer {token}"
+  -b cookies.txt
 ```
 
 **Response (200 OK):**
@@ -158,18 +114,9 @@ curl -X GET "http://localhost:8787/auth/me" \
 
 ### Logout
 
-**Endpoint:** `POST /auth/logout` or `GET /auth/logout`
+**Endpoint:** `GET /auth/logout` or `POST /auth/logout`
 
-```bash
-curl -X POST "http://localhost:8787/auth/logout"
-```
-
-**Response (200 OK):**
-```json
-{
-  "message": "Logged out successfully"
-}
-```
+Calls Better Auth sign-out and redirects to the login page. Include the session cookie so the session can be cleared.
 
 ## API Endpoints
 
@@ -1199,7 +1146,7 @@ curl -X GET "http://localhost:8787/api/content?limit=10" -i
 
 ### v0.1.0 (Current)
 - Initial API implementation
-- JWT authentication
+- Session-based authentication (Better Auth)
 - Collections and content endpoints
 - Media upload and management
 - Three-tiered caching system

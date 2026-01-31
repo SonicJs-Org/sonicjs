@@ -31,8 +31,8 @@ SonicJS is built with security in mind, implementing industry best practices out
   features={[
     {
       icon: '🔐',
-      title: 'JWT Authentication',
-      description: 'Secure token-based authentication with automatic expiration',
+      title: 'Session Authentication',
+      description: 'Better Auth session-based auth with HTTP-only cookies',
     },
     {
       icon: '🛡️',
@@ -57,87 +57,37 @@ SonicJS is built with security in mind, implementing industry best practices out
 
 ## Authentication
 
-### JWT Token Security
+### Session Security (Better Auth)
 
-SonicJS uses JWT (JSON Web Tokens) for authentication with these security features:
+SonicJS uses **Better Auth** for sign-in and sessions with these security features:
 
-- **HS256 Algorithm**: HMAC-SHA256 for token signing
-- **24-hour Expiration**: Tokens automatically expire
-- **Secure Storage**: Tokens stored in HttpOnly cookies
-
-<CodeGroup title="Token Payload Structure">
-
-```typescript
-interface JWTPayload {
-  userId: string    // User identifier
-  email: string     // User email
-  role: string      // User role for authorization
-  exp: number       // Expiration timestamp
-  iat: number       // Issued at timestamp
-}
-```
-
-</CodeGroup>
+- **Session cookie** — HTTP-only `better-auth.session_token` (no client-side token handling)
+- **Configurable expiration** — Session lifetime and refresh via Better Auth options
+- **Secure storage** — Sessions stored in database and/or cookie by Better Auth
 
 ### Cookie Security
 
-Authentication cookies are configured with maximum security:
-
-<CodeGroup title="Cookie Configuration">
-
-```typescript
-// Default cookie settings (set automatically)
-{
-  httpOnly: true,   // Prevents JavaScript access
-  secure: true,     // HTTPS only
-  sameSite: 'Strict', // Prevents CSRF
-  maxAge: 86400,    // 24 hours
-  path: '/'
-}
-```
-
-</CodeGroup>
+Better Auth sets the session cookie with secure defaults (httpOnly, sameSite, secure in production). Cookie options are configurable in your Better Auth config.
 
 ### Password Security
 
-Passwords are hashed using the Web Crypto API:
-
-<CodeGroup title="Password Hashing">
-
-```typescript
-// SonicJS hashes passwords automatically
-// Using SHA-256 with salt
-
-// Registration - password is hashed before storage
-const hashedPassword = await hashPassword(plainPassword)
-
-// Login - compare hashed values
-const isValid = await verifyPassword(plainPassword, storedHash)
-```
-
-</CodeGroup>
+Better Auth hashes and verifies passwords for sign-in and sign-up. Do not use custom password hashing for new features.
 
 <Note>
-Always use a unique, strong JWT secret in production. Never use the default secret.
+Always set a strong **BETTER_AUTH_SECRET** (min 32 characters) in production. See [Deployment](/deployment).
 </Note>
 
 ### Multi-Factor Authentication
 
-For enhanced security, use the OTP Login plugin:
+For 2FA or passwordless login, add Better Auth plugins in `auth.extendBetterAuth`:
 
-<CodeGroup title="Enable OTP">
+<CodeGroup title="Better Auth plugins">
 
 ```typescript
-// OTP provides additional verification
-// 1. User enters email
-// 2. Receives one-time code
-// 3. Enters code to complete login
-
-// OTP security features:
-// - Rate limiting per hour
-// - Maximum attempt limits
-// - Short expiration time
-// - IP and user agent tracking
+// In SonicJSConfig.auth.extendBetterAuth:
+// 1. Add magicLink or emailOtp plugin from better-auth/plugins
+// 2. Implement sendMagicLink or sendVerificationOTP (e.g. with Email Plugin)
+// See Authentication docs for full examples.
 ```
 
 </CodeGroup>

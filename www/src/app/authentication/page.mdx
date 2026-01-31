@@ -1,53 +1,51 @@
 export const metadata = {
   title: 'Authentication - SonicJS',
   description:
-    'Secure your SonicJS application with JWT authentication, role-based access control, and user management.',
+    'Secure your SonicJS application with Better Auth: session-based authentication, RBAC, and optional magic link, OTP, and OAuth.',
 }
 
 export const sections = [
   { title: 'Overview', id: 'overview' },
-  { title: 'JWT Authentication', id: 'jwt-authentication' },
-  { title: 'Passwordless Authentication', id: 'passwordless-authentication' },
+  { title: 'Session Authentication', id: 'session-authentication' },
+  { title: 'Magic Link & Email OTP', id: 'magic-link-otp' },
   { title: 'User Management', id: 'user-management' },
   { title: 'RBAC', id: 'rbac' },
 ]
 
 # Authentication
 
-Secure your SonicJS application with JWT authentication and role-based access control. {{ className: 'lead' }}
+Secure your SonicJS application with Better Auth: session-based authentication and role-based access control. {{ className: 'lead' }}
 
 ## Overview
 
-SonicJS uses JWT (JSON Web Tokens) for authentication with:
+SonicJS uses **Better Auth** for sign-in, sign-up, and sessions:
 
-- **24-hour token expiration**
-- **HTTP-only cookie storage** for web clients
-- **Bearer token support** for API clients
-- **KV-based token caching** (5-minute TTL)
-- **Role-based access control** (RBAC)
-- **Permission system** for fine-grained access
+- **Session cookie** — HTTP-only `better-auth.session_token` (no JWT in app code)
+- **Email/password** — `POST /auth/sign-in/email`, `POST /auth/sign-up/email`
+- **RBAC** — First user gets `admin`, others get `viewer` by default
+- **Extensible** — Add Google, magic link, email OTP, 2FA via `auth.extendBetterAuth`
 
 <FeatureGrid
   features={[
     {
       icon: '🔐',
-      title: 'JWT Tokens',
-      description: 'Secure, stateless authentication with automatic expiration',
+      title: 'Session-Based Auth',
+      description: 'Better Auth sessions with HTTP-only cookies and optional DB storage',
     },
     {
       icon: '👥',
       title: 'User Roles',
-      description: 'Admin, Editor, Author, and Viewer roles with different permissions',
+      description: 'Admin, Editor, and Viewer roles with different permissions',
     },
     {
-      icon: '⚡',
-      title: 'Fast Verification',
-      description: 'KV cache for sub-millisecond token verification',
+      icon: '🔗',
+      title: 'Magic Link & OTP',
+      description: 'Add passwordless login via Better Auth plugins in config',
     },
     {
       icon: '🔒',
       title: 'Secure by Default',
-      description: 'HTTP-only cookies, CSRF protection, and rate limiting',
+      description: 'HTTP-only cookies, CSRF protection, and configurable rate limiting',
     },
   ]}
   columns={2}
@@ -55,242 +53,101 @@ SonicJS uses JWT (JSON Web Tokens) for authentication with:
 
 ---
 
-## JWT Authentication
+## Session Authentication
 
 ### Login
 
-<ApiEndpoint method="POST" path="/auth/login" description="Authenticate user and receive JWT token" auth={false} />
+<ApiEndpoint method="POST" path="/auth/sign-in/email" description="Sign in with email and password (Better Auth)" auth={false} />
 
-<CodeGroup title="Login Request">
+<CodeGroup title="Sign-in Request">
 
 ```bash {{title:'cURL'}}
-curl -X POST http://localhost:8787/auth/login \
+curl -X POST http://localhost:8787/auth/sign-in/email \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@sonicjs.com",
     "password": "sonicjs!"
-  }'
+  }' \
+  -c cookies.txt
 ```
 
 ```javascript
-const response = await fetch('http://localhost:8787/auth/login', {
+const response = await fetch('http://localhost:8787/auth/sign-in/email', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     email: 'admin@sonicjs.com',
     password: 'sonicjs!'
-  })
+  }),
+  credentials: 'include'
 });
-
-const { user, token } = await response.json();
 ```
 
 </CodeGroup>
 
-**Response (200 OK):**
+On success, Better Auth sets a session cookie. Use `credentials: 'include'` in browsers so the cookie is sent on later requests.
 
-```json
-{
-  "user": {
-    "id": "admin-user-id",
-    "email": "admin@sonicjs.com",
-    "username": "admin",
-    "firstName": "Admin",
-    "lastName": "User",
-    "role": "admin"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+### Using the Session
 
-### Using the Token
-
-Include the token in the Authorization header for authenticated requests:
+Include the session cookie on authenticated requests. In browsers, send credentials:
 
 <CodeGroup title="Authenticated Request">
 
 ```bash {{title:'cURL'}}
-curl http://localhost:8787/admin/content \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+curl http://localhost:8787/auth/me \
+  -b cookies.txt
 ```
 
 ```javascript
-const response = await fetch('http://localhost:8787/admin/content', {
-  headers: {
-    'Authorization': `Bearer ${token}`
-  }
+const response = await fetch('http://localhost:8787/auth/me', {
+  credentials: 'include'
 });
 ```
 
 </CodeGroup>
 
-For browser-based applications, the token is automatically stored as an HTTP-only cookie named `auth_token`.
+### Registration
+
+<ApiEndpoint method="POST" path="/auth/sign-up/email" description="Create account (Better Auth)" auth={false} />
+
+Send `email`, `password`, and `name`. Optional fields (e.g. `username`, `firstName`, `lastName`) depend on your Better Auth user config. First registered user gets the `admin` role.
 
 ---
 
-## Passwordless Authentication
+## Magic Link & Email OTP
 
-SonicJS offers multiple passwordless authentication methods through plugins. These plugins are **inactive by default** and need to be enabled in the admin panel.
+Passwordless login (magic link or email OTP) is added via **Better Auth plugins** in your app config, not as separate SonicJS plugins.
 
-### OTP Login Plugin
+### Magic Link
 
-The **OTP (One-Time Password) Login Plugin** provides email-based authentication with temporary codes.
+1. Add the `magicLink` plugin in `auth.extendBetterAuth` and implement `sendMagicLink` (e.g. with your email service).
+2. Use the Better Auth client with `magicLinkClient` and call `signIn.magicLink({ email, callbackURL })`.
 
-**Features:**
-- Configurable OTP code length (4-8 digits)
-- Code expiration (5-60 minutes, default: 10 minutes)
-- Rate limiting (default: 5 codes per hour)
-- Max verification attempts (default: 3)
-- Optional new user registration support
+See [Better Auth – Magic Link](https://www.better-auth.com/docs/plugins/magic-link) and [docs/authentication.md](https://github.com/sonicjs/sonicjs/blob/main/docs/authentication.md#magic-link-better-auth-plugin) for a full SonicJS example.
 
-**Installation:**
+### Email OTP
 
-1. Navigate to **Admin** → **Plugins**
-2. Find **OTP Login** plugin
-3. Click **Activate**
-4. Configure settings:
-   - **Code Length**: 4-8 digits (default: 6)
-   - **Code Expiration**: 5-60 minutes (default: 10)
-   - **Max Attempts**: 3-10 (default: 3)
-   - **Rate Limit**: Codes per hour (default: 5)
-   - **Allow Registration**: Enable if you want new users to register via OTP
+1. Add the `emailOtp` plugin in `auth.extendBetterAuth` and implement `sendVerificationOTP({ email, otp, type })`.
+2. Use the Better Auth client with `emailOtpClient` and call `authClient.emailOtp.sendVerificationOtp({ email, type: 'sign-in' })`, then verify the OTP.
 
-**API Usage:**
-
-<CodeGroup title="OTP Login Flow">
-
-```bash {{title:'Request OTP Code'}}
-# Step 1: Request OTP code
-curl -X POST http://localhost:8787/auth/otp/request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com"
-  }'
-
-# Response: { "message": "OTP code sent to email" }
-```
-
-```bash {{title:'Verify OTP Code'}}
-# Step 2: Verify OTP code
-curl -X POST http://localhost:8787/auth/otp/verify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "code": "123456"
-  }'
-
-# Response: { "user": {...}, "token": "eyJhbGc..." }
-```
-
-</CodeGroup>
-
-**Database Schema:**
-
-The OTP plugin creates a new table `otp_codes`:
-
-```sql
-CREATE TABLE otp_codes (
-  id TEXT PRIMARY KEY,
-  user_email TEXT NOT NULL,
-  code TEXT NOT NULL,
-  expires_at INTEGER NOT NULL,
-  attempts INTEGER DEFAULT 0,
-  created_at INTEGER DEFAULT (unixepoch())
-);
-```
-
-### Magic Link Authentication Plugin
-
-The **Magic Link Plugin** enables passwordless login via email links.
-
-**Features:**
-- One-click email authentication
-- No password required
-- Secure token-based links
-- Optional user registration
-
-**Installation:**
-
-1. Navigate to **Admin** → **Plugins**
-2. Find **Magic Link Auth** plugin
-3. Click **Activate**
-4. Configure email settings (requires Email Plugin)
-
-**API Usage:**
-
-<CodeGroup title="Magic Link Flow">
-
-```bash {{title:'Request Magic Link'}}
-# Step 1: Request magic link
-curl -X POST http://localhost:8787/auth/magic-link/request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com"
-  }'
-
-# Response: { "message": "Magic link sent to email" }
-```
-
-```bash {{title:'Verify Magic Link'}}
-# Step 2: User clicks link in email
-# GET /auth/magic-link/verify?token=abc123...
-
-# Automatically redirects to admin with auth cookie set
-```
-
-</CodeGroup>
-
-### Choosing an Authentication Method
-
-| Method | Best For | Security | User Experience |
-|--------|----------|----------|-----------------|
-| **Email + Password** | Traditional apps, maximum control | ⭐⭐⭐⭐ | Familiar, requires password management |
-| **OTP Login** | Mobile apps, high-security environments | ⭐⭐⭐⭐⭐ | Easy, no password needed, limited time |
-| **Magic Link** | Simplified onboarding, newsletters | ⭐⭐⭐⭐ | Seamless, requires email access |
+See [Better Auth – Email OTP](https://www.better-auth.com/docs/plugins/email-otp) and [docs/authentication.md](https://github.com/sonicjs/sonicjs/blob/main/docs/authentication.md#email-otp-better-auth-plugin) for a full SonicJS example.
 
 <Callout type="info">
-**Email Plugin Required:** Both OTP and Magic Link authentication require the Email Plugin to be configured with a valid email service (e.g., Resend, SendGrid).
+**Config, not plugins:** Magic link and email OTP are enabled by extending Better Auth in `SonicJSConfig.auth.extendBetterAuth`, not by activating plugins in the admin panel.
 </Callout>
 
 ---
 
 ## User Management
 
-### User Registration
+### Pages
 
-<ApiEndpoint method="POST" path="/auth/register" description="Create new user account" auth={false} />
+- **GET** `/auth/login` — Login form (submits to `POST /auth/sign-in/email`)
+- **GET** `/auth/register` — Registration form (submits to `POST /auth/sign-up/email`)
+- **GET** `/auth/me` — Current user (requires session cookie)
+- **GET** or **POST** `/auth/logout` — Sign out (calls Better Auth sign-out, redirects to login)
 
-<CodeGroup title="Register User">
-
-```bash {{title:'cURL'}}
-curl -X POST http://localhost:8787/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securepassword123",
-    "username": "newuser",
-    "firstName": "John",
-    "lastName": "Doe"
-  }'
-```
-
-```javascript
-const response = await fetch('http://localhost:8787/auth/register', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    email: 'user@example.com',
-    password: 'securepassword123',
-    username: 'newuser',
-    firstName: 'John',
-    lastName: 'Doe'
-  })
-});
-
-const { user, token } = await response.json();
-```
-
-</CodeGroup>
+Required env: `BETTER_AUTH_SECRET` (min 32 chars), `BETTER_AUTH_URL`. See [deployment](/deployment).
 
 ---
 
@@ -298,7 +155,7 @@ const { user, token } = await response.json();
 
 ### User Roles
 
-SonicJS supports four built-in roles:
+SonicJS supports built-in roles:
 
 <Properties>
   <Property name="admin" type="string">
@@ -306,9 +163,6 @@ SonicJS supports four built-in roles:
   </Property>
   <Property name="editor" type="string">
     Content management. Can create, edit, publish, and delete content.
-  </Property>
-  <Property name="author" type="string">
-    Content creation. Can create and edit own content, but not publish.
   </Property>
   <Property name="viewer" type="string">
     Read-only access. Can view content but not modify.

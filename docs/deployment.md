@@ -473,14 +473,18 @@ cache:collection-content:blog-posts:limit:50
    - Sensitive data (passwords, API keys)
    - Encrypted at rest
    - Only available at runtime
-   - Examples: JWT_SECRET, API keys
+   - Examples: BETTER_AUTH_SECRET, API keys
 
 ### Required Secrets for Production
 
 ```bash
-# JWT Secret for authentication
-# Generate a secure random string
-openssl rand -base64 32 | wrangler secret put JWT_SECRET --env production
+# Better Auth: session signing and base URL (required for authentication)
+# BETTER_AUTH_SECRET: min 32 characters; used to sign session cookies
+openssl rand -base64 32 | wrangler secret put BETTER_AUTH_SECRET --env production
+
+# BETTER_AUTH_URL: public URL of your app (e.g. https://your-app.com or https://your-app.workers.dev)
+# For local dev, use http://localhost:8787 in .dev.vars
+wrangler secret put BETTER_AUTH_URL --env production
 
 # Admin password for initial setup (optional)
 echo "your-secure-admin-password" | wrangler secret put ADMIN_PASSWORD --env production
@@ -534,7 +538,7 @@ export default {
     const environment = env.ENVIRONMENT  // "production"
 
     // Secrets (encrypted)
-    const jwtSecret = env.JWT_SECRET
+    const authSecret = env.BETTER_AUTH_SECRET
 
     // Bindings
     const db = env.DB
@@ -811,7 +815,7 @@ Use this checklist before going live:
 - [ ] Production R2 bucket created
 - [ ] Production KV namespace created
 - [ ] All bindings configured in wrangler.toml
-- [ ] Secrets uploaded (JWT_SECRET, etc.)
+- [ ] Secrets uploaded (BETTER_AUTH_SECRET, BETTER_AUTH_URL, etc.)
 - [ ] Custom domain added and DNS configured
 - [ ] SSL certificate active and valid
 
@@ -835,7 +839,7 @@ Use this checklist before going live:
 ### Security
 
 - [ ] HTTPS enforced (no HTTP access)
-- [ ] Strong JWT secret configured
+- [ ] Strong Better Auth secret configured (BETTER_AUTH_SECRET)
 - [ ] CORS properly configured
 - [ ] Rate limiting enabled (if applicable)
 - [ ] Security headers configured
@@ -1424,14 +1428,15 @@ wrangler d1 execute sonicjs-ai --env production --command="SELECT name FROM sqli
 
 ```bash
 # Symptom
-Error: Uncaught ReferenceError: JWT_SECRET is not defined
+Error: Uncaught ReferenceError: BETTER_AUTH_SECRET is not defined
 
 # Solution
 # List secrets
 wrangler secret list --env production
 
-# Add missing secret
-echo "your-secret-value" | wrangler secret put JWT_SECRET --env production
+# Add required auth secrets
+openssl rand -base64 32 | wrangler secret put BETTER_AUTH_SECRET --env production
+wrangler secret put BETTER_AUTH_URL --env production
 ```
 
 #### Issue: R2 Bucket Access Denied

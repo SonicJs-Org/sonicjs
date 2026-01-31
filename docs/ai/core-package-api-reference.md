@@ -201,7 +201,7 @@ await bootstrap.bootstrapCorePlugins()
 
 #### requireAuth
 
-Middleware that requires valid JWT authentication.
+Middleware that requires valid session authentication (Better Auth). Reads `user` from context set by global session middleware.
 
 ```typescript
 import { requireAuth } from '@sonicjs-cms/core'
@@ -231,22 +231,16 @@ app.use('/api/*', optionalAuth())
 
 ### AuthManager
 
-Static class for authentication operations.
+Static class for legacy auth operations (e.g. seed-admin). Sign-in/sign-up use Better Auth; do not use `generateToken`/`verifyToken` for new features.
 
 ```typescript
 import { AuthManager } from '@sonicjs-cms/core'
 
-// Hash password
+// Hash password (legacy flows only)
 const hash = await AuthManager.hashPassword('password123')
 
-// Verify password
+// Verify password (legacy flows only)
 const valid = await AuthManager.verifyPassword('password123', hash)
-
-// Generate JWT
-const token = await AuthManager.generateToken({ userId, email, role })
-
-// Verify JWT
-const payload = await AuthManager.verifyToken(token)
 ```
 
 ### Logging Middleware

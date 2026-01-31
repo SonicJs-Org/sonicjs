@@ -218,10 +218,8 @@ app.get('/api/data', async (c) => {
             ▼
 ┌───────────────────────────────────────────────────────────────────┐
 │ 5. Authentication Middleware (if required)                        │
-│    - Extract JWT token                                            │
-│    - Check KV cache for token                                     │
-│    - Verify token signature                                       │
-│    - Set user context                                             │
+│    - Read session from Better Auth (session cookie)                │
+│    - Set user context (userId, email, role)                       │
 └───────────┬───────────────────────────────────────────────────────┘
             │
             ▼
@@ -306,7 +304,7 @@ The middleware pipeline processes requests in a specific order to ensure proper 
    ↓
 4. CORS (cross-origin) [Priority: 3]
    ↓
-5. Authentication (JWT verification) [Priority: 10]
+5. Authentication (session from Better Auth) [Priority: 10]
    ↓
 6. Authorization (permission checks) [Priority: 11]
    ↓
@@ -361,52 +359,19 @@ export function bootstrapMiddleware() {
 
 ### Authentication Middleware
 
-JWT-based authentication with KV caching:
+Session-based authentication (Better Auth). A global middleware calls Better Auth `getSession` and sets `user` on context when a valid session cookie is present. `requireAuth()` checks for `c.get('user')`.
 
 ```typescript
-// From /Users/lane/Dev/refs/sonicjs-ai/src/middleware/auth.ts
+// packages/core/src/middleware/auth.ts
 
 export const requireAuth = () => {
   return async (c: Context, next: Next) => {
-    // Get token from header or cookie
-    let token = c.req.header('Authorization')?.replace('Bearer ', '')
-    if (!token) {
-      token = getCookie(c, 'auth_token')
-    }
+    const user = c.get('user')  // Set by global session middleware from Better Auth
 
-    if (!token) {
+    if (!user) {
       return c.json({ error: 'Authentication required' }, 401)
     }
 
-    // Try KV cache first
-    const kv = c.env?.KV
-    let payload: JWTPayload | null = null
-
-    if (kv) {
-      const cacheKey = `auth:${token.substring(0, 20)}`
-      const cached = await kv.get(cacheKey, 'json')
-      if (cached) {
-        payload = cached as JWTPayload
-      }
-    }
-
-    // Verify token if not cached
-    if (!payload) {
-      payload = await AuthManager.verifyToken(token)
-
-      // Cache for 5 minutes
-      if (payload && kv) {
-        await kv.put(cacheKey, JSON.stringify(payload), {
-          expirationTtl: 300
-        })
-      }
-    }
-
-    if (!payload) {
-      return c.json({ error: 'Invalid or expired token' }, 401)
-    }
-
-    c.set('user', payload)
     return await next()
   }
 }
@@ -983,7 +948,7 @@ export async function uploadToCloudflareImages(
 
 1. **Cache Aggressively**: Use three-tier caching
 2. **Minimize Database Queries**: Batch operations when possible
-3. **Use KV for Authentication**: Cache JWT verification
+3. **Session in Cookie**: Better Auth manages session; no app-level token cache
 4. **Optimize Middleware Order**: Fast checks first
 5. **Lazy Load Plugins**: Only load when needed
 

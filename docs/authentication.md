@@ -1,349 +1,201 @@
 # Authentication & Security
 
-SonicJS AI implements a comprehensive authentication and authorization system using JWT tokens, KV-based caching, and role-based access control (RBAC). This guide covers all aspects of user authentication, security, and permissions.
+SonicJS uses **Better Auth** for sign-in, sign-up, and sessions, with role-based access control (RBAC) and optional extension for social login, magic link, 2FA, and other methods.
+
+## Extending Better Auth (custom login methods)
+
+You can add your own login methods (e.g. Google, magic link, 2FA) by passing `auth.extendBetterAuth` when creating the app. The function receives SonicJS’s default Better Auth options; return a merged object with your additions.
+
+**Example: add Google sign-in**
+
+```typescript
+// src/index.ts
+import { createSonicJSApp } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
+
+const config: SonicJSConfig = {
+  auth: {
+    extendBetterAuth: (defaults) => ({
+      ...defaults,
+      socialProviders: {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        },
+      },
+    }),
+  },
+  // ...collections, plugins, etc.
+}
+
+export default createSonicJSApp(config)
+```
+
+See [Better Auth docs](https://www.better-auth.com/docs) for `socialProviders`, `magicLink`, `twoFactor`, and other options. Required env: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (see [deployment.md](deployment.md)).
+
+---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Extending Better Auth](#extending-better-auth-custom-login-methods)
 - [Authentication Flow](#authentication-flow)
-- [JWT Implementation](#jwt-implementation)
-- [Token Caching with KV](#token-caching-with-kv)
-- [Password Security](#password-security)
+- [Magic Link (Better Auth plugin)](#magic-link-better-auth-plugin)
+- [Email OTP (Better Auth plugin)](#email-otp-better-auth-plugin)
 - [Role-Based Access Control](#role-based-access-control)
 - [Permission System](#permission-system)
 - [Auth Routes & Endpoints](#auth-routes--endpoints)
 - [Session Management](#session-management)
-- [User Invitation System](#user-invitation-system)
-- [Password Reset Flow](#password-reset-flow)
 - [Implementing Authentication in Routes](#implementing-authentication-in-routes)
 - [Security Best Practices](#security-best-practices)
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
 
-SonicJS AI uses a modern authentication architecture built on:
+SonicJS uses:
 
-- **JWT (JSON Web Tokens)** for stateless authentication
-- **Cloudflare KV** for token verification caching (5-minute TTL)
-- **SHA-256 password hashing** with salt
-- **RBAC (Role-Based Access Control)** for fine-grained permissions
-- **HTTP-only cookies** and Bearer token support
-- **Session tracking** with activity logging
-- **Invitation-based user onboarding**
+- **Better Auth** for sign-in, sign-up, sessions, and password hashing (session stored in DB and cookie)
+- **Session cookie** `better-auth.session_token` (HTTP-only; configurable via Better Auth)
+- **RBAC** — first user gets `admin`, others get `viewer` by default; registration gating via core-auth plugin
+- **Optional extensions** — add magic link, email OTP, Google/GitHub, 2FA via `auth.extendBetterAuth`
+
+Required env: `BETTER_AUTH_SECRET` (min 32 chars), `BETTER_AUTH_URL`. See [deployment.md](deployment.md).
 
 ## Authentication Flow
 
+Sign-in and sign-up are handled by **Better Auth** at `/auth/*`. The login and registration HTML pages submit via JavaScript to Better Auth’s API.
+
 ### 1. User Registration
 
-**Endpoint:** `POST /auth/register`
+**Endpoint:** `POST /auth/sign-up/email` (Better Auth)
 
 ```typescript
-// Request
+// Request (JSON)
 {
   "email": "user@example.com",
   "password": "securePassword123",
-  "username": "johndoe",
-  "firstName": "John",
-  "lastName": "Doe"
+  "name": "John Doe"
+  // optional: username, firstName, lastName per Better Auth user fields
 }
 
-// Response
-{
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "user@example.com",
-    "username": "johndoe",
-    "firstName": "John",
-    "lastName": "Doe",
-    "role": "viewer"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
+// Response: session cookie set (better-auth.session_token), user object in body
 ```
 
 **Process:**
-1. Email normalized to lowercase
-2. Check for duplicate email/username
-3. Password hashed with SHA-256 + salt
-4. User created with default role: `viewer`
-5. JWT token generated (24-hour expiration)
-6. HTTP-only cookie set
-7. Token returned in response
+1. Request goes to Better Auth; email/password validated and hashed by Better Auth
+2. User created in `users` table; first user gets `admin` role via SonicJS database hooks, others get `viewer`
+3. Session created; HTTP-only cookie `better-auth.session_token` set
+4. Registration gating (e.g. “registration disabled”) is enforced by SonicJS before showing the register page
 
 ### 2. User Login
 
-**Endpoint:** `POST /auth/login`
+**Endpoint:** `POST /auth/sign-in/email` (Better Auth)
 
 ```typescript
-// Request
+// Request (JSON)
 {
   "email": "user@example.com",
   "password": "securePassword123"
 }
 
-// Response
-{
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "user@example.com",
-    "username": "johndoe",
-    "firstName": "John",
-    "lastName": "Doe",
-    "role": "viewer"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
+// Response: session cookie set, user/session in body
 ```
 
 **Process:**
-1. Email normalized to lowercase
-2. User lookup with KV caching
-3. Password verification with SHA-256
-4. JWT token generation
-5. HTTP-only cookie set (24-hour expiration)
-6. `last_login_at` timestamp updated
-7. User cache invalidated to ensure fresh data
+1. Better Auth verifies credentials and creates/updates session
+2. Session cookie set; Hono middleware reads session and sets `c.set('user', { userId, email, role })` for routes
 
-### 3. Token Refresh
+### 3. Session Refresh
 
-**Endpoint:** `POST /auth/refresh`
+Sessions are refreshed automatically by Better Auth (e.g. `session.updateAge`). `POST /auth/refresh` returns a message that refresh is handled by Better Auth; no manual token refresh is required.
 
-```typescript
-// Headers
-Authorization: Bearer <current_token>
+## Magic Link (Better Auth plugin)
 
-// Response
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+To add passwordless login via magic link, use Better Auth’s `magicLink` plugin in `auth.extendBetterAuth`. You must implement `sendMagicLink` (e.g. with your email service).
 
-## JWT Implementation
+**1. Install any email dependency** your app uses (e.g. Resend, SendGrid).
 
-### Token Structure
-
-SonicJS AI uses JWTs with the following payload:
+**2. Extend Better Auth in your app config:**
 
 ```typescript
-interface JWTPayload {
-  userId: string;      // User's unique ID
-  email: string;       // User's email (normalized)
-  role: string;        // User's role (admin, editor, viewer)
-  exp: number;         // Expiration timestamp (Unix)
-  iat: number;         // Issued at timestamp (Unix)
-}
-```
+// src/index.ts (or wherever you call createSonicJSApp)
+import { createSonicJSApp } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
+import { magicLink } from 'better-auth/plugins/magic-link'
 
-### Token Generation
-
-```typescript
-import { AuthManager } from '../middleware/auth'
-
-// Generate a token
-const token = await AuthManager.generateToken(
-  userId,
-  email,
-  role
-)
-
-// Token expires in 24 hours
-// exp = Math.floor(Date.now() / 1000) + (60 * 60 * 24)
-```
-
-**Implementation (`src/middleware/auth.ts`):**
-
-```typescript
-export class AuthManager {
-  static async generateToken(userId: string, email: string, role: string): Promise<string> {
-    const payload: JWTPayload = {
-      userId,
-      email,
-      role,
-      exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 24 hours
-      iat: Math.floor(Date.now() / 1000)
-    }
-
-    return await sign(payload, JWT_SECRET, 'HS256')
-  }
-}
-```
-
-### Token Verification
-
-```typescript
-// Verify and decode token
-const payload = await AuthManager.verifyToken(token)
-
-if (!payload) {
-  // Token invalid or expired
-  return c.json({ error: 'Invalid or expired token' }, 401)
-}
-
-// Token is valid, payload contains user info
-console.log(payload.userId, payload.email, payload.role)
-```
-
-**Implementation:**
-
-```typescript
-static async verifyToken(token: string): Promise<JWTPayload | null> {
-  try {
-    const payload = await verify(token, JWT_SECRET, 'HS256') as JWTPayload
-
-    // Check if token is expired
-    if (payload.exp < Math.floor(Date.now() / 1000)) {
-      return null
-    }
-
-    return payload
-  } catch (error) {
-    console.error('Token verification failed:', error)
-    return null
-  }
-}
-```
-
-### Token Configuration
-
-```typescript
-// Default configuration in src/middleware/auth.ts
-const JWT_SECRET = 'your-super-secret-jwt-key-change-in-production'
-
-// Token expiration: 24 hours
-const TOKEN_EXPIRY = 60 * 60 * 24
-```
-
-**Production Configuration:**
-
-```bash
-# Set JWT_SECRET in wrangler.toml or Cloudflare dashboard
-[vars]
-JWT_SECRET = "your-256-bit-production-secret"
-```
-
-## Token Caching with KV
-
-SonicJS AI implements intelligent token verification caching using Cloudflare KV to reduce JWT verification overhead.
-
-### How It Works
-
-```typescript
-// In requireAuth() middleware
-export const requireAuth = () => {
-  return async (c: Context, next: Next) => {
-    // Get token from header or cookie
-    let token = c.req.header('Authorization')?.replace('Bearer ', '')
-    if (!token) {
-      token = getCookie(c, 'auth_token')
-    }
-
-    // Try to get cached token verification from KV
-    const kv = c.env?.KV
-    let payload: JWTPayload | null = null
-
-    if (kv) {
-      const cacheKey = `auth:${token.substring(0, 20)}`
-      const cached = await kv.get(cacheKey, 'json')
-      if (cached) {
-        payload = cached as JWTPayload
-      }
-    }
-
-    // If not cached, verify token
-    if (!payload) {
-      payload = await AuthManager.verifyToken(token)
-
-      // Cache the verified payload for 5 minutes
-      if (payload && kv) {
-        const cacheKey = `auth:${token.substring(0, 20)}`
-        await kv.put(cacheKey, JSON.stringify(payload), {
-          expirationTtl: 300 // 5 minutes
+const config: SonicJSConfig = {
+  auth: {
+    extendBetterAuth: (defaults) => ({
+      ...defaults,
+      plugins: [
+        ...(defaults.plugins ?? []),
+        magicLink({
+          sendMagicLink: async ({ email, url }) => {
+            // Send email with link: url (Better Auth handles token and callback)
+            await yourEmailService.send({
+              to: email,
+              subject: 'Sign in to the app',
+              html: `Click to sign in: <a href="${url}">${url}</a>`
+            })
+          }
         })
-      }
-    }
-
-    if (!payload) {
-      return c.json({ error: 'Invalid or expired token' }, 401)
-    }
-
-    // Add user info to context
-    c.set('user', payload)
-    await next()
+      ]
+    })
   }
 }
+
+export default createSonicJSApp(config)
 ```
 
-### Cache Strategy
+**3. Client-side:** Use Better Auth client with `magicLinkClient` and call `signIn.magicLink({ email, callbackURL })`. See [Better Auth – Magic Link](https://www.better-auth.com/docs/plugins/magic-link).
 
-- **Cache Key:** `auth:{first-20-chars-of-token}`
-- **TTL:** 5 minutes (300 seconds)
-- **Cache Miss:** Verifies JWT and caches result
-- **Cache Hit:** Returns cached payload (faster)
-- **Invalidation:** Automatic after 5 minutes
+**4. Database:** If the magic link plugin adds tables, run Better Auth CLI migrate/generate and add any new migrations to your project.
 
-### Performance Benefits
+## Email OTP (Better Auth plugin)
 
-- Reduces JWT signature verification overhead
-- Faster response times for authenticated requests
-- Scales better under high load
-- Cloudflare KV provides global edge caching
+To add one-time password (OTP) sign-in via email, use Better Auth’s `emailOtp` plugin in `auth.extendBetterAuth` and implement `sendVerificationOTP`.
+
+**1. Extend Better Auth in your app config:**
+
+```typescript
+// src/index.ts
+import { createSonicJSApp } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
+import { emailOtp } from 'better-auth/plugins/email-otp'
+
+const config: SonicJSConfig = {
+  auth: {
+    extendBetterAuth: (defaults) => ({
+      ...defaults,
+      plugins: [
+        ...(defaults.plugins ?? []),
+        emailOtp({
+          async sendVerificationOTP({ email, otp, type }) {
+            if (type === 'sign-in') {
+              await yourEmailService.send({
+                to: email,
+                subject: 'Your sign-in code',
+                body: `Your code is: ${otp}`
+              })
+            }
+            // Handle type === 'email-verification' or 'forget-password' if needed
+          }
+        })
+      ]
+    })
+  }
+}
+
+export default createSonicJSApp(config)
+```
+
+**2. Client-side:** Add `emailOtpClient` to the Better Auth client and use `authClient.emailOtp.sendVerificationOtp({ email, type: 'sign-in' })`, then verify the OTP with the client API. See [Better Auth – Email OTP](https://www.better-auth.com/docs/plugins/email-otp).
+
+**3. Database:** If the plugin adds tables, run the Better Auth CLI and add migrations as needed.
 
 ## Password Security
 
-### Hashing Algorithm
-
-SonicJS AI uses SHA-256 with a salt for password hashing:
-
-```typescript
-export class AuthManager {
-  static async hashPassword(password: string): Promise<string> {
-    // In Cloudflare Workers, we use Web Crypto API
-    const encoder = new TextEncoder()
-    const data = encoder.encode(password + 'salt-change-in-production')
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  }
-
-  static async verifyPassword(password: string, hash: string): Promise<boolean> {
-    const passwordHash = await this.hashPassword(password)
-    return passwordHash === hash
-  }
-}
-```
-
-### Important Notes
-
-1. **Change the salt in production** - Update `'salt-change-in-production'` to a unique, secure value
-2. **SHA-256 vs bcrypt** - SHA-256 is used because bcrypt is not natively available in Cloudflare Workers
-3. **Salt storage** - The salt is currently hardcoded; consider using environment variables
-4. **Password requirements** - Minimum 8 characters (enforced in validation schemas)
-
-### Password Validation
-
-```typescript
-// Registration schema
-const registerSchema = z.object({
-  email: z.string().email('Valid email is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required')
-})
-```
-
-### Password History
-
-Passwords are tracked in the `password_history` table for security:
-
-```sql
-CREATE TABLE password_history (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  password_hash TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-```
+Better Auth handles password hashing and verification for sign-in and sign-up. SonicJS keeps `AuthManager.hashPassword` and `AuthManager.verifyPassword` only for legacy flows (e.g. seed-admin); do not use them for new features. Password requirements and validation are configured in Better Auth.
 
 ## Role-Based Access Control
 
@@ -424,7 +276,7 @@ app.post('/content',
 ```typescript
 export const requireRole = (requiredRole: string | string[]) => {
   return async (c: Context, next: Next) => {
-    const user = c.get('user') as JWTPayload
+    const user = c.get('user')  // { userId, email, role } from Better Auth session
 
     if (!user) {
       return c.json({ error: 'Authentication required' }, 401)
@@ -605,120 +457,46 @@ export class PermissionManager {
 
 ## Auth Routes & Endpoints
 
+### Better Auth API (`/auth/*`)
+
+Sign-in and sign-up are handled by Better Auth. Key endpoints:
+
+- **POST** `/auth/sign-in/email` — Login with `{ email, password }` (JSON). Sets session cookie.
+- **POST** `/auth/sign-up/email` — Register with `{ email, password, name }` (JSON). Sets session cookie.
+- **POST** `/auth/sign-out` — Log out; clears session cookie.
+
+See [Better Auth docs](https://www.better-auth.com/docs) for the full API (e.g. OAuth, magic link, OTP).
+
 ### Login Page
 
 **GET** `/auth/login`
 
-Renders the login HTML form. Supports query parameters:
-- `?error=<message>` - Display error message
-- `?message=<message>` - Display info message
+Renders the login HTML form. The form submits via JavaScript to `POST /auth/sign-in/email`. Query parameters: `?error=<message>`, `?message=<message>`.
 
 ### Registration Page
 
 **GET** `/auth/register`
 
-Renders the registration HTML form.
+Renders the registration HTML form. The form submits via JavaScript to `POST /auth/sign-up/email`. Registration can be gated (e.g. disabled except for first user).
 
-### Login (API)
+### Legacy API (deprecated)
 
-**POST** `/auth/login`
-
-```typescript
-// Request body
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-
-// Success response (200)
-{
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "username": "username",
-    "firstName": "John",
-    "lastName": "Doe",
-    "role": "viewer"
-  },
-  "token": "jwt-token"
-}
-
-// Error response (401)
-{
-  "error": "Invalid email or password"
-}
-```
-
-### Login (Form)
-
-**POST** `/auth/login/form`
-
-Handles HTML form submissions. Returns HTMX-compatible HTML response.
-
-### Register (API)
-
-**POST** `/auth/register`
-
-```typescript
-// Request body
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "username": "johndoe",
-  "firstName": "John",
-  "lastName": "Doe"
-}
-
-// Success response (201)
-{
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "username": "johndoe",
-    "firstName": "John",
-    "lastName": "Doe",
-    "role": "viewer"
-  },
-  "token": "jwt-token"
-}
-
-// Error response (400)
-{
-  "error": "User with this email or username already exists"
-}
-```
-
-### Register (Form)
-
-**POST** `/auth/register/form`
-
-Handles HTML form submissions. First user registered gets `admin` role.
+**POST** `/auth/login` and **POST** `/auth/register` return `410 Gone` with a message to use Better Auth endpoints (`/auth/sign-in/email`, `/auth/sign-up/email`) instead.
 
 ### Logout
 
 **GET** `/auth/logout` or **POST** `/auth/logout`
 
-Clears the `auth_token` cookie and redirects to login page.
-
-```typescript
-// GET response
-// Redirects to /auth/login?message=You have been logged out successfully
-
-// POST response (200)
-{
-  "message": "Logged out successfully"
-}
-```
+Calls `POST /auth/sign-out` (Better Auth) and redirects to `/auth/login?message=You have been logged out successfully`. Session cookie is cleared by Better Auth.
 
 ### Get Current User
 
 **GET** `/auth/me`
 
-Requires authentication.
+Requires authentication (session cookie). Returns the current user from the database.
 
 ```typescript
-// Headers
-Authorization: Bearer <token>
+// Request: include session cookie (credentials: 'include' in browser)
 
 // Response (200)
 {
@@ -734,21 +512,11 @@ Authorization: Bearer <token>
 }
 ```
 
-### Refresh Token
+### Session Refresh
 
 **POST** `/auth/refresh`
 
-Requires authentication. Generates a new token with extended expiration.
-
-```typescript
-// Headers
-Authorization: Bearer <current-token>
-
-// Response (200)
-{
-  "token": "new-jwt-token"
-}
-```
+Requires authentication. Returns a message that session refresh is handled automatically by Better Auth; no new token is returned.
 
 ### Seed Admin User (Development)
 
@@ -775,61 +543,21 @@ Creates default admin user for testing. **Not for production use.**
 
 ## Session Management
 
-### HTTP-Only Cookies
+### Session Cookie
 
-SonicJS AI uses secure, HTTP-only cookies for session management:
+Better Auth manages sessions and sets an HTTP-only session cookie (default name: `better-auth.session_token`). Cookie options (expiration, secure, sameSite) are configured in Better Auth. SonicJS does not set a separate `auth_token` cookie for normal sign-in/sign-up.
 
-```typescript
-setCookie(c, 'auth_token', token, {
-  httpOnly: true,      // Cannot be accessed via JavaScript
-  secure: true,        // HTTPS only in production
-  sameSite: 'Strict',  // CSRF protection
-  maxAge: 60 * 60 * 24 // 24 hours
-})
-```
+### Session Storage
 
-### Session Tracking
+Sessions are stored in the `session` table (Better Auth schema). The Hono middleware calls `auth.api.getSession({ headers })` and, if a session exists, sets `c.set('user', { userId, email, role })` and `c.set('session', session)` for route handlers.
 
-Sessions are tracked in the `user_sessions` table:
+### requireAuth() Behavior
 
-```sql
-CREATE TABLE user_sessions (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL,
-  ip_address TEXT,
-  user_agent TEXT,
-  is_active INTEGER NOT NULL DEFAULT 1,
-  expires_at INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  last_used_at INTEGER
-);
-```
-
-### Token Extraction
-
-The `requireAuth()` middleware supports multiple token sources:
-
-```typescript
-// 1. Authorization header (Bearer token)
-Authorization: Bearer <token>
-
-// 2. HTTP-only cookie
-Cookie: auth_token=<token>
-
-// Priority: Header > Cookie
-```
+`requireAuth()` reads the user from context (populated by the global session middleware). It does not read an Authorization header or a separate token cookie; authentication is session-cookie based via Better Auth.
 
 ### Session Expiration
 
-- **Token expiration:** 24 hours from issue time
-- **Cookie expiration:** 24 hours (maxAge)
-- **Cache expiration:** 5 minutes (KV TTL)
-
-When a token expires:
-1. JWT verification fails
-2. User redirected to login (HTML requests)
-3. 401 error returned (API requests)
+Session lifetime and refresh are configured in Better Auth (e.g. `session.expiresIn`, `session.updateAge`). When the session is missing or expired, the middleware does not set `user`, and `requireAuth()` returns 401 or redirects to login.
 
 ## User Invitation System
 
@@ -881,8 +609,7 @@ Process:
 4. Hash password
 5. Activate user (`is_active = 1`)
 6. Clear `invitation_token`
-7. Auto-login with JWT token
-8. Redirect to admin dashboard
+7. Auto-login (session set) and redirect to admin dashboard
 
 ### Invitation Expiration
 
@@ -1295,54 +1022,25 @@ export { contentRoutes }
 
 ## Security Best Practices
 
-### 1. Production JWT Secret
+### 1. Production Better Auth Secret
 
-**Never use default JWT secret in production.**
+**Never use a weak or default secret in production.**
 
 ```bash
-# Generate a secure random secret
+# Generate a secure random secret (min 32 characters)
 openssl rand -base64 32
 
-# Add to wrangler.toml
-[vars]
-JWT_SECRET = "your-secure-random-256-bit-secret"
+# Set as Wrangler secret
+openssl rand -base64 32 | wrangler secret put BETTER_AUTH_SECRET --env production
 ```
 
-### 2. Change Password Salt
+Also set `BETTER_AUTH_URL` to your app’s public URL (e.g. `https://your-app.com`). See [deployment.md](deployment.md).
 
-Update the salt in `src/middleware/auth.ts`:
+### 2. HTTPS Only
 
-```typescript
-// BEFORE (insecure)
-const data = encoder.encode(password + 'salt-change-in-production')
+Use HTTPS in production so the session cookie is sent only over secure connections. Better Auth can be configured with `advanced.useSecureCookies` for production.
 
-// AFTER (secure)
-const SALT = c.env.PASSWORD_SALT || 'your-unique-production-salt'
-const data = encoder.encode(password + SALT)
-```
-
-Better yet, use environment-specific salts:
-
-```bash
-# wrangler.toml
-[vars]
-PASSWORD_SALT = "your-unique-production-salt-value"
-```
-
-### 3. HTTPS Only
-
-Always use HTTPS in production:
-
-```typescript
-setCookie(c, 'auth_token', token, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // true in production
-  sameSite: 'Strict',
-  maxAge: 60 * 60 * 24
-})
-```
-
-### 4. Rate Limiting
+### 3. Rate Limiting
 
 Implement rate limiting for auth endpoints:
 
@@ -1355,7 +1053,7 @@ const RATE_LIMITS = {
 }
 ```
 
-### 5. Password Requirements
+### 4. Password Requirements
 
 Enforce strong passwords:
 
@@ -1368,7 +1066,7 @@ const strongPasswordSchema = z.string()
   .regex(/[^A-Za-z0-9]/, 'Password must contain special character')
 ```
 
-### 6. Email Verification
+### 5. Email Verification
 
 Implement email verification:
 
@@ -1386,7 +1084,7 @@ await db.prepare(`
 // Send verification email with token
 ```
 
-### 7. Two-Factor Authentication (2FA)
+### 6. Two-Factor Authentication (2FA)
 
 Enable 2FA for sensitive accounts:
 
@@ -1412,7 +1110,7 @@ await logActivity(
 )
 ```
 
-### 9. Secure Headers
+### 8. Secure Headers
 
 Set security headers:
 
@@ -1461,7 +1159,7 @@ app.use('*', cors({
 }))
 ```
 
-### 12. Input Validation
+### 10. Input Validation
 
 Always validate and sanitize input:
 
@@ -1487,23 +1185,14 @@ app.put('/user/:id',
 
 ## Troubleshooting
 
-### Token Validation Errors
+### Session / Authentication Required
 
-**Problem:** `Invalid or expired token`
+**Problem:** `Authentication required` or `Invalid or expired token`
 
 **Solutions:**
-1. Check JWT_SECRET matches between token generation and verification
-2. Verify token hasn't expired (check `exp` claim)
-3. Ensure token is properly formatted (Bearer <token>)
-4. Check KV cache for stale data
-
-```typescript
-// Debug token
-const parts = token.split('.')
-const payload = JSON.parse(atob(parts[1]))
-console.log('Token payload:', payload)
-console.log('Expired?', payload.exp < Date.now() / 1000)
-```
+1. Ensure the session cookie (`better-auth.session_token`) is sent with the request (browser: `credentials: 'include'`; same origin so cookies are sent by default).
+2. Check that `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are set correctly (same secret and URL used when the session was created).
+3. If the session has expired, the user must sign in again via `/auth/sign-in/email` or your configured method (e.g. magic link, OTP).
 
 ### Permission Denied Errors
 
@@ -1539,71 +1228,22 @@ PermissionManager.clearAllCache()
 
 ### Cookie Not Set
 
-**Problem:** Auth cookie not being sent/received
+**Problem:** Session cookie not being sent or received
 
 **Solutions:**
-1. Verify `secure` flag matches protocol (HTTP vs HTTPS)
-2. Check `sameSite` setting
-3. Ensure domain matches
-4. Check browser console for cookie errors
-
-```typescript
-// Development (HTTP)
-setCookie(c, 'auth_token', token, {
-  httpOnly: true,
-  secure: false,  // false for localhost HTTP
-  sameSite: 'Lax', // Lax for development
-  maxAge: 60 * 60 * 24
-})
-
-// Production (HTTPS)
-setCookie(c, 'auth_token', token, {
-  httpOnly: true,
-  secure: true,   // true for HTTPS
-  sameSite: 'Strict',
-  maxAge: 60 * 60 * 24
-})
-```
-
-### KV Cache Issues
-
-**Problem:** Stale cached data
-
-**Solutions:**
-1. Wait for cache expiration (5 minutes)
-2. Manually clear KV keys
-3. Check KV namespace binding
-
-```typescript
-// Clear cached token verification
-const cacheKey = `auth:${token.substring(0, 20)}`
-await kv.delete(cacheKey)
-
-// Clear user cache
-await cache.delete(`user:${userId}`)
-await cache.delete(`user:email:${email}`)
-```
+1. Ensure `BETTER_AUTH_URL` matches the URL the user is visiting (same origin so cookies are sent).
+2. In development (HTTP), Better Auth may set cookies with `secure: false`; in production use HTTPS and `useSecureCookies` if needed.
+3. Check `sameSite` and domain; cross-site requests require correct CORS and cookie settings.
+4. Check browser DevTools → Application → Cookies for the session cookie.
 
 ### Password Verification Failed
 
-**Problem:** Valid password rejected
+**Problem:** Valid password rejected at sign-in
 
 **Solutions:**
-1. Check salt matches between hash and verify
-2. Verify password_hash in database
-3. Check for encoding issues
-4. Ensure consistent salt usage
-
-```typescript
-// Test password hashing
-const password = 'test123'
-const hash1 = await AuthManager.hashPassword(password)
-const hash2 = await AuthManager.hashPassword(password)
-console.log('Hashes match?', hash1 === hash2) // Should be true
-
-const valid = await AuthManager.verifyPassword(password, hash1)
-console.log('Verification works?', valid) // Should be true
-```
+1. Sign-in is handled by Better Auth; ensure the request is sent to `POST /auth/sign-in/email` with correct `email` and `password`.
+2. Check that the user exists in the `users` table and that Better Auth’s password verification (and any custom adapter) is correct.
+3. For legacy flows that use `AuthManager.verifyPassword` (e.g. seed-admin), ensure the stored hash was produced by the same method.
 
 ### Database Connection Issues
 

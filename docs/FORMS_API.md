@@ -40,7 +40,7 @@ const response = await fetch('http://localhost:8787/admin/forms', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/x-www-form-urlencoded',
-    'Cookie': 'auth_token=your-session-token' // Include auth cookie
+    // Session cookie sent automatically with credentials: 'include'
   },
   body: new URLSearchParams({
     name: 'contact_form',
@@ -57,7 +57,7 @@ const response = await fetch('http://localhost:8787/admin/forms', {
 
 ```bash
 curl -X POST http://localhost:8787/admin/forms \
-  -H "Cookie: auth_token=your-session-token" \
+  -b cookies.txt \   # or Cookie: better-auth.session_token=...
   -d "name=contact_form" \
   -d "displayName=Contact Us" \
   -d "description=Customer contact form" \

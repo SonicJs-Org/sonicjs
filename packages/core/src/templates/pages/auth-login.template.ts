@@ -65,15 +65,14 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
             ${data.error ? `<div class="mb-6">${renderAlert({ type: 'error', message: data.error })}</div>` : ''}
             ${data.message ? `<div class="mb-6">${renderAlert({ type: 'success', message: data.message })}</div>` : ''}
 
-            <!-- Form Response (HTMX target) -->
+            <!-- Form Response (errors from Better Auth) -->
             <div id="form-response" class="mb-6"></div>
 
-            <!-- Form -->
+            <!-- Form: submits to Better Auth /auth/sign-in/email -->
             <form
               id="login-form"
-              hx-post="/auth/login/form"
-              hx-target="#form-response"
-              hx-swap="innerHTML"
+              action="/auth/sign-in/email"
+              method="POST"
               class="space-y-6"
             >
               <!-- Email -->
@@ -116,6 +115,29 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
                 Sign In
               </button>
             </form>
+            <script>
+              (function() {
+                var form = document.getElementById('login-form');
+                if (!form) return;
+                form.addEventListener('submit', function(e) {
+                  e.preventDefault();
+                  var target = document.getElementById('form-response');
+                  var email = form.querySelector('[name="email"]').value;
+                  var password = form.querySelector('[name="password"]').value;
+                  fetch('/auth/sign-in/email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email: email, password: password })
+                  }).then(function(r) {
+                    if (r.ok) { window.location.href = '/admin/dashboard'; return; }
+                    return r.json().then(function(d) { return Promise.reject(d); });
+                  }).catch(function(err) {
+                    if (target) target.innerHTML = '<div class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">' + (err.message || 'Invalid email or password') + '</div>';
+                  });
+                });
+              })();
+            </script>
 
             <!-- Links -->
             <div class="mt-6 text-center">

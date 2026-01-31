@@ -40,56 +40,41 @@ When debugging issues, check the console logs first. SonicJS logs detailed error
 **Error Message:** `"Authentication required"` or `"Invalid or expired token"`
 
 **Causes:**
-- Missing JWT token in request
-- Token not in Authorization header or auth_token cookie
-- Malformed Bearer token format
+- Session cookie not sent (e.g. missing `credentials: 'include'` or wrong origin)
+- Session expired or invalid
+- `BETTER_AUTH_SECRET` or `BETTER_AUTH_URL` mismatch
 
 **Solutions:**
 
-<CodeGroup title="Check Token Format">
+<CodeGroup title="Include session cookie">
 
 ```typescript
-// Correct format - Authorization header
+// Browser: send credentials so session cookie is included
 fetch('/api/content', {
-  headers: {
-    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
-  }
+  credentials: 'include'
 })
 
-// Or use cookies (set by login endpoint)
-fetch('/api/content', {
-  credentials: 'include'  // Include cookies in request
-})
+// Ensure BETTER_AUTH_URL matches the app URL (same origin for cookies)
 ```
 
 </CodeGroup>
 
-### 401 - Expired Token
+### 401 - Expired Session
 
 **Error Message:** `"Your session has expired, please login again"`
 
 **Causes:**
-- Token's `exp` timestamp has passed
-- Default token lifetime is 24 hours
+- Session has expired (lifetime configured in Better Auth)
+- User signed out elsewhere
 
 **Solutions:**
 
-<CodeGroup title="Refresh Token">
+<CodeGroup title="Re-authenticate">
 
 ```typescript
-// Call refresh endpoint before token expires
-const response = await fetch('/auth/refresh', {
-  method: 'POST',
-  credentials: 'include'
-})
-
-if (response.ok) {
-  // New token automatically set in cookie
-  console.log('Token refreshed')
-} else {
-  // Redirect to login
-  window.location.href = '/admin/login'
-}
+// Session refresh is handled by Better Auth; if session is gone, sign in again
+// Redirect to login
+window.location.href = '/auth/login'
 ```
 
 </CodeGroup>

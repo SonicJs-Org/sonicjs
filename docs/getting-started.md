@@ -189,7 +189,7 @@ sonicjs-ai/
 ├── src/
 │   ├── index.ts              # Application entry point
 │   ├── middleware/           # Request middleware
-│   │   ├── auth.ts          # JWT authentication
+│   │   ├── auth.ts          # Session auth (Better Auth) + requireAuth/requireRole
 │   │   ├── bootstrap.ts     # App initialization
 │   │   ├── logging.ts       # Request/security logging
 │   │   ├── performance.ts   # Cache headers & optimization
@@ -374,11 +374,11 @@ Request → Memory → KV → Database → Populate KV → Populate Memory → R
 
 ### 5. Authentication & Authorization
 
-**JWT-based Authentication:**
+**Session-based Authentication (Better Auth):**
 
-- 24-hour token expiration
-- Cookie and header support
-- KV-based token caching (5-min TTL)
+- Sign-in/sign-up at `/auth/sign-in/email`, `/auth/sign-up/email`
+- HTTP-only session cookie (`better-auth.session_token`)
+- Optional: magic link, email OTP, OAuth via `auth.extendBetterAuth`
 
 **Role-Based Access Control (RBAC):**
 

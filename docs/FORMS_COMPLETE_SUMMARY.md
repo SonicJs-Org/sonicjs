@@ -188,7 +188,7 @@ POST   /api/forms/:identifier/submit  - Submit form data
 ```typescript
 const response = await fetch('/admin/forms', {
   method: 'POST',
-  headers: { 'Cookie': 'auth_token=...' },
+  credentials: 'include',  // session cookie (better-auth.session_token) sent automatically
   body: new URLSearchParams({
     name: 'contact_form',
     displayName: 'Contact Us',

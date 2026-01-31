@@ -23,7 +23,7 @@ This plan outlines the next batch of unit tests to improve code coverage from th
 |------|----------|
 | `middleware/bootstrap.ts` | 100% |
 | `middleware/plugin-middleware.ts` | 100% |
-| `otp-login-plugin/otp-service.ts` | 100% |
+| *(otp-login-plugin removed; OTP via Better Auth)* | — |
 | `plugins/cache/services/cache-config.ts` | 100% |
 | `services/cache.ts` | 100% |
 | `services/collection-sync.ts` | 100% |

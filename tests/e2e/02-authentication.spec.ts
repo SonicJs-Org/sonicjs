@@ -27,13 +27,14 @@ test.describe('Authentication', () => {
 
   test('should show error with invalid credentials', async ({ page }) => {
     await page.goto('/auth/login');
-    
+
     await page.fill('[name="email"]', 'invalid@email.com');
     await page.fill('[name="password"]', 'wrongpassword');
     await page.click('button[type="submit"]');
-    
-    // Should show error message
-    await expect(page.locator('.error, .bg-red-100')).toBeVisible();
+
+    // Better Auth / form script shows error in #form-response (red styling)
+    await expect(page.locator('#form-response')).toBeVisible();
+    await expect(page.locator('#form-response [class*="red"]')).toBeVisible({ timeout: 5000 });
   });
 
   test('should logout successfully', async ({ page }) => {

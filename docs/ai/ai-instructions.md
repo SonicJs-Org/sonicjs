@@ -70,7 +70,7 @@ Based on comprehensive analysis of Strapi, Directus, and Payload CMS, SonicJS wi
    - Built-in auth system
    - Role-based access control (RBAC)
    - Field-level permissions
-   - JWT tokens with Cloudflare Access integration
+   - Session-based auth (Better Auth) with Cloudflare Access integration
 
 ### Medium Priority Features
 1. **Content Management**

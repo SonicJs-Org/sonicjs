@@ -1,6 +1,6 @@
 'use strict';
 
-var chunk6STHJAKU_cjs = require('./chunk-6STHJAKU.cjs');
+var chunkMNFY6DWY_cjs = require('./chunk-MNFY6DWY.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
 require('./chunk-KYGRJCZM.cjs');
 require('./chunk-IGJUBJBW.cjs');
@@ -9,35 +9,35 @@ require('./chunk-IGJUBJBW.cjs');
 
 Object.defineProperty(exports, "HookSystemImpl", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.HookSystemImpl; }
+  get: function () { return chunkMNFY6DWY_cjs.HookSystemImpl; }
 });
 Object.defineProperty(exports, "HookUtils", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.HookUtils; }
+  get: function () { return chunkMNFY6DWY_cjs.HookUtils; }
 });
 Object.defineProperty(exports, "PluginManager", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.PluginManager; }
+  get: function () { return chunkMNFY6DWY_cjs.PluginManager; }
 });
 Object.defineProperty(exports, "PluginRegistryImpl", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.PluginRegistryImpl; }
+  get: function () { return chunkMNFY6DWY_cjs.PluginRegistryImpl; }
 });
 Object.defineProperty(exports, "PluginValidator", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.PluginValidator; }
+  get: function () { return chunkMNFY6DWY_cjs.PluginValidator; }
 });
 Object.defineProperty(exports, "ScopedHookSystem", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.ScopedHookSystem; }
+  get: function () { return chunkMNFY6DWY_cjs.ScopedHookSystem; }
 });
 Object.defineProperty(exports, "createTurnstileMiddleware", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.createTurnstileMiddleware; }
+  get: function () { return chunkMNFY6DWY_cjs.createTurnstileMiddleware; }
 });
 Object.defineProperty(exports, "verifyTurnstile", {
   enumerable: true,
-  get: function () { return chunk6STHJAKU_cjs.verifyTurnstile; }
+  get: function () { return chunkMNFY6DWY_cjs.verifyTurnstile; }
 });
 Object.defineProperty(exports, "TurnstileService", {
   enumerable: true,

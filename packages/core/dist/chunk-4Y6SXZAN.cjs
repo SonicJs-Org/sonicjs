@@ -1,8 +1,10 @@
-import { syncCollections, PluginBootstrapService } from './chunk-TVIJ7U2H.js';
-import { MigrationService } from './chunk-IPJPWOQN.js';
-import { metricsTracker } from './chunk-FICTAGD4.js';
-import { sign, verify } from 'hono/jwt';
-import { setCookie, getCookie } from 'hono/cookie';
+'use strict';
+
+var chunkXEITDGR3_cjs = require('./chunk-XEITDGR3.cjs');
+var chunkENPCRSUI_cjs = require('./chunk-ENPCRSUI.cjs');
+var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
+var jwt = require('hono/jwt');
+var cookie = require('hono/cookie');
 
 // src/services/form-collection-sync.ts
 var SYSTEM_FORM_USER_ID = "system-form-submission";
@@ -274,6 +276,18 @@ async function createContentFromSubmission(db, submissionData, form, submissionI
       }
     };
     const authorId = metadata.userId || SYSTEM_FORM_USER_ID;
+    if (authorId === SYSTEM_FORM_USER_ID) {
+      const systemUser = await db.prepare("SELECT id FROM users WHERE id = ?").bind(SYSTEM_FORM_USER_ID).first();
+      if (!systemUser) {
+        console.log("[FormSync] System form user missing, creating...");
+        const sysNow = Date.now();
+        await db.prepare(`
+          INSERT OR IGNORE INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, NULL, 'viewer', 0, ?, ?)
+        `).bind(SYSTEM_FORM_USER_ID, "system-forms@sonicjs.internal", "system-forms", "Form", "Submission", sysNow, sysNow).run();
+      }
+    }
+    console.log(`[FormSync] Inserting content: id=${contentId}, collection=${collection.id}, slug=${slug}, title=${title}, author=${authorId}`);
     await db.prepare(`
       INSERT INTO content (id, collection_id, slug, title, data, status, author_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, 'published', ?, ?, ?)
@@ -290,6 +304,7 @@ async function createContentFromSubmission(db, submissionData, form, submissionI
     await db.prepare(
       "UPDATE form_submissions SET content_id = ? WHERE id = ?"
     ).bind(contentId, submissionId).run();
+    console.log(`[FormSync] Content created successfully: ${contentId}`);
     return contentId;
   } catch (error) {
     console.error("[FormSync] Error creating content from submission:", error);
@@ -353,11 +368,11 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new MigrationService(c.env.DB);
+      const migrationService = new chunkENPCRSUI_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await syncCollections(c.env.DB);
+        await chunkXEITDGR3_cjs.syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
@@ -369,7 +384,7 @@ function bootstrapMiddleware(config = {}) {
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new PluginBootstrapService(c.env.DB);
+        const bootstrapService = new chunkXEITDGR3_cjs.PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -396,11 +411,11 @@ var AuthManager = class {
       // 24 hours
       iat: Math.floor(Date.now() / 1e3)
     };
-    return await sign(payload, JWT_SECRET, "HS256");
+    return await jwt.sign(payload, JWT_SECRET, "HS256");
   }
   static async verifyToken(token) {
     try {
-      const payload = await verify(token, JWT_SECRET, "HS256");
+      const payload = await jwt.verify(token, JWT_SECRET, "HS256");
       if (payload.exp < Math.floor(Date.now() / 1e3)) {
         return null;
       }
@@ -428,7 +443,7 @@ var AuthManager = class {
    * @param options - Optional cookie configuration
    */
   static setAuthCookie(c, token, options) {
-    setCookie(c, "auth_token", token, {
+    cookie.setCookie(c, "auth_token", token, {
       httpOnly: options?.httpOnly ?? true,
       secure: options?.secure ?? true,
       sameSite: options?.sameSite ?? "Strict",
@@ -442,7 +457,7 @@ var requireAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = getCookie(c, "auth_token");
+        token = cookie.getCookie(c, "auth_token");
       }
       if (!token) {
         const acceptHeader = c.req.header("Accept") || "";
@@ -512,7 +527,7 @@ var optionalAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = getCookie(c, "auth_token");
+        token = cookie.getCookie(c, "auth_token");
       }
       if (token) {
         const payload = await AuthManager.verifyToken(token);
@@ -533,7 +548,7 @@ var metricsMiddleware = () => {
   return async (c, next) => {
     const path = new URL(c.req.url).pathname;
     if (path !== "/admin/dashboard/api/metrics") {
-      metricsTracker.recordRequest();
+      chunkRCQ2HIQD_cjs.metricsTracker.recordRequest();
     }
     await next();
   };
@@ -557,6 +572,28 @@ var requireActivePlugins = () => async (_c, next) => await next();
 var getActivePlugins = () => [];
 var isPluginActive = () => false;
 
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, createContentFromSubmission, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware, syncFormCollection };
-//# sourceMappingURL=chunk-3ZU6RPI3.js.map
-//# sourceMappingURL=chunk-3ZU6RPI3.js.map
+exports.AuthManager = AuthManager;
+exports.PermissionManager = PermissionManager;
+exports.bootstrapMiddleware = bootstrapMiddleware;
+exports.cacheHeaders = cacheHeaders;
+exports.compressionMiddleware = compressionMiddleware;
+exports.createContentFromSubmission = createContentFromSubmission;
+exports.detailedLoggingMiddleware = detailedLoggingMiddleware;
+exports.getActivePlugins = getActivePlugins;
+exports.isPluginActive = isPluginActive;
+exports.logActivity = logActivity;
+exports.loggingMiddleware = loggingMiddleware;
+exports.metricsMiddleware = metricsMiddleware;
+exports.optionalAuth = optionalAuth;
+exports.performanceLoggingMiddleware = performanceLoggingMiddleware;
+exports.requireActivePlugin = requireActivePlugin;
+exports.requireActivePlugins = requireActivePlugins;
+exports.requireAnyPermission = requireAnyPermission;
+exports.requireAuth = requireAuth;
+exports.requirePermission = requirePermission;
+exports.requireRole = requireRole;
+exports.securityHeaders = securityHeaders;
+exports.securityLoggingMiddleware = securityLoggingMiddleware;
+exports.syncFormCollection = syncFormCollection;
+//# sourceMappingURL=chunk-4Y6SXZAN.cjs.map
+//# sourceMappingURL=chunk-4Y6SXZAN.cjs.map

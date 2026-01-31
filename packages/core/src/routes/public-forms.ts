@@ -568,8 +568,9 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
     `).bind(now, form.id).run()
 
     // Dual-write: create content item for this submission
+    let contentId: string | null = null
     try {
-      await createContentFromSubmission(
+      contentId = await createContentFromSubmission(
         db,
         body.data,
         { id: form.id as string, name: form.name as string, display_name: form.display_name as string },
@@ -581,6 +582,9 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
           userId: null // anonymous submission
         }
       )
+      if (!contentId) {
+        console.warn('[FormSubmit] Content creation returned null for submission:', submissionId)
+      }
     } catch (contentError) {
       // Don't fail the submission if content creation fails
       console.error('[FormSubmit] Error creating content from submission:', contentError)
@@ -589,6 +593,7 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
     return c.json({
       success: true,
       submissionId,
+      contentId,
       message: 'Form submitted successfully'
     })
   } catch (error: any) {

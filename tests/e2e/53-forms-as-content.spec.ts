@@ -252,6 +252,7 @@ test.describe('Forms as Content - Submissions', () => {
     const result = JSON.parse(responseBody);
     expect(result.success).toBe(true);
     expect(result.submissionId).toBeTruthy();
+    console.log(`Content creation result: contentId=${result.contentId || 'NULL (content NOT created)'}`);
     submissionsCreated = true;
 
     // Diagnostic: check the model filter for the shadow collection
@@ -260,8 +261,11 @@ test.describe('Forms as Content - Submissions', () => {
     const modelFilter = page.locator('select[name="model"]');
     if (await modelFilter.isVisible({ timeout: 3000 }).catch(() => false)) {
       const options = await modelFilter.locator('option').allTextContents();
-      console.log(`Model filter options: ${options.join(' | ')}`);
-      const hasFormModel = options.some(opt => opt.toLowerCase().includes(contactFormName));
+      const trimmedOptions = options.map(o => o.trim()).filter(o => o);
+      console.log(`Model filter options: ${trimmedOptions.join(' | ')}`);
+      const hasFormModel = trimmedOptions.some(opt =>
+        opt.toLowerCase().includes('form') && opt.toLowerCase().includes('contact')
+      );
       console.log(`Shadow collection visible in filter: ${hasFormModel}`);
     }
 

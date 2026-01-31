@@ -327,13 +327,44 @@ export async function createContentFromSubmission(
 ): Promise<string | null> {
   try {
     // Find the shadow collection
-    const collection = await db.prepare(
+    let collection = await db.prepare(
       'SELECT id FROM collections WHERE source_type = ? AND source_id = ?'
     ).bind('form', form.id).first() as any
 
     if (!collection) {
-      console.warn(`[FormSync] No shadow collection found for form ${form.name}`)
-      return null
+      // Shadow collection missing — try to create it on the fly
+      console.warn(`[FormSync] No shadow collection found for form ${form.name}, attempting to create...`)
+      try {
+        const fullForm = await db.prepare(
+          'SELECT id, name, display_name, description, formio_schema, is_active FROM forms WHERE id = ?'
+        ).bind(form.id).first() as any
+
+        if (fullForm) {
+          const schema = typeof fullForm.formio_schema === 'string'
+            ? JSON.parse(fullForm.formio_schema)
+            : fullForm.formio_schema
+          const result = await syncFormCollection(db, {
+            id: fullForm.id,
+            name: fullForm.name,
+            display_name: fullForm.display_name,
+            description: fullForm.description,
+            formio_schema: schema,
+            is_active: fullForm.is_active ?? 1
+          })
+          // Re-query the collection
+          collection = await db.prepare(
+            'SELECT id FROM collections WHERE source_type = ? AND source_id = ?'
+          ).bind('form', form.id).first() as any
+          console.log(`[FormSync] On-the-fly sync result: ${result.status}, collectionId: ${result.collectionId}`)
+        }
+      } catch (syncErr) {
+        console.error('[FormSync] On-the-fly shadow collection creation failed:', syncErr)
+      }
+
+      if (!collection) {
+        console.error(`[FormSync] Still no shadow collection for form ${form.name} after recovery attempt`)
+        return null
+      }
     }
 
     const contentId = crypto.randomUUID()
@@ -359,6 +390,21 @@ export async function createContentFromSubmission(
 
     const authorId = metadata.userId || SYSTEM_FORM_USER_ID
 
+    // Ensure the system user exists (D1 enforces foreign keys)
+    if (authorId === SYSTEM_FORM_USER_ID) {
+      const systemUser = await db.prepare('SELECT id FROM users WHERE id = ?').bind(SYSTEM_FORM_USER_ID).first()
+      if (!systemUser) {
+        console.log('[FormSync] System form user missing, creating...')
+        const sysNow = Date.now()
+        await db.prepare(`
+          INSERT OR IGNORE INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, NULL, 'viewer', 0, ?, ?)
+        `).bind(SYSTEM_FORM_USER_ID, 'system-forms@sonicjs.internal', 'system-forms', 'Form', 'Submission', sysNow, sysNow).run()
+      }
+    }
+
+    console.log(`[FormSync] Inserting content: id=${contentId}, collection=${collection.id}, slug=${slug}, title=${title}, author=${authorId}`)
+
     await db.prepare(`
       INSERT INTO content (id, collection_id, slug, title, data, status, author_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, 'published', ?, ?, ?)
@@ -378,6 +424,7 @@ export async function createContentFromSubmission(
       'UPDATE form_submissions SET content_id = ? WHERE id = ?'
     ).bind(contentId, submissionId).run()
 
+    console.log(`[FormSync] Content created successfully: ${contentId}`)
     return contentId
   } catch (error) {
     console.error('[FormSync] Error creating content from submission:', error)

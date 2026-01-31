@@ -252,14 +252,41 @@ test.describe('Forms as Content - Submissions', () => {
     const result = JSON.parse(responseBody);
     expect(result.success).toBe(true);
     expect(result.submissionId).toBeTruthy();
+    console.log(`Content creation result: contentId=${result.contentId || 'NULL (content NOT created)'}`);
     submissionsCreated = true;
 
-    // Verify content item appeared in the content list
-    await page.goto(`/admin/content?model=form_${contactFormName}`);
+    // Diagnostic: check the model filter for the shadow collection
+    await page.goto('/admin/content');
     await page.waitForLoadState('networkidle');
+    const modelFilter = page.locator('select[name="model"]');
+    if (await modelFilter.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const options = await modelFilter.locator('option').allTextContents();
+      const trimmedOptions = options.map(o => o.trim()).filter(o => o);
+      console.log(`Model filter options: ${trimmedOptions.join(' | ')}`);
+      const hasFormModel = trimmedOptions.some(opt =>
+        opt.toLowerCase().includes('form') && opt.toLowerCase().includes('contact')
+      );
+      console.log(`Shadow collection visible in filter: ${hasFormModel}`);
+    }
 
-    const rows = page.locator('tbody tr');
-    const rowCount = await rows.count();
+    // Verify content item appeared in the content list
+    // Use retry loop to handle D1 eventual consistency
+    let rowCount = 0;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await page.goto(`/admin/content?model=form_${contactFormName}`);
+      await page.waitForLoadState('networkidle');
+
+      const rows = page.locator('tbody tr');
+      rowCount = await rows.count();
+      console.log(`Content list attempt ${attempt}: ${rowCount} rows for model form_${contactFormName}`);
+
+      if (rowCount >= 1) break;
+      if (attempt < 3) {
+        console.log(`No rows found, waiting before retry...`);
+        await page.waitForTimeout(2000);
+      }
+    }
+
     expect(rowCount).toBeGreaterThanOrEqual(1);
 
     // Title should be derived from the name field

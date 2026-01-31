@@ -258,42 +258,7 @@ adminPluginRoutes.get('/:id', async (c) => {
     const activity = await pluginService.getPluginActivity(pluginId, 20)
 
     // Load additional context for plugins with custom settings components
-    let enrichedSettings = plugin.settings || {}
-
-    // For OTP Login plugin, add site name and email config status
-    if (pluginId === 'otp-login') {
-      // Get site name from general settings
-      const generalSettings = await db.prepare(`
-        SELECT value FROM settings WHERE key = 'general'
-      `).first() as { value: string } | null
-
-      let siteName = 'SonicJS'
-      if (generalSettings?.value) {
-        try {
-          const parsed = JSON.parse(generalSettings.value)
-          siteName = parsed.siteName || 'SonicJS'
-        } catch (e) { /* ignore */ }
-      }
-
-      // Check if email plugin is configured
-      const emailPlugin = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'email'
-      `).first() as { settings: string | null } | null
-
-      let emailConfigured = false
-      if (emailPlugin?.settings) {
-        try {
-          const emailSettings = JSON.parse(emailPlugin.settings)
-          emailConfigured = !!(emailSettings.apiKey && emailSettings.fromEmail && emailSettings.fromName)
-        } catch (e) { /* ignore */ }
-      }
-
-      enrichedSettings = {
-        ...enrichedSettings,
-        siteName,
-        _emailConfigured: emailConfigured
-      }
-    }
+    const enrichedSettings = plugin.settings || {}
 
     // Map plugin data to template format
     const templatePlugin = {

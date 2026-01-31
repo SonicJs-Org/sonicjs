@@ -693,7 +693,7 @@ If your form requires authentication:
 ```typescript
 // React example with auth
 const handleSubmit = async (submission: any) => {
-  const token = localStorage.getItem('auth_token')
+  // Session is in HTTP-only cookie; use credentials: 'include' so cookie is sent
   
   const response = await fetch(`${apiUrl}${formData.submitUrl}`, {
     method: 'POST',

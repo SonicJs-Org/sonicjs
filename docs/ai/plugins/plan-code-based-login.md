@@ -1,6 +1,10 @@
 # Code-Based Login (OTP) Plugin - Implementation Plan
 
-## Overview
+**Status: Obsolete.** The OTP Login and Magic Link plugins were removed. Email OTP and magic link are now provided via **Better Auth** plugins in app config. See [docs/authentication.md](../../authentication.md) for Magic Link and Email OTP setup with `auth.extendBetterAuth`. This plan is retained for historical context only.
+
+---
+
+## Overview (historical)
 
 Create a passwordless authentication plugin that sends a 6-digit one-time password (OTP) code via email. Users enter their email, receive a code, and enter it to authenticate. This is simpler than magic links (no clicking links) and more user-friendly for mobile devices.
 

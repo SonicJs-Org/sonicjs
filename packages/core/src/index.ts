@@ -23,6 +23,9 @@
 export { createSonicJSApp, setupCoreMiddleware, setupCoreRoutes } from './app'
 export type { SonicJSConfig, SonicJSApp, Bindings, Variables } from './app'
 
+export { createAuth, getDefaultAuthOptions } from './auth/config'
+export type { BetterAuthDefaultOptions, ExtendBetterAuth, SonicJSAuth } from './auth/config'
+
 // ============================================================================
 // Placeholders - To be populated in Phase 2
 // ============================================================================

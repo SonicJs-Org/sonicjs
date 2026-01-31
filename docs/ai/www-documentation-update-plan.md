@@ -27,7 +27,7 @@ The SonicJS documentation site (www folder) needs a comprehensive update to alig
   - Media management with R2 storage
   - Workflow system with scheduling
   - Three-tiered caching
-  - JWT authentication with RBAC
+  - Session-based authentication (Better Auth) with RBAC
 
 ### Gap Analysis
 1. **Outdated Content**: Many www pages reference old API patterns or missing features
@@ -204,7 +204,7 @@ The SonicJS documentation site (www folder) needs a comprehensive update to alig
 **Current State**: Basic auth info
 **Updates Needed**:
 - Migrate content from docs/authentication.md
-- Document JWT-based authentication
+- Document session-based authentication (Better Auth)
 - Explain token management (cookies + headers)
 - Show login/logout/register flows
 - Document password reset functionality

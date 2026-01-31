@@ -162,6 +162,9 @@ After creation, you may want to set up environment variables:
 ```bash
 # .dev.vars (for local development)
 ENVIRONMENT=development
+# Better Auth (required for login/sign-up)
+BETTER_AUTH_SECRET=your-min-32-char-secret-change-in-production
+BETTER_AUTH_URL=http://localhost:8787
 ```
 
 ## Cloudflare Resources

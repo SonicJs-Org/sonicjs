@@ -44,7 +44,7 @@
     {
       "id": "obs-4",
       "entityId": "sonicjs-ai-project",
-      "content": "Features complete content management with collections, versioning, media library, JWT authentication with RBAC (admin/editor/author/viewer roles), plugin architecture, and template system.",
+      "content": "Features complete content management with collections, versioning, media library, session-based authentication (Better Auth) with RBAC (admin/editor/viewer roles), plugin architecture, and template system.",
       "created": "2025-01-26T16:45:00Z"
     },
     {

@@ -315,57 +315,31 @@ export async function ensureTestCollectionExists(page: Page) {
 }
 
 /**
- * Login as admin user
+ * Login as admin user (form submits to Better Auth /auth/sign-in/email, then redirects to /admin)
  */
 export async function loginAsAdmin(page: Page) {
-  // Ensure admin user exists first
   await ensureAdminUserExists(page);
-  
+
   await page.goto('/auth/login');
   await page.fill('[name="email"]', ADMIN_CREDENTIALS.email);
   await page.fill('[name="password"]', ADMIN_CREDENTIALS.password);
   await page.click('button[type="submit"]');
-  
-  // Wait for HTMX response and success message with longer timeout for CI
-  // CI environments can be slow, especially with Workers cold starts
-  try {
-    await expect(page.locator('#form-response .bg-green-100')).toBeVisible({ timeout: 10000 });
-  } catch (error) {
-    // If success message doesn't appear, check if we're already redirected to admin
-    const currentUrl = page.url();
-    if (currentUrl.includes('/admin')) {
-      console.log('Login succeeded (already on admin page despite missing success message)');
-    } else {
-      // Try one more time - sometimes Workers need a moment
-      console.log('Retrying login form submission...');
-      await page.click('button[type="submit"]');
-      await expect(page.locator('#form-response .bg-green-100')).toBeVisible({ timeout: 10000 });
-    }
-  }
 
-  // Wait for JavaScript redirect to admin dashboard (up to 20 seconds for CI)
-  // The app redirects /admin to /admin/dashboard, so we accept any /admin/* URL
+  // Login form uses fetch to /auth/sign-in/email; on success it does window.location = '/admin/dashboard'
   try {
     await page.waitForURL(/\/admin/, { timeout: 20000 });
     await page.waitForLoadState('networkidle', { timeout: 15000 });
-  } catch (error) {
-    // If redirect doesn't happen automatically, try navigating manually
+  } catch {
     console.log('Auto-redirect failed, navigating manually to /admin');
     await page.goto('/admin');
     await page.waitForLoadState('networkidle', { timeout: 15000 });
   }
 
-  // Simply verify we're on an admin page - accept /admin or /admin/*
-  // The app redirects /admin -> /admin/dashboard
   await expect(page).toHaveURL(/\/admin/);
 
-  // Ensure workflow tables exist for workflow tests (after login)
   await ensureWorkflowTablesExist(page);
-
-  // Ensure workflow plugin is active for workflow-related tests
   await ensureWorkflowPluginActive(page);
 
-  // Navigate back to admin dashboard after plugin setup
   await page.goto('/admin');
   await page.waitForLoadState('networkidle', { timeout: 15000 });
 }
@@ -497,14 +471,17 @@ export async function waitForHTMX(page: Page) {
   }
 }
 
+/** Better Auth default session cookie name */
+const BETTER_AUTH_SESSION_COOKIE = 'better-auth.session_token';
+
 /**
- * Check if user is authenticated by checking for auth cookie
+ * Check if user is authenticated by checking for Better Auth session cookie
  */
 export async function isAuthenticated(page: Page): Promise<boolean> {
   try {
     const cookies = await page.context().cookies();
-    const authCookie = cookies.find(c => c.name === 'auth_token');
-    return !!authCookie;
+    const sessionCookie = cookies.find(c => c.name === BETTER_AUTH_SESSION_COOKIE);
+    return !!sessionCookie;
   } catch {
     return false;
   }

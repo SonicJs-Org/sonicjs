@@ -77,33 +77,24 @@ Response
 
 ## Authentication Middleware
 
-The authentication system uses JWT tokens stored in HTTP-only cookies.
+The authentication system uses **Better Auth** for sign-in, sign-up, and sessions. Sessions are stored in an HTTP-only cookie (`better-auth.session_token`). A global middleware populates `c.set('user', { userId, email, role })` from the session.
 
 ### File Location
-`/Users/lane/Dev/refs/sonicjs-ai/src/middleware/auth.ts`
+`packages/core/src/middleware/auth.ts`
 
-### Authentication Manager
+### AuthManager (legacy / seed-admin only)
 
 ```typescript
 import { AuthManager } from '../middleware/auth'
 
-// Generate JWT token
-const token = await AuthManager.generateToken(
-  userId,
-  email,
-  role
-)
-
-// Verify JWT token
-const payload = await AuthManager.verifyToken(token)
-// Returns: { userId, email, role, exp, iat } or null
-
-// Hash password
+// Hash password (used only for legacy flows, e.g. seed-admin)
 const hash = await AuthManager.hashPassword(password)
 
 // Verify password
 const isValid = await AuthManager.verifyPassword(password, hash)
 ```
+
+Sign-in and sign-up use Better Auth; do not use `AuthManager.generateToken` or `AuthManager.verifyToken` for new features.
 
 ### requireAuth Middleware
 
@@ -115,7 +106,7 @@ import { requireAuth } from '../middleware/auth'
 // Protect a route
 app.get('/protected', requireAuth(), async (c) => {
   const user = c.get('user')
-  // user contains: { userId, email, role, exp, iat }
+  // user contains: { userId, email, role } from Better Auth session
 
   return c.json({ message: 'Welcome!', user })
 })
@@ -123,12 +114,9 @@ app.get('/protected', requireAuth(), async (c) => {
 
 **How it works:**
 
-1. Checks for token in `Authorization` header (Bearer token)
-2. Falls back to `auth_token` cookie if no header present
-3. Verifies token with KV cache (5-minute TTL)
-4. Falls back to JWT verification if not cached
-5. Sets `user` object on context for downstream use
-6. Returns 401 error or redirects to login if invalid
+1. Global session middleware calls Better Auth `getSession` and sets `user` on context when a valid session cookie is present.
+2. `requireAuth()` checks for `c.get('user')`; if missing, returns 401 or redirects to login.
+3. No separate Bearer token or KV cache; authentication is session-cookie based.
 
 **Example Usage:**
 
@@ -1494,7 +1482,7 @@ export default app
 This documentation provides a comprehensive guide to routing and middleware in SonicJS AI:
 
 1. **Middleware Pipeline**: Ordered execution from bootstrap through to route handlers
-2. **Authentication**: JWT-based auth with requireAuth, requireRole, and optionalAuth
+2. **Authentication**: Session-based auth (Better Auth) with requireAuth, requireRole, and optionalAuth
 3. **Permissions**: Fine-grained permission system with requirePermission and requireAnyPermission
 4. **Bootstrap**: One-time system initialization on worker startup
 5. **Logging**: Request, security, and performance logging

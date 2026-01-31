@@ -50,12 +50,14 @@ export function renderRegisterPage(data: RegisterPageData): string {
             <!-- Alerts -->
             ${data.error ? `<div class="mb-6">${renderAlert({ type: 'error', message: data.error })}</div>` : ''}
 
-            <!-- Form -->
+            <!-- Form Response (errors from Better Auth) -->
+            <div id="form-response" class="mb-6"></div>
+
+            <!-- Form: submits to Better Auth /auth/sign-up/email -->
             <form
               id="register-form"
-              hx-post="/auth/register/form"
-              hx-target="#form-response"
-              hx-swap="innerHTML"
+              action="/auth/sign-up/email"
+              method="POST"
               class="space-y-6"
             >
               <!-- First and Last Name -->
@@ -144,6 +146,33 @@ export function renderRegisterPage(data: RegisterPageData): string {
                 Create Account
               </button>
             </form>
+            <script>
+              (function() {
+                var form = document.getElementById('register-form');
+                if (!form) return;
+                form.addEventListener('submit', function(e) {
+                  e.preventDefault();
+                  var target = document.getElementById('form-response');
+                  var firstName = form.querySelector('[name="firstName"]').value;
+                  var lastName = form.querySelector('[name="lastName"]').value;
+                  var username = form.querySelector('[name="username"]').value;
+                  var email = form.querySelector('[name="email"]').value;
+                  var password = form.querySelector('[name="password"]').value;
+                  var name = (firstName + ' ' + lastName).trim() || 'User';
+                  fetch('/auth/sign-up/email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email: email, password: password, name: name, username: username, firstName: firstName, lastName: lastName })
+                  }).then(function(r) {
+                    if (r.ok) { window.location.href = '/admin/dashboard'; return; }
+                    return r.json().then(function(d) { return Promise.reject(d); });
+                  }).catch(function(err) {
+                    if (target) target.innerHTML = '<div class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">' + (err.message || 'Registration failed') + '</div>';
+                  });
+                });
+              })();
+            </script>
 
             <!-- Links -->
             <div class="mt-6 text-center">
@@ -153,7 +182,6 @@ export function renderRegisterPage(data: RegisterPageData): string {
               </p>
             </div>
 
-            <div id="form-response"></div>
           </div>
         </div>
       </div>

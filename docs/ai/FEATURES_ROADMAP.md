@@ -134,7 +134,7 @@ The entire application is designed to run at the edge, providing:
 ## 2. Authentication & Security
 
 ### User Authentication
-- **JWT-Based Auth**: Secure token management
+- **Session-Based Auth (Better Auth)**: Secure session and cookie management
 - **Session Management**:
   - HTTP-only cookies
   - Configurable expiration
@@ -682,7 +682,7 @@ sonic plugin        # Manage plugins
 
 **Stage 2: Authentication (100%)**
 - User management
-- JWT implementation
+- Better Auth session implementation
 - Role-based access
 - Session handling
 

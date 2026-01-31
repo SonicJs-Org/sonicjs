@@ -102,6 +102,8 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {
+    "better-auth": "^1.4.18",
+    "drizzle-orm": "^0.44.7",
     "drizzle-zod": "^0.8.3",
     "highlight.js": "^11.11.1",
     "marked": "^16.4.1",
@@ -113,7 +115,6 @@
     "@types/node": "^24.9.2",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.50.0",
-    "drizzle-orm": "^0.44.7",
     "eslint": "^9.39.2",
     "glob": "^10.5.0",
     "hono": "^4.11.7",

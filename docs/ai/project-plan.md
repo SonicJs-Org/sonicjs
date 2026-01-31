@@ -45,7 +45,7 @@ This document outlines the systematic development plan for rebuilding SonicJS as
 
 #### Stage 2 Deliverables
 - [x] Hono.js REST API endpoints with OpenAPI schema
-- [x] JWT-based authentication middleware
+- [x] Session-based authentication middleware (Better Auth)
 - [x] Role-based access control (RBAC) system
 - [x] Request validation and security middleware
 - [x] Admin dashboard interface (HTML/HTMX)
@@ -64,7 +64,7 @@ This document outlines the systematic development plan for rebuilding SonicJS as
 - [x] Create Hono.js route structure and middleware
 - [x] Implement auto-generated REST endpoints (foundation)
 - [x] Set up OpenAPI schema generation
-- [x] Create JWT authentication middleware
+- [x] Create session auth middleware (Better Auth)
 - [x] Implement session and token handling
 - [x] Build user management system
 - [x] Create role and permission system
@@ -396,7 +396,7 @@ Each stage should be completed and thoroughly tested before proceeding to the ne
 
 ### Stage 2 Complete ✅ (December 2024)
 
-- **JWT Authentication**: Full token-based auth with HTTP-only cookies
+- **Session Authentication (Better Auth)**: Session-based auth with HTTP-only cookies
 - **Role-based Access Control**: Admin, editor, author, viewer roles with middleware protection
 - **User Management**: Registration, login, logout, profile management with secure password hashing
 - **API Foundation**: Schema-driven REST endpoints with Zod validation
@@ -445,7 +445,7 @@ Each stage should be completed and thoroughly tested before proceeding to the ne
 
 - **Comprehensive Documentation**: Created complete documentation covering all aspects of SonicJS AI
 - **Documentation Files Created**:
-  - `docs/authentication.md` - Complete authentication & security guide (JWT, RBAC, user management)
+  - `docs/authentication.md` - Complete authentication & security guide (Better Auth, RBAC, user management)
   - `docs/deployment.md` - Production deployment guide (Cloudflare Workers, D1, R2)
   - `docs/database.md` - Database operations & schema guide (Drizzle ORM, migrations, best practices)
   - `docs/templating.md` - Template system documentation (components, HTMX integration, patterns)

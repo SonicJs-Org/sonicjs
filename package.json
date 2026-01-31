@@ -54,6 +54,7 @@
     "@hono/zod-validator": "^0.7.0",
     "@libsql/client": "^0.15.9",
     "@sonicjs-cms/core": "^2.0.1",
+    "better-auth": "^1.4.18",
     "clsx": "^2.1.1",
     "drizzle-kit": "^0.31.2",
     "drizzle-orm": "^0.44.7",

@@ -402,7 +402,7 @@ export type {
   User,
   Role,
   Permission,
-  JWTPayload,
+  // JWTPayload removed; session user shape from Better Auth
 
   // Cloudflare types
   Bindings,

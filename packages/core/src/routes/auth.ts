@@ -1,14 +1,10 @@
 import { Hono } from 'hono'
-// import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
 import { setCookie } from 'hono/cookie'
 import { html } from 'hono/html'
 import { AuthManager, requireAuth } from '../middleware'
 import { renderLoginPage, LoginPageData } from '../templates/pages/auth-login.template'
 import { renderRegisterPage, RegisterPageData } from '../templates/pages/auth-register.template'
-import { getCacheService, CACHE_CONFIGS } from '../services'
-import { authValidationService, isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
-import type { RegistrationData } from '../services/auth-validation'
+import { isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
 import type { Bindings, Variables } from '../app'
 
 const authRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -63,514 +59,83 @@ authRoutes.get('/register', async (c) => {
   return c.html(renderRegisterPage(pageData))
 })
 
-// Login schema
-const loginSchema = z.object({
-  email: z.string().email('Valid email is required'),
-  password: z.string().min(1, 'Password is required')
-})
-
-// Register new user
-authRoutes.post('/register',
-  async (c) => {
-    try {
-      const db = c.env.DB
-
-      // Check if this is the first user (bootstrap scenario) - always allow
-      const isFirstUser = await isFirstUserRegistration(db)
-
-      // If not first user, check if registration is enabled
-      if (!isFirstUser) {
-        const registrationEnabled = await isRegistrationEnabled(db)
-        if (!registrationEnabled) {
-          return c.json({ error: 'Registration is currently disabled' }, 403)
-        }
-      }
-
-      // Parse JSON with error handling
-      let requestData
-      try {
-        requestData = await c.req.json()
-      } catch (parseError) {
-        return c.json({ error: 'Invalid JSON in request body' }, 400)
-      }
-
-      // Build and validate using dynamic schema
-      const validationSchema = await authValidationService.buildRegistrationSchema(db)
-
-      let validatedData: RegistrationData
-      try {
-        validatedData = await validationSchema.parseAsync(requestData)
-      } catch (validationError: any) {
-        return c.json({
-          error: 'Validation failed',
-          details: validationError.issues?.map((e: any) => e.message) || [validationError.message || 'Invalid request data']
-        }, 400)
-      }
-
-      // Extract fields with defaults for optional ones
-      const email = validatedData.email
-      const password = validatedData.password
-      const username = validatedData.username || authValidationService.generateDefaultValue('username', validatedData)
-      const firstName = validatedData.firstName || authValidationService.generateDefaultValue('firstName', validatedData)
-      const lastName = validatedData.lastName || authValidationService.generateDefaultValue('lastName', validatedData)
-
-      // Normalize email to lowercase
-      const normalizedEmail = email.toLowerCase()
-      
-      // Check if user already exists
-      const existingUser = await db.prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-        .bind(normalizedEmail, username)
-        .first()
-      
-      if (existingUser) {
-        return c.json({ error: 'User with this email or username already exists' }, 400)
-      }
-      
-      // Hash password
-      const passwordHash = await AuthManager.hashPassword(password)
-      
-      // Create user
-      const userId = crypto.randomUUID()
-      const now = new Date()
-      
-      await db.prepare(`
-        INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        userId,
-        normalizedEmail,
-        username,
-        firstName,
-        lastName,
-        passwordHash,
-        'viewer', // Default role
-        1, // is_active
-        now.getTime(),
-        now.getTime()
-      ).run()
-      
-      // Generate JWT token
-      const token = await AuthManager.generateToken(userId, normalizedEmail, 'viewer')
-      
-      // Set HTTP-only cookie
-      setCookie(c, 'auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: 60 * 60 * 24 // 24 hours
-      })
-      
-      return c.json({
-        user: {
-          id: userId,
-          email: normalizedEmail,
-          username,
-          firstName,
-          lastName,
-          role: 'viewer'
-        },
-        token
-      }, 201)
-    } catch (error) {
-      console.error('Registration error:', error)
-      // Return validation errors as 400, other errors as 500
-      if (error instanceof Error && error.message.includes('validation')) {
-        return c.json({ error: error.message }, 400)
-      }
-      return c.json({
-        error: 'Registration failed',
-        details: error instanceof Error ? error.message : String(error)
-      }, 500)
-    }
-  }
+// Legacy POST /login and /register: use Better Auth endpoints instead
+authRoutes.post('/login', (c) =>
+  c.json({ error: 'Use POST /auth/sign-in/email with JSON { email, password }' }, 410)
+)
+authRoutes.post('/register', (c) =>
+  c.json({ error: 'Use POST /auth/sign-up/email with JSON { email, password, name }' }, 410)
 )
 
-// Login user
-authRoutes.post('/login', async (c) => {
-    try {
-      const body = await c.req.json()
-      const validation = loginSchema.safeParse(body)
-      if (!validation.success) {
-        return c.json({ error: 'Validation failed', details: validation.error.issues }, 400)
-      }
-      const { email, password } = validation.data
-      const db = c.env.DB
-      
-      // Normalize email to lowercase
-      const normalizedEmail = email.toLowerCase()
-      
-      // Find user with caching
-      const cache = getCacheService(CACHE_CONFIGS.user!)
-      let user = await cache.get<any>(cache.generateKey('user', `email:${normalizedEmail}`))
-
-      if (!user) {
-        user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-          .bind(normalizedEmail)
-          .first() as any
-
-        if (user) {
-          // Cache the user for faster subsequent lookups
-          await cache.set(cache.generateKey('user', `email:${normalizedEmail}`), user)
-          await cache.set(cache.generateKey('user', user.id), user)
-        }
-      }
-
-      if (!user) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-      
-      // Verify password
-      const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-      if (!isValidPassword) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-      
-      // Generate JWT token
-      const token = await AuthManager.generateToken(user.id, user.email, user.role)
-      
-      // Set HTTP-only cookie
-      setCookie(c, 'auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: 60 * 60 * 24 // 24 hours
-      })
-      
-      // Update last login
-      await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-        .bind(new Date().getTime(), user.id)
-        .run()
-
-      // Invalidate user cache on login
-      await cache.delete(cache.generateKey('user', user.id))
-      await cache.delete(cache.generateKey('user', `email:${normalizedEmail}`))
-
-      return c.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role
-        },
-        token
-      })
-    } catch (error) {
-      console.error('Login error:', error)
-      return c.json({ error: 'Login failed' }, 500)
-    }
-})
-
-// Logout user (both GET and POST for convenience)
-authRoutes.post('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
-  
-  return c.json({ message: 'Logged out successfully' })
-})
-
+// Logout: redirect to Better Auth sign-out then to login
 authRoutes.get('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
-  
-  return c.redirect('/auth/login?message=You have been logged out successfully')
+  return c.html(html`
+    <!DOCTYPE html>
+    <html><head><title>Signing out...</title></head>
+    <body>
+      <p>Signing out...</p>
+      <script>
+        fetch('/auth/sign-out', { method: 'POST', credentials: 'include' })
+          .then(function() { window.location.href = '/auth/login?message=You have been logged out successfully'; })
+          .catch(function() { window.location.href = '/auth/login'; });
+      </script>
+    </body></html>
+  `)
 })
 
-// Get current user
+authRoutes.post('/logout', (c) => {
+  return c.html(html`
+    <!DOCTYPE html>
+    <html><head><title>Signing out...</title></head>
+    <body>
+      <p>Signing out...</p>
+      <script>
+        fetch('/auth/sign-out', { method: 'POST', credentials: 'include' })
+          .then(function() { window.location.href = '/auth/login?message=You have been logged out successfully'; })
+          .catch(function() { window.location.href = '/auth/login'; });
+      </script>
+    </body></html>
+  `)
+})
+
+// Get current user (session set by Better Auth middleware)
 authRoutes.get('/me', requireAuth(), async (c) => {
-  try {
-    // This would need the auth middleware applied
-    const user = c.get('user')
-    
-    if (!user) {
-      return c.json({ error: 'Not authenticated' }, 401)
-    }
-    
-    const db = c.env.DB
-    const userData = await db.prepare('SELECT id, email, username, first_name, last_name, role, created_at FROM users WHERE id = ?')
-      .bind(user.userId)
-      .first()
-    
-    if (!userData) {
-      return c.json({ error: 'User not found' }, 404)
-    }
-    
-    return c.json({ user: userData })
-  } catch (error) {
-    console.error('Get user error:', error)
-    return c.json({ error: 'Failed to get user' }, 500)
-  }
+  const user = c.get('user')
+  if (!user) return c.json({ error: 'Not authenticated' }, 401)
+  const db = c.env.DB
+  const userData = await db
+    .prepare('SELECT id, email, username, first_name, last_name, role, created_at FROM users WHERE id = ?')
+    .bind(user.userId)
+    .first()
+  if (!userData) return c.json({ error: 'User not found' }, 404)
+  return c.json({ user: userData })
 })
 
-// Refresh token
-authRoutes.post('/refresh', requireAuth(), async (c) => {
-  try {
-    const user = c.get('user')
-    
-    if (!user) {
-      return c.json({ error: 'Not authenticated' }, 401)
-    }
-    
-    // Generate new token
-    const token = await AuthManager.generateToken(user.userId, user.email, user.role)
-    
-    // Set new cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Strict',
-      maxAge: 60 * 60 * 24 // 24 hours
-    })
-    
-    return c.json({ token })
-  } catch (error) {
-    console.error('Token refresh error:', error)
-    return c.json({ error: 'Token refresh failed' }, 500)
-  }
-})
+// Session refresh is handled by Better Auth (session.updateAge)
+authRoutes.post('/refresh', requireAuth(), (c) =>
+  c.json({ message: 'Session is refreshed automatically by Better Auth' }, 200)
+)
 
-// Form-based registration handler (for HTML forms)
-authRoutes.post('/register/form', async (c) => {
-  try {
-    const db = c.env.DB
-
-    // Check if this is the first user (bootstrap scenario) - always allow
-    const isFirstUser = await isFirstUserRegistration(db)
-
-    // If not first user, check if registration is enabled
-    if (!isFirstUser) {
-      const registrationEnabled = await isRegistrationEnabled(db)
-      if (!registrationEnabled) {
-        return c.html(html`
-          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            Registration is currently disabled. Please contact an administrator.
-          </div>
-        `)
-      }
-    }
-
-    const formData = await c.req.formData()
-
-    // Extract form data
-    const requestData = {
-      email: formData.get('email') as string,
-      password: formData.get('password') as string,
-      username: formData.get('username') as string,
-      firstName: formData.get('firstName') as string,
-      lastName: formData.get('lastName') as string,
-    }
-
-    // Normalize email to lowercase
-    const normalizedEmail = requestData.email?.toLowerCase()
-    requestData.email = normalizedEmail
-
-    // Build and validate using dynamic schema
-    const validationSchema = await authValidationService.buildRegistrationSchema(db)
-    const validation = await validationSchema.safeParseAsync(requestData)
-
-    if (!validation.success) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          ${validation.error.issues.map((err: { message: string }) => err.message).join(', ')}
-        </div>
-      `)
-    }
-
-      const validatedData: RegistrationData = validation.data
-
-    // Extract fields with defaults for optional ones
-    // const email = validatedData.email
-    const password = validatedData.password
-    const username = validatedData.username || authValidationService.generateDefaultValue('username', validatedData)
-    const firstName = validatedData.firstName || authValidationService.generateDefaultValue('firstName', validatedData)
-    const lastName = validatedData.lastName || authValidationService.generateDefaultValue('lastName', validatedData)
-    
-    // Check if user already exists
-    const existingUser = await db.prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-      .bind(normalizedEmail, username)
-      .first()
-    
-    if (existingUser) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          User with this email or username already exists
-        </div>
-      `)
-    }
-    
-    // Hash password
-    const passwordHash = await AuthManager.hashPassword(password)
-
-    // Determine role: first user gets admin, others get viewer
-    const role = isFirstUser ? 'admin' : 'viewer'
-
-    // Create user
-    const userId = crypto.randomUUID()
-    const now = new Date()
-
-    await db.prepare(`
-      INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      userId,
-      normalizedEmail,
-      username,
-      firstName,
-      lastName,
-      passwordHash,
-      role,
-      1, // is_active
-      now.getTime(),
-      now.getTime()
-    ).run()
-
-    // Generate JWT token
-    const token = await AuthManager.generateToken(userId, normalizedEmail, role)
-
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      sameSite: 'Strict',
-      maxAge: 60 * 60 * 24 // 24 hours
-    })
-
-    // Redirect based on role
-    const redirectUrl = role === 'admin' ? '/admin/dashboard' : '/admin/dashboard'
-
-    return c.html(html`
-      <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
-        Account created successfully! Redirecting...
-        <script>
-          setTimeout(() => {
-            window.location.href = '${redirectUrl}';
-          }, 2000);
-        </script>
-      </div>
-    `)
-  } catch (error) {
-    console.error('Registration error:', error)
-    return c.html(html`
-      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        Registration failed. Please try again.
-      </div>
-    `)
-  }
-})
-
-// Form-based login handler (for HTML forms)
-authRoutes.post('/login/form', async (c) => {
-  try {
-    const formData = await c.req.formData()
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-
-    // Normalize email to lowercase
-    const normalizedEmail = email.toLowerCase()
-
-    // Validate the data
-    const validation = loginSchema.safeParse({ email: normalizedEmail, password })
-
-    if (!validation.success) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          ${validation.error.issues.map((err: { message: string }) => err.message).join(', ')}
-        </div>
-      `)
-    }
-
-    const db = c.env.DB
-    
-    // Find user
-    const user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-      .bind(normalizedEmail)
-      .first() as any
-    
-    if (!user) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Invalid email or password
-        </div>
-      `)
-    }
-    
-    // Verify password
-    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-    if (!isValidPassword) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Invalid email or password
-        </div>
-      `)
-    }
-    
-    // Generate JWT token
-    const token = await AuthManager.generateToken(user.id, user.email, user.role)
-    
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      sameSite: 'Strict',
-      maxAge: 60 * 60 * 24 // 24 hours
-    })
-    
-    // Update last login
-    await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-      .bind(new Date().getTime(), user.id)
-      .run()
-    
-    return c.html(html`
-      <div id="form-response">
-        <div class="rounded-lg bg-green-100 dark:bg-lime-500/10 p-4 ring-1 ring-green-400 dark:ring-lime-500/20">
-          <div class="flex items-start gap-x-3">
-            <svg class="h-5 w-5 text-green-600 dark:text-lime-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <div class="flex-1">
-              <p class="text-sm font-medium text-green-700 dark:text-lime-300">Login successful! Redirecting to admin dashboard...</p>
-            </div>
-          </div>
-          <script>
-            setTimeout(() => {
-              window.location.href = '/admin/dashboard';
-            }, 2000);
-          </script>
-        </div>
-      </div>
-    `)
-  } catch (error) {
-    console.error('Login error:', error)
-    return c.html(html`
-      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        Login failed. Please try again.
-      </div>
-    `)
-  }
-})
+// Form handlers: login/register now submit to Better Auth via JS on the page
+authRoutes.post('/register/form', (c) =>
+  c.html(html`<div class="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-400">Form now uses Better Auth. Submit again.</div>`)
+)
+authRoutes.post('/login/form', (c) =>
+  c.html(html`<div class="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-400">Form now uses Better Auth. Submit again.</div>`)
+)
 
 // Test seeding endpoint (only for development/testing)
 authRoutes.post('/seed-admin', async (c) => {
   try {
     const db = c.env.DB
     
-    // First ensure the users table exists
+    // First ensure the users table exists (includes name for Better Auth)
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         email TEXT NOT NULL UNIQUE,
         username TEXT NOT NULL UNIQUE,
+        name TEXT,
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
         password_hash TEXT,

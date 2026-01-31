@@ -25,36 +25,43 @@ export function createAuthPlugin(): Plugin {
     compatibility: '^0.1.0'
   })
 
-  // Create auth API routes
+  // Create auth API routes (Better Auth owns sign-in/sign-out; this plugin exposes compatibility)
   const authAPI = new Hono()
 
-  // POST /auth/login - User login
-  authAPI.post('/login', async (c) => {
-    const { email } = await c.req.json()
-    
-    // Login logic would integrate with existing auth service
-    return c.json({ 
-      message: 'Login endpoint',
-      data: { email }
-    })
-  })
-
-  // POST /auth/logout - User logout
-  authAPI.post('/logout', async (c) => {
-    return c.json({ message: 'Logout successful' })
-  })
-
-  // GET /auth/me - Current user info
+  // GET /api/auth/me - Current user from session (set by global middleware)
   authAPI.get('/me', async (c) => {
-    return c.json({ 
+    const user = (c.get as (k: string) => { userId: string; email: string; role: string } | undefined)('user')
+    if (!user) {
+      return c.json({ error: 'Authentication required' }, 401)
+    }
+    return c.json({
       message: 'Current user info',
-      user: { id: 1, email: 'user@example.com' }
+      user: { id: user.userId, email: user.email, role: user.role }
     })
   })
 
-  // POST /auth/refresh - Refresh token
+  // POST /api/auth/login - Deprecated: use Better Auth POST /auth/sign-in/email
+  authAPI.post('/login', async (c) => {
+    return c.json(
+      { error: 'Use Better Auth: POST /auth/sign-in/email with { email, password }' },
+      410
+    )
+  })
+
+  // POST /api/auth/logout - Deprecated: use Better Auth POST /auth/sign-out
+  authAPI.post('/logout', async (c) => {
+    return c.json(
+      { message: 'Use Better Auth: POST /auth/sign-out to sign out' },
+      200
+    )
+  })
+
+  // POST /api/auth/refresh - Deprecated: Better Auth manages session refresh
   authAPI.post('/refresh', async (c) => {
-    return c.json({ message: 'Token refreshed' })
+    return c.json(
+      { message: 'Session is managed by Better Auth; no separate refresh needed' },
+      200
+    )
   })
 
   builder.addRoute('/api/auth', authAPI, {
@@ -62,9 +69,8 @@ export function createAuthPlugin(): Plugin {
     priority: 1
   })
 
-  // Add auth middleware
-  builder.addSingleMiddleware('auth-session', async (c: any, next: any) => {
-    // Session management middleware
+  // Add auth middleware (session is set by global Better Auth middleware; this is for x-session-id only)
+  builder.addSingleMiddleware('auth-session', async (c: { req: { header: (name: string) => string | undefined }; set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
     const sessionId = c.req.header('x-session-id')
     if (sessionId) {
       c.set('sessionId', sessionId)
@@ -76,11 +82,8 @@ export function createAuthPlugin(): Plugin {
     priority: 5
   })
 
-  builder.addSingleMiddleware('auth-rate-limit', async (c: any, next: any) => {
-    // Rate limiting for auth endpoints
-    const path = c.req.path
-    if (path.startsWith('/api/auth/')) {
-      // Rate limiting logic would go here
+  builder.addSingleMiddleware('auth-rate-limit', async (c: { req: { path: string; header: (name: string) => string | undefined } }, next: () => Promise<void>) => {
+    if (c.req.path.startsWith('/api/auth/')) {
       const clientIP = c.req.header('CF-Connecting-IP') || 'unknown'
       console.debug(`Auth rate limit check for IP: ${clientIP}`)
     }
@@ -91,51 +94,35 @@ export function createAuthPlugin(): Plugin {
     priority: 3
   })
 
-  // Add auth service
+  // Add auth service (stub for plugin compatibility; main auth is Better Auth)
   builder.addService('authService', {
-    validateToken: (_token: string) => {
-      // Token validation logic
-      return { valid: true, userId: 1 }
-    },
-    
-    generateToken: (userId: number) => {
-      // Token generation logic
-      return `token-${userId}-${Date.now()}`
-    },
-    
-    hashPassword: (password: string) => {
-      // Password hashing logic
-      return `hashed-${password}`
-    },
-    
-    verifyPassword: (password: string, hash: string) => {
-      // Password verification logic
-      return hash === `hashed-${password}`
-    }
+    validateToken: (_token: string) => ({ valid: false, userId: null as number | null }),
+    generateToken: (_userId: number) => '',
+    hashPassword: (_password: string) => '',
+    verifyPassword: (_password: string, _hash: string) => false
   }, {
-    description: 'Core authentication service',
+    description: 'Core authentication service (Better Auth is source of truth)',
     singleton: true
   })
 
   // Add auth hooks
-  builder.addHook('auth:login', async (data: any) => {
-    console.info(`User login attempt: ${data.email}`)
+  builder.addHook('auth:login', async (data: { email?: string }) => {
+    console.info(`User login attempt: ${data.email ?? 'unknown'}`)
     return data
   }, {
     priority: 10,
     description: 'Handle user login events'
   })
 
-  builder.addHook('auth:logout', async (data: any) => {
-    console.info(`User logout: ${data.userId}`)
+  builder.addHook('auth:logout', async (data: { userId?: string }) => {
+    console.info(`User logout: ${data.userId ?? 'unknown'}`)
     return data
   }, {
     priority: 10,
     description: 'Handle user logout events'
   })
 
-  builder.addHook(HOOKS.REQUEST_START, async (data: any) => {
-    // Track authentication status on each request
+  builder.addHook(HOOKS.REQUEST_START, async (data: { request?: { headers?: { authorization?: string } }; authenticated?: boolean }) => {
     const authHeader = data.request?.headers?.authorization
     if (authHeader) {
       data.authenticated = true

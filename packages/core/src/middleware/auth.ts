@@ -1,8 +1,8 @@
-import { sign, verify } from 'hono/jwt'
-import { Context, Next } from 'hono'
-import { getCookie, setCookie } from 'hono/cookie'
+import type { Context, Next } from 'hono'
+import { setCookie } from 'hono/cookie'
 
-type JWTPayload = {
+/** User shape set by Better Auth session middleware (compatibility with c.get('user')) */
+export type AuthUserPayload = {
   userId: string
   email: string
   role: string
@@ -10,40 +10,27 @@ type JWTPayload = {
   iat: number
 }
 
-// JWT secret - in production this should come from environment variables
-const JWT_SECRET = 'your-super-secret-jwt-key-change-in-production'
-
+/**
+ * AuthManager: legacy helpers for seed-admin and plugins.
+ * Main auth is handled by Better Auth; session is set by global middleware.
+ */
 export class AuthManager {
-  static async generateToken(userId: string, email: string, role: string): Promise<string> {
-    const payload: JWTPayload = {
-      userId,
-      email,
-      role,
-      exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 24 hours
-      iat: Math.floor(Date.now() / 1000)
-    }
-    
-    return await sign(payload, JWT_SECRET, 'HS256')
+  /**
+   * @deprecated Use Better Auth for sign-in. Kept for seed-admin and plugin compatibility.
+   */
+  static async generateToken(_userId: string, _email: string, _role: string): Promise<string> {
+    throw new Error('Use Better Auth for authentication. JWT generation is deprecated.')
   }
 
-  static async verifyToken(token: string): Promise<JWTPayload | null> {
-    try {
-      const payload = await verify(token, JWT_SECRET, 'HS256') as JWTPayload
-      
-      // Check if token is expired
-      if (payload.exp < Math.floor(Date.now() / 1000)) {
-        return null
-      }
-      
-      return payload
-    } catch (error) {
-      console.error('Token verification failed:', error)
-      return null
-    }
+  /**
+   * @deprecated Session is verified by Better Auth. Kept for type compatibility.
+   */
+  static async verifyToken(_token: string): Promise<AuthUserPayload | null> {
+    return null
   }
 
+  /** Password hashing for seed-admin (Better Auth uses its own hashing for normal sign-up/sign-in). */
   static async hashPassword(password: string): Promise<string> {
-    // In Cloudflare Workers, we'll use Web Crypto API
     const encoder = new TextEncoder()
     const data = encoder.encode(password + 'salt-change-in-production')
     const hashBuffer = await crypto.subtle.digest('SHA-256', data)
@@ -57,146 +44,69 @@ export class AuthManager {
   }
 
   /**
-   * Set authentication cookie - useful for plugins implementing alternative auth methods
-   * @param c - Hono context
-   * @param token - JWT token to set in cookie
-   * @param options - Optional cookie configuration
+   * Set authentication cookie - useful for plugins implementing alternative auth methods.
+   * @deprecated Better Auth sets its own session cookie. Kept for plugin compatibility.
    */
-  static setAuthCookie(c: Context, token: string, options?: {
-    maxAge?: number
-    secure?: boolean
-    httpOnly?: boolean
-    sameSite?: 'Strict' | 'Lax' | 'None'
-  }): void {
+  static setAuthCookie(
+    c: Context,
+    token: string,
+    options?: {
+      maxAge?: number
+      secure?: boolean
+      httpOnly?: boolean
+      sameSite?: 'Strict' | 'Lax' | 'None'
+    }
+  ): void {
     setCookie(c, 'auth_token', token, {
       httpOnly: options?.httpOnly ?? true,
       secure: options?.secure ?? true,
       sameSite: options?.sameSite ?? 'Strict',
-      maxAge: options?.maxAge ?? (60 * 60 * 24) // 24 hours default
+      maxAge: options?.maxAge ?? 60 * 60 * 24
     })
   }
 }
 
-// Middleware to require authentication
+/** Require authentication. Relies on global session middleware to set c.set('user'). */
 export const requireAuth = () => {
   return async (c: Context, next: Next) => {
-    try {
-      // Try to get token from Authorization header
-      let token = c.req.header('Authorization')?.replace('Bearer ', '')
-
-      // If no header token, try cookie
-      if (!token) {
-        token = getCookie(c, 'auth_token')
-      }
-
-      if (!token) {
-        // Check if this is a browser request (HTML accept header)
-        const acceptHeader = c.req.header('Accept') || ''
-        if (acceptHeader.includes('text/html')) {
-          return c.redirect('/auth/login?error=Please login to access the admin area')
-        }
-        return c.json({ error: 'Authentication required' }, 401)
-      }
-
-      // Try to get cached token verification from KV
-      const kv = c.env?.KV
-      let payload: JWTPayload | null = null
-
-      if (kv) {
-        const cacheKey = `auth:${token.substring(0, 20)}` // Use token prefix as key
-        const cached = await kv.get(cacheKey, 'json')
-        if (cached) {
-          payload = cached as JWTPayload
-        }
-      }
-
-      // If not cached, verify token
-      if (!payload) {
-        payload = await AuthManager.verifyToken(token)
-
-        // Cache the verified payload for 5 minutes
-        if (payload && kv) {
-          const cacheKey = `auth:${token.substring(0, 20)}`
-          await kv.put(cacheKey, JSON.stringify(payload), { expirationTtl: 300 })
-        }
-      }
-
-      if (!payload) {
-        // Check if this is a browser request (HTML accept header)
-        const acceptHeader = c.req.header('Accept') || ''
-        if (acceptHeader.includes('text/html')) {
-          return c.redirect('/auth/login?error=Your session has expired, please login again')
-        }
-        return c.json({ error: 'Invalid or expired token' }, 401)
-      }
-
-      // Add user info to context
-      c.set('user', payload)
-
-      return await next()
-    } catch (error) {
-      console.error('Auth middleware error:', error)
-      // Check if this is a browser request (HTML accept header)
-      const acceptHeader = c.req.header('Accept') || ''
-      if (acceptHeader.includes('text/html')) {
-        return c.redirect('/auth/login?error=Authentication failed, please login again')
-      }
-      return c.json({ error: 'Authentication failed' }, 401)
-    }
-  }
-}
-
-// Middleware to require specific role
-export const requireRole = (requiredRole: string | string[]) => {
-  return async (c: Context, next: Next) => {
-    const user = c.get('user') as JWTPayload
-    
+    const user = c.get('user') as AuthUserPayload | undefined
     if (!user) {
-      // Check if this is a browser request (HTML accept header)
-      const acceptHeader = c.req.header('Accept') || ''
+      const acceptHeader = c.req.header('Accept') ?? ''
       if (acceptHeader.includes('text/html')) {
         return c.redirect('/auth/login?error=Please login to access the admin area')
       }
       return c.json({ error: 'Authentication required' }, 401)
     }
-    
+    return await next()
+  }
+}
+
+/** Require specific role. Must run after requireAuth or session middleware. */
+export const requireRole = (requiredRole: string | string[]) => {
+  return async (c: Context, next: Next) => {
+    const user = c.get('user') as AuthUserPayload | undefined
+    if (!user) {
+      const acceptHeader = c.req.header('Accept') ?? ''
+      if (acceptHeader.includes('text/html')) {
+        return c.redirect('/auth/login?error=Please login to access the admin area')
+      }
+      return c.json({ error: 'Authentication required' }, 401)
+    }
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
-    
     if (!roles.includes(user.role)) {
-      // Check if this is a browser request (HTML accept header)
-      const acceptHeader = c.req.header('Accept') || ''
+      const acceptHeader = c.req.header('Accept') ?? ''
       if (acceptHeader.includes('text/html')) {
         return c.redirect('/auth/login?error=You do not have permission to access this area')
       }
       return c.json({ error: 'Insufficient permissions' }, 403)
     }
-    
     return await next()
   }
 }
 
-// Optional auth middleware (doesn't block if no token)
+/** Optional auth: user may already be set by global session middleware; no-op if not. */
 export const optionalAuth = () => {
   return async (c: Context, next: Next) => {
-    try {
-      let token = c.req.header('Authorization')?.replace('Bearer ', '')
-      
-      if (!token) {
-        token = getCookie(c, 'auth_token')
-      }
-      
-      if (token) {
-        const payload = await AuthManager.verifyToken(token)
-        if (payload) {
-          c.set('user', payload)
-        }
-      }
-      
-      return await next()
-    } catch (error) {
-      // Don't block on auth errors in optional auth
-      console.error('Optional auth error:', error)
-      return await next()
-    }
+    await next()
   }
 }

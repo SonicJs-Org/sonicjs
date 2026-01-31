@@ -29,7 +29,7 @@ This is the recommended way to get started with SonicJS. It sets up everything y
 - 🔌 **Plugin System**: Extensible architecture with hooks and middleware
 - ⚡ **Three-Tier Caching**: Memory, KV, and database layers for optimal performance
 - 🎨 **Admin Interface**: Beautiful glass morphism design system
-- 🔐 **Authentication**: JWT-based auth with role-based permissions
+- 🔐 **Authentication**: Better Auth session-based auth with role-based permissions
 - 📝 **Content Management**: Dynamic collections with versioning and workflows
 - 🖼️ **Media Management**: R2 storage with automatic optimization
 - 🌐 **REST API**: Auto-generated endpoints for all collections

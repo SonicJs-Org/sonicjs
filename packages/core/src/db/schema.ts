@@ -6,6 +6,7 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
   username: text('username').notNull().unique(),
+  name: text('name'), // Better Auth display name (required by Better Auth for registration)
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   passwordHash: text('password_hash'), // Hashed password, nullable for OAuth users
@@ -13,6 +14,49 @@ export const users = sqliteTable('users', {
   avatar: text('avatar'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   lastLoginAt: integer('last_login_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Better Auth session table (cookie-based sessions)
+export const session = sqliteTable('session', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  token: text('token').notNull().unique(),
+  expiresAt: integer('expires_at').notNull(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Better Auth account table (credentials + OAuth providers)
+export const account = sqliteTable('account', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  accountId: text('account_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  accessTokenExpiresAt: integer('access_token_expires_at'),
+  refreshTokenExpiresAt: integer('refresh_token_expires_at'),
+  scope: text('scope'),
+  idToken: text('id_token'),
+  password: text('password'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Better Auth verification table (email verification, password reset, etc.)
+export const verification = sqliteTable('verification', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: integer('expires_at').notNull(),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });

@@ -19,7 +19,6 @@ export { databaseToolsPlugin } from './database-tools-plugin'
 export { helloWorldPlugin, createHelloWorldPlugin } from './hello-world-plugin'
 export { quillEditorPlugin, createQuillEditorPlugin } from './quill-editor'
 export { emailPlugin, createEmailPlugin } from './email-plugin'
-export { otpLoginPlugin, createOTPLoginPlugin } from './otp-login-plugin'
 export { turnstilePlugin } from './turnstile-plugin'
 export { TurnstileService, verifyTurnstile, createTurnstileMiddleware } from './turnstile-plugin'
 export { aiSearchPlugin } from './ai-search-plugin'
@@ -39,7 +38,6 @@ export const CORE_PLUGIN_IDS = [
   'hello-world',
   'quill-editor',
   'email',
-  'otp-login',
   'turnstile',
   'ai-search'
 ] as const

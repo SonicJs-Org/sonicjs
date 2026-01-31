@@ -109,6 +109,7 @@ adminCollectionsRoutes.get('/', async (c) => {
         SELECT id, name, display_name, description, created_at, managed, schema
         FROM collections
         WHERE is_active = 1
+        AND (source_type IS NULL OR source_type = 'user')
         AND (name LIKE ? OR display_name LIKE ? OR description LIKE ?)
         ORDER BY created_at DESC
       `)
@@ -116,7 +117,7 @@ adminCollectionsRoutes.get('/', async (c) => {
       const queryResults = await stmt.bind(searchParam, searchParam, searchParam).all()
       results = queryResults.results
     } else {
-      stmt = db.prepare('SELECT id, name, display_name, description, created_at, managed, schema FROM collections WHERE is_active = 1 ORDER BY created_at DESC')
+      stmt = db.prepare("SELECT id, name, display_name, description, created_at, managed, schema FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY created_at DESC")
       const queryResults = await stmt.all()
       results = queryResults.results
     }

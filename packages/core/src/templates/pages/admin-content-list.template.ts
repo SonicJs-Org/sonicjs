@@ -9,10 +9,13 @@ export interface ContentItem {
   title: string
   slug: string
   modelName: string
+  collectionSourceType?: string
   statusBadge: string
   authorName: string
   formattedDate: string
   availableActions: string[]
+  submitterEmail?: string
+  submitterIp?: string
 }
 
 export interface ContentListPageData {
@@ -23,6 +26,7 @@ export interface ContentListPageData {
   models: Array<{
     name: string
     displayName: string
+    sourceType?: string
   }>
   contentItems: ContentItem[]
   totalItems: number
@@ -118,7 +122,11 @@ export function renderContentListPage(data: ContentListPageData): string {
       label: 'Model',
       sortable: true,
       sortType: 'string',
-      className: 'text-sm text-zinc-500 dark:text-zinc-400'
+      className: 'text-sm text-zinc-500 dark:text-zinc-400',
+      render: (value, row) => {
+        const isForm = row.collectionSourceType === 'form'
+        return `<span>${value}</span>${isForm ? ' <span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">Form</span>' : ''}`
+      }
     },
     {
       key: 'statusBadge',

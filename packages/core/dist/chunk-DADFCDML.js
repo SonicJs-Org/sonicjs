@@ -1388,13 +1388,6 @@ INSERT OR IGNORE INTO plugins (
 `
   },
   {
-    id: "025",
-    name: "Rename Mdxeditor To Easy Mdx",
-    filename: "025_rename_mdxeditor_to_easy_mdx.sql",
-    description: "Migration 025: Rename Mdxeditor To Easy Mdx",
-    sql: "-- Rename mdxeditor-plugin to easy-mdx\n-- Migration: 025_rename_mdxeditor_to_easy_mdx\n-- Description: Update plugin ID from mdxeditor-plugin to easy-mdx to reflect the change to EasyMDE editor\n\n-- Update the plugin record if it exists with the old ID\nUPDATE plugins\nSET\n    id = 'easy-mdx',\n    name = 'easy-mdx',\n    display_name = 'EasyMDE Markdown Editor',\n    description = 'Lightweight markdown editor with live preview. Provides a simple and efficient editor with markdown support for richtext fields.'\nWHERE id = 'mdxeditor-plugin';\n\n-- Update any plugin_hooks references\nUPDATE plugin_hooks\nSET plugin_id = 'easy-mdx'\nWHERE plugin_id = 'mdxeditor-plugin';\n\n-- Update any plugin_activity_log references\nUPDATE plugin_activity_log\nSET plugin_id = 'easy-mdx'\nWHERE plugin_id = 'mdxeditor-plugin';\n"
-  },
-  {
     id: "026",
     name: "Add Otp Login",
     filename: "026_add_otp_login.sql",
@@ -1489,9 +1482,221 @@ WHERE id = 'news-collection' AND schema LIKE '%"slug":{"type":"string"%';
   },
   {
     id: "029",
+    name: "Add Forms System",
+    filename: "029_add_forms_system.sql",
+    description: "Migration 029: Add Forms System",
+    sql: `-- Migration: 029_add_forms_system.sql
+-- Description: Add Form.io integration for advanced form building
+-- Date: January 23, 2026
+-- Phase: 1 - Database Schema
+
+-- =====================================================
+-- Table: forms
+-- Description: Stores form definitions and configuration
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS forms (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,              -- Machine name (e.g., "contact-form")
+  display_name TEXT NOT NULL,             -- Human name (e.g., "Contact Form")
+  description TEXT,                       -- Optional description
+  category TEXT DEFAULT 'general',        -- Form category (contact, survey, registration, etc.)
+  
+  -- Form.io schema (JSON)
+  formio_schema TEXT NOT NULL,            -- Complete Form.io JSON schema
+  
+  -- Settings
+  settings TEXT,                          -- JSON: {
+                                          --   emailNotifications: true,
+                                          --   notifyEmail: "admin@example.com",
+                                          --   successMessage: "Thank you!",
+                                          --   redirectUrl: "/thank-you",
+                                          --   allowAnonymous: true,
+                                          --   requireAuth: false,
+                                          --   maxSubmissions: null,
+                                          --   submitButtonText: "Submit",
+                                          --   saveProgress: true,
+                                          --   webhookUrl: null
+                                          -- }
+  
+  -- Status & Management
+  is_active INTEGER DEFAULT 1,            -- Active/inactive flag
+  is_public INTEGER DEFAULT 1,            -- Public (anyone) vs private (auth required)
+  managed INTEGER DEFAULT 0,              -- Code-managed (like collections)
+  
+  -- Metadata
+  icon TEXT,                              -- Optional icon for admin UI
+  color TEXT,                             -- Optional color (hex) for admin UI
+  tags TEXT,                              -- JSON array of tags
+  
+  -- Stats
+  submission_count INTEGER DEFAULT 0,     -- Total submissions received
+  view_count INTEGER DEFAULT 0,           -- Form views (optional tracking)
+  
+  -- Ownership
+  created_by TEXT REFERENCES users(id),   -- User who created the form
+  updated_by TEXT REFERENCES users(id),   -- User who last updated
+  
+  -- Timestamps
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Indexes for forms
+CREATE INDEX IF NOT EXISTS idx_forms_name ON forms(name);
+CREATE INDEX IF NOT EXISTS idx_forms_category ON forms(category);
+CREATE INDEX IF NOT EXISTS idx_forms_active ON forms(is_active);
+CREATE INDEX IF NOT EXISTS idx_forms_public ON forms(is_public);
+CREATE INDEX IF NOT EXISTS idx_forms_created_by ON forms(created_by);
+
+-- =====================================================
+-- Table: form_submissions
+-- Description: Stores submitted form data
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS form_submissions (
+  id TEXT PRIMARY KEY,
+  form_id TEXT NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+  
+  -- Submission data
+  submission_data TEXT NOT NULL,          -- JSON: The actual form data submitted
+  
+  -- Submission metadata
+  status TEXT DEFAULT 'pending',          -- pending, reviewed, approved, rejected, spam
+  submission_number INTEGER,              -- Sequential number per form
+  
+  -- User information (if authenticated)
+  user_id TEXT REFERENCES users(id),      -- Submitter user ID (if logged in)
+  user_email TEXT,                        -- Email from form (or user account)
+  
+  -- Tracking information
+  ip_address TEXT,                        -- IP address of submitter
+  user_agent TEXT,                        -- Browser user agent
+  referrer TEXT,                          -- Page that referred to form
+  utm_source TEXT,                        -- UTM tracking params
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  
+  -- Review/Processing
+  reviewed_by TEXT REFERENCES users(id),  -- Admin who reviewed
+  reviewed_at INTEGER,                    -- Review timestamp
+  review_notes TEXT,                      -- Admin notes
+  
+  -- Flags
+  is_spam INTEGER DEFAULT 0,              -- Spam flag
+  is_archived INTEGER DEFAULT 0,          -- Archived flag
+  
+  -- Timestamps
+  submitted_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Indexes for submissions
+CREATE INDEX IF NOT EXISTS idx_form_submissions_form_id ON form_submissions(form_id);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_status ON form_submissions(status);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_user_id ON form_submissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_email ON form_submissions(user_email);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_submitted_at ON form_submissions(submitted_at);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_spam ON form_submissions(is_spam);
+
+-- Trigger to auto-increment submission_number per form
+CREATE TRIGGER IF NOT EXISTS set_submission_number
+AFTER INSERT ON form_submissions
+BEGIN
+  UPDATE form_submissions 
+  SET submission_number = (
+    SELECT COUNT(*) 
+    FROM form_submissions 
+    WHERE form_id = NEW.form_id 
+    AND id <= NEW.id
+  )
+  WHERE id = NEW.id;
+END;
+
+-- Trigger to update form submission_count
+CREATE TRIGGER IF NOT EXISTS increment_form_submission_count
+AFTER INSERT ON form_submissions
+BEGIN
+  UPDATE forms 
+  SET submission_count = submission_count + 1,
+      updated_at = unixepoch() * 1000
+  WHERE id = NEW.form_id;
+END;
+
+-- =====================================================
+-- Table: form_files (Optional)
+-- Description: Link form submissions to uploaded files
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS form_files (
+  id TEXT PRIMARY KEY,
+  submission_id TEXT NOT NULL REFERENCES form_submissions(id) ON DELETE CASCADE,
+  media_id TEXT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+  field_name TEXT NOT NULL,               -- Form field that uploaded this file
+  uploaded_at INTEGER NOT NULL
+);
+
+-- Indexes for form files
+CREATE INDEX IF NOT EXISTS idx_form_files_submission ON form_files(submission_id);
+CREATE INDEX IF NOT EXISTS idx_form_files_media ON form_files(media_id);
+
+-- =====================================================
+-- Sample Data: Create a default contact form
+-- =====================================================
+
+INSERT OR IGNORE INTO forms (
+  id,
+  name,
+  display_name,
+  description,
+  category,
+  formio_schema,
+  settings,
+  is_active,
+  is_public,
+  created_at,
+  updated_at
+) VALUES (
+  'default-contact-form',
+  'contact',
+  'Contact Form',
+  'A simple contact form for getting in touch',
+  'contact',
+  '{"components":[]}',
+  '{"emailNotifications":false,"successMessage":"Thank you for your submission!","submitButtonText":"Submit","requireAuth":false}',
+  1,
+  1,
+  unixepoch() * 1000,
+  unixepoch() * 1000
+);
+`
+  },
+  {
+    id: "030",
+    name: "Add Turnstile To Forms",
+    filename: "030_add_turnstile_to_forms.sql",
+    description: "Migration 030: Add Turnstile To Forms",
+    sql: `-- Add Turnstile configuration to forms table
+-- This allows per-form Turnstile settings with global fallback
+
+-- Add columns (D1 may not support CHECK constraints in ALTER TABLE)
+ALTER TABLE forms ADD COLUMN turnstile_enabled INTEGER DEFAULT 0;
+ALTER TABLE forms ADD COLUMN turnstile_settings TEXT;
+
+-- Set default to inherit global settings for existing forms
+UPDATE forms 
+SET turnstile_settings = '{"inherit":true}' 
+WHERE turnstile_settings IS NULL;
+
+-- Add index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_forms_turnstile ON forms(turnstile_enabled);
+`
+  },
+  {
+    id: "031",
     name: "Ai Search Plugin",
-    filename: "029_ai_search_plugin.sql",
-    description: "Migration 029: Ai Search Plugin",
+    filename: "031_ai_search_plugin.sql",
+    description: "Migration 031: Ai Search Plugin",
     sql: "-- AI Search plugin settings\nCREATE TABLE IF NOT EXISTS ai_search_settings (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  enabled BOOLEAN DEFAULT 0,\n  ai_mode_enabled BOOLEAN DEFAULT 1,\n  selected_collections TEXT, -- JSON array of collection IDs to index\n  dismissed_collections TEXT, -- JSON array of collection IDs user chose not to index\n  autocomplete_enabled BOOLEAN DEFAULT 1,\n  cache_duration INTEGER DEFAULT 1, -- hours\n  results_limit INTEGER DEFAULT 20,\n  index_media BOOLEAN DEFAULT 0,\n  index_status TEXT, -- JSON object with status per collection\n  last_indexed_at INTEGER,\n  created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),\n  updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)\n);\n\n-- Search history/analytics\nCREATE TABLE IF NOT EXISTS ai_search_history (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  query TEXT NOT NULL,\n  mode TEXT, -- 'ai' or 'keyword'\n  results_count INTEGER,\n  user_id INTEGER,\n  created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)\n);\n\n-- Index metadata tracking (per collection)\nCREATE TABLE IF NOT EXISTS ai_search_index_meta (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  collection_id INTEGER NOT NULL,\n  collection_name TEXT NOT NULL, -- Cache collection name for display\n  total_items INTEGER DEFAULT 0,\n  indexed_items INTEGER DEFAULT 0,\n  last_sync_at INTEGER,\n  status TEXT DEFAULT 'pending', -- 'pending', 'indexing', 'completed', 'error'\n  error_message TEXT,\n  UNIQUE(collection_id)\n);\n\n-- Indexes for performance\nCREATE INDEX IF NOT EXISTS idx_ai_search_history_created_at ON ai_search_history(created_at);\nCREATE INDEX IF NOT EXISTS idx_ai_search_history_mode ON ai_search_history(mode);\nCREATE INDEX IF NOT EXISTS idx_ai_search_index_meta_collection_id ON ai_search_index_meta(collection_id);\nCREATE INDEX IF NOT EXISTS idx_ai_search_index_meta_status ON ai_search_index_meta(status);\n"
   }
 ];
@@ -1901,5 +2106,5 @@ var MigrationService = class {
 };
 
 export { MigrationService };
-//# sourceMappingURL=chunk-NATWDP7Q.js.map
-//# sourceMappingURL=chunk-NATWDP7Q.js.map
+//# sourceMappingURL=chunk-DADFCDML.js.map
+//# sourceMappingURL=chunk-DADFCDML.js.map

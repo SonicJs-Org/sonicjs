@@ -5,7 +5,7 @@
 // When releasing a new version, run `npm run version:patch` (or minor/major) from the root
 // which will update this file via scripts/sync-versions.js
 
-export const VERSION = '2.7.0'
+export const VERSION = '2.8.0'
 
 // Helper function to get the current month/year for "Last updated"
 export function getLastUpdatedDate(): string {

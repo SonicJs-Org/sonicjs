@@ -23,6 +23,7 @@
     "setup:db": "bash scripts/setup-worktree-db.sh"
   },
   "dependencies": {
+    "@cf-wasm/resvg": "^0.3.3",
     "@sonicjs-cms/core": "file:../packages/core",
     "csv-parse": "^6.1.0",
     "linkedom": "^0.18.12",

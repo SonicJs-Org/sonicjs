@@ -9,6 +9,13 @@ export type CornerShape = 'square' | 'rounded' | 'dots' | 'extra-rounded'
 // STYLE-06: square, rounded, dots, diamond
 export type DotShape = 'square' | 'rounded' | 'dots' | 'diamond'
 
+// DPI options for PNG export (EXP-01)
+// 72 = web/screen, 150 = standard print, 300 = high-quality print
+export type DpiOption = 72 | 150 | 300
+
+// Export format options
+export type ExportFormat = 'svg' | 'png'
+
 // QR code stored in database
 export interface QRCode {
   id: string
@@ -66,6 +73,28 @@ export interface UpdateQRCodeInput {
   logoAspectRatio?: number | null
 }
 
+// Options for PNG export
+export interface PngExportOptions {
+  /** DPI for output image (72 = web, 150 = screen, 300 = print) */
+  dpi?: DpiOption
+  /** Enable transparent background */
+  transparent?: boolean
+}
+
+// Result of PNG export
+export interface PngExportResult {
+  /** PNG image as Uint8Array */
+  buffer: Uint8Array
+  /** Width of output image in pixels */
+  width: number
+  /** Height of output image in pixels */
+  height: number
+  /** File size in bytes */
+  size: number
+  /** Content type for HTTP response */
+  contentType: 'image/png'
+}
+
 // Options for generating QR code image
 export interface QRCodeGenerateOptions {
   content: string
@@ -81,12 +110,17 @@ export interface QRCodeGenerateOptions {
   // Phase 2: Logo embedding
   logoUrl?: string | null
   logoAspectRatio?: number | null
+  // Phase 2: PNG export options
+  exportFormat?: ExportFormat
+  pngOptions?: PngExportOptions
 }
 
 // Result of QR code generation
 export interface QRCodeGenerateResult {
   svg: string  // Raw SVG string
   dataUrl: string  // data:image/svg+xml;base64,...
+  // PNG data (only present if exportFormat === 'png')
+  png?: PngExportResult
 }
 
 // Result of CRUD operations

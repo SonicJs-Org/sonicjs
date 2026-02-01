@@ -7,19 +7,27 @@ import type {
   QRCodeGenerateResult,
   QRCodeOperationResult,
   QRGeneratorSettings,
-  ErrorCorrectionLevel
+  ErrorCorrectionLevel,
+  CornerShape,
+  DotShape
 } from '../types'
 import type { D1Database } from '@cloudflare/workers-types'
 import { normalizeHexColor, isValidHexColor } from '../utils/color-validator'
 import { validateDestinationUrl } from '../utils/url-validator'
 import { getContrastWarning } from '../utils/contrast-checker'
+import { SvgCustomizer } from './svg-customizer'
+import { LogoEmbedder } from './logo-embedder'
 import QRCodeLib from 'qrcode-svg'
 
 /**
  * QR Code Generation and Management Service
  * Handles CRUD operations for QR codes and SVG generation with qrcode-svg library
+ * Phase 2: Supports shape customization and logo embedding
  */
 export class QRService {
+  private svgCustomizer = new SvgCustomizer()
+  private logoEmbedder = new LogoEmbedder()
+
   constructor(private db: D1Database) {}
 
   /**
@@ -60,7 +68,9 @@ export class QRService {
       defaultForegroundColor: '#000000',
       defaultBackgroundColor: '#ffffff',
       defaultErrorCorrection: 'M',
-      defaultSize: 300
+      defaultSize: 300,
+      defaultCornerShape: 'square',
+      defaultDotShape: 'square'
     }
   }
 
@@ -118,6 +128,11 @@ export class QRService {
   /**
    * Generate QR code SVG from content with customizable options
    * Returns both raw SVG string and data URL
+   *
+   * Phase 2: Supports shape customization and logo embedding
+   * - Uses join:false when shapes/eyeColor needed (individual rects for manipulation)
+   * - Uses join:true when no customization (optimized paths)
+   * - Forces Level H error correction when logo is present
    */
   generate(options: QRCodeGenerateOptions): QRCodeGenerateResult {
     const {
@@ -125,7 +140,13 @@ export class QRService {
       size = 300,
       foregroundColor = '#000000',
       backgroundColor = '#ffffff',
-      errorCorrection = 'M'
+      errorCorrection = 'M',
+      // Phase 2 options
+      cornerShape = 'square',
+      dotShape = 'square',
+      eyeColor = null,
+      logoUrl = null,
+      logoAspectRatio = null
     } = options
 
     // Validate colors
@@ -136,8 +157,18 @@ export class QRService {
       throw new Error('Invalid hex color format. Use #RRGGBB or #RGB format.')
     }
 
+    // Determine if we need custom shapes or eye color
+    const needsCustomization = cornerShape !== 'square' ||
+                                dotShape !== 'square' ||
+                                eyeColor !== null
+
+    // Force Level H when logo is present (STYLE-04)
+    const effectiveErrorCorrection = logoUrl ? 'H' : errorCorrection
+
     // Generate QR code using qrcode-svg library
     // padding: 4 provides the required 4-module quiet zone per ISO 18004
+    // Use join:false when customization is needed (individual rects)
+    // Use join:true when no customization (optimized paths)
     const qr = new QRCodeLib({
       content: content,
       padding: 4,
@@ -145,10 +176,29 @@ export class QRService {
       height: size,
       color: normalizedFg,
       background: normalizedBg,
-      ecl: errorCorrection as 'L' | 'M' | 'Q' | 'H'
+      ecl: effectiveErrorCorrection as 'L' | 'M' | 'Q' | 'H',
+      join: !needsCustomization  // false when shapes/eyeColor needed
     })
 
-    const svg = qr.svg()
+    let svg = qr.svg()
+
+    // Apply shape customization if needed (STYLE-05, STYLE-06, STYLE-07)
+    if (needsCustomization) {
+      svg = this.svgCustomizer.customize(svg, {
+        cornerShape,
+        dotShape,
+        eyeColor: eyeColor ?? undefined,
+        moduleColor: normalizedFg
+      })
+    }
+
+    // Embed logo if provided (STYLE-03)
+    if (logoUrl && logoAspectRatio) {
+      svg = this.logoEmbedder.embed(svg, {
+        logoDataUrl: logoUrl,
+        logoAspectRatio
+      })
+    }
 
     // Create data URL for direct embedding
     const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
@@ -163,6 +213,7 @@ export class QRService {
 
   /**
    * Create a new QR code with validation
+   * Phase 2: Supports shape customization and logo embedding with automatic error correction
    */
   async create(input: CreateQRCodeInput, userId: string): Promise<QRCodeOperationResult> {
     try {
@@ -182,8 +233,12 @@ export class QRService {
       // Apply defaults
       const foregroundColor = input.foregroundColor ?? settings.defaultForegroundColor
       const backgroundColor = input.backgroundColor ?? settings.defaultBackgroundColor
-      const errorCorrection = input.errorCorrection ?? settings.defaultErrorCorrection
+      let errorCorrection = input.errorCorrection ?? settings.defaultErrorCorrection
       const size = input.size ?? settings.defaultSize
+
+      // Phase 2: Shape defaults
+      const cornerShape = input.cornerShape ?? (settings.defaultCornerShape || 'square')
+      const dotShape = input.dotShape ?? (settings.defaultDotShape || 'square')
 
       // Validate and normalize colors
       const normalizedFg = normalizeHexColor(foregroundColor)
@@ -205,21 +260,46 @@ export class QRService {
         }
       }
 
+      // Validate eye color if provided
+      let normalizedEyeColor: string | null = null
+      if (input.eyeColor) {
+        normalizedEyeColor = normalizeHexColor(input.eyeColor)
+        if (!normalizedEyeColor) {
+          return {
+            success: false,
+            qrCode: undefined,
+            error: `Invalid eye color: ${input.eyeColor}. Use #RRGGBB or #RGB format.`
+          }
+        }
+      }
+
       // Check contrast ratio
       const contrastWarning = getContrastWarning(normalizedFg, normalizedBg)
+
+      // Phase 2: Handle error correction with logo (STYLE-04)
+      let errorCorrectionBeforeLogo: ErrorCorrectionLevel | null = null
+      if (input.logoUrl) {
+        // Store original before forcing H
+        if (errorCorrection !== 'H') {
+          errorCorrectionBeforeLogo = errorCorrection
+        }
+        errorCorrection = 'H'  // Force Level H with logo
+      }
 
       // Generate unique ID
       const id = crypto.randomUUID()
       const now = Date.now()
 
-      // Insert into database
+      // Insert into database with Phase 2 columns
       await this.db
         .prepare(`
           INSERT INTO qr_codes (
             id, name, destination_url, foreground_color, background_color,
-            error_correction, size, created_by, created_at, updated_at
+            error_correction, size, corner_shape, dot_shape, eye_color,
+            logo_url, logo_aspect_ratio, error_correction_before_logo,
+            created_by, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .bind(
           id,
@@ -229,6 +309,12 @@ export class QRService {
           normalizedBg,
           errorCorrection,
           size,
+          cornerShape,
+          dotShape,
+          normalizedEyeColor,
+          input.logoUrl ?? null,
+          input.logoAspectRatio ?? null,
+          errorCorrectionBeforeLogo,
           userId,
           now,
           now
@@ -263,7 +349,9 @@ export class QRService {
         .prepare(`
           SELECT
             id, name, destination_url, foreground_color, background_color,
-            error_correction, size, created_by, created_at, updated_at, deleted_at
+            error_correction, size, corner_shape, dot_shape, eye_color,
+            logo_url, logo_aspect_ratio, error_correction_before_logo,
+            created_by, created_at, updated_at, deleted_at
           FROM qr_codes
           WHERE id = ? AND deleted_at IS NULL
         `)
@@ -293,7 +381,9 @@ export class QRService {
       let query = `
         SELECT
           id, name, destination_url, foreground_color, background_color,
-          error_correction, size, created_by, created_at, updated_at, deleted_at
+          error_correction, size, corner_shape, dot_shape, eye_color,
+          logo_url, logo_aspect_ratio, error_correction_before_logo,
+          created_by, created_at, updated_at, deleted_at
         FROM qr_codes
         WHERE deleted_at IS NULL
       `
@@ -343,6 +433,7 @@ export class QRService {
 
   /**
    * Update an existing QR code
+   * Phase 2: Supports shape customization and logo embedding with error correction restoration
    */
   async update(id: string, input: UpdateQRCodeInput, userId?: string): Promise<QRCodeOperationResult> {
     try {
@@ -417,6 +508,59 @@ export class QRService {
       if (input.size !== undefined) {
         updates.push('size = ?')
         bindings.push(input.size)
+      }
+
+      // Phase 2: Handle shape updates
+      if (input.cornerShape !== undefined) {
+        updates.push('corner_shape = ?')
+        bindings.push(input.cornerShape)
+      }
+
+      if (input.dotShape !== undefined) {
+        updates.push('dot_shape = ?')
+        bindings.push(input.dotShape)
+      }
+
+      if (input.eyeColor !== undefined) {
+        const normalizedEyeColor = input.eyeColor ? normalizeHexColor(input.eyeColor) : null
+        if (input.eyeColor && !normalizedEyeColor) {
+          return {
+            success: false,
+            qrCode: undefined,
+            error: `Invalid eye color: ${input.eyeColor}`
+          }
+        }
+        updates.push('eye_color = ?')
+        bindings.push(normalizedEyeColor)
+      }
+
+      // Phase 2: Handle logo addition/removal (STYLE-04)
+      if (input.logoUrl !== undefined) {
+        if (input.logoUrl) {
+          // Adding logo - enforce Level H
+          if (existing.errorCorrection !== 'H') {
+            updates.push('error_correction_before_logo = ?')
+            bindings.push(existing.errorCorrection)
+            updates.push('error_correction = ?')
+            bindings.push('H')
+          }
+        } else {
+          // Removing logo - restore previous level if available
+          if (existing.errorCorrectionBeforeLogo) {
+            updates.push('error_correction = ?')
+            bindings.push(existing.errorCorrectionBeforeLogo)
+          }
+          updates.push('error_correction_before_logo = ?')
+          bindings.push(null)
+        }
+        updates.push('logo_url = ?')
+        bindings.push(input.logoUrl)
+      }
+
+      // Handle logo aspect ratio
+      if (input.logoAspectRatio !== undefined) {
+        updates.push('logo_aspect_ratio = ?')
+        bindings.push(input.logoAspectRatio)
       }
 
       // Always update updated_at
@@ -504,6 +648,7 @@ export class QRService {
   /**
    * Map database row to QRCode type
    * @internal Helper method for type conversion
+   * Phase 2: Includes shape and logo fields
    */
   private mapRowToQRCode(row: any): QRCode {
     return {
@@ -514,6 +659,13 @@ export class QRService {
       backgroundColor: row.background_color as string,
       errorCorrection: row.error_correction as ErrorCorrectionLevel,
       size: row.size as number,
+      // Phase 2 fields
+      cornerShape: (row.corner_shape as CornerShape) || 'square',
+      dotShape: (row.dot_shape as DotShape) || 'square',
+      eyeColor: row.eye_color as string | null,
+      logoUrl: row.logo_url as string | null,
+      logoAspectRatio: row.logo_aspect_ratio as number | null,
+      errorCorrectionBeforeLogo: row.error_correction_before_logo as ErrorCorrectionLevel | null,
       createdBy: row.created_by as string,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,

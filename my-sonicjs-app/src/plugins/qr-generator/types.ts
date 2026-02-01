@@ -1,10 +1,12 @@
 // Error correction levels per ISO 18004
 export type ErrorCorrectionLevel = 'L' | 'M' | 'Q' | 'H'
 
-// Shape types for corners (eye patterns / position detection patterns)
+// Corner shape options for position detection patterns (eyes)
+// STYLE-05: square, rounded, dots, extra-rounded
 export type CornerShape = 'square' | 'rounded' | 'dots' | 'extra-rounded'
 
-// Shape types for data modules (dots)
+// Dot shape options for data modules
+// STYLE-06: square, rounded, dots, diamond
 export type DotShape = 'square' | 'rounded' | 'dots' | 'diamond'
 
 // QR code stored in database
@@ -16,9 +18,14 @@ export interface QRCode {
   backgroundColor: string  // Hex, e.g., "#ffffff"
   errorCorrection: ErrorCorrectionLevel
   size: number  // Pixels, e.g., 300
-  cornerShape: CornerShape | null  // Shape for eye patterns
-  dotShape: DotShape | null  // Shape for data modules
-  eyeColor: string | null  // Hex color for position detection patterns
+  // Phase 2: Shape customization
+  cornerShape: CornerShape
+  dotShape: DotShape
+  eyeColor: string | null  // Hex color for position markers, null = use foregroundColor
+  // Phase 2: Logo embedding
+  logoUrl: string | null  // URL/data URL of embedded logo
+  logoAspectRatio: number | null  // Cached aspect ratio for positioning
+  errorCorrectionBeforeLogo: ErrorCorrectionLevel | null  // Backup for restoration
   createdBy: string
   createdAt: number  // Unix timestamp ms
   updatedAt: number
@@ -33,9 +40,13 @@ export interface CreateQRCodeInput {
   backgroundColor?: string  // Default: #ffffff
   errorCorrection?: ErrorCorrectionLevel  // Default: M
   size?: number  // Default: 300
+  // Phase 2: Shape customization
   cornerShape?: CornerShape  // Default: square
   dotShape?: DotShape  // Default: square
-  eyeColor?: string  // Default: same as foregroundColor
+  eyeColor?: string | null  // Default: null (uses foregroundColor)
+  // Phase 2: Logo embedding
+  logoUrl?: string | null
+  logoAspectRatio?: number | null
 }
 
 // Input for updating existing QR code
@@ -46,9 +57,13 @@ export interface UpdateQRCodeInput {
   backgroundColor?: string
   errorCorrection?: ErrorCorrectionLevel
   size?: number
-  cornerShape?: CornerShape | null
-  dotShape?: DotShape | null
+  // Phase 2: Shape customization
+  cornerShape?: CornerShape
+  dotShape?: DotShape
   eyeColor?: string | null
+  // Phase 2: Logo embedding
+  logoUrl?: string | null
+  logoAspectRatio?: number | null
 }
 
 // Options for generating QR code image
@@ -59,9 +74,13 @@ export interface QRCodeGenerateOptions {
   backgroundColor?: string
   errorCorrection?: ErrorCorrectionLevel
   format?: 'svg' | 'dataUrl'
+  // Phase 2: Shape customization
   cornerShape?: CornerShape
   dotShape?: DotShape
-  eyeColor?: string
+  eyeColor?: string | null
+  // Phase 2: Logo embedding
+  logoUrl?: string | null
+  logoAspectRatio?: number | null
 }
 
 // Result of QR code generation
@@ -84,6 +103,7 @@ export interface QRGeneratorSettings {
   defaultBackgroundColor: string
   defaultErrorCorrection: ErrorCorrectionLevel
   defaultSize: number
-  defaultCornerShape: CornerShape
-  defaultDotShape: DotShape
+  // Phase 2: Default shape settings
+  defaultCornerShape?: CornerShape
+  defaultDotShape?: DotShape
 }

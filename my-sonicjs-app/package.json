@@ -24,11 +24,14 @@
   },
   "dependencies": {
     "@sonicjs-cms/core": "file:../packages/core",
+    "csv-parse": "^6.1.0",
+    "qrcode-svg": "^1.1.0",
     "tiny-lru": "^11.4.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250620.0",
     "@types/node": "^20.19.1",
+    "@types/qrcode-svg": "^1.1.5",
     "drizzle-kit": "^0.30.0",
     "drizzle-orm": "^0.44.2",
     "hono": "^4.11.7",

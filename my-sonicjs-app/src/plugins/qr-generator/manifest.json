@@ -1,0 +1,21 @@
+{
+  "id": "qr-generator",
+  "name": "QR Code Generator",
+  "version": "1.0.0",
+  "description": "Generate and manage QR codes with customizable styling",
+  "author": "SonicJS Community",
+  "license": "MIT",
+  "category": "utilities",
+  "tags": ["qr-code", "generator", "utilities"],
+  "permissions": [
+    "qr_code.generate",
+    "qr_code.manage",
+    "qr_code.view"
+  ],
+  "adminMenu": {
+    "label": "QR Codes",
+    "icon": "qrcode",
+    "path": "/admin/qr-codes",
+    "order": 87
+  }
+}

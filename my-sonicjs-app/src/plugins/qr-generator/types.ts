@@ -1,6 +1,12 @@
 // Error correction levels per ISO 18004
 export type ErrorCorrectionLevel = 'L' | 'M' | 'Q' | 'H'
 
+// Shape types for corners (eye patterns / position detection patterns)
+export type CornerShape = 'square' | 'rounded' | 'dots' | 'extra-rounded'
+
+// Shape types for data modules (dots)
+export type DotShape = 'square' | 'rounded' | 'dots' | 'diamond'
+
 // QR code stored in database
 export interface QRCode {
   id: string
@@ -10,6 +16,9 @@ export interface QRCode {
   backgroundColor: string  // Hex, e.g., "#ffffff"
   errorCorrection: ErrorCorrectionLevel
   size: number  // Pixels, e.g., 300
+  cornerShape: CornerShape | null  // Shape for eye patterns
+  dotShape: DotShape | null  // Shape for data modules
+  eyeColor: string | null  // Hex color for position detection patterns
   createdBy: string
   createdAt: number  // Unix timestamp ms
   updatedAt: number
@@ -24,6 +33,9 @@ export interface CreateQRCodeInput {
   backgroundColor?: string  // Default: #ffffff
   errorCorrection?: ErrorCorrectionLevel  // Default: M
   size?: number  // Default: 300
+  cornerShape?: CornerShape  // Default: square
+  dotShape?: DotShape  // Default: square
+  eyeColor?: string  // Default: same as foregroundColor
 }
 
 // Input for updating existing QR code
@@ -34,6 +46,9 @@ export interface UpdateQRCodeInput {
   backgroundColor?: string
   errorCorrection?: ErrorCorrectionLevel
   size?: number
+  cornerShape?: CornerShape | null
+  dotShape?: DotShape | null
+  eyeColor?: string | null
 }
 
 // Options for generating QR code image
@@ -44,6 +59,9 @@ export interface QRCodeGenerateOptions {
   backgroundColor?: string
   errorCorrection?: ErrorCorrectionLevel
   format?: 'svg' | 'dataUrl'
+  cornerShape?: CornerShape
+  dotShape?: DotShape
+  eyeColor?: string
 }
 
 // Result of QR code generation
@@ -66,4 +84,6 @@ export interface QRGeneratorSettings {
   defaultBackgroundColor: string
   defaultErrorCorrection: ErrorCorrectionLevel
   defaultSize: number
+  defaultCornerShape: CornerShape
+  defaultDotShape: DotShape
 }

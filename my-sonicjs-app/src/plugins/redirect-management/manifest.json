@@ -1,0 +1,37 @@
+{
+  "id": "redirect-management",
+  "name": "Redirect Management",
+  "version": "1.0.0",
+  "description": "URL redirect management with exact, partial, and regex matching",
+  "author": "ahaas",
+  "homepage": "https://sonicjs.com/plugins/redirect-management",
+  "license": "MIT",
+  "category": "utilities",
+  "tags": ["redirects", "seo", "urls", "utilities"],
+  "dependencies": [],
+  "settings": {
+    "enabled": {
+      "type": "boolean",
+      "label": "Enable Redirects",
+      "description": "Enable or disable redirect processing",
+      "default": true
+    },
+    "autoOffloadEnabled": {
+      "type": "boolean",
+      "label": "Auto-Sync to Cloudflare",
+      "description": "Automatically sync eligible redirects (EXACT/WILDCARD with 301/302/307/308) to Cloudflare Bulk Redirects. Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID environment variables.",
+      "default": false
+    }
+  },
+  "permissions": {
+    "redirect.manage": "Manage redirects and settings",
+    "redirect.view": "View redirects"
+  },
+  "routes": [],
+  "adminMenu": {
+    "label": "Redirects",
+    "icon": "arrow-right",
+    "path": "/admin/redirects",
+    "order": 85
+  }
+}

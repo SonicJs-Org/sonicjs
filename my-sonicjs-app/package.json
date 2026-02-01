@@ -25,6 +25,7 @@
   "dependencies": {
     "@sonicjs-cms/core": "file:../packages/core",
     "csv-parse": "^6.1.0",
+    "linkedom": "^0.18.12",
     "qrcode-svg": "^1.1.0",
     "tiny-lru": "^11.4.7"
   },

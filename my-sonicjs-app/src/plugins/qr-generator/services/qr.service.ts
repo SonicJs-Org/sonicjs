@@ -9,7 +9,9 @@ import type {
   QRGeneratorSettings,
   ErrorCorrectionLevel,
   CornerShape,
-  DotShape
+  DotShape,
+  DpiOption,
+  PngExportResult
 } from '../types'
 import type { D1Database } from '@cloudflare/workers-types'
 import { normalizeHexColor, isValidHexColor } from '../utils/color-validator'
@@ -17,16 +19,18 @@ import { validateDestinationUrl } from '../utils/url-validator'
 import { getContrastWarning } from '../utils/contrast-checker'
 import { SvgCustomizer } from './svg-customizer'
 import { LogoEmbedder } from './logo-embedder'
+import { PngExporter } from './png-exporter'
 import QRCodeLib from 'qrcode-svg'
 
 /**
  * QR Code Generation and Management Service
  * Handles CRUD operations for QR codes and SVG generation with qrcode-svg library
- * Phase 2: Supports shape customization and logo embedding
+ * Phase 2: Supports shape customization, logo embedding, and PNG export
  */
 export class QRService {
   private svgCustomizer = new SvgCustomizer()
   private logoEmbedder = new LogoEmbedder()
+  private pngExporter = new PngExporter()
 
   constructor(private db: D1Database) {}
 
@@ -206,6 +210,104 @@ export class QRService {
     return {
       svg,
       dataUrl
+    }
+  }
+
+  // PNG Export Methods
+
+  /**
+   * Generate QR code as PNG
+   * Combines SVG generation with PNG conversion using @cf-wasm/resvg
+   *
+   * @param options - Generation options including PNG-specific settings
+   * @returns PNG buffer and metadata
+   */
+  async generatePng(options: QRCodeGenerateOptions & {
+    dpi?: DpiOption
+    transparent?: boolean
+  }): Promise<PngExportResult> {
+    // First generate the SVG
+    const { svg } = this.generate(options)
+
+    // Then convert to PNG
+    const result = await this.pngExporter.export(svg, {
+      dpi: options.dpi ?? 300,
+      baseSize: options.size ?? 300,
+      transparent: options.transparent ?? false
+    })
+
+    return {
+      buffer: result.buffer,
+      width: result.width,
+      height: result.height,
+      size: result.size,
+      contentType: 'image/png' as const
+    }
+  }
+
+  /**
+   * Generate PNG for a stored QR code record
+   * Retrieves QR code from database and generates PNG with specified options
+   *
+   * @param id - QR code record ID
+   * @param dpi - Output DPI (72, 150, or 300)
+   * @param transparent - Enable transparent background
+   * @returns PNG buffer or error
+   */
+  async generateForRecordAsPng(
+    id: string,
+    dpi: DpiOption = 300,
+    transparent: boolean = false
+  ): Promise<{ success: boolean; result?: PngExportResult; error?: string; warning?: string }> {
+    const qrCode = await this.getById(id)
+    if (!qrCode) {
+      return { success: false, error: 'QR code not found' }
+    }
+
+    // Check size warning
+    const warning = PngExporter.checkSizeWarning(qrCode.size, dpi)
+
+    try {
+      const result = await this.generatePng({
+        content: qrCode.destinationUrl,
+        size: qrCode.size,
+        foregroundColor: qrCode.foregroundColor,
+        backgroundColor: qrCode.backgroundColor,
+        errorCorrection: qrCode.errorCorrection,
+        cornerShape: qrCode.cornerShape,
+        dotShape: qrCode.dotShape,
+        eyeColor: qrCode.eyeColor,
+        logoUrl: qrCode.logoUrl,
+        logoAspectRatio: qrCode.logoAspectRatio,
+        dpi,
+        transparent
+      })
+
+      return {
+        success: true,
+        result,
+        warning: warning ?? undefined
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: `PNG generation failed: ${error instanceof Error ? error.message : String(error)}`
+      }
+    }
+  }
+
+  /**
+   * Get estimated PNG size for a QR code
+   * Useful for UI to warn users before generating large files
+   *
+   * @param size - Base QR code size in pixels
+   * @param dpi - Target DPI
+   * @returns Estimated size in bytes and optional warning message
+   */
+  estimatePngSize(size: number, dpi: DpiOption): { bytes: number; warning: string | null } {
+    return {
+      bytes: PngExporter.estimateSize(size, dpi),
+      warning: PngExporter.checkSizeWarning(size, dpi)
     }
   }
 

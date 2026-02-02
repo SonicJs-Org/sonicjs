@@ -17,22 +17,28 @@ import type { D1Database } from '@cloudflare/workers-types'
 import { normalizeHexColor, isValidHexColor } from '../utils/color-validator'
 import { validateDestinationUrl } from '../utils/url-validator'
 import { getContrastWarning } from '../utils/contrast-checker'
+import { generateUniqueShortCode } from '../utils/short-code'
 import { SvgCustomizer } from './svg-customizer'
 import { LogoEmbedder } from './logo-embedder'
 import { PngExporter } from './png-exporter'
+import { RedirectIntegration, MatchType } from './redirect-integration'
 import QRCodeLib from 'qrcode-svg'
 
 /**
  * QR Code Generation and Management Service
  * Handles CRUD operations for QR codes and SVG generation with qrcode-svg library
  * Phase 2: Supports shape customization, logo embedding, and PNG export
+ * Phase 3: Integrates with redirect-management for trackable short URLs
  */
 export class QRService {
   private svgCustomizer = new SvgCustomizer()
   private logoEmbedder = new LogoEmbedder()
   private pngExporter = new PngExporter()
+  private redirectIntegration: RedirectIntegration
 
-  constructor(private db: D1Database) {}
+  constructor(private db: D1Database) {
+    this.redirectIntegration = new RedirectIntegration(db)
+  }
 
   /**
    * Get plugin settings from the database
@@ -316,6 +322,7 @@ export class QRService {
   /**
    * Create a new QR code with validation
    * Phase 2: Supports shape customization and logo embedding with automatic error correction
+   * Phase 3: Atomically creates QR code and redirect entry via D1 batch()
    */
   async create(input: CreateQRCodeInput, userId: string): Promise<QRCodeOperationResult> {
     try {
@@ -388,40 +395,68 @@ export class QRService {
         errorCorrection = 'H'  // Force Level H with logo
       }
 
-      // Generate unique ID
+      // Generate unique ID and short code
       const id = crypto.randomUUID()
+      const shortCode = await generateUniqueShortCode(this.db)
+      const redirectId = crypto.randomUUID()
       const now = Date.now()
 
-      // Insert into database with Phase 2 columns
-      await this.db
-        .prepare(`
-          INSERT INTO qr_codes (
-            id, name, destination_url, foreground_color, background_color,
-            error_correction, size, corner_shape, dot_shape, eye_color,
-            logo_url, logo_aspect_ratio, error_correction_before_logo,
-            created_by, created_at, updated_at
+      // Phase 3: Atomically insert QR code AND redirect via D1 batch()
+      // This ensures both records are created together or neither is created
+      await this.db.batch([
+        this.db
+          .prepare(`
+            INSERT INTO qr_codes (
+              id, name, destination_url, foreground_color, background_color,
+              error_correction, size, corner_shape, dot_shape, eye_color,
+              logo_url, logo_aspect_ratio, error_correction_before_logo,
+              short_code, created_by, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
+            id,
+            input.name ?? null,
+            urlValidation.normalizedUrl!,
+            normalizedFg,
+            normalizedBg,
+            errorCorrection,
+            size,
+            cornerShape,
+            dotShape,
+            normalizedEyeColor,
+            input.logoUrl ?? null,
+            input.logoAspectRatio ?? null,
+            errorCorrectionBeforeLogo,
+            shortCode,
+            userId,
+            now,
+            now
+          ),
+        this.db
+          .prepare(`
+            INSERT INTO redirects (
+              id, source, destination, match_type, status_code,
+              is_active, source_plugin, created_by, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
+            redirectId,
+            this.redirectIntegration.getSourcePath(shortCode),
+            urlValidation.normalizedUrl!,
+            MatchType.EXACT,
+            302,  // Temporary redirect - destination may change
+            1,    // is_active = true
+            'qr-generator',
+            userId,
+            now,
+            now
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .bind(
-          id,
-          input.name ?? null,
-          urlValidation.normalizedUrl!,
-          normalizedFg,
-          normalizedBg,
-          errorCorrection,
-          size,
-          cornerShape,
-          dotShape,
-          normalizedEyeColor,
-          input.logoUrl ?? null,
-          input.logoAspectRatio ?? null,
-          errorCorrectionBeforeLogo,
-          userId,
-          now,
-          now
-        )
-        .run()
+      ])
+
+      // Invalidate redirect cache after successful insert
+      this.redirectIntegration.invalidateCache()
 
       // Fetch the created QR code
       const qrCode = await this.getById(id)
@@ -453,7 +488,7 @@ export class QRService {
             id, name, destination_url, foreground_color, background_color,
             error_correction, size, corner_shape, dot_shape, eye_color,
             logo_url, logo_aspect_ratio, error_correction_before_logo,
-            created_by, created_at, updated_at, deleted_at
+            short_code, created_by, created_at, updated_at, deleted_at
           FROM qr_codes
           WHERE id = ? AND deleted_at IS NULL
         `)
@@ -485,7 +520,7 @@ export class QRService {
           id, name, destination_url, foreground_color, background_color,
           error_correction, size, corner_shape, dot_shape, eye_color,
           logo_url, logo_aspect_ratio, error_correction_before_logo,
-          created_by, created_at, updated_at, deleted_at
+          short_code, created_by, created_at, updated_at, deleted_at
         FROM qr_codes
         WHERE deleted_at IS NULL
       `
@@ -536,6 +571,7 @@ export class QRService {
   /**
    * Update an existing QR code
    * Phase 2: Supports shape customization and logo embedding with error correction restoration
+   * Phase 3: Atomically updates redirect when destination URL changes
    */
   async update(id: string, input: UpdateQRCodeInput, userId?: string): Promise<QRCodeOperationResult> {
     try {
@@ -550,6 +586,7 @@ export class QRService {
       }
 
       // Validate destination URL if provided
+      let normalizedDestinationUrl: string | undefined
       if (input.destinationUrl) {
         const urlValidation = validateDestinationUrl(input.destinationUrl)
         if (!urlValidation.valid) {
@@ -559,6 +596,7 @@ export class QRService {
             error: urlValidation.error
           }
         }
+        normalizedDestinationUrl = urlValidation.normalizedUrl!
       }
 
       // Build update query dynamically based on provided fields
@@ -571,9 +609,8 @@ export class QRService {
       }
 
       if (input.destinationUrl !== undefined) {
-        const urlValidation = validateDestinationUrl(input.destinationUrl)
         updates.push('destination_url = ?')
-        bindings.push(urlValidation.normalizedUrl!)
+        bindings.push(normalizedDestinationUrl!)
       }
 
       if (input.foregroundColor !== undefined) {
@@ -666,8 +703,9 @@ export class QRService {
       }
 
       // Always update updated_at
+      const now = Date.now()
       updates.push('updated_at = ?')
-      bindings.push(Date.now())
+      bindings.push(now)
 
       // Add ID to bindings
       bindings.push(id)
@@ -681,11 +719,27 @@ export class QRService {
         }
       }
 
-      // Execute update
-      await this.db
-        .prepare(`UPDATE qr_codes SET ${updates.join(', ')} WHERE id = ?`)
-        .bind(...bindings)
-        .run()
+      // Phase 3: If destination URL is being updated and QR has a short code,
+      // atomically update both QR code and redirect
+      if (normalizedDestinationUrl && existing.shortCode) {
+        const sourcePath = this.redirectIntegration.getSourcePath(existing.shortCode)
+        await this.db.batch([
+          this.db
+            .prepare(`UPDATE qr_codes SET ${updates.join(', ')} WHERE id = ?`)
+            .bind(...bindings),
+          this.db
+            .prepare(`UPDATE redirects SET destination = ?, updated_at = ? WHERE source = ? AND deleted_at IS NULL`)
+            .bind(normalizedDestinationUrl, now, sourcePath)
+        ])
+        // Invalidate redirect cache
+        this.redirectIntegration.invalidateCache()
+      } else {
+        // No redirect update needed - just update QR code
+        await this.db
+          .prepare(`UPDATE qr_codes SET ${updates.join(', ')} WHERE id = ?`)
+          .bind(...bindings)
+          .run()
+      }
 
       // Fetch updated QR code
       const updated = await this.getById(id)
@@ -715,27 +769,47 @@ export class QRService {
 
   /**
    * Delete a QR code (soft delete - sets deleted_at timestamp)
+   * Phase 3: Atomically soft-deletes both QR code and associated redirect
    */
   async delete(id: string): Promise<QRCodeOperationResult> {
     try {
-      const now = Date.now()
-      const result = await this.db
-        .prepare(`UPDATE qr_codes SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`)
-        .bind(now, id)
-        .run()
-
-      if (result.meta.changes > 0) {
-        return {
-          success: true,
-          qrCode: undefined,
-          error: undefined
-        }
-      } else {
+      // First fetch the QR code to get its short code
+      const existing = await this.getById(id)
+      if (!existing) {
         return {
           success: false,
           qrCode: undefined,
           error: 'QR code not found'
         }
+      }
+
+      const now = Date.now()
+
+      // Phase 3: Atomically soft-delete both QR code and redirect
+      if (existing.shortCode) {
+        const sourcePath = this.redirectIntegration.getSourcePath(existing.shortCode)
+        await this.db.batch([
+          this.db
+            .prepare(`UPDATE qr_codes SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`)
+            .bind(now, id),
+          this.db
+            .prepare(`UPDATE redirects SET deleted_at = ? WHERE source = ? AND deleted_at IS NULL`)
+            .bind(now, sourcePath)
+        ])
+        // Invalidate redirect cache
+        this.redirectIntegration.invalidateCache()
+      } else {
+        // No short code (legacy QR code) - just delete QR code
+        await this.db
+          .prepare(`UPDATE qr_codes SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`)
+          .bind(now, id)
+          .run()
+      }
+
+      return {
+        success: true,
+        qrCode: undefined,
+        error: undefined
       }
     } catch (error) {
       console.error('[QRService] Error deleting QR code:', error)
@@ -751,6 +825,7 @@ export class QRService {
    * Map database row to QRCode type
    * @internal Helper method for type conversion
    * Phase 2: Includes shape and logo fields
+   * Phase 3: Includes shortCode for redirect integration
    */
   private mapRowToQRCode(row: any): QRCode {
     return {
@@ -768,6 +843,8 @@ export class QRService {
       logoUrl: row.logo_url as string | null,
       logoAspectRatio: row.logo_aspect_ratio as number | null,
       errorCorrectionBeforeLogo: row.error_correction_before_logo as ErrorCorrectionLevel | null,
+      // Phase 3 fields
+      shortCode: row.short_code as string,
       createdBy: row.created_by as string,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,

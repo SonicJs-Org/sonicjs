@@ -3,11 +3,13 @@ import type { Plugin, PluginContext } from '@sonicjs-cms/core'
 import manifest from './manifest.json'
 import { QRService } from './services/qr.service'
 import qrRedirectRoutes from './routes/qr-redirect'
+import { createQRAdminRoutes } from './routes/admin'
 
 // Export types for external use
 export type { QRCode, CreateQRCodeInput, UpdateQRCodeInput, QRCodeGenerateOptions, QRCodeGenerateResult } from './types'
 export { QRService } from './services/qr.service'
 export { createQRRedirectHandler } from './routes/qr-redirect'
+export { createQRAdminRoutes } from './routes/admin'
 
 export function createQRGeneratorPlugin(): Plugin {
   const builder = PluginBuilder.create({
@@ -30,8 +32,19 @@ export function createQRGeneratorPlugin(): Plugin {
     priority: 10  // High priority to ensure /qr/:code is matched before catch-all routes
   })
 
-  // NOTE: Admin routes will be added in Phase 4 (Admin Interface)
-  // NOTE: Menu items will be added in Phase 4 (Admin Interface)
+  // Admin routes for QR code management UI
+  builder.addRoute('/admin/qr-codes', createQRAdminRoutes(), {
+    description: 'QR code management admin routes',
+    requiresAuth: true,
+    priority: 100
+  })
+
+  // Add menu item in admin sidebar
+  builder.addMenuItem('QR Codes', '/admin/qr-codes', {
+    icon: 'qr-code',
+    order: 86,
+    permissions: ['admin', 'qr.manage']
+  })
 
   // Register service
   let qrService: QRService | null = null

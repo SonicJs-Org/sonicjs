@@ -75,12 +75,14 @@ export class QRService {
    */
   getDefaultSettings(): QRGeneratorSettings {
     return {
+      enabled: true,
       defaultForegroundColor: '#000000',
       defaultBackgroundColor: '#ffffff',
       defaultErrorCorrection: 'M',
       defaultSize: 300,
       defaultCornerShape: 'square',
-      defaultDotShape: 'square'
+      defaultDotShape: 'square',
+      defaultLogoUrl: ''
     }
   }
 
@@ -179,6 +181,17 @@ export class QRService {
     // padding: 4 provides the required 4-module quiet zone per ISO 18004
     // Use join:false when customization is needed (individual rects)
     // Use join:true when no customization (optimized paths)
+    console.log('[QRService.generate] Creating QR with options:', {
+      content,
+      padding: 4,
+      width: size,
+      height: size,
+      color: normalizedFg,
+      background: normalizedBg,
+      ecl: effectiveErrorCorrection,
+      join: !needsCustomization
+    })
+
     const qr = new QRCodeLib({
       content: content,
       padding: 4,
@@ -190,26 +203,35 @@ export class QRService {
       join: !needsCustomization  // false when shapes/eyeColor needed
     })
 
+    console.log('[QRService.generate] QR object created, typeof qr.svg:', typeof qr.svg)
     let svg = qr.svg()
+    console.log('[QRService.generate] SVG generated, length:', svg?.length, 'first 200 chars:', svg?.substring(0, 200))
 
     // Apply shape customization if needed (STYLE-05, STYLE-06, STYLE-07)
+    console.log('[QRService.generate] needsCustomization:', needsCustomization, { cornerShape, dotShape, eyeColor })
     if (needsCustomization) {
+      console.log('[QRService.generate] Calling svgCustomizer.customize')
       svg = this.svgCustomizer.customize(svg, {
         cornerShape,
         dotShape,
         eyeColor: eyeColor ?? undefined,
         moduleColor: normalizedFg
       })
+      console.log('[QRService.generate] After customize, length:', svg?.length)
     }
 
     // Embed logo if provided (STYLE-03)
+    console.log('[QRService.generate] logoUrl:', logoUrl ? 'present' : 'null', 'logoAspectRatio:', logoAspectRatio)
     if (logoUrl && logoAspectRatio) {
+      console.log('[QRService.generate] Calling logoEmbedder.embed')
       svg = this.logoEmbedder.embed(svg, {
         logoDataUrl: logoUrl,
         logoAspectRatio
       })
+      console.log('[QRService.generate] After logo embed, length:', svg?.length)
     }
 
+    console.log('[QRService.generate] Final SVG length:', svg?.length, 'first 300 chars:', svg?.substring(0, 300))
     // Create data URL for direct embedding
     const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
 
@@ -263,7 +285,8 @@ export class QRService {
   async generateForRecordAsPng(
     id: string,
     dpi: DpiOption = 300,
-    transparent: boolean = false
+    transparent: boolean = false,
+    baseUrl?: string  // Base URL for constructing short URL
   ): Promise<{ success: boolean; result?: PngExportResult; error?: string; warning?: string }> {
     const qrCode = await this.getById(id)
     if (!qrCode) {
@@ -273,16 +296,26 @@ export class QRService {
     // Check size warning
     const warning = PngExporter.checkSizeWarning(qrCode.size, dpi)
 
+    // Only use eye color if it's different from foreground color
+    const effectiveEyeColor = (qrCode.eyeColor && qrCode.eyeColor !== qrCode.foregroundColor)
+      ? qrCode.eyeColor
+      : null
+
+    // QR code encodes the short URL (for tracking), not the destination URL
+    const content = baseUrl && qrCode.shortCode
+      ? `${baseUrl}/qr/${qrCode.shortCode}`
+      : qrCode.destinationUrl  // Fallback if no baseUrl provided
+
     try {
       const result = await this.generatePng({
-        content: qrCode.destinationUrl,
+        content,
         size: qrCode.size,
         foregroundColor: qrCode.foregroundColor,
         backgroundColor: qrCode.backgroundColor,
         errorCorrection: qrCode.errorCorrection,
         cornerShape: qrCode.cornerShape,
         dotShape: qrCode.dotShape,
-        eyeColor: qrCode.eyeColor,
+        eyeColor: effectiveEyeColor,
         logoUrl: qrCode.logoUrl,
         logoAspectRatio: qrCode.logoAspectRatio,
         dpi,
@@ -395,9 +428,9 @@ export class QRService {
         errorCorrection = 'H'  // Force Level H with logo
       }
 
-      // Generate unique ID and short code
+      // Generate unique ID and use provided short code or generate new one
       const id = crypto.randomUUID()
-      const shortCode = await generateUniqueShortCode(this.db)
+      const shortCode = input.shortCode || await generateUniqueShortCode(this.db)
       const redirectId = crypto.randomUUID()
       const now = Date.now()
 

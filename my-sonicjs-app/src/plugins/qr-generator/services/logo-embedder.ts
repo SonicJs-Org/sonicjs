@@ -2,8 +2,9 @@
  * Logo Embedder Service
  * Embeds logos into QR code SVGs using SVG composition
  *
- * Logo embedding constraints (from CONTEXT.md):
- * - Maximum logo coverage: 25% of QR code area (safe for scannability)
+ * Logo embedding constraints:
+ * - Maximum logo coverage: 5% of QR code area (~22% linear width)
+ * - This ensures logo fits within the center data area (between eyes)
  * - White padding behind logo for visibility
  * - Logo container matches uploaded logo's aspect ratio
  * - Requires Level H error correction (30% capacity)
@@ -18,7 +19,7 @@ export interface LogoEmbedOptions {
   logoAspectRatio: number
   /** Padding percentage around logo (0.1 = 10%) */
   paddingPercent?: number
-  /** Maximum coverage of QR code area (0.25 = 25%) */
+  /** Maximum coverage of QR code area (0.05 = 5% area = ~22% linear width) */
   maxCoverage?: number
 }
 
@@ -37,8 +38,8 @@ export class LogoEmbedder {
     const {
       logoDataUrl,
       logoAspectRatio,
-      paddingPercent = 0.1,
-      maxCoverage = 0.25
+      paddingPercent = 0.15,
+      maxCoverage = 0.05  // 5% area = ~22% linear width, fits safely in center data area
     } = options
 
     if (!logoDataUrl) {

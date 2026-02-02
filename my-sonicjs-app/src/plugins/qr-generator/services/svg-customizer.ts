@@ -147,7 +147,16 @@ export class SvgCustomizer {
    */
   customize(svgString: string, options: SvgCustomizerOptions): string {
     // If no customization needed, return as-is
-    if (!options.cornerShape && !options.dotShape && !options.eyeColor) {
+    // Treat 'square' shapes as default (no customization)
+    const hasCornerCustomization = options.cornerShape && options.cornerShape !== 'square'
+    const hasDotCustomization = options.dotShape && options.dotShape !== 'square'
+    const hasEyeColorCustomization = !!options.eyeColor
+
+    console.log('[SvgCustomizer] Options:', options)
+    console.log('[SvgCustomizer] Customization flags:', { hasCornerCustomization, hasDotCustomization, hasEyeColorCustomization })
+
+    if (!hasCornerCustomization && !hasDotCustomization && !hasEyeColorCustomization) {
+      console.log('[SvgCustomizer] No customization needed, returning original')
       return svgString
     }
 
@@ -195,11 +204,12 @@ export class SvgCustomizer {
     // Calculate matrix size
     const matrixSize = estimateMatrixSize(svgWidth, moduleSize, this.quietZone)
 
-    // Get path generators
-    const cornerGenerator = options.cornerShape
+    // Get path generators - only for non-square shapes
+    // Square is the default, so we don't need to replace rects with paths
+    const cornerGenerator = (options.cornerShape && options.cornerShape !== 'square')
       ? getCornerPathGenerator(options.cornerShape)
       : null
-    const dotGenerator = options.dotShape
+    const dotGenerator = (options.dotShape && options.dotShape !== 'square')
       ? getDotPathGenerator(options.dotShape)
       : null
 
@@ -207,9 +217,10 @@ export class SvgCustomizer {
     const eyeColor = options.eyeColor
     const moduleColor = options.moduleColor
 
-    // Create path elements to replace rects
-    const pathsToAdd: string[] = []
+    // Track elements to modify
+    const pathElements: Element[] = []
     const rectsToRemove: Element[] = []
+    let eyeColorChanges = 0
 
     for (const rect of rects) {
       const pos = parseRectElement(rect)
@@ -230,9 +241,21 @@ export class SvgCustomizer {
 
       const isEye = isInEyeRegion(row, col, matrixSize)
       const generator = isEye ? cornerGenerator : dotGenerator
+
+      // Extract fill color - check both fill attribute and style attribute
+      let originalColor = rect.getAttribute('fill')
+      if (!originalColor) {
+        const style = rect.getAttribute('style')
+        if (style) {
+          const match = style.match(/fill:(#[0-9A-Fa-f]{6})/)
+          if (match) {
+            originalColor = match[1]
+          }
+        }
+      }
       const color = isEye && eyeColor
         ? eyeColor
-        : (rect.getAttribute('fill') ?? moduleColor ?? '#000000')
+        : (originalColor ?? moduleColor ?? '#000000')
 
       // If we have a custom generator, replace with path
       if (generator) {
@@ -242,27 +265,55 @@ export class SvgCustomizer {
           size: pos.size
         }
         const pathData = generator(config)
-        pathsToAdd.push(`<path d="${pathData}" fill="${color}"/>`)
+
+        // Create path element using DOM methods (avoid innerHTML corruption)
+        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        pathEl.setAttribute('d', pathData)
+        pathEl.setAttribute('fill', color)
+        pathElements.push(pathEl)
         rectsToRemove.push(rect)
+
+        // Debug: log first few path creations
+        if (pathElements.length <= 3) {
+          console.log('[SvgCustomizer] Created path:', { row, col, isEye, pathData: pathData.substring(0, 50), color })
+        }
       } else if (isEye && eyeColor) {
         // No shape change, but need to update eye color
-        rect.setAttribute('fill', eyeColor)
+        // Check if rect uses style attribute (qrcode-svg uses inline styles)
+        const style = rect.getAttribute('style')
+        if (style && style.includes('fill:')) {
+          // Replace fill in style attribute
+          const newStyle = style.replace(/fill:#[0-9A-Fa-f]{6}/, `fill:${eyeColor}`)
+          rect.setAttribute('style', newStyle)
+        } else {
+          // Fallback to fill attribute
+          rect.setAttribute('fill', eyeColor)
+        }
+        eyeColorChanges++
       }
     }
 
-    // Remove old rects and add new paths
+    console.log('[SvgCustomizer] Rects to remove:', rectsToRemove.length, 'Paths to add:', pathElements.length, 'Eye color changes:', eyeColorChanges)
+
+    // Remove old rects
     for (const rect of rectsToRemove) {
       rect.remove()
     }
 
-    if (pathsToAdd.length > 0) {
-      // Insert paths as innerHTML
-      const existingContent = svg.innerHTML
-      svg.innerHTML = existingContent + pathsToAdd.join('')
+    // Append new path elements
+    for (const pathEl of pathElements) {
+      svg.appendChild(pathEl)
     }
 
+    // Debug: count elements after modification
+    const finalRects = svg.querySelectorAll('rect').length
+    const finalPaths = svg.querySelectorAll('path').length
+    console.log('[SvgCustomizer] After modification - rects:', finalRects, 'paths:', finalPaths)
+
     // Return the modified SVG
-    return svg.outerHTML
+    const result = svg.outerHTML
+    console.log('[SvgCustomizer] Result SVG length:', result.length, 'first 300 chars:', result.substring(0, 300))
+    return result
   }
 
   /**

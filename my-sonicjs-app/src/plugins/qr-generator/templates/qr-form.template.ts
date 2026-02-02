@@ -19,6 +19,8 @@ export interface QRFormPageData {
   user: any
   /** Base URL for preview short URL display */
   baseUrl?: string
+  /** Pre-generated short code for new QR codes (used in preview and on save) */
+  provisionalShortCode?: string
   /** Initial SVG for preview (generated with defaults or current settings) */
   initialSvg?: string
 }
@@ -207,10 +209,12 @@ function renderShapeSelector(props: {
  * Render the QR code create/edit form page
  */
 export function renderQRFormPage(data: QRFormPageData): HtmlEscapedString | Promise<HtmlEscapedString> {
-  const { isEdit, qrCode, error, warning, referrerParams, baseUrl = '', initialSvg = '' } = data
+  const { isEdit, qrCode, error, warning, referrerParams, baseUrl = '', initialSvg = '', provisionalShortCode = '' } = data
   const pageTitle = isEdit ? 'Edit QR Code' : 'New QR Code'
   const submitText = isEdit ? 'Update QR Code' : 'Create QR Code'
   const formAction = isEdit ? `/admin/qr-codes/${qrCode?.id}` : '/admin/qr-codes'
+  // Use provisional short code for new QR codes, or existing short code for edits
+  const shortCode = qrCode?.shortCode || provisionalShortCode
 
   const backUrl = referrerParams
     ? `/admin/qr-codes?${referrerParams}`
@@ -220,7 +224,7 @@ export function renderQRFormPage(data: QRFormPageData): HtmlEscapedString | Prom
   const values = {
     name: qrCode?.name || '',
     destinationUrl: qrCode?.destinationUrl || '',
-    shortCode: qrCode?.shortCode || '',
+    shortCode: shortCode,  // Use provisional short code for new, existing for edit
     foregroundColor: qrCode?.foregroundColor || '#000000',
     backgroundColor: qrCode?.backgroundColor || '#ffffff',
     eyeColor: qrCode?.eyeColor || '',
@@ -448,8 +452,9 @@ export function renderQRFormPage(data: QRFormPageData): HtmlEscapedString | Prom
     </div>
   `
 
-  // Build the full form content
+  // Build the full form content - scripts MUST come first before any onclick handlers
   const content = html`
+    ${getFormScripts()}
     <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
@@ -480,6 +485,7 @@ export function renderQRFormPage(data: QRFormPageData): HtmlEscapedString | Prom
               <div id="form-messages"></div>
 
               ${isEdit && qrCode ? html`<input type="hidden" id="qr-id" name="id" value="${qrCode.id}" />` : ''}
+              <input type="hidden" id="short-code" name="short_code" value="${values.shortCode}" />
 
               ${html([renderCollapsibleSection({
                 id: 'section-basic',
@@ -547,8 +553,6 @@ export function renderQRFormPage(data: QRFormPageData): HtmlEscapedString | Prom
         </div>
       </div>
     </div>
-
-    ${getFormScripts()}
   `
 
   return renderLayout(pageTitle, content)
@@ -574,8 +578,8 @@ function renderAlert(type: 'error' | 'warning', message: string): HtmlEscapedStr
  * Get form interaction scripts
  */
 function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
+  // Note: HTMX is already loaded by admin layout (v2.0.3)
   return html`
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script>
       // Define all functions immediately in global scope
       window.toggleSection = function(id) {
@@ -617,7 +621,8 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
 
       // Sync from hex input to native picker (with validation)
       window.syncColorFromHex = function(name, value) {
-        if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+        // Validate hex color format: #RRGGBB
+        if (value && value.length === 7 && value[0] === '#' && /^[0-9A-Fa-f]{6}/.test(value.slice(1))) {
           const picker = document.getElementById(name + '-picker');
           const preview = document.getElementById(name + '-preview');
 
@@ -674,7 +679,8 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
         if (files.length === 0) return;
 
         const file = files[0];
-        if (!file.type.match(/^image\/(png|svg\+xml)$/)) {
+        // Check for PNG or SVG file types
+        if (file.type !== 'image/png' && file.type !== 'image/svg+xml') {
           alert('Please select a PNG or SVG file');
           return;
         }
@@ -767,12 +773,13 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
         }
       }
 
-      // Handle HTMX form submission
+      // Handle HTMX form submission (only for actual form submit, not preview)
       document.body.addEventListener('htmx:afterRequest', function(event) {
-        if (event.detail.successful && event.detail.xhr.status >= 200 && event.detail.xhr.status < 300) {
-          if (event.detail.xhr.status !== 302) {
-            window.location.href = '/admin/qr-codes';
-          }
+        // Only redirect on successful form submission, not preview updates
+        const path = event.detail.pathInfo?.requestPath || '';
+        const isPreview = path.includes('/preview');
+        if (!isPreview && event.detail.successful && event.detail.xhr.status >= 200 && event.detail.xhr.status < 300) {
+          window.location.href = '/admin/qr-codes';
         }
       });
 

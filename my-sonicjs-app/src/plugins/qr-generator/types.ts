@@ -112,14 +112,14 @@ export interface QRCodeGenerateOptions {
   backgroundColor?: string
   errorCorrection?: ErrorCorrectionLevel
   format?: 'svg' | 'dataUrl'
-  // Phase 2: Shape customization
+  // Shape customization
   cornerShape?: CornerShape
   dotShape?: DotShape
   eyeColor?: string | null
-  // Phase 2: Logo embedding
+  // Logo embedding
   logoUrl?: string | null
   logoAspectRatio?: number | null
-  // Phase 2: PNG export options
+  // PNG export options
   exportFormat?: ExportFormat
   pngOptions?: PngExportOptions
 }
@@ -140,13 +140,16 @@ export interface QRCodeOperationResult {
   warning?: string  // e.g., low contrast warning
 }
 
-// Plugin settings (for Phase 5)
+// Plugin settings
 export interface QRGeneratorSettings {
+  enabled: boolean
   defaultForegroundColor: string
   defaultBackgroundColor: string
   defaultErrorCorrection: ErrorCorrectionLevel
   defaultSize: number
-  // Phase 2: Default shape settings
+  // Default shape settings
   defaultCornerShape?: CornerShape
   defaultDotShape?: DotShape
+  // Default logo
+  defaultLogoUrl?: string  // Data URL or image URL for default logo
 }

@@ -704,6 +704,7 @@ type PluginSettingsRenderer = (plugin: any, settings: PluginSettings) => string
 const pluginSettingsComponents: Record<string, PluginSettingsRenderer> = {
   'otp-login': renderOTPLoginSettingsContent,
   'email': renderEmailSettingsContent,
+  'qr-generator': renderQRGeneratorSettingsContent,
 }
 
 /**
@@ -1213,6 +1214,308 @@ function renderEmailSettingsContent(plugin: any, settings: PluginSettings): stri
           resultEl.innerHTML = '<p class="text-red-200">❌ Network error. Please try again.</p>';
         }
       });
+    </script>
+  `
+}
+
+/**
+ * QR Generator plugin settings content
+ */
+function renderQRGeneratorSettingsContent(plugin: any, settings: PluginSettings): string {
+  const enabled = settings.enabled !== false
+  const defaultForegroundColor = settings.defaultForegroundColor || '#000000'
+  const defaultBackgroundColor = settings.defaultBackgroundColor || '#ffffff'
+  const defaultErrorCorrection = settings.defaultErrorCorrection || 'M'
+  const defaultSize = settings.defaultSize || 300
+  const defaultCornerShape = settings.defaultCornerShape || 'square'
+  const defaultDotShape = settings.defaultDotShape || 'square'
+  const defaultLogoUrl = settings.defaultLogoUrl || ''
+
+  const selectClass = "backdrop-blur-sm bg-zinc-800 border border-white/20 rounded-lg px-3 py-2 text-white focus:border-blue-400 focus:outline-none transition-colors w-full [&>option]:bg-zinc-800 [&>option]:text-white"
+  const inputClass = "backdrop-blur-sm bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:border-blue-400 focus:outline-none transition-colors w-full"
+
+  return `
+    <div class="space-y-6">
+      <!-- Enable Toggle -->
+      <div class="flex items-center justify-between">
+        <div>
+          <label for="setting_enabled" class="text-sm font-medium text-gray-300">Enable QR Codes</label>
+          <p class="text-xs text-gray-400">Enable or disable QR code generation</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" name="setting_enabled" id="setting_enabled" ${enabled ? 'checked' : ''} class="sr-only peer">
+          <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+
+      <!-- Colors Section -->
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Default Colors</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="setting_defaultForegroundColor" class="block text-sm font-medium text-gray-300 mb-2">Foreground Color</label>
+            <div class="flex gap-2">
+              <input
+                type="color"
+                id="setting_defaultForegroundColor_picker"
+                value="${escapeHtmlAttr(defaultForegroundColor)}"
+                class="h-10 w-14 rounded border border-white/20 cursor-pointer"
+                onchange="document.getElementById('setting_defaultForegroundColor').value = this.value"
+              />
+              <input
+                type="text"
+                name="setting_defaultForegroundColor"
+                id="setting_defaultForegroundColor"
+                value="${escapeHtmlAttr(defaultForegroundColor)}"
+                class="${inputClass}"
+                pattern="^#[0-9A-Fa-f]{6}$"
+                onchange="document.getElementById('setting_defaultForegroundColor_picker').value = this.value"
+              />
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Color for QR code modules (hex format)</p>
+          </div>
+          <div>
+            <label for="setting_defaultBackgroundColor" class="block text-sm font-medium text-gray-300 mb-2">Background Color</label>
+            <div class="flex gap-2">
+              <input
+                type="color"
+                id="setting_defaultBackgroundColor_picker"
+                value="${escapeHtmlAttr(defaultBackgroundColor)}"
+                class="h-10 w-14 rounded border border-white/20 cursor-pointer"
+                onchange="document.getElementById('setting_defaultBackgroundColor').value = this.value"
+              />
+              <input
+                type="text"
+                name="setting_defaultBackgroundColor"
+                id="setting_defaultBackgroundColor"
+                value="${escapeHtmlAttr(defaultBackgroundColor)}"
+                class="${inputClass}"
+                pattern="^#[0-9A-Fa-f]{6}$"
+                onchange="document.getElementById('setting_defaultBackgroundColor_picker').value = this.value"
+              />
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Background color for QR codes (hex format)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Size and Error Correction -->
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Default Settings</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="setting_defaultSize" class="block text-sm font-medium text-gray-300 mb-2">Default Size (pixels)</label>
+            <input
+              type="number"
+              name="setting_defaultSize"
+              id="setting_defaultSize"
+              value="${defaultSize}"
+              min="100"
+              max="1000"
+              class="${inputClass}"
+            />
+            <p class="text-xs text-gray-400 mt-1">QR code size in pixels (100-1000)</p>
+          </div>
+          <div>
+            <label for="setting_defaultErrorCorrection" class="block text-sm font-medium text-gray-300 mb-2">Error Correction Level</label>
+            <select name="setting_defaultErrorCorrection" id="setting_defaultErrorCorrection" class="${selectClass}" style="color: white; background-color: rgb(39, 39, 42);">
+              <option value="L" ${defaultErrorCorrection === 'L' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">L - Low (7% recovery)</option>
+              <option value="M" ${defaultErrorCorrection === 'M' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">M - Medium (15% recovery)</option>
+              <option value="Q" ${defaultErrorCorrection === 'Q' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Q - Quartile (25% recovery)</option>
+              <option value="H" ${defaultErrorCorrection === 'H' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">H - High (30% recovery)</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Higher = more recoverable but denser</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shape Settings -->
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Default Shapes</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="setting_defaultCornerShape" class="block text-sm font-medium text-gray-300 mb-2">Corner Shape</label>
+            <select name="setting_defaultCornerShape" id="setting_defaultCornerShape" class="${selectClass}" style="color: white; background-color: rgb(39, 39, 42);">
+              <option value="square" ${defaultCornerShape === 'square' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Square</option>
+              <option value="rounded" ${defaultCornerShape === 'rounded' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Rounded</option>
+              <option value="dots" ${defaultCornerShape === 'dots' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Dots</option>
+              <option value="extra-rounded" ${defaultCornerShape === 'extra-rounded' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Extra Rounded</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Shape for position markers (eyes)</p>
+          </div>
+          <div>
+            <label for="setting_defaultDotShape" class="block text-sm font-medium text-gray-300 mb-2">Dot Shape</label>
+            <select name="setting_defaultDotShape" id="setting_defaultDotShape" class="${selectClass}" style="color: white; background-color: rgb(39, 39, 42);">
+              <option value="square" ${defaultDotShape === 'square' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Square</option>
+              <option value="rounded" ${defaultDotShape === 'rounded' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Rounded</option>
+              <option value="dots" ${defaultDotShape === 'dots' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Dots</option>
+              <option value="diamond" ${defaultDotShape === 'diamond' ? 'selected' : ''} style="background-color: rgb(39, 39, 42); color: white;">Diamond</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Shape for data modules</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Default Logo -->
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Default Logo</h3>
+        <p class="text-sm text-gray-400 mb-4">Upload a logo to embed in the center of all QR codes by default.</p>
+
+        <div class="flex items-start gap-4">
+          <!-- Logo Preview -->
+          <div class="flex-shrink-0">
+            <div id="logoPreviewContainer" class="w-24 h-24 rounded-lg border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden bg-white/5 ${defaultLogoUrl ? '' : ''}">
+              ${defaultLogoUrl
+                ? `<img id="logoPreview" src="${escapeHtmlAttr(defaultLogoUrl)}" alt="Logo preview" class="max-w-full max-h-full object-contain" />`
+                : `<span id="logoPlaceholder" class="text-gray-500 text-xs text-center px-2">No logo</span>`
+              }
+            </div>
+          </div>
+
+          <!-- Upload Controls -->
+          <div class="flex-1">
+            <input
+              type="file"
+              id="logoFileInput"
+              accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+              class="hidden"
+            />
+            <input
+              type="hidden"
+              name="setting_defaultLogoUrl"
+              id="setting_defaultLogoUrl"
+              value="${escapeHtmlAttr(defaultLogoUrl)}"
+            />
+
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onclick="document.getElementById('logoFileInput').click()"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                ${defaultLogoUrl ? 'Change Logo' : 'Upload Logo'}
+              </button>
+              ${defaultLogoUrl ? `
+                <button
+                  type="button"
+                  id="removeLogoBtn"
+                  onclick="removeLogo()"
+                  class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Remove
+                </button>
+              ` : ''}
+            </div>
+
+            <p class="text-xs text-gray-400 mt-2">
+              Recommended: PNG or SVG with transparent background. Max 500KB.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info Card -->
+      <div class="backdrop-blur-md bg-blue-500/10 border border-blue-500/20 rounded-xl p-6">
+        <h3 class="font-semibold text-blue-400 mb-3">📱 QR Code Features</h3>
+        <ul class="text-sm text-blue-200 space-y-2">
+          <li>✓ Custom colors and shapes</li>
+          <li>✓ Logo embedding with automatic error correction</li>
+          <li>✓ SVG and PNG export</li>
+          <li>✓ Redirect tracking with analytics</li>
+          <li>✓ Scannable validation</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      // Handle file upload and convert to data URL
+      document.getElementById('logoFileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Validate file size (500KB max)
+        if (file.size > 500 * 1024) {
+          alert('Logo file must be smaller than 500KB');
+          e.target.value = '';
+          return;
+        }
+
+        // Validate file type
+        const validTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+          alert('Please upload a PNG, JPEG, GIF, SVG, or WebP image');
+          e.target.value = '';
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          const dataUrl = event.target.result;
+
+          // Update hidden input
+          document.getElementById('setting_defaultLogoUrl').value = dataUrl;
+
+          // Update preview
+          const container = document.getElementById('logoPreviewContainer');
+          const placeholder = document.getElementById('logoPlaceholder');
+          let preview = document.getElementById('logoPreview');
+
+          if (placeholder) {
+            placeholder.remove();
+          }
+
+          if (!preview) {
+            preview = document.createElement('img');
+            preview.id = 'logoPreview';
+            preview.alt = 'Logo preview';
+            preview.className = 'max-w-full max-h-full object-contain';
+            container.appendChild(preview);
+          }
+          preview.src = dataUrl;
+
+          // Add remove button if not present
+          if (!document.getElementById('removeLogoBtn')) {
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.id = 'removeLogoBtn';
+            removeBtn.onclick = removeLogo;
+            removeBtn.className = 'px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors';
+            removeBtn.textContent = 'Remove';
+            document.querySelector('#logoFileInput').parentElement.querySelector('.flex.flex-wrap').appendChild(removeBtn);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+
+      function removeLogo() {
+        // Clear hidden input
+        document.getElementById('setting_defaultLogoUrl').value = '';
+
+        // Reset preview
+        const container = document.getElementById('logoPreviewContainer');
+        const preview = document.getElementById('logoPreview');
+        if (preview) {
+          preview.remove();
+        }
+
+        // Add placeholder back
+        if (!document.getElementById('logoPlaceholder')) {
+          const placeholder = document.createElement('span');
+          placeholder.id = 'logoPlaceholder';
+          placeholder.className = 'text-gray-500 text-xs text-center px-2';
+          placeholder.textContent = 'No logo';
+          container.appendChild(placeholder);
+        }
+
+        // Remove the remove button
+        const removeBtn = document.getElementById('removeLogoBtn');
+        if (removeBtn) {
+          removeBtn.remove();
+        }
+
+        // Clear file input
+        document.getElementById('logoFileInput').value = '';
+      }
     </script>
   `
 }

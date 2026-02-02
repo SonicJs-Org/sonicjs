@@ -87,13 +87,19 @@ export function createQRAdminRoutes(): Hono {
       const service = new QRService(db)
       const { data: settings } = await service.getSettings()
 
-      // Generate initial preview SVG with defaults
+      // Pre-generate a short code for the preview (will be used on save)
+      const { generateUniqueShortCode } = await import('../utils/short-code')
+      const provisionalShortCode = await generateUniqueShortCode(db)
+
+      // Generate initial preview SVG with the provisional short URL
+      const baseUrl = new URL(c.req.url).origin
+      const previewSize = 280 // Fixed preview size for consistent display
       const initialPreview = service.generate({
-        content: 'https://example.com',
+        content: `${baseUrl}/qr/${provisionalShortCode}`,
         foregroundColor: settings.defaultForegroundColor,
         backgroundColor: settings.defaultBackgroundColor,
         errorCorrection: settings.defaultErrorCorrection,
-        size: 200,
+        size: previewSize,
         cornerShape: settings.defaultCornerShape || 'square',
         dotShape: settings.defaultDotShape || 'square'
       })
@@ -102,8 +108,9 @@ export function createQRAdminRoutes(): Hono {
         isEdit: false,
         referrerParams: ref,
         user: c.get('user'),
-        baseUrl: new URL(c.req.url).origin,
-        initialSvg: initialPreview.svg
+        baseUrl,
+        initialSvg: initialPreview.svg,
+        provisionalShortCode  // Pass to form as hidden field
       })
       return c.html(html)
     } catch (error) {
@@ -132,16 +139,23 @@ export function createQRAdminRoutes(): Hono {
         return c.redirect('/admin/qr-codes', 303)
       }
 
-      // Generate preview SVG for current QR code
+      // Generate preview SVG for current QR code at fixed preview size
+      // QR code encodes the short URL (for tracking), not the destination URL
+      const baseUrl = new URL(c.req.url).origin
+      const previewSize = 280 // Fixed preview size for consistent display
+      const effectiveEyeColor = (qrCode.eyeColor && qrCode.eyeColor !== qrCode.foregroundColor)
+        ? qrCode.eyeColor
+        : null
+
       const preview = service.generate({
-        content: qrCode.destinationUrl,
+        content: `${baseUrl}/qr/${qrCode.shortCode}`,  // Use short URL for tracking
         foregroundColor: qrCode.foregroundColor,
         backgroundColor: qrCode.backgroundColor,
         errorCorrection: qrCode.errorCorrection,
-        size: 200,
+        size: previewSize,
         cornerShape: qrCode.cornerShape,
         dotShape: qrCode.dotShape,
-        eyeColor: qrCode.eyeColor,
+        eyeColor: effectiveEyeColor,
         logoUrl: qrCode.logoUrl,
         logoAspectRatio: qrCode.logoAspectRatio
       })
@@ -176,28 +190,43 @@ export function createQRAdminRoutes(): Hono {
       const service = new QRService(db)
 
       // Parse form values with defaults
-      const content = (body.destination_url as string) || 'https://example.com'
+      const baseUrl = new URL(c.req.url).origin
+      const shortCode = body.short_code as string || ''
+
+      // QR code should encode the short URL (for tracking), not the destination URL
+      // For new QR codes without a short code yet, show a placeholder
+      const content = shortCode
+        ? `${baseUrl}/qr/${shortCode}`
+        : `${baseUrl}/qr/preview`  // Placeholder for new QR codes
+
       const foregroundColor = (body.foreground_color as string) || '#000000'
       const backgroundColor = (body.background_color as string) || '#ffffff'
       const errorCorrection = (body.error_correction as string) || 'M'
       const cornerShape = (body.corner_shape as string) || 'square'
       const dotShape = (body.dot_shape as string) || 'square'
-      const eyeColor = body.eye_color as string || null
+      // Only use eye color if it's different from foreground color
+      const rawEyeColor = body.eye_color as string || ''
+      const eyeColor = (rawEyeColor && rawEyeColor !== foregroundColor) ? rawEyeColor : null
+      console.log('[QR Preview] Eye color check:', { rawEyeColor, foregroundColor, effectiveEyeColor: eyeColor })
       const size = parseInt(body.size as string) || 200
 
-      // Generate preview
+      // Generate preview at fixed size for consistent display
+      const previewSize = 280 // Fixed preview size
+      console.log('[QR Preview] Generating with:', { content, shortCode, foregroundColor, backgroundColor, cornerShape, dotShape, previewSize })
       const result = service.generate({
         content,
         foregroundColor,
         backgroundColor,
         errorCorrection: errorCorrection as any,
-        size: Math.min(size, 400), // Cap preview size
+        size: previewSize, // Always use fixed preview size
         cornerShape: cornerShape as any,
         dotShape: dotShape as any,
         eyeColor: eyeColor || null,
         logoUrl: body.logo_url as string || null,
         logoAspectRatio: body.logo_url ? 1 : null // Default to 1:1 if logo present
       })
+      console.log('[QR Preview] Generated SVG length:', result.svg?.length)
+      console.log('[QR Preview] SVG first 500 chars:', result.svg?.substring(0, 500))
 
       // Return just the preview partial for HTMX swap
       const html = renderQRPreview({
@@ -228,18 +257,27 @@ export function createQRAdminRoutes(): Hono {
       const body = await c.req.parseBody()
       console.log('[QR Admin] POST / - Form body:', body)
 
+      // Only use eye color if it's different from foreground color
+      const fgColor = body.foreground_color as string || '#000000'
+      const rawEyeColor = body.eye_color as string || ''
+      const effectiveEyeColor = (rawEyeColor && rawEyeColor !== fgColor) ? rawEyeColor : null
+
+      // Use the provisional short code from the form (pre-generated on page load)
+      const provisionalShortCode = body.short_code as string || null
+
       const input = {
         name: body.name as string || null,
         destinationUrl: body.destination_url as string,
-        foregroundColor: body.foreground_color as string,
+        foregroundColor: fgColor,
         backgroundColor: body.background_color as string,
         errorCorrection: body.error_correction as any,
         size: parseInt(body.size as string) || 300,
         cornerShape: body.corner_shape as any || 'square',
         dotShape: body.dot_shape as any || 'square',
-        eyeColor: body.eye_color as string || null,
+        eyeColor: effectiveEyeColor,
         logoUrl: body.logo_url as string || null,
-        logoAspectRatio: body.logo_url ? 1 : null
+        logoAspectRatio: body.logo_url ? 1 : null,
+        shortCode: provisionalShortCode  // Use pre-generated short code
       }
 
       // Get user ID
@@ -285,16 +323,21 @@ export function createQRAdminRoutes(): Hono {
       const body = await c.req.parseBody()
       console.log('[QR Admin] PUT /:id - Form body:', body)
 
+      // Only use eye color if it's different from foreground color
+      const fgColor = body.foreground_color as string || '#000000'
+      const rawEyeColor = body.eye_color as string || ''
+      const effectiveEyeColor = (rawEyeColor && rawEyeColor !== fgColor) ? rawEyeColor : null
+
       const input = {
         name: body.name as string || null,
         destinationUrl: body.destination_url as string,
-        foregroundColor: body.foreground_color as string,
+        foregroundColor: fgColor,
         backgroundColor: body.background_color as string,
         errorCorrection: body.error_correction as any,
         size: parseInt(body.size as string) || 300,
         cornerShape: body.corner_shape as any || 'square',
         dotShape: body.dot_shape as any || 'square',
-        eyeColor: body.eye_color as string || null,
+        eyeColor: effectiveEyeColor,
         logoUrl: body.logo_url as string || null,
         logoAspectRatio: body.logo_url ? 1 : null
       }
@@ -367,15 +410,21 @@ export function createQRAdminRoutes(): Hono {
         return c.text('QR code not found', 404)
       }
 
+      // Only use eye color if it's different from foreground color
+      const baseUrl = new URL(c.req.url).origin
+      const effectiveEyeColor = (qrCode.eyeColor && qrCode.eyeColor !== qrCode.foregroundColor)
+        ? qrCode.eyeColor
+        : null
+
       const result = service.generate({
-        content: qrCode.destinationUrl,
+        content: `${baseUrl}/qr/${qrCode.shortCode}`,  // Use short URL for tracking
         foregroundColor: qrCode.foregroundColor,
         backgroundColor: qrCode.backgroundColor,
         errorCorrection: qrCode.errorCorrection,
         size: Math.min(size, 100), // Cap thumbnail size
         cornerShape: qrCode.cornerShape,
         dotShape: qrCode.dotShape,
-        eyeColor: qrCode.eyeColor,
+        eyeColor: effectiveEyeColor,
         logoUrl: qrCode.logoUrl,
         logoAspectRatio: qrCode.logoAspectRatio
       })
@@ -406,7 +455,8 @@ export function createQRAdminRoutes(): Hono {
       }
 
       const service = new QRService(db)
-      const result = await service.generateForRecordAsPng(id, dpi)
+      const baseUrl = new URL(c.req.url).origin
+      const result = await service.generateForRecordAsPng(id, dpi, false, baseUrl)
 
       if (!result.success || !result.result) {
         return c.text(result.error || 'Failed to generate PNG', 404)

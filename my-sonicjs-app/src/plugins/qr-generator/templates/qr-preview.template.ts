@@ -1,4 +1,4 @@
-import { html } from 'hono/html'
+import { html, raw } from 'hono/html'
 import type { HtmlEscapedString } from 'hono/utils/html'
 
 export interface QRPreviewData {
@@ -22,9 +22,9 @@ export function renderQRPreview(data: QRPreviewData): HtmlEscapedString | Promis
 
   return html`
     <!-- QR Code Display -->
-    <div class="mb-4 p-4 bg-white rounded-lg shadow-inner flex items-center justify-center" style="min-height: 200px;">
-      <div class="w-48 h-48 flex items-center justify-center">
-        ${html([svg] as unknown as TemplateStringsArray)}
+    <div class="mb-4 bg-white rounded-lg shadow-inner flex items-center justify-center">
+      <div class="qr-svg-container flex items-center justify-center w-full max-w-[280px] aspect-square [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full">
+        ${raw(svg || '<p class="text-zinc-400 text-sm">No preview</p>')}
       </div>
     </div>
 

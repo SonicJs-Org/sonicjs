@@ -1,7 +1,7 @@
 import { html } from 'hono/html'
 import type { HtmlEscapedString } from 'hono/utils/html'
 import { renderAdminLayoutCatalyst } from '@sonicjs-cms/core/templates'
-import type { QRCode, CornerShape, DotShape } from '../types'
+import type { QRCode, CornerShape, DotShape, QRGeneratorSettings } from '../types'
 import { renderQRPreview } from './qr-preview.template'
 
 export interface QRFormPageData {
@@ -23,6 +23,8 @@ export interface QRFormPageData {
   provisionalShortCode?: string
   /** Initial SVG for preview (generated with defaults or current settings) */
   initialSvg?: string
+  /** Plugin settings for default values (new QR codes only) */
+  defaultSettings?: QRGeneratorSettings
 }
 
 // Default color swatches for color pickers
@@ -209,7 +211,7 @@ function renderShapeSelector(props: {
  * Render the QR code create/edit form page
  */
 export function renderQRFormPage(data: QRFormPageData): HtmlEscapedString | Promise<HtmlEscapedString> {
-  const { isEdit, qrCode, error, warning, referrerParams, baseUrl = '', initialSvg = '', provisionalShortCode = '' } = data
+  const { isEdit, qrCode, error, warning, referrerParams, baseUrl = '', initialSvg = '', provisionalShortCode = '', defaultSettings } = data
   const pageTitle = isEdit ? 'Edit QR Code' : 'New QR Code'
   const submitText = isEdit ? 'Update QR Code' : 'Create QR Code'
   const formAction = isEdit ? `/admin/qr-codes/${qrCode?.id}` : '/admin/qr-codes'
@@ -220,19 +222,29 @@ export function renderQRFormPage(data: QRFormPageData): HtmlEscapedString | Prom
     ? `/admin/qr-codes?${referrerParams}`
     : '/admin/qr-codes'
 
-  // Default values for new QR codes
+  // Default values - use plugin settings for new QR codes, or existing values for edits
+  const defaults = defaultSettings || {
+    defaultForegroundColor: '#000000',
+    defaultBackgroundColor: '#ffffff',
+    defaultErrorCorrection: 'M' as const,
+    defaultSize: 300,
+    defaultCornerShape: 'square' as const,
+    defaultDotShape: 'square' as const,
+    defaultLogoUrl: ''
+  }
+
   const values = {
     name: qrCode?.name || '',
     destinationUrl: qrCode?.destinationUrl || '',
     shortCode: shortCode,  // Use provisional short code for new, existing for edit
-    foregroundColor: qrCode?.foregroundColor || '#000000',
-    backgroundColor: qrCode?.backgroundColor || '#ffffff',
+    foregroundColor: qrCode?.foregroundColor || defaults.defaultForegroundColor,
+    backgroundColor: qrCode?.backgroundColor || defaults.defaultBackgroundColor,
     eyeColor: qrCode?.eyeColor || '',
-    cornerShape: qrCode?.cornerShape || 'square',
-    dotShape: qrCode?.dotShape || 'square',
-    errorCorrection: qrCode?.errorCorrection || 'M',
-    size: qrCode?.size || 300,
-    logoUrl: qrCode?.logoUrl || ''
+    cornerShape: qrCode?.cornerShape || defaults.defaultCornerShape || 'square',
+    dotShape: qrCode?.dotShape || defaults.defaultDotShape || 'square',
+    errorCorrection: qrCode?.errorCorrection || defaults.defaultErrorCorrection,
+    size: qrCode?.size || defaults.defaultSize,
+    logoUrl: qrCode?.logoUrl || defaults.defaultLogoUrl || ''
   }
 
   // HTMX attributes for preview updates

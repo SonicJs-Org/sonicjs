@@ -101,7 +101,9 @@ export function createQRAdminRoutes(): Hono {
         errorCorrection: settings.defaultErrorCorrection,
         size: previewSize,
         cornerShape: settings.defaultCornerShape || 'square',
-        dotShape: settings.defaultDotShape || 'square'
+        dotShape: settings.defaultDotShape || 'square',
+        logoUrl: settings.defaultLogoUrl || null,
+        logoAspectRatio: settings.defaultLogoUrl ? 1 : null
       })
 
       const html = renderQRFormPage({
@@ -110,7 +112,8 @@ export function createQRAdminRoutes(): Hono {
         user: c.get('user'),
         baseUrl,
         initialSvg: initialPreview.svg,
-        provisionalShortCode  // Pass to form as hidden field
+        provisionalShortCode,  // Pass to form as hidden field
+        defaultSettings: settings  // Pass settings for form defaults
       })
       return c.html(html)
     } catch (error) {
@@ -189,7 +192,10 @@ export function createQRAdminRoutes(): Hono {
       const body = await c.req.parseBody()
       const service = new QRService(db)
 
-      // Parse form values with defaults
+      // Get plugin settings for defaults
+      const { data: settings } = await service.getSettings()
+
+      // Parse form values with plugin settings as defaults
       const baseUrl = new URL(c.req.url).origin
       const shortCode = body.short_code as string || ''
 
@@ -199,20 +205,23 @@ export function createQRAdminRoutes(): Hono {
         ? `${baseUrl}/qr/${shortCode}`
         : `${baseUrl}/qr/preview`  // Placeholder for new QR codes
 
-      const foregroundColor = (body.foreground_color as string) || '#000000'
-      const backgroundColor = (body.background_color as string) || '#ffffff'
-      const errorCorrection = (body.error_correction as string) || 'M'
-      const cornerShape = (body.corner_shape as string) || 'square'
-      const dotShape = (body.dot_shape as string) || 'square'
+      const foregroundColor = (body.foreground_color as string) || settings.defaultForegroundColor || '#000000'
+      const backgroundColor = (body.background_color as string) || settings.defaultBackgroundColor || '#ffffff'
+      const errorCorrection = (body.error_correction as string) || settings.defaultErrorCorrection || 'M'
+      const cornerShape = (body.corner_shape as string) || settings.defaultCornerShape || 'square'
+      const dotShape = (body.dot_shape as string) || settings.defaultDotShape || 'square'
       // Only use eye color if it's different from foreground color
       const rawEyeColor = body.eye_color as string || ''
       const eyeColor = (rawEyeColor && rawEyeColor !== foregroundColor) ? rawEyeColor : null
       console.log('[QR Preview] Eye color check:', { rawEyeColor, foregroundColor, effectiveEyeColor: eyeColor })
-      const size = parseInt(body.size as string) || 200
+      const size = parseInt(body.size as string) || settings.defaultSize || 200
+      // Logo URL: use form value if provided, otherwise null
+      // Note: empty string means user removed the logo, so don't fall back to default
+      const logoUrl = (body.logo_url as string) || null
 
       // Generate preview at fixed size for consistent display
       const previewSize = 280 // Fixed preview size
-      console.log('[QR Preview] Generating with:', { content, shortCode, foregroundColor, backgroundColor, cornerShape, dotShape, previewSize })
+      console.log('[QR Preview] Generating with:', { content, shortCode, foregroundColor, backgroundColor, cornerShape, dotShape, previewSize, logoUrl })
       const result = service.generate({
         content,
         foregroundColor,
@@ -222,8 +231,8 @@ export function createQRAdminRoutes(): Hono {
         cornerShape: cornerShape as any,
         dotShape: dotShape as any,
         eyeColor: eyeColor || null,
-        logoUrl: body.logo_url as string || null,
-        logoAspectRatio: body.logo_url ? 1 : null // Default to 1:1 if logo present
+        logoUrl: logoUrl,
+        logoAspectRatio: logoUrl ? 1 : null // Default to 1:1 if logo present
       })
       console.log('[QR Preview] Generated SVG length:', result.svg?.length)
       console.log('[QR Preview] SVG first 500 chars:', result.svg?.substring(0, 500))
@@ -257,26 +266,34 @@ export function createQRAdminRoutes(): Hono {
       const body = await c.req.parseBody()
       console.log('[QR Admin] POST / - Form body:', body)
 
+      // Get plugin settings for defaults
+      const service = new QRService(db)
+      const { data: settings } = await service.getSettings()
+
       // Only use eye color if it's different from foreground color
-      const fgColor = body.foreground_color as string || '#000000'
+      const fgColor = body.foreground_color as string || settings.defaultForegroundColor || '#000000'
       const rawEyeColor = body.eye_color as string || ''
       const effectiveEyeColor = (rawEyeColor && rawEyeColor !== fgColor) ? rawEyeColor : null
 
       // Use the provisional short code from the form (pre-generated on page load)
       const provisionalShortCode = body.short_code as string || null
 
+      // Logo URL: use form value (which already has the default when form loads)
+      // Empty string means user removed the logo
+      const logoUrl = (body.logo_url as string) || null
+
       const input = {
         name: body.name as string || null,
         destinationUrl: body.destination_url as string,
         foregroundColor: fgColor,
-        backgroundColor: body.background_color as string,
-        errorCorrection: body.error_correction as any,
-        size: parseInt(body.size as string) || 300,
-        cornerShape: body.corner_shape as any || 'square',
-        dotShape: body.dot_shape as any || 'square',
+        backgroundColor: body.background_color as string || settings.defaultBackgroundColor || '#ffffff',
+        errorCorrection: body.error_correction as any || settings.defaultErrorCorrection || 'M',
+        size: parseInt(body.size as string) || settings.defaultSize || 300,
+        cornerShape: body.corner_shape as any || settings.defaultCornerShape || 'square',
+        dotShape: body.dot_shape as any || settings.defaultDotShape || 'square',
         eyeColor: effectiveEyeColor,
-        logoUrl: body.logo_url as string || null,
-        logoAspectRatio: body.logo_url ? 1 : null,
+        logoUrl: logoUrl,
+        logoAspectRatio: logoUrl ? 1 : null,
         shortCode: provisionalShortCode  // Use pre-generated short code
       }
 
@@ -287,7 +304,6 @@ export function createQRAdminRoutes(): Hono {
         userId = adminUser?.id as string || 'system'
       }
 
-      const service = new QRService(db)
       const result = await service.create(input, userId)
 
       if (result.success) {

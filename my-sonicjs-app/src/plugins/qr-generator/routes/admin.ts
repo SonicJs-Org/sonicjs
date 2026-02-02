@@ -217,19 +217,108 @@ export function createQRAdminRoutes(): Hono {
   /**
    * POST /admin/qr-codes
    * Create a new QR code
-   * (Placeholder - will be implemented in Plan 03)
    */
   admin.post('/', async (c: any) => {
-    return c.html(renderAlertFragment('error', 'Create not yet implemented'), 501)
+    try {
+      const db = c.env?.DB || c.get('db')
+      if (!db) {
+        return c.html(renderAlertFragment('error', 'Database not available'), 500)
+      }
+
+      const body = await c.req.parseBody()
+      console.log('[QR Admin] POST / - Form body:', body)
+
+      const input = {
+        name: body.name as string || null,
+        destinationUrl: body.destination_url as string,
+        foregroundColor: body.foreground_color as string,
+        backgroundColor: body.background_color as string,
+        errorCorrection: body.error_correction as any,
+        size: parseInt(body.size as string) || 300,
+        cornerShape: body.corner_shape as any || 'square',
+        dotShape: body.dot_shape as any || 'square',
+        eyeColor: body.eye_color as string || null,
+        logoUrl: body.logo_url as string || null,
+        logoAspectRatio: body.logo_url ? 1 : null
+      }
+
+      // Get user ID
+      let userId = c.get('user')?.id
+      if (!userId) {
+        const adminUser = await db.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').bind('admin').first()
+        userId = adminUser?.id as string || 'system'
+      }
+
+      const service = new QRService(db)
+      const result = await service.create(input, userId)
+
+      if (result.success) {
+        return c.redirect('/admin/qr-codes?success=' + encodeURIComponent('QR code created successfully'), 303)
+      } else {
+        let html = ''
+        if (result.error) {
+          html += renderAlertFragment('error', result.error)
+        }
+        if (result.warning) {
+          html += renderAlertFragment('warning', result.warning)
+        }
+        return c.html(html || renderAlertFragment('error', 'Failed to create QR code'), 400)
+      }
+    } catch (error) {
+      console.error('[QR Admin] Error creating QR code:', error)
+      return c.html(renderAlertFragment('error', `Failed to create QR code: ${error instanceof Error ? error.message : 'Unknown error'}`), 500)
+    }
   })
 
   /**
    * PUT /admin/qr-codes/:id
    * Update an existing QR code
-   * (Placeholder - will be implemented in Plan 03)
    */
   admin.put('/:id', async (c: any) => {
-    return c.html(renderAlertFragment('error', 'Update not yet implemented'), 501)
+    try {
+      const id = c.req.param('id')
+      const db = c.env?.DB || c.get('db')
+      if (!db) {
+        return c.html(renderAlertFragment('error', 'Database not available'), 500)
+      }
+
+      const body = await c.req.parseBody()
+      console.log('[QR Admin] PUT /:id - Form body:', body)
+
+      const input = {
+        name: body.name as string || null,
+        destinationUrl: body.destination_url as string,
+        foregroundColor: body.foreground_color as string,
+        backgroundColor: body.background_color as string,
+        errorCorrection: body.error_correction as any,
+        size: parseInt(body.size as string) || 300,
+        cornerShape: body.corner_shape as any || 'square',
+        dotShape: body.dot_shape as any || 'square',
+        eyeColor: body.eye_color as string || null,
+        logoUrl: body.logo_url as string || null,
+        logoAspectRatio: body.logo_url ? 1 : null
+      }
+
+      const userId = c.get('user')?.id
+      const service = new QRService(db)
+      const result = await service.update(id, input, userId)
+
+      if (result.success) {
+        return c.redirect('/admin/qr-codes?success=' + encodeURIComponent('QR code updated successfully'), 303)
+      } else {
+        let html = ''
+        if (result.error) {
+          html += renderAlertFragment('error', result.error)
+        }
+        if (result.warning) {
+          html += renderAlertFragment('warning', result.warning)
+        }
+        return c.html(html || renderAlertFragment('error', 'Failed to update QR code'), 400)
+      }
+    } catch (error) {
+      console.error('[QR Admin] Error updating QR code:', error)
+      return c.html(renderAlertFragment('error', `Failed to update QR code: ${error instanceof Error ? error.message : 'Unknown error'}`), 500)
+    }
   })
 
   /**
@@ -255,6 +344,86 @@ export function createQRAdminRoutes(): Hono {
     } catch (error) {
       console.error('Error deleting QR code:', error)
       return c.json({ success: false, error: 'Failed to delete QR code' }, 500)
+    }
+  })
+
+  /**
+   * GET /admin/qr-codes/:id/preview
+   * Returns SVG thumbnail for list view
+   */
+  admin.get('/:id/preview', async (c: any) => {
+    try {
+      const id = c.req.param('id')
+      const size = parseInt(c.req.query('size') || '40')
+      const db = c.env?.DB || c.get('db')
+      if (!db) {
+        return c.text('Database not available', 500)
+      }
+
+      const service = new QRService(db)
+      const qrCode = await service.getById(id)
+
+      if (!qrCode) {
+        return c.text('QR code not found', 404)
+      }
+
+      const result = service.generate({
+        content: qrCode.destinationUrl,
+        foregroundColor: qrCode.foregroundColor,
+        backgroundColor: qrCode.backgroundColor,
+        errorCorrection: qrCode.errorCorrection,
+        size: Math.min(size, 100), // Cap thumbnail size
+        cornerShape: qrCode.cornerShape,
+        dotShape: qrCode.dotShape,
+        eyeColor: qrCode.eyeColor,
+        logoUrl: qrCode.logoUrl,
+        logoAspectRatio: qrCode.logoAspectRatio
+      })
+
+      return new Response(result.svg, {
+        headers: {
+          'Content-Type': 'image/svg+xml',
+          'Cache-Control': 'public, max-age=3600'
+        }
+      })
+    } catch (error) {
+      console.error('[QR Admin] Error generating preview:', error)
+      return c.text('Error generating preview', 500)
+    }
+  })
+
+  /**
+   * GET /admin/qr-codes/:id/download/png
+   * Returns PNG file for download with DPI option
+   */
+  admin.get('/:id/download/png', async (c: any) => {
+    try {
+      const id = c.req.param('id')
+      const dpi = parseInt(c.req.query('dpi') || '300') as 72 | 150 | 300
+      const db = c.env?.DB || c.get('db')
+      if (!db) {
+        return c.text('Database not available', 500)
+      }
+
+      const service = new QRService(db)
+      const result = await service.generateForRecordAsPng(id, dpi)
+
+      if (!result.success || !result.result) {
+        return c.text(result.error || 'Failed to generate PNG', 404)
+      }
+
+      const filename = `qr-code-${id.slice(0, 8)}-${dpi}dpi.png`
+
+      return new Response(result.result.buffer, {
+        headers: {
+          'Content-Type': 'image/png',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': result.result.size.toString()
+        }
+      })
+    } catch (error) {
+      console.error('[QR Admin] Error generating PNG:', error)
+      return c.text('Error generating PNG', 500)
     }
   })
 

@@ -1,391 +1,362 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-01-30
+**Analysis Date:** 2026-02-01
+
+## Security Issues
+
+**Hardcoded JWT Secret in Middleware:**
+- Issue: Default JWT secret stored in source code instead of environment variable
+- Files: `src/middleware/auth.ts` (line 14)
+- Impact: All tokens use same predictable secret; enables token forgery and session hijacking
+- Current state: Comment says "change in production" but no runtime validation enforces this
+- Fix approach: Load JWT_SECRET from environment variables at runtime, fail fast if not set in production
+
+**Insecure Password Hashing in Seed Data:**
+- Issue: Seed data plugin uses plaintext 'password123' instead of proper bcrypt hashing
+- Files: `src/plugins/core-plugins/seed-data-plugin/services/seed-data-service.ts` (line 104)
+- Impact: Test/demo accounts use trivially guessable passwords; security risk if seed data runs in production
+- Fix approach: Use proper bcrypt hashing for all passwords, remove plaintext hardcoding
+
+**SQL Injection Risk - Dynamic Table Names:**
+- Issue: Table name directly interpolated into DELETE query without validation
+- Files: `src/routes/admin-settings.ts` (line 438)
+- Vulnerable pattern: `` await db.prepare(`DELETE FROM ${tableName}`).run() ``
+- Impact: Malicious table names could execute arbitrary SQL if input validation insufficient
+- Current mitigation: User must be admin role, but insufficient for defense-in-depth
+- Fix approach: Whitelist allowed table names, validate before interpolation
+
+**XSS via innerHTML in AI Search Plugin:**
+- Issue: User search query strings injected directly into innerHTML without sanitization
+- Files: `src/plugins/core-plugins/ai-search-plugin/components/search-modal.ts` (lines 198-200, 285-294)
+- Vulnerable patterns:
+  - `suggestionsDiv.innerHTML = data.map(s => \`...\${s}\`)`
+  - `resultsDiv.innerHTML = searchData.results.map(result => \`...\${result.title}\`)`
+- Impact: Attackers can inject JavaScript through search suggestions, targeting admin users
+- Current mitigation: Only admin users can access, but pattern is still unsafe
+- Fix approach: Use textContent for user-generated data, sanitize HTML with DOMPurify before innerHTML
+
+**innerHTML in Demo Login Plugin:**
+- Issue: HTML content set via innerHTML without proper context escaping
+- Files: `src/plugins/core-plugins/demo-login/index.ts` (line 30)
+- Pattern: `notice.innerHTML = '🎯 <strong>Demo Mode:</strong> ...'`
+- Impact: Low risk for this hardcoded message, but establishes unsafe pattern
+- Fix approach: Use textContent or createElement for user-controlled data
+
+**Unsafe Password Hash Implementation:**
+- Issue: Password hashing uses SHA-256 with static salt instead of bcrypt
+- Files: `src/middleware/auth.ts` (lines 45-52)
+- Pattern: Simple SHA-256 with hardcoded salt string
+- Impact: Passwords vulnerable to rainbow table attacks, insufficient salt
+- Fix approach: Use bcrypt with random salt generation per password
 
 ## Tech Debt
 
-**Incomplete Plugin Architecture Migration:**
-- Issue: Plugin system underwent major refactoring but several critical services are partially commented out or unfinished
+**Activity Logging Not Implemented:**
+- Issue: Multiple TODO comments for activity logging functionality, no implementation
 - Files:
-  - `packages/core/src/routes/admin-plugins.ts` (line 6-7, 143, 744-748)
-  - `packages/core/src/services/auth-validation.ts`
-- Impact:
-  - Permission system cannot be properly enforced for plugin management
-  - Auth validation caching cannot be cleared when plugin settings change
-  - Plugin-specific validation rules may not be applied consistently
-- Fix approach: Complete migration of `authValidationService`, restore permission validation in plugin routes, implement cache invalidation hooks for plugin setting changes
+  - `src/routes/auth.ts` (lines 897, 962, 1206)
+- Impact: No audit trail for critical auth operations (login, registration, password reset)
+- Security gap: Cannot investigate security incidents or user behavior
+- Priority: High
+- Fix approach: Implement activity logging service that records auth events with user, timestamp, action
 
-**Cache Implementation Removed During Migration:**
-- Issue: Cache functionality was stripped out with intention to restore via plugin but was never completed
-- Files:
-  - `packages/core/src/routes/admin-content.ts` (lines 54-55)
-  - `packages/core/src/routes/admin-media.ts` (lines 54, 163, 556, 709, 875)
-- Impact:
-  - Media library operations have no caching layer
-  - Content listing queries execute on every request
-  - Performance degradation on large media libraries
-  - No cache invalidation strategy in place
-- Fix approach: Implement cache layer via cache plugin for media and content queries, establish cache invalidation strategy for mutations
+**Middleware Stubs - Placeholder Implementations:**
+- Issue: Multiple middleware exports are empty pass-through stubs
+- Files: `src/middleware/index.ts` (lines 28-44)
+- Includes (all return pass-through middleware):
+  - loggingMiddleware
+  - detailedLoggingMiddleware
+  - securityLoggingMiddleware
+  - performanceLoggingMiddleware
+  - cacheHeaders
+  - compressionMiddleware
+  - securityHeaders
+  - requirePermission
+  - requireAnyPermission
+  - logActivity
+  - requireActivePlugin
+  - requireActivePlugins
+- Impact: No actual logging, caching, compression, or permission enforcement - features silently disabled
+- Fix approach: Implement middleware or document as "not yet implemented", make explicit in logs
 
-**Hardcoded Demo Password in Seed Data:**
-- Issue: Seed data service uses plaintext password hash instead of actual bcrypt hash
-- Files: `packages/core/src/plugins/core-plugins/seed-data-plugin/services/seed-data-service.ts` (line 104)
-- Impact:
-  - Seed users created with `password123` plaintext value instead of hashed
-  - Authentication will fail or use insecure comparison
-  - Security risk if seed data is deployed to production
-- Fix approach: Use proper bcrypt hashing in seed data generation
+**Plugin Settings Not Loaded from Configuration:**
+- Issue: Plugins have hardcoded configuration values instead of loading from plugin settings
+- Files: `src/plugins/available/magic-link-auth/index.ts` (lines 46, 60, 78)
+- Hardcoded values:
+  - Line 46: `const rateLimitPerHour = 5 // TODO: Get from plugin settings`
+  - Line 60: `const allowNewUsers = false // TODO: Get from plugin settings`
+  - Line 78: `const linkExpiryMinutes = 15 // TODO: Get from plugin settings`
+- Impact: Plugins cannot be configured without code changes, admin UI settings have no effect
+- Fix approach: Load all configuration from plugin settings database on plugin initialization
 
-**Missing Activity Logging Implementation:**
-- Issue: Multiple TODO comments indicate activity logging was planned but never implemented
-- Files:
-  - `packages/core/src/routes/auth.ts` (lines 897, 962, 1206)
-- Impact:
-  - User authentication events not tracked
-  - Audit trail missing for security-sensitive operations
-  - Compliance and forensics capabilities limited
-- Fix approach: Implement comprehensive activity/audit logging for all auth operations
+**Cache Implementation Removed, Not Replaced:**
+- Issue: Cache functionality removed during migration with plans to restore via plugin - never completed
+- Files: `src/routes/admin-media.ts` (lines 54, 163, 556, 709, 875)
+- Impact: No caching for media, content, or settings queries - performance degradation
+- Performance hit: Every page load queries database for collections, settings, media lists
+- Fix approach: Implement cache plugin or service with TTL, add invalidation on mutations
 
-**Incomplete Feature: Backup Functionality:**
-- Issue: Backup endpoint returns success message but actual backup functionality is not implemented
-- Files: `packages/core/src/routes/admin-settings.ts` (lines 395-400)
-- Impact:
-  - Users think database backups are created when they are not
-  - Data loss risk if users rely on this feature
-  - Deceptive API response
-- Fix approach: Either implement real backup functionality or remove the endpoint entirely with clear documentation
+**Incomplete Migration of authValidationService:**
+- Issue: Auth validation service not fully migrated to core package
+- Files: `src/routes/admin-plugins.ts` (line 6-7, comment: "TODO: authValidationService not yet migrated")
+- Impact: Permission system for plugin management not fully functional
+- Lines 743-745: Cache invalidation commented out because service not available
+- Fix approach: Complete migration of authValidationService, uncomment cache invalidation
 
-**Hardcoded Plugin Settings with TODOs:**
-- Issue: Multiple plugins have hardcoded configuration values that should come from settings
-- Files:
-  - `packages/core/src/plugins/available/magic-link-auth/index.ts` (lines 46, 60, 78, 163)
-- Impact:
-  - Magic link rate limits and expiry cannot be customized
-  - Plugin configuration is not dynamic
-  - Changes require code edits instead of admin interface updates
-- Fix approach: Load all plugin settings from database at runtime
+**Backup Feature Stub Only:**
+- Issue: Database backup endpoint returns success but performs no backup
+- Files: `src/routes/admin-settings.ts` (lines 395-400)
+- Response: `"Database backup feature coming soon. Use Cloudflare Dashboard for backups."`
+- Impact: Users think backups created when they're not - data loss risk
+- Fix approach: Implement actual backup to Cloudflare or S3, or remove feature from UI
 
-**Dynamic Field Validation Uses 'any' Type:**
-- Issue: Field options in form processing are typed as 'any' reducing type safety
-- Files: `packages/core/src/routes/admin-content.ts` (line 21)
-- Impact:
-  - Potential runtime errors from invalid field configurations
-  - Loss of IDE autocomplete and type checking
-  - Difficult to refactor field option structure safely
-- Fix approach: Create proper TypeScript interface for field options with discriminated unions
+**Incomplete Event System:**
+- Issue: Event architecture planned but not fully implemented
+- Files: `src/routes/api-media.ts` (line 14, comment: "TODO: Implement proper event system")
+- Current state: Console logging with TODO for full implementation
+- Impact: Cannot hook into media operations for workflows or notifications
+- Fix approach: Implement event system for plugin lifecycle and media operations
+
+**AI Search Indexing Not Implemented:**
+- Issue: Cloudflare AI Search API integration is stubbed
+- Files: `src/plugins/core-plugins/ai-search-plugin/services/indexer.ts` (line 146)
+- Comment: `// TODO: Call Cloudflare AI Search API to index document`
+- Impact: AI search plugin cannot index new documents
+- Fix approach: Integrate with Cloudflare AI Search API endpoints
+
+**RAG Chunk Tracking Not Implemented:**
+- Issue: No tracking of which source chunks used in search results
+- Files: `src/plugins/core-plugins/ai-search-plugin/services/custom-rag.service.ts` (line 377)
+- Comment: `// TODO: Implement proper chunk tracking`
+- Impact: Cannot trace search results back to source documents
+- Fix approach: Implement chunk tracking in RAG retrieval pipeline
+
+**Query Time Tracking Missing:**
+- Issue: Analytics don't track query execution times
+- Files: `src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts` (line 593)
+- Value: `average_query_time: 0, // TODO: Track query times`
+- Impact: Cannot identify slow queries or analyze search performance
+- Fix approach: Add query timing instrumentation to search service
 
 ## Known Bugs
 
-**Missing Test Coverage for Plugin Permission System:**
-- Symptoms: Permission system has TODO comment indicating incomplete implementation
-- Files: `packages/core/src/routes/admin-plugins.ts` (line 143)
-- Trigger: Accessing plugin management endpoints with non-admin users
-- Workaround: Only admin users can access plugin endpoints (role check at line 144)
-- Risk: Once permission system is implemented, behavior may change unexpectedly
+**Permission System Not Enforced:**
+- Symptoms: Plugin management permission checks are incomplete
+- Files: `src/routes/admin-plugins.ts` (line 143)
+- Comment: `// TODO: Fix permission system`
+- Current state: Only admin role check, permissions ignored
+- Workaround: Only admin users can manage plugins
+- Risk: Once permission system implemented, behavior may change unexpectedly
 
-**Auth Validation Cache Never Cleared:**
-- Symptoms: Plugin settings changes may not take effect until app restart
-- Files: `packages/core/src/routes/admin-plugins.ts` (line 744, commented out)
+**Auth Validation Cache Invalidation Broken:**
+- Symptoms: Plugin auth settings changes may not take effect
+- Files: `src/routes/admin-plugins.ts` (line 744, commented out)
 - Trigger: Update core-auth plugin settings in admin interface
-- Workaround: Restart the application for changes to take effect
-- Fix needed: Uncomment and restore cache clearing logic once authValidationService migration completes
+- Workaround: Restart application for changes to take effect
+- Fix needed: Uncomment cache invalidation once authValidationService migration completes
 
-## Security Considerations
+**Concurrent Content Edits Not Handled:**
+- Symptoms: Last-write-wins on simultaneous edits, no conflict detection
+- Files: `src/routes/admin-content.ts` (implied from no version tracking)
+- Trigger: Two users editing same content item simultaneously
+- Impact: Data loss from overwritten changes
+- Fix approach: Add version/revision tracking and optimistic locking
 
-**Demo Login Credentials in Seed Data:**
-- Risk: Default demo account credentials are hardcoded in seed data service
-- Files: `packages/core/src/plugins/core-plugins/seed-data-plugin/services/seed-data-service.ts` (line 104)
-- Current mitigation: Seed data only runs in development/demo environments
-- Recommendations:
-  - Generate random passwords for seed users
-  - Document seed data as development-only
-  - Add warnings if seed data detected in production environment
-  - Implement seed data cleanup for production deployments
+## Test Coverage Gaps
 
-**Plaintext Password in Demo Reset:**
-- Risk: Demo password reset sets a hardcoded password instead of prompting user
-- Files: `packages/core/src/routes/auth.ts` (lines 593, 610)
-- Current mitigation: Only accessible through admin routes with authentication
-- Recommendations:
-  - Remove hardcoded demo password or use it only in test environments
-  - Always require manual password reset for security
+**Skipped Test Suites - 10+ Major Areas:**
+- Issue: Test suites marked with describe.skip() preventing test execution
+- Skipped files:
+  - `src/__tests__/services/collections.schema.test.ts`
+  - `src/__tests__/services/collections.integration.test.ts`
+  - `src/__tests__/services/content.models.test.ts`
+  - `src/__tests__/services/content.workflow.test.ts`
+  - `src/__tests__/services/media.images.test.ts` (multiple suites)
+  - `src/__tests__/services/media.storage.test.ts`
+  - `src/__tests__/services/notifications.test.ts`
+  - `src/__tests__/middleware/middleware.permissions.test.ts`
+  - `src/__tests__/middleware/logging.test.ts`
+  - `src/__tests__/routes/routes.api.test.ts`
+  - `src/__tests__/routes/routes.api.final.test.ts`
+- Impact: Zero test coverage for content models, workflows, media ops, permissions, API routes
+- Risk: Changes break untested functionality silently
+- Fix approach: Unskip tests, implement missing dependencies
 
-**Type Safety in API Handlers (712 'any' usages):**
-- Risk: Widespread use of 'any' type bypasses TypeScript safety checks
-- Files: 123 files across the codebase
-- Current mitigation: Runtime validation where applied
-- Recommendations:
-  - Establish strict TypeScript config with `noImplicitAny: true`
-  - Create proper interfaces for field definitions, API responses, database rows
-  - Prioritize migration of large/critical files first
+**Overall Low Test Coverage:**
+- Issue: 33 test files for 220+ source files = ~15% coverage
+- Route layer: 21 route files with minimal test coverage
+- Services: Most services untested
+- Plugins: Core plugins lack test coverage
+- Missing coverage: Auth flows, permissions, plugins, media operations
+- Fix approach: Incremental coverage improvements, focus on security-critical paths
 
-**SQL Parameter Binding Usage:**
-- Risk: While parameterized queries are used (good), many inline prepared statements could be extracted
-- Files: All route files with database access
-- Current mitigation: Proper use of `bind()` method prevents SQL injection
-- Recommendations:
-  - Extract complex queries into service layer for reusability and easier auditing
-  - Add validation layer before database operations
+**Form Field Validation Not Tested:**
+- What's missing: Comprehensive tests for all field types (blocks, complex JSON, dynamic selects)
+- Files: `src/routes/admin-content.ts` (form handling)
+- Risk: Invalid data saved due to missing validation
+- Priority: Medium
 
-**Missing Input Validation in Some Endpoints:**
-- Risk: Form parsing skips validation in preview mode (`skipValidation: true`)
-- Files: `packages/core/src/routes/admin-content.ts` (line 40, 48, 56, 64, 92-93)
-- Current mitigation: Preview functionality is admin-only, errors caught when saving
-- Recommendations:
-  - Always validate even in preview mode (validate separately for display purposes)
-  - Add explicit validation schemas using Zod for all inputs
+**Plugin Permission System Not Tested:**
+- What's missing: Permission validation for plugin install/uninstall/update
+- Files: `src/routes/admin-plugins.ts`
+- Risk: Unauthorized operations may succeed
+- Priority: High
 
-## Performance Bottlenecks
+**Plugin Dependency Resolution Not Tested:**
+- What's missing: Complex dependency chains, circular deps, missing deps
+- Files: `src/services/plugin-service.ts`
+- Risk: Plugin system becomes unstable
+- Priority: Medium
 
-**Media Library Listing Without Pagination Optimization:**
-- Problem: Media queries execute without caching and may load large result sets
-- Files: `packages/core/src/routes/admin-media.ts` (lines 50-95)
-- Cause: Cache layer was removed, no query result caching implemented
-- Improvement path:
-  - Re-implement cache plugin integration
-  - Add database query result caching with TTL
-  - Implement cursor-based pagination for large collections
+**Cache Operations Not Tested:**
+- What's missing: Cache invalidation, TTL behavior, cache warming
+- Files: `src/services/cache.ts`
+- Risk: Stale data served to users
+- Priority: Medium
 
-**Collection Loading During Each Request:**
-- Problem: Collections metadata may be loaded repeatedly from database
-- Files: `packages/core/src/services/collection-loader.ts`
-- Cause: No caching layer for collection definitions
-- Improvement path:
-  - Implement collection definition caching with invalidation on updates
-  - Cache collection schemas and field configurations
-  - Track collection changes to invalidate cache selectively
-
-**Large Template Files:**
-- Problem: Several template files exceed 1500 lines making them difficult to maintain
-- Files:
-  - `packages/core/src/templates/components/dynamic-field.template.ts` (1671 lines)
-  - `packages/core/src/routes/admin-users.ts` (1581 lines)
-  - `packages/core/src/routes/admin-content.ts` (1574 lines)
-  - `packages/core/src/templates/pages/admin-settings.template.ts` (1568 lines)
-- Cause: Component-heavy templates mixing logic and markup
-- Improvement path:
-  - Break large templates into smaller, reusable components
-  - Extract field rendering logic into separate template functions
-  - Implement template composition patterns
-
-**AI Search Indexing Not Fully Implemented:**
-- Problem: Cloudflare AI Search API integration is stubbed out
-- Files: `packages/core/src/plugins/core-plugins/ai-search-plugin/services/indexer.ts` (line 146)
-- Cause: Integration was marked as TODO during development
-- Impact: AI search plugin cannot index documents
-- Improvement path: Complete Cloudflare AI Search API integration
+**Concurrent Operations Not Tested:**
+- What's missing: Concurrent uploads, edits, media operations
+- Files: `src/routes/admin-content.ts`, `src/routes/admin-media.ts`
+- Risk: Race conditions, data corruption
+- Priority: High
 
 ## Fragile Areas
 
+**Large Monolithic Files - Difficult to Maintain:**
+- Issue: Multiple files exceed 1,500 lines of code
+- Files with line counts:
+  - `src/templates/components/dynamic-field.template.ts` (1,671 lines)
+  - `src/routes/admin-users.ts` (1,581 lines)
+  - `src/routes/admin-content.ts` (1,574 lines)
+  - `src/templates/pages/admin-settings.template.ts` (1,568 lines)
+  - `src/routes/auth.ts` (1,218 lines)
+- Impact: Difficult to understand, modify, test; high risk for bug introduction
+- Safe modification: Any change requires full file review; single function changes risk side effects
+- Test coverage: Incomplete for these files
+- Fix approach: Break into smaller modules by responsibility (form handlers, templates, routes)
+
+**Type Safety Issues - Widespread 'any' Usage:**
+- Issue: Extensive use of `any` type in middleware and services
+- Files: `src/middleware/index.ts` (all stub middleware typed as `any`)
+- Pattern: `export const loggingMiddleware: any = () => ...`
+- Impact: Type checking disabled for critical auth/permission code
+- Risk areas: Middleware composition, plugin context, error handling
+- Fix approach: Implement proper TypeScript types for middleware, enforce no-implicit-any
+
+**Permission System Incomplete:**
+- Issue: Permission checking middleware is stubbed, permissions not enforced
+- Files: `src/middleware/index.ts` (lines 38-44)
+- Current state: `export const requirePermission: any = () => ...`
+- Impact: Role-based access control not working
+- Safe modification: Cannot modify without understanding full permission intent
+- Test coverage: Permissions not tested
+- Fix approach: Implement permission system, wire up middleware
+
+**Plugin System Under Active Development:**
+- Issue: Multiple plugin-related systems partially implemented
+- Fragile components:
+  - Plugin installation (depends on incomplete permission system)
+  - Plugin settings (hardcoded instead of dynamic)
+  - Plugin activation (cache invalidation disabled)
+  - Plugin events (not implemented)
+- Safe modification: Large refactor in progress - changes may conflict with ongoing migration
+- Fix approach: Complete plugin migration, stabilize API before third-party plugins
+
 **Dynamic Field Rendering with Type-Specific Logic:**
-- Files: `packages/core/src/routes/admin-content.ts` (lines 35-150)
+- Issue: Long switch statements with type-specific parsing
+- Files: `src/routes/admin-content.ts` (form handling)
 - Why fragile:
-  - Long switch statement with type-specific parsing
   - No validation of field options shape before using
   - Field types hardcoded in multiple places
   - JSON parsing without error context
-- Safe modification:
-  - Extract field parsers into separate functions per type
-  - Create type-safe field option interfaces
-  - Add comprehensive unit tests for each field type
-- Test coverage: Partial - some field types tested, others untested
+- Safe modification: Extract field parsers into separate functions, add type validation
+- Test coverage: Partial - some field types tested, others not
 
-**Plugin Installation/Activation Flow:**
-- Files: `packages/core/src/routes/admin-plugins.ts`, `packages/core/src/services/plugin-service.ts`
-- Why fragile:
-  - Permission system is incomplete
-  - Dependency resolution not fully tested
-  - Plugin deactivation can fail if dependents exist
-  - No transaction safety for multi-step installations
-- Safe modification:
-  - Add comprehensive transaction handling for plugin operations
-  - Test all permission scenarios before modifying
-  - Document plugin dependency resolution behavior
-- Test coverage: Incomplete - permission scenarios not tested
+## Performance Bottlenecks
 
-**Authentication and Session Management:**
-- Files: `packages/core/src/routes/auth.ts` (1218 lines)
-- Why fragile:
-  - Very large single file mixing multiple concerns
-  - Password reset token generation and validation
-  - Multiple authentication methods (OAuth, OTP, Magic Link)
-  - Cookie-based session management
-- Safe modification:
-  - Break auth routes into separate modules per auth method
-  - Extract session/token management into dedicated service
-  - Add comprehensive test coverage for all auth flows
-- Test coverage: Good in some areas (registration, login) but gaps in token resets
+**Missing Caching Layer for All Queries:**
+- Issue: Cache functionality removed during migration, no replacement
+- Files: `src/routes/admin-media.ts` (multiple TODOs mentioning removed cache)
+- Problem: Media library, content listings, settings queries hit database every time
+- Impact: Slow page loads, higher database load
+- Scale limit: Becomes critical with hundreds of content items
+- Fix approach: Implement Redis/KV-based cache with invalidation on updates
 
-**Concurrent Content Edits Not Handled:**
-- Files: `packages/core/src/routes/admin-content.ts`
-- Why fragile:
-  - No optimistic locking or version tracking
-  - Last-write-wins on concurrent edits
-  - No conflict detection or merge strategy
-- Safe modification:
-  - Implement version/revision tracking on content
-  - Add optimistic locking with version checks
-  - Implement conflict detection and merge strategies
-- Test coverage: Test exists for concurrent access issues (test marked as incomplete)
+**Query Time Tracking Missing:**
+- Issue: TODO to track query times but no implementation
+- Files: `src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts` (line 593)
+- Impact: Cannot identify slow queries or analyze performance
+- Fix approach: Add query timing instrumentation
 
-**Media Upload and Organization:**
-- Files: `packages/core/src/routes/admin-media.ts`
-- Why fragile:
-  - File system operations coupled with database
-  - Folder structure not validated
-  - Cache invalidation logic was removed
-  - No transaction safety for folder operations
-- Safe modification:
-  - Isolate file system operations in dedicated service
-  - Add folder validation and hierarchy checks
-  - Implement proper cache invalidation
-- Test coverage: Gaps in concurrent upload scenarios
+**No Pagination Optimization for Large Datasets:**
+- Issue: Media queries use basic LIMIT/OFFSET pagination without optimization
+- Files: `src/routes/admin-media.ts` (lines 50-95)
+- Problem: No indexes, no cursor-based pagination, no result caching
+- Scale limit: 100K+ files become slow
+- Fix approach: Add database indexes, implement cursor-based pagination
 
 ## Scaling Limits
 
+**Auth Validation Not Cached:**
+- Issue: Auth validation queries database on every request, no caching
+- Files: `src/routes/admin-plugins.ts` (line 744) - cache invalidation commented out
+- Current capacity: Works fine with <100 users
+- Limit: ~500 concurrent users before database bottleneck
+- Scaling path: Implement auth validation caching with TTL
+
 **D1 Database Direct Usage Across Routes:**
-- Current capacity: D1 is serverless, scales automatically
+- Current capacity: D1 serverless scales automatically
 - Limit: Query performance degrades with large datasets; no connection pooling
-- Scaling path:
-  - Implement query result caching layer
-  - Add database indexing strategy for common queries
-  - Consider connection pooling for high-concurrency scenarios
-  - Monitor D1 performance metrics
+- Scaling path: Cache query results, add indexes, implement query optimization
 
 **In-Memory Plugin Registry:**
-- Current capacity: Plugin list held in memory during request
+- Current capacity: Plugin list held in memory
 - Limit: Changes require server restart to take effect
-- Scaling path:
-  - Implement plugin registry caching with TTL
-  - Add cache invalidation on plugin changes
-  - Support plugin hot-reloading
+- Scaling path: Implement plugin registry caching with TTL and cache invalidation
 
-**Form Field Dynamic Generation:**
-- Current capacity: Field parsing happens inline per request
-- Limit: Complex forms with many dynamic fields slow page rendering
-- Scaling path:
-  - Pre-compute field configurations
-  - Implement lazy-loading for complex field types
-  - Cache field option sets
+## Unfinished Features
 
-## Dependencies at Risk
+**Activity Logging System:**
+- Problem: No audit trail for user actions or system changes
+- What's missing: Activity table schema, logging middleware, UI for viewing logs
+- Blocks: Security compliance, debugging, forensics
+- Files: `src/routes/auth.ts` (multiple TODOs for activity logging)
+- Fix approach: Implement activity logging service integrated with all user-modifying endpoints
 
-**Unversioned 'any' Type Everywhere:**
-- Risk: Migration needed to remove reliance on TypeScript's permissive 'any' type
-- Impact: Type safety cannot improve without addressing 712 occurrences
-- Migration plan:
-  - Enable `noImplicitAny: true` in tsconfig
-  - Create shared type definitions for common patterns
-  - Gradually migrate files from high-risk to low-risk categories
-
-**Partially Migrated Service Architecture:**
-- Risk: Services being refactored leave holes in functionality
-- Impact: Features like caching and activity logging are incomplete
-- Migration plan:
-  - Complete plugin migration first (cache, auth-validation)
-  - Test all services in integration before marking stable
-  - Document service boundaries and responsibilities
-
-**Plugin System Under Active Development:**
-- Risk: API stability unknown; plugins may break across releases
-- Impact: Third-party plugin compatibility uncertain
-- Stability path:
-  - Establish semantic versioning for plugin SDK
-  - Document plugin lifecycle and compatibility guarantees
-  - Provide migration guides for breaking changes
-
-## Missing Critical Features
-
-**Audit/Activity Logging:**
-- Problem: No comprehensive audit trail for user actions
-- Blocks: Compliance requirements, forensic investigation, user behavior analysis
-- Implementation path:
-  - Create activities table schema
-  - Instrument all authentication and content modification routes
-  - Implement activity filtering and export in admin UI
-
-**Database Backup Functionality:**
-- Problem: Backup endpoint exists but is non-functional
-- Blocks: Data recovery, disaster preparedness
-- Implementation path:
-  - Implement native D1 backup integration
-  - Add scheduled backup automation
-  - Create restore point management UI
-
-**Cache Invalidation Strategy:**
-- Problem: No consistent approach to cache invalidation across system
-- Blocks: Content update reliability, performance optimization
-- Implementation path:
-  - Design cache tag-based invalidation system
-  - Implement cache warming for hot data
-  - Add cache metrics and monitoring
-
-**Plugin Configuration UI:**
-- Problem: Magic link and other plugins have hardcoded settings
-- Blocks: Customization without code changes
-- Implementation path:
-  - Build generic plugin settings UI
-  - Allow plugins to declare configurable options
-  - Persist settings to database with plugin validation
+**Configuration Management for Plugins:**
+- Problem: Plugin settings UI exists but settings don't configure plugins
+- What's missing: Plugin settings loading and validation, dynamic configuration application
+- Blocks: Admin control of plugin behavior, rate limiting, expiry times
+- Files: `src/plugins/available/magic-link-auth/index.ts` (hardcoded values)
+- Fix approach: Implement settings service that plugins load from at initialization
 
 **Rate Limiting:**
 - Problem: No rate limiting on public endpoints (forms, API)
 - Blocks: DoS protection, abuse prevention
-- Implementation path:
-  - Implement rate limiting middleware
-  - Add per-endpoint rate limit configuration
-  - Provide admin UI for rate limit management
+- Implementation path: Rate limiting middleware, per-endpoint configuration
 
-## Test Coverage Gaps
+**Backup and Disaster Recovery:**
+- Problem: Backup endpoint exists but is non-functional
+- Blocks: Data recovery capabilities
+- Implementation path: D1 backup integration, scheduled backups, restore point management
 
-**Plugin Permission System:**
-- What's not tested: Permission validation for plugin operations (install, uninstall, update)
-- Files: `packages/core/src/routes/admin-plugins.ts`
-- Risk: Permission changes may allow unauthorized operations to succeed
-- Priority: High
+## Dependencies at Risk
 
-**Concurrent Content Operations:**
-- What's not tested: Multiple simultaneous edits, publish conflicts, media upload races
-- Files: `packages/core/src/routes/admin-content.ts`, `packages/core/src/routes/admin-media.ts`
-- Risk: Data corruption from race conditions, lost updates
-- Priority: High
+**Partial TypeScript Migration:**
+- Risk: 712+ uses of `any` type throughout codebase
+- Impact: Type safety cannot improve without addressing widespread any usage
+- Migration plan: Enable strict TypeScript config, gradually migrate high-risk files
 
-**Complete Authentication Flow with Plugins:**
-- What's not tested: OTP, magic link, and other plugin auth methods end-to-end
-- Files: `packages/core/src/plugins/core-plugins/otp-login-plugin/`, `packages/core/src/plugins/available/magic-link-auth/`
-- Risk: Login flows fail in production due to untested scenarios
-- Priority: High
+**Partially Migrated Service Architecture:**
+- Risk: Services being refactored, leaving holes in functionality
+- Impact: Features like caching and activity logging incomplete
+- Migration plan: Complete plugin migration, test all services in integration
 
-**Form Field Validation for All Types:**
-- What's not tested: Blocks fields, complex JSON fields, dynamic select options
-- Files: `packages/core/src/routes/admin-content.ts`
-- Risk: Invalid data saved due to missing validation
-- Priority: Medium
-
-**Cache Operations and Invalidation:**
-- What's not tested: Cache invalidation on updates, cache warming, TTL behavior
-- Files: `packages/core/src/services/cache.ts`
-- Risk: Stale data served to users
-- Priority: Medium
-
-**Media Upload and Organization:**
-- What's not tested: Concurrent uploads, folder hierarchy violations, orphaned files
-- Files: `packages/core/src/routes/admin-media.ts`
-- Risk: File system inconsistencies, orphaned media files
-- Priority: Medium
-
-**API Content CRUD Operations:**
-- What's not tested: API version of CRUD operations, error conditions
-- Files: `packages/core/src/routes/api-content-crud.ts`
-- Risk: API clients receive invalid or incomplete responses
-- Priority: Medium
-
-**Plugin Dependency Resolution:**
-- What's not tested: Complex dependency chains, circular dependencies, missing dependencies
-- Files: `packages/core/src/services/plugin-service.ts` (lines 300, 315)
-- Risk: Plugin system becomes unstable with broken dependencies
-- Priority: Medium
+**Plugin System API Stability Unknown:**
+- Risk: Plugin SDK API may change; third-party plugins may break
+- Impact: Plugin compatibility uncertain across releases
+- Stability path: Establish semantic versioning, document compatibility guarantees
 
 ---
 
-*Concerns audit: 2026-01-30*
+*Concerns audit: 2026-02-01*

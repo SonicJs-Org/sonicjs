@@ -2,7 +2,27 @@
 
 ## What This Is
 
-A redirect management plugin for SonicJS that handles URL redirects with multiple match types (exact, partial, regex), integrates with Cloudflare bulk redirects for performance, and provides a foundation for other plugins like QR code generation to build upon. Redirects are managed as a content type with a full admin UI, CSV import/export, and programmatic API access.
+A redirect management plugin for SonicJS that handles URL redirects with exact matching, sub-millisecond caching, and provides a foundation for other plugins like QR code generation to build upon. Redirects are managed as a content type with a full admin UI, CSV import/export, programmatic API access, hit tracking, and audit trail.
+
+## Current State
+
+**Shipped:** v1.0 (2026-02-01)
+
+**Codebase:**
+- 13 TypeScript files, 4,489 lines
+- 3 database migrations (032, 033, 034)
+- Full plugin with routes, services, templates, middleware, utilities
+
+**Capabilities:**
+- ✓ Create, edit, delete redirects via admin UI
+- ✓ Search, filter, sort redirect list
+- ✓ CSV import/export with validation
+- ✓ REST API with RFC 9457 errors
+- ✓ Hit count tracking (async, non-blocking)
+- ✓ Audit trail (created by, updated by)
+- ✓ LRU cache for sub-millisecond lookups
+- ✓ Circular redirect detection
+- ✓ HTTP status codes: 301, 302, 307, 308, 410
 
 ## Core Value
 
@@ -12,88 +32,69 @@ Reliable, performant URL redirection that preserves SEO value during site migrat
 
 ### Validated
 
-(Existing SonicJS capabilities the plugin will build upon)
-
-- ✓ Plugin architecture with lifecycle management — existing
-- ✓ Collection-based content types with declarative schemas — existing
-- ✓ Admin UI with CRUD operations — existing
-- ✓ D1 database with Drizzle ORM — existing
-- ✓ Cloudflare Workers edge runtime — existing
-- ✓ API endpoint generation for collections — existing
-- ✓ Middleware pipeline for request processing — existing
-- ✓ Authentication and user tracking — existing
+- ✓ Plugin architecture with lifecycle management — v1.0
+- ✓ Redirect CRUD operations (create, read, update, delete) — v1.0
+- ✓ Admin UI with search, filter, sort, delete confirmation — v1.0
+- ✓ CSV import/export for bulk operations — v1.0
+- ✓ REST API for programmatic access — v1.0
+- ✓ Hit count tracking per redirect — v1.0
+- ✓ Audit trail (created by, updated by, timestamps) — v1.0
+- ✓ Circular redirect detection — v1.0
+- ✓ URL normalization for consistent matching — v1.0
+- ✓ LRU caching for performance — v1.0
+- ✓ HTTP status codes 301/302/307/308/410 — v1.0
 
 ### Active
 
-(New capabilities this plugin will deliver)
+(For next milestone — v2.0)
 
-- [ ] Redirect content type with source pattern, destination URL, match type, HTTP status code
-- [ ] Match type support: exact, partial, regex with priority (exact > partial > regex)
-- [ ] HTTP status code support: 301, 302, 307, 308, 410
-- [ ] Active/inactive toggle for redirects
-- [ ] Basic analytics: hit count tracking per redirect
-- [ ] Audit trail: last updated timestamp and user
-- [ ] Admin menu link to redirect management
-- [ ] List view with search and filter capabilities
-- [ ] CSV export of all redirects
-- [ ] CSV import for bulk redirect operations
-- [ ] API endpoints for programmatic redirect creation (for QR plugin and others)
-- [ ] Automatic Cloudflare bulk redirect offloading for simple redirects (exact/partial match)
-- [ ] Local execution for complex redirects (regex patterns)
-- [ ] Validation to prevent circular redirects
-- [ ] High-performance caching for redirect lookup
-- [ ] Manual testing interface for redirect verification
+- [ ] Cloudflare bulk redirect integration for edge-level redirects
+- [ ] Regex pattern matching for complex URL transformations
+- [ ] 404 detection and suggested redirects
+- [ ] Redirect preview/testing interface
 
 ### Out of Scope
 
-- Advanced analytics (timestamp, referrer, user agent) — deferred to future analytics plugin that can hook into redirect events
-- Real-time redirect statistics dashboard — basic hit count is sufficient for v1
-- A/B testing or conditional redirects — not needed for core use case
-- Import from other redirect systems — CSV import covers bulk operations
+- Advanced analytics (timestamp, referrer, user agent) — future analytics plugin
+- A/B testing redirects — use dedicated tools
+- User-level redirect rules — caching complexity
+- Historical redirect versioning — use git for CSV exports
 
 ## Context
-
-**Existing Codebase:**
-- Brownfield SonicJS application with established plugin patterns
-- contact-form plugin serves as architectural reference
-- Plugin system supports routes, services, components, and lifecycle hooks
-- Collections automatically generate admin UI and API endpoints
-- Cloudflare Workers edge runtime for global performance
-
-**Key Use Cases:**
-1. **SEO Migrations:** Preserve link equity when restructuring URLs or migrating content
-2. **Page Maintenance:** Manage broken links and URL changes over time
-3. **QR Code Foundation:** Short URLs that redirect to destinations, enabling:
-   - Usage tracking (via hit counts)
-   - Dynamic destinations (change target without reprinting QR code)
-   - Future extensibility for other dynamic URL features
 
 **Technical Environment:**
 - TypeScript with strict type checking
 - Hono web framework for routing
-- Drizzle ORM for database access
-- D1 SQLite database
-- Cloudflare R2, KV, and bulk redirect APIs available
+- D1 SQLite database with direct SQL queries
+- Cloudflare Workers edge runtime
+- HTMX for admin UI interactions
+- tiny-lru for in-memory caching
+
+**Integration Points:**
+- Plugin system via PluginBuilder
+- Middleware mounted early (before routing)
+- API at /api/redirects
+- Admin UI at /admin/redirects
 
 ## Constraints
 
 - **Runtime**: Cloudflare Workers edge environment — must be fast, no blocking operations
 - **Database**: D1 SQLite — query performance critical for redirect lookup
-- **Architecture**: Must follow SonicJS plugin patterns from contact-form reference
-- **Compatibility**: Must expose API that other plugins (QR code) can depend on
-- **Performance**: Redirect lookup must be highly optimized with caching — users expect instant redirects
-- **Cloudflare Integration**: Leverage Cloudflare bulk redirect API where possible to offload work from origin
+- **Architecture**: Must follow SonicJS plugin patterns
+- **Performance**: Redirect lookup must be highly optimized — users expect instant redirects
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Store redirects as collection | Leverages existing admin UI, API generation, and content management patterns | — Pending |
-| Match priority: exact > partial > regex | Predictable behavior prevents surprising matches | — Pending |
-| Automatic Cloudflare offloading | Simple redirects (exact/partial) to Cloudflare, complex (regex) stay local for performance | — Pending |
-| Basic analytics only (hit count) | Keep plugin focused; future analytics plugin can hook events for deeper metrics | — Pending |
-| CSV import/export for bulk ops | Admins prefer spreadsheet editing over web forms for large-scale changes | — Pending |
-| Active/inactive toggle | Allow temporary disable without deletion for testing and rollback | — Pending |
+| Use MatchType enum (0=exact, 1=partial, 2=regex) | Database efficiency via INTEGER storage | ✓ Good |
+| 1000 entry LRU cache default | Balance memory usage with cache coverage | ✓ Good |
+| Visited-set algorithm for circular detection | Efficient O(n) traversal | ✓ Good |
+| All-or-nothing CSV validation | Prevents partial imports | ✓ Good |
+| RFC 9457 Problem Details for API errors | Standardized error format | ✓ Good |
+| Async fire-and-forget hit tracking | Don't block redirect execution | ✓ Good |
+| LEFT JOINs for analytics/audit display | Single query for all data | ✓ Good |
+| Follow contact-form plugin patterns | Ensures consistency | ✓ Good |
 
 ---
-*Last updated: 2026-01-30 after initialization*
+*Last updated: 2026-02-01 after v1.0 milestone*

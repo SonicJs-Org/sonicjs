@@ -2,12 +2,17 @@ import { PluginBuilder } from '@sonicjs-cms/core'
 import type { Plugin, PluginContext } from '@sonicjs-cms/core'
 import manifest from './manifest.json'
 import { RedirectService } from './services/redirect'
+import { createRedirectAdminRoutes } from './routes/admin'
+import { createRedirectApiRoutes } from './routes/api'
 
 // Export middleware for direct mounting in app
 export { createRedirectMiddleware, invalidateRedirectCache, warmRedirectCache } from './middleware/redirect'
 
 // Export admin routes for mounting
 export { createRedirectAdminRoutes } from './routes/admin'
+
+// Export API routes for mounting
+export { createRedirectApiRoutes } from './routes/api'
 
 export function createRedirectPlugin(): Plugin {
   const builder = PluginBuilder.create({
@@ -20,6 +25,20 @@ export function createRedirectPlugin(): Plugin {
     author: { name: manifest.author },
     license: manifest.license,
     compatibility: '^2.0.0'
+  })
+
+  // Admin routes
+  builder.addRoute('/admin/redirects', createRedirectAdminRoutes(), {
+    description: 'Redirect management admin routes',
+    requiresAuth: true,
+    priority: 100
+  })
+
+  // API routes
+  builder.addRoute('/api/redirects', createRedirectApiRoutes(), {
+    description: 'Redirect management REST API',
+    requiresAuth: false,  // API handles its own auth via Bearer tokens
+    priority: 100
   })
 
   // Add admin page

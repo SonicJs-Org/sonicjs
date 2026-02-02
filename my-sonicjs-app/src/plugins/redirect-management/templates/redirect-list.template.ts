@@ -18,16 +18,24 @@ export interface RedirectListPageData {
     isActive?: string
   }
   user: any
+  successMessage?: string
 }
 
 /**
  * Render the redirect list page with table, filters, and pagination
  */
 export function renderRedirectListPage(data: RedirectListPageData): HtmlEscapedString | Promise<HtmlEscapedString> {
-  const { redirects, pagination, filters } = data
+  const { redirects, pagination, filters, successMessage } = data
 
   const content = html`
     <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
+      <!-- Success Message -->
+      ${successMessage ? html`
+        <div class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 p-4 mb-6">
+          <p class="text-sm">${successMessage}</p>
+        </div>
+      ` : ''}
+
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
@@ -36,7 +44,27 @@ export function renderRedirectListPage(data: RedirectListPageData): HtmlEscapedS
             Manage URL redirects and monitor redirect activity
           </p>
         </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+        <div class="mt-4 sm:mt-0 sm:ml-16 flex items-center gap-3">
+          <!-- Export CSV Button -->
+          <a href="/admin/redirects/export${buildQueryString(filters)}"
+             class="inline-flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700 shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Export CSV (${pagination.total})
+          </a>
+
+          <!-- Import CSV Button -->
+          <button type="button"
+                  onclick="document.getElementById('import-form').classList.toggle('hidden')"
+                  class="inline-flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700 shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            Import CSV
+          </button>
+
+          <!-- New Redirect Button -->
           <a href="/admin/redirects/new" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 shadow-sm">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -44,6 +72,80 @@ export function renderRedirectListPage(data: RedirectListPageData): HtmlEscapedS
             New Redirect
           </a>
         </div>
+      </div>
+
+      <!-- Import Form (hidden by default) -->
+      <div id="import-form" class="hidden mb-6 p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700">
+        <form hx-post="/admin/redirects/import"
+              hx-encoding="multipart/form-data"
+              hx-target="#import-result"
+              hx-indicator="#import-progress"
+              class="space-y-4">
+
+          <div>
+            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+              Select CSV File
+            </label>
+            <input type="file"
+                   name="csv_file"
+                   accept=".csv"
+                   required
+                   class="block w-full text-sm text-zinc-500 dark:text-zinc-400
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-lg file:border-0
+                          file:text-sm file:font-medium
+                          file:bg-blue-50 file:text-blue-700
+                          dark:file:bg-blue-900/20 dark:file:text-blue-400
+                          hover:file:bg-blue-100 dark:hover:file:bg-blue-900/30">
+            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Maximum 10MB, up to 10,000 rows
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+              Duplicate Handling
+            </label>
+            <div class="space-y-2">
+              <label class="flex items-center gap-2">
+                <input type="radio" name="duplicate_handling" value="reject" checked
+                       class="text-blue-600 focus:ring-blue-500">
+                <span class="text-sm text-zinc-700 dark:text-zinc-300">
+                  Reject file if duplicates found
+                </span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="radio" name="duplicate_handling" value="skip"
+                       class="text-blue-600 focus:ring-blue-500">
+                <span class="text-sm text-zinc-700 dark:text-zinc-300">
+                  Skip duplicate rows (import new only)
+                </span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="radio" name="duplicate_handling" value="update"
+                       class="text-blue-600 focus:ring-blue-500">
+                <span class="text-sm text-zinc-700 dark:text-zinc-300">
+                  Update existing redirects with CSV values
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button type="submit"
+                    class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+              Upload and Import
+            </button>
+            <div id="import-progress" class="htmx-indicator">
+              <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+          </div>
+
+          <div id="import-result"></div>
+        </form>
       </div>
 
       <!-- Filter Bar -->
@@ -112,7 +214,7 @@ function renderFilterBar(filters: RedirectListPageData['filters']): HtmlEscapedS
           >
             <option value="">All Match Types</option>
             <option value="0" ${filters.matchType === '0' ? 'selected' : ''}>Exact</option>
-            <option value="1" ${filters.matchType === '1' ? 'selected' : ''}>Partial</option>
+            <option value="1" ${filters.matchType === '1' ? 'selected' : ''}>Wildcard</option>
             <option value="2" ${filters.matchType === '2' ? 'selected' : ''}>Regex</option>
           </select>
         </div>
@@ -177,6 +279,19 @@ function hasActiveFilters(filters: RedirectListPageData['filters']): boolean {
 }
 
 /**
+ * Build query string from filters for export URL
+ */
+function buildQueryString(filters: RedirectListPageData['filters']): string {
+  const params = new URLSearchParams()
+  if (filters.search) params.set('search', filters.search)
+  if (filters.statusCode) params.set('statusCode', filters.statusCode)
+  if (filters.matchType) params.set('matchType', filters.matchType)
+  if (filters.isActive) params.set('isActive', filters.isActive)
+  const str = params.toString()
+  return str ? `?${str}` : ''
+}
+
+/**
  * Render active filter chips showing current filters
  */
 function renderActiveFilterChips(filters: RedirectListPageData['filters']): HtmlEscapedString | Promise<HtmlEscapedString> {
@@ -184,7 +299,7 @@ function renderActiveFilterChips(filters: RedirectListPageData['filters']): Html
     return html``
   }
 
-  const chips: HtmlEscapedString[] = []
+  const chips: (HtmlEscapedString | Promise<HtmlEscapedString>)[] = []
 
   // Search filter chip
   if (filters.search) {
@@ -225,7 +340,7 @@ function renderActiveFilterChips(filters: RedirectListPageData['filters']): Html
   if (filters.matchType) {
     const matchTypeLabels: Record<string, string> = {
       '0': 'Exact',
-      '1': 'Partial',
+      '1': 'Wildcard',
       '2': 'Regex'
     }
     chips.push(html`
@@ -312,23 +427,27 @@ function renderTable(redirects: Redirect[]): HtmlEscapedString | Promise<HtmlEsc
             </th>
             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700" onclick="sortTable('source')">
               Source URL
-              <span class="ml-1">↕</span>
+              <span id="sort-icon-source" class="ml-1 inline-block w-3">↕</span>
             </th>
             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700" onclick="sortTable('destination')">
               Destination URL
-              <span class="ml-1">↕</span>
+              <span id="sort-icon-destination" class="ml-1 inline-block w-3">↕</span>
             </th>
             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700" onclick="sortTable('statusCode')">
               Status
-              <span class="ml-1">↕</span>
+              <span id="sort-icon-statusCode" class="ml-1 inline-block w-3">↕</span>
             </th>
             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700" onclick="sortTable('matchType')">
               Match Type
-              <span class="ml-1">↕</span>
+              <span id="sort-icon-matchType" class="ml-1 inline-block w-3">↕</span>
             </th>
             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700" onclick="sortTable('isActive')">
               Active
-              <span class="ml-1">↕</span>
+              <span id="sort-icon-isActive" class="ml-1 inline-block w-3">↕</span>
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700" onclick="sortTable('hitCount')">
+              Hits
+              <span id="sort-icon-hitCount" class="ml-1 inline-block w-3">↕</span>
             </th>
             <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
               Actions
@@ -336,20 +455,44 @@ function renderTable(redirects: Redirect[]): HtmlEscapedString | Promise<HtmlEsc
           </tr>
         </thead>
         <tbody class="bg-white dark:bg-zinc-900 divide-y divide-zinc-200 dark:divide-zinc-800" id="redirectTableBody">
-          ${redirects.map(redirect => renderTableRow(redirect)).join('')}
+          ${redirects.map(redirect => renderTableRow(redirect))}
         </tbody>
       </table>
     </div>
 
     <script>
       let sortDirection = {};
+      let originalOrder = [];
 
       function sortTable(column) {
         const tbody = document.getElementById('redirectTableBody');
         const rows = Array.from(tbody.querySelectorAll('tr'));
 
-        // Toggle sort direction
-        sortDirection[column] = sortDirection[column] === 'asc' ? 'desc' : 'asc';
+        // Save original order on first interaction
+        if (originalOrder.length === 0) {
+          originalOrder = rows.map(row => row.cloneNode(true));
+        }
+
+        // Cycle through 3 states: none → asc → desc → none
+        if (!sortDirection[column]) {
+          // State 1: none → asc
+          sortDirection[column] = 'asc';
+        } else if (sortDirection[column] === 'asc') {
+          // State 2: asc → desc
+          sortDirection[column] = 'desc';
+        } else {
+          // State 3: desc → none
+          sortDirection[column] = null;
+        }
+
+        // Reset to original order if sort is null
+        if (sortDirection[column] === null) {
+          tbody.innerHTML = '';
+          originalOrder.forEach(row => tbody.appendChild(row.cloneNode(true)));
+          updateSortIcons(column, null);
+          return;
+        }
+
         const ascending = sortDirection[column] === 'asc';
 
         rows.sort((a, b) => {
@@ -362,6 +505,31 @@ function renderTable(redirects: Redirect[]): HtmlEscapedString | Promise<HtmlEsc
         });
 
         rows.forEach(row => tbody.appendChild(row));
+
+        // Update sort icons
+        updateSortIcons(column, ascending);
+      }
+
+      function updateSortIcons(column, ascending) {
+        // Reset all icons to default
+        const allColumns = ['source', 'destination', 'statusCode', 'matchType', 'isActive', 'hitCount'];
+        allColumns.forEach(col => {
+          const icon = document.getElementById('sort-icon-' + col);
+          if (icon) {
+            if (col === column) {
+              if (ascending === null) {
+                icon.textContent = '↕';
+                icon.classList.remove('text-indigo-600', 'dark:text-indigo-400');
+              } else {
+                icon.textContent = ascending ? '↑' : '↓';
+                icon.classList.add('text-indigo-600', 'dark:text-indigo-400');
+              }
+            } else {
+              icon.textContent = '↕';
+              icon.classList.remove('text-indigo-600', 'dark:text-indigo-400');
+            }
+          }
+        });
       }
     </script>
   `
@@ -378,6 +546,8 @@ function renderTableRow(redirect: Redirect): HtmlEscapedString | Promise<HtmlEsc
       data-statuscode="${redirect.statusCode}"
       data-matchtype="${redirect.matchType}"
       data-isactive="${redirect.isActive ? '1' : '0'}"
+      data-hitcount="${(redirect as any).hitCount || 0}"
+      data-sourceplugin="${(redirect as any).sourcePlugin || ''}"
       data-id="${redirect.id}"
       class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
     >
@@ -390,9 +560,12 @@ function renderTableRow(redirect: Redirect): HtmlEscapedString | Promise<HtmlEsc
         />
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900 dark:text-zinc-100">
-        <span class="inline-block max-w-xs truncate" title="${redirect.source}">
-          ${redirect.source}
-        </span>
+        <div class="flex items-center">
+          <span class="inline-block max-w-xs truncate" title="${redirect.source}">
+            ${redirect.source}
+          </span>
+          ${renderSourcePluginBadge((redirect as any).sourcePlugin)}
+        </div>
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-900 dark:text-zinc-100">
         <span class="inline-block max-w-xs truncate" title="${redirect.destination}">
@@ -407,6 +580,9 @@ function renderTableRow(redirect: Redirect): HtmlEscapedString | Promise<HtmlEsc
       </td>
       <td class="px-6 py-4 whitespace-nowrap">
         ${renderActiveIndicator(redirect.isActive)}
+      </td>
+      <td class="px-6 py-4 whitespace-nowrap">
+        ${renderHitCountBadge((redirect as any).hitCount || 0)}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
         <a
@@ -453,7 +629,7 @@ function renderStatusBadge(code: number): HtmlEscapedString | Promise<HtmlEscape
 function renderMatchTypeBadge(type: number): HtmlEscapedString | Promise<HtmlEscapedString> {
   const labels: Record<number, string> = {
     0: 'Exact',
-    1: 'Partial',
+    1: 'Wildcard',
     2: 'Regex'
   }
 
@@ -483,6 +659,41 @@ function renderActiveIndicator(active: boolean): HtmlEscapedString | Promise<Htm
       </span>
     `
   }
+}
+
+/**
+ * Render hit count badge with color coding
+ */
+function renderHitCountBadge(hitCount: number): HtmlEscapedString | Promise<HtmlEscapedString> {
+  // Color coding based on hit count ranges
+  const colorClass = hitCount === 0
+    ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+    : hitCount < 10
+    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+    : hitCount < 100
+    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+    : 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400'
+
+  return html`
+    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}">
+      ${hitCount.toLocaleString()}
+    </span>
+  `
+}
+
+/**
+ * Render source plugin badge (shows which plugin created the redirect)
+ */
+function renderSourcePluginBadge(sourcePlugin: string | null | undefined): HtmlEscapedString | Promise<HtmlEscapedString> {
+  if (!sourcePlugin) {
+    return html``
+  }
+
+  return html`
+    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400" title="Created by ${sourcePlugin} plugin">
+      ${sourcePlugin}
+    </span>
+  `
 }
 
 /**
@@ -600,7 +811,7 @@ function renderPagination(pagination: RedirectListPageData['pagination'], filter
                   </a>
                 `
               }
-            }).join('')}
+            })}
 
             ${page < totalPages ? html`
               <a href="${baseUrl}page=${page + 1}" class="relative inline-flex items-center px-2 py-2 rounded-r-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
@@ -621,7 +832,7 @@ function renderPagination(pagination: RedirectListPageData['pagination'], filter
 function getConfirmationDialogScript(): HtmlEscapedString | Promise<HtmlEscapedString> {
   return html`
     <!-- Single Delete Dialog -->
-    <dialog id="deleteDialog" class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 p-0">
+    <dialog id="deleteDialog" class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 p-0 max-w-md backdrop:bg-black backdrop:bg-opacity-50" style="margin: auto;">
       <div class="p-6">
         <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-2">Delete Redirect</h3>
         <p id="deleteMessage" class="text-sm text-zinc-600 dark:text-zinc-400 mb-6"></p>
@@ -637,7 +848,7 @@ function getConfirmationDialogScript(): HtmlEscapedString | Promise<HtmlEscapedS
     </dialog>
 
     <!-- Bulk Delete Dialog -->
-    <dialog id="bulkDeleteDialog" class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 p-0">
+    <dialog id="bulkDeleteDialog" class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 p-0 max-w-md backdrop:bg-black backdrop:bg-opacity-50" style="margin: auto;">
       <div class="p-6">
         <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-2">Delete Multiple Redirects</h3>
         <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-6">
@@ -801,7 +1012,7 @@ function getConfirmationDialogScript(): HtmlEscapedString | Promise<HtmlEscapedS
 /**
  * Render page layout using shared admin layout template
  */
-function renderLayout(title: string, content: any): string {
+function renderLayout(title: string, content: any): HtmlEscapedString | Promise<HtmlEscapedString> {
   // Add custom styles for dialog backdrop
   const customStyles = `
     <style>
@@ -815,5 +1026,5 @@ function renderLayout(title: string, content: any): string {
     title,
     currentPath: '/admin/redirects',
     content: customStyles + content.toString()
-  })
+  }) as HtmlEscapedString
 }

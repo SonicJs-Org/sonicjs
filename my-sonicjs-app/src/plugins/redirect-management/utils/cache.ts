@@ -24,12 +24,16 @@ export interface CacheEntry {
   statusCode: number
   /** Whether redirect is currently active */
   isActive: boolean
-  /** Match type: 0=exact, 1=partial, 2=regex */
+  /** Match type: 0=exact, 1=wildcard, 2=regex */
   matchType: number
-  /** Whether to include query params in source matching */
-  includeQueryParams: boolean
-  /** Whether to preserve query params in destination */
-  preserveQueryParams: boolean
+  /** Whether to preserve query string in destination (Cloudflare: preserve_query_string) */
+  preserveQueryString: boolean
+  /** Whether to include subdomains in matching (Cloudflare: include_subdomains) */
+  includeSubdomains: boolean
+  /** Whether to enable subpath matching (Cloudflare: subpath_matching) */
+  subpathMatching: boolean
+  /** Whether to preserve path suffix when redirecting (Cloudflare: preserve_path_suffix) */
+  preservePathSuffix: boolean
 }
 
 /**

@@ -16,8 +16,8 @@ import contactMessagesCollection from './collections/contact-messages.collection
 // Import plugins (manual mounting until auto-loading is implemented)
 import contactFormPlugin from './plugins/contact-form/index'
 import redirectManagementPlugin from './plugins/redirect-management/index'
+import qrGeneratorPlugin from './plugins/qr-generator/index'
 import { createRedirectMiddleware } from './plugins/redirect-management/middleware/redirect'
-import { createRedirectAdminRoutes } from './plugins/redirect-management/routes/admin'
 
 // Register all custom collections
 registerCollections([
@@ -35,7 +35,7 @@ const config: SonicJSConfig = {
     directory: './src/plugins',
     autoLoad: false,  // Set to true to auto-load custom plugins
     disableAll: false,  // Enable plugins
-    enabled: ['email', 'contact-form', 'redirect-management']  // Enable specific plugins
+    enabled: ['email', 'contact-form', 'redirect-management', 'qr-generator']  // Enable specific plugins
   }
 }
 
@@ -56,9 +56,19 @@ if (contactFormPlugin.routes) {
   }
 }
 
-// Mount redirect management admin routes
-const redirectAdminRoutes = createRedirectAdminRoutes()
-app.route('/admin/redirects', redirectAdminRoutes)
+// Mount redirect management plugin routes
+if (redirectManagementPlugin.routes) {
+  for (const route of redirectManagementPlugin.routes) {
+    app.route(route.path, route.handler)
+  }
+}
+
+// Mount QR generator plugin routes
+if (qrGeneratorPlugin.routes) {
+  for (const route of qrGeneratorPlugin.routes) {
+    app.route(route.path, route.handler)
+  }
+}
 
 // Mount core app last (catch-all)
 app.route('/', coreApp)

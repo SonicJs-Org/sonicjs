@@ -64,8 +64,8 @@ CREATE TABLE IF NOT EXISTS redirect_analytics (
   updated_at INTEGER NOT NULL
 );
 
--- Create index for redirect_analytics table
-CREATE INDEX IF NOT EXISTS idx_redirect_analytics_redirect_id ON redirect_analytics(redirect_id);
+-- Create UNIQUE index for redirect_analytics table (required for ON CONFLICT)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_redirect_analytics_redirect_id ON redirect_analytics(redirect_id);
 
 -- Insert sample redirect data
 -- Get the first active admin user ID (or use a placeholder)

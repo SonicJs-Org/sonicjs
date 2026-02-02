@@ -1,9 +1,8 @@
 import type { Context, Next } from 'hono'
 import type { D1Database } from '@cloudflare/workers-types'
 import { normalizeUrl, normalizeUrlWithQuery } from '../utils/url-normalizer'
-import { RedirectCache, CacheEntry } from '../utils/cache'
+import { RedirectCache } from '../utils/cache'
 import { RedirectService } from '../services/redirect'
-import type { Redirect } from '../types'
 
 // Module-level cache (singleton per worker instance)
 let redirectCache: RedirectCache | null = null
@@ -20,27 +19,33 @@ export function createRedirectMiddleware(options: RedirectMiddlewareOptions = {}
     redirectCache = new RedirectCache(cacheSize)
   }
 
-  return async (c: Context, next: Next) => {
-    const db = c.env?.D1 as D1Database | undefined
+  return async (c: Context, next: Next): Promise<Response | void> => {
+    const url = new URL(c.req.url)
+    const pathname = url.pathname
+
+    // Skip redirect processing for admin routes
+    if (pathname.startsWith('/admin/redirects')) {
+      await next()
+      return
+    }
+
+    const db = (c.env?.DB || c.get('db')) as D1Database | undefined
     if (!db) {
       // No database, skip redirect processing
       await next()
       return
     }
 
-    const url = new URL(c.req.url)
-    const pathname = url.pathname
-
     // Normalize URL for matching
     const normalizedPath = normalizeUrl(pathname)
 
     // Check cache first (sub-millisecond)
-    let cached = redirectCache.get(normalizedPath)
+    let cached = redirectCache?.get(normalizedPath)
 
     if (!cached) {
       // Also try with full path + query for query-inclusive redirects
       const normalizedWithQuery = normalizeUrlWithQuery(url.pathname + url.search, true)
-      cached = redirectCache.get(normalizedWithQuery)
+      cached = redirectCache?.get(normalizedWithQuery)
     }
 
     if (!cached) {
@@ -56,10 +61,12 @@ export function createRedirectMiddleware(options: RedirectMiddlewareOptions = {}
           statusCode: redirect.statusCode,
           isActive: redirect.isActive,
           matchType: redirect.matchType,
-          includeQueryParams: redirect.includeQueryParams,
-          preserveQueryParams: redirect.preserveQueryParams
+          preserveQueryString: redirect.preserveQueryString,
+          includeSubdomains: redirect.includeSubdomains,
+          subpathMatching: redirect.subpathMatching,
+          preservePathSuffix: redirect.preservePathSuffix
         }
-        redirectCache.set(normalizedPath, cached)
+        redirectCache?.set(normalizedPath, cached)
 
         // Also record hit asynchronously (don't block redirect)
         recordHitAsync(db, redirect.id)
@@ -81,8 +88,8 @@ export function createRedirectMiddleware(options: RedirectMiddlewareOptions = {}
       // Build destination URL
       let destination = cached.destination
 
-      // Preserve query params if configured
-      if (cached.preserveQueryParams && url.search) {
+      // Preserve query string if configured (Cloudflare-aligned)
+      if (cached.preserveQueryString && url.search) {
         if (destination.includes('?')) {
           // Append to existing query
           destination += '&' + url.search.slice(1)
@@ -91,8 +98,25 @@ export function createRedirectMiddleware(options: RedirectMiddlewareOptions = {}
         }
       }
 
+      // Handle subpath matching with path suffix preservation
+      if (cached.subpathMatching && cached.preservePathSuffix) {
+        // If the request path extends beyond the source pattern, append the suffix
+        const sourcePath = normalizedPath
+        const requestPath = pathname
+        if (requestPath.length > sourcePath.length && requestPath.startsWith(sourcePath)) {
+          const pathSuffix = requestPath.slice(sourcePath.length)
+          if (destination.includes('?')) {
+            // Insert before query string
+            const [basePath, query] = destination.split('?')
+            destination = basePath + pathSuffix + '?' + query
+          } else {
+            destination += pathSuffix
+          }
+        }
+      }
+
       // Record hit asynchronously (cache hit path)
-      recordHitAsync(c.env?.D1 as D1Database, cached.id)
+      recordHitAsync((c.env?.DB || c.get('db')) as D1Database, cached.id)
 
       // Execute redirect
       return c.redirect(destination, cached.statusCode as 301 | 302 | 307 | 308)
@@ -108,7 +132,7 @@ function recordHitAsync(db: D1Database | undefined, redirectId: string): void {
   if (!db) return
 
   // Use waitUntil if available (Cloudflare Workers), otherwise fire-and-forget
-  const promise = db
+  void db
     .prepare(`
       INSERT INTO redirect_analytics (id, redirect_id, hit_count, last_hit_at, created_at, updated_at)
       VALUES (?, ?, 1, ?, ?, ?)
@@ -147,11 +171,15 @@ export async function warmRedirectCache(db: D1Database): Promise<number> {
     const { results } = await db
       .prepare(`
         SELECT r.id, r.source, r.destination, r.status_code, r.is_active,
-               r.match_type, r.include_query_params, r.preserve_query_params,
+               r.match_type,
+               COALESCE(r.preserve_query_string, 0) as preserve_query_string,
+               COALESCE(r.include_subdomains, 0) as include_subdomains,
+               COALESCE(r.subpath_matching, 0) as subpath_matching,
+               COALESCE(r.preserve_path_suffix, 1) as preserve_path_suffix,
                COALESCE(a.hit_count, 0) as hit_count
         FROM redirects r
         LEFT JOIN redirect_analytics a ON r.id = a.redirect_id
-        WHERE r.is_active = 1
+        WHERE r.is_active = 1 AND r.deleted_at IS NULL
         ORDER BY hit_count DESC
         LIMIT 1000
       `)
@@ -165,8 +193,10 @@ export async function warmRedirectCache(db: D1Database): Promise<number> {
         statusCode: row.status_code as number,
         isActive: true,
         matchType: row.match_type as number,
-        includeQueryParams: (row.include_query_params as number ?? 0) === 1,
-        preserveQueryParams: (row.preserve_query_params as number ?? 0) === 1
+        preserveQueryString: (row.preserve_query_string as number ?? 0) === 1,
+        includeSubdomains: (row.include_subdomains as number ?? 0) === 1,
+        subpathMatching: (row.subpath_matching as number ?? 0) === 1,
+        preservePathSuffix: (row.preserve_path_suffix as number ?? 1) === 1
       })
     }
 

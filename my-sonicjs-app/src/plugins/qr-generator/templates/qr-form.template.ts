@@ -577,8 +577,8 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
   return html`
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script>
-      // Toggle collapsible section visibility
-      function toggleSection(id) {
+      // Define all functions immediately in global scope
+      window.toggleSection = function(id) {
         const content = document.getElementById(id + '-content');
         const icon = document.getElementById(id + '-icon');
         if (content && icon) {
@@ -588,7 +588,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Set color from swatch button
-      function setColor(name, color) {
+      window.setColor = function(name, color) {
         const picker = document.getElementById(name + '-picker');
         const hex = document.getElementById(name + '-hex');
         const preview = document.getElementById(name + '-preview');
@@ -603,7 +603,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Sync from native color picker to hex input
-      function syncColor(name, color) {
+      window.syncColor = function(name, color) {
         const hex = document.getElementById(name + '-hex');
         const preview = document.getElementById(name + '-preview');
 
@@ -616,7 +616,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Sync from hex input to native picker (with validation)
-      function syncColorFromHex(name, value) {
+      window.syncColorFromHex = function(name, value) {
         if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
           const picker = document.getElementById(name + '-picker');
           const preview = document.getElementById(name + '-preview');
@@ -627,7 +627,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Toggle eye color picker visibility
-      function toggleEyeColor(enabled) {
+      window.toggleEyeColor = function(enabled) {
         const picker = document.getElementById('eye-color-picker');
         if (picker) {
           picker.classList.toggle('hidden', !enabled);
@@ -643,7 +643,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Copy text to clipboard
-      function copyToClipboard(text) {
+      window.copyToClipboard = function(text) {
         navigator.clipboard.writeText(text).then(() => {
           // Show brief success feedback
           const btn = event.currentTarget;
@@ -654,13 +654,13 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Handle drag over for logo dropzone
-      function handleDragOver(event) {
+      window.handleDragOver = function(event) {
         event.preventDefault();
         event.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50', 'dark:bg-indigo-900/10');
       }
 
       // Handle logo file drop
-      function handleLogoDrop(event) {
+      window.handleLogoDrop = function(event) {
         event.preventDefault();
         event.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50', 'dark:bg-indigo-900/10');
         const files = event.dataTransfer.files;
@@ -670,7 +670,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Handle logo file selection
-      function handleLogoSelect(files) {
+      window.handleLogoSelect = function(files) {
         if (files.length === 0) return;
 
         const file = files[0];
@@ -696,7 +696,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Remove logo
-      function removeLogo() {
+      window.removeLogo = function() {
         document.getElementById('logo_url').value = '';
 
         // Reset dropzone
@@ -709,7 +709,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Download QR code as SVG
-      function downloadQRSvg() {
+      window.downloadQRSvg = function() {
         const svgElement = document.querySelector('#qr-preview svg');
         if (!svgElement) return;
 
@@ -727,7 +727,7 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
       }
 
       // Download QR code as PNG
-      function downloadQRPng() {
+      window.downloadQRPng = function() {
         const qrId = document.getElementById('qr-id')?.value;
         const dpi = document.getElementById('png-dpi')?.value || '300';
 

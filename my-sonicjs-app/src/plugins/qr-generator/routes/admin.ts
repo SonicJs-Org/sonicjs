@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { QRService } from '../services/qr.service'
 import { renderQRListPage } from '../templates/qr-list.template'
+import { renderQRFormPage } from '../templates/qr-form.template'
+import { renderQRPreview } from '../templates/qr-preview.template'
 
 /**
  * Render an alert message HTML fragment for HTMX
@@ -74,21 +76,142 @@ export function createQRAdminRoutes(): Hono {
 
   /**
    * GET /admin/qr-codes/new
-   * Display the create QR code form
-   * (Placeholder - will be implemented in Plan 03)
+   * Display the create QR code form with default settings and initial preview
    */
   admin.get('/new', async (c: any) => {
-    return c.html('<h1>Create QR Code - Coming Soon</h1><p><a href="/admin/qr-codes">Back to list</a></p>')
+    try {
+      const ref = c.req.query('ref') || undefined
+
+      // Get DB and plugin settings for default values
+      const db = c.env?.DB || c.get('db')
+      const service = new QRService(db)
+      const { data: settings } = await service.getSettings()
+
+      // Generate initial preview SVG with defaults
+      const initialPreview = service.generate({
+        content: 'https://example.com',
+        foregroundColor: settings.defaultForegroundColor,
+        backgroundColor: settings.defaultBackgroundColor,
+        errorCorrection: settings.defaultErrorCorrection,
+        size: 200,
+        cornerShape: settings.defaultCornerShape || 'square',
+        dotShape: settings.defaultDotShape || 'square'
+      })
+
+      const html = renderQRFormPage({
+        isEdit: false,
+        referrerParams: ref,
+        user: c.get('user'),
+        baseUrl: new URL(c.req.url).origin,
+        initialSvg: initialPreview.svg
+      })
+      return c.html(html)
+    } catch (error) {
+      console.error('Error loading create form:', error)
+      return c.html('<h1>Error loading form</h1>', 500)
+    }
   })
 
   /**
    * GET /admin/qr-codes/:id/edit
-   * Display the edit QR code form
-   * (Placeholder - will be implemented in Plan 03)
+   * Display the edit QR code form with current values and preview
    */
   admin.get('/:id/edit', async (c: any) => {
-    const id = c.req.param('id')
-    return c.html(`<h1>Edit QR Code ${id} - Coming Soon</h1><p><a href="/admin/qr-codes">Back to list</a></p>`)
+    try {
+      const id = c.req.param('id')
+      const db = c.env?.DB || c.get('db')
+      if (!db) {
+        return c.html('<h1>Database not available</h1>', 500)
+      }
+
+      const ref = c.req.query('ref') || undefined
+      const service = new QRService(db)
+      const qrCode = await service.getById(id)
+
+      if (!qrCode) {
+        return c.redirect('/admin/qr-codes', 303)
+      }
+
+      // Generate preview SVG for current QR code
+      const preview = service.generate({
+        content: qrCode.destinationUrl,
+        foregroundColor: qrCode.foregroundColor,
+        backgroundColor: qrCode.backgroundColor,
+        errorCorrection: qrCode.errorCorrection,
+        size: 200,
+        cornerShape: qrCode.cornerShape,
+        dotShape: qrCode.dotShape,
+        eyeColor: qrCode.eyeColor,
+        logoUrl: qrCode.logoUrl,
+        logoAspectRatio: qrCode.logoAspectRatio
+      })
+
+      const html = renderQRFormPage({
+        isEdit: true,
+        qrCode,
+        referrerParams: ref,
+        user: c.get('user'),
+        baseUrl: new URL(c.req.url).origin,
+        initialSvg: preview.svg
+      })
+      return c.html(html)
+    } catch (error) {
+      console.error('Error loading edit form:', error)
+      return c.html('<h1>Error loading form</h1>', 500)
+    }
+  })
+
+  /**
+   * POST /admin/qr-codes/preview
+   * Real-time preview endpoint for HTMX - returns preview partial HTML
+   */
+  admin.post('/preview', async (c: any) => {
+    try {
+      const db = c.env?.DB || c.get('db')
+      if (!db) {
+        return c.html('<p class="text-red-500">Database not available</p>', 500)
+      }
+
+      const body = await c.req.parseBody()
+      const service = new QRService(db)
+
+      // Parse form values with defaults
+      const content = (body.destination_url as string) || 'https://example.com'
+      const foregroundColor = (body.foreground_color as string) || '#000000'
+      const backgroundColor = (body.background_color as string) || '#ffffff'
+      const errorCorrection = (body.error_correction as string) || 'M'
+      const cornerShape = (body.corner_shape as string) || 'square'
+      const dotShape = (body.dot_shape as string) || 'square'
+      const eyeColor = body.eye_color as string || null
+      const size = parseInt(body.size as string) || 200
+
+      // Generate preview
+      const result = service.generate({
+        content,
+        foregroundColor,
+        backgroundColor,
+        errorCorrection: errorCorrection as any,
+        size: Math.min(size, 400), // Cap preview size
+        cornerShape: cornerShape as any,
+        dotShape: dotShape as any,
+        eyeColor: eyeColor || null,
+        logoUrl: body.logo_url as string || null,
+        logoAspectRatio: body.logo_url ? 1 : null // Default to 1:1 if logo present
+      })
+
+      // Return just the preview partial for HTMX swap
+      const html = renderQRPreview({
+        svg: result.svg,
+        shortCode: body.short_code as string || undefined,
+        baseUrl: new URL(c.req.url).origin,
+        qrId: body.id as string || undefined
+      })
+
+      return c.html(html)
+    } catch (error) {
+      console.error('Error generating preview:', error)
+      return c.html(`<p class="text-red-500 text-sm">Preview error: ${error instanceof Error ? error.message : 'Unknown error'}</p>`, 500)
+    }
   })
 
   /**

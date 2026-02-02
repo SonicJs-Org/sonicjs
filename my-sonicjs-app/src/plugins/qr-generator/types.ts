@@ -33,6 +33,13 @@ export interface QRCode {
   logoUrl: string | null  // URL/data URL of embedded logo
   logoAspectRatio: number | null  // Cached aspect ratio for positioning
   errorCorrectionBeforeLogo: ErrorCorrectionLevel | null  // Backup for restoration
+  // Phase 3: Redirect integration
+  shortCode: string  // 6-character alphanumeric code for redirect path /qr/{code}
+  /**
+   * Number of times QR code has been scanned (from redirect analytics)
+   * Populated when listing QR codes, not stored in qr_codes table
+   */
+  scanCount?: number
   createdBy: string
   createdAt: number  // Unix timestamp ms
   updatedAt: number
@@ -54,6 +61,8 @@ export interface CreateQRCodeInput {
   // Phase 2: Logo embedding
   logoUrl?: string | null
   logoAspectRatio?: number | null
+  // Phase 3: Redirect integration - optional, will be generated if not provided
+  shortCode?: string  // 6-character alphanumeric code for redirect path /qr/{code}
 }
 
 // Input for updating existing QR code

@@ -479,18 +479,23 @@ export class QRService {
 
   /**
    * Get QR code by ID
+   * Phase 3: Includes scan count from redirect analytics
    */
   async getById(id: string): Promise<QRCode | null> {
     try {
+      // Phase 3: Join with redirects and redirect_analytics to get scan count
       const row = await this.db
         .prepare(`
           SELECT
-            id, name, destination_url, foreground_color, background_color,
-            error_correction, size, corner_shape, dot_shape, eye_color,
-            logo_url, logo_aspect_ratio, error_correction_before_logo,
-            short_code, created_by, created_at, updated_at, deleted_at
-          FROM qr_codes
-          WHERE id = ? AND deleted_at IS NULL
+            q.id, q.name, q.destination_url, q.foreground_color, q.background_color,
+            q.error_correction, q.size, q.corner_shape, q.dot_shape, q.eye_color,
+            q.logo_url, q.logo_aspect_ratio, q.error_correction_before_logo,
+            q.short_code, q.created_by, q.created_at, q.updated_at, q.deleted_at,
+            COALESCE(a.hit_count, 0) as scan_count
+          FROM qr_codes q
+          LEFT JOIN redirects r ON r.source = '/qr/' || q.short_code AND r.deleted_at IS NULL
+          LEFT JOIN redirect_analytics a ON r.id = a.redirect_id
+          WHERE q.id = ? AND q.deleted_at IS NULL
         `)
         .bind(id)
         .first()
@@ -508,6 +513,7 @@ export class QRService {
 
   /**
    * List all QR codes with optional pagination
+   * Phase 3: Includes scan counts from redirect analytics via JOIN
    */
   async list(options?: { limit?: number; offset?: number; search?: string }): Promise<QRCode[]> {
     try {
@@ -515,25 +521,32 @@ export class QRService {
       const offset = options?.offset ?? 0
       const search = options?.search
 
+      // Phase 3: Join with redirects and redirect_analytics to get scan counts
+      // - LEFT JOIN redirects on source = '/qr/' || short_code (only active redirects)
+      // - LEFT JOIN redirect_analytics to get hit_count
+      // - COALESCE to return 0 when no analytics exist
       let query = `
         SELECT
-          id, name, destination_url, foreground_color, background_color,
-          error_correction, size, corner_shape, dot_shape, eye_color,
-          logo_url, logo_aspect_ratio, error_correction_before_logo,
-          short_code, created_by, created_at, updated_at, deleted_at
-        FROM qr_codes
-        WHERE deleted_at IS NULL
+          q.id, q.name, q.destination_url, q.foreground_color, q.background_color,
+          q.error_correction, q.size, q.corner_shape, q.dot_shape, q.eye_color,
+          q.logo_url, q.logo_aspect_ratio, q.error_correction_before_logo,
+          q.short_code, q.created_by, q.created_at, q.updated_at, q.deleted_at,
+          COALESCE(a.hit_count, 0) as scan_count
+        FROM qr_codes q
+        LEFT JOIN redirects r ON r.source = '/qr/' || q.short_code AND r.deleted_at IS NULL
+        LEFT JOIN redirect_analytics a ON r.id = a.redirect_id
+        WHERE q.deleted_at IS NULL
       `
 
       const bindings: any[] = []
 
       if (search) {
-        query += ` AND (name LIKE ? OR destination_url LIKE ?)`
+        query += ` AND (q.name LIKE ? OR q.destination_url LIKE ?)`
         const searchPattern = `%${search}%`
         bindings.push(searchPattern, searchPattern)
       }
 
-      query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+      query += ` ORDER BY q.created_at DESC LIMIT ? OFFSET ?`
       bindings.push(limit, offset)
 
       const result = await this.db.prepare(query).bind(...bindings).all()
@@ -825,7 +838,7 @@ export class QRService {
    * Map database row to QRCode type
    * @internal Helper method for type conversion
    * Phase 2: Includes shape and logo fields
-   * Phase 3: Includes shortCode for redirect integration
+   * Phase 3: Includes shortCode and scanCount for redirect integration
    */
   private mapRowToQRCode(row: any): QRCode {
     return {
@@ -845,6 +858,8 @@ export class QRService {
       errorCorrectionBeforeLogo: row.error_correction_before_logo as ErrorCorrectionLevel | null,
       // Phase 3 fields
       shortCode: row.short_code as string,
+      // scanCount from redirect_analytics JOIN (optional, only present after list/getById queries)
+      scanCount: row.scan_count !== undefined ? (row.scan_count as number) : undefined,
       createdBy: row.created_by as string,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,

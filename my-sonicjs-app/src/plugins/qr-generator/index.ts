@@ -2,10 +2,12 @@ import { PluginBuilder } from '@sonicjs-cms/core'
 import type { Plugin, PluginContext } from '@sonicjs-cms/core'
 import manifest from './manifest.json'
 import { QRService } from './services/qr.service'
+import qrRedirectRoutes from './routes/qr-redirect'
 
 // Export types for external use
 export type { QRCode, CreateQRCodeInput, UpdateQRCodeInput, QRCodeGenerateOptions, QRCodeGenerateResult } from './types'
 export { QRService } from './services/qr.service'
+export { createQRRedirectHandler } from './routes/qr-redirect'
 
 export function createQRGeneratorPlugin(): Plugin {
   const builder = PluginBuilder.create({
@@ -20,7 +22,15 @@ export function createQRGeneratorPlugin(): Plugin {
     compatibility: '^2.0.0'
   })
 
-  // NOTE: Routes will be added in Phase 4 (Admin Interface)
+  // Public route: QR code redirect handler
+  // Handles /qr/:code requests with 302 redirect or 410 expired page
+  builder.addRoute('/', qrRedirectRoutes, {
+    description: 'QR code redirect routes',
+    requiresAuth: false,
+    priority: 10  // High priority to ensure /qr/:code is matched before catch-all routes
+  })
+
+  // NOTE: Admin routes will be added in Phase 4 (Admin Interface)
   // NOTE: Menu items will be added in Phase 4 (Admin Interface)
 
   // Register service

@@ -16,12 +16,7 @@ The notification requires a Discord webhook URL. Set it as an environment variab
 export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 ```
 
-### Current Webhook
-
-The SonicJS Discord webhook URL:
-```
-https://discord.com/api/webhooks/1443339433318285442/lnxdw64Wze72PjY8EhxPYF6bLGjqBwOi8EqwOnZxUFPo82E37o6myjQ1aO-8dzvsaStN
-```
+The webhook URL is stored in `~/Dropbox/Data/.env`. Source it before running release commands.
 
 ## Usage
 
@@ -30,8 +25,8 @@ https://discord.com/api/webhooks/1443339433318285442/lnxdw64Wze72PjY8EhxPYF6bLGj
 Discord notifications are automatically sent at the end of each release command:
 
 ```bash
-# Set the webhook URL
-export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1443339433318285442/lnxdw64Wze72PjY8EhxPYF6bLGjqBwOi8EqwOnZxUFPo82E37o6myjQ1aO-8dzvsaStN"
+# Source the env file with the webhook URL
+source ~/Dropbox/Data/.env
 
 # Run any release command - notification is sent automatically
 npm run release:patch
@@ -44,15 +39,14 @@ npm run release:major
 To send a notification manually without publishing:
 
 ```bash
-export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1443339433318285442/lnxdw64Wze72PjY8EhxPYF6bLGjqBwOi8EqwOnZxUFPo82E37o6myjQ1aO-8dzvsaStN"
-
+source ~/Dropbox/Data/.env
 npm run notify:discord
 ```
 
 Or as a one-liner:
 
 ```bash
-DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1443339433318285442/lnxdw64Wze72PjY8EhxPYF6bLGjqBwOi8EqwOnZxUFPo82E37o6myjQ1aO-8dzvsaStN" node scripts/notify-discord.js
+source ~/Dropbox/Data/.env && node scripts/notify-discord.js
 ```
 
 ## What Gets Posted
@@ -98,4 +92,4 @@ Check that:
 
 ## Security Note
 
-The webhook URL should be treated as a secret. Anyone with the URL can post messages to the Discord channel. Avoid committing it directly to version control.
+The webhook URL should be treated as a secret. Anyone with the URL can post messages to the Discord channel. Never commit it directly to version control. Store it in `~/Dropbox/Data/.env` and source it at runtime.

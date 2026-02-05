@@ -15,6 +15,19 @@ adminPluginRoutes.use('*', requireAuth())
 // Available plugins registry - plugins that can be installed
 const AVAILABLE_PLUGINS = [
   {
+    id: 'contact-form',
+    name: 'contact-form',
+    display_name: 'Contact Form',
+    description: 'Professional contact form with Google Maps integration, message storage, and configurable company information',
+    version: '1.0.0',
+    author: 'SonicJS Community',
+    category: 'communication',
+    icon: '✉️',
+    permissions: ['admin', 'contact_form.manage'],
+    dependencies: [],
+    is_core: false
+  },
+  {
     id: 'third-party-faq',
     name: 'faq-plugin',
     display_name: 'FAQ System',
@@ -466,6 +479,36 @@ adminPluginRoutes.post('/install', async (c) => {
       })
 
       return c.json({ success: true, plugin: authPlugin })
+    }
+
+    // Handle Contact Form plugin installation
+    if (body.name === 'contact-form') {
+      const contactPlugin = await pluginService.installPlugin({
+        id: 'contact-form',
+        name: 'contact-form',
+        display_name: 'Contact Form',
+        description: 'Professional contact form with Google Maps integration, message storage, and configurable company information',
+        version: '1.0.0',
+        author: 'SonicJS Community',
+        category: 'communication',
+        icon: '✉️',
+        permissions: ['contact_form.manage', 'contact_form.view'],
+        dependencies: [],
+        is_core: false,
+        settings: {
+          companyName: 'My Company',
+          phoneNumber: '555-0199',
+          description: '',
+          address: '123 Web Dev Lane',
+          city: '',
+          state: '',
+          showMap: false,
+          mapApiKey: '',
+          useTurnstile: false
+        }
+      })
+
+      return c.json({ success: true, plugin: contactPlugin })
     }
 
     // Handle core Media Manager plugin installation

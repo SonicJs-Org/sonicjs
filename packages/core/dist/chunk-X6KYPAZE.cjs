@@ -1,7 +1,7 @@
 'use strict';
 
 var chunkXEITDGR3_cjs = require('./chunk-XEITDGR3.cjs');
-var chunkBREODGO3_cjs = require('./chunk-BREODGO3.cjs');
+var chunkD2VQPLHY_cjs = require('./chunk-D2VQPLHY.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var jwt = require('hono/jwt');
 var cookie = require('hono/cookie');
@@ -368,7 +368,7 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new chunkBREODGO3_cjs.MigrationService(c.env.DB);
+      const migrationService = new chunkD2VQPLHY_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
@@ -595,5 +595,5 @@ exports.requireRole = requireRole;
 exports.securityHeaders = securityHeaders;
 exports.securityLoggingMiddleware = securityLoggingMiddleware;
 exports.syncFormCollection = syncFormCollection;
-//# sourceMappingURL=chunk-TEBP6B7J.cjs.map
-//# sourceMappingURL=chunk-TEBP6B7J.cjs.map
+//# sourceMappingURL=chunk-X6KYPAZE.cjs.map
+//# sourceMappingURL=chunk-X6KYPAZE.cjs.map

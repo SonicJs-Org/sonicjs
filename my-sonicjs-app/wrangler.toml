@@ -1,36 +1,158 @@
-name = "my-sonicjs-app"
+# ================================================================================
+# SonicJS Multi-Environment Configuration
+# ================================================================================
+# This config supports multiple deployment targets:
+#   - Top-level (default) = Preview/CI environment
+#   - [env.local] = Local development
+#   - [env.staging] = Staging (add when needed)
+#   - [env.production] = Production (add when ready)
+#
+# Usage:
+#   wrangler dev --env local              # Local development
+#   wrangler deploy                       # Deploy to preview (CI default)
+#   wrangler deploy --env staging         # Deploy to staging (when added)
+#   wrangler deploy --env production      # Deploy to production (when ready)
+#
+# See docs/WRANGLER_ENVIRONMENTS_GUIDE.md for full documentation
+# ================================================================================
+
+# ================================================================================
+# TOP-LEVEL = PREVIEW/CI (Default deployment target)
+# ================================================================================
+# This is what gets deployed when you run `wrangler deploy` with NO --env flag
+# Perfect for PR testing and CI/CD workflows
+name = "my-sonicjs-app-preview"
 main = "src/index.ts"
 compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat"]
-
-# Cloudflare account
-account_id = "f9d6328dc3115e621758a741dda3d5c4"
-
-# Cloudflare Workers settings
 workers_dev = true
 
-# D1 Database
-# Note: database_name and database_id are automatically updated by GitHub Actions
+# Cloudflare account
+# Note: Uses CLOUDFLARE_ACCOUNT_ID environment variable in CI
+# For local dev with top-level config, set account_id here or use wrangler login
+
+# D1 Database (CI will sed-replace these IDs with PR-specific values)
 [[d1_databases]]
 binding = "DB"
 database_name = "sonicjs-worktree-lane711-otp-email-branding"
 database_id = "68223153-215a-4c8f-a9bf-797f11236758"
 migrations_dir = "./migrations"
 
-# R2 Bucket for media storage (using CI bucket)
+# Workers AI for embeddings (AI Search Plugin)
+# Note: AI binding is defined once at top-level and automatically available to all environments
+[ai]
+binding = "AI"
+
+# Vectorize for vector search (AI Search Plugin)
+# Note: Created automatically in CI if it doesn't exist
+[[vectorize]]
+binding = "VECTORIZE_INDEX"
+index_name = "sonicjs-ai-search"
+remote = true
+
+# R2 Bucket for media storage
+# Note: Created automatically in CI if it doesn't exist
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
-bucket_name = "sonicjs-ci-media"
-
-# KV Cache (using CI namespace)
-[[kv_namespaces]]
-binding = "CACHE_KV"
-id = "a16f8246fc294d809c90b0fb2df6d363"
+bucket_name = "sonicjs-preview-media"
 
 # Environment variables
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "preview"
 
 # Observability
 [observability]
 enabled = true
+
+# Optional bindings (commented out for preview - add when needed)
+# [[kv_namespaces]]
+# binding = "CACHE_KV"
+# id = "preview-kv-id"
+
+# ================================================================================
+# LOCAL DEVELOPMENT ENVIRONMENT
+# ================================================================================
+[env.local]
+name = "my-sonicjs-app-local"
+# Note: Set your personal account_id here or use wrangler login
+# account_id = "your-personal-account-id"
+
+[[env.local.d1_databases]]
+binding = "DB"
+database_name = "sonicjs-local"
+database_id = ""  # Empty = auto-provisioning by wrangler
+migrations_dir = "./migrations"
+
+[[env.local.vectorize]]
+binding = "VECTORIZE_INDEX"
+index_name = "sonicjs-ai-search-local"
+remote = true  # Vectorize always requires remote=true (no local mode)
+
+[env.local.vars]
+ENVIRONMENT = "local"
+
+[env.local.observability]
+enabled = true
+
+# ================================================================================
+# STAGING ENVIRONMENT (Uncomment when ready to use)
+# ================================================================================
+# [env.staging]
+# name = "my-sonicjs-app-staging"
+# 
+# [[env.staging.d1_databases]]
+# binding = "DB"
+# database_name = "sonicjs-staging"
+# database_id = "staging-database-id"  # Update with actual ID
+# migrations_dir = "./migrations"
+# 
+# [[env.staging.vectorize]]
+# binding = "VECTORIZE_INDEX"
+# index_name = "sonicjs-ai-search-staging"
+# remote = true
+# 
+# [[env.staging.kv_namespaces]]
+# binding = "CACHE_KV"
+# id = "staging-kv-id"  # Update with actual ID
+# 
+# [[env.staging.r2_buckets]]
+# binding = "MEDIA_BUCKET"
+# bucket_name = "sonicjs-staging-media"
+# 
+# [env.staging.vars]
+# ENVIRONMENT = "staging"
+# 
+# [env.staging.observability]
+# enabled = true
+
+# ================================================================================
+# PRODUCTION ENVIRONMENT (Uncomment when ready to use)
+# ================================================================================
+# [env.production]
+# name = "my-sonicjs-app"
+# account_id = "production-account-id"  # Update with actual production account
+# 
+# [[env.production.d1_databases]]
+# binding = "DB"
+# database_name = "sonicjs-production"
+# database_id = "production-database-id"  # Update with actual ID
+# migrations_dir = "./migrations"
+# 
+# [[env.production.vectorize]]
+# binding = "VECTORIZE_INDEX"
+# index_name = "sonicjs-ai-search-prod"
+# remote = true
+# 
+# [[env.production.kv_namespaces]]
+# binding = "CACHE_KV"
+# id = "production-kv-id"  # Update with actual ID
+# 
+# [[env.production.r2_buckets]]
+# binding = "MEDIA_BUCKET"
+# bucket_name = "sonicjs-production-media"
+# 
+# [env.production.vars]
+# ENVIRONMENT = "production"
+# 
+# [env.production.observability]
+# enabled = true

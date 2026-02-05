@@ -66,6 +66,27 @@ jobs:
         run: npm run build:core
 
       # Skip Cloudflare deployment and E2E tests for Dependabot PRs (no access to secrets)
+      - name: Configure wrangler for CI account
+        if: github.actor != 'dependabot[bot]'
+        run: |
+          cd my-sonicjs-app
+
+          # Remove hardcoded account_id — the CLOUDFLARE_API_TOKEN is already
+          # scoped to the correct account, so wrangler derives it from the token.
+          # A wrong account_id in wrangler.toml causes auth failures on forks.
+          sed -i '/^account_id/d' wrangler.toml
+
+          # Remove KV namespace config if present — the KV ID may reference a
+          # namespace on a different account. KV is optional for CI testing.
+          sed -i '/^\[\[kv_namespaces\]\]/,/^$/d' wrangler.toml
+          sed -i '/^binding = "CACHE_KV"/d' wrangler.toml
+          sed -i '/^id = "/d' wrangler.toml
+
+          echo "=== wrangler.toml configured for CI ==="
+          cat wrangler.toml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
       - name: Create fresh D1 database for PR
         if: github.actor != 'dependabot[bot]'
         id: create-db

@@ -1,5 +1,6 @@
 import { Context, Next } from "hono";
 import { syncCollections } from "../services/collection-sync";
+import { syncAllFormCollections } from "../services/form-collection-sync";
 import { MigrationService } from "../services/migrations";
 import { PluginBootstrapService } from "../services/plugin-bootstrap";
 import type { SonicJSConfig } from "../app";
@@ -53,6 +54,15 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
         // Continue bootstrap even if collection sync fails
+      }
+
+      // 2b. Sync form collections (creates shadow collections for forms)
+      console.log("[Bootstrap] Syncing form collections...");
+      try {
+        await syncAllFormCollections(c.env.DB);
+      } catch (error) {
+        console.error("[Bootstrap] Error syncing form collections:", error);
+        // Continue bootstrap even if form collection sync fails
       }
 
       // 3. Bootstrap core plugins (unless disableAll is set)

@@ -498,23 +498,50 @@ export class AISearchService {
 
   /**
    * Extract snippet from content data
+   * Pulls human-readable text from JSON data fields instead of raw JSON
    */
   private extractSnippet(data: string, query: string): string {
     try {
       const parsed = typeof data === 'string' ? JSON.parse(data) : data
-      const text = JSON.stringify(parsed).toLowerCase()
-      const queryLower = query.toLowerCase()
 
-      const index = text.indexOf(queryLower)
-      if (index === -1) {
-        // Return first 200 chars
-        return JSON.stringify(parsed).substring(0, 200) + '...'
+      // Extract readable text from common content fields
+      const textParts: string[] = []
+      const textFields = ['description', 'content', 'body', 'text', 'summary', 'excerpt']
+      for (const field of textFields) {
+        if (parsed[field] && typeof parsed[field] === 'string') {
+          textParts.push(parsed[field])
+        }
       }
 
-      // Extract context around match
-      const start = Math.max(0, index - 50)
-      const end = Math.min(text.length, index + query.length + 50)
-      return text.substring(start, end) + '...'
+      // Fallback: collect all string values
+      if (textParts.length === 0) {
+        for (const value of Object.values(parsed)) {
+          if (typeof value === 'string' && value.length > 20) {
+            textParts.push(value)
+          }
+        }
+      }
+
+      const text = textParts.join(' ').replace(/\s+/g, ' ').trim()
+
+      if (!text) {
+        return 'No preview available'
+      }
+
+      // Try to find query match and show context around it
+      const queryLower = query.toLowerCase()
+      const textLower = text.toLowerCase()
+      const index = textLower.indexOf(queryLower)
+
+      if (index === -1) {
+        return text.substring(0, 200) + (text.length > 200 ? '...' : '')
+      }
+
+      const start = Math.max(0, index - 80)
+      const end = Math.min(text.length, index + query.length + 120)
+      const prefix = start > 0 ? '...' : ''
+      const suffix = end < text.length ? '...' : ''
+      return prefix + text.substring(start, end) + suffix
     } catch {
       return data.substring(0, 200) + '...'
     }

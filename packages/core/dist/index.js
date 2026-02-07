@@ -1,11 +1,11 @@
-import { FTS5Service, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-5DKUHNWK.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-5DKUHNWK.js';
+import { FTS5Service, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-UZMMK2BQ.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-UZMMK2BQ.js';
 import { SettingsService, schema_exports } from './chunk-JEJCR3C5.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-JEJCR3C5.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-777RBKOD.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-777RBKOD.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-KCANSIVG.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-KCANSIVG.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-TVIJ7U2H.js';
-export { MigrationService } from './chunk-WH4ORTPK.js';
+export { MigrationService } from './chunk-267TQLGR.js';
 export { renderFilterBar } from './chunk-H7AMQWVI.js';
 import { init_admin_layout_catalyst_template, renderAdminLayout, renderAdminLayoutCatalyst } from './chunk-VCH6HXVP.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-VCH6HXVP.js';
@@ -2860,19 +2860,40 @@ var AISearchService = class {
   }
   /**
    * Extract snippet from content data
+   * Pulls human-readable text from JSON data fields instead of raw JSON
    */
   extractSnippet(data, query) {
     try {
       const parsed = typeof data === "string" ? JSON.parse(data) : data;
-      const text = JSON.stringify(parsed).toLowerCase();
-      const queryLower = query.toLowerCase();
-      const index = text.indexOf(queryLower);
-      if (index === -1) {
-        return JSON.stringify(parsed).substring(0, 200) + "...";
+      const textParts = [];
+      const textFields = ["description", "content", "body", "text", "summary", "excerpt"];
+      for (const field of textFields) {
+        if (parsed[field] && typeof parsed[field] === "string") {
+          textParts.push(parsed[field]);
+        }
       }
-      const start = Math.max(0, index - 50);
-      const end = Math.min(text.length, index + query.length + 50);
-      return text.substring(start, end) + "...";
+      if (textParts.length === 0) {
+        for (const value of Object.values(parsed)) {
+          if (typeof value === "string" && value.length > 20) {
+            textParts.push(value);
+          }
+        }
+      }
+      const text = textParts.join(" ").replace(/\s+/g, " ").trim();
+      if (!text) {
+        return "No preview available";
+      }
+      const queryLower = query.toLowerCase();
+      const textLower = text.toLowerCase();
+      const index = textLower.indexOf(queryLower);
+      if (index === -1) {
+        return text.substring(0, 200) + (text.length > 200 ? "..." : "");
+      }
+      const start = Math.max(0, index - 80);
+      const end = Math.min(text.length, index + query.length + 120);
+      const prefix = start > 0 ? "..." : "";
+      const suffix = end < text.length ? "..." : "";
+      return prefix + text.substring(start, end) + suffix;
     } catch {
       return data.substring(0, 200) + "...";
     }

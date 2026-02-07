@@ -223,8 +223,8 @@ testPageRoutes.get('/test', async (c) => {
             <strong>Autocomplete:</strong> Type 2+ characters to see instant suggestions (<50ms).
             <br><br>
             <strong>For Developers:</strong> Want to add AI search to your own frontend? 
-            <a href="https://github.com/lane711/sonicjs/blob/main/packages/core/src/plugins/core-plugins/ai-search-plugin/HEADLESS_INTEGRATION.md" 
-               target="_blank" 
+            <a href="/admin/plugins/ai-search/integration"
+               target="_blank"
                style="color: #2196f3; text-decoration: underline;">
               View the Headless Integration Guide
             </a> for React, Vue, Next.js examples and copy-paste code.

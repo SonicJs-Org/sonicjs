@@ -108,7 +108,7 @@ export class FTS5Service {
         JOIN collections col ON fts.collection_id = col.id
         WHERE content_fts MATCH ?
           AND fts.collection_id IN (${collectionPlaceholders})
-          AND c.status = 'published'
+          AND c.status != 'deleted'
         ORDER BY score
         LIMIT ? OFFSET ?
       `
@@ -140,7 +140,7 @@ export class FTS5Service {
         JOIN content c ON fts.content_id = c.id
         WHERE content_fts MATCH ?
           AND fts.collection_id IN (${collectionPlaceholders})
-          AND c.status = 'published'
+          AND c.status != 'deleted'
       `
       const countResult = await this.db
         .prepare(countSql)
@@ -211,8 +211,8 @@ export class FTS5Service {
         return
       }
 
-      // Only index published content
-      if (content.status !== 'published') {
+      // Skip deleted content
+      if (content.status === 'deleted') {
         await this.removeFromIndex(contentId)
         return
       }
@@ -253,11 +253,11 @@ export class FTS5Service {
     console.log(`[FTS5Service] Starting indexing for collection: ${collectionId}`)
 
     try {
-      // Get all published content from collection
+      // Get all non-deleted content from collection
       const { results } = await this.db
         .prepare(`
           SELECT id FROM content
-          WHERE collection_id = ? AND status = 'published'
+          WHERE collection_id = ? AND status != 'deleted'
         `)
         .bind(collectionId)
         .all<{ id: string }>()
@@ -265,7 +265,7 @@ export class FTS5Service {
       const totalItems = results?.length || 0
 
       if (totalItems === 0) {
-        console.log(`[FTS5Service] No published content found in collection ${collectionId}`)
+        console.log(`[FTS5Service] No content found in collection ${collectionId}`)
         return { total_items: 0, indexed_items: 0, errors: 0 }
       }
 

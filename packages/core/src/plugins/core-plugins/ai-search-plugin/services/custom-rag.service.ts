@@ -43,7 +43,7 @@ export class CustomRAGService {
                  col.name as collection_name, col.display_name as collection_display_name
           FROM content c
           JOIN collections col ON c.collection_id = col.id
-          WHERE c.collection_id = ? AND c.status = 'published'
+          WHERE c.collection_id = ? AND c.status != 'deleted'
         `)
         .bind(collectionId)
         .all<{
@@ -142,13 +142,86 @@ export class CustomRAGService {
   }
 
   /**
+   * Auto-index content in selected collections that hasn't been indexed into Vectorize yet.
+   * Mirrors FTS5's ensureCollectionsIndexed() self-healing pattern.
+   */
+  private async ensureCollectionsIndexed(collections: string[]): Promise<void> {
+    if (collections.length === 0) return
+
+    try {
+      // Check which collections have been indexed via ai_search_index_meta
+      // Require both 'completed' status AND indexed_items > 0 to avoid
+      // false positives from IndexManager marking empty indexes as completed
+      const placeholders = collections.map(() => '?').join(', ')
+      const { results: indexedCollections } = await this.db
+        .prepare(`
+          SELECT collection_id, status, indexed_items FROM ai_search_index_meta
+          WHERE collection_id IN (${placeholders}) AND status = 'completed' AND indexed_items > 0
+        `)
+        .bind(...collections)
+        .all<{ collection_id: string; status: string; indexed_items: number }>()
+
+      const completedIds = new Set((indexedCollections || []).map(r => r.collection_id))
+      const unindexedCollections = collections.filter(id => !completedIds.has(id))
+
+      if (unindexedCollections.length === 0) return
+
+      console.log(`[CustomRAG] Auto-indexing ${unindexedCollections.length} collection(s) into Vectorize...`)
+
+      for (const collectionId of unindexedCollections) {
+        try {
+          // Mark as indexing
+          await this.db
+            .prepare(`
+              INSERT OR REPLACE INTO ai_search_index_meta(collection_id, collection_name, status, total_items, indexed_items)
+              VALUES (?, ?, 'indexing', 0, 0)
+            `)
+            .bind(collectionId, collectionId)
+            .run()
+
+          const result = await this.indexCollection(collectionId)
+
+          // Mark as completed
+          await this.db
+            .prepare(`
+              UPDATE ai_search_index_meta
+              SET status = 'completed', total_items = ?, indexed_items = ?, last_sync_at = ?
+              WHERE collection_id = ?
+            `)
+            .bind(result.total_items, result.indexed_chunks, Date.now(), collectionId)
+            .run()
+
+          console.log(`[CustomRAG] Auto-indexed collection ${collectionId}: ${result.indexed_chunks} chunks from ${result.total_items} items`)
+        } catch (error) {
+          console.error(`[CustomRAG] Error auto-indexing collection ${collectionId}:`, error)
+          // Mark as error but don't fail the search
+          await this.db
+            .prepare(`
+              UPDATE ai_search_index_meta SET status = 'error', error_message = ?
+              WHERE collection_id = ?
+            `)
+            .bind(String(error), collectionId)
+            .run().catch(() => {})
+        }
+      }
+    } catch (error) {
+      // Don't fail the search if auto-indexing fails
+      console.error('[CustomRAG] Error during auto-indexing check:', error)
+    }
+  }
+
+  /**
    * Search using RAG (semantic search with Vectorize)
    */
   async search(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
     const startTime = Date.now()
 
     try {
-      console.log(`[CustomRAG] Searching for: "${query.query}"`)
+      // Auto-index selected collections that haven't been indexed yet
+      const collections = query.filters?.collections?.length
+        ? query.filters.collections
+        : settings.selected_collections
+      await this.ensureCollectionsIndexed(collections)
 
       // Generate query embedding
       const queryEmbedding = await this.embeddingService.generateEmbedding(query.query)
@@ -169,14 +242,15 @@ export class CustomRAGService {
       // Vectorize filters have issues, so we query without filter and manually filter results
       const vectorResults = await this.vectorize.query(queryEmbedding, {
         topK: 50, // Max allowed with returnMetadata: true
-        returnMetadata: true
+        returnMetadata: 'all'
       })
 
       // Manually filter results by collection_id if filter exists
       let filteredMatches = vectorResults.matches || []
       if (filter.collection_id?.$in && Array.isArray(filter.collection_id.$in)) {
         const allowedCollections = filter.collection_id.$in
-        filteredMatches = filteredMatches.filter((match: any) => 
+        const beforeCount = filteredMatches.length
+        filteredMatches = filteredMatches.filter((match: any) =>
           allowedCollections.includes(match.metadata?.collection_id)
         )
       }
@@ -184,7 +258,7 @@ export class CustomRAGService {
       // Apply status filter if exists
       if (filter.status?.$in && Array.isArray(filter.status.$in)) {
         const allowedStatuses = filter.status.$in
-        filteredMatches = filteredMatches.filter((match: any) => 
+        filteredMatches = filteredMatches.filter((match: any) =>
           allowedStatuses.includes(match.metadata?.status)
         )
       }
@@ -205,10 +279,11 @@ export class CustomRAGService {
         }
       }
 
-      // Get unique content IDs
+      // Get unique content IDs from Vectorize matches
       const contentIds = [...new Set(
         vectorResults.matches.map((m: any) => m.metadata.content_id)
       )]
+
 
       // Fetch full content from D1
       const placeholders = contentIds.map(() => '?').join(',')
@@ -234,30 +309,67 @@ export class CustomRAGService {
           author_id?: string
         }>()
 
-      // Map results with relevance scores
-      const searchResults: SearchResult[] = (contentItems || []).map(item => {
-        // Find best matching chunk for this content
-        const matchingChunks = vectorResults.matches.filter(
-          (m: any) => m.metadata.content_id === item.id
-        )
-        
-        const bestMatch = matchingChunks.reduce((best: any, current: any) => 
-          current.score > (best?.score || 0) ? current : best
-        , null)
+      // Only include results that exist in D1 (skip stale Vectorize entries)
+      const d1Map = new Map((contentItems || []).map(item => [item.id, item]))
 
-        return {
-          id: item.id,
-          title: item.title || 'Untitled',
-          slug: item.slug || '',
-          collection_id: item.collection_id,
-          collection_name: item.collection_name,
-          snippet: bestMatch?.metadata?.text || '',
-          relevance_score: bestMatch?.score || 0,
-          status: item.status,
-          created_at: item.created_at,
-          updated_at: item.updated_at
+      // Deduplicate by content_id, keeping the best score per content item
+      const bestByContent = new Map<string, any>()
+      for (const match of vectorResults.matches) {
+        const cid = match.metadata?.content_id
+        if (!cid || !d1Map.has(cid)) continue  // Skip stale entries
+        const existing = bestByContent.get(cid)
+        if (!existing || match.score > existing.score) {
+          bestByContent.set(cid, match)
         }
-      })
+      }
+
+      // Sort by score descending and apply intelligent filtering:
+      // 1. Absolute minimum threshold (0.6)
+      // 2. Score gap detection: cut off when score drops >5% from previous result
+      const MIN_RELEVANCE_SCORE = 0.6
+      const SCORE_GAP_THRESHOLD = 0.05
+      const sortedEntries = [...bestByContent.entries()]
+        .sort((a, b) => b[1].score - a[1].score)
+
+      const filteredEntries: [string, any][] = []
+      for (let i = 0; i < sortedEntries.length; i++) {
+        const entry = sortedEntries[i]!
+        const score = entry[1].score
+        if (score < MIN_RELEVANCE_SCORE) break  // Below absolute minimum
+
+        if (i > 0) {
+          const prevScore = sortedEntries[i - 1]![1].score
+          const gap = prevScore - score
+          if (gap > SCORE_GAP_THRESHOLD) {
+            break
+          }
+        }
+
+        filteredEntries.push(entry)
+      }
+
+      // Replace bestByContent with filtered entries
+      bestByContent.clear()
+      for (const [key, value] of filteredEntries) {
+        bestByContent.set(key, value)
+      }
+
+      const searchResults: SearchResult[] = []
+      for (const [contentId, bestMatch] of bestByContent) {
+        const d1Item = d1Map.get(contentId)!
+        searchResults.push({
+          id: d1Item.id,
+          title: d1Item.title || 'Untitled',
+          slug: d1Item.slug || '',
+          collection_id: d1Item.collection_id,
+          collection_name: d1Item.collection_name,
+          snippet: bestMatch.metadata?.text || '',
+          relevance_score: bestMatch.score || 0,
+          status: d1Item.status,
+          created_at: d1Item.created_at,
+          updated_at: d1Item.updated_at
+        })
+      }
 
       // Sort by relevance score
       searchResults.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0))

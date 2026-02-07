@@ -131,6 +131,13 @@ testPageRoutes.get('/test', async (c) => {
             margin-bottom: 0.5rem;
             color: #333;
           }
+          .result-title a {
+            color: #667eea;
+            text-decoration: none;
+          }
+          .result-title a:hover {
+            text-decoration: underline;
+          }
           .result-excerpt {
             color: #666;
             font-size: 0.875rem;
@@ -213,7 +220,7 @@ testPageRoutes.get('/test', async (c) => {
         <div class="container">
           <a href="/admin/plugins/ai-search" class="back-link">← Back to AI Search Settings</a>
           
-          <h1>🔍 AI Search Test</h1>
+          <h1>AI Search Test</h1>
           <p class="subtitle">Test search performance and similarity-based caching</p>
 
           <div class="info-box">
@@ -390,27 +397,39 @@ testPageRoutes.get('/test', async (c) => {
             }
           }
 
+          function renderResultItem(result) {
+            var title = result.highlights && result.highlights.title ? result.highlights.title : (result.title || 'Untitled');
+            var snippet = (result.highlights && result.highlights.body) || result.snippet || result.excerpt || '';
+            var collection = result.collection_name || result.collection || 'N/A';
+            var score = result.bm25_score || result.relevance_score || result.score;
+            var scoreStr = score ? score.toFixed(3) : 'N/A';
+
+            var titleHtml = title;
+            if (result.id) {
+              var editUrl = '/admin/content/' + result.id + '/edit';
+              titleHtml = '<a href="' + editUrl + '" target="_blank">' + title + '</a>';
+            }
+
+            return '<div class="result-item">' +
+              '<div class="result-title">' + titleHtml + '</div>' +
+              '<div class="result-excerpt">' + snippet + '</div>' +
+              '<div class="result-meta">Collection: ' + collection + ' | Score: ' + scoreStr + '</div>' +
+              '</div>';
+          }
+
           function displayResults(data, duration) {
             if (!data.results || data.results.length === 0) {
               resultsDiv.innerHTML = '<div class="loading">No results found</div>';
               return;
             }
 
-            resultsDiv.innerHTML = \`
-              <div class="results">
-                <h3>Found \${data.results.length} results in \${duration}ms (mode: \${data.mode || 'unknown'})</h3>
-                \${data.results.map(result => \`
-                  <div class="result-item">
-                    <div class="result-title">\${result.highlights?.title || result.title || 'Untitled'}</div>
-                    <div class="result-excerpt">\${result.highlights?.body || result.snippet || result.excerpt || result.content?.substring(0, 200) || ''}</div>
-                    <div class="result-meta">
-                      Collection: \${result.collection_name || result.collection || 'N/A'} |
-                      Score: \${result.bm25_score?.toFixed(3) || result.relevance_score?.toFixed(3) || result.score?.toFixed(3) || 'N/A'}
-                    </div>
-                  </div>
-                \`).join('')}
-              </div>
-            \`;
+            var html = '<div class="results">';
+            html += '<h3>Found ' + data.results.length + ' results in ' + duration + 'ms (mode: ' + (data.mode || 'unknown') + ')</h3>';
+            for (var i = 0; i < data.results.length; i++) {
+              html += renderResultItem(data.results[i]);
+            }
+            html += '</div>';
+            resultsDiv.innerHTML = html;
           }
 
           function updateStats(query, mode, duration) {

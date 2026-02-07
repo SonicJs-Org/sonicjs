@@ -1,11 +1,11 @@
-import { FTS5Service, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-PIGR3QYR.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-PIGR3QYR.js';
+import { FTS5Service, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-JRMAWR3J.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-JRMAWR3J.js';
 import { SettingsService, schema_exports } from './chunk-JEJCR3C5.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-JEJCR3C5.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-MQVOQQMS.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-MQVOQQMS.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-RVCPOHXI.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-RVCPOHXI.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-TVIJ7U2H.js';
-export { MigrationService } from './chunk-FONWRGDD.js';
+export { MigrationService } from './chunk-5IT7RA3P.js';
 export { renderFilterBar } from './chunk-H7AMQWVI.js';
 import { init_admin_layout_catalyst_template, renderAdminLayout, renderAdminLayoutCatalyst } from './chunk-VCH6HXVP.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-VCH6HXVP.js';
@@ -2248,7 +2248,7 @@ var CustomRAGService = class {
                  col.name as collection_name, col.display_name as collection_display_name
           FROM content c
           JOIN collections col ON c.collection_id = col.id
-          WHERE c.collection_id = ? AND c.status = 'published'
+          WHERE c.collection_id = ? AND c.status != 'deleted'
         `).bind(collectionId).all();
       const totalItems = contentItems?.length || 0;
       if (totalItems === 0) {
@@ -2320,12 +2320,55 @@ ${c.text}`)
     }
   }
   /**
+   * Auto-index content in selected collections that hasn't been indexed into Vectorize yet.
+   * Mirrors FTS5's ensureCollectionsIndexed() self-healing pattern.
+   */
+  async ensureCollectionsIndexed(collections2) {
+    if (collections2.length === 0) return;
+    try {
+      const placeholders = collections2.map(() => "?").join(", ");
+      const { results: indexedCollections } = await this.db.prepare(`
+          SELECT collection_id, status, indexed_items FROM ai_search_index_meta
+          WHERE collection_id IN (${placeholders}) AND status = 'completed' AND indexed_items > 0
+        `).bind(...collections2).all();
+      const completedIds = new Set((indexedCollections || []).map((r) => r.collection_id));
+      const unindexedCollections = collections2.filter((id) => !completedIds.has(id));
+      if (unindexedCollections.length === 0) return;
+      console.log(`[CustomRAG] Auto-indexing ${unindexedCollections.length} collection(s) into Vectorize...`);
+      for (const collectionId of unindexedCollections) {
+        try {
+          await this.db.prepare(`
+              INSERT OR REPLACE INTO ai_search_index_meta(collection_id, collection_name, status, total_items, indexed_items)
+              VALUES (?, ?, 'indexing', 0, 0)
+            `).bind(collectionId, collectionId).run();
+          const result = await this.indexCollection(collectionId);
+          await this.db.prepare(`
+              UPDATE ai_search_index_meta
+              SET status = 'completed', total_items = ?, indexed_items = ?, last_sync_at = ?
+              WHERE collection_id = ?
+            `).bind(result.total_items, result.indexed_chunks, Date.now(), collectionId).run();
+          console.log(`[CustomRAG] Auto-indexed collection ${collectionId}: ${result.indexed_chunks} chunks from ${result.total_items} items`);
+        } catch (error) {
+          console.error(`[CustomRAG] Error auto-indexing collection ${collectionId}:`, error);
+          await this.db.prepare(`
+              UPDATE ai_search_index_meta SET status = 'error', error_message = ?
+              WHERE collection_id = ?
+            `).bind(String(error), collectionId).run().catch(() => {
+          });
+        }
+      }
+    } catch (error) {
+      console.error("[CustomRAG] Error during auto-indexing check:", error);
+    }
+  }
+  /**
    * Search using RAG (semantic search with Vectorize)
    */
   async search(query, settings) {
     const startTime = Date.now();
     try {
-      console.log(`[CustomRAG] Searching for: "${query.query}"`);
+      const collections2 = query.filters?.collections?.length ? query.filters.collections : settings.selected_collections;
+      await this.ensureCollectionsIndexed(collections2);
       const queryEmbedding = await this.embeddingService.generateEmbedding(query.query);
       const filter = {};
       if (query.filters?.collections && query.filters.collections.length > 0) {
@@ -2339,11 +2382,12 @@ ${c.text}`)
       const vectorResults = await this.vectorize.query(queryEmbedding, {
         topK: 50,
         // Max allowed with returnMetadata: true
-        returnMetadata: true
+        returnMetadata: "all"
       });
       let filteredMatches = vectorResults.matches || [];
       if (filter.collection_id?.$in && Array.isArray(filter.collection_id.$in)) {
         const allowedCollections = filter.collection_id.$in;
+        const beforeCount = filteredMatches.length;
         filteredMatches = filteredMatches.filter(
           (match) => allowedCollections.includes(match.metadata?.collection_id)
         );
@@ -2377,27 +2421,53 @@ ${c.text}`)
           JOIN collections col ON c.collection_id = col.id
           WHERE c.id IN (${placeholders})
         `).bind(...contentIds).all();
-      const searchResults = (contentItems || []).map((item) => {
-        const matchingChunks = vectorResults.matches.filter(
-          (m) => m.metadata.content_id === item.id
-        );
-        const bestMatch = matchingChunks.reduce(
-          (best, current) => current.score > (best?.score || 0) ? current : best,
-          null
-        );
-        return {
-          id: item.id,
-          title: item.title || "Untitled",
-          slug: item.slug || "",
-          collection_id: item.collection_id,
-          collection_name: item.collection_name,
-          snippet: bestMatch?.metadata?.text || "",
-          relevance_score: bestMatch?.score || 0,
-          status: item.status,
-          created_at: item.created_at,
-          updated_at: item.updated_at
-        };
-      });
+      const d1Map = new Map((contentItems || []).map((item) => [item.id, item]));
+      const bestByContent = /* @__PURE__ */ new Map();
+      for (const match of vectorResults.matches) {
+        const cid = match.metadata?.content_id;
+        if (!cid || !d1Map.has(cid)) continue;
+        const existing = bestByContent.get(cid);
+        if (!existing || match.score > existing.score) {
+          bestByContent.set(cid, match);
+        }
+      }
+      const MIN_RELEVANCE_SCORE = 0.6;
+      const SCORE_GAP_THRESHOLD = 0.05;
+      const sortedEntries = [...bestByContent.entries()].sort((a, b) => b[1].score - a[1].score);
+      const filteredEntries = [];
+      for (let i = 0; i < sortedEntries.length; i++) {
+        const entry = sortedEntries[i];
+        const score = entry[1].score;
+        if (score < MIN_RELEVANCE_SCORE) break;
+        if (i > 0) {
+          const prevScore = sortedEntries[i - 1][1].score;
+          const gap = prevScore - score;
+          if (gap > SCORE_GAP_THRESHOLD) {
+            break;
+          }
+        }
+        filteredEntries.push(entry);
+      }
+      bestByContent.clear();
+      for (const [key, value] of filteredEntries) {
+        bestByContent.set(key, value);
+      }
+      const searchResults = [];
+      for (const [contentId, bestMatch] of bestByContent) {
+        const d1Item = d1Map.get(contentId);
+        searchResults.push({
+          id: d1Item.id,
+          title: d1Item.title || "Untitled",
+          slug: d1Item.slug || "",
+          collection_id: d1Item.collection_id,
+          collection_name: d1Item.collection_name,
+          snippet: bestMatch.metadata?.text || "",
+          relevance_score: bestMatch.score || 0,
+          status: d1Item.status,
+          created_at: d1Item.created_at,
+          updated_at: d1Item.updated_at
+        });
+      }
       searchResults.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
       const queryTime = Date.now() - startTime;
       console.log(`[CustomRAG] Search completed in ${queryTime}ms, ${searchResults.length} results`);
@@ -5112,6 +5182,13 @@ testPageRoutes.get("/test", async (c) => {
             margin-bottom: 0.5rem;
             color: #333;
           }
+          .result-title a {
+            color: #667eea;
+            text-decoration: none;
+          }
+          .result-title a:hover {
+            text-decoration: underline;
+          }
           .result-excerpt {
             color: #666;
             font-size: 0.875rem;
@@ -5194,7 +5271,7 @@ testPageRoutes.get("/test", async (c) => {
         <div class="container">
           <a href="/admin/plugins/ai-search" class="back-link">← Back to AI Search Settings</a>
           
-          <h1>🔍 AI Search Test</h1>
+          <h1>AI Search Test</h1>
           <p class="subtitle">Test search performance and similarity-based caching</p>
 
           <div class="info-box">
@@ -5371,27 +5448,39 @@ testPageRoutes.get("/test", async (c) => {
             }
           }
 
+          function renderResultItem(result) {
+            var title = result.highlights && result.highlights.title ? result.highlights.title : (result.title || 'Untitled');
+            var snippet = (result.highlights && result.highlights.body) || result.snippet || result.excerpt || '';
+            var collection = result.collection_name || result.collection || 'N/A';
+            var score = result.bm25_score || result.relevance_score || result.score;
+            var scoreStr = score ? score.toFixed(3) : 'N/A';
+
+            var titleHtml = title;
+            if (result.id) {
+              var editUrl = '/admin/content/' + result.id + '/edit';
+              titleHtml = '<a href="' + editUrl + '" target="_blank">' + title + '</a>';
+            }
+
+            return '<div class="result-item">' +
+              '<div class="result-title">' + titleHtml + '</div>' +
+              '<div class="result-excerpt">' + snippet + '</div>' +
+              '<div class="result-meta">Collection: ' + collection + ' | Score: ' + scoreStr + '</div>' +
+              '</div>';
+          }
+
           function displayResults(data, duration) {
             if (!data.results || data.results.length === 0) {
               resultsDiv.innerHTML = '<div class="loading">No results found</div>';
               return;
             }
 
-            resultsDiv.innerHTML = \`
-              <div class="results">
-                <h3>Found \${data.results.length} results in \${duration}ms (mode: \${data.mode || 'unknown'})</h3>
-                \${data.results.map(result => \`
-                  <div class="result-item">
-                    <div class="result-title">\${result.highlights?.title || result.title || 'Untitled'}</div>
-                    <div class="result-excerpt">\${result.highlights?.body || result.snippet || result.excerpt || result.content?.substring(0, 200) || ''}</div>
-                    <div class="result-meta">
-                      Collection: \${result.collection_name || result.collection || 'N/A'} |
-                      Score: \${result.bm25_score?.toFixed(3) || result.relevance_score?.toFixed(3) || result.score?.toFixed(3) || 'N/A'}
-                    </div>
-                  </div>
-                \`).join('')}
-              </div>
-            \`;
+            var html = '<div class="results">';
+            html += '<h3>Found ' + data.results.length + ' results in ' + duration + 'ms (mode: ' + (data.mode || 'unknown') + ')</h3>';
+            for (var i = 0; i < data.results.length; i++) {
+              html += renderResultItem(data.results[i]);
+            }
+            html += '</div>';
+            resultsDiv.innerHTML = html;
           }
 
           function updateStats(query, mode, duration) {

@@ -1,8 +1,14 @@
 {
   "hooks": {
-    "userPromptSubmitHook": {
-      "command": "echo '\n\n---\n\n📋 TESTING REMINDER: After completing this task, create and run E2E tests to verify the changes work correctly. Tests should go in tests/e2e/ using Playwright.\n\n---\n'",
-      "description": "Remind Claude to create E2E tests for all changes"
-    }
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\n\n---\n\n📋 TESTING REMINDER: After completing this task, create and run E2E tests to verify the changes work correctly. Tests should go in tests/e2e/ using Playwright.\n\n---\n'"
+          }
+        ]
+      }
+    ]
   }
 }

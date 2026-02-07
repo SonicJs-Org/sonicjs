@@ -54,6 +54,7 @@ export class FTS5Service {
 
   /**
    * Search using FTS5 with BM25 ranking and highlighting
+   * Auto-indexes any missing content in selected collections before searching
    */
   async search(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
     const startTime = Date.now()
@@ -84,6 +85,9 @@ export class FTS5Service {
           mode: 'fts5' as any
         }
       }
+
+      // Auto-index any content not yet in the FTS5 index
+      await this.ensureCollectionsIndexed(collections)
 
       const collectionPlaceholders = collections.map(() => '?').join(', ')
       const tag = this.options.highlightTag || 'mark'
@@ -185,7 +189,7 @@ export class FTS5Service {
 
   /**
    * Index a single content item
-   * Only indexes published content; removes non-published from index
+   * Indexes all non-deleted content; removes deleted content from index
    */
   async indexContent(contentId: string): Promise<void> {
     try {
@@ -381,6 +385,51 @@ export class FTS5Service {
       return true
     } catch {
       return false
+    }
+  }
+
+  /**
+   * Auto-index content in selected collections that isn't yet in the FTS5 index.
+   * This makes FTS5 self-healing - existing content that predates the FTS5 feature
+   * gets indexed on first search, so results match keyword search coverage.
+   */
+  private async ensureCollectionsIndexed(collections: string[]): Promise<void> {
+    try {
+      const collectionPlaceholders = collections.map(() => '?').join(', ')
+
+      // Find content in selected collections that's not yet indexed
+      const { results } = await this.db
+        .prepare(`
+          SELECT c.id FROM content c
+          LEFT JOIN content_fts_sync s ON c.id = s.content_id
+          WHERE c.collection_id IN (${collectionPlaceholders})
+            AND c.status != 'deleted'
+            AND s.content_id IS NULL
+          LIMIT 200
+        `)
+        .bind(...collections)
+        .all<{ id: string }>()
+
+      if (!results || results.length === 0) {
+        return
+      }
+
+      console.log(`[FTS5Service] Auto-indexing ${results.length} unindexed items`)
+
+      let indexed = 0
+      for (const item of results) {
+        try {
+          await this.indexContent(item.id)
+          indexed++
+        } catch (error) {
+          console.error(`[FTS5Service] Error auto-indexing ${item.id}:`, error)
+        }
+      }
+
+      console.log(`[FTS5Service] Auto-indexed ${indexed}/${results.length} items`)
+    } catch (error) {
+      // Don't fail the search if auto-indexing fails
+      console.error('[FTS5Service] Error during auto-indexing:', error)
     }
   }
 

@@ -30,7 +30,7 @@ export interface IndexStatus {
 
 export interface SearchQuery {
   query: string
-  mode: 'ai' | 'keyword'
+  mode: 'ai' | 'keyword' | 'fts5'
   filters?: SearchFilters
   limit?: number
   offset?: number
@@ -56,26 +56,32 @@ export interface SearchResult {
   collection_id: string // Collection ID (TEXT/UUID)
   collection_name: string
   snippet?: string
-  relevance_score?: number // For AI search
+  relevance_score?: number // For AI and FTS5 search
   status: string
   created_at: number
   updated_at: number
   author_name?: string
   url?: string
+  // FTS5-specific fields
+  highlights?: {
+    title?: string  // Full title with <mark> tags around matches
+    body?: string   // Body snippet with <mark> tags around matches
+  }
+  bm25_score?: number // Raw BM25 score (positive, higher = better match)
 }
 
 export interface SearchResponse {
   results: SearchResult[]
   total: number
   query_time_ms: number
-  mode: 'ai' | 'keyword'
+  mode: 'ai' | 'keyword' | 'fts5'
   suggestions?: string[] // Autocomplete suggestions
 }
 
 export interface SearchHistory {
   id: number
   query: string
-  mode: 'ai' | 'keyword'
+  mode: 'ai' | 'keyword' | 'fts5'
   results_count: number
   user_id?: number
   created_at: number

@@ -8,6 +8,7 @@ import type {
   SearchResult,
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { FTS5Service } from './fts5.service'
 
 /**
  * AI Search Service
@@ -16,6 +17,7 @@ import { CustomRAGService } from './custom-rag.service'
  */
 export class AISearchService {
   private customRAG?: CustomRAGService
+  private fts5Service?: FTS5Service
 
   constructor(
     private db: D1Database,
@@ -29,6 +31,10 @@ export class AISearchService {
     } else {
       console.log('[AISearchService] Custom RAG not available, using keyword search only')
     }
+
+    // Initialize FTS5 service (always available, degrades gracefully if table doesn't exist)
+    this.fts5Service = new FTS5Service(db)
+    console.log('[AISearchService] FTS5 service initialized')
   }
 
   /**
@@ -268,6 +274,7 @@ export class AISearchService {
 
   /**
    * Execute search query
+   * Supports three modes: 'ai' (semantic), 'fts5' (full-text), 'keyword' (basic)
    */
   async search(query: SearchQuery): Promise<SearchResponse> {
     const startTime = Date.now()
@@ -282,13 +289,48 @@ export class AISearchService {
       }
     }
 
-    // Use AI Search if enabled and mode is 'ai'
+    // FTS5 mode - full-text search with BM25 ranking and highlighting
+    if (query.mode === 'fts5') {
+      return this.searchFTS5(query, settings)
+    }
+
+    // AI mode - semantic search using Custom RAG with Vectorize
     if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
       return this.searchAI(query, settings)
     }
 
     // Fallback to keyword search
     return this.searchKeyword(query, settings)
+  }
+
+  /**
+   * FTS5 full-text search with BM25 ranking, stemming, and highlighting
+   */
+  private async searchFTS5(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
+    const startTime = Date.now()
+
+    try {
+      if (!this.fts5Service) {
+        console.warn('[AISearchService] FTS5 service not initialized, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      // Check if FTS5 table is available
+      if (!(await this.fts5Service.isAvailable())) {
+        console.warn('[AISearchService] FTS5 table not available, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      const result = await this.fts5Service.search(query, settings)
+
+      // Log search to history
+      await this.logSearch(query.query, 'fts5', result.results.length)
+
+      return result
+    } catch (error) {
+      console.error('[AISearchService] FTS5 search error, falling back to keyword:', error)
+      return this.searchKeyword(query, settings)
+    }
   }
 
   /**
@@ -537,7 +579,7 @@ export class AISearchService {
   /**
    * Log search query to history
    */
-  private async logSearch(query: string, mode: 'ai' | 'keyword', resultsCount: number): Promise<void> {
+  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5', resultsCount: number): Promise<void> {
     try {
       const stmt = this.db.prepare(`
         INSERT INTO ai_search_history (query, mode, results_count, created_at)
@@ -556,23 +598,24 @@ export class AISearchService {
     total_queries: number
     ai_queries: number
     keyword_queries: number
+    fts5_queries: number
     popular_queries: Array<{ query: string; count: number }>
     average_query_time: number
   }> {
     try {
       // Total queries (last 30 days)
       const totalStmt = this.db.prepare(`
-        SELECT COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
       `)
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
       const totalResult = await totalStmt.bind(thirtyDaysAgo).first<{ count: number }>()
 
-      // AI vs Keyword breakdown
+      // AI vs Keyword vs FTS5 breakdown
       const modeStmt = this.db.prepare(`
-        SELECT mode, COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT mode, COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
         GROUP BY mode
       `)
@@ -583,14 +626,15 @@ export class AISearchService {
 
       const aiCount = modeResults?.find((r) => r.mode === 'ai')?.count || 0
       const keywordCount = modeResults?.find((r) => r.mode === 'keyword')?.count || 0
+      const fts5Count = modeResults?.find((r) => r.mode === 'fts5')?.count || 0
 
       // Popular queries
       const popularStmt = this.db.prepare(`
-        SELECT query, COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT query, COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
-        GROUP BY query 
-        ORDER BY count DESC 
+        GROUP BY query
+        ORDER BY count DESC
         LIMIT 10
       `)
       const { results: popularResults } = await popularStmt.bind(thirtyDaysAgo).all<{
@@ -602,6 +646,7 @@ export class AISearchService {
         total_queries: totalResult?.count || 0,
         ai_queries: aiCount,
         keyword_queries: keywordCount,
+        fts5_queries: fts5Count,
         popular_queries: (popularResults || []).map((r) => ({
           query: r.query,
           count: r.count,
@@ -614,6 +659,7 @@ export class AISearchService {
         total_queries: 0,
         ai_queries: 0,
         keyword_queries: 0,
+        fts5_queries: 0,
         popular_queries: [],
         average_query_time: 0,
       }
@@ -632,5 +678,12 @@ export class AISearchService {
    */
   getCustomRAG(): CustomRAGService | undefined {
     return this.customRAG
+  }
+
+  /**
+   * Get FTS5 service instance (for content sync and admin operations)
+   */
+  getFTS5Service(): FTS5Service | undefined {
+    return this.fts5Service
   }
 }

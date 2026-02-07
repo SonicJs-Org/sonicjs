@@ -54,6 +54,7 @@ export const aiSearchPlugin = new PluginBuilder({
 // Export services and types for easy import
 export { AISearchService } from './services/ai-search'
 export { IndexManager } from './services/indexer'
+export { FTS5Service } from './services/fts5.service'
 export type {
   AISearchSettings, CollectionInfo,
   IndexStatus, SearchQuery,

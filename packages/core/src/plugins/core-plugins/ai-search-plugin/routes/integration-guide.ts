@@ -750,7 +750,7 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <h3>Search Request</h3>
               <pre><code>{
   "query": "cloudflare workers",
-  "mode": "ai",           // or "keyword"
+  "mode": "ai",           // "ai", "fts5", or "keyword"
   "filters": {
     "collections": ["blog_posts"],
     "status": "published"
@@ -768,10 +768,16 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
       "title": "Getting Started",
       "excerpt": "Learn how to...",
       "collection": "blog_posts",
-      "score": 0.95
+      "score": 0.95,
+      "highlights": {          // FTS5 mode only
+        "title": "&lt;mark&gt;Getting&lt;/mark&gt; Started",
+        "body": "Learn how to use &lt;mark&gt;cloudflare&lt;/mark&gt; &lt;mark&gt;workers&lt;/mark&gt;..."
+      },
+      "bm25_score": 12.5       // FTS5 mode only
     }],
     "total": 42,
-    "query_time_ms": 150
+    "query_time_ms": 150,
+    "mode": "ai"
   }
 }</code></pre>
             </div>
@@ -782,6 +788,11 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               
               <div class="grid">
                 <div class="card">
+                  <h4>FTS5 Full-Text Mode</h4>
+                  <p>BM25 ranked, stemming, highlights</p>
+                  <p><code>mode: "fts5"</code> ~20-50ms</p>
+                </div>
+                <div class="card">
                   <h4>Use Keyword Mode</h4>
                   <p>~50ms response time for simple matching</p>
                   <p><code>mode: "keyword"</code></p>
@@ -790,11 +801,6 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
                   <h4>Debounce Input</h4>
                   <p>Wait 300-500ms after typing stops</p>
                   <p><code>setTimeout(search, 500)</code></p>
-                </div>
-                <div class="card">
-                  <h4>Cache Results</h4>
-                  <p>Store results in Map or localStorage</p>
-                  <p>Avoid redundant API calls</p>
                 </div>
                 <div class="card">
                   <h4>AI Mode Benefits</h4>

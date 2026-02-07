@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-JEJCR3C5.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity, syncFormCollection, createContentFromSubmission } from './chunk-YXUFZV3V.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity, syncFormCollection, createContentFromSubmission } from './chunk-UHLZEYH6.js';
 import { PluginService } from './chunk-TVIJ7U2H.js';
-import { MigrationService } from './chunk-HAGCXV5N.js';
+import { MigrationService } from './chunk-FPUPYDYO.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-VCH6HXVP.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-34QIAULP.js';
@@ -14,6 +14,343 @@ import { html, raw } from 'hono/html';
 
 // src/schemas/index.ts
 var schemaDefinitions = [];
+
+// src/plugins/core-plugins/ai-search-plugin/services/fts5.service.ts
+var FTS5Service = class {
+  constructor(db, options = {}) {
+    this.db = db;
+    this.options = { ...this.defaultOptions, ...options };
+  }
+  defaultOptions = {
+    titleBoost: 5,
+    slugBoost: 2,
+    bodyBoost: 1,
+    snippetLength: 15,
+    // ~15 tokens per snippet fragment
+    highlightTag: "mark"
+  };
+  options;
+  /**
+   * Search using FTS5 with BM25 ranking and highlighting
+   */
+  async search(query, settings) {
+    const startTime = Date.now();
+    try {
+      const escapedQuery = this.sanitizeFTS5Query(query.query);
+      if (!escapedQuery || escapedQuery === '""') {
+        return {
+          results: [],
+          total: 0,
+          query_time_ms: Date.now() - startTime,
+          mode: "fts5"
+        };
+      }
+      const collections = query.filters?.collections?.length ? query.filters.collections : settings.selected_collections;
+      if (collections.length === 0) {
+        return {
+          results: [],
+          total: 0,
+          query_time_ms: Date.now() - startTime,
+          mode: "fts5"
+        };
+      }
+      const collectionPlaceholders = collections.map(() => "?").join(", ");
+      const tag = this.options.highlightTag || "mark";
+      const sql = `
+        SELECT
+          fts.content_id,
+          fts.collection_id,
+          fts.title,
+          bm25(content_fts, ${this.options.titleBoost}, ${this.options.slugBoost}, ${this.options.bodyBoost}, 0, 0) as score,
+          snippet(content_fts, 2, '<${tag}>', '</${tag}>', '...', ${this.options.snippetLength}) as body_snippet,
+          highlight(content_fts, 0, '<${tag}>', '</${tag}>') as title_highlight,
+          c.slug,
+          c.status,
+          c.created_at,
+          c.updated_at,
+          col.display_name as collection_name
+        FROM content_fts fts
+        JOIN content c ON fts.content_id = c.id
+        JOIN collections col ON fts.collection_id = col.id
+        WHERE content_fts MATCH ?
+          AND fts.collection_id IN (${collectionPlaceholders})
+          AND c.status = 'published'
+        ORDER BY score
+        LIMIT ? OFFSET ?
+      `;
+      const limit = query.limit || settings.results_limit || 20;
+      const offset = query.offset || 0;
+      const { results } = await this.db.prepare(sql).bind(escapedQuery, ...collections, limit, offset).all();
+      const countSql = `
+        SELECT COUNT(*) as total
+        FROM content_fts fts
+        JOIN content c ON fts.content_id = c.id
+        WHERE content_fts MATCH ?
+          AND fts.collection_id IN (${collectionPlaceholders})
+          AND c.status = 'published'
+      `;
+      const countResult = await this.db.prepare(countSql).bind(escapedQuery, ...collections).first();
+      const searchResults = (results || []).map((row) => ({
+        id: row.content_id,
+        title: row.title,
+        slug: row.slug,
+        collection_id: row.collection_id,
+        collection_name: row.collection_name,
+        snippet: row.body_snippet,
+        status: row.status,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        highlights: {
+          title: row.title_highlight,
+          body: row.body_snippet
+        },
+        // BM25 returns negative scores (more negative = better match)
+        // Convert to positive for display
+        bm25_score: Math.abs(row.score),
+        relevance_score: Math.abs(row.score)
+      }));
+      const queryTime = Date.now() - startTime;
+      console.log(`[FTS5Service] Search completed in ${queryTime}ms, ${searchResults.length} results`);
+      return {
+        results: searchResults,
+        total: countResult?.total || 0,
+        query_time_ms: queryTime,
+        mode: "fts5"
+      };
+    } catch (error) {
+      console.error("[FTS5Service] Search error:", error);
+      throw error;
+    }
+  }
+  /**
+   * Index a single content item
+   * Only indexes published content; removes non-published from index
+   */
+  async indexContent(contentId) {
+    try {
+      const content = await this.db.prepare(`
+          SELECT c.id, c.collection_id, c.title, c.slug, c.data, c.status
+          FROM content c
+          WHERE c.id = ?
+        `).bind(contentId).first();
+      if (!content) {
+        console.warn(`[FTS5Service] Content ${contentId} not found`);
+        return;
+      }
+      if (content.status !== "published") {
+        await this.removeFromIndex(contentId);
+        return;
+      }
+      const bodyText = this.extractSearchableText(content.data);
+      await this.db.batch([
+        this.db.prepare("DELETE FROM content_fts WHERE content_id = ?").bind(contentId),
+        this.db.prepare(`
+          INSERT INTO content_fts(title, slug, body, content_id, collection_id)
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(
+          content.title || "",
+          content.slug || "",
+          bodyText,
+          content.id,
+          content.collection_id
+        ),
+        this.db.prepare(`
+          INSERT OR REPLACE INTO content_fts_sync(content_id, collection_id, indexed_at, status)
+          VALUES (?, ?, ?, 'indexed')
+        `).bind(contentId, content.collection_id, Date.now())
+      ]);
+      console.log(`[FTS5Service] Indexed content ${contentId}`);
+    } catch (error) {
+      console.error(`[FTS5Service] Error indexing ${contentId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Index all published content in a collection
+   */
+  async indexCollection(collectionId) {
+    console.log(`[FTS5Service] Starting indexing for collection: ${collectionId}`);
+    try {
+      const { results } = await this.db.prepare(`
+          SELECT id FROM content
+          WHERE collection_id = ? AND status = 'published'
+        `).bind(collectionId).all();
+      const totalItems = results?.length || 0;
+      if (totalItems === 0) {
+        console.log(`[FTS5Service] No published content found in collection ${collectionId}`);
+        return { total_items: 0, indexed_items: 0, errors: 0 };
+      }
+      let indexedItems = 0;
+      let errors = 0;
+      for (const item of results || []) {
+        try {
+          await this.indexContent(item.id);
+          indexedItems++;
+        } catch (error) {
+          console.error(`[FTS5Service] Error indexing item ${item.id}:`, error);
+          errors++;
+        }
+      }
+      console.log(`[FTS5Service] Indexing complete: ${indexedItems}/${totalItems} items, ${errors} errors`);
+      return {
+        total_items: totalItems,
+        indexed_items: indexedItems,
+        errors
+      };
+    } catch (error) {
+      console.error(`[FTS5Service] Error indexing collection ${collectionId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Remove content from FTS index
+   */
+  async removeFromIndex(contentId) {
+    try {
+      await this.db.batch([
+        this.db.prepare("DELETE FROM content_fts WHERE content_id = ?").bind(contentId),
+        this.db.prepare("DELETE FROM content_fts_sync WHERE content_id = ?").bind(contentId)
+      ]);
+      console.log(`[FTS5Service] Removed content ${contentId} from index`);
+    } catch (error) {
+      console.error(`[FTS5Service] Error removing ${contentId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Process pending sync items (for deferred/batch indexing)
+   */
+  async processPendingSync(batchSize = 100) {
+    const { results } = await this.db.prepare(`
+        SELECT content_id FROM content_fts_sync
+        WHERE status = 'pending'
+        LIMIT ?
+      `).bind(batchSize).all();
+    let processed = 0;
+    for (const item of results || []) {
+      try {
+        await this.indexContent(item.content_id);
+        processed++;
+      } catch (error) {
+        console.error(`[FTS5Service] Error processing pending item ${item.content_id}:`, error);
+      }
+    }
+    return processed;
+  }
+  /**
+   * Get FTS5 index statistics
+   */
+  async getStats() {
+    try {
+      const totalResult = await this.db.prepare("SELECT COUNT(*) as count FROM content_fts").first();
+      const { results: collectionCounts } = await this.db.prepare(`
+          SELECT collection_id, COUNT(*) as count
+          FROM content_fts
+          GROUP BY collection_id
+        `).all();
+      const byCollection = {};
+      for (const row of collectionCounts || []) {
+        byCollection[row.collection_id] = row.count;
+      }
+      return {
+        total_indexed: totalResult?.count || 0,
+        by_collection: byCollection
+      };
+    } catch (error) {
+      console.error("[FTS5Service] Error getting stats:", error);
+      return { total_indexed: 0, by_collection: {} };
+    }
+  }
+  /**
+   * Check if FTS5 table is available
+   */
+  async isAvailable() {
+    try {
+      await this.db.prepare("SELECT * FROM content_fts LIMIT 0").run();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  /**
+   * Extract searchable text from JSON content data
+   * Reuses logic pattern from ChunkingService
+   */
+  extractSearchableText(data) {
+    try {
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+      const parts = [];
+      if (parsed.description) parts.push(String(parsed.description));
+      if (parsed.content) parts.push(String(parsed.content));
+      if (parsed.body) parts.push(String(parsed.body));
+      if (parsed.text) parts.push(String(parsed.text));
+      if (parsed.summary) parts.push(String(parsed.summary));
+      if (parsed.excerpt) parts.push(String(parsed.excerpt));
+      const extractRecursive = (obj, depth = 0) => {
+        if (depth > 5) return;
+        if (typeof obj === "string") {
+          if (obj.length > 20 && !obj.startsWith("http") && !obj.match(/^[a-f0-9-]{36}$/i)) {
+            parts.push(obj);
+          }
+        } else if (Array.isArray(obj)) {
+          obj.forEach((item) => extractRecursive(item, depth + 1));
+        } else if (obj && typeof obj === "object") {
+          const skipKeys = /* @__PURE__ */ new Set([
+            "id",
+            "_id",
+            "slug",
+            "url",
+            "href",
+            "src",
+            "image",
+            "thumbnail",
+            "avatar",
+            "icon",
+            "logo",
+            "metadata",
+            "meta",
+            "created_at",
+            "updated_at",
+            "author_id",
+            "collection_id",
+            "parent_id"
+          ]);
+          Object.entries(obj).forEach(([key, value]) => {
+            if (!skipKeys.has(key.toLowerCase())) {
+              extractRecursive(value, depth + 1);
+            }
+          });
+        }
+      };
+      extractRecursive(parsed);
+      const combined = parts.join(" ").trim();
+      return combined.replace(/\s+/g, " ");
+    } catch (error) {
+      console.error("[FTS5Service] Error extracting text:", error);
+      return "";
+    }
+  }
+  /**
+   * Sanitize user input for FTS5 MATCH clause
+   * Removes operators and special characters that could cause errors
+   */
+  sanitizeFTS5Query(query) {
+    if (!query || typeof query !== "string") {
+      return '""';
+    }
+    let sanitized = query.replace(/['"]/g, "").replace(/[()[\]{}]/g, "").replace(/\b(AND|OR|NOT|NEAR)\b/gi, "").replace(/\*/g, "").replace(/:/g, "").replace(/\^/g, "").replace(/-/g, " ").trim();
+    const terms = sanitized.split(/\s+/).filter((t) => t.length > 0);
+    if (terms.length === 0) {
+      return '""';
+    }
+    if (terms.length === 1) {
+      return `"${terms[0]}"*`;
+    }
+    return terms.map((t) => `"${t}"`).join(" ");
+  }
+};
+
+// src/routes/api-content-crud.ts
 var apiContentCrudRoutes = new Hono();
 apiContentCrudRoutes.get("/check-slug", async (c) => {
   try {
@@ -118,6 +455,12 @@ apiContentCrudRoutes.post("/", requireAuth(), async (c) => {
     const cache = getCacheService(CACHE_CONFIGS.api);
     await cache.invalidate(`content:list:${collectionId}:*`);
     await cache.invalidate("content-filtered:*");
+    const fts5Service = new FTS5Service(db);
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(contentId).catch(
+        (err) => console.error("[API Content] FTS5 indexing failed:", err)
+      )
+    );
     const getStmt = db.prepare("SELECT * FROM content WHERE id = ?");
     const createdContent = await getStmt.bind(contentId).first();
     return c.json({
@@ -182,6 +525,12 @@ apiContentCrudRoutes.put("/:id", requireAuth(), async (c) => {
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
+    const fts5Service = new FTS5Service(db);
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(id).catch(
+        (err) => console.error("[API Content] FTS5 reindexing failed:", err)
+      )
+    );
     const getStmt = db.prepare("SELECT * FROM content WHERE id = ?");
     const updatedContent = await getStmt.bind(id).first();
     return c.json({
@@ -219,6 +568,12 @@ apiContentCrudRoutes.delete("/:id", requireAuth(), async (c) => {
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
+    const fts5Service = new FTS5Service(db);
+    c.executionCtx.waitUntil(
+      fts5Service.removeFromIndex(id).catch(
+        (err) => console.error("[API Content] FTS5 removal failed:", err)
+      )
+    );
     return c.json({ success: true });
   } catch (error) {
     console.error("Error deleting content:", error);
@@ -2231,7 +2586,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-NIILGMVI.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-DKMXIALN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2256,7 +2611,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-NIILGMVI.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-DKMXIALN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2275,7 +2630,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-NIILGMVI.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-DKMXIALN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -8745,6 +9100,12 @@ adminContentRoutes.post("/", async (c) => {
       user?.userId || "unknown",
       now
     ).run();
+    const fts5Service = new FTS5Service(db);
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(contentId).catch(
+        (err) => console.error("[Content] FTS5 indexing failed:", err)
+      )
+    );
     const referrerParams = formData.get("referrer_params");
     const redirectUrl = action === "save_and_continue" ? `/admin/content/${contentId}/edit?success=Content saved successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ""}` : referrerParams ? `/admin/content?${referrerParams}&success=Content created successfully!` : `/admin/content?collection=${collectionId}&success=Content created successfully!`;
     const isHTMX = c.req.header("HX-Request") === "true";
@@ -8873,6 +9234,12 @@ adminContentRoutes.put("/:id", async (c) => {
         now
       ).run();
     }
+    const fts5Service = new FTS5Service(db);
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(id).catch(
+        (err) => console.error("[Content] FTS5 reindexing failed:", err)
+      )
+    );
     const referrerParams = formData.get("referrer_params");
     const redirectUrl = action === "save_and_continue" ? `/admin/content/${id}/edit?success=Content updated successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ""}` : referrerParams ? `/admin/content?${referrerParams}&success=Content updated successfully!` : `/admin/content?collection=${existingContent.collection_id}&success=Content updated successfully!`;
     const isHTMX = c.req.header("HX-Request") === "true";
@@ -9138,6 +9505,12 @@ adminContentRoutes.delete("/:id", async (c) => {
       WHERE id = ?
     `);
     await deleteStmt.bind(now, id).run();
+    const fts5Service = new FTS5Service(db);
+    c.executionCtx.waitUntil(
+      fts5Service.removeFromIndex(id).catch(
+        (err) => console.error("[Content] FTS5 removal failed:", err)
+      )
+    );
     const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate("content:list:*");
@@ -27888,6 +28261,6 @@ var ROUTES_INFO = {
   reference: "https://github.com/sonicjs/sonicjs"
 };
 
-export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-7BMMFPKS.js.map
-//# sourceMappingURL=chunk-7BMMFPKS.js.map
+export { FTS5Service, ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
+//# sourceMappingURL=chunk-EDAM7ZMS.js.map
+//# sourceMappingURL=chunk-EDAM7ZMS.js.map

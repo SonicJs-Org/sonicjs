@@ -3,6 +3,7 @@ import type { Bindings } from '../../../../app'
 import { requireAuth } from '../../../../middleware'
 import { AISearchService } from '../services/ai-search'
 import { IndexManager } from '../services/indexer'
+import { FTS5Service } from '../services/fts5.service'
 import { renderSettingsPage } from '../components/settings-page'
 import type { AISearchSettings, SearchQuery } from '../types'
 
@@ -235,6 +236,149 @@ adminRoutes.post('/api/reindex', async (c) => {
   } catch (error) {
     console.error('Error starting re-index:', error)
     return c.json({ error: 'Failed to start re-indexing' }, 500)
+  }
+})
+
+/**
+ * GET /admin/api/ai-search/fts5/status
+ * Get FTS5 index status and statistics
+ */
+adminRoutes.get('/api/fts5/status', async (c) => {
+  try {
+    const db = c.env.DB
+    const fts5Service = new FTS5Service(db)
+
+    const isAvailable = await fts5Service.isAvailable()
+    if (!isAvailable) {
+      return c.json({
+        success: true,
+        data: {
+          available: false,
+          message: 'FTS5 tables not yet created. Run migrations to enable FTS5 search.'
+        }
+      })
+    }
+
+    const stats = await fts5Service.getStats()
+    return c.json({
+      success: true,
+      data: {
+        available: true,
+        total_indexed: stats.total_indexed,
+        by_collection: stats.by_collection
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching FTS5 status:', error)
+    return c.json({ error: 'Failed to fetch FTS5 status' }, 500)
+  }
+})
+
+/**
+ * POST /admin/api/ai-search/fts5/index-collection
+ * Index a specific collection for FTS5 search
+ */
+adminRoutes.post('/api/fts5/index-collection', async (c) => {
+  try {
+    const db = c.env.DB
+    const fts5Service = new FTS5Service(db)
+
+    const isAvailable = await fts5Service.isAvailable()
+    if (!isAvailable) {
+      return c.json({
+        error: 'FTS5 tables not available. Run migrations first.'
+      }, 400)
+    }
+
+    const body = await c.req.json()
+    const collectionIdRaw: unknown = body.collection_id
+    const collectionId = collectionIdRaw ? String(collectionIdRaw) : ''
+
+    if (!collectionId || collectionId === 'undefined' || collectionId === 'null') {
+      return c.json({ error: 'collection_id is required' }, 400)
+    }
+
+    // Start FTS5 indexing in background
+    c.executionCtx.waitUntil(
+      fts5Service
+        .indexCollection(collectionId)
+        .then((result) => {
+          console.log(`[FTS5 Admin] Indexing completed for collection ${collectionId}:`, result)
+        })
+        .catch((error) => {
+          console.error(`[FTS5 Admin] Indexing error for collection ${collectionId}:`, error)
+        })
+    )
+
+    return c.json({
+      success: true,
+      message: 'FTS5 indexing started for collection'
+    })
+  } catch (error) {
+    console.error('Error starting FTS5 index:', error)
+    return c.json({ error: 'Failed to start FTS5 indexing' }, 500)
+  }
+})
+
+/**
+ * POST /admin/api/ai-search/fts5/reindex-all
+ * Reindex all selected collections for FTS5 search
+ */
+adminRoutes.post('/api/fts5/reindex-all', async (c) => {
+  try {
+    const db = c.env.DB
+    const ai = (c.env as any).AI
+    const vectorize = (c.env as any).VECTORIZE_INDEX
+    const service = new AISearchService(db, ai, vectorize)
+    const fts5Service = new FTS5Service(db)
+
+    const isAvailable = await fts5Service.isAvailable()
+    if (!isAvailable) {
+      return c.json({
+        error: 'FTS5 tables not available. Run migrations first.'
+      }, 400)
+    }
+
+    // Get current settings to find selected collections
+    const settings = await service.getSettings()
+    const collections = settings?.selected_collections || []
+
+    if (collections.length === 0) {
+      return c.json({
+        success: true,
+        message: 'No collections selected for indexing'
+      })
+    }
+
+    // Start FTS5 indexing for all collections in background
+    c.executionCtx.waitUntil(
+      (async () => {
+        console.log(`[FTS5 Admin] Starting reindex-all for ${collections.length} collections`)
+        const results: Record<string, any> = {}
+
+        for (const collectionId of collections) {
+          try {
+            const result = await fts5Service.indexCollection(collectionId)
+            results[collectionId] = result
+            console.log(`[FTS5 Admin] Indexed collection ${collectionId}:`, result)
+          } catch (error) {
+            console.error(`[FTS5 Admin] Error indexing collection ${collectionId}:`, error)
+            results[collectionId] = { error: error instanceof Error ? error.message : String(error) }
+          }
+        }
+
+        console.log('[FTS5 Admin] Reindex-all completed:', results)
+      })()
+    )
+
+    return c.json({
+      success: true,
+      message: `FTS5 indexing started for ${collections.length} collections`,
+      collections
+    })
+  } catch (error) {
+    console.error('Error starting FTS5 reindex-all:', error)
+    return c.json({ error: 'Failed to start FTS5 reindex' }, 500)
   }
 })
 

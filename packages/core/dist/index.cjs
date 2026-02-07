@@ -1,10 +1,10 @@
 'use strict';
 
-var chunkJYX2H2ZW_cjs = require('./chunk-JYX2H2ZW.cjs');
+var chunk4AXVM6CP_cjs = require('./chunk-4AXVM6CP.cjs');
 var chunkIDBAYTYB_cjs = require('./chunk-IDBAYTYB.cjs');
-var chunkX6KYPAZE_cjs = require('./chunk-X6KYPAZE.cjs');
+var chunkADKRCI34_cjs = require('./chunk-ADKRCI34.cjs');
 var chunkXEITDGR3_cjs = require('./chunk-XEITDGR3.cjs');
-var chunkD2VQPLHY_cjs = require('./chunk-D2VQPLHY.cjs');
+var chunkRSMMDDOR_cjs = require('./chunk-RSMMDDOR.cjs');
 var chunkS6K2H2TS_cjs = require('./chunk-S6K2H2TS.cjs');
 var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
 var chunkMNFY6DWY_cjs = require('./chunk-MNFY6DWY.cjs');
@@ -559,7 +559,7 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkX6KYPAZE_cjs.requireAuth());
+  router3.use("*", chunkADKRCI34_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
@@ -1925,7 +1925,7 @@ function createOTPLoginPlugin() {
           error: "Account is deactivated"
         }, 403);
       }
-      const token = await chunkX6KYPAZE_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+      const token = await chunkADKRCI34_cjs.AuthManager.generateToken(user.id, user.email, user.role);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2519,8 +2519,11 @@ var AISearchService = class {
     } else {
       console.log("[AISearchService] Custom RAG not available, using keyword search only");
     }
+    this.fts5Service = new chunk4AXVM6CP_cjs.FTS5Service(db);
+    console.log("[AISearchService] FTS5 service initialized");
   }
   customRAG;
+  fts5Service;
   /**
    * Get plugin settings
    */
@@ -2696,6 +2699,7 @@ var AISearchService = class {
   }
   /**
    * Execute search query
+   * Supports three modes: 'ai' (semantic), 'fts5' (full-text), 'keyword' (basic)
    */
   async search(query) {
     const settings = await this.getSettings();
@@ -2707,10 +2711,34 @@ var AISearchService = class {
         mode: query.mode
       };
     }
+    if (query.mode === "fts5") {
+      return this.searchFTS5(query, settings);
+    }
     if (query.mode === "ai" && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
       return this.searchAI(query, settings);
     }
     return this.searchKeyword(query, settings);
+  }
+  /**
+   * FTS5 full-text search with BM25 ranking, stemming, and highlighting
+   */
+  async searchFTS5(query, settings) {
+    try {
+      if (!this.fts5Service) {
+        console.warn("[AISearchService] FTS5 service not initialized, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      if (!await this.fts5Service.isAvailable()) {
+        console.warn("[AISearchService] FTS5 table not available, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      const result = await this.fts5Service.search(query, settings);
+      await this.logSearch(query.query, "fts5", result.results.length);
+      return result;
+    } catch (error) {
+      console.error("[AISearchService] FTS5 search error, falling back to keyword:", error);
+      return this.searchKeyword(query, settings);
+    }
   }
   /**
    * AI-powered semantic search using Custom RAG
@@ -2910,27 +2938,28 @@ var AISearchService = class {
   async getSearchAnalytics() {
     try {
       const totalStmt = this.db.prepare(`
-        SELECT COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
       `);
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1e3;
       const totalResult = await totalStmt.bind(thirtyDaysAgo).first();
       const modeStmt = this.db.prepare(`
-        SELECT mode, COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT mode, COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
         GROUP BY mode
       `);
       const { results: modeResults } = await modeStmt.bind(thirtyDaysAgo).all();
       const aiCount = modeResults?.find((r) => r.mode === "ai")?.count || 0;
       const keywordCount = modeResults?.find((r) => r.mode === "keyword")?.count || 0;
+      const fts5Count = modeResults?.find((r) => r.mode === "fts5")?.count || 0;
       const popularStmt = this.db.prepare(`
-        SELECT query, COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT query, COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
-        GROUP BY query 
-        ORDER BY count DESC 
+        GROUP BY query
+        ORDER BY count DESC
         LIMIT 10
       `);
       const { results: popularResults } = await popularStmt.bind(thirtyDaysAgo).all();
@@ -2938,6 +2967,7 @@ var AISearchService = class {
         total_queries: totalResult?.count || 0,
         ai_queries: aiCount,
         keyword_queries: keywordCount,
+        fts5_queries: fts5Count,
         popular_queries: (popularResults || []).map((r) => ({
           query: r.query,
           count: r.count
@@ -2951,6 +2981,7 @@ var AISearchService = class {
         total_queries: 0,
         ai_queries: 0,
         keyword_queries: 0,
+        fts5_queries: 0,
         popular_queries: [],
         average_query_time: 0
       };
@@ -2967,6 +2998,12 @@ var AISearchService = class {
    */
   getCustomRAG() {
     return this.customRAG;
+  }
+  /**
+   * Get FTS5 service instance (for content sync and admin operations)
+   */
+  getFTS5Service() {
+    return this.fts5Service;
   }
 };
 
@@ -3446,6 +3483,36 @@ function renderSettingsPage(data) {
                 </div>
           </div>
 
+              <hr class="border-zinc-200 dark:border-zinc-800">
+
+              <!-- FTS5 Full-Text Search Section -->
+              <div>
+                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">FTS5 Full-Text Search</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                  SQLite FTS5 provides fast full-text search with BM25 ranking, stemming, and highlighting. No AI binding required.
+                </p>
+                <div id="fts5-status" class="p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 mb-4">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300" id="fts5-status-text">Checking FTS5 status...</span>
+                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1" id="fts5-stats-text"></p>
+                    </div>
+                    <button
+                      type="button"
+                      id="fts5-reindex-btn"
+                      onclick="reindexFTS5All()"
+                      class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Reindex All (FTS5)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <!-- Save Button -->
               <div class="flex items-center justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
                 <p class="text-xs text-zinc-500 dark:text-zinc-400">
@@ -3474,6 +3541,10 @@ function renderSettingsPage(data) {
           <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
             <div class="text-sm text-zinc-500 dark:text-zinc-400">Keyword Queries</div>
             <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">${data.analytics.keyword_queries}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">FTS5 Queries</div>
+            <div class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">${data.analytics.fts5_queries || 0}</div>
           </div>
         </div>
         ${data.analytics.popular_queries.length > 0 ? `
@@ -3610,6 +3681,55 @@ function renderSettingsPage(data) {
           }
         }
       }, 30000);
+
+      // FTS5 status check on load
+      (async function checkFTS5Status() {
+        try {
+          const res = await fetch('/admin/plugins/ai-search/api/fts5/status');
+          if (res.ok) {
+            const { data } = await res.json();
+            const statusText = document.getElementById('fts5-status-text');
+            const statsText = document.getElementById('fts5-stats-text');
+            const reindexBtn = document.getElementById('fts5-reindex-btn');
+            if (data.available) {
+              statusText.textContent = 'FTS5 is available';
+              statsText.textContent = data.total_indexed + ' items indexed across ' + Object.keys(data.by_collection || {}).length + ' collections';
+              reindexBtn.disabled = false;
+            } else {
+              statusText.textContent = 'FTS5 tables not created yet';
+              statsText.textContent = 'Run migrations to enable FTS5 full-text search.';
+            }
+          }
+        } catch (e) {
+          console.error('FTS5 status check failed:', e);
+        }
+      })();
+
+      // Reindex all collections for FTS5
+      async function reindexFTS5All() {
+        const btn = document.getElementById('fts5-reindex-btn');
+        btn.disabled = true;
+        btn.textContent = 'Reindexing...';
+        try {
+          const res = await fetch('/admin/plugins/ai-search/api/fts5/reindex-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (res.ok) {
+            const result = await res.json();
+            alert('FTS5 reindex started for ' + (result.collections?.length || 0) + ' collections');
+            setTimeout(() => location.reload(), 3000);
+          } else {
+            alert('Failed to start FTS5 reindex');
+            btn.disabled = false;
+            btn.textContent = 'Reindex All (FTS5)';
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Reindex All (FTS5)';
+        }
+      }
     </script>
   `;
   return chunkSHCYIZAN_cjs.renderAdminLayout({
@@ -3623,7 +3743,7 @@ function renderSettingsPage(data) {
 
 // src/plugins/core-plugins/ai-search-plugin/routes/admin.ts
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkX6KYPAZE_cjs.requireAuth());
+adminRoutes.use("*", chunkADKRCI34_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -3768,6 +3888,114 @@ adminRoutes.post("/api/reindex", async (c) => {
   } catch (error) {
     console.error("Error starting re-index:", error);
     return c.json({ error: "Failed to start re-indexing" }, 500);
+  }
+});
+adminRoutes.get("/api/fts5/status", async (c) => {
+  try {
+    const db = c.env.DB;
+    const fts5Service = new chunk4AXVM6CP_cjs.FTS5Service(db);
+    const isAvailable = await fts5Service.isAvailable();
+    if (!isAvailable) {
+      return c.json({
+        success: true,
+        data: {
+          available: false,
+          message: "FTS5 tables not yet created. Run migrations to enable FTS5 search."
+        }
+      });
+    }
+    const stats = await fts5Service.getStats();
+    return c.json({
+      success: true,
+      data: {
+        available: true,
+        total_indexed: stats.total_indexed,
+        by_collection: stats.by_collection
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching FTS5 status:", error);
+    return c.json({ error: "Failed to fetch FTS5 status" }, 500);
+  }
+});
+adminRoutes.post("/api/fts5/index-collection", async (c) => {
+  try {
+    const db = c.env.DB;
+    const fts5Service = new chunk4AXVM6CP_cjs.FTS5Service(db);
+    const isAvailable = await fts5Service.isAvailable();
+    if (!isAvailable) {
+      return c.json({
+        error: "FTS5 tables not available. Run migrations first."
+      }, 400);
+    }
+    const body = await c.req.json();
+    const collectionIdRaw = body.collection_id;
+    const collectionId = collectionIdRaw ? String(collectionIdRaw) : "";
+    if (!collectionId || collectionId === "undefined" || collectionId === "null") {
+      return c.json({ error: "collection_id is required" }, 400);
+    }
+    c.executionCtx.waitUntil(
+      fts5Service.indexCollection(collectionId).then((result) => {
+        console.log(`[FTS5 Admin] Indexing completed for collection ${collectionId}:`, result);
+      }).catch((error) => {
+        console.error(`[FTS5 Admin] Indexing error for collection ${collectionId}:`, error);
+      })
+    );
+    return c.json({
+      success: true,
+      message: "FTS5 indexing started for collection"
+    });
+  } catch (error) {
+    console.error("Error starting FTS5 index:", error);
+    return c.json({ error: "Failed to start FTS5 indexing" }, 500);
+  }
+});
+adminRoutes.post("/api/fts5/reindex-all", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    const service = new AISearchService(db, ai, vectorize);
+    const fts5Service = new chunk4AXVM6CP_cjs.FTS5Service(db);
+    const isAvailable = await fts5Service.isAvailable();
+    if (!isAvailable) {
+      return c.json({
+        error: "FTS5 tables not available. Run migrations first."
+      }, 400);
+    }
+    const settings = await service.getSettings();
+    const collections2 = settings?.selected_collections || [];
+    if (collections2.length === 0) {
+      return c.json({
+        success: true,
+        message: "No collections selected for indexing"
+      });
+    }
+    c.executionCtx.waitUntil(
+      (async () => {
+        console.log(`[FTS5 Admin] Starting reindex-all for ${collections2.length} collections`);
+        const results = {};
+        for (const collectionId of collections2) {
+          try {
+            const result = await fts5Service.indexCollection(collectionId);
+            results[collectionId] = result;
+            console.log(`[FTS5 Admin] Indexed collection ${collectionId}:`, result);
+          } catch (error) {
+            console.error(`[FTS5 Admin] Error indexing collection ${collectionId}:`, error);
+            results[collectionId] = { error: error instanceof Error ? error.message : String(error) };
+          }
+        }
+        console.log("[FTS5 Admin] Reindex-all completed:", results);
+      })()
+    );
+    return c.json({
+      success: true,
+      message: `FTS5 indexing started for ${collections2.length} collections`,
+      collections: collections2
+    });
+  } catch (error) {
+    console.error("Error starting FTS5 reindex-all:", error);
+    return c.json({ error: "Failed to start FTS5 reindex" }, 500);
   }
 });
 var admin_default = adminRoutes;
@@ -4602,7 +4830,7 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <h3>Search Request</h3>
               <pre><code>{
   "query": "cloudflare workers",
-  "mode": "ai",           // or "keyword"
+  "mode": "ai",           // "ai", "fts5", or "keyword"
   "filters": {
     "collections": ["blog_posts"],
     "status": "published"
@@ -4620,10 +4848,16 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
       "title": "Getting Started",
       "excerpt": "Learn how to...",
       "collection": "blog_posts",
-      "score": 0.95
+      "score": 0.95,
+      "highlights": {          // FTS5 mode only
+        "title": "&lt;mark&gt;Getting&lt;/mark&gt; Started",
+        "body": "Learn how to use &lt;mark&gt;cloudflare&lt;/mark&gt; &lt;mark&gt;workers&lt;/mark&gt;..."
+      },
+      "bm25_score": 12.5       // FTS5 mode only
     }],
     "total": 42,
-    "query_time_ms": 150
+    "query_time_ms": 150,
+    "mode": "ai"
   }
 }</code></pre>
             </div>
@@ -4634,6 +4868,11 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               
               <div class="grid">
                 <div class="card">
+                  <h4>FTS5 Full-Text Mode</h4>
+                  <p>BM25 ranked, stemming, highlights</p>
+                  <p><code>mode: "fts5"</code> ~20-50ms</p>
+                </div>
+                <div class="card">
                   <h4>Use Keyword Mode</h4>
                   <p>~50ms response time for simple matching</p>
                   <p><code>mode: "keyword"</code></p>
@@ -4642,11 +4881,6 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
                   <h4>Debounce Input</h4>
                   <p>Wait 300-500ms after typing stops</p>
                   <p><code>setTimeout(search, 500)</code></p>
-                </div>
-                <div class="card">
-                  <h4>Cache Results</h4>
-                  <p>Store results in Map or localStorage</p>
-                  <p>Avoid redundant API calls</p>
                 </div>
                 <div class="card">
                   <h4>AI Mode Benefits</h4>
@@ -4957,6 +5191,9 @@ testPageRoutes.get("/test", async (c) => {
               <input type="radio" name="mode" value="ai" checked> AI Mode (with caching)
             </label>
             <label>
+              <input type="radio" name="mode" value="fts5"> FTS5 Full-Text
+            </label>
+            <label>
               <input type="radio" name="mode" value="keyword"> Keyword Mode
             </label>
           </div>
@@ -5117,14 +5354,14 @@ testPageRoutes.get("/test", async (c) => {
 
             resultsDiv.innerHTML = \`
               <div class="results">
-                <h3>Found \${data.results.length} results in \${duration}ms</h3>
+                <h3>Found \${data.results.length} results in \${duration}ms (mode: \${data.mode || 'unknown'})</h3>
                 \${data.results.map(result => \`
                   <div class="result-item">
-                    <div class="result-title">\${result.title || 'Untitled'}</div>
-                    <div class="result-excerpt">\${result.excerpt || result.content?.substring(0, 200) || ''}</div>
+                    <div class="result-title">\${result.highlights?.title || result.title || 'Untitled'}</div>
+                    <div class="result-excerpt">\${result.highlights?.body || result.snippet || result.excerpt || result.content?.substring(0, 200) || ''}</div>
                     <div class="result-meta">
-                      Collection: \${result.collection} | 
-                      Score: \${result.score?.toFixed(3) || 'N/A'}
+                      Collection: \${result.collection_name || result.collection || 'N/A'} |
+                      Score: \${result.bm25_score?.toFixed(3) || result.relevance_score?.toFixed(3) || result.score?.toFixed(3) || 'N/A'}
                     </div>
                   </div>
                 \`).join('')}
@@ -5314,12 +5551,12 @@ function createMagicLinkAuthPlugin() {
         SET used = 1, used_at = ?
         WHERE id = ?
       `).bind(Date.now(), magicLink.id).run();
-      const jwtToken = await chunkX6KYPAZE_cjs.AuthManager.generateToken(
+      const jwtToken = await chunkADKRCI34_cjs.AuthManager.generateToken(
         user.id,
         user.email,
         user.role
       );
-      chunkX6KYPAZE_cjs.AuthManager.setAuthCookie(c, jwtToken);
+      chunkADKRCI34_cjs.AuthManager.setAuthCookie(c, jwtToken);
       await db.prepare(`
         UPDATE users SET last_login_at = ? WHERE id = ?
       `).bind(Date.now(), user.id).run();
@@ -6605,7 +6842,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunkJYX2H2ZW_cjs.renderConfirmationDialog({
+    ${chunk4AXVM6CP_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -6616,7 +6853,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunkJYX2H2ZW_cjs.renderConfirmationDialog({
+    ${chunk4AXVM6CP_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -6627,7 +6864,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunkJYX2H2ZW_cjs.getConfirmationDialogScript()}
+    ${chunk4AXVM6CP_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -7319,8 +7556,8 @@ function createSonicJSApp(config = {}) {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkX6KYPAZE_cjs.metricsMiddleware());
-  app2.use("*", chunkX6KYPAZE_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkADKRCI34_cjs.metricsMiddleware());
+  app2.use("*", chunkADKRCI34_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -7337,21 +7574,21 @@ function createSonicJSApp(config = {}) {
       app2.use("*", middleware);
     }
   }
-  app2.route("/api", chunkJYX2H2ZW_cjs.api_default);
-  app2.route("/api/media", chunkJYX2H2ZW_cjs.api_media_default);
-  app2.route("/api/system", chunkJYX2H2ZW_cjs.api_system_default);
-  app2.route("/admin/api", chunkJYX2H2ZW_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunkJYX2H2ZW_cjs.router);
-  app2.route("/admin/collections", chunkJYX2H2ZW_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunkJYX2H2ZW_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunkJYX2H2ZW_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunkJYX2H2ZW_cjs.public_forms_default);
-  app2.route("/api/forms", chunkJYX2H2ZW_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunkJYX2H2ZW_cjs.router2);
+  app2.route("/api", chunk4AXVM6CP_cjs.api_default);
+  app2.route("/api/media", chunk4AXVM6CP_cjs.api_media_default);
+  app2.route("/api/system", chunk4AXVM6CP_cjs.api_system_default);
+  app2.route("/admin/api", chunk4AXVM6CP_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunk4AXVM6CP_cjs.router);
+  app2.route("/admin/collections", chunk4AXVM6CP_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunk4AXVM6CP_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunk4AXVM6CP_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunk4AXVM6CP_cjs.public_forms_default);
+  app2.route("/api/forms", chunk4AXVM6CP_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunk4AXVM6CP_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunkJYX2H2ZW_cjs.admin_content_default);
-  app2.route("/admin/media", chunkJYX2H2ZW_cjs.adminMediaRoutes);
+  app2.route("/admin/content", chunk4AXVM6CP_cjs.admin_content_default);
+  app2.route("/admin/media", chunk4AXVM6CP_cjs.adminMediaRoutes);
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
     for (const route of aiSearchPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -7363,11 +7600,11 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunkJYX2H2ZW_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunkJYX2H2ZW_cjs.adminLogsRoutes);
-  app2.route("/admin", chunkJYX2H2ZW_cjs.userRoutes);
-  app2.route("/auth", chunkJYX2H2ZW_cjs.auth_default);
-  app2.route("/", chunkJYX2H2ZW_cjs.test_cleanup_default);
+  app2.route("/admin/plugins", chunk4AXVM6CP_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunk4AXVM6CP_cjs.adminLogsRoutes);
+  app2.route("/admin", chunk4AXVM6CP_cjs.userRoutes);
+  app2.route("/auth", chunk4AXVM6CP_cjs.auth_default);
+  app2.route("/", chunk4AXVM6CP_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -7454,79 +7691,79 @@ var VERSION = chunk5HMR2SJW_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.ROUTES_INFO; }
+  get: function () { return chunk4AXVM6CP_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.admin_api_default; }
+  get: function () { return chunk4AXVM6CP_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.adminCheckboxRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.admin_code_examples_default; }
+  get: function () { return chunk4AXVM6CP_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.adminCollectionsRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.admin_content_default; }
+  get: function () { return chunk4AXVM6CP_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.router; }
+  get: function () { return chunk4AXVM6CP_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.adminDesignRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.adminLogsRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.adminMediaRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.adminPluginRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.adminSettingsRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.admin_testimonials_default; }
+  get: function () { return chunk4AXVM6CP_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.userRoutes; }
+  get: function () { return chunk4AXVM6CP_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.api_content_crud_default; }
+  get: function () { return chunk4AXVM6CP_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.api_media_default; }
+  get: function () { return chunk4AXVM6CP_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.api_default; }
+  get: function () { return chunk4AXVM6CP_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.api_system_default; }
+  get: function () { return chunk4AXVM6CP_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkJYX2H2ZW_cjs.auth_default; }
+  get: function () { return chunk4AXVM6CP_cjs.auth_default; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
@@ -7694,83 +7931,83 @@ Object.defineProperty(exports, "workflowHistory", {
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.AuthManager; }
+  get: function () { return chunkADKRCI34_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.PermissionManager; }
+  get: function () { return chunkADKRCI34_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.bootstrapMiddleware; }
+  get: function () { return chunkADKRCI34_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.cacheHeaders; }
+  get: function () { return chunkADKRCI34_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.compressionMiddleware; }
+  get: function () { return chunkADKRCI34_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkADKRCI34_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.getActivePlugins; }
+  get: function () { return chunkADKRCI34_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.isPluginActive; }
+  get: function () { return chunkADKRCI34_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.logActivity; }
+  get: function () { return chunkADKRCI34_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.loggingMiddleware; }
+  get: function () { return chunkADKRCI34_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.optionalAuth; }
+  get: function () { return chunkADKRCI34_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkADKRCI34_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.requireActivePlugin; }
+  get: function () { return chunkADKRCI34_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.requireActivePlugins; }
+  get: function () { return chunkADKRCI34_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.requireAnyPermission; }
+  get: function () { return chunkADKRCI34_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.requireAuth; }
+  get: function () { return chunkADKRCI34_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.requirePermission; }
+  get: function () { return chunkADKRCI34_cjs.requirePermission; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.requireRole; }
+  get: function () { return chunkADKRCI34_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.securityHeaders; }
+  get: function () { return chunkADKRCI34_cjs.securityHeaders; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkX6KYPAZE_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkADKRCI34_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
@@ -7826,7 +8063,7 @@ Object.defineProperty(exports, "validateCollectionConfig", {
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunkD2VQPLHY_cjs.MigrationService; }
+  get: function () { return chunkRSMMDDOR_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,

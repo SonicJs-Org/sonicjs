@@ -235,6 +235,9 @@ testPageRoutes.get('/test', async (c) => {
               <input type="radio" name="mode" value="ai" checked> AI Mode (with caching)
             </label>
             <label>
+              <input type="radio" name="mode" value="fts5"> FTS5 Full-Text
+            </label>
+            <label>
               <input type="radio" name="mode" value="keyword"> Keyword Mode
             </label>
           </div>
@@ -395,14 +398,14 @@ testPageRoutes.get('/test', async (c) => {
 
             resultsDiv.innerHTML = \`
               <div class="results">
-                <h3>Found \${data.results.length} results in \${duration}ms</h3>
+                <h3>Found \${data.results.length} results in \${duration}ms (mode: \${data.mode || 'unknown'})</h3>
                 \${data.results.map(result => \`
                   <div class="result-item">
-                    <div class="result-title">\${result.title || 'Untitled'}</div>
-                    <div class="result-excerpt">\${result.excerpt || result.content?.substring(0, 200) || ''}</div>
+                    <div class="result-title">\${result.highlights?.title || result.title || 'Untitled'}</div>
+                    <div class="result-excerpt">\${result.highlights?.body || result.snippet || result.excerpt || result.content?.substring(0, 200) || ''}</div>
                     <div class="result-meta">
-                      Collection: \${result.collection} | 
-                      Score: \${result.score?.toFixed(3) || 'N/A'}
+                      Collection: \${result.collection_name || result.collection || 'N/A'} |
+                      Score: \${result.bm25_score?.toFixed(3) || result.relevance_score?.toFixed(3) || result.score?.toFixed(3) || 'N/A'}
                     </div>
                   </div>
                 \`).join('')}

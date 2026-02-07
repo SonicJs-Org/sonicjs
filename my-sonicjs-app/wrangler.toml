@@ -28,13 +28,12 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 # Cloudflare account
-# Note: Uses CLOUDFLARE_ACCOUNT_ID environment variable in CI
-# For local dev with top-level config, set account_id here or use wrangler login
+account_id = "f61c658f1de7911b0a529f38308adb21"  # Mmcintosh@infowall.com's Account
 
 # D1 Database (CI will sed-replace these IDs with PR-specific values)
 [[d1_databases]]
 binding = "DB"
-database_name = "sonicjs-worktree-lane711-otp-email-branding"
+database_name = "sonicjs-preview"
 database_id = "68223153-215a-4c8f-a9bf-797f11236758"
 migrations_dir = "./migrations"
 
@@ -74,8 +73,7 @@ enabled = true
 # ================================================================================
 [env.local]
 name = "my-sonicjs-app-local"
-# Note: Set your personal account_id here or use wrangler login
-# account_id = "your-personal-account-id"
+account_id = "f61c658f1de7911b0a529f38308adb21"  # Mmcintosh@infowall.com's Account
 
 [[env.local.d1_databases]]
 binding = "DB"

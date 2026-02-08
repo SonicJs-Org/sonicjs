@@ -15,6 +15,7 @@ interface SettingsPageData {
     total_queries: number
     ai_queries: number
     keyword_queries: number
+    fts5_queries: number
     popular_queries: Array<{ query: string; count: number }>
     average_query_time: number
   }
@@ -68,7 +69,19 @@ export function renderSettingsPage(data: SettingsPageData): string {
             Configure advanced search with Cloudflare AI Search. Select collections to index and manage search preferences.
           </p>
         </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-3">
+          <a href="/admin/plugins/ai-search/integration" target="_blank" class="inline-flex items-center justify-center rounded-lg bg-green-600 hover:bg-green-700 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
+            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+            </svg>
+            Headless Guide
+          </a>
+          <a href="/admin/plugins/ai-search/test" target="_blank" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
+            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+            Test Search
+          </a>
           <a href="/admin/plugins" class="inline-flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
@@ -222,6 +235,36 @@ export function renderSettingsPage(data: SettingsPageData): string {
                 </div>
           </div>
 
+              <hr class="border-zinc-200 dark:border-zinc-800">
+
+              <!-- FTS5 Full-Text Search Section -->
+              <div>
+                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">FTS5 Full-Text Search</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                  SQLite FTS5 provides fast full-text search with BM25 ranking, stemming, and highlighting. No AI binding required.
+                </p>
+                <div id="fts5-status" class="p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 mb-4">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300" id="fts5-status-text">Checking FTS5 status...</span>
+                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1" id="fts5-stats-text"></p>
+                    </div>
+                    <button
+                      type="button"
+                      id="fts5-reindex-btn"
+                      onclick="reindexFTS5All()"
+                      class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Reindex All (FTS5)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <!-- Save Button -->
               <div class="flex items-center justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
                 <p class="text-xs text-zinc-500 dark:text-zinc-400">
@@ -250,6 +293,10 @@ export function renderSettingsPage(data: SettingsPageData): string {
           <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
             <div class="text-sm text-zinc-500 dark:text-zinc-400">Keyword Queries</div>
             <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">${data.analytics.keyword_queries}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">FTS5 Queries</div>
+            <div class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">${data.analytics.fts5_queries || 0}</div>
           </div>
         </div>
         ${data.analytics.popular_queries.length > 0
@@ -388,6 +435,55 @@ export function renderSettingsPage(data: SettingsPageData): string {
           }
         }
       }, 30000);
+
+      // FTS5 status check on load
+      (async function checkFTS5Status() {
+        try {
+          const res = await fetch('/admin/plugins/ai-search/api/fts5/status');
+          if (res.ok) {
+            const { data } = await res.json();
+            const statusText = document.getElementById('fts5-status-text');
+            const statsText = document.getElementById('fts5-stats-text');
+            const reindexBtn = document.getElementById('fts5-reindex-btn');
+            if (data.available) {
+              statusText.textContent = 'FTS5 is available';
+              statsText.textContent = data.total_indexed + ' items indexed across ' + Object.keys(data.by_collection || {}).length + ' collections';
+              reindexBtn.disabled = false;
+            } else {
+              statusText.textContent = 'FTS5 tables not created yet';
+              statsText.textContent = 'Run migrations to enable FTS5 full-text search.';
+            }
+          }
+        } catch (e) {
+          console.error('FTS5 status check failed:', e);
+        }
+      })();
+
+      // Reindex all collections for FTS5
+      async function reindexFTS5All() {
+        const btn = document.getElementById('fts5-reindex-btn');
+        btn.disabled = true;
+        btn.textContent = 'Reindexing...';
+        try {
+          const res = await fetch('/admin/plugins/ai-search/api/fts5/reindex-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (res.ok) {
+            const result = await res.json();
+            alert('FTS5 reindex started for ' + (result.collections?.length || 0) + ' collections');
+            setTimeout(() => location.reload(), 3000);
+          } else {
+            alert('Failed to start FTS5 reindex');
+            btn.disabled = false;
+            btn.textContent = 'Reindex All (FTS5)';
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Reindex All (FTS5)';
+        }
+      }
     </script>
   `
 

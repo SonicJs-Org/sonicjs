@@ -1455,5 +1455,5 @@ function createInstallationIdentity(projectName) {
 }
 
 export { CACHE_CONFIGS, CacheService, Logger, SettingsService, TelemetryService, apiTokens, collections, content, contentVersions, createInstallationIdentity, getCacheService, getLogger, getTelemetryService, initLogger, initTelemetry, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, schema_exports, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory };
-//# sourceMappingURL=chunk-5PH7K7YR.js.map
-//# sourceMappingURL=chunk-5PH7K7YR.js.map
+//# sourceMappingURL=chunk-G44QUVNM.js.map
+//# sourceMappingURL=chunk-G44QUVNM.js.map

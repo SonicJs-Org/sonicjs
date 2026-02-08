@@ -1,5 +1,3 @@
-'use strict';
-
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -1700,6 +1698,13 @@ CREATE INDEX IF NOT EXISTS idx_forms_turnstile ON forms(turnstile_enabled);
     filename: "031_ai_search_plugin.sql",
     description: "Migration 031: Ai Search Plugin",
     sql: "-- AI Search plugin settings\nCREATE TABLE IF NOT EXISTS ai_search_settings (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  enabled BOOLEAN DEFAULT 0,\n  ai_mode_enabled BOOLEAN DEFAULT 1,\n  selected_collections TEXT, -- JSON array of collection IDs to index\n  dismissed_collections TEXT, -- JSON array of collection IDs user chose not to index\n  autocomplete_enabled BOOLEAN DEFAULT 1,\n  cache_duration INTEGER DEFAULT 1, -- hours\n  results_limit INTEGER DEFAULT 20,\n  index_media BOOLEAN DEFAULT 0,\n  index_status TEXT, -- JSON object with status per collection\n  last_indexed_at INTEGER,\n  created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),\n  updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)\n);\n\n-- Search history/analytics\nCREATE TABLE IF NOT EXISTS ai_search_history (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  query TEXT NOT NULL,\n  mode TEXT, -- 'ai' or 'keyword'\n  results_count INTEGER,\n  user_id INTEGER,\n  created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)\n);\n\n-- Index metadata tracking (per collection)\nCREATE TABLE IF NOT EXISTS ai_search_index_meta (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  collection_id INTEGER NOT NULL,\n  collection_name TEXT NOT NULL, -- Cache collection name for display\n  total_items INTEGER DEFAULT 0,\n  indexed_items INTEGER DEFAULT 0,\n  last_sync_at INTEGER,\n  status TEXT DEFAULT 'pending', -- 'pending', 'indexing', 'completed', 'error'\n  error_message TEXT,\n  UNIQUE(collection_id)\n);\n\n-- Indexes for performance\nCREATE INDEX IF NOT EXISTS idx_ai_search_history_created_at ON ai_search_history(created_at);\nCREATE INDEX IF NOT EXISTS idx_ai_search_history_mode ON ai_search_history(mode);\nCREATE INDEX IF NOT EXISTS idx_ai_search_index_meta_collection_id ON ai_search_index_meta(collection_id);\nCREATE INDEX IF NOT EXISTS idx_ai_search_index_meta_status ON ai_search_index_meta(status);\n"
+  },
+  {
+    id: "033",
+    name: "Fts5 Fulltext Search",
+    filename: "033_fts5_fulltext_search.sql",
+    description: "Migration 033: Fts5 Fulltext Search",
+    sql: "-- Migration 033: FTS5 Full-Text Search for AI Search Plugin\n--\n-- Creates FTS5 virtual table for content full-text search with:\n-- - Porter stemming (running/runs/ran -> run)\n-- - Unicode support with diacritics/accent folding (cafe matches cafe)\n-- - BM25 ranking with field boosting (title > slug > body)\n--\n-- Tokenizer: porter wraps unicode61 (porter MUST come first as it's a wrapper)\n-- - porter: Applies Porter stemming algorithm to output of underlying tokenizer\n-- - unicode61: Unicode-aware tokenization with ASCII folding\n-- - remove_diacritics 2: Remove diacritics from ALL Unicode characters (level 2 = broadest)\n--\n-- Column order: Indexed columns first for cleaner bm25() weights\n\nCREATE VIRTUAL TABLE IF NOT EXISTS content_fts USING fts5(\n  title,                   -- column 0: Indexed (weight 5x at query time)\n  slug,                    -- column 1: Indexed (weight 2x at query time)\n  body,                    -- column 2: Main content extracted from JSON (weight 1x)\n  content_id UNINDEXED,    -- column 3: Original content ID for JOINs\n  collection_id UNINDEXED, -- column 4: Collection ID for filtering\n  tokenize='porter unicode61 remove_diacritics 2'\n);\n\n-- Sync tracking table for indexing status\nCREATE TABLE IF NOT EXISTS content_fts_sync (\n  content_id TEXT PRIMARY KEY,\n  collection_id TEXT NOT NULL,\n  indexed_at INTEGER NOT NULL,\n  status TEXT DEFAULT 'indexed'\n);\n\nCREATE INDEX IF NOT EXISTS idx_content_fts_sync_collection\n  ON content_fts_sync(collection_id);\n\nCREATE INDEX IF NOT EXISTS idx_content_fts_sync_status\n  ON content_fts_sync(status);\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2107,6 +2112,6 @@ var MigrationService = class {
   }
 };
 
-exports.MigrationService = MigrationService;
-//# sourceMappingURL=chunk-2YRNPIU4.cjs.map
-//# sourceMappingURL=chunk-2YRNPIU4.cjs.map
+export { MigrationService };
+//# sourceMappingURL=chunk-YCVNOFTB.js.map
+//# sourceMappingURL=chunk-YCVNOFTB.js.map

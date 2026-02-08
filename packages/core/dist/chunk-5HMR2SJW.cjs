@@ -1,3 +1,5 @@
+'use strict';
+
 // src/utils/sanitize.ts
 function escapeHtml(text) {
   if (typeof text !== "string") {
@@ -419,7 +421,7 @@ function buildQuery(table, filter) {
 // package.json
 var package_default = {
   name: "@sonicjs-cms/core",
-  version: "2.7.0",
+  version: "2.8.0",
   description: "Core framework for SonicJS headless CMS - Edge-first, TypeScript-native CMS built for Cloudflare Workers",
   type: "module",
   main: "./dist/index.cjs",
@@ -601,6 +603,19 @@ function parseBlocksValue(value, config) {
   return { value: normalized, errors };
 }
 
-export { QueryFilterBuilder, SONICJS_VERSION, TemplateRenderer, buildQuery, escapeHtml, generateSlug, getBlocksFieldConfig, getCoreVersion, package_default, parseBlocksValue, renderTemplate, sanitizeInput, sanitizeObject, templateRenderer };
-//# sourceMappingURL=chunk-PSRPBW3W.js.map
-//# sourceMappingURL=chunk-PSRPBW3W.js.map
+exports.QueryFilterBuilder = QueryFilterBuilder;
+exports.SONICJS_VERSION = SONICJS_VERSION;
+exports.TemplateRenderer = TemplateRenderer;
+exports.buildQuery = buildQuery;
+exports.escapeHtml = escapeHtml;
+exports.generateSlug = generateSlug;
+exports.getBlocksFieldConfig = getBlocksFieldConfig;
+exports.getCoreVersion = getCoreVersion;
+exports.package_default = package_default;
+exports.parseBlocksValue = parseBlocksValue;
+exports.renderTemplate = renderTemplate;
+exports.sanitizeInput = sanitizeInput;
+exports.sanitizeObject = sanitizeObject;
+exports.templateRenderer = templateRenderer;
+//# sourceMappingURL=chunk-5HMR2SJW.cjs.map
+//# sourceMappingURL=chunk-5HMR2SJW.cjs.map

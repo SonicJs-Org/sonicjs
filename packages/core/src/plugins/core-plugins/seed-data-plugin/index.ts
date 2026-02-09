@@ -7,7 +7,7 @@ export function createSeedDataPlugin(): Plugin {
   const builder = PluginBuilder.create({
     name: 'seed-data',
     version: '1.0.0-beta.1',
-    description: 'Generate realistic example users and content for testing and development'
+    description: 'Generate realistic users, content, forms, and submissions for testing and development'
   })
 
   builder.metadata({

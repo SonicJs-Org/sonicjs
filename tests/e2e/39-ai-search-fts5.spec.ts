@@ -341,7 +341,7 @@ test.describe('AI Search - FTS5 Full-Text Search', () => {
       expect(pageContent).toContain('fts5')
 
       // Should show mode options including fts5
-      expect(pageContent).toContain('"ai", "fts5", or "keyword"')
+      expect(pageContent).toContain('"ai", "fts5", "hybrid", or "keyword"')
 
       // Should show FTS5-specific response fields
       expect(pageContent).toContain('bm25_score')

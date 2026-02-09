@@ -16,6 +16,9 @@ export interface AISearchSettings {
   last_indexed_at?: number
   created_at?: number
   updated_at?: number
+  // Phase 2: Hybrid search settings
+  query_rewriting_enabled?: boolean // Off by default, adds ~100-300ms latency
+  reranking_enabled?: boolean // On by default, adds ~50-150ms latency
 }
 
 export interface IndexStatus {
@@ -30,7 +33,7 @@ export interface IndexStatus {
 
 export interface SearchQuery {
   query: string
-  mode: 'ai' | 'keyword' | 'fts5'
+  mode: 'ai' | 'keyword' | 'fts5' | 'hybrid'
   filters?: SearchFilters
   limit?: number
   offset?: number
@@ -68,20 +71,23 @@ export interface SearchResult {
     body?: string   // Body snippet with <mark> tags around matches
   }
   bm25_score?: number // Raw BM25 score (positive, higher = better match)
+  // Phase 2: Hybrid search fields
+  rrf_score?: number // Reciprocal Rank Fusion score (internal sorting)
+  rerank_score?: number // Cross-encoder reranking score
 }
 
 export interface SearchResponse {
   results: SearchResult[]
   total: number
   query_time_ms: number
-  mode: 'ai' | 'keyword' | 'fts5'
+  mode: 'ai' | 'keyword' | 'fts5' | 'hybrid'
   suggestions?: string[] // Autocomplete suggestions
 }
 
 export interface SearchHistory {
   id: number
   query: string
-  mode: 'ai' | 'keyword' | 'fts5'
+  mode: 'ai' | 'keyword' | 'fts5' | 'hybrid'
   results_count: number
   user_id?: number
   created_at: number

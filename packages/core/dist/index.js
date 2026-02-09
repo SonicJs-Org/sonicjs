@@ -1,11 +1,11 @@
-import { FTS5Service, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-DHY6LY7C.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-DHY6LY7C.js';
+import { FTS5Service, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-VFHOHBGQ.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-VFHOHBGQ.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-SZGG34YX.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-SZGG34YX.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-3B57MJFC.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-3B57MJFC.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-YCVNOFTB.js';
+export { MigrationService } from './chunk-F22IHQ5A.js';
 export { renderFilterBar } from './chunk-H7AMQWVI.js';
 import { init_admin_layout_catalyst_template, renderAdminLayout, renderAdminLayoutCatalyst } from './chunk-VCH6HXVP.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-VCH6HXVP.js';
@@ -2581,6 +2581,172 @@ ${c.text}`)
   }
 };
 
+// src/plugins/core-plugins/ai-search-plugin/services/hybrid-search.service.ts
+var HybridSearchService = class {
+  constructor(fts5Service, customRAG) {
+    this.fts5Service = fts5Service;
+    this.customRAG = customRAG;
+  }
+  /**
+   * Run FTS5 + AI searches in parallel, merge with RRF
+   * Uses Promise.allSettled for partial failure tolerance
+   */
+  async search(query, settings) {
+    const startTime = Date.now();
+    const searches = [
+      this.fts5Service.search(query, settings)
+    ];
+    if (this.customRAG?.isAvailable()) {
+      searches.push(this.customRAG.search(query, settings));
+    }
+    const settled = await Promise.allSettled(searches);
+    const fulfilled = [];
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        fulfilled.push(result.value);
+      } else {
+        console.error("[HybridSearch] One search leg failed:", result.reason);
+      }
+    }
+    if (fulfilled.length === 0) {
+      return {
+        results: [],
+        total: 0,
+        query_time_ms: Date.now() - startTime,
+        mode: "hybrid"
+      };
+    }
+    return this.mergeWithRRF(fulfilled, query, settings, startTime);
+  }
+  /**
+   * Reciprocal Rank Fusion (Cormack et al. 2009)
+   * score(d) = Σ 1/(k + rank(d))  where k=60
+   */
+  mergeWithRRF(responses, query, settings, startTime) {
+    const K = 60;
+    const scoreMap = /* @__PURE__ */ new Map();
+    for (const response of responses) {
+      response.results.forEach((result, rank) => {
+        const id = result.id;
+        const rrfContribution = 1 / (K + rank + 1);
+        if (scoreMap.has(id)) {
+          const existing = scoreMap.get(id);
+          existing.rrfScore += rrfContribution;
+          if (result.highlights) existing.result.highlights = result.highlights;
+          if (result.bm25_score) existing.result.bm25_score = result.bm25_score;
+          if (result.relevance_score) existing.result.relevance_score = result.relevance_score;
+        } else {
+          scoreMap.set(id, {
+            result: { ...result },
+            rrfScore: rrfContribution
+          });
+        }
+      });
+    }
+    const limit = query.limit || settings.results_limit || 20;
+    const merged = Array.from(scoreMap.values()).sort((a, b) => b.rrfScore - a.rrfScore).slice(0, limit).map(({ result, rrfScore }) => ({
+      ...result,
+      rrf_score: rrfScore
+    }));
+    return {
+      mode: "hybrid",
+      results: merged,
+      total: scoreMap.size,
+      query_time_ms: Date.now() - startTime
+    };
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/query-rewriter.service.ts
+var REWRITE_SYSTEM_PROMPT = `You are a search query optimizer. Given a user's search query, rewrite it to improve search results by:
+- Adding relevant synonyms or related terms
+- Expanding abbreviations
+- Keeping the core intent intact
+
+Rules:
+- Return ONLY the rewritten query, nothing else
+- Keep it concise (under 100 characters)
+- Do not add explanations or formatting
+- Do not wrap in quotes
+- If the query is already precise, return it unchanged`;
+var QueryRewriterService = class {
+  constructor(ai) {
+    this.ai = ai;
+  }
+  /**
+   * Rewrite a query using LLM expansion
+   * Returns original query on any failure
+   */
+  async rewrite(originalQuery) {
+    try {
+      const response = await this.ai.run(
+        "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+        {
+          messages: [
+            { role: "system", content: REWRITE_SYSTEM_PROMPT },
+            { role: "user", content: originalQuery }
+          ],
+          max_tokens: 100
+        }
+      );
+      const rewritten = response.response?.trim();
+      if (!rewritten) return originalQuery;
+      if (rewritten.length > originalQuery.length * 3) return originalQuery;
+      if (rewritten.length > 200) return originalQuery;
+      if (rewritten.includes("\n")) return originalQuery;
+      return rewritten;
+    } catch (error) {
+      console.error("[QueryRewriter] LLM call failed, using original query:", error);
+      return originalQuery;
+    }
+  }
+  /**
+   * Check if a query should be rewritten
+   * Short/precise queries don't benefit from rewriting
+   */
+  static shouldRewrite(query) {
+    return query.length >= 15;
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/reranker.service.ts
+var RerankerService = class {
+  constructor(ai) {
+    this.ai = ai;
+  }
+  /**
+   * Rerank results using cross-encoder scoring
+   * Returns results sorted by reranker score with rerank_score field added
+   */
+  async rerank(query, results, topK) {
+    if (results.length <= 1) return results;
+    const limit = topK || results.length;
+    try {
+      const contexts = results.map((r) => ({
+        text: `${r.title}. ${r.snippet || ""}`
+      }));
+      const response = await this.ai.run("@cf/baai/bge-reranker-base", {
+        query,
+        contexts,
+        top_k: limit
+      });
+      const scores = Array.isArray(response) ? response : response.response;
+      if (!Array.isArray(scores) || scores.length === 0) {
+        console.warn("[Reranker] Unexpected response format, returning original order");
+        return results.slice(0, limit);
+      }
+      const reranked = scores.filter((s) => s.id >= 0 && s.id < results.length).map((s) => {
+        const result = results[s.id];
+        return { ...result, rerank_score: s.score };
+      });
+      return reranked.slice(0, limit);
+    } catch (error) {
+      console.error("[Reranker] Cross-encoder failed, returning original order:", error);
+      return results.slice(0, limit);
+    }
+  }
+};
+
 // src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts
 var AISearchService = class {
   constructor(db, ai, vectorize) {
@@ -2595,9 +2761,19 @@ var AISearchService = class {
     }
     this.fts5Service = new FTS5Service(db);
     console.log("[AISearchService] FTS5 service initialized");
+    this.hybridService = new HybridSearchService(this.fts5Service, this.customRAG);
+    console.log("[AISearchService] Hybrid search service initialized");
+    if (this.ai) {
+      this.queryRewriter = new QueryRewriterService(this.ai);
+      this.reranker = new RerankerService(this.ai);
+      console.log("[AISearchService] Query rewriter and reranker initialized");
+    }
   }
   customRAG;
   fts5Service;
+  hybridService;
+  queryRewriter;
+  reranker;
   /**
    * Get plugin settings
    */
@@ -2625,7 +2801,9 @@ var AISearchService = class {
       autocomplete_enabled: true,
       cache_duration: 1,
       results_limit: 20,
-      index_media: false
+      index_media: false,
+      query_rewriting_enabled: false,
+      reranking_enabled: true
     };
   }
   /**
@@ -2785,6 +2963,9 @@ var AISearchService = class {
         mode: query.mode
       };
     }
+    if (query.mode === "hybrid") {
+      return this.searchHybrid(query, settings);
+    }
     if (query.mode === "fts5") {
       return this.searchFTS5(query, settings);
     }
@@ -2811,6 +2992,46 @@ var AISearchService = class {
       return result;
     } catch (error) {
       console.error("[AISearchService] FTS5 search error, falling back to keyword:", error);
+      return this.searchKeyword(query, settings);
+    }
+  }
+  /**
+   * Hybrid search: FTS5 + AI combined with RRF, optional query rewriting + reranking
+   */
+  async searchHybrid(query, settings) {
+    const startTime = Date.now();
+    try {
+      if (!this.hybridService || !this.fts5Service) {
+        console.warn("[AISearchService] Hybrid service not available, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      if (!await this.fts5Service.isAvailable()) {
+        console.warn("[AISearchService] FTS5 not available for hybrid, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      let searchQuery = query;
+      const rewritingEnabled = settings.query_rewriting_enabled ?? false;
+      if (rewritingEnabled && this.queryRewriter && QueryRewriterService.shouldRewrite(query.query)) {
+        const rewritten = await this.queryRewriter.rewrite(query.query);
+        if (rewritten !== query.query) {
+          console.log(`[AISearchService] Query rewritten: "${query.query}" \u2192 "${rewritten}"`);
+          searchQuery = { ...query, query: rewritten };
+        }
+      }
+      let result = await this.hybridService.search(searchQuery, settings);
+      const rerankingEnabled = settings.reranking_enabled ?? true;
+      if (rerankingEnabled && this.reranker && result.results.length > 1) {
+        const limit = query.limit || settings.results_limit || 20;
+        result = {
+          ...result,
+          results: await this.reranker.rerank(query.query, result.results, limit),
+          query_time_ms: Date.now() - startTime
+        };
+      }
+      await this.logSearch(query.query, "hybrid", result.results.length);
+      return result;
+    } catch (error) {
+      console.error("[AISearchService] Hybrid search error, falling back to keyword:", error);
       return this.searchKeyword(query, settings);
     }
   }
@@ -3049,6 +3270,7 @@ var AISearchService = class {
       const aiCount = modeResults?.find((r) => r.mode === "ai")?.count || 0;
       const keywordCount = modeResults?.find((r) => r.mode === "keyword")?.count || 0;
       const fts5Count = modeResults?.find((r) => r.mode === "fts5")?.count || 0;
+      const hybridCount = modeResults?.find((r) => r.mode === "hybrid")?.count || 0;
       const popularStmt = this.db.prepare(`
         SELECT query, COUNT(*) as count
         FROM ai_search_history
@@ -3063,6 +3285,7 @@ var AISearchService = class {
         ai_queries: aiCount,
         keyword_queries: keywordCount,
         fts5_queries: fts5Count,
+        hybrid_queries: hybridCount,
         popular_queries: (popularResults || []).map((r) => ({
           query: r.query,
           count: r.count
@@ -3077,6 +3300,7 @@ var AISearchService = class {
         ai_queries: 0,
         keyword_queries: 0,
         fts5_queries: 0,
+        hybrid_queries: 0,
         popular_queries: [],
         average_query_time: 0
       };
@@ -3580,6 +3804,36 @@ function renderSettingsPage(data) {
 
               <hr class="border-zinc-200 dark:border-zinc-800">
 
+              <!-- Hybrid Search Settings -->
+              <div>
+                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Hybrid Search</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                  Hybrid mode combines FTS5 + AI search with Reciprocal Rank Fusion for best-quality results. Use <code>mode: "hybrid"</code> in your API requests.
+                </p>
+                <div class="space-y-3">
+                  <div class="flex items-center gap-3 p-4 border border-purple-200 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <input type="checkbox" id="reranking_enabled" name="reranking_enabled" ${settings.reranking_enabled !== false ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
+                    <div class="flex-1">
+                      <label for="reranking_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">AI Reranking</label>
+                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                        Cross-encoder reranks results for better relevance. Adds ~50-150ms. Cost: ~$0.003/M tokens.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3 p-4 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                    <input type="checkbox" id="query_rewriting_enabled" name="query_rewriting_enabled" ${settings.query_rewriting_enabled ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
+                    <div class="flex-1">
+                      <label for="query_rewriting_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">Query Rewriting (LLM)</label>
+                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                        Expands vague queries using an LLM for better recall. Adds ~100-300ms. Best for large content libraries.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <hr class="border-zinc-200 dark:border-zinc-800">
+
               <!-- FTS5 Full-Text Search Section -->
               <div>
                 <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">FTS5 Full-Text Search</h2>
@@ -3624,7 +3878,7 @@ function renderSettingsPage(data) {
           <!-- Search Analytics -->
           <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
             <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">\u{1F4CA} Search Analytics</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
             <div class="text-sm text-zinc-500 dark:text-zinc-400">Total Queries</div>
             <div class="text-2xl font-bold text-zinc-950 dark:text-white mt-1">${data.analytics.total_queries}</div>
@@ -3640,6 +3894,10 @@ function renderSettingsPage(data) {
           <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
             <div class="text-sm text-zinc-500 dark:text-zinc-400">FTS5 Queries</div>
             <div class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">${data.analytics.fts5_queries || 0}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">Hybrid Queries</div>
+            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">${data.analytics.hybrid_queries || 0}</div>
           </div>
         </div>
         ${data.analytics.popular_queries.length > 0 ? `
@@ -3689,6 +3947,8 @@ function renderSettingsPage(data) {
             cache_duration: Number(formData.get('cache_duration')),
             results_limit: Number(formData.get('results_limit')),
             index_media: document.getElementById('index_media').checked,
+            reranking_enabled: document.getElementById('reranking_enabled').checked,
+            query_rewriting_enabled: document.getElementById('query_rewriting_enabled').checked,
           };
           
           console.log('[AI Search Client] Sending data:', data);
@@ -4925,7 +5185,7 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <h3>Search Request</h3>
               <pre><code>{
   "query": "cloudflare workers",
-  "mode": "ai",           // "ai", "fts5", or "keyword"
+  "mode": "ai",           // "ai", "fts5", "hybrid", or "keyword"
   "filters": {
     "collections": ["blog_posts"],
     "status": "published"
@@ -4962,6 +5222,11 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <h2>⚡ Performance Tips</h2>
               
               <div class="grid">
+                <div class="card">
+                  <h4>Hybrid Mode</h4>
+                  <p>FTS5 + AI + Reranking combined</p>
+                  <p><code>mode: "hybrid"</code> ~150-500ms</p>
+                </div>
                 <div class="card">
                   <h4>FTS5 Full-Text Mode</h4>
                   <p>BM25 ranked, stemming, highlights</p>
@@ -5296,6 +5561,9 @@ testPageRoutes.get("/test", async (c) => {
               <input type="radio" name="mode" value="fts5"> FTS5 Full-Text
             </label>
             <label>
+              <input type="radio" name="mode" value="hybrid"> Hybrid (FTS5 + AI)
+            </label>
+            <label>
               <input type="radio" name="mode" value="keyword"> Keyword Mode
             </label>
           </div>
@@ -5452,8 +5720,9 @@ testPageRoutes.get("/test", async (c) => {
             var title = result.highlights && result.highlights.title ? result.highlights.title : (result.title || 'Untitled');
             var snippet = (result.highlights && result.highlights.body) || result.snippet || result.excerpt || '';
             var collection = result.collection_name || result.collection || 'N/A';
-            var score = result.bm25_score || result.relevance_score || result.score;
+            var score = result.rerank_score || result.rrf_score || result.bm25_score || result.relevance_score || result.score;
             var scoreStr = score ? score.toFixed(3) : 'N/A';
+            var scoreLabel = result.rerank_score ? 'Rerank' : result.rrf_score ? 'RRF' : result.bm25_score ? 'BM25' : 'Score';
 
             var titleHtml = title;
             if (result.id) {
@@ -5464,7 +5733,7 @@ testPageRoutes.get("/test", async (c) => {
             return '<div class="result-item">' +
               '<div class="result-title">' + titleHtml + '</div>' +
               '<div class="result-excerpt">' + snippet + '</div>' +
-              '<div class="result-meta">Collection: ' + collection + ' | Score: ' + scoreStr + '</div>' +
+              '<div class="result-meta">Collection: ' + collection + ' | ' + scoreLabel + ': ' + scoreStr + '</div>' +
               '</div>';
           }
 

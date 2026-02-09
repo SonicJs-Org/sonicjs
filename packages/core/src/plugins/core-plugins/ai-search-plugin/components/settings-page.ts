@@ -16,6 +16,7 @@ interface SettingsPageData {
     ai_queries: number
     keyword_queries: number
     fts5_queries: number
+    hybrid_queries: number
     popular_queries: Array<{ query: string; count: number }>
     average_query_time: number
   }
@@ -237,6 +238,36 @@ export function renderSettingsPage(data: SettingsPageData): string {
 
               <hr class="border-zinc-200 dark:border-zinc-800">
 
+              <!-- Hybrid Search Settings -->
+              <div>
+                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Hybrid Search</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                  Hybrid mode combines FTS5 + AI search with Reciprocal Rank Fusion for best-quality results. Use <code>mode: "hybrid"</code> in your API requests.
+                </p>
+                <div class="space-y-3">
+                  <div class="flex items-center gap-3 p-4 border border-purple-200 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <input type="checkbox" id="reranking_enabled" name="reranking_enabled" ${settings.reranking_enabled !== false ? 'checked' : ''} class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
+                    <div class="flex-1">
+                      <label for="reranking_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">AI Reranking</label>
+                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                        Cross-encoder reranks results for better relevance. Adds ~50-150ms. Cost: ~$0.003/M tokens.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3 p-4 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                    <input type="checkbox" id="query_rewriting_enabled" name="query_rewriting_enabled" ${settings.query_rewriting_enabled ? 'checked' : ''} class="w-5 h-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
+                    <div class="flex-1">
+                      <label for="query_rewriting_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">Query Rewriting (LLM)</label>
+                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                        Expands vague queries using an LLM for better recall. Adds ~100-300ms. Best for large content libraries.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <hr class="border-zinc-200 dark:border-zinc-800">
+
               <!-- FTS5 Full-Text Search Section -->
               <div>
                 <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">FTS5 Full-Text Search</h2>
@@ -281,7 +312,7 @@ export function renderSettingsPage(data: SettingsPageData): string {
           <!-- Search Analytics -->
           <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
             <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">📊 Search Analytics</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
             <div class="text-sm text-zinc-500 dark:text-zinc-400">Total Queries</div>
             <div class="text-2xl font-bold text-zinc-950 dark:text-white mt-1">${data.analytics.total_queries}</div>
@@ -297,6 +328,10 @@ export function renderSettingsPage(data: SettingsPageData): string {
           <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
             <div class="text-sm text-zinc-500 dark:text-zinc-400">FTS5 Queries</div>
             <div class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">${data.analytics.fts5_queries || 0}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">Hybrid Queries</div>
+            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">${data.analytics.hybrid_queries || 0}</div>
           </div>
         </div>
         ${data.analytics.popular_queries.length > 0
@@ -348,6 +383,8 @@ export function renderSettingsPage(data: SettingsPageData): string {
             cache_duration: Number(formData.get('cache_duration')),
             results_limit: Number(formData.get('results_limit')),
             index_media: document.getElementById('index_media').checked,
+            reranking_enabled: document.getElementById('reranking_enabled').checked,
+            query_rewriting_enabled: document.getElementById('query_rewriting_enabled').checked,
           };
           
           console.log('[AI Search Client] Sending data:', data);

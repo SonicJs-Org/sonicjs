@@ -9,6 +9,9 @@ import type {
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
 import { FTS5Service } from './fts5.service'
+import { HybridSearchService } from './hybrid-search.service'
+import { QueryRewriterService } from './query-rewriter.service'
+import { RerankerService } from './reranker.service'
 
 /**
  * AI Search Service
@@ -18,6 +21,9 @@ import { FTS5Service } from './fts5.service'
 export class AISearchService {
   private customRAG?: CustomRAGService
   private fts5Service?: FTS5Service
+  private hybridService?: HybridSearchService
+  private queryRewriter?: QueryRewriterService
+  private reranker?: RerankerService
 
   constructor(
     private db: D1Database,
@@ -35,6 +41,17 @@ export class AISearchService {
     // Initialize FTS5 service (always available, degrades gracefully if table doesn't exist)
     this.fts5Service = new FTS5Service(db)
     console.log('[AISearchService] FTS5 service initialized')
+
+    // Initialize hybrid search (FTS5 always, AI when available)
+    this.hybridService = new HybridSearchService(this.fts5Service, this.customRAG)
+    console.log('[AISearchService] Hybrid search service initialized')
+
+    // Initialize AI-dependent services
+    if (this.ai) {
+      this.queryRewriter = new QueryRewriterService(this.ai)
+      this.reranker = new RerankerService(this.ai)
+      console.log('[AISearchService] Query rewriter and reranker initialized')
+    }
   }
 
   /**
@@ -71,6 +88,8 @@ export class AISearchService {
       cache_duration: 1,
       results_limit: 20,
       index_media: false,
+      query_rewriting_enabled: false,
+      reranking_enabled: true,
     }
   }
 
@@ -289,6 +308,11 @@ export class AISearchService {
       }
     }
 
+    // Hybrid mode - FTS5 + AI combined with RRF, optional rewriting + reranking
+    if (query.mode === 'hybrid') {
+      return this.searchHybrid(query, settings)
+    }
+
     // FTS5 mode - full-text search with BM25 ranking and highlighting
     if (query.mode === 'fts5') {
       return this.searchFTS5(query, settings)
@@ -329,6 +353,68 @@ export class AISearchService {
       return result
     } catch (error) {
       console.error('[AISearchService] FTS5 search error, falling back to keyword:', error)
+      return this.searchKeyword(query, settings)
+    }
+  }
+
+  /**
+   * Hybrid search: FTS5 + AI combined with RRF, optional query rewriting + reranking
+   */
+  private async searchHybrid(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
+    const startTime = Date.now()
+
+    try {
+      if (!this.hybridService || !this.fts5Service) {
+        console.warn('[AISearchService] Hybrid service not available, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      // Check if FTS5 table is available (required for hybrid)
+      if (!(await this.fts5Service.isAvailable())) {
+        console.warn('[AISearchService] FTS5 not available for hybrid, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      let searchQuery = query
+
+      // Step 1: Query Rewriting (if enabled + AI available + query >= 15 chars)
+      const rewritingEnabled = settings.query_rewriting_enabled ?? false
+      if (
+        rewritingEnabled &&
+        this.queryRewriter &&
+        QueryRewriterService.shouldRewrite(query.query)
+      ) {
+        const rewritten = await this.queryRewriter.rewrite(query.query)
+        if (rewritten !== query.query) {
+          console.log(`[AISearchService] Query rewritten: "${query.query}" → "${rewritten}"`)
+          searchQuery = { ...query, query: rewritten }
+        }
+      }
+
+      // Step 2: Hybrid Search via RRF (FTS5 + AI in parallel)
+      let result = await this.hybridService.search(searchQuery, settings)
+
+      // Step 3: AI Reranking (if enabled + AI available + results > 1)
+      const rerankingEnabled = settings.reranking_enabled ?? true
+      if (
+        rerankingEnabled &&
+        this.reranker &&
+        result.results.length > 1
+      ) {
+        const limit = query.limit || settings.results_limit || 20
+        result = {
+          ...result,
+          results: await this.reranker.rerank(query.query, result.results, limit),
+          query_time_ms: Date.now() - startTime
+        }
+      }
+
+      // Log search to history
+      await this.logSearch(query.query, 'hybrid', result.results.length)
+
+      return result
+    } catch (error) {
+      console.error('[AISearchService] Hybrid search error, falling back to keyword:', error)
       return this.searchKeyword(query, settings)
     }
   }
@@ -606,7 +692,7 @@ export class AISearchService {
   /**
    * Log search query to history
    */
-  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5', resultsCount: number): Promise<void> {
+  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number): Promise<void> {
     try {
       const stmt = this.db.prepare(`
         INSERT INTO ai_search_history (query, mode, results_count, created_at)
@@ -626,6 +712,7 @@ export class AISearchService {
     ai_queries: number
     keyword_queries: number
     fts5_queries: number
+    hybrid_queries: number
     popular_queries: Array<{ query: string; count: number }>
     average_query_time: number
   }> {
@@ -654,6 +741,7 @@ export class AISearchService {
       const aiCount = modeResults?.find((r) => r.mode === 'ai')?.count || 0
       const keywordCount = modeResults?.find((r) => r.mode === 'keyword')?.count || 0
       const fts5Count = modeResults?.find((r) => r.mode === 'fts5')?.count || 0
+      const hybridCount = modeResults?.find((r) => r.mode === 'hybrid')?.count || 0
 
       // Popular queries
       const popularStmt = this.db.prepare(`
@@ -674,6 +762,7 @@ export class AISearchService {
         ai_queries: aiCount,
         keyword_queries: keywordCount,
         fts5_queries: fts5Count,
+        hybrid_queries: hybridCount,
         popular_queries: (popularResults || []).map((r) => ({
           query: r.query,
           count: r.count,
@@ -687,6 +776,7 @@ export class AISearchService {
         ai_queries: 0,
         keyword_queries: 0,
         fts5_queries: 0,
+        hybrid_queries: 0,
         popular_queries: [],
         average_query_time: 0,
       }

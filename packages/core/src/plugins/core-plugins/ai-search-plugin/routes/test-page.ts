@@ -245,6 +245,9 @@ testPageRoutes.get('/test', async (c) => {
               <input type="radio" name="mode" value="fts5"> FTS5 Full-Text
             </label>
             <label>
+              <input type="radio" name="mode" value="hybrid"> Hybrid (FTS5 + AI)
+            </label>
+            <label>
               <input type="radio" name="mode" value="keyword"> Keyword Mode
             </label>
           </div>
@@ -401,8 +404,9 @@ testPageRoutes.get('/test', async (c) => {
             var title = result.highlights && result.highlights.title ? result.highlights.title : (result.title || 'Untitled');
             var snippet = (result.highlights && result.highlights.body) || result.snippet || result.excerpt || '';
             var collection = result.collection_name || result.collection || 'N/A';
-            var score = result.bm25_score || result.relevance_score || result.score;
+            var score = result.rerank_score || result.rrf_score || result.bm25_score || result.relevance_score || result.score;
             var scoreStr = score ? score.toFixed(3) : 'N/A';
+            var scoreLabel = result.rerank_score ? 'Rerank' : result.rrf_score ? 'RRF' : result.bm25_score ? 'BM25' : 'Score';
 
             var titleHtml = title;
             if (result.id) {
@@ -413,7 +417,7 @@ testPageRoutes.get('/test', async (c) => {
             return '<div class="result-item">' +
               '<div class="result-title">' + titleHtml + '</div>' +
               '<div class="result-excerpt">' + snippet + '</div>' +
-              '<div class="result-meta">Collection: ' + collection + ' | Score: ' + scoreStr + '</div>' +
+              '<div class="result-meta">Collection: ' + collection + ' | ' + scoreLabel + ': ' + scoreStr + '</div>' +
               '</div>';
           }
 

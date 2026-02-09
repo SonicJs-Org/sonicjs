@@ -750,7 +750,7 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <h3>Search Request</h3>
               <pre><code>{
   "query": "cloudflare workers",
-  "mode": "ai",           // "ai", "fts5", or "keyword"
+  "mode": "ai",           // "ai", "fts5", "hybrid", or "keyword"
   "filters": {
     "collections": ["blog_posts"],
     "status": "published"
@@ -787,6 +787,11 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <h2>⚡ Performance Tips</h2>
               
               <div class="grid">
+                <div class="card">
+                  <h4>Hybrid Mode</h4>
+                  <p>FTS5 + AI + Reranking combined</p>
+                  <p><code>mode: "hybrid"</code> ~150-500ms</p>
+                </div>
                 <div class="card">
                   <h4>FTS5 Full-Text Mode</h4>
                   <p>BM25 ranked, stemming, highlights</p>

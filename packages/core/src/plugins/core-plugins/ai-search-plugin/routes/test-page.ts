@@ -393,30 +393,48 @@ testPageRoutes.get('/test', async (c) => {
                 throw new Error(data.message || 'Search failed');
               }
             } catch (error) {
-              errorDiv.innerHTML = \`<div class="error">Error: \${error.message}</div>\`;
+              errorDiv.innerHTML = '<div class="error">Error: ' + escapeHtml(error.message) + '</div>';
               resultsDiv.innerHTML = '';
             } finally {
               searchBtn.disabled = false;
             }
           }
 
+          function escapeHtml(str) {
+            if (!str) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+          }
+
+          function stripHtml(str) {
+            if (!str) return '';
+            var tmp = document.createElement('div');
+            tmp.innerHTML = str;
+            return tmp.textContent || tmp.innerText || '';
+          }
+
           function renderResultItem(result) {
-            var title = result.highlights && result.highlights.title ? result.highlights.title : (result.title || 'Untitled');
-            var snippet = (result.highlights && result.highlights.body) || result.snippet || result.excerpt || '';
-            var collection = result.collection_name || result.collection || 'N/A';
+            var rawTitle = result.highlights && result.highlights.title ? result.highlights.title : (result.title || 'Untitled');
+            var rawSnippet = (result.highlights && result.highlights.body) || result.snippet || result.excerpt || '';
+            var collection = escapeHtml(result.collection_name || result.collection || 'N/A');
             var score = result.rerank_score || result.rrf_score || result.bm25_score || result.relevance_score || result.score;
             var scoreStr = score ? score.toFixed(3) : 'N/A';
             var scoreLabel = result.rerank_score ? 'Rerank' : result.rrf_score ? 'RRF' : result.bm25_score ? 'BM25' : 'Score';
 
-            var titleHtml = title;
+            // Strip HTML tags then escape to prevent XSS
+            var safeTitle = escapeHtml(stripHtml(rawTitle));
+            var safeSnippet = escapeHtml(stripHtml(rawSnippet));
+
+            var titleHtml = safeTitle;
             if (result.id) {
-              var editUrl = '/admin/content/' + result.id + '/edit';
-              titleHtml = '<a href="' + editUrl + '" target="_blank">' + title + '</a>';
+              var editUrl = '/admin/content/' + encodeURIComponent(result.id) + '/edit';
+              titleHtml = '<a href="' + editUrl + '" target="_blank">' + safeTitle + '</a>';
             }
 
             return '<div class="result-item">' +
               '<div class="result-title">' + titleHtml + '</div>' +
-              '<div class="result-excerpt">' + snippet + '</div>' +
+              '<div class="result-excerpt">' + safeSnippet + '</div>' +
               '<div class="result-meta">Collection: ' + collection + ' | ' + scoreLabel + ': ' + scoreStr + '</div>' +
               '</div>';
           }

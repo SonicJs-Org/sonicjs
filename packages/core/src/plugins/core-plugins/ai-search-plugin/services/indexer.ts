@@ -78,11 +78,11 @@ export class IndexManager {
       ).bind(collectionId).first<{ cnt: number }>()
       const totalItems = countResult?.cnt || 0
 
-      // Check FTS5 indexed count for this collection
+      // Check FTS5 indexed count for this collection via the FTS5 virtual table directly
       let fts5Indexed = 0
       try {
         const fts5Count = await this.db.prepare(
-          'SELECT COUNT(*) as cnt FROM content_fts5 WHERE collection_id = ?'
+          'SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?'
         ).bind(collectionId).first<{ cnt: number }>()
         fts5Indexed = fts5Count?.cnt || 0
       } catch {

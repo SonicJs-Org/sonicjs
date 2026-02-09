@@ -10,6 +10,7 @@ import { getCacheService, CACHE_CONFIGS } from '../services/cache'
 import type { Bindings, Variables } from '../app'
 import { PluginService } from '../services/plugin-service'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
+import { FTS5Service } from '../plugins/core-plugins/ai-search-plugin/services/fts5.service'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -842,7 +843,15 @@ adminContentRoutes.post('/', async (c) => {
       user?.userId || 'unknown',
       now
     ).run()
-    
+
+    // Sync to FTS5 index (non-blocking)
+    const fts5Service = new FTS5Service(db)
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(contentId).catch(err =>
+        console.error('[Content] FTS5 indexing failed:', err)
+      )
+    )
+
     // Handle different actions
     const referrerParams = formData.get('referrer_params') as string
     const redirectUrl = action === 'save_and_continue'
@@ -1017,7 +1026,15 @@ adminContentRoutes.put('/:id', async (c) => {
         now
       ).run()
     }
-    
+
+    // Sync to FTS5 index (non-blocking)
+    const fts5Service = new FTS5Service(db)
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(id).catch(err =>
+        console.error('[Content] FTS5 reindexing failed:', err)
+      )
+    )
+
     // Handle different actions
     const referrerParams = formData.get('referrer_params') as string
     const redirectUrl = action === 'save_and_continue'
@@ -1338,6 +1355,14 @@ adminContentRoutes.delete('/:id', async (c) => {
       WHERE id = ?
     `)
     await deleteStmt.bind(now, id).run()
+
+    // Remove from FTS5 index (non-blocking)
+    const fts5Service = new FTS5Service(db)
+    c.executionCtx.waitUntil(
+      fts5Service.removeFromIndex(id).catch(err =>
+        console.error('[Content] FTS5 removal failed:', err)
+      )
+    )
 
     // Invalidate cache
     const cache = getCacheService(CACHE_CONFIGS.content!)

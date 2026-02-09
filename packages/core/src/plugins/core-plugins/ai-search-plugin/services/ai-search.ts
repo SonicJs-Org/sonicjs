@@ -1,13 +1,17 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type {
   AISearchSettings,
+  CollectionInfo,
+  NewCollectionNotification,
   SearchQuery,
   SearchResponse,
   SearchResult,
-  CollectionInfo,
-  NewCollectionNotification,
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { FTS5Service } from './fts5.service'
+import { HybridSearchService } from './hybrid-search.service'
+import { QueryRewriterService } from './query-rewriter.service'
+import { RerankerService } from './reranker.service'
 
 /**
  * AI Search Service
@@ -16,6 +20,10 @@ import { CustomRAGService } from './custom-rag.service'
  */
 export class AISearchService {
   private customRAG?: CustomRAGService
+  private fts5Service?: FTS5Service
+  private hybridService?: HybridSearchService
+  private queryRewriter?: QueryRewriterService
+  private reranker?: RerankerService
 
   constructor(
     private db: D1Database,
@@ -28,6 +36,21 @@ export class AISearchService {
       console.log('[AISearchService] Custom RAG initialized')
     } else {
       console.log('[AISearchService] Custom RAG not available, using keyword search only')
+    }
+
+    // Initialize FTS5 service (always available, degrades gracefully if table doesn't exist)
+    this.fts5Service = new FTS5Service(db)
+    console.log('[AISearchService] FTS5 service initialized')
+
+    // Initialize hybrid search (FTS5 always, AI when available)
+    this.hybridService = new HybridSearchService(this.fts5Service, this.customRAG)
+    console.log('[AISearchService] Hybrid search service initialized')
+
+    // Initialize AI-dependent services
+    if (this.ai) {
+      this.queryRewriter = new QueryRewriterService(this.ai)
+      this.reranker = new RerankerService(this.ai)
+      console.log('[AISearchService] Query rewriter and reranker initialized')
     }
   }
 
@@ -65,6 +88,8 @@ export class AISearchService {
       cache_duration: 1,
       results_limit: 20,
       index_media: false,
+      query_rewriting_enabled: false,
+      reranking_enabled: true,
     }
   }
 
@@ -113,20 +138,20 @@ export class AISearchService {
         display_name: string
         description?: string
       }>()
-      
-          // Filter out test collections (starts with test_, ends with _test, or is test_collection)
-          const collections = (allCollections || []).filter(
-            (col) => {
-              if (!col.name) return false
-              const name = col.name.toLowerCase()
-              return !name.startsWith('test_') && 
-                     !name.endsWith('_test') && 
-                     name !== 'test_collection' &&
-                     !name.includes('_test_') &&
-                     name !== 'large_payload_test' &&
-                     name !== 'concurrent_test'
-            }
-          )
+
+      // Filter out test collections (starts with test_, ends with _test, or is test_collection)
+      const collections = (allCollections || []).filter(
+        (col) => {
+          if (!col.name) return false
+          const name = col.name.toLowerCase()
+          return !name.startsWith('test_') &&
+            !name.endsWith('_test') &&
+            name !== 'test_collection' &&
+            !name.includes('_test_') &&
+            name !== 'large_payload_test' &&
+            name !== 'concurrent_test'
+        }
+      )
 
       // Get settings
       const settings = await this.getSettings()
@@ -188,7 +213,7 @@ export class AISearchService {
         display_name: string
         description?: string
       }>()
-      
+
       console.log('[AISearchService.getAllCollections] Raw collections from DB:', allCollections?.length || 0)
       const firstCollection = allCollections?.[0]
       if (firstCollection) {
@@ -198,12 +223,12 @@ export class AISearchService {
           display_name: firstCollection.display_name
         })
       }
-      
+
       // No filtering needed - test collections are now properly cleaned up by E2E tests
       const collections = (allCollections || []).filter(
         (col) => col.id && col.name
       )
-      
+
       console.log('[AISearchService.getAllCollections] After filtering test collections:', collections.length)
       console.log('[AISearchService.getAllCollections] Remaining collections:', collections.map(c => c.name).join(', '))
 
@@ -211,7 +236,7 @@ export class AISearchService {
       const settings = await this.getSettings()
       const selected = settings?.selected_collections || []
       const dismissed = settings?.dismissed_collections || []
-      
+
       console.log('[AISearchService.getAllCollections] Settings:', {
         selected_count: selected.length,
         dismissed_count: dismissed.length,
@@ -224,7 +249,7 @@ export class AISearchService {
       for (const collection of collections) {
         if (!collection.id || !collection.name) continue
         const collectionId = String(collection.id)
-        
+
         if (!collectionId) {
           console.warn('[AISearchService] Skipping invalid collection:', collection)
           continue
@@ -248,7 +273,7 @@ export class AISearchService {
           is_new: !selected.includes(collectionId) && !dismissed.includes(collectionId),
         })
       }
-      
+
       console.log('[AISearchService.getAllCollections] Returning collectionInfos:', collectionInfos.length)
       const firstInfo = collectionInfos[0]
       if (collectionInfos.length > 0 && firstInfo) {
@@ -268,6 +293,7 @@ export class AISearchService {
 
   /**
    * Execute search query
+   * Supports three modes: 'ai' (semantic), 'fts5' (full-text), 'keyword' (basic)
    */
   async search(query: SearchQuery): Promise<SearchResponse> {
     const startTime = Date.now()
@@ -282,7 +308,17 @@ export class AISearchService {
       }
     }
 
-    // Use AI Search if enabled and mode is 'ai'
+    // Hybrid mode - FTS5 + AI combined with RRF, optional rewriting + reranking
+    if (query.mode === 'hybrid') {
+      return this.searchHybrid(query, settings)
+    }
+
+    // FTS5 mode - full-text search with BM25 ranking and highlighting
+    if (query.mode === 'fts5') {
+      return this.searchFTS5(query, settings)
+    }
+
+    // AI mode - semantic search using Custom RAG with Vectorize
     if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
       return this.searchAI(query, settings)
     }
@@ -292,11 +328,103 @@ export class AISearchService {
   }
 
   /**
+   * FTS5 full-text search with BM25 ranking, stemming, and highlighting
+   */
+  private async searchFTS5(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
+    const startTime = Date.now()
+
+    try {
+      if (!this.fts5Service) {
+        console.warn('[AISearchService] FTS5 service not initialized, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      // Check if FTS5 table is available
+      if (!(await this.fts5Service.isAvailable())) {
+        console.warn('[AISearchService] FTS5 table not available, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      const result = await this.fts5Service.search(query, settings)
+
+      // Log search to history
+      await this.logSearch(query.query, 'fts5', result.results.length)
+
+      return result
+    } catch (error) {
+      console.error('[AISearchService] FTS5 search error, falling back to keyword:', error)
+      return this.searchKeyword(query, settings)
+    }
+  }
+
+  /**
+   * Hybrid search: FTS5 + AI combined with RRF, optional query rewriting + reranking
+   */
+  private async searchHybrid(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
+    const startTime = Date.now()
+
+    try {
+      if (!this.hybridService || !this.fts5Service) {
+        console.warn('[AISearchService] Hybrid service not available, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      // Check if FTS5 table is available (required for hybrid)
+      if (!(await this.fts5Service.isAvailable())) {
+        console.warn('[AISearchService] FTS5 not available for hybrid, falling back to keyword search')
+        return this.searchKeyword(query, settings)
+      }
+
+      let searchQuery = query
+
+      // Step 1: Query Rewriting (if enabled + AI available + query >= 15 chars)
+      const rewritingEnabled = settings.query_rewriting_enabled ?? false
+      if (
+        rewritingEnabled &&
+        this.queryRewriter &&
+        QueryRewriterService.shouldRewrite(query.query)
+      ) {
+        const rewritten = await this.queryRewriter.rewrite(query.query)
+        if (rewritten !== query.query) {
+          console.log(`[AISearchService] Query rewritten: "${query.query}" → "${rewritten}"`)
+          searchQuery = { ...query, query: rewritten }
+        }
+      }
+
+      // Step 2: Hybrid Search via RRF (FTS5 + AI in parallel)
+      let result = await this.hybridService.search(searchQuery, settings)
+
+      // Step 3: AI Reranking (if enabled + AI available + results > 1)
+      const rerankingEnabled = settings.reranking_enabled ?? true
+      if (
+        rerankingEnabled &&
+        this.reranker &&
+        result.results.length > 1
+      ) {
+        const limit = query.limit || settings.results_limit || 20
+        result = {
+          ...result,
+          results: await this.reranker.rerank(query.query, result.results, limit),
+          query_time_ms: Date.now() - startTime
+        }
+      }
+
+      // Log search to history
+      await this.logSearch(query.query, 'hybrid', result.results.length)
+
+      return result
+    } catch (error) {
+      console.error('[AISearchService] Hybrid search error, falling back to keyword:', error)
+      return this.searchKeyword(query, settings)
+    }
+  }
+
+  /**
    * AI-powered semantic search using Custom RAG
    */
   private async searchAI(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
     const startTime = Date.now()
-    
+
     try {
       if (!this.customRAG) {
         console.warn('[AISearchService] CustomRAG not available, falling back to keyword search')
@@ -456,23 +584,50 @@ export class AISearchService {
 
   /**
    * Extract snippet from content data
+   * Pulls human-readable text from JSON data fields instead of raw JSON
    */
   private extractSnippet(data: string, query: string): string {
     try {
       const parsed = typeof data === 'string' ? JSON.parse(data) : data
-      const text = JSON.stringify(parsed).toLowerCase()
-      const queryLower = query.toLowerCase()
 
-      const index = text.indexOf(queryLower)
-      if (index === -1) {
-        // Return first 200 chars
-        return JSON.stringify(parsed).substring(0, 200) + '...'
+      // Extract readable text from common content fields
+      const textParts: string[] = []
+      const textFields = ['description', 'content', 'body', 'text', 'summary', 'excerpt']
+      for (const field of textFields) {
+        if (parsed[field] && typeof parsed[field] === 'string') {
+          textParts.push(parsed[field])
+        }
       }
 
-      // Extract context around match
-      const start = Math.max(0, index - 50)
-      const end = Math.min(text.length, index + query.length + 50)
-      return text.substring(start, end) + '...'
+      // Fallback: collect all string values
+      if (textParts.length === 0) {
+        for (const value of Object.values(parsed)) {
+          if (typeof value === 'string' && value.length > 20) {
+            textParts.push(value)
+          }
+        }
+      }
+
+      const text = textParts.join(' ').replace(/\s+/g, ' ').trim()
+
+      if (!text) {
+        return 'No preview available'
+      }
+
+      // Try to find query match and show context around it
+      const queryLower = query.toLowerCase()
+      const textLower = text.toLowerCase()
+      const index = textLower.indexOf(queryLower)
+
+      if (index === -1) {
+        return text.substring(0, 200) + (text.length > 200 ? '...' : '')
+      }
+
+      const start = Math.max(0, index - 80)
+      const end = Math.min(text.length, index + query.length + 120)
+      const prefix = start > 0 ? '...' : ''
+      const suffix = end < text.length ? '...' : ''
+      return prefix + text.substring(start, end) + suffix
     } catch {
       return data.substring(0, 200) + '...'
     }
@@ -480,6 +635,7 @@ export class AISearchService {
 
   /**
    * Get search suggestions (autocomplete)
+   * Uses fast keyword prefix matching for instant results (<50ms)
    */
   async getSearchSuggestions(partial: string): Promise<string[]> {
     try {
@@ -488,30 +644,45 @@ export class AISearchService {
         return []
       }
 
-      // If Custom RAG is available, use AI-powered suggestions
-      if (this.customRAG?.isAvailable()) {
-        try {
-          const aiSuggestions = await this.customRAG.getSuggestions(partial, 5)
-          if (aiSuggestions.length > 0) {
-            return aiSuggestions
-          }
-        } catch (error) {
-          console.error('[AISearchService] Error getting AI suggestions:', error)
-          // Fall through to history-based suggestions
+      // Fast keyword prefix matching from indexed content
+      // This provides instant autocomplete (<50ms) without AI overhead
+      try {
+        const stmt = this.db.prepare(`
+          SELECT DISTINCT title 
+          FROM ai_search_index 
+          WHERE title LIKE ? 
+          ORDER BY title 
+          LIMIT 10
+        `)
+        const { results } = await stmt.bind(`%${partial}%`).all<{ title: string }>()
+
+        const suggestions = (results || []).map((r) => r.title).filter(Boolean)
+
+        if (suggestions.length > 0) {
+          return suggestions
         }
+      } catch (indexError) {
+        // Table doesn't exist yet or is empty - that's okay, fall back to history
+        console.log('[AISearchService] Index table not available yet, using search history')
       }
 
-      // Fallback to history-based suggestions
-      const stmt = this.db.prepare(`
-        SELECT DISTINCT query 
-        FROM ai_search_history 
-        WHERE query LIKE ? 
-        ORDER BY created_at DESC 
-        LIMIT 10
-      `)
-      const { results } = await stmt.bind(`%${partial}%`).all<{ query: string }>()
+      // Fallback to search history if no indexed titles match
+      try {
+        const historyStmt = this.db.prepare(`
+          SELECT DISTINCT query 
+          FROM ai_search_history 
+          WHERE query LIKE ? 
+          ORDER BY created_at DESC 
+          LIMIT 10
+        `)
+        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all<{ query: string }>()
 
-      return (results || []).map((r) => r.query)
+        return (historyResults || []).map((r) => r.query)
+      } catch (historyError) {
+        // History table might not exist either - return empty
+        console.log('[AISearchService] No suggestions available (tables not initialized)')
+        return []
+      }
     } catch (error) {
       console.error('Error getting suggestions:', error)
       return []
@@ -521,7 +692,7 @@ export class AISearchService {
   /**
    * Log search query to history
    */
-  private async logSearch(query: string, mode: 'ai' | 'keyword', resultsCount: number): Promise<void> {
+  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number): Promise<void> {
     try {
       const stmt = this.db.prepare(`
         INSERT INTO ai_search_history (query, mode, results_count, created_at)
@@ -540,23 +711,25 @@ export class AISearchService {
     total_queries: number
     ai_queries: number
     keyword_queries: number
+    fts5_queries: number
+    hybrid_queries: number
     popular_queries: Array<{ query: string; count: number }>
     average_query_time: number
   }> {
     try {
       // Total queries (last 30 days)
       const totalStmt = this.db.prepare(`
-        SELECT COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
       `)
       const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
       const totalResult = await totalStmt.bind(thirtyDaysAgo).first<{ count: number }>()
 
-      // AI vs Keyword breakdown
+      // AI vs Keyword vs FTS5 breakdown
       const modeStmt = this.db.prepare(`
-        SELECT mode, COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT mode, COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
         GROUP BY mode
       `)
@@ -567,14 +740,16 @@ export class AISearchService {
 
       const aiCount = modeResults?.find((r) => r.mode === 'ai')?.count || 0
       const keywordCount = modeResults?.find((r) => r.mode === 'keyword')?.count || 0
+      const fts5Count = modeResults?.find((r) => r.mode === 'fts5')?.count || 0
+      const hybridCount = modeResults?.find((r) => r.mode === 'hybrid')?.count || 0
 
       // Popular queries
       const popularStmt = this.db.prepare(`
-        SELECT query, COUNT(*) as count 
-        FROM ai_search_history 
+        SELECT query, COUNT(*) as count
+        FROM ai_search_history
         WHERE created_at >= ?
-        GROUP BY query 
-        ORDER BY count DESC 
+        GROUP BY query
+        ORDER BY count DESC
         LIMIT 10
       `)
       const { results: popularResults } = await popularStmt.bind(thirtyDaysAgo).all<{
@@ -586,6 +761,8 @@ export class AISearchService {
         total_queries: totalResult?.count || 0,
         ai_queries: aiCount,
         keyword_queries: keywordCount,
+        fts5_queries: fts5Count,
+        hybrid_queries: hybridCount,
         popular_queries: (popularResults || []).map((r) => ({
           query: r.query,
           count: r.count,
@@ -598,6 +775,8 @@ export class AISearchService {
         total_queries: 0,
         ai_queries: 0,
         keyword_queries: 0,
+        fts5_queries: 0,
+        hybrid_queries: 0,
         popular_queries: [],
         average_query_time: 0,
       }
@@ -616,5 +795,12 @@ export class AISearchService {
    */
   getCustomRAG(): CustomRAGService | undefined {
     return this.customRAG
+  }
+
+  /**
+   * Get FTS5 service instance (for content sync and admin operations)
+   */
+  getFTS5Service(): FTS5Service | undefined {
+    return this.fts5Service
   }
 }

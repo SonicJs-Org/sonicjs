@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { requireAuth } from '../middleware'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import type { Bindings, Variables } from '../app'
+import { FTS5Service } from '../plugins/core-plugins/ai-search-plugin/services/fts5.service'
 
 const apiContentCrudRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -146,6 +147,14 @@ apiContentCrudRoutes.post('/', requireAuth(), async (c) => {
     await cache.invalidate(`content:list:${collectionId}:*`)
     await cache.invalidate('content-filtered:*')
 
+    // Sync to FTS5 index (non-blocking)
+    const fts5Service = new FTS5Service(db)
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(contentId).catch(err =>
+        console.error('[API Content] FTS5 indexing failed:', err)
+      )
+    )
+
     // Get the created content
     const getStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const createdContent = await getStmt.bind(contentId).first() as any
@@ -237,6 +246,14 @@ apiContentCrudRoutes.put('/:id', requireAuth(), async (c) => {
     await cache.invalidate(`content:list:${existing.collection_id}:*`)
     await cache.invalidate('content-filtered:*')
 
+    // Sync to FTS5 index (non-blocking)
+    const fts5Service = new FTS5Service(db)
+    c.executionCtx.waitUntil(
+      fts5Service.indexContent(id).catch(err =>
+        console.error('[API Content] FTS5 reindexing failed:', err)
+      )
+    )
+
     // Get updated content
     const getStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const updatedContent = await getStmt.bind(id).first() as any
@@ -285,6 +302,14 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), async (c) => {
     await cache.delete(cache.generateKey('content', id))
     await cache.invalidate(`content:list:${existing.collection_id}:*`)
     await cache.invalidate('content-filtered:*')
+
+    // Remove from FTS5 index (non-blocking)
+    const fts5Service = new FTS5Service(db)
+    c.executionCtx.waitUntil(
+      fts5Service.removeFromIndex(id).catch(err =>
+        console.error('[API Content] FTS5 removal failed:', err)
+      )
+    )
 
     return c.json({ success: true })
   } catch (error) {

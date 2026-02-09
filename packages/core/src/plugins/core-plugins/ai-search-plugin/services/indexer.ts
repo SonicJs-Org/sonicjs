@@ -69,17 +69,34 @@ export class IndexManager {
         return finalStatus
       }
 
-      // Fallback: No indexing without Custom RAG
-      console.warn(`[IndexManager] Custom RAG not available, skipping indexing for ${collectionId}`)
-      
+      // Fallback: No Vectorize — count content items for accurate status display
+      console.warn(`[IndexManager] Custom RAG not available, skipping vector indexing for ${collectionId}`)
+
+      // Count actual content items in this collection
+      const countResult = await this.db.prepare(
+        'SELECT COUNT(*) as cnt FROM content WHERE collection_id = ?'
+      ).bind(collectionId).first<{ cnt: number }>()
+      const totalItems = countResult?.cnt || 0
+
+      // Check FTS5 indexed count for this collection
+      let fts5Indexed = 0
+      try {
+        const fts5Count = await this.db.prepare(
+          'SELECT COUNT(*) as cnt FROM content_fts5 WHERE collection_id = ?'
+        ).bind(collectionId).first<{ cnt: number }>()
+        fts5Indexed = fts5Count?.cnt || 0
+      } catch {
+        // FTS5 table may not exist yet
+      }
+
       const fallbackStatus: IndexStatus = {
         collection_id: collectionId,
         collection_name: collection.display_name,
-        total_items: 0,
-        indexed_items: 0,
+        total_items: totalItems,
+        indexed_items: fts5Indexed,
         last_sync_at: Date.now(),
         status: 'completed',
-        error_message: 'Custom RAG not available - using keyword search only'
+        error_message: fts5Indexed > 0 ? undefined : 'Using FTS5/keyword search (Vectorize not available)'
       }
 
       await this.updateIndexStatus(collectionId, fallbackStatus)

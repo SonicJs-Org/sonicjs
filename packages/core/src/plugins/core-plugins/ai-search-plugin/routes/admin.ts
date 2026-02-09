@@ -117,6 +117,8 @@ adminRoutes.post('/', async (c) => {
       cache_duration: body.cache_duration ? Number(body.cache_duration) : currentSettings?.cache_duration,
       results_limit: body.results_limit ? Number(body.results_limit) : currentSettings?.results_limit,
       index_media: body.index_media !== undefined ? Boolean(body.index_media) : currentSettings?.index_media,
+      reranking_enabled: body.reranking_enabled !== undefined ? Boolean(body.reranking_enabled) : currentSettings?.reranking_enabled,
+      query_rewriting_enabled: body.query_rewriting_enabled !== undefined ? Boolean(body.query_rewriting_enabled) : currentSettings?.query_rewriting_enabled,
     }
 
     console.log('[AI Search POST] Updated settings selected_collections:', updatedSettings.selected_collections)

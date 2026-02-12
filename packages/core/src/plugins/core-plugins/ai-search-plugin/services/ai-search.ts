@@ -11,6 +11,8 @@ import { CustomRAGService } from './custom-rag.service'
 import { FTS5Service } from './fts5.service'
 import { HybridSearchService } from './hybrid-search.service'
 import { QueryRewriterService } from './query-rewriter.service'
+import { RankingPipelineService } from './ranking-pipeline.service'
+import { SynonymService } from './synonym.service'
 import { RerankerService } from './reranker.service'
 
 /**
@@ -24,6 +26,8 @@ export class AISearchService {
   private hybridService?: HybridSearchService
   private queryRewriter?: QueryRewriterService
   private reranker?: RerankerService
+  private rankingPipeline: RankingPipelineService
+  private synonymService: SynonymService
 
   constructor(
     private db: D1Database,
@@ -52,6 +56,15 @@ export class AISearchService {
       this.reranker = new RerankerService(this.ai)
       console.log('[AISearchService] Query rewriter and reranker initialized')
     }
+
+    // Synonym service (always available, degrades gracefully if table doesn't exist)
+    this.synonymService = new SynonymService(db)
+    if (this.fts5Service) {
+      this.fts5Service.setSynonymService(this.synonymService)
+    }
+
+    // Ranking pipeline (always available, zero cost when no stages active)
+    this.rankingPipeline = new RankingPipelineService(db)
   }
 
   /**
@@ -90,6 +103,9 @@ export class AISearchService {
       index_media: false,
       query_rewriting_enabled: false,
       reranking_enabled: true,
+      fts5_title_boost: 5.0,
+      fts5_slug_boost: 2.0,
+      fts5_body_boost: 1.0,
     }
   }
 
@@ -308,23 +324,34 @@ export class AISearchService {
       }
     }
 
+    let result: SearchResponse
+
     // Hybrid mode - FTS5 + AI combined with RRF, optional rewriting + reranking
     if (query.mode === 'hybrid') {
-      return this.searchHybrid(query, settings)
+      result = await this.searchHybrid(query, settings)
     }
-
     // FTS5 mode - full-text search with BM25 ranking and highlighting
-    if (query.mode === 'fts5') {
-      return this.searchFTS5(query, settings)
+    else if (query.mode === 'fts5') {
+      result = await this.searchFTS5(query, settings)
     }
-
     // AI mode - semantic search using Custom RAG with Vectorize
-    if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
-      return this.searchAI(query, settings)
+    else if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+      result = await this.searchAI(query, settings)
+    }
+    // Fallback to keyword search
+    else {
+      result = await this.searchKeyword(query, settings)
     }
 
-    // Fallback to keyword search
-    return this.searchKeyword(query, settings)
+    // Apply ranking pipeline (post-processing: re-scores and re-sorts)
+    // Zero-cost when no stages are enabled
+    try {
+      result = await this.rankingPipeline.apply(result, query.query)
+    } catch (error) {
+      console.warn('[AISearchService] Ranking pipeline error (preserving original order):', error)
+    }
+
+    return result
   }
 
   /**
@@ -345,10 +372,15 @@ export class AISearchService {
         return this.searchKeyword(query, settings)
       }
 
-      const result = await this.fts5Service.search(query, settings)
+      const result = await this.fts5Service.search(query, settings, {
+        titleBoost: settings.fts5_title_boost,
+        slugBoost: settings.fts5_slug_boost,
+        bodyBoost: settings.fts5_body_boost,
+      })
 
       // Log search to history
-      await this.logSearch(query.query, 'fts5', result.results.length)
+      const elapsed = Date.now() - startTime
+      await this.logSearch(query.query, 'fts5', result.results.length, elapsed)
 
       return result
     } catch (error) {
@@ -391,26 +423,17 @@ export class AISearchService {
         }
       }
 
-      // Step 2: Hybrid Search via RRF (FTS5 + AI in parallel)
+      // Step 2: Hybrid Search (FTS5 + AI in parallel, semantic-first ranking)
       let result = await this.hybridService.search(searchQuery, settings)
 
-      // Step 3: AI Reranking (if enabled + AI available + results > 1)
-      const rerankingEnabled = settings.reranking_enabled ?? true
-      if (
-        rerankingEnabled &&
-        this.reranker &&
-        result.results.length > 1
-      ) {
-        const limit = query.limit || settings.results_limit || 20
-        result = {
-          ...result,
-          results: await this.reranker.rerank(query.query, result.results, limit),
-          query_time_ms: Date.now() - startTime
-        }
-      }
+      // Note: AI reranking is intentionally SKIPPED for hybrid mode.
+      // Hybrid already ranks by Vectorize semantic scores (bi-encoder cosine similarity),
+      // which outperforms the bge-reranker-base cross-encoder. Applying the reranker
+      // here degrades nDCG and MRR (confirmed via BEIR benchmark evaluation).
 
       // Log search to history
-      await this.logSearch(query.query, 'hybrid', result.results.length)
+      const elapsed = Date.now() - startTime
+      await this.logSearch(query.query, 'hybrid', result.results.length, elapsed)
 
       return result
     } catch (error) {
@@ -433,6 +456,10 @@ export class AISearchService {
 
       // Use Custom RAG for semantic search - pass the full query object and settings
       const result = await this.customRAG.search(query, settings)
+
+      // Log search to history
+      const elapsed = Date.now() - startTime
+      await this.logSearch(query.query, 'ai', result.results.length, elapsed)
 
       return result
     } catch (error) {
@@ -547,23 +574,31 @@ export class AISearchService {
         data: string
       }>()
 
-      const searchResults: SearchResult[] = (results || []).map((row) => ({
-        id: String(row.id),
-        title: row.title || 'Untitled',
-        slug: row.slug || '',
-        collection_id: String(row.collection_id),
-        collection_name: row.collection_display_name || row.collection_name,
-        snippet: this.extractSnippet(row.data, query.query),
-        status: row.status,
-        created_at: Number(row.created_at),
-        updated_at: Number(row.updated_at),
-        author_name: row.author_email,
-      }))
+      const searchResults: SearchResult[] = (results || []).map((row) => {
+        const snippet = this.extractSnippet(row.data, query.query)
+        const titleHighlight = this.highlightText(row.title || 'Untitled', query.query)
+        return {
+          id: String(row.id),
+          title: row.title || 'Untitled',
+          slug: row.slug || '',
+          collection_id: String(row.collection_id),
+          collection_name: row.collection_display_name || row.collection_name,
+          snippet,
+          highlights: {
+            title: titleHighlight,
+            body: snippet
+          },
+          status: row.status,
+          created_at: Number(row.created_at),
+          updated_at: Number(row.updated_at),
+          author_name: row.author_email,
+        }
+      })
 
       const queryTime = Date.now() - startTime
 
       // Log search history
-      await this.logSearch(query.query, query.mode, searchResults.length)
+      await this.logSearch(query.query, query.mode, searchResults.length, queryTime)
 
       return {
         results: searchResults,
@@ -614,7 +649,7 @@ export class AISearchService {
         return 'No preview available'
       }
 
-      // Try to find query match and show context around it
+      // Try to find query match and show context around it with highlighting
       const queryLower = query.toLowerCase()
       const textLower = text.toLowerCase()
       const index = textLower.indexOf(queryLower)
@@ -627,9 +662,31 @@ export class AISearchService {
       const end = Math.min(text.length, index + query.length + 120)
       const prefix = start > 0 ? '...' : ''
       const suffix = end < text.length ? '...' : ''
-      return prefix + text.substring(start, end) + suffix
+      const excerpt = text.substring(start, end)
+
+      // Add <mark> highlighting around all query matches in the excerpt
+      return prefix + this.highlightText(excerpt, query) + suffix
     } catch {
       return data.substring(0, 200) + '...'
+    }
+  }
+
+  /**
+   * Highlight query terms in text with <mark> tags
+   * Case-insensitive, highlights all occurrences
+   */
+  private highlightText(text: string, query: string): string {
+    if (!text || !query) return text
+    try {
+      // Split query into words and escape for regex
+      const words = query.trim().split(/\s+/).filter(w => w.length > 1)
+      if (words.length === 0) return text
+
+      const escaped = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      const pattern = new RegExp(`(${escaped.join('|')})`, 'gi')
+      return text.replace(pattern, '<mark>$1</mark>')
+    } catch {
+      return text
     }
   }
 
@@ -692,13 +749,13 @@ export class AISearchService {
   /**
    * Log search query to history
    */
-  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number): Promise<void> {
+  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number, responseTimeMs?: number): Promise<void> {
     try {
       const stmt = this.db.prepare(`
-        INSERT INTO ai_search_history (query, mode, results_count, created_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at)
+        VALUES (?, ?, ?, ?, ?)
       `)
-      await stmt.bind(query, mode, resultsCount, Date.now()).run()
+      await stmt.bind(query, mode, resultsCount, responseTimeMs ?? null, Date.now()).run()
     } catch (error) {
       console.error('Error logging search:', error)
     }
@@ -784,6 +841,134 @@ export class AISearchService {
   }
 
   /**
+   * Get extended analytics for the Analytics tab
+   */
+  async getAnalyticsExtended(): Promise<{
+    total_queries: number
+    queries_today: number
+    ai_queries: number
+    keyword_queries: number
+    fts5_queries: number
+    hybrid_queries: number
+    avg_results_per_query: number
+    zero_result_rate: number
+    avg_response_time_ms: number
+    popular_queries: Array<{ query: string; count: number }>
+    zero_result_queries: Array<{ query: string; count: number }>
+    recent_queries: Array<{ query: string; mode: string; results_count: number; response_time_ms: number | null; created_at: number }>
+    daily_counts: Array<{ date: string; count: number }>
+  }> {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayStartMs = todayStart.getTime()
+
+    try {
+      // Run all queries in parallel
+      const [
+        totalResult,
+        todayResult,
+        modeResults,
+        avgResults,
+        zeroCountResult,
+        avgTimeResult,
+        popularResults,
+        zeroResultResults,
+        recentResults,
+        dailyResults,
+      ] = await Promise.all([
+        // Total queries (30 days)
+        this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?')
+          .bind(thirtyDaysAgo).first<{ count: number }>(),
+
+        // Queries today
+        this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?')
+          .bind(todayStartMs).first<{ count: number }>(),
+
+        // Mode breakdown
+        this.db.prepare('SELECT mode, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? GROUP BY mode')
+          .bind(thirtyDaysAgo).all<{ mode: string; count: number }>(),
+
+        // Average results per query
+        this.db.prepare('SELECT AVG(results_count) as avg_results FROM ai_search_history WHERE created_at >= ?')
+          .bind(thirtyDaysAgo).first<{ avg_results: number | null }>(),
+
+        // Zero result count
+        this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ? AND results_count = 0')
+          .bind(thirtyDaysAgo).first<{ count: number }>(),
+
+        // Average response time
+        this.db.prepare('SELECT AVG(response_time_ms) as avg_time FROM ai_search_history WHERE created_at >= ? AND response_time_ms IS NOT NULL')
+          .bind(thirtyDaysAgo).first<{ avg_time: number | null }>(),
+
+        // Popular queries (top 15)
+        this.db.prepare('SELECT query, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? GROUP BY query ORDER BY count DESC LIMIT 15')
+          .bind(thirtyDaysAgo).all<{ query: string; count: number }>(),
+
+        // Zero-result queries (top 20)
+        this.db.prepare('SELECT query, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? AND results_count = 0 GROUP BY query ORDER BY count DESC LIMIT 20')
+          .bind(thirtyDaysAgo).all<{ query: string; count: number }>(),
+
+        // Recent queries (last 25)
+        this.db.prepare('SELECT query, mode, results_count, response_time_ms, created_at FROM ai_search_history ORDER BY created_at DESC LIMIT 25')
+          .all<{ query: string; mode: string; results_count: number; response_time_ms: number | null; created_at: number }>(),
+
+        // Daily counts for last 30 days
+        this.db.prepare(`
+          SELECT date(created_at / 1000, 'unixepoch') as date, COUNT(*) as count
+          FROM ai_search_history
+          WHERE created_at >= ?
+          GROUP BY date(created_at / 1000, 'unixepoch')
+          ORDER BY date ASC
+        `).bind(thirtyDaysAgo).all<{ date: string; count: number }>(),
+      ])
+
+      const totalQueries = totalResult?.count || 0
+      const zeroCount = zeroCountResult?.count || 0
+      const modes = modeResults?.results || []
+
+      return {
+        total_queries: totalQueries,
+        queries_today: todayResult?.count || 0,
+        ai_queries: modes.find(r => r.mode === 'ai')?.count || 0,
+        keyword_queries: modes.find(r => r.mode === 'keyword')?.count || 0,
+        fts5_queries: modes.find(r => r.mode === 'fts5')?.count || 0,
+        hybrid_queries: modes.find(r => r.mode === 'hybrid')?.count || 0,
+        avg_results_per_query: Math.round((avgResults?.avg_results ?? 0) * 10) / 10,
+        zero_result_rate: totalQueries > 0 ? Math.round((zeroCount / totalQueries) * 1000) / 10 : 0,
+        avg_response_time_ms: Math.round(avgTimeResult?.avg_time ?? 0),
+        popular_queries: (popularResults?.results || []).map(r => ({ query: r.query, count: r.count })),
+        zero_result_queries: (zeroResultResults?.results || []).map(r => ({ query: r.query, count: r.count })),
+        recent_queries: (recentResults?.results || []).map(r => ({
+          query: r.query,
+          mode: r.mode,
+          results_count: r.results_count,
+          response_time_ms: r.response_time_ms,
+          created_at: r.created_at,
+        })),
+        daily_counts: (dailyResults?.results || []).map(r => ({ date: r.date, count: r.count })),
+      }
+    } catch (error) {
+      console.error('Error getting extended analytics:', error)
+      return {
+        total_queries: 0,
+        queries_today: 0,
+        ai_queries: 0,
+        keyword_queries: 0,
+        fts5_queries: 0,
+        hybrid_queries: 0,
+        avg_results_per_query: 0,
+        zero_result_rate: 0,
+        avg_response_time_ms: 0,
+        popular_queries: [],
+        zero_result_queries: [],
+        recent_queries: [],
+        daily_counts: [],
+      }
+    }
+  }
+
+  /**
    * Verify Custom RAG is available
    */
   verifyBinding(): boolean {
@@ -802,5 +987,19 @@ export class AISearchService {
    */
   getFTS5Service(): FTS5Service | undefined {
     return this.fts5Service
+  }
+
+  /**
+   * Get ranking pipeline service instance (for admin routes)
+   */
+  getRankingPipeline(): RankingPipelineService {
+    return this.rankingPipeline
+  }
+
+  /**
+   * Get synonym service instance (for admin routes)
+   */
+  getSynonymService(): SynonymService {
+    return this.synonymService
   }
 }

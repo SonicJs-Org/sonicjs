@@ -855,6 +855,11 @@ export default function SearchPage() {
                   <p><strong>POST</strong> <code>/api/instantsearch</code></p>
                   <p>Algolia-compatible multi-search endpoint</p>
                 </div>
+                <div class="card">
+                  <h4>Click Tracking</h4>
+                  <p><strong>POST</strong> <code>/api/search/click</code></p>
+                  <p>Record result clicks for CTR analytics</p>
+                </div>
               </div>
 
               <h3>Search Request</h3>
@@ -873,6 +878,7 @@ export default function SearchPage() {
               <pre><code>{
   "success": true,
   "data": {
+    "search_id": "a1b2c3d4-...",  // Use for click tracking
     "results": [{
       "id": "123",
       "title": "Getting Started",
@@ -890,6 +896,17 @@ export default function SearchPage() {
     "mode": "ai"
   }
 }</code></pre>
+
+              <h3>Click Tracking</h3>
+              <p>Record when users click search results. This powers CTR analytics in the admin dashboard.</p>
+              <pre><code>// Fire-and-forget when user clicks a result
+navigator.sendBeacon('/api/search/click', JSON.stringify({
+  search_id: searchResponse.data.search_id,  // from search response
+  content_id: result.id,                      // clicked result ID
+  content_title: result.title,                // for analytics display
+  click_position: index + 1                   // 1-based position in results
+}));</code></pre>
+              <p><small>Click tracking is optional but recommended. Uses <code>sendBeacon</code> for reliability during navigation.</small></p>
             </div>
 
             <!-- Performance Tips Section -->
@@ -951,6 +968,7 @@ app.use('/api/*', cors({
                 <li>Added loading states</li>
                 <li>Styled to match your design</li>
                 <li>Added error handling</li>
+                <li>Added click tracking (optional)</li>
                 <li>Tested on mobile</li>
               </ul>
             </div>

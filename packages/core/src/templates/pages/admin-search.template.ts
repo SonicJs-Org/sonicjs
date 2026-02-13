@@ -882,7 +882,7 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
         <div class="space-y-6">
 
           <!-- Stat Cards -->
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
               <div class="p-5">
                 <p class="text-sm text-zinc-600 dark:text-zinc-400">Total Queries (30d)</p>
@@ -907,6 +907,18 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
                 <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-today">&mdash;</p>
               </div>
             </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Click-Through Rate (30d)</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-ctr">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Avg Click Position</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-avg-pos">&mdash;</p>
+              </div>
+            </div>
           </div>
 
           <!-- Charts Row: two-column -->
@@ -925,6 +937,14 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
               <div style="height: 260px; position: relative;" class="flex items-center justify-center">
                 <canvas id="ana-mode-chart"></canvas>
               </div>
+            </div>
+          </div>
+
+          <!-- CTR Over Time Chart -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Click-Through Rate Over Time</h3>
+            <div style="height: 260px; position: relative;">
+              <canvas id="ana-ctr-chart"></canvas>
             </div>
           </div>
 
@@ -966,6 +986,52 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
                   </thead>
                   <tbody id="ana-zero-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
                     <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Click Analytics Tables -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Most Clicked Content -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Most Clicked Content</h3>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Top content by click count (30 days)</p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Content</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-clicked-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Searches With No Clicks -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Searches With No Clicks</h3>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Queries that returned results but users didn't click</p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Searches</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Avg Results</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-noclick-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="3" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -2407,6 +2473,7 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
       var analyticsLoaded = false;
       var dailyChart = null;
       var modeChart = null;
+      var ctrChart = null;
 
       // Load analytics when tab is switched to (or on page load if hash is #analytics)
       var origSwitchTab = switchTab;
@@ -2446,6 +2513,19 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
 
           // Recent queries table
           renderRecentTable(d.recent_queries);
+
+          // Click analytics
+          document.getElementById('ana-ctr').textContent = d.total_clicks_30d > 0 ? d.ctr_30d + '%' : 'No data';
+          document.getElementById('ana-avg-pos').textContent = d.avg_click_position_30d > 0 ? d.avg_click_position_30d.toFixed(1) : 'No data';
+
+          // CTR over time chart
+          renderCtrChart(d.ctr_over_time);
+
+          // Most clicked content table
+          renderClickedTable(d.most_clicked_content);
+
+          // No-click searches table
+          renderNoClickTable(d.no_click_searches);
 
         } catch (e) {
           console.error('Analytics load error:', e);
@@ -2637,6 +2717,125 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
             '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + q.results_count + '</td>' +
             '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + timeStr + '</td>' +
             '<td class="px-6 py-3 text-sm text-zinc-500 dark:text-zinc-400 text-right whitespace-nowrap">' + ago + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
+      function renderCtrChart(ctrData) {
+        var canvas = document.getElementById('ana-ctr-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        if (!ctrData || ctrData.length === 0) {
+          canvas.parentElement.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center" style="padding-top:100px">No click data yet</p>';
+          return;
+        }
+
+        // Fill in missing days with 0
+        var labels = [];
+        var data = [];
+        var ctrMap = {};
+        for (var i = 0; i < ctrData.length; i++) {
+          ctrMap[ctrData[i].date] = ctrData[i].ctr;
+        }
+        var now = new Date();
+        for (var d = 29; d >= 0; d--) {
+          var dt = new Date(now);
+          dt.setDate(dt.getDate() - d);
+          var key = dt.toISOString().split('T')[0];
+          labels.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+          data.push(ctrMap[key] || 0);
+        }
+
+        var isDark = document.documentElement.classList.contains('dark');
+        var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+        var textColor = isDark ? '#a1a1aa' : '#71717a';
+
+        if (ctrChart) ctrChart.destroy();
+        ctrChart = new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'CTR %',
+              data: data,
+              borderColor: '#10b981',
+              backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.3,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              pointHoverBackgroundColor: '#10b981'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#27272a' : '#fff',
+                titleColor: isDark ? '#e4e4e7' : '#18181b',
+                bodyColor: isDark ? '#a1a1aa' : '#52525b',
+                borderColor: isDark ? '#3f3f46' : '#e4e4e7',
+                borderWidth: 1,
+                callbacks: {
+                  label: function(ctx) { return 'CTR: ' + ctx.parsed.y.toFixed(1) + '%'; }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: gridColor },
+                ticks: { color: textColor, maxTicksLimit: 8, font: { size: 11 } }
+              },
+              y: {
+                beginAtZero: true,
+                grid: { color: gridColor },
+                ticks: { color: textColor, font: { size: 11 }, callback: function(v) { return v + '%'; } }
+              }
+            }
+          }
+        });
+      }
+
+      function renderClickedTable(items) {
+        var tbody = document.getElementById('ana-clicked-tbody');
+        if (!tbody) return;
+
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="2" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">No click data yet</td></tr>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100 max-w-xs truncate">' + escapeAnalyticsHtml(item.content_title) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + item.click_count + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
+      function renderNoClickTable(items) {
+        var tbody = document.getElementById('ana-noclick-tbody');
+        if (!tbody) return;
+
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">No data yet — all searches got clicks!</td></tr>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100 max-w-xs truncate">' + escapeAnalyticsHtml(item.query) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + item.search_count + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + item.results_count_avg + '</td>' +
             '</tr>';
         }
         tbody.innerHTML = html;

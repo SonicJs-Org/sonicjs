@@ -88,6 +88,7 @@ export interface SearchResponse {
   total: number
   query_time_ms: number
   mode: 'ai' | 'keyword' | 'fts5' | 'hybrid'
+  search_id?: string // ID linking to ai_search_history row for click tracking
   suggestions?: string[] // Autocomplete suggestions
 }
 

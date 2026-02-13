@@ -220,27 +220,45 @@ export function renderSearchModal(data: SearchModalData): string {
         }
       });
 
+      // Click tracking state
+      var currentSearchId = null;
+      var currentResults = [];
+
+      function trackClick(contentId, contentTitle, position) {
+        if (!currentSearchId) return;
+        fetch('/api/search/click', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            search_id: currentSearchId,
+            content_id: contentId,
+            content_title: contentTitle,
+            click_position: position
+          })
+        }).catch(function() {});
+      }
+
       // Form submission
       document.getElementById('advancedSearchForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const formData = new FormData(e.target);
         const query = formData.get('query');
         const mode = formData.get('mode') || 'ai';
-        
+
         // Build filters
         const filters = {};
-        
+
         const collections = Array.from(formData.getAll('collections')).filter(c => c !== '');
         if (collections.length > 0) {
           filters.collections = collections.map(Number);
         }
-        
+
         const status = Array.from(formData.getAll('status'));
         if (status.length > 0) {
           filters.status = status;
         }
-        
+
         const dateStart = formData.get('date_start');
         const dateEnd = formData.get('date_end');
         if (dateStart || dateEnd) {
@@ -265,8 +283,10 @@ export function renderSearchModal(data: SearchModalData): string {
           });
 
           const { data } = await res.json();
-          
+
           if (data && data.results) {
+            currentSearchId = data.search_id || null;
+            currentResults = data.results;
             displaySearchResults(data);
           }
         } catch (error) {
@@ -278,16 +298,16 @@ export function renderSearchModal(data: SearchModalData): string {
       function displaySearchResults(searchData) {
         const resultsDiv = document.getElementById('searchResultsContent');
         const resultsSection = document.getElementById('searchResults');
-        
+
         if (searchData.results.length === 0) {
           resultsDiv.innerHTML = '<p class="text-sm text-zinc-500 dark:text-zinc-400">No results found.</p>';
         } else {
-          resultsDiv.innerHTML = searchData.results.map(result => \`
+          resultsDiv.innerHTML = searchData.results.map((result, idx) => \`
             <div class="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800">
               <div class="flex items-start justify-between">
                 <div class="flex-1">
                   <h4 class="text-sm font-semibold text-zinc-950 dark:text-white mb-1">
-                    <a href="/admin/content/edit?id=\${result.id}" class="hover:text-indigo-600 dark:hover:text-indigo-400">\${result.title || 'Untitled'}</a>
+                    <a href="/admin/content/edit?id=\${result.id}" onclick="trackClick('\${result.id}', '\${(result.title || '').replace(/'/g, "\\\\'")}', \${idx + 1})" class="hover:text-indigo-600 dark:hover:text-indigo-400">\${result.title || 'Untitled'}</a>
                   </h4>
                   <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
                     \${result.collection_name} • \${new Date(result.created_at).toLocaleDateString()}
@@ -302,7 +322,7 @@ export function renderSearchModal(data: SearchModalData): string {
             </div>
           \`).join('');
         }
-        
+
         resultsSection.classList.remove('hidden');
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
@@ -310,6 +330,7 @@ export function renderSearchModal(data: SearchModalData): string {
       // Make functions globally available
       window.openAdvancedSearch = openAdvancedSearch;
       window.closeAdvancedSearch = closeAdvancedSearch;
+      window.trackClick = trackClick;
     </script>
   `
   

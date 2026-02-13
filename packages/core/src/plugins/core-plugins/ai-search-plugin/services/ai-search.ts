@@ -380,7 +380,8 @@ export class AISearchService {
 
       // Log search to history
       const elapsed = Date.now() - startTime
-      await this.logSearch(query.query, 'fts5', result.results.length, elapsed)
+      const searchId = await this.logSearch(query.query, 'fts5', result.results.length, elapsed)
+      result.search_id = searchId
 
       return result
     } catch (error) {
@@ -433,7 +434,8 @@ export class AISearchService {
 
       // Log search to history
       const elapsed = Date.now() - startTime
-      await this.logSearch(query.query, 'hybrid', result.results.length, elapsed)
+      const searchId = await this.logSearch(query.query, 'hybrid', result.results.length, elapsed)
+      result.search_id = searchId
 
       return result
     } catch (error) {
@@ -459,7 +461,8 @@ export class AISearchService {
 
       // Log search to history
       const elapsed = Date.now() - startTime
-      await this.logSearch(query.query, 'ai', result.results.length, elapsed)
+      const searchId = await this.logSearch(query.query, 'ai', result.results.length, elapsed)
+      result.search_id = searchId
 
       return result
     } catch (error) {
@@ -598,13 +601,14 @@ export class AISearchService {
       const queryTime = Date.now() - startTime
 
       // Log search history
-      await this.logSearch(query.query, query.mode, searchResults.length, queryTime)
+      const searchId = await this.logSearch(query.query, query.mode, searchResults.length, queryTime)
 
       return {
         results: searchResults,
         total,
         query_time_ms: queryTime,
         mode: query.mode,
+        search_id: searchId,
       }
     } catch (error) {
       console.error('Keyword search error:', error)
@@ -747,17 +751,20 @@ export class AISearchService {
   }
 
   /**
-   * Log search query to history
+   * Log search query to history, returns the generated search_id
    */
-  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number, responseTimeMs?: number): Promise<void> {
+  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number, responseTimeMs?: number): Promise<string | undefined> {
     try {
-      const stmt = this.db.prepare(`
+      const result = await this.db.prepare(`
         INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at)
         VALUES (?, ?, ?, ?, ?)
-      `)
-      await stmt.bind(query, mode, resultsCount, responseTimeMs ?? null, Date.now()).run()
+      `).bind(query, mode, resultsCount, responseTimeMs ?? null, Date.now()).run()
+      // D1 returns the auto-incremented rowid via meta.last_row_id
+      const rowId = result?.meta?.last_row_id
+      return rowId ? String(rowId) : undefined
     } catch (error) {
       console.error('Error logging search:', error)
+      return undefined
     }
   }
 
@@ -857,6 +864,13 @@ export class AISearchService {
     zero_result_queries: Array<{ query: string; count: number }>
     recent_queries: Array<{ query: string; mode: string; results_count: number; response_time_ms: number | null; created_at: number }>
     daily_counts: Array<{ date: string; count: number }>
+    // Click analytics
+    total_clicks_30d: number
+    ctr_30d: number
+    avg_click_position_30d: number
+    ctr_over_time: Array<{ date: string; searches: number; clicks: number; ctr: number }>
+    most_clicked_content: Array<{ content_id: string; content_title: string; click_count: number }>
+    no_click_searches: Array<{ query: string; search_count: number; results_count_avg: number }>
   }> {
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
     const todayStart = new Date()
@@ -876,6 +890,12 @@ export class AISearchService {
         zeroResultResults,
         recentResults,
         dailyResults,
+        // Click analytics
+        clickCountResult,
+        avgClickPosResult,
+        ctrOverTimeResults,
+        mostClickedResults,
+        noClickResults,
       ] = await Promise.all([
         // Total queries (30 days)
         this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?')
@@ -921,11 +941,66 @@ export class AISearchService {
           GROUP BY date(created_at / 1000, 'unixepoch')
           ORDER BY date ASC
         `).bind(thirtyDaysAgo).all<{ date: string; count: number }>(),
+
+        // Click analytics: total clicks (30 days)
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_clicks WHERE created_at > datetime('now', '-30 days')")
+          .first<{ count: number }>().catch(() => ({ count: 0 })),
+
+        // Click analytics: average click position (30 days)
+        this.db.prepare("SELECT AVG(click_position) as avg_pos FROM ai_search_clicks WHERE created_at > datetime('now', '-30 days')")
+          .first<{ avg_pos: number | null }>().catch(() => ({ avg_pos: null })),
+
+        // Click analytics: CTR over time (daily, 30 days)
+        this.db.prepare(`
+          SELECT
+            date(h.created_at / 1000, 'unixepoch') as date,
+            COUNT(DISTINCT h.id) as searches,
+            COUNT(c.id) as clicks
+          FROM ai_search_history h
+          LEFT JOIN ai_search_clicks c ON c.search_id = h.id
+          WHERE h.created_at >= ?
+          GROUP BY date(h.created_at / 1000, 'unixepoch')
+          ORDER BY date ASC
+        `).bind(thirtyDaysAgo).all<{ date: string; searches: number; clicks: number }>().catch(() => ({ results: [] })),
+
+        // Click analytics: most clicked content (top 20)
+        this.db.prepare(`
+          SELECT clicked_content_id as content_id, clicked_content_title as content_title, COUNT(*) as click_count
+          FROM ai_search_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY clicked_content_id
+          ORDER BY click_count DESC
+          LIMIT 20
+        `).all<{ content_id: string; content_title: string; click_count: number }>().catch(() => ({ results: [] })),
+
+        // Click analytics: searches with no clicks (top 20)
+        this.db.prepare(`
+          SELECT h.query, COUNT(DISTINCT h.id) as search_count, CAST(AVG(h.results_count) AS INTEGER) as results_count_avg
+          FROM ai_search_history h
+          LEFT JOIN ai_search_clicks c ON c.search_id = h.id
+          WHERE h.created_at >= ?
+            AND h.results_count > 0
+            AND c.id IS NULL
+          GROUP BY h.query
+          ORDER BY search_count DESC
+          LIMIT 20
+        `).bind(thirtyDaysAgo).all<{ query: string; search_count: number; results_count_avg: number }>().catch(() => ({ results: [] })),
       ])
 
       const totalQueries = totalResult?.count || 0
       const zeroCount = zeroCountResult?.count || 0
       const modes = modeResults?.results || []
+
+      // Compute click analytics
+      const totalClicks = (clickCountResult as any)?.count || 0
+      const avgClickPos = (avgClickPosResult as any)?.avg_pos
+      const ctrRaw = (ctrOverTimeResults as any)?.results || []
+      const ctrOverTime = ctrRaw.map((r: any) => ({
+        date: r.date,
+        searches: r.searches,
+        clicks: r.clicks,
+        ctr: r.searches > 0 ? Math.round((r.clicks / r.searches) * 1000) / 10 : 0,
+      }))
 
       return {
         total_queries: totalQueries,
@@ -947,6 +1022,21 @@ export class AISearchService {
           created_at: r.created_at,
         })),
         daily_counts: (dailyResults?.results || []).map(r => ({ date: r.date, count: r.count })),
+        // Click analytics
+        total_clicks_30d: totalClicks,
+        ctr_30d: totalQueries > 0 ? Math.round((totalClicks / totalQueries) * 1000) / 10 : 0,
+        avg_click_position_30d: avgClickPos != null ? Math.round(avgClickPos * 10) / 10 : 0,
+        ctr_over_time: ctrOverTime,
+        most_clicked_content: ((mostClickedResults as any)?.results || []).map((r: any) => ({
+          content_id: r.content_id,
+          content_title: r.content_title || 'Untitled',
+          click_count: r.click_count,
+        })),
+        no_click_searches: ((noClickResults as any)?.results || []).map((r: any) => ({
+          query: r.query,
+          search_count: r.search_count,
+          results_count_avg: r.results_count_avg,
+        })),
       }
     } catch (error) {
       console.error('Error getting extended analytics:', error)
@@ -964,6 +1054,12 @@ export class AISearchService {
         zero_result_queries: [],
         recent_queries: [],
         daily_counts: [],
+        total_clicks_30d: 0,
+        ctr_30d: 0,
+        avg_click_position_30d: 0,
+        ctr_over_time: [],
+        most_clicked_content: [],
+        no_click_searches: [],
       }
     }
   }

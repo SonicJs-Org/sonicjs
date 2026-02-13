@@ -19,6 +19,12 @@ export interface AISearchSettings {
   // Phase 2: Hybrid search settings
   query_rewriting_enabled?: boolean // Off by default, adds ~100-300ms latency
   reranking_enabled?: boolean // On by default, adds ~50-150ms latency
+  // Phase 2: FTS5 field weight tuning (BM25 boosting)
+  fts5_title_boost?: number // Default: 5.0
+  fts5_slug_boost?: number  // Default: 2.0
+  fts5_body_boost?: number  // Default: 1.0
+  // Phase 2C: Query Synonyms
+  query_synonyms_enabled?: boolean // Default: true
 }
 
 export interface IndexStatus {
@@ -74,6 +80,7 @@ export interface SearchResult {
   // Phase 2: Hybrid search fields
   rrf_score?: number // Reciprocal Rank Fusion score (internal sorting)
   rerank_score?: number // Cross-encoder reranking score
+  pipeline_score?: number // Composite ranking pipeline score [0, 1]
 }
 
 export interface SearchResponse {
@@ -107,4 +114,87 @@ export interface CollectionInfo {
 export interface NewCollectionNotification {
   collection: CollectionInfo
   message: string
+}
+
+/** Configuration for a single ranking pipeline stage */
+export interface RankingStage {
+  type: 'exactMatch' | 'bm25' | 'semantic' | 'recency' | 'popularity' | 'custom'
+  weight: number      // 0-10, step 0.1
+  enabled: boolean
+  config?: Record<string, any>  // Stage-specific (e.g. recency half_life_days)
+}
+
+/** A bidirectional synonym group — searching any term expands to all terms */
+export interface SynonymGroup {
+  id: string
+  terms: string[]
+  enabled: boolean
+  created_at: number
+  updated_at: number
+}
+
+/** Default pipeline — used when no config exists in DB */
+export const DEFAULT_RANKING_PIPELINE: RankingStage[] = [
+  { type: 'exactMatch', weight: 10, enabled: true },
+  { type: 'bm25',       weight: 5,  enabled: true },
+  { type: 'semantic',    weight: 3,  enabled: true },
+  { type: 'recency',     weight: 1,  enabled: true,  config: { half_life_days: 30 } },
+  { type: 'popularity',  weight: 0,  enabled: false },
+  { type: 'custom',      weight: 0,  enabled: false },
+]
+
+// ==========================================
+// InstantSearch.js Protocol Types (Algolia-compatible)
+// ==========================================
+
+export interface InstantSearchRequest {
+  indexName: string
+  params?: InstantSearchParams
+}
+
+export interface InstantSearchParams {
+  query?: string
+  page?: number
+  hitsPerPage?: number
+  facets?: string[]
+  filters?: string
+  highlightPreTag?: string
+  highlightPostTag?: string
+  attributesToRetrieve?: string[]
+  attributesToHighlight?: string[]
+  attributesToSnippet?: string[]
+}
+
+export interface InstantSearchHit {
+  objectID: string
+  [key: string]: any
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Algolia protocol field name
+  _highlightResult?: Record<string, {
+    value: string
+    matchLevel: 'none' | 'partial' | 'full'
+    matchedWords?: string[]
+  }>
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Algolia protocol field name
+  _snippetResult?: Record<string, {
+    value: string
+    matchLevel: 'none' | 'partial' | 'full'
+  }>
+}
+
+export interface InstantSearchResult {
+  hits: InstantSearchHit[]
+  nbHits: number
+  page: number
+  nbPages: number
+  hitsPerPage: number
+  processingTimeMS: number
+  query: string
+  params: string
+  exhaustiveNbHits?: boolean
+  facets?: Record<string, Record<string, number>>
+  index?: string
+}
+
+export interface InstantSearchMultiResponse {
+  results: InstantSearchResult[]
 }

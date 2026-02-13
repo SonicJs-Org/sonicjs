@@ -1,19 +1,24 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type { AISearchSettings, IndexStatus } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { FTS5Service } from './fts5.service'
 
 /**
  * Index Manager Service
  * Handles indexing of content items using Custom RAG with Vectorize
+ * Falls back to FTS5 indexing when Vectorize is not available
  */
 export class IndexManager {
   private customRAG?: CustomRAGService
+  private fts5Service: FTS5Service
 
   constructor(
     private db: D1Database,
     private ai?: any, // Workers AI for embeddings
     private vectorize?: any // Vectorize for vector search
   ) {
+    this.fts5Service = new FTS5Service(db)
+
     // Initialize Custom RAG if bindings are available
     if (this.ai && this.vectorize) {
       this.customRAG = new CustomRAGService(db, ai, vectorize)
@@ -40,11 +45,17 @@ export class IndexManager {
         throw new Error(`Collection ${collectionId} not found`)
       }
 
-      // Update status to indexing
+      // Count total items before setting status so progress bar shows correctly
+      const countResult = await this.db.prepare(
+        "SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'"
+      ).bind(collectionId).first<{ cnt: number }>()
+      const totalItems = countResult?.cnt || 0
+
+      // Update status to indexing with actual total
       await this.updateIndexStatus(collectionId, {
         collection_id: collectionId,
         collection_name: collection.display_name,
-        total_items: 0,
+        total_items: totalItems,
         indexed_items: 0,
         status: 'indexing',
       })
@@ -52,14 +63,67 @@ export class IndexManager {
       // Use Custom RAG for indexing if available
       if (this.customRAG?.isAvailable()) {
         console.log(`[IndexManager] Using Custom RAG to index collection ${collectionId}`)
-        
-        const result = await this.customRAG.indexCollection(collectionId)
+
+        // Track highest progress to prevent UI from jumping backward between phases
+        let highWaterMark = 0
+
+        let result: { total_items: number; total_chunks: number; indexed_chunks: number; errors: number }
+        try {
+          result = await this.customRAG.indexCollection(
+            collectionId,
+            async (phase, processed, total) => {
+              // Map chunk progress to approximate item progress for the UI
+              // Embedding phase = 0-90%, storing phase = 90-100%
+              let itemProgress: number
+              if (phase === 'chunking') {
+                itemProgress = 0
+              } else if (phase === 'embedding') {
+                // Embedding is the slow part — map to 0-90% of total items
+                itemProgress = Math.round((processed / Math.max(total, 1)) * totalItems * 0.9)
+              } else {
+                // Storing phase — map to 90-100% of total items
+                itemProgress = Math.round(totalItems * 0.9 + (processed / Math.max(total, 1)) * totalItems * 0.1)
+              }
+              itemProgress = Math.min(totalItems, itemProgress)
+              // Never go backward
+              if (itemProgress > highWaterMark) {
+                highWaterMark = itemProgress
+              }
+              await this.updateIndexStatus(collectionId, {
+                collection_id: collectionId,
+                collection_name: collection.display_name,
+                total_items: totalItems,
+                indexed_items: highWaterMark,
+                status: 'indexing',
+              })
+            }
+          )
+        } catch (ragError) {
+          // Ensure we mark as error even if the Worker is about to die
+          console.error(`[IndexManager] CustomRAG indexing failed for ${collectionId}:`, ragError)
+          await this.updateIndexStatus(collectionId, {
+            collection_id: collectionId,
+            collection_name: collection.display_name,
+            total_items: totalItems,
+            indexed_items: highWaterMark,
+            status: 'error',
+            error_message: ragError instanceof Error ? ragError.message : String(ragError),
+          })
+          return {
+            collection_id: collectionId,
+            collection_name: collection.display_name,
+            total_items: totalItems,
+            indexed_items: highWaterMark,
+            status: 'error' as const,
+            error_message: ragError instanceof Error ? ragError.message : String(ragError),
+          }
+        }
 
         const finalStatus: IndexStatus = {
           collection_id: collectionId,
           collection_name: collection.display_name,
           total_items: result.total_items,
-          indexed_items: result.indexed_chunks,
+          indexed_items: result.total_items, // Use total_items, not chunks, for final display
           last_sync_at: Date.now(),
           status: result.errors > 0 ? 'error' : 'completed',
           error_message: result.errors > 0 ? `${result.errors} errors during indexing` : undefined
@@ -69,34 +133,56 @@ export class IndexManager {
         return finalStatus
       }
 
-      // Fallback: No Vectorize — count content items for accurate status display
-      console.warn(`[IndexManager] Custom RAG not available, skipping vector indexing for ${collectionId}`)
+      // Fallback: No Vectorize — use FTS5 for indexing
+      console.log(`[IndexManager] Using FTS5 to index collection ${collectionId}`)
 
-      // Count actual content items in this collection
-      const countResult = await this.db.prepare(
+      // Check if FTS5 is available
+      const fts5Available = await this.fts5Service.isAvailable()
+
+      if (fts5Available) {
+        // Run FTS5 indexing with progress updates
+        const fts5Result = await this.fts5Service.indexCollection(
+          collectionId,
+          async (indexed, total) => {
+            // Update progress in the database so polling picks it up
+            await this.updateIndexStatus(collectionId, {
+              collection_id: collectionId,
+              collection_name: collection.display_name,
+              total_items: total,
+              indexed_items: indexed,
+              status: 'indexing',
+            })
+          }
+        )
+
+        const fallbackStatus: IndexStatus = {
+          collection_id: collectionId,
+          collection_name: collection.display_name,
+          total_items: fts5Result.total_items,
+          indexed_items: fts5Result.indexed_items,
+          last_sync_at: Date.now(),
+          status: fts5Result.errors > 0 ? 'error' : 'completed',
+          error_message: fts5Result.errors > 0 ? `${fts5Result.errors} errors during FTS5 indexing` : undefined
+        }
+
+        await this.updateIndexStatus(collectionId, fallbackStatus)
+        return fallbackStatus
+      }
+
+      // No FTS5 either — just count content items for display
+      console.warn(`[IndexManager] No FTS5 available, counting content items for ${collectionId}`)
+      const fallbackCount = await this.db.prepare(
         'SELECT COUNT(*) as cnt FROM content WHERE collection_id = ?'
       ).bind(collectionId).first<{ cnt: number }>()
-      const totalItems = countResult?.cnt || 0
-
-      // Check FTS5 indexed count for this collection via the FTS5 virtual table directly
-      let fts5Indexed = 0
-      try {
-        const fts5Count = await this.db.prepare(
-          'SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?'
-        ).bind(collectionId).first<{ cnt: number }>()
-        fts5Indexed = fts5Count?.cnt || 0
-      } catch {
-        // FTS5 table may not exist yet
-      }
 
       const fallbackStatus: IndexStatus = {
         collection_id: collectionId,
         collection_name: collection.display_name,
-        total_items: totalItems,
-        indexed_items: fts5Indexed,
+        total_items: fallbackCount?.cnt || 0,
+        indexed_items: 0,
         last_sync_at: Date.now(),
         status: 'completed',
-        error_message: fts5Indexed > 0 ? undefined : 'Using FTS5/keyword search (Vectorize not available)'
+        error_message: 'No search index available (Vectorize and FTS5 both unavailable)'
       }
 
       await this.updateIndexStatus(collectionId, fallbackStatus)

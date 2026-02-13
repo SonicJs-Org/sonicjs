@@ -31,9 +31,18 @@ export class HybridSearchService {
   /**
    * Run FTS5 + AI searches in parallel, merge with RRF
    * Uses Promise.allSettled for partial failure tolerance
+   *
+   * Each sub-search retrieves 3x the final limit to give RRF a larger
+   * candidate pool. This prevents relevant docs from one system being
+   * displaced by irrelevant docs from the other when results are sliced.
    */
   async search(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
     const startTime = Date.now()
+
+    // Expand candidate pool: retrieve 3x limit from each sub-search
+    const finalLimit = query.limit || settings.results_limit || 20
+    const candidateLimit = finalLimit * 3
+    const expandedQuery: SearchQuery = { ...query, limit: candidateLimit }
 
     // Build search promises: FTS5 always, AI only if available
     const fts5Weights = {
@@ -42,10 +51,10 @@ export class HybridSearchService {
       bodyBoost: settings.fts5_body_boost,
     }
     const searches: Promise<SearchResponse>[] = [
-      this.fts5Service.search(query, settings, fts5Weights)
+      this.fts5Service.search(expandedQuery, settings, fts5Weights)
     ]
     if (this.customRAG?.isAvailable()) {
-      searches.push(this.customRAG.search(query, settings))
+      searches.push(this.customRAG.search(expandedQuery, settings))
     }
 
     const settled = await Promise.allSettled(searches)

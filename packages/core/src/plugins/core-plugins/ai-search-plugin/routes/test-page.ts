@@ -407,11 +407,22 @@ testPageRoutes.get('/test', async (c) => {
             return div.innerHTML;
           }
 
-          function stripHtml(str) {
+          function sanitizeHighlight(str) {
             if (!str) return '';
+            // Preserve <mark> and </mark> tags, strip all other HTML, escape text
+            // 1. Replace <mark> with placeholder
+            var s = str.replace(/<mark>/gi, '\\x01MARK_OPEN\\x01').replace(/<\\/mark>/gi, '\\x01MARK_CLOSE\\x01');
+            // 2. Strip all remaining HTML tags
             var tmp = document.createElement('div');
-            tmp.innerHTML = str;
-            return tmp.textContent || tmp.innerText || '';
+            tmp.innerHTML = s;
+            var text = tmp.textContent || tmp.innerText || '';
+            // 3. Escape the text
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            var escaped = div.innerHTML;
+            // 4. Restore <mark> tags
+            escaped = escaped.replace(/\\x01MARK_OPEN\\x01/g, '<mark>').replace(/\\x01MARK_CLOSE\\x01/g, '</mark>');
+            return escaped;
           }
 
           function renderResultItem(result) {
@@ -422,9 +433,9 @@ testPageRoutes.get('/test', async (c) => {
             var scoreStr = score ? score.toFixed(3) : 'N/A';
             var scoreLabel = result.rerank_score ? 'Rerank' : result.rrf_score ? 'RRF' : result.bm25_score ? 'BM25' : 'Score';
 
-            // Strip HTML tags then escape to prevent XSS
-            var safeTitle = escapeHtml(stripHtml(rawTitle));
-            var safeSnippet = escapeHtml(stripHtml(rawSnippet));
+            // Sanitize: allow <mark> highlighting, strip all other HTML
+            var safeTitle = sanitizeHighlight(rawTitle);
+            var safeSnippet = sanitizeHighlight(rawSnippet);
 
             var titleHtml = safeTitle;
             if (result.id) {

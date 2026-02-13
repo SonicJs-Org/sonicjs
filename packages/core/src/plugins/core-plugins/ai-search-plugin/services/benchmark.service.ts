@@ -89,15 +89,21 @@ export class BenchmarkService {
 
   /**
    * Load dataset from KV on first access. Cached for lifetime of the service instance.
+   *
+   * Corpus data may be stored as a single key or chunked across multiple keys
+   * (for datasets that exceed the 25 MiB KV value limit). Chunked data uses:
+   *   benchmark:{dataset}:corpus:meta  → { chunks: N, total: M }
+   *   benchmark:{dataset}:corpus:0     → first slice
+   *   benchmark:{dataset}:corpus:1     → second slice
+   *   ...
    */
   private async loadData(): Promise<BenchmarkData> {
     if (this.data) return this.data
 
-    const [corpus, queries, qrels] = await Promise.all([
-      this.kv.get<BenchmarkDocument[]>(
-        `benchmark:${this.dataset}:corpus`,
-        'json'
-      ),
+    const corpusKey = `benchmark:${this.dataset}:corpus`
+
+    const [corpus, queries, qrels, corpusMeta] = await Promise.all([
+      this.kv.get<BenchmarkDocument[]>(corpusKey, 'json'),
       this.kv.get<BenchmarkQuery[]>(
         `benchmark:${this.dataset}:queries`,
         'json'
@@ -106,15 +112,46 @@ export class BenchmarkService {
         `benchmark:${this.dataset}:qrels`,
         'json'
       ),
+      this.kv.get<{ chunks: number; total: number }>(
+        `${corpusKey}:meta`,
+        'json'
+      ),
     ])
 
-    if (!corpus || !queries || !qrels) {
+    // Reassemble chunked corpus if metadata exists
+    let resolvedCorpus = corpus
+    if (!resolvedCorpus && corpusMeta) {
+      console.log(
+        `[BenchmarkService] Loading chunked corpus: ${corpusMeta.chunks} chunks, ${corpusMeta.total} docs`
+      )
+      const chunkPromises: Promise<BenchmarkDocument[] | null>[] = []
+      for (let i = 0; i < corpusMeta.chunks; i++) {
+        chunkPromises.push(
+          this.kv.get<BenchmarkDocument[]>(`${corpusKey}:${i}`, 'json')
+        )
+      }
+      const chunks = await Promise.all(chunkPromises)
+      resolvedCorpus = []
+      for (const chunk of chunks) {
+        if (!chunk) {
+          throw new Error(
+            `Missing corpus chunk for dataset "${this.dataset}". Re-upload with: npx tsx scripts/generate-benchmark-data.ts --dataset ${this.dataset}`
+          )
+        }
+        resolvedCorpus.push(...chunk)
+      }
+      console.log(
+        `[BenchmarkService] Reassembled ${resolvedCorpus.length} docs from ${corpusMeta.chunks} chunks`
+      )
+    }
+
+    if (!resolvedCorpus || !queries || !qrels) {
       throw new Error(
         `Benchmark dataset "${this.dataset}" not found in KV. Run: npx tsx scripts/generate-benchmark-data.ts --dataset ${this.dataset}`
       )
     }
 
-    this.data = { corpus, queries, qrels }
+    this.data = { corpus: resolvedCorpus, queries, qrels }
     return this.data
   }
 

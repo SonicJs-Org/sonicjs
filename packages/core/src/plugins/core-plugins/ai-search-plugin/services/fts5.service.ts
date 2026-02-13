@@ -11,6 +11,7 @@
 
 import type { D1Database } from '@cloudflare/workers-types'
 import type { SearchQuery, SearchResult, SearchResponse, AISearchSettings } from '../types'
+import type { SynonymService } from './synonym.service'
 
 export interface FTS5SearchOptions {
   titleBoost?: number      // Default: 5.0
@@ -44,6 +45,7 @@ export class FTS5Service {
   }
 
   private options: FTS5SearchOptions
+  private synonymService?: SynonymService
 
   constructor(
     private db: D1Database,
@@ -52,16 +54,25 @@ export class FTS5Service {
     this.options = { ...this.defaultOptions, ...options }
   }
 
+  /** Set synonym service for query expansion */
+  setSynonymService(service: SynonymService): void {
+    this.synonymService = service
+  }
+
   /**
    * Search using FTS5 with BM25 ranking and highlighting
    * Auto-indexes any missing content in selected collections before searching
    */
-  async search(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
+  async search(
+    query: SearchQuery,
+    settings: AISearchSettings,
+    weightOverrides?: { titleBoost?: number; slugBoost?: number; bodyBoost?: number }
+  ): Promise<SearchResponse> {
     const startTime = Date.now()
 
     try {
       // Sanitize and prepare query for FTS5 MATCH
-      const escapedQuery = this.sanitizeFTS5Query(query.query)
+      let escapedQuery = this.sanitizeFTS5Query(query.query)
 
       if (!escapedQuery || escapedQuery === '""') {
         return {
@@ -70,6 +81,11 @@ export class FTS5Service {
           query_time_ms: Date.now() - startTime,
           mode: 'fts5' as any
         }
+      }
+
+      // Synonym expansion: expand terms using admin-defined synonym groups
+      if (this.synonymService && settings.query_synonyms_enabled !== false) {
+        escapedQuery = await this.expandWithSynonyms(escapedQuery)
       }
 
       // Build collection filter
@@ -92,14 +108,19 @@ export class FTS5Service {
       const collectionPlaceholders = collections.map(() => '?').join(', ')
       const tag = this.options.highlightTag || 'mark'
 
+      // Effective weights: overrides (from settings) > constructor options > defaults
+      const titleBoost = weightOverrides?.titleBoost ?? this.options.titleBoost
+      const slugBoost = weightOverrides?.slugBoost ?? this.options.slugBoost
+      const bodyBoost = weightOverrides?.bodyBoost ?? this.options.bodyBoost
+
       // FTS5 query with BM25 ranking and field boosting
-      // bm25 weights: title(5.0), slug(2.0), body(1.0), content_id(0), collection_id(0)
+      // bm25 weights: title, slug, body, content_id(0), collection_id(0)
       const sql = `
         SELECT
           fts.content_id,
           fts.collection_id,
           fts.title,
-          bm25(content_fts, ${this.options.titleBoost}, ${this.options.slugBoost}, ${this.options.bodyBoost}, 0, 0) as score,
+          bm25(content_fts, ${titleBoost}, ${slugBoost}, ${bodyBoost}, 0, 0) as score,
           snippet(content_fts, 2, '<${tag}>', '</${tag}>', '...', ${this.options.snippetLength}) as body_snippet,
           highlight(content_fts, 0, '<${tag}>', '</${tag}>') as title_highlight,
           c.slug,
@@ -243,7 +264,7 @@ export class FTS5Service {
         `).bind(contentId, content.collection_id, Date.now())
       ])
 
-      console.log(`[FTS5Service] Indexed content ${contentId}`)
+      // Per-item logging omitted for bulk performance
     } catch (error) {
       console.error(`[FTS5Service] Error indexing ${contentId}:`, error)
       throw error
@@ -251,42 +272,88 @@ export class FTS5Service {
   }
 
   /**
-   * Index all published content in a collection
+   * Index all published content in a collection (bulk approach).
+   * Fetches all content in one query, processes text in memory,
+   * then inserts in D1 batches for efficiency.
    */
-  async indexCollection(collectionId: string): Promise<FTS5IndexResult> {
-    console.log(`[FTS5Service] Starting indexing for collection: ${collectionId}`)
+  async indexCollection(
+    collectionId: string,
+    onProgress?: (indexed: number, total: number) => Promise<void>
+  ): Promise<FTS5IndexResult> {
+    console.log(`[FTS5Service] Starting bulk indexing for collection: ${collectionId}`)
 
     try {
-      // Get all non-deleted content from collection
+      // Fetch all content with data in one query
       const { results } = await this.db
         .prepare(`
-          SELECT id FROM content
+          SELECT id, title, slug, data, collection_id
+          FROM content
           WHERE collection_id = ? AND status != 'deleted'
         `)
         .bind(collectionId)
-        .all<{ id: string }>()
+        .all<{ id: string; title: string; slug: string; data: string; collection_id: string }>()
 
       const totalItems = results?.length || 0
 
       if (totalItems === 0) {
         console.log(`[FTS5Service] No content found in collection ${collectionId}`)
+        if (onProgress) await onProgress(0, 0)
         return { total_items: 0, indexed_items: 0, errors: 0 }
       }
 
+      // Clear existing FTS5 + sync entries for this collection (clean slate)
+      await this.db.batch([
+        this.db.prepare('DELETE FROM content_fts WHERE collection_id = ?').bind(collectionId),
+        this.db.prepare('DELETE FROM content_fts_sync WHERE collection_id = ?').bind(collectionId),
+      ])
+
       let indexedItems = 0
       let errors = 0
+      const now = Date.now()
 
-      for (const item of results || []) {
-        try {
-          await this.indexContent(item.id)
-          indexedItems++
-        } catch (error) {
-          console.error(`[FTS5Service] Error indexing item ${item.id}:`, error)
-          errors++
+      // Process in batches of 25 items (50 statements per batch: INSERT fts + INSERT sync)
+      const BATCH_SIZE = 25
+      for (let i = 0; i < totalItems; i += BATCH_SIZE) {
+        const batch = results!.slice(i, i + BATCH_SIZE)
+        const statements: any[] = []
+
+        for (const item of batch) {
+          try {
+            const bodyText = this.extractSearchableText(item.data)
+            statements.push(
+              this.db.prepare(`
+                INSERT INTO content_fts(title, slug, body, content_id, collection_id)
+                VALUES (?, ?, ?, ?, ?)
+              `).bind(item.title || '', item.slug || '', bodyText, item.id, item.collection_id)
+            )
+            statements.push(
+              this.db.prepare(`
+                INSERT OR REPLACE INTO content_fts_sync(content_id, collection_id, indexed_at, status)
+                VALUES (?, ?, ?, 'indexed')
+              `).bind(item.id, item.collection_id, now)
+            )
+          } catch (error) {
+            errors++
+          }
+        }
+
+        if (statements.length > 0) {
+          try {
+            await this.db.batch(statements)
+            indexedItems += statements.length / 2 // 2 statements per item
+          } catch (error) {
+            console.error(`[FTS5Service] Batch insert error at offset ${i}:`, error)
+            errors += batch.length
+          }
+        }
+
+        // Report progress every batch
+        if (onProgress) {
+          await onProgress(indexedItems, totalItems)
         }
       }
 
-      console.log(`[FTS5Service] Indexing complete: ${indexedItems}/${totalItems} items, ${errors} errors`)
+      console.log(`[FTS5Service] Bulk indexing complete: ${indexedItems}/${totalItems} items, ${errors} errors`)
 
       return {
         total_items: totalItems,
@@ -296,6 +363,88 @@ export class FTS5Service {
     } catch (error) {
       console.error(`[FTS5Service] Error indexing collection ${collectionId}:`, error)
       throw error
+    }
+  }
+
+  /**
+   * Index a batch of content items from a collection using batch D1 inserts.
+   * Returns the number remaining so the caller can loop.
+   */
+  async indexCollectionBatch(
+    collectionId: string,
+    batchSize: number = 200
+  ): Promise<{ indexed: number; remaining: number; total: number }> {
+    // Find un-indexed content with data for FTS5 extraction
+    const { results } = await this.db
+      .prepare(`
+        SELECT c.id, c.title, c.slug, c.data, c.collection_id
+        FROM content c
+        LEFT JOIN content_fts_sync s ON c.id = s.content_id
+        WHERE c.collection_id = ? AND c.status != 'deleted'
+          AND s.content_id IS NULL
+        LIMIT ?
+      `)
+      .bind(collectionId, batchSize)
+      .all<{ id: string; title: string; slug: string; data: string; collection_id: string }>()
+
+    const toIndex = results || []
+    const now = Date.now()
+    let indexed = 0
+
+    // Process in sub-batches of 25 (50 D1 statements: FTS5 INSERT + sync INSERT)
+    const SUB_BATCH = 25
+    for (let i = 0; i < toIndex.length; i += SUB_BATCH) {
+      const batch = toIndex.slice(i, i + SUB_BATCH)
+      const statements: any[] = []
+
+      for (const item of batch) {
+        try {
+          const bodyText = this.extractSearchableText(item.data)
+          statements.push(
+            this.db.prepare(
+              'INSERT INTO content_fts(title, slug, body, content_id, collection_id) VALUES (?, ?, ?, ?, ?)'
+            ).bind(item.title || '', item.slug || '', bodyText, item.id, item.collection_id)
+          )
+          statements.push(
+            this.db.prepare(
+              "INSERT OR REPLACE INTO content_fts_sync(content_id, collection_id, indexed_at, status) VALUES (?, ?, ?, 'indexed')"
+            ).bind(item.id, item.collection_id, now)
+          )
+        } catch (error) {
+          // Skip items with extraction errors
+        }
+      }
+
+      if (statements.length > 0) {
+        try {
+          await this.db.batch(statements)
+          indexed += statements.length / 2
+        } catch (error) {
+          console.error(`[FTS5Service] Batch insert error at offset ${i}:`, error)
+        }
+      }
+    }
+
+    // Count remaining
+    const remainResult = await this.db
+      .prepare(`
+        SELECT COUNT(*) as cnt FROM content c
+        LEFT JOIN content_fts_sync s ON c.id = s.content_id
+        WHERE c.collection_id = ? AND c.status != 'deleted'
+          AND s.content_id IS NULL
+      `)
+      .bind(collectionId)
+      .first<{ cnt: number }>()
+
+    const totalResult = await this.db
+      .prepare("SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'")
+      .bind(collectionId)
+      .first<{ cnt: number }>()
+
+    return {
+      indexed,
+      remaining: remainResult?.cnt || 0,
+      total: totalResult?.cnt || 0,
     }
   }
 
@@ -493,6 +642,47 @@ export class FTS5Service {
   }
 
   /**
+   * Expand a sanitized FTS5 query string with synonym terms.
+   * Input: "coffee*" (single) or "coffee OR beans" (multiple)
+   * Output: "coffee* OR espresso OR caffeine" or "coffee OR espresso OR beans"
+   */
+  private async expandWithSynonyms(sanitizedQuery: string): Promise<string> {
+    try {
+      let terms: string[]
+      let hasPrefixMatch = false
+
+      if (sanitizedQuery.endsWith('*')) {
+        terms = [sanitizedQuery.slice(0, -1)]
+        hasPrefixMatch = true
+      } else {
+        terms = sanitizedQuery.split(' OR ').map(t => t.trim()).filter(Boolean)
+      }
+
+      if (terms.length === 0) return sanitizedQuery
+
+      const expanded = await this.synonymService!.expandQuery(terms)
+
+      // No new terms added
+      if (expanded.length === terms.length) return sanitizedQuery
+
+      // Cap at 20 terms for safety
+      const capped = expanded.slice(0, 20)
+
+      if (hasPrefixMatch && terms.length === 1) {
+        // Keep prefix on original term, synonyms are exact
+        const original = terms[0] + '*'
+        const synonyms = capped.filter(t => t !== terms[0])
+        return [original, ...synonyms].join(' OR ')
+      }
+
+      return capped.join(' OR ')
+    } catch (error) {
+      console.error('[FTS5Service] Synonym expansion error (using original query):', error)
+      return sanitizedQuery
+    }
+  }
+
+  /**
    * Sanitize user input for FTS5 MATCH clause
    * Removes operators and special characters that could cause errors
    */
@@ -501,19 +691,21 @@ export class FTS5Service {
       return '""'
     }
 
-    // Remove FTS5 special characters and operators
+    // Step 1: Strip everything except letters, numbers, spaces, and hyphens
     let sanitized = query
-      .replace(/['"]/g, '')              // Remove quotes
-      .replace(/[()[\]{}]/g, '')         // Remove brackets
-      .replace(/\b(AND|OR|NOT|NEAR)\b/gi, '') // Remove boolean operators
-      .replace(/\*/g, '')                // Remove wildcards (we add them back)
-      .replace(/:/g, '')                 // Remove column specifiers
-      .replace(/\^/g, '')                // Remove boost operator
-      .replace(/-/g, ' ')                // Convert hyphens to spaces
+      .replace(/-/g, ' ')                // Convert hyphens to spaces first
+      .replace(/[^a-zA-Z0-9\s]/g, '')   // Strip all punctuation/special chars
+      .replace(/\s+/g, ' ')             // Collapse whitespace
       .trim()
+      .toLowerCase()
 
-    // Split into terms and filter empty
-    const terms = sanitized.split(/\s+/).filter(t => t.length > 0)
+    // Step 2: Split into terms, filter short/stop words
+    const stopWords = new Set(['a', 'an', 'the', 'is', 'are', 'was', 'were', 'be',
+      'to', 'of', 'in', 'on', 'at', 'by', 'or', 'and', 'not', 'for', 'it',
+      'as', 'do', 'if', 'no', 'so', 'up', 'but', 'its', 'has', 'had', 'near'])
+    const terms = sanitized
+      .split(/\s+/)
+      .filter(t => t.length > 1 && !stopWords.has(t))
 
     if (terms.length === 0) {
       return '""'
@@ -521,11 +713,12 @@ export class FTS5Service {
 
     // Single term: use prefix matching for autocomplete-like behavior
     if (terms.length === 1) {
-      return `"${terms[0]}"*`
+      return `${terms[0]}*`
     }
 
-    // Multiple terms: wrap each term with quotes for exact matching
-    // and join with spaces (implicit AND)
-    return terms.map(t => `"${t}"`).join(' ')
+    // Multiple terms: unquoted with OR for proper BM25 ranking
+    // Unquoted terms enable porter stemming (running→run, properties→property)
+    // OR means any matching term contributes to BM25 score — more matches rank higher
+    return terms.join(' OR ')
   }
 }

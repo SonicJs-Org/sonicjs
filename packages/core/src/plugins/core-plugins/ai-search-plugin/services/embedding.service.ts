@@ -45,25 +45,35 @@ export class EmbeddingService {
   }
 
   /**
-   * Generate embeddings for multiple texts (batch processing)
+   * Generate embeddings for multiple texts using native batch API.
+   * Workers AI supports up to 100 texts per call for bge-base-en-v1.5.
    */
-  async generateBatch(texts: string[]): Promise<number[][]> {
+  async generateBatch(
+    texts: string[],
+    onProgress?: (completed: number, total: number) => Promise<void>
+  ): Promise<number[][]> {
     try {
-      // Process in smaller batches to avoid rate limits
-      const batchSize = 10
-      const batches: string[][] = []
-      
-      for (let i = 0; i < texts.length; i += batchSize) {
-        batches.push(texts.slice(i, i + batchSize))
-      }
-
+      const batchSize = 50 // Workers AI batch limit; 50 is safe for large texts
       const allEmbeddings: number[][] = []
 
-      for (const batch of batches) {
-        const batchEmbeddings = await Promise.all(
-          batch.map(text => this.generateEmbedding(text))
-        )
-        allEmbeddings.push(...batchEmbeddings)
+      for (let i = 0; i < texts.length; i += batchSize) {
+        const batch = texts.slice(i, i + batchSize)
+        const preprocessed = batch.map(t => this.preprocessText(t))
+
+        // Use native batch API — single call for all texts in batch
+        const response = await this.ai.run('@cf/baai/bge-base-en-v1.5', {
+          text: preprocessed
+        })
+
+        if (response.data && Array.isArray(response.data)) {
+          allEmbeddings.push(...response.data)
+        } else {
+          throw new Error(`Unexpected embedding response at batch offset ${i}`)
+        }
+
+        if (onProgress) {
+          await onProgress(allEmbeddings.length, texts.length)
+        }
       }
 
       return allEmbeddings

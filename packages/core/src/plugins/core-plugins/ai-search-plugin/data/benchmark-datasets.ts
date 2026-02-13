@@ -63,11 +63,10 @@ export const BENCHMARK_DATASETS: DatasetInfo[] = [
   {
     id: 'fiqa',
     name: 'BEIR FiQA-2018',
-    description: 'Financial Q&A — opinion-based questions from StackExchange/Reddit (subset)',
+    description: 'Financial Q&A — opinion-based questions from StackExchange/Reddit',
     corpus_size: 57638,
     query_count: 648,
     avg_qrels_per_query: 2.6,
     license: 'Mixed (see dataset)',
-    subset: true,
   },
 ]

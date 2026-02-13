@@ -368,24 +368,8 @@ function renderSettingsTab(plugin: any): string {
 
   return `
     ${isSeedDataPlugin ? `
-      <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-semibold text-white mb-2">Seed Data Generator</h2>
-            <p class="text-gray-400">Generate realistic example data for testing and development.</p>
-          </div>
-          <a
-            href="/admin/seed-data"
-            target="_blank"
-            class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Open Seed Data Tool
-          </a>
-        </div>
-      </div>
+      <script>window.location.href = '/admin/seed-data';</script>
+      <noscript><meta http-equiv="refresh" content="0;url=/admin/seed-data"></noscript>
     ` : ''}
 
     <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6">

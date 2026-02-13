@@ -1,15 +1,15 @@
 'use strict';
 
-var chunkQVIYLOFA_cjs = require('./chunk-QVIYLOFA.cjs');
+var chunkXUG7SRDU_cjs = require('./chunk-XUG7SRDU.cjs');
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkZS5MYHCW_cjs = require('./chunk-ZS5MYHCW.cjs');
+var chunkJ5AMF4T5_cjs = require('./chunk-J5AMF4T5.cjs');
 var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkRZWYEWXM_cjs = require('./chunk-RZWYEWXM.cjs');
-var chunkS6K2H2TS_cjs = require('./chunk-S6K2H2TS.cjs');
-var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
+var chunkZ3TCJWCL_cjs = require('./chunk-Z3TCJWCL.cjs');
+var chunk6WA4KFYZ_cjs = require('./chunk-6WA4KFYZ.cjs');
+var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
 var chunkMNFY6DWY_cjs = require('./chunk-MNFY6DWY.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
-var chunk5HMR2SJW_cjs = require('./chunk-5HMR2SJW.cjs');
+var chunkUOEIMC67_cjs = require('./chunk-UOEIMC67.cjs');
 require('./chunk-P3XDZL6Q.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var chunkKYGRJCZM_cjs = require('./chunk-KYGRJCZM.cjs');
@@ -235,7 +235,7 @@ var DatabaseToolsService = class {
 };
 
 // src/templates/pages/admin-database-table.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderDatabaseTablePage(data) {
   const totalPages = Math.ceil(data.totalRows / data.pageSize);
   const startRow = (data.currentPage - 1) * data.pageSize + 1;
@@ -484,7 +484,7 @@ function renderDatabaseTablePage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function generatePageNumbers(currentPage, totalPages) {
   const pages = [];
@@ -559,7 +559,7 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkZS5MYHCW_cjs.requireAuth());
+  router3.use("*", chunkJ5AMF4T5_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
@@ -1319,20 +1319,20 @@ var SeedDataService = class {
     for (let i = 0; i < paragraphCount && i < shuffled.length; i++) {
       selected.push(shuffled[i]);
     }
-    let html3 = `<h1>${title}</h1>
+    let html4 = `<h1>${title}</h1>
 `;
     const subheadings = ["Key Concepts", "Practical Considerations", "Best Practices", "Looking Ahead", "Implementation Details", "Common Pitfalls"];
     let subheadingIndex = 0;
     for (let i = 0; i < selected.length; i++) {
       if (i > 0 && i % 2 === 0 && subheadingIndex < subheadings.length) {
-        html3 += `<h2>${subheadings[subheadingIndex]}</h2>
+        html4 += `<h2>${subheadings[subheadingIndex]}</h2>
 `;
         subheadingIndex++;
       }
-      html3 += `<p>${selected[i]}</p>
+      html4 += `<p>${selected[i]}</p>
 `;
     }
-    return html3;
+    return html4;
   }
   // ============================================================================
   // Content Generation (Rich)
@@ -1663,15 +1663,20 @@ var DEFAULTS = {
   submissionsPerForm: 15,
   richness: "full"
 };
+function parseNumberOrDefault(value, defaultVal) {
+  if (value === void 0 || value === null || value === "") return defaultVal;
+  const num = Number(value);
+  return isNaN(num) ? defaultVal : num;
+}
 async function loadSettings(db) {
   try {
     const row = await db.prepare("SELECT settings FROM plugins WHERE id = ?").bind("seed-data").first();
     const saved = row?.settings ? JSON.parse(row.settings) : {};
     return {
-      userCount: saved.userCount || DEFAULTS.userCount,
-      contentCount: saved.contentCount || DEFAULTS.contentCount,
-      formCount: saved.formCount || DEFAULTS.formCount,
-      submissionsPerForm: saved.submissionsPerForm || DEFAULTS.submissionsPerForm,
+      userCount: parseNumberOrDefault(saved.userCount, DEFAULTS.userCount),
+      contentCount: parseNumberOrDefault(saved.contentCount, DEFAULTS.contentCount),
+      formCount: parseNumberOrDefault(saved.formCount, DEFAULTS.formCount),
+      submissionsPerForm: parseNumberOrDefault(saved.submissionsPerForm, DEFAULTS.submissionsPerForm),
       richness: saved.richness || DEFAULTS.richness
     };
   } catch {
@@ -1726,21 +1731,21 @@ function createSeedDataAdminRoutes() {
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label for="userCount" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Users to Create</label>
-              <input type="number" id="userCount" name="userCount" value="${s.userCount}" min="1" max="100"
+              <input type="number" id="userCount" name="userCount" value="${s.userCount}" min="0" max="100"
                 class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-              <p class="mt-1 text-xs text-zinc-500">With names, emails, roles (1-100)</p>
+              <p class="mt-1 text-xs text-zinc-500">With names, emails, roles (0-100)</p>
             </div>
             <div>
               <label for="contentCount" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Content Items</label>
-              <input type="number" id="contentCount" name="contentCount" value="${s.contentCount}" min="10" max="1000"
+              <input type="number" id="contentCount" name="contentCount" value="${s.contentCount}" min="0" max="1000"
                 class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-              <p class="mt-1 text-xs text-zinc-500">Blog posts, pages, products (10-1000)</p>
+              <p class="mt-1 text-xs text-zinc-500">Distributed across existing collections (0-1000)</p>
             </div>
             <div>
               <label for="formCount" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Forms to Create</label>
-              <input type="number" id="formCount" name="formCount" value="${s.formCount}" min="1" max="20"
+              <input type="number" id="formCount" name="formCount" value="${s.formCount}" min="0" max="20"
                 class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-              <p class="mt-1 text-xs text-zinc-500">Contact, feedback, registration, etc. (1-20)</p>
+              <p class="mt-1 text-xs text-zinc-500">Contact, feedback, registration, etc. (0-20)</p>
             </div>
             <div>
               <label for="submissionsPerForm" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Submissions per Form</label>
@@ -1774,32 +1779,40 @@ function createSeedDataAdminRoutes() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div class="space-y-2 text-zinc-600 dark:text-zinc-400">
             <p><strong class="text-zinc-900 dark:text-white">Users:</strong> Realistic names, emails, roles (admin/editor/author/viewer), activity dates</p>
-            <p><strong class="text-zinc-900 dark:text-white">Blog Posts:</strong> Multi-paragraph HTML bodies, excerpts, tags, difficulty levels, reading time</p>
-            <p><strong class="text-zinc-900 dark:text-white">Pages:</strong> About, FAQ, Privacy Policy, etc. with SEO metadata</p>
+            <p><strong class="text-zinc-900 dark:text-white">Content:</strong> Distributed across all existing collections \u2014 blog posts get multi-paragraph HTML bodies with excerpts and tags, pages get SEO metadata, other collections get contextual data</p>
           </div>
           <div class="space-y-2 text-zinc-600 dark:text-zinc-400">
-            <p><strong class="text-zinc-900 dark:text-white">Products:</strong> Detailed descriptions, specs, ratings, reviews, pricing, SKUs</p>
             <p><strong class="text-zinc-900 dark:text-white">Forms:</strong> Contact, feedback, survey, registration, newsletter, support, job application, product review \u2014 with full Form.io schemas</p>
             <p><strong class="text-zinc-900 dark:text-white">Submissions:</strong> Schema-aware field data, IP addresses, user agents, UTM tracking, status workflow</p>
           </div>
         </div>
       </div>
 
+      <!-- Progress Bar (hidden by default) -->
+      <div id="progressContainer" class="hidden rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-semibold text-zinc-950 dark:text-white" id="progressLabel">Generating...</h2>
+          <span class="text-sm text-zinc-500 dark:text-zinc-400" id="progressPercent">0%</span>
+        </div>
+        <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-3 overflow-hidden">
+          <div id="progressBar" class="bg-indigo-600 h-3 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+        </div>
+        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400" id="progressDetail"></p>
+      </div>
+
       <!-- Generate & Clear Actions -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-          <h2 class="text-lg font-semibold text-zinc-950 dark:text-white mb-2">Generate Seed Data</h2>
           <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Creates users, content, forms, and submissions using the configuration above.</p>
           <button id="generateBtn" onclick="generateSeedData()" class="inline-flex items-center rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
             </svg>
-            <span id="generateText">Generate Data</span>
+            <span id="generateText">Generate Seed Data</span>
           </button>
         </div>
 
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-          <h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Clear All Data</h2>
           <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Removes all content, forms, submissions, and non-admin users. Cannot be undone.</p>
           <button id="clearBtn" onclick="clearSeedData()" class="inline-flex items-center rounded-lg bg-red-600 hover:bg-red-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1823,8 +1836,8 @@ function createSeedDataAdminRoutes() {
       }
 
       function showMessage(type, text) {
-        const successEl = document.getElementById('successMessage');
-        const errorEl = document.getElementById('errorMessage');
+        var successEl = document.getElementById('successMessage');
+        var errorEl = document.getElementById('errorMessage');
         successEl.classList.add('hidden');
         errorEl.classList.add('hidden');
 
@@ -1837,17 +1850,35 @@ function createSeedDataAdminRoutes() {
         }
       }
 
+      function updateProgress(percent, label, detail) {
+        var container = document.getElementById('progressContainer');
+        var bar = document.getElementById('progressBar');
+        var percentEl = document.getElementById('progressPercent');
+        var labelEl = document.getElementById('progressLabel');
+        var detailEl = document.getElementById('progressDetail');
+
+        container.classList.remove('hidden');
+        bar.style.width = percent + '%';
+        percentEl.textContent = percent + '%';
+        labelEl.textContent = label;
+        detailEl.textContent = detail || '';
+      }
+
+      function hideProgress() {
+        document.getElementById('progressContainer').classList.add('hidden');
+      }
+
       async function saveDefaults() {
         try {
-          const res = await fetch('/admin/seed-data/settings', {
+          var res = await fetch('/admin/seed-data/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(getFormValues())
           });
           if (res.ok) {
-            const indicator = document.getElementById('savedIndicator');
+            var indicator = document.getElementById('savedIndicator');
             indicator.classList.remove('hidden');
-            setTimeout(() => indicator.classList.add('hidden'), 2000);
+            setTimeout(function() { indicator.classList.add('hidden'); }, 2000);
           } else {
             showMessage('error', 'Failed to save defaults');
           }
@@ -1857,48 +1888,81 @@ function createSeedDataAdminRoutes() {
       }
 
       async function generateSeedData() {
-        const btn = document.getElementById('generateBtn');
-        const text = document.getElementById('generateText');
+        var btn = document.getElementById('generateBtn');
+        var text = document.getElementById('generateText');
+        var clearBtn = document.getElementById('clearBtn');
         btn.disabled = true;
+        clearBtn.disabled = true;
         text.textContent = 'Generating...';
 
+        var vals = getFormValues();
+        var totals = { users: 0, content: 0, forms: 0, submissions: 0 };
+        var steps = [];
+
+        if (vals.userCount > 0) steps.push({ endpoint: 'users', label: 'Creating users...', key: 'users', body: { userCount: vals.userCount } });
+        if (vals.contentCount > 0) steps.push({ endpoint: 'content', label: 'Creating content...', key: 'content', body: { contentCount: vals.contentCount, richness: vals.richness } });
+        if (vals.formCount > 0) steps.push({ endpoint: 'forms', label: 'Creating forms...', key: 'forms', body: { formCount: vals.formCount } });
+        if (vals.formCount > 0 && vals.submissionsPerForm > 0) steps.push({ endpoint: 'submissions', label: 'Creating submissions...', key: 'submissions', body: { submissionsPerForm: vals.submissionsPerForm } });
+
+        if (steps.length === 0) {
+          showMessage('error', 'All counts are set to 0. Nothing to generate.');
+          btn.disabled = false;
+          clearBtn.disabled = false;
+          text.textContent = 'Generate Seed Data';
+          return;
+        }
+
         try {
-          const res = await fetch('/admin/seed-data/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(getFormValues())
-          });
-          const data = await res.json();
-          if (res.ok && data.success) {
-            showMessage('success',
-              'Created ' + data.users + ' users, ' + data.content + ' content items, ' +
-              data.forms + ' forms, and ' + data.submissions + ' submissions!'
-            );
-          } else {
-            throw new Error(data.error || 'Generation failed');
+          for (var i = 0; i < steps.length; i++) {
+            var step = steps[i];
+            var pct = Math.round(((i) / steps.length) * 100);
+            updateProgress(pct, step.label, 'Step ' + (i + 1) + ' of ' + steps.length);
+
+            var res = await fetch('/admin/seed-data/generate/' + step.endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(step.body)
+            });
+            var data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || 'Failed at step: ' + step.label);
+            }
+            totals[step.key] = data.count || 0;
           }
+
+          updateProgress(100, 'Complete!', '');
+          setTimeout(hideProgress, 2000);
+
+          var parts = [];
+          if (totals.users > 0) parts.push(totals.users + ' users');
+          if (totals.content > 0) parts.push(totals.content + ' content items');
+          if (totals.forms > 0) parts.push(totals.forms + ' forms');
+          if (totals.submissions > 0) parts.push(totals.submissions + ' submissions');
+          showMessage('success', 'Created ' + parts.join(', ') + '!');
         } catch (e) {
+          hideProgress();
           showMessage('error', 'Error: ' + e.message);
         } finally {
           btn.disabled = false;
-          text.textContent = 'Generate Data';
+          clearBtn.disabled = false;
+          text.textContent = 'Generate Seed Data';
         }
       }
 
       async function clearSeedData() {
         if (!confirm('Are you sure you want to clear ALL data? This removes all content, forms, submissions, and non-admin users. This cannot be undone!')) return;
 
-        const btn = document.getElementById('clearBtn');
-        const text = document.getElementById('clearText');
+        var btn = document.getElementById('clearBtn');
+        var text = document.getElementById('clearText');
         btn.disabled = true;
         text.textContent = 'Clearing...';
 
         try {
-          const res = await fetch('/admin/seed-data/clear', {
+          var res = await fetch('/admin/seed-data/clear', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
-          const data = await res.json();
+          var data = await res.json();
           if (res.ok && data.success) {
             showMessage('success', 'All seed data cleared successfully!');
           } else {
@@ -1913,7 +1977,7 @@ function createSeedDataAdminRoutes() {
       }
     </script>
     `;
-    return c.html(chunkSHCYIZAN_cjs.renderAdminLayout({
+    return c.html(chunkGMUS5V42_cjs.renderAdminLayout({
       title: "Seed Data Generator",
       pageTitle: "Seed Data Generator",
       currentPath: "/admin/seed-data",
@@ -1925,10 +1989,10 @@ function createSeedDataAdminRoutes() {
       const db = c.env.DB;
       const body = await c.req.json();
       const settings = {
-        userCount: Math.min(Math.max(Number(body.userCount) || DEFAULTS.userCount, 1), 100),
-        contentCount: Math.min(Math.max(Number(body.contentCount) || DEFAULTS.contentCount, 10), 1e3),
-        formCount: Math.min(Math.max(Number(body.formCount) || DEFAULTS.formCount, 1), 20),
-        submissionsPerForm: Math.min(Math.max(Number(body.submissionsPerForm) || 0, 0), 100),
+        userCount: Math.min(Math.max(parseNumberOrDefault(body.userCount, DEFAULTS.userCount), 0), 100),
+        contentCount: Math.min(Math.max(parseNumberOrDefault(body.contentCount, DEFAULTS.contentCount), 0), 1e3),
+        formCount: Math.min(Math.max(parseNumberOrDefault(body.formCount, DEFAULTS.formCount), 0), 20),
+        submissionsPerForm: Math.min(Math.max(parseNumberOrDefault(body.submissionsPerForm, DEFAULTS.submissionsPerForm), 0), 100),
         richness: body.richness === "minimal" ? "minimal" : "full"
       };
       await db.prepare(
@@ -1939,15 +2003,82 @@ function createSeedDataAdminRoutes() {
       return c.json({ success: false, error: error.message }, 500);
     }
   });
+  routes.post("/generate/users", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const userCount = Math.min(Math.max(parseNumberOrDefault(body.userCount, 0), 0), 100);
+      if (userCount === 0) return c.json({ success: true, count: 0 });
+      const seedService = new SeedDataService(db);
+      const count = await seedService.createUsers(userCount);
+      return c.json({ success: true, count });
+    } catch (error) {
+      console.error("[Seed Data] Users error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
+  routes.post("/generate/content", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const contentCount = Math.min(Math.max(parseNumberOrDefault(body.contentCount, 0), 0), 1e3);
+      const richness = body.richness === "minimal" ? "minimal" : "full";
+      if (contentCount === 0) return c.json({ success: true, count: 0 });
+      const seedService = new SeedDataService(db);
+      const count = await seedService.createContent(contentCount, richness);
+      return c.json({ success: true, count });
+    } catch (error) {
+      console.error("[Seed Data] Content error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
+  routes.post("/generate/forms", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const formCount = Math.min(Math.max(parseNumberOrDefault(body.formCount, 0), 0), 20);
+      if (formCount === 0) return c.json({ success: true, count: 0 });
+      const { results: admins } = await db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").all();
+      const creatorId = admins?.[0]?.id || "system";
+      const seedService = new SeedDataService(db);
+      const { forms } = await seedService.createForms(formCount, creatorId);
+      return c.json({ success: true, count: forms });
+    } catch (error) {
+      console.error("[Seed Data] Forms error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
+  routes.post("/generate/submissions", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const submissionsPerForm = Math.min(Math.max(parseNumberOrDefault(body.submissionsPerForm, 0), 0), 100);
+      if (submissionsPerForm === 0) return c.json({ success: true, count: 0 });
+      const { results: forms } = await db.prepare("SELECT id, formio_schema FROM forms").all();
+      if (!forms || forms.length === 0) return c.json({ success: true, count: 0 });
+      const { results: allUsers } = await db.prepare("SELECT id, email FROM users").all();
+      const seedService = new SeedDataService(db);
+      let totalSubmissions = 0;
+      for (const form of forms) {
+        const schema = JSON.parse(form.formio_schema);
+        const created = await seedService.createSubmissions(form.id, schema, submissionsPerForm, allUsers || []);
+        totalSubmissions += created;
+      }
+      return c.json({ success: true, count: totalSubmissions });
+    } catch (error) {
+      console.error("[Seed Data] Submissions error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
   routes.post("/generate", async (c) => {
     try {
       const db = c.env.DB;
       const body = await c.req.json();
       const options = {
-        userCount: Math.min(Math.max(Number(body.userCount) || DEFAULTS.userCount, 1), 100),
-        contentCount: Math.min(Math.max(Number(body.contentCount) || DEFAULTS.contentCount, 10), 1e3),
-        formCount: Math.min(Math.max(Number(body.formCount) || DEFAULTS.formCount, 1), 20),
-        submissionsPerForm: Math.min(Math.max(Number(body.submissionsPerForm) || 0, 0), 100),
+        userCount: Math.min(Math.max(parseNumberOrDefault(body.userCount, DEFAULTS.userCount), 0), 100),
+        contentCount: Math.min(Math.max(parseNumberOrDefault(body.contentCount, DEFAULTS.contentCount), 0), 1e3),
+        formCount: Math.min(Math.max(parseNumberOrDefault(body.formCount, DEFAULTS.formCount), 0), 20),
+        submissionsPerForm: Math.min(Math.max(parseNumberOrDefault(body.submissionsPerForm, DEFAULTS.submissionsPerForm), 0), 100),
         richness: body.richness === "minimal" ? "minimal" : "full"
       };
       const seedService = new SeedDataService(db);
@@ -2590,7 +2721,7 @@ function createOTPLoginPlugin() {
           error: "Account is deactivated"
         }, 403);
       }
-      const token = await chunkZS5MYHCW_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+      const token = await chunkJ5AMF4T5_cjs.AuthManager.generateToken(user.id, user.email, user.role);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2668,2166 +2799,22 @@ var manifest_default = {
   description: "Advanced search with Cloudflare AI Search. Full-text search, semantic search, and advanced filtering across all content collections.",
   version: "1.0.0",
   author: "SonicJS"};
-
-// src/plugins/core-plugins/ai-search-plugin/services/embedding.service.ts
-var EmbeddingService = class {
-  constructor(ai) {
-    this.ai = ai;
-  }
-  /**
-   * Generate embedding for a single text
-   * 
-   * ⭐ Enhanced with Cloudflare Similarity-Based Caching
-   * - Automatically caches embeddings for 30 days
-   * - Similar queries share the same cache (semantic matching)
-   * - 90%+ speedup for repeated/similar queries (200ms → 5ms)
-   * - Zero infrastructure cost (included with Workers AI)
-   * 
-   * Example: "cloudflare workers" and "cloudflare worker" share cache
-   */
-  async generateEmbedding(text) {
-    try {
-      const response = await this.ai.run("@cf/baai/bge-base-en-v1.5", {
-        text: this.preprocessText(text)
-      }, {
-        // ⭐ Enable Cloudflare's Similarity-Based Caching
-        // This provides semantic cache matching across similar queries
-        cf: {
-          cacheTtl: 2592e3,
-          // 30 days (maximum allowed)
-          cacheEverything: true
-          // Cache all AI responses
-        }
-      });
-      if (response.data && response.data.length > 0) {
-        return response.data[0];
-      }
-      throw new Error("No embedding data returned");
-    } catch (error) {
-      console.error("[EmbeddingService] Error generating embedding:", error);
-      throw error;
-    }
-  }
-  /**
-   * Generate embeddings for multiple texts (batch processing)
-   */
-  async generateBatch(texts) {
-    try {
-      const batchSize = 10;
-      const batches = [];
-      for (let i = 0; i < texts.length; i += batchSize) {
-        batches.push(texts.slice(i, i + batchSize));
-      }
-      const allEmbeddings = [];
-      for (const batch of batches) {
-        const batchEmbeddings = await Promise.all(
-          batch.map((text) => this.generateEmbedding(text))
-        );
-        allEmbeddings.push(...batchEmbeddings);
-      }
-      return allEmbeddings;
-    } catch (error) {
-      console.error("[EmbeddingService] Error generating batch embeddings:", error);
-      throw error;
-    }
-  }
-  /**
-   * Preprocess text before generating embedding
-   * - Trim whitespace
-   * - Limit length to avoid token limits
-   * - Remove special characters that might cause issues
-   */
-  preprocessText(text) {
-    if (!text) return "";
-    let processed = text.trim().replace(/\s+/g, " ");
-    if (processed.length > 8e3) {
-      processed = processed.substring(0, 8e3);
-    }
-    return processed;
-  }
-  /**
-   * Calculate cosine similarity between two embeddings
-   */
-  cosineSimilarity(a, b) {
-    if (a.length !== b.length) {
-      throw new Error("Embeddings must have same dimensions");
-    }
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-    for (let i = 0; i < a.length; i++) {
-      const aVal = a[i] ?? 0;
-      const bVal = b[i] ?? 0;
-      dotProduct += aVal * bVal;
-      normA += aVal * aVal;
-      normB += bVal * bVal;
-    }
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
+var clampWeight = (val, fallback) => {
+  const n = Number(val);
+  return isNaN(n) || !isFinite(n) ? fallback : Math.round(Math.min(10, Math.max(0, n)) * 10) / 10;
 };
-
-// src/plugins/core-plugins/ai-search-plugin/services/chunking.service.ts
-var ChunkingService = class {
-  // Default chunk size (in approximate tokens)
-  CHUNK_SIZE = 500;
-  CHUNK_OVERLAP = 50;
-  /**
-   * Chunk a single content item
-   */
-  chunkContent(contentId, collectionId, title, data, metadata = {}) {
-    const text = this.extractText(data);
-    if (!text || text.trim().length === 0) {
-      console.warn(`[ChunkingService] No text found for content ${contentId}`);
-      return [];
-    }
-    const textChunks = this.splitIntoChunks(text);
-    return textChunks.map((chunkText, index) => ({
-      id: `${contentId}_chunk_${index}`,
-      content_id: contentId,
-      collection_id: collectionId,
-      title,
-      text: chunkText,
-      chunk_index: index,
-      metadata: {
-        ...metadata,
-        total_chunks: textChunks.length
-      }
-    }));
-  }
-  /**
-   * Chunk multiple content items
-   */
-  chunkContentBatch(items) {
-    const allChunks = [];
-    for (const item of items) {
-      const chunks = this.chunkContent(
-        item.id,
-        item.collection_id,
-        item.title,
-        item.data,
-        item.metadata
-      );
-      allChunks.push(...chunks);
-    }
-    return allChunks;
-  }
-  /**
-   * Extract all text from content data
-   */
-  extractText(data) {
-    const parts = [];
-    if (data.title) parts.push(String(data.title));
-    if (data.name) parts.push(String(data.name));
-    if (data.description) parts.push(String(data.description));
-    if (data.content) parts.push(String(data.content));
-    if (data.body) parts.push(String(data.body));
-    if (data.text) parts.push(String(data.text));
-    if (data.summary) parts.push(String(data.summary));
-    const extractRecursive = (obj) => {
-      if (typeof obj === "string") {
-        if (obj.length > 10 && !obj.startsWith("http")) {
-          parts.push(obj);
-        }
-      } else if (Array.isArray(obj)) {
-        obj.forEach(extractRecursive);
-      } else if (obj && typeof obj === "object") {
-        const skipKeys = ["id", "slug", "url", "image", "thumbnail", "metadata"];
-        Object.entries(obj).forEach(([key, value]) => {
-          if (!skipKeys.includes(key.toLowerCase())) {
-            extractRecursive(value);
-          }
-        });
-      }
-    };
-    extractRecursive(data);
-    return parts.join("\n\n").trim();
-  }
-  /**
-   * Split text into overlapping chunks
-   */
-  splitIntoChunks(text) {
-    const words = text.split(/\s+/);
-    if (words.length <= this.CHUNK_SIZE) {
-      return [text];
-    }
-    const chunks = [];
-    let startIndex = 0;
-    while (startIndex < words.length) {
-      const endIndex = Math.min(startIndex + this.CHUNK_SIZE, words.length);
-      const chunk = words.slice(startIndex, endIndex).join(" ");
-      chunks.push(chunk);
-      startIndex += this.CHUNK_SIZE - this.CHUNK_OVERLAP;
-      if (startIndex >= words.length - this.CHUNK_OVERLAP) {
-        break;
-      }
-    }
-    return chunks;
-  }
-  /**
-   * Get optimal chunk size based on content type
-   */
-  getOptimalChunkSize(contentType) {
-    switch (contentType) {
-      case "blog_posts":
-      case "articles":
-        return 600;
-      // Larger chunks for long-form content
-      case "products":
-      case "pages":
-        return 400;
-      // Medium chunks for structured content
-      case "messages":
-      case "comments":
-        return 200;
-      // Small chunks for short content
-      default:
-        return this.CHUNK_SIZE;
-    }
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/custom-rag.service.ts
-var CustomRAGService = class {
-  constructor(db, ai, vectorize) {
-    this.db = db;
-    this.ai = ai;
-    this.vectorize = vectorize;
-    this.embeddingService = new EmbeddingService(ai);
-    this.chunkingService = new ChunkingService();
-  }
-  embeddingService;
-  chunkingService;
-  /**
-   * Index all content from a collection
-   */
-  async indexCollection(collectionId) {
-    console.log(`[CustomRAG] Starting indexing for collection: ${collectionId}`);
-    try {
-      const { results: contentItems } = await this.db.prepare(`
-          SELECT c.id, c.title, c.data, c.collection_id, c.status,
-                 c.created_at, c.updated_at, c.author_id,
-                 col.name as collection_name, col.display_name as collection_display_name
-          FROM content c
-          JOIN collections col ON c.collection_id = col.id
-          WHERE c.collection_id = ? AND c.status != 'deleted'
-        `).bind(collectionId).all();
-      const totalItems = contentItems?.length || 0;
-      if (totalItems === 0) {
-        console.log(`[CustomRAG] No content found in collection ${collectionId}`);
-        return { total_items: 0, total_chunks: 0, indexed_chunks: 0, errors: 0 };
-      }
-      const items = (contentItems || []).map((item) => ({
-        id: item.id,
-        collection_id: item.collection_id,
-        title: item.title || "Untitled",
-        data: typeof item.data === "string" ? JSON.parse(item.data) : item.data,
-        metadata: {
-          status: item.status,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          author_id: item.author_id,
-          collection_name: item.collection_name,
-          collection_display_name: item.collection_display_name
-        }
-      }));
-      const chunks = this.chunkingService.chunkContentBatch(items);
-      const totalChunks = chunks.length;
-      console.log(`[CustomRAG] Generated ${totalChunks} chunks from ${totalItems} items`);
-      const embeddings = await this.embeddingService.generateBatch(
-        chunks.map((c) => `${c.title}
-
-${c.text}`)
-      );
-      console.log(`[CustomRAG] Generated ${embeddings.length} embeddings`);
-      let indexedChunks = 0;
-      let errors = 0;
-      const batchSize = 100;
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const chunkBatch = chunks.slice(i, i + batchSize);
-        const embeddingBatch = embeddings.slice(i, i + batchSize);
-        try {
-          await this.vectorize.upsert(
-            chunkBatch.map((chunk, idx) => ({
-              id: chunk.id,
-              values: embeddingBatch[idx],
-              metadata: {
-                content_id: chunk.content_id,
-                collection_id: chunk.collection_id,
-                title: chunk.title,
-                text: chunk.text.substring(0, 500),
-                // Store snippet for display
-                chunk_index: chunk.chunk_index,
-                ...chunk.metadata
-              }
-            }))
-          );
-          indexedChunks += chunkBatch.length;
-          console.log(`[CustomRAG] Indexed batch ${i / batchSize + 1}: ${chunkBatch.length} chunks`);
-        } catch (error) {
-          console.error(`[CustomRAG] Error indexing batch ${i / batchSize + 1}:`, error);
-          errors += chunkBatch.length;
-        }
-      }
-      console.log(`[CustomRAG] Indexing complete: ${indexedChunks}/${totalChunks} chunks indexed`);
-      return {
-        total_items: totalItems,
-        total_chunks: totalChunks,
-        indexed_chunks: indexedChunks,
-        errors
-      };
-    } catch (error) {
-      console.error(`[CustomRAG] Error indexing collection ${collectionId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Auto-index content in selected collections that hasn't been indexed into Vectorize yet.
-   * Mirrors FTS5's ensureCollectionsIndexed() self-healing pattern.
-   */
-  async ensureCollectionsIndexed(collections2) {
-    if (collections2.length === 0) return;
-    try {
-      const placeholders = collections2.map(() => "?").join(", ");
-      const { results: indexedCollections } = await this.db.prepare(`
-          SELECT collection_id, status, indexed_items FROM ai_search_index_meta
-          WHERE collection_id IN (${placeholders}) AND status = 'completed' AND indexed_items > 0
-        `).bind(...collections2).all();
-      const completedIds = new Set((indexedCollections || []).map((r) => r.collection_id));
-      const unindexedCollections = collections2.filter((id) => !completedIds.has(id));
-      if (unindexedCollections.length === 0) return;
-      console.log(`[CustomRAG] Auto-indexing ${unindexedCollections.length} collection(s) into Vectorize...`);
-      for (const collectionId of unindexedCollections) {
-        try {
-          await this.db.prepare(`
-              INSERT OR REPLACE INTO ai_search_index_meta(collection_id, collection_name, status, total_items, indexed_items)
-              VALUES (?, ?, 'indexing', 0, 0)
-            `).bind(collectionId, collectionId).run();
-          const result = await this.indexCollection(collectionId);
-          await this.db.prepare(`
-              UPDATE ai_search_index_meta
-              SET status = 'completed', total_items = ?, indexed_items = ?, last_sync_at = ?
-              WHERE collection_id = ?
-            `).bind(result.total_items, result.indexed_chunks, Date.now(), collectionId).run();
-          console.log(`[CustomRAG] Auto-indexed collection ${collectionId}: ${result.indexed_chunks} chunks from ${result.total_items} items`);
-        } catch (error) {
-          console.error(`[CustomRAG] Error auto-indexing collection ${collectionId}:`, error);
-          await this.db.prepare(`
-              UPDATE ai_search_index_meta SET status = 'error', error_message = ?
-              WHERE collection_id = ?
-            `).bind(String(error), collectionId).run().catch(() => {
-          });
-        }
-      }
-    } catch (error) {
-      console.error("[CustomRAG] Error during auto-indexing check:", error);
-    }
-  }
-  /**
-   * Search using RAG (semantic search with Vectorize)
-   */
-  async search(query, settings) {
-    const startTime = Date.now();
-    try {
-      const collections2 = query.filters?.collections?.length ? query.filters.collections : settings.selected_collections;
-      await this.ensureCollectionsIndexed(collections2);
-      const queryEmbedding = await this.embeddingService.generateEmbedding(query.query);
-      const filter = {};
-      if (query.filters?.collections && query.filters.collections.length > 0) {
-        filter.collection_id = { $in: query.filters.collections };
-      } else if (settings.selected_collections.length > 0) {
-        filter.collection_id = { $in: settings.selected_collections };
-      }
-      if (query.filters?.status && query.filters.status.length > 0) {
-        filter.status = { $in: query.filters.status };
-      }
-      const vectorResults = await this.vectorize.query(queryEmbedding, {
-        topK: 50,
-        // Max allowed with returnMetadata: true
-        returnMetadata: "all"
-      });
-      let filteredMatches = vectorResults.matches || [];
-      if (filter.collection_id?.$in && Array.isArray(filter.collection_id.$in)) {
-        const allowedCollections = filter.collection_id.$in;
-        const beforeCount = filteredMatches.length;
-        filteredMatches = filteredMatches.filter(
-          (match) => allowedCollections.includes(match.metadata?.collection_id)
-        );
-      }
-      if (filter.status?.$in && Array.isArray(filter.status.$in)) {
-        const allowedStatuses = filter.status.$in;
-        filteredMatches = filteredMatches.filter(
-          (match) => allowedStatuses.includes(match.metadata?.status)
-        );
-      }
-      const topK = query.limit || settings.results_limit || 20;
-      filteredMatches = filteredMatches.slice(0, topK);
-      vectorResults.matches = filteredMatches;
-      if (!vectorResults.matches || vectorResults.matches.length === 0) {
-        return {
-          results: [],
-          total: 0,
-          query_time_ms: Date.now() - startTime,
-          mode: "ai"
-        };
-      }
-      const contentIds = [...new Set(
-        vectorResults.matches.map((m) => m.metadata.content_id)
-      )];
-      const placeholders = contentIds.map(() => "?").join(",");
-      const { results: contentItems } = await this.db.prepare(`
-          SELECT c.id, c.title, c.slug, c.collection_id, c.status,
-                 c.created_at, c.updated_at, c.author_id,
-                 col.display_name as collection_name
-          FROM content c
-          JOIN collections col ON c.collection_id = col.id
-          WHERE c.id IN (${placeholders})
-        `).bind(...contentIds).all();
-      const d1Map = new Map((contentItems || []).map((item) => [item.id, item]));
-      const bestByContent = /* @__PURE__ */ new Map();
-      for (const match of vectorResults.matches) {
-        const cid = match.metadata?.content_id;
-        if (!cid || !d1Map.has(cid)) continue;
-        const existing = bestByContent.get(cid);
-        if (!existing || match.score > existing.score) {
-          bestByContent.set(cid, match);
-        }
-      }
-      const MIN_RELEVANCE_SCORE = 0.6;
-      const SCORE_GAP_THRESHOLD = 0.05;
-      const sortedEntries = [...bestByContent.entries()].sort((a, b) => b[1].score - a[1].score);
-      const filteredEntries = [];
-      for (let i = 0; i < sortedEntries.length; i++) {
-        const entry = sortedEntries[i];
-        const score = entry[1].score;
-        if (score < MIN_RELEVANCE_SCORE) break;
-        if (i > 0) {
-          const prevScore = sortedEntries[i - 1][1].score;
-          const gap = prevScore - score;
-          if (gap > SCORE_GAP_THRESHOLD) {
-            break;
-          }
-        }
-        filteredEntries.push(entry);
-      }
-      bestByContent.clear();
-      for (const [key, value] of filteredEntries) {
-        bestByContent.set(key, value);
-      }
-      const searchResults = [];
-      for (const [contentId, bestMatch] of bestByContent) {
-        const d1Item = d1Map.get(contentId);
-        searchResults.push({
-          id: d1Item.id,
-          title: d1Item.title || "Untitled",
-          slug: d1Item.slug || "",
-          collection_id: d1Item.collection_id,
-          collection_name: d1Item.collection_name,
-          snippet: bestMatch.metadata?.text || "",
-          relevance_score: bestMatch.score || 0,
-          status: d1Item.status,
-          created_at: d1Item.created_at,
-          updated_at: d1Item.updated_at
-        });
-      }
-      searchResults.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
-      const queryTime = Date.now() - startTime;
-      console.log(`[CustomRAG] Search completed in ${queryTime}ms, ${searchResults.length} results`);
-      return {
-        results: searchResults,
-        total: searchResults.length,
-        query_time_ms: queryTime,
-        mode: "ai"
-      };
-    } catch (error) {
-      console.error("[CustomRAG] Search error:", error);
-      throw error;
-    }
-  }
-  /**
-   * Update index for a single content item
-   */
-  async updateContentIndex(contentId) {
-    try {
-      const content2 = await this.db.prepare(`
-          SELECT c.id, c.title, c.data, c.collection_id, c.status,
-                 c.created_at, c.updated_at, c.author_id,
-                 col.name as collection_name, col.display_name as collection_display_name
-          FROM content c
-          JOIN collections col ON c.collection_id = col.id
-          WHERE c.id = ?
-        `).bind(contentId).first();
-      if (!content2) {
-        console.warn(`[CustomRAG] Content ${contentId} not found`);
-        return;
-      }
-      if (content2.status !== "published") {
-        await this.removeContentFromIndex(contentId);
-        return;
-      }
-      const chunks = this.chunkingService.chunkContent(
-        content2.id,
-        content2.collection_id,
-        content2.title || "Untitled",
-        typeof content2.data === "string" ? JSON.parse(content2.data) : content2.data,
-        {
-          status: content2.status,
-          created_at: content2.created_at,
-          updated_at: content2.updated_at,
-          author_id: content2.author_id,
-          collection_name: content2.collection_name,
-          collection_display_name: content2.collection_display_name
-        }
-      );
-      const embeddings = await this.embeddingService.generateBatch(
-        chunks.map((c) => `${c.title}
-
-${c.text}`)
-      );
-      await this.vectorize.upsert(
-        chunks.map((chunk, idx) => ({
-          id: chunk.id,
-          values: embeddings[idx],
-          metadata: {
-            content_id: chunk.content_id,
-            collection_id: chunk.collection_id,
-            title: chunk.title,
-            text: chunk.text.substring(0, 500),
-            chunk_index: chunk.chunk_index,
-            ...chunk.metadata
-          }
-        }))
-      );
-      console.log(`[CustomRAG] Updated index for content ${contentId}: ${chunks.length} chunks`);
-    } catch (error) {
-      console.error(`[CustomRAG] Error updating index for ${contentId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Remove content from index
-   */
-  async removeContentFromIndex(contentId) {
-    try {
-      console.log(`[CustomRAG] Removing content ${contentId} from index`);
-    } catch (error) {
-      console.error(`[CustomRAG] Error removing content ${contentId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Get search suggestions based on query
-   */
-  async getSuggestions(partialQuery, limit = 5) {
-    try {
-      const queryEmbedding = await this.embeddingService.generateEmbedding(partialQuery);
-      const results = await this.vectorize.query(queryEmbedding, {
-        topK: limit * 2,
-        // Get more to filter
-        returnMetadata: true
-      });
-      const suggestions = [...new Set(
-        results.matches?.map((m) => m.metadata.title).filter(Boolean) || []
-      )].slice(0, limit);
-      return suggestions;
-    } catch (error) {
-      console.error("[CustomRAG] Error getting suggestions:", error);
-      return [];
-    }
-  }
-  /**
-   * Check if Vectorize is available and configured
-   */
-  isAvailable() {
-    return !!this.vectorize && !!this.ai;
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/hybrid-search.service.ts
-var HybridSearchService = class {
-  constructor(fts5Service, customRAG) {
-    this.fts5Service = fts5Service;
-    this.customRAG = customRAG;
-  }
-  /**
-   * Run FTS5 + AI searches in parallel, merge with RRF
-   * Uses Promise.allSettled for partial failure tolerance
-   */
-  async search(query, settings) {
-    const startTime = Date.now();
-    const searches = [
-      this.fts5Service.search(query, settings)
-    ];
-    if (this.customRAG?.isAvailable()) {
-      searches.push(this.customRAG.search(query, settings));
-    }
-    const settled = await Promise.allSettled(searches);
-    const fulfilled = [];
-    for (const result of settled) {
-      if (result.status === "fulfilled") {
-        fulfilled.push(result.value);
-      } else {
-        console.error("[HybridSearch] One search leg failed:", result.reason);
-      }
-    }
-    if (fulfilled.length === 0) {
-      return {
-        results: [],
-        total: 0,
-        query_time_ms: Date.now() - startTime,
-        mode: "hybrid"
-      };
-    }
-    return this.mergeWithRRF(fulfilled, query, settings, startTime);
-  }
-  /**
-   * Reciprocal Rank Fusion (Cormack et al. 2009)
-   * score(d) = Σ 1/(k + rank(d))  where k=60
-   */
-  mergeWithRRF(responses, query, settings, startTime) {
-    const K = 60;
-    const scoreMap = /* @__PURE__ */ new Map();
-    for (const response of responses) {
-      response.results.forEach((result, rank) => {
-        const id = result.id;
-        const rrfContribution = 1 / (K + rank + 1);
-        if (scoreMap.has(id)) {
-          const existing = scoreMap.get(id);
-          existing.rrfScore += rrfContribution;
-          if (result.highlights) existing.result.highlights = result.highlights;
-          if (result.bm25_score) existing.result.bm25_score = result.bm25_score;
-          if (result.relevance_score) existing.result.relevance_score = result.relevance_score;
-        } else {
-          scoreMap.set(id, {
-            result: { ...result },
-            rrfScore: rrfContribution
-          });
-        }
-      });
-    }
-    const limit = query.limit || settings.results_limit || 20;
-    const merged = Array.from(scoreMap.values()).sort((a, b) => b.rrfScore - a.rrfScore).slice(0, limit).map(({ result, rrfScore }) => ({
-      ...result,
-      rrf_score: rrfScore
-    }));
-    return {
-      mode: "hybrid",
-      results: merged,
-      total: scoreMap.size,
-      query_time_ms: Date.now() - startTime
-    };
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/query-rewriter.service.ts
-var REWRITE_SYSTEM_PROMPT = `You are a search query optimizer. Given a user's search query, rewrite it to improve search results by:
-- Adding relevant synonyms or related terms
-- Expanding abbreviations
-- Keeping the core intent intact
-
-Rules:
-- Return ONLY the rewritten query, nothing else
-- Keep it concise (under 100 characters)
-- Do not add explanations or formatting
-- Do not wrap in quotes
-- If the query is already precise, return it unchanged`;
-var QueryRewriterService = class {
-  constructor(ai) {
-    this.ai = ai;
-  }
-  /**
-   * Rewrite a query using LLM expansion
-   * Returns original query on any failure
-   */
-  async rewrite(originalQuery) {
-    try {
-      const response = await this.ai.run(
-        "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
-        {
-          messages: [
-            { role: "system", content: REWRITE_SYSTEM_PROMPT },
-            { role: "user", content: originalQuery }
-          ],
-          max_tokens: 100
-        }
-      );
-      const rewritten = response.response?.trim();
-      if (!rewritten) return originalQuery;
-      if (rewritten.length > originalQuery.length * 3) return originalQuery;
-      if (rewritten.length > 200) return originalQuery;
-      if (rewritten.includes("\n")) return originalQuery;
-      return rewritten;
-    } catch (error) {
-      console.error("[QueryRewriter] LLM call failed, using original query:", error);
-      return originalQuery;
-    }
-  }
-  /**
-   * Check if a query should be rewritten
-   * Short/precise queries don't benefit from rewriting
-   */
-  static shouldRewrite(query) {
-    return query.length >= 15;
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/reranker.service.ts
-var RerankerService = class {
-  constructor(ai) {
-    this.ai = ai;
-  }
-  /**
-   * Rerank results using cross-encoder scoring
-   * Returns results sorted by reranker score with rerank_score field added
-   */
-  async rerank(query, results, topK) {
-    if (results.length <= 1) return results;
-    const limit = topK || results.length;
-    try {
-      const contexts = results.map((r) => ({
-        text: `${r.title}. ${r.snippet || ""}`
-      }));
-      const response = await this.ai.run("@cf/baai/bge-reranker-base", {
-        query,
-        contexts,
-        top_k: limit
-      });
-      const scores = Array.isArray(response) ? response : response.response;
-      if (!Array.isArray(scores) || scores.length === 0) {
-        console.warn("[Reranker] Unexpected response format, returning original order");
-        return results.slice(0, limit);
-      }
-      const reranked = scores.filter((s) => s.id >= 0 && s.id < results.length).map((s) => {
-        const result = results[s.id];
-        return { ...result, rerank_score: s.score };
-      });
-      return reranked.slice(0, limit);
-    } catch (error) {
-      console.error("[Reranker] Cross-encoder failed, returning original order:", error);
-      return results.slice(0, limit);
-    }
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts
-var AISearchService = class {
-  constructor(db, ai, vectorize) {
-    this.db = db;
-    this.ai = ai;
-    this.vectorize = vectorize;
-    if (this.ai && this.vectorize) {
-      this.customRAG = new CustomRAGService(db, ai, vectorize);
-      console.log("[AISearchService] Custom RAG initialized");
-    } else {
-      console.log("[AISearchService] Custom RAG not available, using keyword search only");
-    }
-    this.fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
-    console.log("[AISearchService] FTS5 service initialized");
-    this.hybridService = new HybridSearchService(this.fts5Service, this.customRAG);
-    console.log("[AISearchService] Hybrid search service initialized");
-    if (this.ai) {
-      this.queryRewriter = new QueryRewriterService(this.ai);
-      this.reranker = new RerankerService(this.ai);
-      console.log("[AISearchService] Query rewriter and reranker initialized");
-    }
-  }
-  customRAG;
-  fts5Service;
-  hybridService;
-  queryRewriter;
-  reranker;
-  /**
-   * Get plugin settings
-   */
-  async getSettings() {
-    try {
-      const plugin2 = await this.db.prepare(`SELECT settings FROM plugins WHERE id = ? LIMIT 1`).bind("ai-search").first();
-      if (!plugin2 || !plugin2.settings) {
-        return this.getDefaultSettings();
-      }
-      return JSON.parse(plugin2.settings);
-    } catch (error) {
-      console.error("Error fetching AI Search settings:", error);
-      return this.getDefaultSettings();
-    }
-  }
-  /**
-   * Get default settings
-   */
-  getDefaultSettings() {
-    return {
-      enabled: true,
-      ai_mode_enabled: true,
-      selected_collections: [],
-      dismissed_collections: [],
-      autocomplete_enabled: true,
-      cache_duration: 1,
-      results_limit: 20,
-      index_media: false,
-      query_rewriting_enabled: false,
-      reranking_enabled: true
-    };
-  }
-  /**
-   * Update plugin settings
-   */
-  async updateSettings(settings) {
-    const existing = await this.getSettings();
-    const updated = {
-      ...existing,
-      ...settings
-    };
-    try {
-      await this.db.prepare(`
-          UPDATE plugins
-          SET settings = ?,
-              updated_at = unixepoch()
-          WHERE id = 'ai-search'
-        `).bind(JSON.stringify(updated)).run();
-      return updated;
-    } catch (error) {
-      console.error("Error updating AI Search settings:", error);
-      throw error;
-    }
-  }
-  /**
-   * Detect new collections that aren't indexed or dismissed
-   */
-  async detectNewCollections() {
-    try {
-      const collectionsStmt = this.db.prepare(
-        "SELECT id, name, display_name, description FROM collections WHERE is_active = 1"
-      );
-      const { results: allCollections } = await collectionsStmt.all();
-      const collections2 = (allCollections || []).filter(
-        (col) => {
-          if (!col.name) return false;
-          const name = col.name.toLowerCase();
-          return !name.startsWith("test_") && !name.endsWith("_test") && name !== "test_collection" && !name.includes("_test_") && name !== "large_payload_test" && name !== "concurrent_test";
-        }
-      );
-      const settings = await this.getSettings();
-      const selected = settings?.selected_collections || [];
-      const dismissed = settings?.dismissed_collections || [];
-      const notifications = [];
-      for (const collection of collections2 || []) {
-        const collectionId = String(collection.id);
-        if (selected.includes(collectionId) || dismissed.includes(collectionId)) {
-          continue;
-        }
-        const countStmt = this.db.prepare(
-          "SELECT COUNT(*) as count FROM content WHERE collection_id = ?"
-        );
-        const countResult = await countStmt.bind(collectionId).first();
-        const itemCount = countResult?.count || 0;
-        notifications.push({
-          collection: {
-            id: collectionId,
-            name: collection.name,
-            display_name: collection.display_name,
-            description: collection.description,
-            item_count: itemCount,
-            is_indexed: false,
-            is_dismissed: false,
-            is_new: true
-          },
-          message: `New collection "${collection.display_name}" with ${itemCount} items available for indexing`
-        });
-      }
-      return notifications;
-    } catch (error) {
-      console.error("Error detecting new collections:", error);
-      return [];
-    }
-  }
-  /**
-   * Get all collections with indexing status
-   */
-  async getAllCollections() {
-    try {
-      const collectionsStmt = this.db.prepare(
-        "SELECT id, name, display_name, description FROM collections WHERE is_active = 1 ORDER BY display_name"
-      );
-      const { results: allCollections } = await collectionsStmt.all();
-      console.log("[AISearchService.getAllCollections] Raw collections from DB:", allCollections?.length || 0);
-      const firstCollection = allCollections?.[0];
-      if (firstCollection) {
-        console.log("[AISearchService.getAllCollections] Sample collection:", {
-          id: firstCollection.id,
-          name: firstCollection.name,
-          display_name: firstCollection.display_name
-        });
-      }
-      const collections2 = (allCollections || []).filter(
-        (col) => col.id && col.name
-      );
-      console.log("[AISearchService.getAllCollections] After filtering test collections:", collections2.length);
-      console.log("[AISearchService.getAllCollections] Remaining collections:", collections2.map((c) => c.name).join(", "));
-      const settings = await this.getSettings();
-      const selected = settings?.selected_collections || [];
-      const dismissed = settings?.dismissed_collections || [];
-      console.log("[AISearchService.getAllCollections] Settings:", {
-        selected_count: selected.length,
-        dismissed_count: dismissed.length,
-        selected
-      });
-      const collectionInfos = [];
-      for (const collection of collections2) {
-        if (!collection.id || !collection.name) continue;
-        const collectionId = String(collection.id);
-        if (!collectionId) {
-          console.warn("[AISearchService] Skipping invalid collection:", collection);
-          continue;
-        }
-        const countStmt = this.db.prepare(
-          "SELECT COUNT(*) as count FROM content WHERE collection_id = ?"
-        );
-        const countResult = await countStmt.bind(collectionId).first();
-        const itemCount = countResult?.count || 0;
-        collectionInfos.push({
-          id: collectionId,
-          name: collection.name,
-          display_name: collection.display_name || collection.name,
-          description: collection.description,
-          item_count: itemCount,
-          is_indexed: selected.includes(collectionId),
-          is_dismissed: dismissed.includes(collectionId),
-          is_new: !selected.includes(collectionId) && !dismissed.includes(collectionId)
-        });
-      }
-      console.log("[AISearchService.getAllCollections] Returning collectionInfos:", collectionInfos.length);
-      const firstInfo = collectionInfos[0];
-      if (collectionInfos.length > 0 && firstInfo) {
-        console.log("[AISearchService.getAllCollections] First collectionInfo:", {
-          id: firstInfo.id,
-          name: firstInfo.name,
-          display_name: firstInfo.display_name,
-          item_count: firstInfo.item_count
-        });
-      }
-      return collectionInfos;
-    } catch (error) {
-      console.error("[AISearchService] Error fetching collections:", error);
-      return [];
-    }
-  }
-  /**
-   * Execute search query
-   * Supports three modes: 'ai' (semantic), 'fts5' (full-text), 'keyword' (basic)
-   */
-  async search(query) {
-    const settings = await this.getSettings();
-    if (!settings?.enabled) {
-      return {
-        results: [],
-        total: 0,
-        query_time_ms: 0,
-        mode: query.mode
-      };
-    }
-    if (query.mode === "hybrid") {
-      return this.searchHybrid(query, settings);
-    }
-    if (query.mode === "fts5") {
-      return this.searchFTS5(query, settings);
-    }
-    if (query.mode === "ai" && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
-      return this.searchAI(query, settings);
-    }
-    return this.searchKeyword(query, settings);
-  }
-  /**
-   * FTS5 full-text search with BM25 ranking, stemming, and highlighting
-   */
-  async searchFTS5(query, settings) {
-    try {
-      if (!this.fts5Service) {
-        console.warn("[AISearchService] FTS5 service not initialized, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      if (!await this.fts5Service.isAvailable()) {
-        console.warn("[AISearchService] FTS5 table not available, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      const result = await this.fts5Service.search(query, settings);
-      await this.logSearch(query.query, "fts5", result.results.length);
-      return result;
-    } catch (error) {
-      console.error("[AISearchService] FTS5 search error, falling back to keyword:", error);
-      return this.searchKeyword(query, settings);
-    }
-  }
-  /**
-   * Hybrid search: FTS5 + AI combined with RRF, optional query rewriting + reranking
-   */
-  async searchHybrid(query, settings) {
-    const startTime = Date.now();
-    try {
-      if (!this.hybridService || !this.fts5Service) {
-        console.warn("[AISearchService] Hybrid service not available, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      if (!await this.fts5Service.isAvailable()) {
-        console.warn("[AISearchService] FTS5 not available for hybrid, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      let searchQuery = query;
-      const rewritingEnabled = settings.query_rewriting_enabled ?? false;
-      if (rewritingEnabled && this.queryRewriter && QueryRewriterService.shouldRewrite(query.query)) {
-        const rewritten = await this.queryRewriter.rewrite(query.query);
-        if (rewritten !== query.query) {
-          console.log(`[AISearchService] Query rewritten: "${query.query}" \u2192 "${rewritten}"`);
-          searchQuery = { ...query, query: rewritten };
-        }
-      }
-      let result = await this.hybridService.search(searchQuery, settings);
-      const rerankingEnabled = settings.reranking_enabled ?? true;
-      if (rerankingEnabled && this.reranker && result.results.length > 1) {
-        const limit = query.limit || settings.results_limit || 20;
-        result = {
-          ...result,
-          results: await this.reranker.rerank(query.query, result.results, limit),
-          query_time_ms: Date.now() - startTime
-        };
-      }
-      await this.logSearch(query.query, "hybrid", result.results.length);
-      return result;
-    } catch (error) {
-      console.error("[AISearchService] Hybrid search error, falling back to keyword:", error);
-      return this.searchKeyword(query, settings);
-    }
-  }
-  /**
-   * AI-powered semantic search using Custom RAG
-   */
-  async searchAI(query, settings) {
-    try {
-      if (!this.customRAG) {
-        console.warn("[AISearchService] CustomRAG not available, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      const result = await this.customRAG.search(query, settings);
-      return result;
-    } catch (error) {
-      console.error("[AISearchService] AI search error, falling back to keyword:", error);
-      return this.searchKeyword(query, settings);
-    }
-  }
-  /**
-   * Traditional keyword search
-   */
-  async searchKeyword(query, settings) {
-    const startTime = Date.now();
-    try {
-      const conditions = [];
-      const params = [];
-      if (query.query) {
-        conditions.push("(c.title LIKE ? OR c.slug LIKE ? OR c.data LIKE ?)");
-        const searchTerm = `%${query.query}%`;
-        params.push(searchTerm, searchTerm, searchTerm);
-      }
-      if (query.filters?.collections && query.filters.collections.length > 0) {
-        const placeholders = query.filters.collections.map(() => "?").join(",");
-        conditions.push(`c.collection_id IN (${placeholders})`);
-        params.push(...query.filters.collections);
-      } else if (settings.selected_collections.length > 0) {
-        const placeholders = settings.selected_collections.map(() => "?").join(",");
-        conditions.push(`c.collection_id IN (${placeholders})`);
-        params.push(...settings.selected_collections);
-      }
-      if (query.filters?.status && query.filters.status.length > 0) {
-        const placeholders = query.filters.status.map(() => "?").join(",");
-        conditions.push(`c.status IN (${placeholders})`);
-        params.push(...query.filters.status);
-      } else {
-        conditions.push("c.status != 'deleted'");
-      }
-      if (query.filters?.dateRange) {
-        const field = query.filters.dateRange.field || "created_at";
-        if (query.filters.dateRange.start) {
-          conditions.push(`c.${field} >= ?`);
-          params.push(query.filters.dateRange.start.getTime());
-        }
-        if (query.filters.dateRange.end) {
-          conditions.push(`c.${field} <= ?`);
-          params.push(query.filters.dateRange.end.getTime());
-        }
-      }
-      if (query.filters?.author) {
-        conditions.push("c.author_id = ?");
-        params.push(query.filters.author);
-      }
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const countStmt = this.db.prepare(`
-        SELECT COUNT(*) as count 
-        FROM content c
-        ${whereClause}
-      `);
-      const countResult = await countStmt.bind(...params).first();
-      const total = countResult?.count || 0;
-      const limit = query.limit || settings.results_limit;
-      const offset = query.offset || 0;
-      const resultsStmt = this.db.prepare(`
-        SELECT 
-          c.id, c.title, c.slug, c.collection_id, c.status,
-          c.created_at, c.updated_at, c.author_id, c.data,
-          col.name as collection_name, col.display_name as collection_display_name,
-          u.email as author_email
-        FROM content c
-        JOIN collections col ON c.collection_id = col.id
-        LEFT JOIN users u ON c.author_id = u.id
-        ${whereClause}
-        ORDER BY c.updated_at DESC
-        LIMIT ? OFFSET ?
-      `);
-      const { results } = await resultsStmt.bind(...params, limit, offset).all();
-      const searchResults = (results || []).map((row) => ({
-        id: String(row.id),
-        title: row.title || "Untitled",
-        slug: row.slug || "",
-        collection_id: String(row.collection_id),
-        collection_name: row.collection_display_name || row.collection_name,
-        snippet: this.extractSnippet(row.data, query.query),
-        status: row.status,
-        created_at: Number(row.created_at),
-        updated_at: Number(row.updated_at),
-        author_name: row.author_email
-      }));
-      const queryTime = Date.now() - startTime;
-      await this.logSearch(query.query, query.mode, searchResults.length);
-      return {
-        results: searchResults,
-        total,
-        query_time_ms: queryTime,
-        mode: query.mode
-      };
-    } catch (error) {
-      console.error("Keyword search error:", error);
-      return {
-        results: [],
-        total: 0,
-        query_time_ms: Date.now() - startTime,
-        mode: query.mode
-      };
-    }
-  }
-  /**
-   * Extract snippet from content data
-   * Pulls human-readable text from JSON data fields instead of raw JSON
-   */
-  extractSnippet(data, query) {
-    try {
-      const parsed = typeof data === "string" ? JSON.parse(data) : data;
-      const textParts = [];
-      const textFields = ["description", "content", "body", "text", "summary", "excerpt"];
-      for (const field of textFields) {
-        if (parsed[field] && typeof parsed[field] === "string") {
-          textParts.push(parsed[field]);
-        }
-      }
-      if (textParts.length === 0) {
-        for (const value of Object.values(parsed)) {
-          if (typeof value === "string" && value.length > 20) {
-            textParts.push(value);
-          }
-        }
-      }
-      const text = textParts.join(" ").replace(/\s+/g, " ").trim();
-      if (!text) {
-        return "No preview available";
-      }
-      const queryLower = query.toLowerCase();
-      const textLower = text.toLowerCase();
-      const index = textLower.indexOf(queryLower);
-      if (index === -1) {
-        return text.substring(0, 200) + (text.length > 200 ? "..." : "");
-      }
-      const start = Math.max(0, index - 80);
-      const end = Math.min(text.length, index + query.length + 120);
-      const prefix = start > 0 ? "..." : "";
-      const suffix = end < text.length ? "..." : "";
-      return prefix + text.substring(start, end) + suffix;
-    } catch {
-      return data.substring(0, 200) + "...";
-    }
-  }
-  /**
-   * Get search suggestions (autocomplete)
-   * Uses fast keyword prefix matching for instant results (<50ms)
-   */
-  async getSearchSuggestions(partial) {
-    try {
-      const settings = await this.getSettings();
-      if (!settings?.autocomplete_enabled) {
-        return [];
-      }
-      try {
-        const stmt = this.db.prepare(`
-          SELECT DISTINCT title 
-          FROM ai_search_index 
-          WHERE title LIKE ? 
-          ORDER BY title 
-          LIMIT 10
-        `);
-        const { results } = await stmt.bind(`%${partial}%`).all();
-        const suggestions = (results || []).map((r) => r.title).filter(Boolean);
-        if (suggestions.length > 0) {
-          return suggestions;
-        }
-      } catch (indexError) {
-        console.log("[AISearchService] Index table not available yet, using search history");
-      }
-      try {
-        const historyStmt = this.db.prepare(`
-          SELECT DISTINCT query 
-          FROM ai_search_history 
-          WHERE query LIKE ? 
-          ORDER BY created_at DESC 
-          LIMIT 10
-        `);
-        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all();
-        return (historyResults || []).map((r) => r.query);
-      } catch (historyError) {
-        console.log("[AISearchService] No suggestions available (tables not initialized)");
-        return [];
-      }
-    } catch (error) {
-      console.error("Error getting suggestions:", error);
-      return [];
-    }
-  }
-  /**
-   * Log search query to history
-   */
-  async logSearch(query, mode, resultsCount) {
-    try {
-      const stmt = this.db.prepare(`
-        INSERT INTO ai_search_history (query, mode, results_count, created_at)
-        VALUES (?, ?, ?, ?)
-      `);
-      await stmt.bind(query, mode, resultsCount, Date.now()).run();
-    } catch (error) {
-      console.error("Error logging search:", error);
-    }
-  }
-  /**
-   * Get search analytics
-   */
-  async getSearchAnalytics() {
-    try {
-      const totalStmt = this.db.prepare(`
-        SELECT COUNT(*) as count
-        FROM ai_search_history
-        WHERE created_at >= ?
-      `);
-      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1e3;
-      const totalResult = await totalStmt.bind(thirtyDaysAgo).first();
-      const modeStmt = this.db.prepare(`
-        SELECT mode, COUNT(*) as count
-        FROM ai_search_history
-        WHERE created_at >= ?
-        GROUP BY mode
-      `);
-      const { results: modeResults } = await modeStmt.bind(thirtyDaysAgo).all();
-      const aiCount = modeResults?.find((r) => r.mode === "ai")?.count || 0;
-      const keywordCount = modeResults?.find((r) => r.mode === "keyword")?.count || 0;
-      const fts5Count = modeResults?.find((r) => r.mode === "fts5")?.count || 0;
-      const hybridCount = modeResults?.find((r) => r.mode === "hybrid")?.count || 0;
-      const popularStmt = this.db.prepare(`
-        SELECT query, COUNT(*) as count
-        FROM ai_search_history
-        WHERE created_at >= ?
-        GROUP BY query
-        ORDER BY count DESC
-        LIMIT 10
-      `);
-      const { results: popularResults } = await popularStmt.bind(thirtyDaysAgo).all();
-      return {
-        total_queries: totalResult?.count || 0,
-        ai_queries: aiCount,
-        keyword_queries: keywordCount,
-        fts5_queries: fts5Count,
-        hybrid_queries: hybridCount,
-        popular_queries: (popularResults || []).map((r) => ({
-          query: r.query,
-          count: r.count
-        })),
-        average_query_time: 0
-        // TODO: Track query times
-      };
-    } catch (error) {
-      console.error("Error getting analytics:", error);
-      return {
-        total_queries: 0,
-        ai_queries: 0,
-        keyword_queries: 0,
-        fts5_queries: 0,
-        hybrid_queries: 0,
-        popular_queries: [],
-        average_query_time: 0
-      };
-    }
-  }
-  /**
-   * Verify Custom RAG is available
-   */
-  verifyBinding() {
-    return this.customRAG?.isAvailable() ?? false;
-  }
-  /**
-   * Get Custom RAG service instance (for indexer)
-   */
-  getCustomRAG() {
-    return this.customRAG;
-  }
-  /**
-   * Get FTS5 service instance (for content sync and admin operations)
-   */
-  getFTS5Service() {
-    return this.fts5Service;
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/indexer.ts
-var IndexManager = class {
-  constructor(db, ai, vectorize) {
-    this.db = db;
-    this.ai = ai;
-    this.vectorize = vectorize;
-    if (this.ai && this.vectorize) {
-      this.customRAG = new CustomRAGService(db, ai, vectorize);
-      console.log("[IndexManager] Custom RAG initialized");
-    }
-  }
-  customRAG;
-  /**
-   * Index all content items within a collection using Custom RAG
-   */
-  async indexCollection(collectionId) {
-    try {
-      const collectionStmt = this.db.prepare(
-        "SELECT id, name, display_name FROM collections WHERE id = ?"
-      );
-      const collection = await collectionStmt.bind(collectionId).first();
-      if (!collection) {
-        throw new Error(`Collection ${collectionId} not found`);
-      }
-      await this.updateIndexStatus(collectionId, {
-        collection_id: collectionId,
-        collection_name: collection.display_name,
-        total_items: 0,
-        indexed_items: 0,
-        status: "indexing"
-      });
-      if (this.customRAG?.isAvailable()) {
-        console.log(`[IndexManager] Using Custom RAG to index collection ${collectionId}`);
-        const result = await this.customRAG.indexCollection(collectionId);
-        const finalStatus = {
-          collection_id: collectionId,
-          collection_name: collection.display_name,
-          total_items: result.total_items,
-          indexed_items: result.indexed_chunks,
-          last_sync_at: Date.now(),
-          status: result.errors > 0 ? "error" : "completed",
-          error_message: result.errors > 0 ? `${result.errors} errors during indexing` : void 0
-        };
-        await this.updateIndexStatus(collectionId, finalStatus);
-        return finalStatus;
-      }
-      console.warn(`[IndexManager] Custom RAG not available, skipping vector indexing for ${collectionId}`);
-      const countResult = await this.db.prepare(
-        "SELECT COUNT(*) as cnt FROM content WHERE collection_id = ?"
-      ).bind(collectionId).first();
-      const totalItems = countResult?.cnt || 0;
-      let fts5Indexed = 0;
-      try {
-        const fts5Count = await this.db.prepare(
-          "SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?"
-        ).bind(collectionId).first();
-        fts5Indexed = fts5Count?.cnt || 0;
-      } catch {
-      }
-      const fallbackStatus = {
-        collection_id: collectionId,
-        collection_name: collection.display_name,
-        total_items: totalItems,
-        indexed_items: fts5Indexed,
-        last_sync_at: Date.now(),
-        status: "completed",
-        error_message: fts5Indexed > 0 ? void 0 : "Using FTS5/keyword search (Vectorize not available)"
-      };
-      await this.updateIndexStatus(collectionId, fallbackStatus);
-      return fallbackStatus;
-    } catch (error) {
-      console.error(`[IndexManager] Error indexing collection ${collectionId}:`, error);
-      const errorStatus = {
-        collection_id: collectionId,
-        collection_name: "Unknown",
-        total_items: 0,
-        indexed_items: 0,
-        status: "error",
-        error_message: error instanceof Error ? error.message : String(error)
-      };
-      await this.updateIndexStatus(collectionId, errorStatus);
-      return errorStatus;
-    }
-  }
-  /**
-   * Index a single content item
-   */
-  async indexContentItem(item, collectionId) {
-    try {
-      let parsedData = {};
-      try {
-        parsedData = typeof item.data === "string" ? JSON.parse(item.data) : item.data;
-      } catch {
-        parsedData = {};
-      }
-      const document = {
-        id: `content_${item.id}`,
-        title: item.title || "Untitled",
-        slug: item.slug || "",
-        content: this.extractSearchableText(parsedData),
-        metadata: {
-          collection_id: collectionId,
-          collection_name: item.collection_name,
-          collection_display_name: item.collection_display_name,
-          status: item.status,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          author_id: item.author_id
-        }
-      };
-      console.log(`Indexed content item: ${item.id}`);
-    } catch (error) {
-      console.error(`Error indexing content item ${item.id}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Extract searchable text from content data
-   */
-  extractSearchableText(data) {
-    const parts = [];
-    if (data.title) parts.push(String(data.title));
-    if (data.name) parts.push(String(data.name));
-    if (data.description) parts.push(String(data.description));
-    if (data.content) parts.push(String(data.content));
-    if (data.body) parts.push(String(data.body));
-    if (data.text) parts.push(String(data.text));
-    const extractStrings = (obj) => {
-      if (typeof obj === "string") {
-        parts.push(obj);
-      } else if (Array.isArray(obj)) {
-        obj.forEach(extractStrings);
-      } else if (obj && typeof obj === "object") {
-        Object.values(obj).forEach(extractStrings);
-      }
-    };
-    extractStrings(data);
-    return parts.join(" ");
-  }
-  /**
-   * Update a single content item in the index
-   */
-  async updateIndex(collectionId, contentId) {
-    try {
-      const stmt = this.db.prepare(`
-            SELECT 
-              c.id, c.title, c.slug, c.data, c.status,
-              c.created_at, c.updated_at, c.author_id,
-              col.name as collection_name, col.display_name as collection_display_name
-            FROM content c
-            JOIN collections col ON c.collection_id = col.id
-            WHERE c.id = ? AND c.collection_id = ?
-          `);
-      const item = await stmt.bind(contentId, collectionId).first();
-      if (!item) {
-        throw new Error(`Content item ${contentId} not found`);
-      }
-      await this.indexContentItem(item, String(collectionId));
-      const status = await this.getIndexStatus(String(collectionId));
-      if (status) {
-        await this.updateIndexStatus(String(collectionId), {
-          ...status,
-          last_sync_at: Date.now()
-        });
-      }
-    } catch (error) {
-      console.error(`Error updating index for content ${contentId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Remove a content item from the index using Custom RAG
-   */
-  async removeFromIndex(collectionId, contentId) {
-    try {
-      if (this.customRAG?.isAvailable()) {
-        console.log(`[IndexManager] Removing content ${contentId} from index`);
-        await this.customRAG.removeContentFromIndex(contentId);
-      } else {
-        console.warn(`[IndexManager] Custom RAG not available, skipping removal for ${contentId}`);
-      }
-    } catch (error) {
-      console.error(`[IndexManager] Error removing content ${contentId} from index:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Get indexing status for a collection
-   */
-  async getIndexStatus(collectionId) {
-    try {
-      const stmt = this.db.prepare(
-        "SELECT * FROM ai_search_index_meta WHERE collection_id = ?"
-      );
-      const result = await stmt.bind(collectionId).first();
-      if (!result) {
-        return null;
-      }
-      return {
-        collection_id: String(result.collection_id),
-        collection_name: result.collection_name,
-        total_items: result.total_items,
-        indexed_items: result.indexed_items,
-        last_sync_at: result.last_sync_at,
-        status: result.status,
-        error_message: result.error_message
-      };
-    } catch (error) {
-      console.error(`Error getting index status for collection ${collectionId}:`, error);
-      return null;
-    }
-  }
-  /**
-   * Get indexing status for all collections
-   */
-  async getAllIndexStatus() {
-    try {
-      const stmt = this.db.prepare("SELECT * FROM ai_search_index_meta");
-      const { results } = await stmt.all();
-      const statusMap = {};
-      for (const row of results || []) {
-        const collectionId = String(row.collection_id);
-        statusMap[collectionId] = {
-          collection_id: collectionId,
-          collection_name: row.collection_name,
-          total_items: row.total_items,
-          indexed_items: row.indexed_items,
-          last_sync_at: row.last_sync_at,
-          status: row.status,
-          error_message: row.error_message
-        };
-      }
-      return statusMap;
-    } catch (error) {
-      console.error("Error getting all index status:", error);
-      return {};
-    }
-  }
-  /**
-   * Update index status in database
-   */
-  async updateIndexStatus(collectionId, status) {
-    try {
-      const checkStmt = this.db.prepare(
-        "SELECT id FROM ai_search_index_meta WHERE collection_id = ?"
-      );
-      const existing = await checkStmt.bind(collectionId).first();
-      if (existing) {
-        const stmt = this.db.prepare(`
-              UPDATE ai_search_index_meta 
-              SET collection_name = ?,
-                  total_items = ?,
-                  indexed_items = ?,
-                  last_sync_at = ?,
-                  status = ?,
-                  error_message = ?
-              WHERE collection_id = ?
-            `);
-        await stmt.bind(
-          status.collection_name,
-          status.total_items,
-          status.indexed_items,
-          status.last_sync_at || null,
-          status.status,
-          status.error_message || null,
-          String(collectionId)
-        ).run();
-      } else {
-        const stmt = this.db.prepare(`
-              INSERT INTO ai_search_index_meta (
-                collection_id, collection_name, total_items, indexed_items,
-                last_sync_at, status, error_message
-              ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            `);
-        await stmt.bind(
-          String(status.collection_id),
-          status.collection_name,
-          status.total_items,
-          status.indexed_items,
-          status.last_sync_at || null,
-          status.status,
-          status.error_message || null
-        ).run();
-      }
-    } catch (error) {
-      console.error(`Error updating index status for collection ${collectionId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Sync all selected collections
-   */
-  async syncAll(selectedCollections) {
-    for (const collectionId of selectedCollections) {
-      try {
-        await this.indexCollection(collectionId);
-      } catch (error) {
-        console.error(`Error syncing collection ${collectionId}:`, error);
-      }
-    }
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/components/settings-page.ts
-function renderSettingsPage(data) {
-  const settings = data.settings || {
-    enabled: false,
-    ai_mode_enabled: true,
-    selected_collections: [],
-    dismissed_collections: [],
-    autocomplete_enabled: true,
-    cache_duration: 1,
-    results_limit: 20,
-    index_media: false
-  };
-  const selectedCollections = Array.isArray(settings.selected_collections) ? settings.selected_collections : [];
-  const dismissedCollections = Array.isArray(settings.dismissed_collections) ? settings.dismissed_collections : [];
-  const enabled = settings.enabled === true;
-  const aiModeEnabled = settings.ai_mode_enabled !== false;
-  const autocompleteEnabled = settings.autocomplete_enabled !== false;
-  const indexMedia = settings.index_media === true;
-  const selectedCollectionIds = new Set(selectedCollections.map((id) => String(id)));
-  const dismissedCollectionIds = new Set(dismissedCollections.map((id) => String(id)));
-  const collections2 = Array.isArray(data.collections) ? data.collections : [];
-  console.log("[SettingsPage Template] Collections received:", collections2.length);
-  if (collections2.length > 0) {
-    console.log("[SettingsPage Template] First collection:", collections2[0]);
-  }
-  const content2 = `
-    <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
-      <!-- Header with Back Button -->
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">\u{1F50D} AI Search Settings</h1>
-          <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">
-            Configure advanced search with Cloudflare AI Search. Select collections to index and manage search preferences.
-          </p>
-        </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-3">
-          <a href="/admin/plugins/ai-search/integration" target="_blank" class="inline-flex items-center justify-center rounded-lg bg-green-600 hover:bg-green-700 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
-            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-            </svg>
-            Headless Guide
-          </a>
-          <a href="/admin/plugins/ai-search/test" target="_blank" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
-            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-            </svg>
-            Test Search
-          </a>
-          <a href="/admin/plugins" class="inline-flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
-            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-            </svg>
-            Back to Plugins
-          </a>
-        </div>
-      </div>
-
-
-          <!-- Main Settings Card -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
-            <form id="settingsForm" class="space-y-6">
-              <!-- Enable Search Section -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">\u{1F50D} Search Settings</h2>
-                <div class="space-y-3">
-                  <div class="flex items-center gap-3 p-4 border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-                    <input type="checkbox" id="enabled" name="enabled" ${enabled ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">Enable AI Search</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Turn on advanced search capabilities across your content</p>
-                    </div>
-                  </div>
-
-                  <div class="flex items-center gap-3 p-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <input type="checkbox" id="ai_mode_enabled" name="ai_mode_enabled" ${aiModeEnabled ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="ai_mode_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">\u{1F916} AI/Semantic Search</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                        Enable natural language queries (requires Cloudflare Workers AI binding)
-                        <a href="https://developers.cloudflare.com/workers-ai/" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline ml-1">\u2192 Setup Guide</a>
-                      </p>
-                      <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                        \u26A0\uFE0F If AI binding unavailable, will fallback to keyword search
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- Collections Section -->
-              <div>
-                <div class="flex items-start justify-between mb-4">
-                  <div>
-                    <h2 class="text-xl font-semibold text-zinc-950 dark:text-white">\u{1F4DA} Collections to Index</h2>
-                    <p class="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-                      Select which content collections should be indexed and searchable. Only checked collections will be included in search results.
-                    </p>
-                  </div>
-                </div>
-            <div class="space-y-3 max-h-96 overflow-y-auto border-2 border-zinc-300 dark:border-zinc-700 rounded-lg p-4 bg-white dark:bg-zinc-800" id="collections-list">
-              ${collections2.length === 0 ? '<p class="text-sm text-zinc-500 dark:text-zinc-400 p-4">No collections available. Create collections first.</p>' : collections2.map((collection) => {
-    const collectionId = String(collection.id);
-    const isChecked = selectedCollectionIds.has(collectionId);
-    const isDismissed = dismissedCollectionIds.has(collectionId);
-    const indexStatusMap = data.indexStatus || {};
-    const status = indexStatusMap[collectionId];
-    const isNew = collection.is_new === true && !isDismissed && !status;
-    const statusBadge = status && isChecked ? `<span class="ml-2 px-2 py-1 text-xs rounded-full ${status.status === "completed" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" : status.status === "indexing" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" : status.status === "error" ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"}">${status.status}</span>` : "";
-    return `<div class="flex items-start gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 ${isNew ? "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"}">
-                      <input
-                        type="checkbox"
-                        id="collection_${collectionId}"
-                        name="selected_collections"
-                        value="${collectionId}"
-                        ${isChecked ? "checked" : ""}
-                        class="mt-1 w-5 h-5 text-indigo-600 bg-white border-gray-300 rounded focus:ring-indigo-500 focus:ring-2 cursor-pointer"
-                        style="cursor: pointer; flex-shrink: 0;"
-                      />
-                      <div class="flex-1 min-w-0">
-                        <label for="collection_${collectionId}" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer flex items-center">
-                          ${collection.display_name || collection.name || "Unnamed Collection"}
-                          ${isNew ? '<span class="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">NEW</span>' : ""}
-                          ${statusBadge}
-                        </label>
-                        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          ${collection.description || collection.name || "No description"} \u2022 ${collection.item_count || 0} items
-                          ${status ? ` \u2022 ${status.indexed_items}/${status.total_items} indexed` : ""}
-                        </p>
-                        ${status && status.status === "indexing" ? `<div class="mt-2 w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                              <div class="bg-blue-600 h-2 rounded-full" style="width: ${status.indexed_items / status.total_items * 100}%"></div>
-                            </div>` : ""}
-                      </div>
-                      ${isChecked ? `
-                        <button
-                          type="button"
-                          onclick="reindexCollection('${collectionId}')"
-                          class="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap"
-                          ${status && status.status === "indexing" ? "disabled" : ""}
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          Re-index
-                        </button>
-                      ` : ""}
-                    </div>`;
-  }).join("")}
-            </div>
-          </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- Advanced Options -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">\u2699\uFE0F Advanced Options</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="flex items-start gap-3 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <input type="checkbox" id="autocomplete_enabled" name="autocomplete_enabled" ${autocompleteEnabled ? "checked" : ""} class="mt-0.5 w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                    <div>
-                      <label for="autocomplete_enabled" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer block">Autocomplete Suggestions</label>
-                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Show search suggestions as users type</p>
-                    </div>
-                  </div>
-
-                  <div class="flex items-start gap-3 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <input type="checkbox" id="index_media" name="index_media" ${indexMedia ? "checked" : ""} class="mt-0.5 w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                    <div>
-                      <label for="index_media" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer block">Index Media Metadata</label>
-                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Include media files in search results</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Cache Duration (hours)</label>
-                    <input type="number" id="cache_duration" name="cache_duration" value="${settings.cache_duration || 1}" min="0" max="24" class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Results Per Page</label>
-                    <input type="number" id="results_limit" name="results_limit" value="${settings.results_limit || 20}" min="10" max="100" class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-                  </div>
-                </div>
-          </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- Hybrid Search Settings -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Hybrid Search</h2>
-                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-                  Hybrid mode combines FTS5 + AI search with Reciprocal Rank Fusion for best-quality results. Use <code>mode: "hybrid"</code> in your API requests.
-                </p>
-                <div class="space-y-3">
-                  <div class="flex items-center gap-3 p-4 border border-purple-200 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <input type="checkbox" id="reranking_enabled" name="reranking_enabled" ${settings.reranking_enabled !== false ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="reranking_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">AI Reranking</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                        Cross-encoder reranks results for better relevance. Adds ~50-150ms. Cost: ~$0.003/M tokens.
-                      </p>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-3 p-4 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                    <input type="checkbox" id="query_rewriting_enabled" name="query_rewriting_enabled" ${settings.query_rewriting_enabled ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="query_rewriting_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">Query Rewriting (LLM)</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                        Expands vague queries using an LLM for better recall. Adds ~100-300ms. Best for large content libraries.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- FTS5 Full-Text Search Section -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">FTS5 Full-Text Search</h2>
-                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-                  SQLite FTS5 provides fast full-text search with BM25 ranking, stemming, and highlighting. No AI binding required.
-                </p>
-                <div id="fts5-status" class="p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 mb-4">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300" id="fts5-status-text">Checking FTS5 status...</span>
-                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1" id="fts5-stats-text"></p>
-                    </div>
-                    <button
-                      type="button"
-                      id="fts5-reindex-btn"
-                      onclick="reindexFTS5All()"
-                      class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reindex All (FTS5)
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Save Button -->
-              <div class="flex items-center justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <p class="text-xs text-zinc-500 dark:text-zinc-400">
-                  \u{1F4A1} Collections marked as <span class="px-1.5 py-0.5 text-xs font-medium rounded-full bg-blue-500 text-white">NEW</span> haven't been indexed yet
-                </p>
-                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm transition-colors">
-                  \u{1F4BE} Save Settings
-                </button>
-              </div>
-        </form>
-      </div>
-
-
-          <!-- Search Analytics -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-            <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">\u{1F4CA} Search Analytics</h2>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">Total Queries</div>
-            <div class="text-2xl font-bold text-zinc-950 dark:text-white mt-1">${data.analytics.total_queries}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">AI Queries</div>
-            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">${data.analytics.ai_queries}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">Keyword Queries</div>
-            <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">${data.analytics.keyword_queries}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">FTS5 Queries</div>
-            <div class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">${data.analytics.fts5_queries || 0}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">Hybrid Queries</div>
-            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">${data.analytics.hybrid_queries || 0}</div>
-          </div>
-        </div>
-        ${data.analytics.popular_queries.length > 0 ? `
-              <div>
-                <h3 class="text-sm font-semibold text-zinc-950 dark:text-white mb-2">Popular Searches</h3>
-                <div class="space-y-1">
-                  ${data.analytics.popular_queries.map(
-    (item) => `
-                      <div class="flex items-center justify-between text-sm">
-                        <span class="text-zinc-700 dark:text-zinc-300">"${item.query}"</span>
-                        <span class="text-zinc-500 dark:text-zinc-400">${item.count} times</span>
-                      </div>
-                    `
-  ).join("")}
-                </div>
-              </div>
-            ` : '<p class="text-sm text-zinc-500 dark:text-zinc-400">No search history yet.</p>'}
-      </div>
-
-          <!-- Success Message -->
-          <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
-            <div class="flex items-center gap-2">
-              <span class="text-xl">\u2705</span>
-              <span class="font-semibold">Settings Saved Successfully!</span>
-            </div>
-          </div>
-    </div>
-    <script>
-      // Form submission with error handling
-      document.getElementById('settingsForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        console.log('[AI Search Client] Form submitted');
-        
-        try {
-          const btn = e.submitter;
-          btn.innerText = 'Saving...'; 
-          btn.disabled = true;
-          
-          const formData = new FormData(e.target);
-          const selectedCollections = Array.from(formData.getAll('selected_collections')).map(String);
-          
-          const data = {
-            enabled: document.getElementById('enabled').checked,
-            ai_mode_enabled: document.getElementById('ai_mode_enabled').checked,
-            selected_collections: selectedCollections,
-            autocomplete_enabled: document.getElementById('autocomplete_enabled').checked,
-            cache_duration: Number(formData.get('cache_duration')),
-            results_limit: Number(formData.get('results_limit')),
-            index_media: document.getElementById('index_media').checked,
-            reranking_enabled: document.getElementById('reranking_enabled').checked,
-            query_rewriting_enabled: document.getElementById('query_rewriting_enabled').checked,
-          };
-          
-          console.log('[AI Search Client] Sending data:', data);
-          console.log('[AI Search Client] Selected collections:', selectedCollections);
-          
-          const res = await fetch('/admin/plugins/ai-search', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify(data) 
-          });
-          
-          console.log('[AI Search Client] Response status:', res.status);
-          
-          if (res.ok) {
-            const result = await res.json();
-            console.log('[AI Search Client] Save successful:', result);
-            document.getElementById('msg').classList.remove('hidden'); 
-            setTimeout(() => {
-              document.getElementById('msg').classList.add('hidden');
-              location.reload();
-            }, 2000); 
-          } else {
-            const error = await res.text();
-            console.error('[AI Search Client] Save failed:', error);
-            alert('Failed to save settings: ' + error);
-          }
-          
-          btn.innerText = 'Save Settings'; 
-          btn.disabled = false;
-        } catch (error) {
-          console.error('[AI Search Client] Error:', error);
-          alert('Error saving settings: ' + error.message);
-        }
-      });
-
-      // Add collection to index
-      async function addCollectionToIndex(collectionId) {
-        const form = document.getElementById('settingsForm');
-        const checkbox = document.getElementById('collection_' + collectionId);
-        if (checkbox) {
-          checkbox.checked = true;
-          form.dispatchEvent(new Event('submit'));
-        }
-      }
-
-      // Dismiss collection
-      async function dismissCollection(collectionId) {
-        const res = await fetch('/admin/plugins/ai-search', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            dismissed_collections: [collectionId]
-          })
-        });
-        if (res.ok) {
-          location.reload();
-        }
-      }
-
-      // Re-index collection
-      async function reindexCollection(collectionId) {
-        const res = await fetch('/admin/plugins/ai-search/api/reindex', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ collection_id: collectionId })
-        });
-        if (res.ok) {
-          alert('Re-indexing started. Page will refresh in a moment.');
-          setTimeout(() => location.reload(), 2000);
-        } else {
-          alert('Failed to start re-indexing. Please try again.');
-        }
-      }
-
-      // Poll for index status updates
-      setInterval(async () => {
-        const res = await fetch('/admin/plugins/ai-search/api/status');
-        if (res.ok) {
-          const { data } = await res.json();
-          // Update status indicators if needed
-          // For now, just reload every 30 seconds if indexing is in progress
-          const hasIndexing = Object.values(data).some((s) => s.status === 'indexing');
-          if (hasIndexing) {
-            location.reload();
-          }
-        }
-      }, 30000);
-
-      // FTS5 status check on load
-      (async function checkFTS5Status() {
-        try {
-          const res = await fetch('/admin/plugins/ai-search/api/fts5/status');
-          if (res.ok) {
-            const { data } = await res.json();
-            const statusText = document.getElementById('fts5-status-text');
-            const statsText = document.getElementById('fts5-stats-text');
-            const reindexBtn = document.getElementById('fts5-reindex-btn');
-            if (data.available) {
-              statusText.textContent = 'FTS5 is available';
-              statsText.textContent = data.total_indexed + ' items indexed across ' + Object.keys(data.by_collection || {}).length + ' collections';
-              reindexBtn.disabled = false;
-            } else {
-              statusText.textContent = 'FTS5 tables not created yet';
-              statsText.textContent = 'Run migrations to enable FTS5 full-text search.';
-            }
-          }
-        } catch (e) {
-          console.error('FTS5 status check failed:', e);
-        }
-      })();
-
-      // Reindex all collections for FTS5
-      async function reindexFTS5All() {
-        const btn = document.getElementById('fts5-reindex-btn');
-        btn.disabled = true;
-        btn.textContent = 'Reindexing...';
-        try {
-          const res = await fetch('/admin/plugins/ai-search/api/fts5/reindex-all', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-          if (res.ok) {
-            const result = await res.json();
-            alert('FTS5 reindex started for ' + (result.collections?.length || 0) + ' collections');
-            setTimeout(() => location.reload(), 3000);
-          } else {
-            alert('Failed to start FTS5 reindex');
-            btn.disabled = false;
-            btn.textContent = 'Reindex All (FTS5)';
-          }
-        } catch (e) {
-          alert('Error: ' + e.message);
-          btn.disabled = false;
-          btn.textContent = 'Reindex All (FTS5)';
-        }
-      }
-    </script>
-  `;
-  return chunkSHCYIZAN_cjs.renderAdminLayout({
-    title: "AI Search Settings",
-    pageTitle: "AI Search Settings",
-    currentPath: "/admin/plugins/ai-search/settings",
-    user: data.user,
-    content: content2
-  });
-}
-
-// src/plugins/core-plugins/ai-search-plugin/routes/admin.ts
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+adminRoutes.use("*", chunkJ5AMF4T5_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
-  try {
-    const user = c.get("user");
-    const db = c.env.DB;
-    const ai = c.env.AI;
-    const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
-    const indexer = new IndexManager(db, ai, vectorize);
-    const settings = await service.getSettings();
-    console.log("[AI Search Settings Route] Settings loaded:", !!settings);
-    const collections2 = await service.getAllCollections();
-    console.log("[AI Search Settings Route] Collections returned:", collections2.length);
-    if (collections2.length === 0) {
-      const directQuery = await db.prepare("SELECT id, name, display_name FROM collections WHERE is_active = 1").all();
-      console.log("[AI Search Settings Route] Direct DB query found:", directQuery.results?.length || 0, "collections");
-      if (directQuery.results && directQuery.results.length > 0) {
-        console.log("[AI Search Settings Route] Sample from DB:", directQuery.results[0]);
-      }
-    } else if (collections2.length > 0 && collections2[0]) {
-      console.log("[AI Search Settings Route] First collection:", {
-        id: collections2[0].id,
-        name: collections2[0].name,
-        display_name: collections2[0].display_name
-      });
-    }
-    const newCollections = await service.detectNewCollections();
-    console.log("AI Search: New collections:", newCollections.length);
-    const indexStatus = await indexer.getAllIndexStatus();
-    console.log("AI Search: Index status:", Object.keys(indexStatus).length);
-    const analytics = await service.getSearchAnalytics();
-    return c.html(
-      renderSettingsPage({
-        settings,
-        collections: collections2 || [],
-        newCollections: newCollections || [],
-        indexStatus: indexStatus || {},
-        analytics,
-        user: {
-          name: user.email,
-          email: user.email,
-          role: user.role
-        }
-      })
-    );
-  } catch (error) {
-    console.error("Error rendering AI Search settings:", error);
-    return c.html(`<p>Error loading settings: ${error instanceof Error ? error.message : String(error)}</p>`, 500);
-  }
+  return c.redirect("/admin/search");
 });
 adminRoutes.post("/", async (c) => {
   try {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
-    const indexer = new IndexManager(db, ai, vectorize);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
+    const indexer = new chunkXUG7SRDU_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     console.log("[AI Search POST] Received body:", JSON.stringify(body, null, 2));
     const currentSettings = await service.getSettings();
@@ -4842,7 +2829,11 @@ adminRoutes.post("/", async (c) => {
       results_limit: body.results_limit ? Number(body.results_limit) : currentSettings?.results_limit,
       index_media: body.index_media !== void 0 ? Boolean(body.index_media) : currentSettings?.index_media,
       reranking_enabled: body.reranking_enabled !== void 0 ? Boolean(body.reranking_enabled) : currentSettings?.reranking_enabled,
-      query_rewriting_enabled: body.query_rewriting_enabled !== void 0 ? Boolean(body.query_rewriting_enabled) : currentSettings?.query_rewriting_enabled
+      query_rewriting_enabled: body.query_rewriting_enabled !== void 0 ? Boolean(body.query_rewriting_enabled) : currentSettings?.query_rewriting_enabled,
+      fts5_title_boost: body.fts5_title_boost !== void 0 ? clampWeight(body.fts5_title_boost, currentSettings?.fts5_title_boost ?? 5) : currentSettings?.fts5_title_boost,
+      fts5_slug_boost: body.fts5_slug_boost !== void 0 ? clampWeight(body.fts5_slug_boost, currentSettings?.fts5_slug_boost ?? 2) : currentSettings?.fts5_slug_boost,
+      fts5_body_boost: body.fts5_body_boost !== void 0 ? clampWeight(body.fts5_body_boost, currentSettings?.fts5_body_boost ?? 1) : currentSettings?.fts5_body_boost,
+      query_synonyms_enabled: body.query_synonyms_enabled !== void 0 ? Boolean(body.query_synonyms_enabled) : currentSettings?.query_synonyms_enabled
     };
     console.log("[AI Search POST] Updated settings selected_collections:", updatedSettings.selected_collections);
     const collectionsChanged = JSON.stringify(updatedSettings.selected_collections) !== JSON.stringify(currentSettings?.selected_collections || []);
@@ -4865,7 +2856,7 @@ adminRoutes.get("/api/settings", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
     const settings = await service.getSettings();
     return c.json({ success: true, data: settings });
   } catch (error) {
@@ -4878,7 +2869,7 @@ adminRoutes.get("/api/new-collections", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
     const notifications = await service.detectNewCollections();
     return c.json({ success: true, data: notifications });
   } catch (error) {
@@ -4891,7 +2882,7 @@ adminRoutes.get("/api/status", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new IndexManager(db, ai, vectorize);
+    const indexer = new chunkXUG7SRDU_cjs.IndexManager(db, ai, vectorize);
     const status = await indexer.getAllIndexStatus();
     return c.json({ success: true, data: status });
   } catch (error) {
@@ -4904,7 +2895,7 @@ adminRoutes.post("/api/reindex", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new IndexManager(db, ai, vectorize);
+    const indexer = new chunkXUG7SRDU_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     const collectionIdRaw = body.collection_id;
     const collectionId = collectionIdRaw ? String(collectionIdRaw) : "";
@@ -4923,7 +2914,7 @@ adminRoutes.post("/api/reindex", async (c) => {
 adminRoutes.get("/api/fts5/status", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
+    const fts5Service = new chunkXUG7SRDU_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -4951,7 +2942,7 @@ adminRoutes.get("/api/fts5/status", async (c) => {
 adminRoutes.post("/api/fts5/index-collection", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
+    const fts5Service = new chunkXUG7SRDU_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -4985,8 +2976,8 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
-    const fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
+    const fts5Service = new chunkXUG7SRDU_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -5000,6 +2991,16 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
         success: true,
         message: "No collections selected for indexing"
       });
+    }
+    try {
+      const placeholders = collections2.map(() => "?").join(",");
+      await db.batch([
+        db.prepare(`DELETE FROM content_fts WHERE collection_id NOT IN (${placeholders})`).bind(...collections2),
+        db.prepare(`DELETE FROM content_fts_sync WHERE collection_id NOT IN (${placeholders})`).bind(...collections2)
+      ]);
+      console.log(`[FTS5 Admin] Cleaned up FTS5 entries for unselected collections`);
+    } catch (e) {
+      console.warn("[FTS5 Admin] Cleanup of unselected collections failed (non-fatal):", e);
     }
     c.executionCtx.waitUntil(
       (async () => {
@@ -5028,6 +3029,690 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
     return c.json({ error: "Failed to start FTS5 reindex" }, 500);
   }
 });
+adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    if (!ai || !vectorize) {
+      return c.json({ error: "Vectorize reindexing requires AI and VECTORIZE_INDEX bindings." }, 400);
+    }
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
+    const settings = await service.getSettings();
+    const collections2 = settings?.selected_collections || [];
+    if (collections2.length === 0) {
+      return c.json({ error: "No collections selected. Configure collections in the Configuration tab first." }, 400);
+    }
+    for (const collectionId of collections2) {
+      try {
+        await db.prepare(
+          "DELETE FROM ai_search_index_meta WHERE collection_id = ?"
+        ).bind(collectionId).run();
+        const countResult = await db.prepare(
+          "SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'"
+        ).bind(collectionId).first();
+        const colInfo = await db.prepare(
+          "SELECT display_name FROM collections WHERE id = ?"
+        ).bind(collectionId).first();
+        await db.prepare(`
+          INSERT INTO ai_search_index_meta (collection_id, collection_name, total_items, indexed_items, status, last_sync_at)
+          VALUES (?, ?, ?, 0, 'indexing', ?)
+        `).bind(
+          collectionId,
+          colInfo?.display_name || collectionId,
+          countResult?.cnt || 0,
+          Date.now()
+        ).run();
+      } catch (e) {
+      }
+    }
+    try {
+      const benchmarkIds = [];
+      for (const dsId of chunkXUG7SRDU_cjs.BENCHMARK_DATASETS.map((d) => d.id)) {
+        for (let i = 0; i < 6e3; i++) {
+          for (let chunk = 0; chunk < 3; chunk++) {
+            benchmarkIds.push(`beir-${dsId}-${i}-chunk-${chunk}`);
+          }
+        }
+      }
+      for (let i = 0; i < benchmarkIds.length; i += 1e3) {
+        await vectorize.deleteByIds(benchmarkIds.slice(i, i + 1e3));
+      }
+      console.log("[Vectorize Reindex] Cleaned orphaned benchmark vectors from main index");
+    } catch (e) {
+      console.warn("[Vectorize Reindex] Orphan cleanup failed (non-fatal):", e);
+    }
+    const indexer = new chunkXUG7SRDU_cjs.IndexManager(db, ai, vectorize);
+    c.executionCtx.waitUntil(
+      indexer.syncAll(collections2).then(() => console.log("[Vectorize Reindex] All collections reindexed")).catch((error) => console.error("[Vectorize Reindex] Error:", error))
+    );
+    return c.json({
+      success: true,
+      message: `Vectorize reindexing started for ${collections2.length} collection(s)`,
+      collections: collections2
+    });
+  } catch (error) {
+    console.error("Error starting Vectorize reindex-all:", error);
+    return c.json({ error: "Failed to start Vectorize reindexing" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/preview", async (c) => {
+  try {
+    const db = c.env.DB;
+    const body = await c.req.json();
+    const query = body.query?.trim();
+    if (!query) return c.json({ error: "query is required" }, 400);
+    const limit = Math.min(body.limit || 10, 20);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db);
+    const settings = await service.getSettings();
+    const titleWeight = clampWeight(body.title_weight, settings?.fts5_title_boost ?? 5);
+    const slugWeight = clampWeight(body.slug_weight, settings?.fts5_slug_boost ?? 2);
+    const bodyWeight = clampWeight(body.body_weight, settings?.fts5_body_boost ?? 1);
+    const previewSettings = {
+      ...settings,
+      fts5_title_boost: titleWeight,
+      fts5_slug_boost: slugWeight,
+      fts5_body_boost: bodyWeight
+    };
+    const fts5Service = new chunkXUG7SRDU_cjs.FTS5Service(db);
+    let result = await fts5Service.search(
+      { query, mode: "fts5", limit, offset: 0 },
+      previewSettings,
+      { titleBoost: titleWeight, slugBoost: slugWeight, bodyBoost: bodyWeight }
+    );
+    const pipelineService = new chunkXUG7SRDU_cjs.RankingPipelineService(db);
+    let pipelineApplied = false;
+    try {
+      const config = await pipelineService.getConfig();
+      const activeStages = config.filter((s) => s.enabled && s.weight > 0);
+      if (activeStages.length > 0) {
+        result = await pipelineService.apply(result, query);
+        pipelineApplied = true;
+      }
+    } catch (err) {
+      console.warn("[Relevance Preview] Pipeline application failed:", err);
+    }
+    return c.json({
+      success: true,
+      data: {
+        results: result.results,
+        total: result.total,
+        query_time_ms: result.query_time_ms,
+        weights: { title: titleWeight, slug: slugWeight, body: bodyWeight },
+        pipeline_applied: pipelineApplied
+      }
+    });
+  } catch (error) {
+    console.error("Error in relevance preview:", error);
+    return c.json({ error: "Preview search failed: " + (error instanceof Error ? error.message : String(error)) }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/pipeline", async (c) => {
+  try {
+    const pipelineService = new chunkXUG7SRDU_cjs.RankingPipelineService(c.env.DB);
+    const config = await pipelineService.getConfig();
+    return c.json({ success: true, data: config });
+  } catch (error) {
+    console.error("Error fetching pipeline config:", error);
+    return c.json({ error: "Failed to fetch pipeline config" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/pipeline", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.stages)) {
+      return c.json({ error: "stages must be an array" }, 400);
+    }
+    const pipelineService = new chunkXUG7SRDU_cjs.RankingPipelineService(c.env.DB);
+    await pipelineService.saveConfig(body.stages);
+    const saved = await pipelineService.getConfig();
+    return c.json({ success: true, data: saved });
+  } catch (error) {
+    console.error("Error saving pipeline config:", error);
+    return c.json({ error: "Failed to save pipeline config" }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/content-scores", async (c) => {
+  try {
+    const contentId = c.req.query("content_id");
+    const scoreType = c.req.query("score_type") || "popularity";
+    if (!contentId) {
+      return c.json({ error: "content_id query parameter is required" }, 400);
+    }
+    const pipelineService = new chunkXUG7SRDU_cjs.RankingPipelineService(c.env.DB);
+    const scores = await pipelineService.getContentScores([contentId], scoreType);
+    return c.json({
+      success: true,
+      data: { content_id: contentId, score_type: scoreType, score: scores.get(contentId) ?? null }
+    });
+  } catch (error) {
+    console.error("Error fetching content scores:", error);
+    return c.json({ error: "Failed to fetch content scores" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/content-scores", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { content_id: contentId, score_type: scoreType, score } = body;
+    if (!contentId || !scoreType || score == null) {
+      return c.json({ error: "content_id, score_type, and score are required" }, 400);
+    }
+    if (!["popularity", "custom"].includes(scoreType)) {
+      return c.json({ error: 'score_type must be "popularity" or "custom"' }, 400);
+    }
+    const pipelineService = new chunkXUG7SRDU_cjs.RankingPipelineService(c.env.DB);
+    await pipelineService.setContentScore(String(contentId), scoreType, Number(score));
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error setting content score:", error);
+    return c.json({ error: "Failed to set content score" }, 500);
+  }
+});
+adminRoutes.delete("/api/relevance/content-scores", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { content_id: contentId, score_type: scoreType } = body;
+    if (!contentId || !scoreType) {
+      return c.json({ error: "content_id and score_type are required" }, 400);
+    }
+    const pipelineService = new chunkXUG7SRDU_cjs.RankingPipelineService(c.env.DB);
+    await pipelineService.deleteContentScore(String(contentId), scoreType);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting content score:", error);
+    return c.json({ error: "Failed to delete content score" }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/synonyms", async (c) => {
+  try {
+    const synonymService = new chunkXUG7SRDU_cjs.SynonymService(c.env.DB);
+    const groups = await synonymService.getAll();
+    return c.json({ success: true, data: groups });
+  } catch (error) {
+    console.error("Error fetching synonym groups:", error);
+    return c.json({ error: "Failed to fetch synonym groups" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/synonyms", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.terms) || body.terms.length < 2) {
+      return c.json({ error: "terms must be an array with at least 2 items" }, 400);
+    }
+    const synonymService = new chunkXUG7SRDU_cjs.SynonymService(c.env.DB);
+    const group = await synonymService.create(body.terms, body.enabled !== false);
+    return c.json({ success: true, data: group });
+  } catch (error) {
+    console.error("Error creating synonym group:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to create synonym group" }, 500);
+  }
+});
+adminRoutes.put("/api/relevance/synonyms/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const synonymService = new chunkXUG7SRDU_cjs.SynonymService(c.env.DB);
+    const group = await synonymService.update(id, {
+      terms: body.terms,
+      enabled: body.enabled
+    });
+    if (!group) {
+      return c.json({ error: "Synonym group not found" }, 404);
+    }
+    return c.json({ success: true, data: group });
+  } catch (error) {
+    console.error("Error updating synonym group:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to update synonym group" }, 500);
+  }
+});
+adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const synonymService = new chunkXUG7SRDU_cjs.SynonymService(c.env.DB);
+    const deleted = await synonymService.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Synonym group not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting synonym group:", error);
+    return c.json({ error: "Failed to delete synonym group" }, 500);
+  }
+});
+adminRoutes.get("/api/analytics/extended", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
+    const data = await service.getAnalyticsExtended();
+    return c.json({ success: true, data });
+  } catch (error) {
+    console.error("Error fetching extended analytics:", error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : String(error) }, 500);
+  }
+});
+adminRoutes.get("/api/benchmark/datasets", async (c) => {
+  return c.json({ success: true, datasets: chunkXUG7SRDU_cjs.BENCHMARK_DATASETS });
+});
+adminRoutes.get("/api/benchmark/status", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const dataset = c.req.query("dataset") || "scifact";
+    const benchmarkService = new chunkXUG7SRDU_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const { seeded, count } = await benchmarkService.isSeeded();
+    const meta = benchmarkService.getMeta();
+    const dataAvailable = await benchmarkService.isDataAvailable();
+    let subsetSize = 0;
+    let evaluableQueries = 0;
+    if (dataAvailable) {
+      try {
+        const [ss, eqIds] = await Promise.all([
+          benchmarkService.getSubsetSize(),
+          benchmarkService.getEvaluableQueryIds(0)
+        ]);
+        subsetSize = ss;
+        evaluableQueries = eqIds.length;
+      } catch (e) {
+      }
+    }
+    return c.json({
+      success: true,
+      data: {
+        seeded,
+        seeded_count: count,
+        corpus_size: meta.corpus_size,
+        subset_size: subsetSize,
+        query_count: meta.query_count,
+        evaluable_queries: evaluableQueries,
+        dataset: meta.name,
+        dataset_id: dataset,
+        license: meta.license,
+        data_available: dataAvailable
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching benchmark status:", error);
+    return c.json({ error: `Failed to fetch benchmark status: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/seed", async (c) => {
+  try {
+    const user = c.get("user");
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const useSubset = body.corpus_size !== "full";
+    const benchmarkService = new chunkXUG7SRDU_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const collectionId = benchmarkService.getCollectionId();
+    const userId = user.userId || user.id;
+    const result = await benchmarkService.seed(String(userId), useSubset);
+    if (useSubset) {
+      const fts5Service = new chunkXUG7SRDU_cjs.FTS5Service(db);
+      c.executionCtx.waitUntil(
+        fts5Service.indexCollection(collectionId).then((r) => console.log(`[Benchmark:${dataset}] FTS5 indexed ${r.indexed_items}/${r.total_items} docs`)).catch((e) => console.error(`[Benchmark:${dataset}] FTS5 indexing error:`, e))
+      );
+    }
+    const meta = benchmarkService.getMeta();
+    const indexNote = useSubset ? "FTS5 indexing started in background." : "Use the Index buttons to index before evaluating.";
+    if (result.skipped) {
+      return c.json({
+        success: true,
+        message: `Benchmark data already exists (${result.seeded} documents). ${indexNote}`,
+        seeded: result.seeded,
+        skipped: true
+      });
+    }
+    return c.json({
+      success: true,
+      message: `Seeded ${result.seeded} ${meta.name} documents. ${indexNote}`,
+      seeded: result.seeded,
+      skipped: false
+    });
+  } catch (error) {
+    console.error("Error seeding benchmark data:", error);
+    return c.json(
+      { error: `Failed to seed benchmark data: ${error instanceof Error ? error.message : String(error)}` },
+      500
+    );
+  }
+});
+adminRoutes.post("/api/benchmark/purge", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const benchmarkService = new chunkXUG7SRDU_cjs.BenchmarkService(db, kv, vectorize, dataset);
+    const deleted = await benchmarkService.purge();
+    return c.json({
+      success: true,
+      message: `Removed ${deleted} benchmark documents`,
+      deleted
+    });
+  } catch (error) {
+    console.error("Error purging benchmark data:", error);
+    return c.json({ error: "Failed to purge benchmark data" }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/index-fts5-batch", async (c) => {
+  try {
+    const db = c.env.DB;
+    const fts5Service = new chunkXUG7SRDU_cjs.FTS5Service(db);
+    if (!await fts5Service.isAvailable()) {
+      return c.json({ error: "FTS5 tables not available." }, 400);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const batchSize = body.batch_size || 200;
+    const collectionId = `benchmark-${dataset}-collection`;
+    const result = await fts5Service.indexCollectionBatch(
+      collectionId,
+      batchSize
+    );
+    return c.json({
+      success: true,
+      indexed: result.indexed,
+      remaining: result.remaining,
+      total: result.total
+    });
+  } catch (error) {
+    console.error("Error in FTS5 batch indexing:", error);
+    return c.json({ error: `FTS5 batch indexing failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/index-vectorize-batch", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    if (!ai || !vectorize) {
+      return c.json({ error: "Vectorize indexing requires AI and VECTORIZE_BENCHMARK_INDEX bindings." }, 400);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const batchSize = body.batch_size || 25;
+    const offset = body.offset || 0;
+    const benchmarkCollectionId = `benchmark-${dataset}-collection`;
+    const datasetInfo = chunkXUG7SRDU_cjs.BENCHMARK_DATASETS.find((d) => d.id === dataset);
+    const displayName = datasetInfo ? `${datasetInfo.name} Benchmark` : `BEIR ${dataset} Benchmark`;
+    const embeddingService = new chunkXUG7SRDU_cjs.EmbeddingService(ai);
+    const chunkingService = new chunkXUG7SRDU_cjs.ChunkingService();
+    const totalResult = await db.prepare("SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'").bind(benchmarkCollectionId).first();
+    const total = totalResult?.cnt || 0;
+    if (offset >= total) {
+      try {
+        await db.prepare(`
+          INSERT OR REPLACE INTO ai_search_index_meta
+          (collection_id, collection_name, total_items, indexed_items, last_sync_at, status)
+          VALUES (?, ?, ?, ?, ?, 'completed')
+        `).bind(benchmarkCollectionId, displayName, total, total, Date.now()).run();
+      } catch (e) {
+      }
+      return c.json({ success: true, indexed: 0, offset, total, remaining: 0 });
+    }
+    const { results: contentItems } = await db.prepare(`
+        SELECT c.id, c.title, c.data, c.collection_id, c.status,
+               c.created_at, c.author_id
+        FROM content c
+        WHERE c.collection_id = ? AND c.status != 'deleted'
+        ORDER BY c.id
+        LIMIT ? OFFSET ?
+      `).bind(benchmarkCollectionId, batchSize, offset).all();
+    const items = (contentItems || []).map((item) => ({
+      id: item.id,
+      collection_id: item.collection_id,
+      title: item.title || "Untitled",
+      data: typeof item.data === "string" ? JSON.parse(item.data) : item.data,
+      metadata: {
+        status: item.status,
+        created_at: item.created_at,
+        author_id: item.author_id,
+        collection_name: `benchmark_${dataset}`,
+        collection_display_name: displayName
+      }
+    }));
+    const chunks = chunkingService.chunkContentBatch(items);
+    const embeddings = await embeddingService.generateBatch(
+      chunks.map((ch) => `${ch.title}
+
+${ch.text}`)
+    );
+    let indexedChunks = 0;
+    const upsertBatchSize = 100;
+    for (let i = 0; i < chunks.length; i += upsertBatchSize) {
+      const chunkBatch = chunks.slice(i, i + upsertBatchSize);
+      const embBatch = embeddings.slice(i, i + upsertBatchSize);
+      try {
+        await vectorize.upsert(
+          chunkBatch.map((chunk, idx) => ({
+            id: chunk.id,
+            values: embBatch[idx],
+            metadata: {
+              content_id: chunk.content_id,
+              collection_id: chunk.collection_id,
+              title: chunk.title,
+              text: chunk.text.substring(0, 500),
+              chunk_index: chunk.chunk_index,
+              ...chunk.metadata
+            }
+          }))
+        );
+        indexedChunks += chunkBatch.length;
+      } catch (error) {
+        console.error(`[Benchmark:${dataset} Vectorize] Upsert error at batch offset ${i}:`, error);
+      }
+    }
+    const newOffset = offset + (contentItems?.length || 0);
+    const remaining = Math.max(0, total - newOffset);
+    try {
+      await db.prepare(`
+        INSERT OR REPLACE INTO ai_search_index_meta
+        (collection_id, collection_name, total_items, indexed_items, last_sync_at, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        benchmarkCollectionId,
+        displayName,
+        total,
+        newOffset,
+        Date.now(),
+        remaining > 0 ? "indexing" : "completed"
+      ).run();
+    } catch (e) {
+    }
+    return c.json({
+      success: true,
+      indexed: indexedChunks,
+      items_processed: contentItems?.length || 0,
+      offset: newOffset,
+      total,
+      remaining
+    });
+  } catch (error) {
+    console.error("Error in Vectorize batch indexing:", error);
+    return c.json({ error: `Vectorize batch indexing failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/index-vectorize", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    if (!ai || !vectorize) {
+      return c.json(
+        { error: "Vectorize indexing requires AI and VECTORIZE_BENCHMARK_INDEX bindings. Configure them in wrangler.toml." },
+        400
+      );
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const benchmarkService = new chunkXUG7SRDU_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const { seeded } = await benchmarkService.isSeeded();
+    if (!seeded) {
+      return c.json({ error: "Benchmark data not seeded. Seed first." }, 400);
+    }
+    const collectionId = benchmarkService.getCollectionId();
+    const meta = benchmarkService.getMeta();
+    const displayName = `${meta.name} Benchmark`;
+    try {
+      await db.prepare(`
+        INSERT OR REPLACE INTO ai_search_index_meta
+        (collection_id, collection_name, total_items, indexed_items, last_sync_at, status)
+        VALUES (?, ?, 0, 0, ?, 'indexing')
+      `).bind(collectionId, displayName, Date.now()).run();
+    } catch (e) {
+    }
+    return c.json({
+      success: true,
+      message: "Vectorize index reset. Use batch indexing to process documents."
+    });
+  } catch (error) {
+    console.error("Error starting Vectorize indexing:", error);
+    return c.json({ error: "Failed to start Vectorize indexing" }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/evaluate", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    const body = await c.req.json();
+    const mode = body.mode || "fts5";
+    const limit = body.limit || 10;
+    const maxQueries = body.max_queries || 0;
+    const dataset = body.dataset || "scifact";
+    const benchmarkService = new chunkXUG7SRDU_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const collectionId = benchmarkService.getCollectionId();
+    const { seeded } = await benchmarkService.isSeeded();
+    if (!seeded) {
+      return c.json(
+        { error: "Benchmark data not seeded. Call /api/benchmark/seed first." },
+        400
+      );
+    }
+    if (mode === "fts5" || mode === "hybrid") {
+      const fts5Service = new chunkXUG7SRDU_cjs.FTS5Service(db);
+      if (await fts5Service.isAvailable()) {
+        const ftsCount = await db.prepare("SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?").bind(collectionId).first();
+        if (!ftsCount || ftsCount.cnt === 0) {
+          return c.json(
+            { error: 'Benchmark data not yet FTS5-indexed. Click "Seed Data" again or wait for background indexing to complete, then retry.' },
+            400
+          );
+        }
+      }
+    }
+    if ((mode === "ai" || mode === "hybrid") && !vectorize) {
+      return c.json(
+        { error: `${mode.toUpperCase()} mode requires a Vectorize index binding. Configure it in wrangler.toml.` },
+        400
+      );
+    }
+    if (mode === "ai" || mode === "hybrid") {
+      try {
+        const indexMeta = await db.prepare("SELECT status, indexed_items FROM ai_search_index_meta WHERE collection_id = ?").bind(collectionId).first();
+        if (!indexMeta || indexMeta.indexed_items === 0) {
+          return c.json(
+            { error: 'Benchmark data not yet Vectorize-indexed. Click "Index (Vectorize)" first and wait for it to complete.' },
+            400
+          );
+        }
+        if (indexMeta.status === "indexing") {
+          return c.json(
+            { error: "Vectorize indexing is still in progress. Wait for it to complete, then retry." },
+            400
+          );
+        }
+      } catch (e) {
+        return c.json(
+          { error: 'Benchmark data not yet Vectorize-indexed. Click "Index (Vectorize)" first.' },
+          400
+        );
+      }
+    }
+    const aiSearchService = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
+    const searchFn = async (query, searchMode, searchLimit) => {
+      const response = await aiSearchService.search({
+        query,
+        mode: searchMode,
+        limit: searchLimit,
+        filters: { collections: [collectionId] }
+      });
+      return { results: response.results.map((r) => ({ id: r.id })) };
+    };
+    const results = await benchmarkService.evaluate(
+      searchFn,
+      mode,
+      limit,
+      maxQueries
+    );
+    return c.json({ success: true, ...results });
+  } catch (error) {
+    console.error("Error running benchmark evaluation:", error);
+    return c.json(
+      { error: `Benchmark evaluation failed: ${error instanceof Error ? error.message : String(error)}` },
+      500
+    );
+  }
+});
+adminRoutes.get("/api/benchmark/query-ids", async (c) => {
+  try {
+    const maxQueries = parseInt(c.req.query("max_queries") || "0", 10);
+    const dataset = c.req.query("dataset") || "scifact";
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const benchmarkService = new chunkXUG7SRDU_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const ids = await benchmarkService.getEvaluableQueryIds(maxQueries);
+    return c.json({ success: true, query_ids: ids, total: ids.length });
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/evaluate-batch", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    const body = await c.req.json();
+    const mode = body.mode || "fts5";
+    const limit = body.limit || 10;
+    const queryIds = body.query_ids || [];
+    const dataset = body.dataset || "scifact";
+    if (queryIds.length === 0) {
+      return c.json({ error: "No query_ids provided" }, 400);
+    }
+    if ((mode === "ai" || mode === "hybrid") && !vectorize) {
+      return c.json({ error: `${mode.toUpperCase()} mode requires Vectorize binding.` }, 400);
+    }
+    const benchmarkService = new chunkXUG7SRDU_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const collectionId = benchmarkService.getCollectionId();
+    const aiSearchService = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
+    const searchFn = async (query, searchMode, searchLimit) => {
+      const response = await aiSearchService.search({
+        query,
+        mode: searchMode,
+        limit: searchLimit,
+        filters: { collections: [collectionId] }
+      });
+      return { results: response.results.map((r) => ({ id: r.id })) };
+    };
+    const perQuery = await benchmarkService.evaluateBatch(searchFn, mode, limit, queryIds);
+    return c.json({
+      success: true,
+      per_query: perQuery,
+      evaluated: perQuery.length
+    });
+  } catch (error) {
+    console.error("Error in batch evaluation:", error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
 var admin_default = adminRoutes;
 var apiRoutes = new hono.Hono();
 apiRoutes.post("/", async (c) => {
@@ -5035,7 +3720,7 @@ apiRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
     const body = await c.req.json();
     const query = {
       query: body.query || "",
@@ -5074,7 +3759,7 @@ apiRoutes.get("/suggest", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
     const query = c.req.query("q") || "";
     if (!query || query.length < 2) {
       return c.json({ success: true, data: [] });
@@ -5100,7 +3785,7 @@ apiRoutes.get("/analytics", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
     const analytics = await service.getSearchAnalytics();
     return c.json({
       success: true,
@@ -5118,6 +3803,550 @@ apiRoutes.get("/analytics", async (c) => {
   }
 });
 var api_default2 = apiRoutes;
+
+// src/plugins/core-plugins/ai-search-plugin/services/instantsearch-adapter.ts
+var InstantSearchAdapter = class {
+  constructor(db) {
+    this.db = db;
+  }
+  collectionCache = /* @__PURE__ */ new Map();
+  /**
+   * Convert an InstantSearch request to a SonicJS SearchQuery
+   */
+  async toSonicQuery(request, settings) {
+    const params = request.params || {};
+    const page = params.page ?? 0;
+    const hitsPerPage = Math.min(params.hitsPerPage ?? 20, 200);
+    const collections2 = await this.resolveCollections(request.indexName);
+    const mode = this.determineSearchMode(settings);
+    return {
+      query: params.query || "",
+      mode,
+      limit: hitsPerPage,
+      offset: page * hitsPerPage,
+      filters: {
+        collections: collections2.length > 0 ? collections2 : void 0,
+        status: this.parseStatusFilter(params.filters)
+      }
+    };
+  }
+  /**
+   * Convert a SonicJS SearchResponse to an InstantSearch result
+   */
+  toInstantSearchResult(response, request, queryTime) {
+    const params = request.params || {};
+    const page = params.page ?? 0;
+    const hitsPerPage = Math.min(params.hitsPerPage ?? 20, 200);
+    const hits = response.results.map((r) => this.toHit(r, params));
+    const nbPages = hitsPerPage > 0 ? Math.ceil(response.total / hitsPerPage) : 0;
+    const facets = this.computeFacets(response.results, params.facets);
+    return {
+      hits,
+      nbHits: response.total,
+      page,
+      nbPages,
+      hitsPerPage,
+      processingTimeMS: queryTime,
+      query: params.query || "",
+      params: this.buildParamsString(params),
+      exhaustiveNbHits: true,
+      ...Object.keys(facets).length > 0 ? { facets } : {},
+      index: request.indexName
+    };
+  }
+  // --------------------------------------------------
+  // Private helpers
+  // --------------------------------------------------
+  toHit(result, params) {
+    const pre = params.highlightPreTag || "<em>";
+    const post = params.highlightPostTag || "</em>";
+    const hit = {
+      objectID: result.id,
+      title: result.title,
+      slug: result.slug,
+      collection_id: result.collection_id,
+      collection_name: result.collection_name,
+      status: result.status,
+      created_at: result.created_at,
+      updated_at: result.updated_at,
+      ...result.author_name ? { author_name: result.author_name } : {},
+      ...result.url ? { url: result.url } : {},
+      ...result.relevance_score != null ? { relevance_score: result.relevance_score } : {}
+    };
+    if (result.highlights) {
+      const hr = {};
+      if (result.highlights.title) {
+        hr.title = {
+          value: this.convertTags(result.highlights.title, pre, post),
+          matchLevel: this.matchLevel(result.highlights.title)
+        };
+      }
+      if (result.highlights.body) {
+        hr.body = {
+          value: this.convertTags(result.highlights.body, pre, post),
+          matchLevel: this.matchLevel(result.highlights.body)
+        };
+      }
+      if (Object.keys(hr).length > 0) {
+        hit._highlightResult = hr;
+      }
+    }
+    if (result.snippet) {
+      hit._snippetResult = {
+        body: {
+          value: this.convertTags(result.snippet, pre, post),
+          matchLevel: this.matchLevel(result.snippet)
+        }
+      };
+    }
+    return hit;
+  }
+  /**
+   * Resolve collection name(s) to IDs.
+   * "*" / "all" / "" → empty array (search all indexed collections).
+   */
+  async resolveCollections(indexName) {
+    if (!indexName || indexName === "*" || indexName === "all") {
+      return [];
+    }
+    const cached = this.collectionCache.get(indexName);
+    if (cached) return cached;
+    try {
+      const row = await this.db.prepare("SELECT id FROM collections WHERE name = ? AND is_active = 1 LIMIT 1").bind(indexName).first();
+      const ids = row?.id ? [String(row.id)] : [];
+      this.collectionCache.set(indexName, ids);
+      return ids;
+    } catch {
+      return [];
+    }
+  }
+  determineSearchMode(settings) {
+    if (settings.ai_mode_enabled) return "hybrid";
+    return "fts5";
+  }
+  /**
+   * Minimal Algolia filter parser. MVP supports:
+   *   status:published   status:'draft'   status:"archived"
+   */
+  parseStatusFilter(filters) {
+    if (!filters) return void 0;
+    const m = filters.match(/status\s*:\s*['"]?(\w+)['"]?/i);
+    return m?.[1] ? [m[1]] : void 0;
+  }
+  /**
+   * Compute facet counts from the current result page.
+   * MVP: collection_name and status only.
+   */
+  computeFacets(results, requested) {
+    if (!requested || requested.length === 0) return {};
+    const facets = {};
+    for (const name of requested) {
+      if (name === "collection_name") {
+        const counts = {};
+        for (const r of results) {
+          counts[r.collection_name] = (counts[r.collection_name] || 0) + 1;
+        }
+        facets.collection_name = counts;
+      } else if (name === "status") {
+        const counts = {};
+        for (const r of results) {
+          counts[r.status] = (counts[r.status] || 0) + 1;
+        }
+        facets.status = counts;
+      }
+    }
+    return facets;
+  }
+  /** Replace <mark>...</mark> with the requested highlight tags. */
+  convertTags(text, open, close) {
+    return text.replace(/<mark>/g, open).replace(/<\/mark>/g, close);
+  }
+  /** Detect Algolia match level from presence of <mark> tags in the source text. */
+  matchLevel(text) {
+    if (!text.includes("<mark>")) return "none";
+    const plain = text.replace(/<\/?mark>/g, "");
+    const highlighted = (text.match(/<mark>([\s\S]*?)<\/mark>/g) || []).map((m) => m.replace(/<\/?mark>/g, "")).join("");
+    return highlighted.length / Math.max(plain.length, 1) > 0.5 ? "full" : "partial";
+  }
+  buildParamsString(params) {
+    const parts = [];
+    if (params.query != null) parts.push(`query=${encodeURIComponent(params.query)}`);
+    if (params.page != null) parts.push(`page=${params.page}`);
+    if (params.hitsPerPage != null) parts.push(`hitsPerPage=${params.hitsPerPage}`);
+    if (params.facets) parts.push(`facets=${encodeURIComponent(JSON.stringify(params.facets))}`);
+    if (params.filters) parts.push(`filters=${encodeURIComponent(params.filters)}`);
+    return parts.join("&");
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/routes/instantsearch-api.ts
+var instantSearchRoutes = new hono.Hono();
+instantSearchRoutes.post("/", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    const searchService = new chunkXUG7SRDU_cjs.AISearchService(db, ai, vectorize);
+    const adapter = new InstantSearchAdapter(db);
+    const body = await c.req.json();
+    if (!body.requests || !Array.isArray(body.requests)) {
+      return c.json(
+        { message: "Invalid request format. Expected { requests: [...] }", status: 400 },
+        400
+      );
+    }
+    const settings = await searchService.getSettings();
+    if (!settings?.enabled) {
+      return c.json({
+        results: body.requests.map((req) => emptyResult(req))
+      });
+    }
+    const results = await Promise.all(
+      body.requests.map(async (request) => {
+        const requestStart = Date.now();
+        try {
+          const sonicQuery = await adapter.toSonicQuery(request, settings);
+          const sonicResponse = await searchService.search(sonicQuery);
+          return adapter.toInstantSearchResult(
+            sonicResponse,
+            request,
+            Date.now() - requestStart
+          );
+        } catch (error) {
+          console.error("[InstantSearch] Request error:", error);
+          return emptyResult(request, Date.now() - requestStart);
+        }
+      })
+    );
+    return c.json({ results });
+  } catch (error) {
+    console.error("[InstantSearch] Error:", error);
+    return c.json(
+      { message: "Search request failed", status: 500 },
+      500
+    );
+  }
+});
+function emptyResult(request, processingTimeMS = 0) {
+  const params = request.params || {};
+  return {
+    hits: [],
+    nbHits: 0,
+    page: params.page ?? 0,
+    nbPages: 0,
+    hitsPerPage: params.hitsPerPage ?? 20,
+    processingTimeMS,
+    query: params.query || "",
+    params: "",
+    exhaustiveNbHits: true,
+    index: request.indexName
+  };
+}
+var instantsearch_api_default = instantSearchRoutes;
+var instantSearchTestRoutes = new hono.Hono();
+instantSearchTestRoutes.get("/instantsearch", async (c) => {
+  let collectionOptions = '<option value="*">* (All Collections)</option>';
+  try {
+    const { results } = await c.env.DB.prepare("SELECT name, display_name FROM collections WHERE is_active = 1 ORDER BY display_name").all();
+    for (const col of results || []) {
+      collectionOptions += `<option value="${col.name}">${col.display_name} (${col.name})</option>`;
+    }
+  } catch {
+  }
+  return c.html(html.html`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>InstantSearch.js Test - SonicJS</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/instantsearch.css@8/themes/satellite-min.css">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            min-height: 100vh;
+          }
+          .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+          }
+          h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+          .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+          .subtitle a { color: #6366f1; text-decoration: none; }
+          .subtitle a:hover { text-decoration: underline; }
+
+          /* Config bar */
+          .config-bar {
+            background: white;
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+          }
+          .config-bar .field { display: flex; flex-direction: column; gap: 4px; }
+          .config-bar label { font-size: 0.8rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.025em; }
+          .config-bar select, .config-bar input[type="number"] {
+            padding: 0.4rem 0.6rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: white;
+          }
+          .config-bar button {
+            padding: 0.45rem 1rem;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+          }
+          .config-bar button:hover { background: #4f46e5; }
+
+          /* Hits styling */
+          .ais-SearchBox { margin-bottom: 1rem; }
+          .ais-Hits-item {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid #f1f5f9;
+          }
+          .hit-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.3rem; line-height: 1.3; }
+          .hit-title em, .hit-snippet em {
+            background: #fef08a;
+            font-style: normal;
+            padding: 1px 3px;
+            border-radius: 2px;
+          }
+          .hit-snippet { color: #475569; font-size: 0.88rem; line-height: 1.55; }
+          .hit-meta { margin-top: 0.5rem; font-size: 0.78rem; color: #94a3b8; display: flex; gap: 1rem; flex-wrap: wrap; }
+          .badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 9999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+          }
+          .badge-published { background: #dcfce7; color: #166534; }
+          .badge-draft { background: #fef9c3; color: #854d0e; }
+          .badge-archived { background: #f1f5f9; color: #475569; }
+
+          .ais-Stats { color: #64748b; font-size: 0.85rem; margin-bottom: 1rem; }
+          .ais-Pagination { margin-top: 1.5rem; }
+
+          /* Code snippet */
+          .code-panel {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 1.25rem;
+            margin-top: 2rem;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            overflow-x: auto;
+          }
+          .code-panel summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 0.75rem;
+          }
+          .code-panel code { white-space: pre; }
+          .code-panel .key { color: #7dd3fc; }
+          .code-panel .str { color: #86efac; }
+          .code-panel .cmt { color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>InstantSearch.js Test</h1>
+          <p class="subtitle">
+            Algolia-compatible search powered by SonicJS &mdash;
+            <a href="/admin/plugins/ai-search/integration#instantsearch" target="_blank">Integration Guide</a> |
+            <a href="/admin/search" target="_blank">Admin</a>
+          </p>
+
+          <div class="config-bar">
+            <div class="field">
+              <label for="idx">Index (Collection)</label>
+              <select id="idx">${collectionOptions}</select>
+            </div>
+            <div class="field">
+              <label for="hpp">Hits / Page</label>
+              <select id="hpp">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+              </select>
+            </div>
+            <button onclick="restart()">Apply</button>
+          </div>
+
+          <div id="searchbox"></div>
+          <div id="stats"></div>
+          <div id="hits"></div>
+          <div id="pagination"></div>
+
+          <details class="code-panel">
+            <summary>Show searchClient code (copy this into your project)</summary>
+            <code><span class="cmt">// 1. Create the search client (5 lines)</span>
+<span class="key">const</span> searchClient = {
+  search(requests) {
+    <span class="key">return</span> fetch(<span class="str">'${"{"}window.location.origin${"}"}/api/instantsearch'</span>, {
+      method: <span class="str">'POST'</span>,
+      headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> },
+      body: JSON.stringify({ requests }),
+    }).then(r => r.json());
+  },
+};
+
+<span class="cmt">// 2. Use with InstantSearch.js</span>
+<span class="key">import</span> instantsearch <span class="key">from</span> <span class="str">'instantsearch.js'</span>;
+<span class="key">const</span> search = instantsearch({
+  indexName: <span class="str">'blog_posts'</span>,  <span class="cmt">// your collection name, or "*" for all</span>
+  searchClient,
+});
+search.addWidgets([ <span class="cmt">/* searchBox, hits, pagination ... */</span> ]);
+search.start();</code>
+          </details>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js"></script>
+        <script>
+          var API = window.location.origin;
+          var currentSearch = null;
+
+          function makeClient() {
+            return {
+              search: function(requests) {
+                return fetch(API + '/api/instantsearch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ requests }),
+                }).then(function(r) { return r.json(); });
+              }
+            };
+          }
+
+          function badgeClass(status) {
+            if (status === 'published') return 'badge badge-published';
+            if (status === 'draft') return 'badge badge-draft';
+            return 'badge badge-archived';
+          }
+
+          function esc(s) {
+            if (!s) return '';
+            var d = document.createElement('div');
+            d.appendChild(document.createTextNode(s));
+            return d.innerHTML;
+          }
+
+          function restart() {
+            var idx = document.getElementById('idx').value;
+            var hpp = parseInt(document.getElementById('hpp').value, 10);
+
+            if (currentSearch) {
+              currentSearch.dispose();
+              ['searchbox','stats','hits','pagination'].forEach(function(id) {
+                document.getElementById(id).innerHTML = '';
+              });
+            }
+
+            currentSearch = instantsearch({
+              indexName: idx,
+              searchClient: makeClient(),
+              searchFunction: function(helper) {
+                if (helper.state.query) {
+                  helper.search();
+                } else {
+                  document.getElementById('hits').innerHTML =
+                    '<p style="color:#94a3b8;text-align:center;padding:3rem 1rem;">Type a query above to search your content...</p>';
+                  document.getElementById('stats').innerHTML = '';
+                }
+              },
+            });
+
+            currentSearch.addWidgets([
+              instantsearch.widgets.searchBox({
+                container: '#searchbox',
+                placeholder: 'Search your content...',
+                autofocus: true,
+              }),
+
+              instantsearch.widgets.stats({
+                container: '#stats',
+                templates: {
+                  text: function(data) {
+                    return data.nbHits + ' results in ' + data.processingTimeMS + 'ms';
+                  },
+                },
+              }),
+
+              instantsearch.widgets.hits({
+                container: '#hits',
+                templates: {
+                  item: function(hit) {
+                    var title = (hit._highlightResult && hit._highlightResult.title)
+                      ? hit._highlightResult.title.value
+                      : esc(hit.title);
+                    var body = (hit._snippetResult && hit._snippetResult.body)
+                      ? hit._snippetResult.body.value
+                      : '';
+                    var date = hit.created_at
+                      ? new Date(hit.created_at * 1000).toLocaleDateString()
+                      : '';
+                    var score = hit.relevance_score
+                      ? (hit.relevance_score * 100).toFixed(1) + '%'
+                      : '';
+
+                    return '<div>' +
+                      '<div class="hit-title">' + title + '</div>' +
+                      (body ? '<div class="hit-snippet">' + body + '</div>' : '') +
+                      '<div class="hit-meta">' +
+                        '<span>' + esc(hit.collection_name) + '</span>' +
+                        '<span class="' + badgeClass(hit.status) + '">' + esc(hit.status) + '</span>' +
+                        (date ? '<span>' + date + '</span>' : '') +
+                        (score ? '<span>Score: ' + score + '</span>' : '') +
+                        '<span>ID: ' + esc(hit.objectID).substring(0, 8) + '&hellip;</span>' +
+                      '</div>' +
+                    '</div>';
+                  },
+                  empty: function(data) {
+                    return '<p style="text-align:center;color:#94a3b8;padding:3rem 1rem;">No results for &ldquo;' + esc(data.query) + '&rdquo;</p>';
+                  },
+                },
+              }),
+
+              instantsearch.widgets.pagination({
+                container: '#pagination',
+              }),
+
+              instantsearch.widgets.configure({
+                hitsPerPage: hpp,
+              }),
+            ]);
+
+            currentSearch.start();
+          }
+
+          restart();
+        </script>
+      </body>
+    </html>
+  `);
+});
+var instantsearch_test_page_default = instantSearchTestRoutes;
 var integrationGuideRoutes = new hono.Hono();
 integrationGuideRoutes.get("/integration", async (c) => {
   return c.html(html.html`
@@ -5326,6 +4555,7 @@ integrationGuideRoutes.get("/integration", async (c) => {
                 <button class="tab" onclick="showTab('react')">React</button>
                 <button class="tab" onclick="showTab('vue')">Vue</button>
                 <button class="tab" onclick="showTab('astro')">Astro</button>
+                <button class="tab" onclick="showTab('instantsearch')">InstantSearch.js</button>
               </div>
 
               <!-- Vanilla JS Tab -->
@@ -5838,6 +5068,110 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
 .result { padding: 1rem; background: #f8f9fa; border-left: 4px solid #667eea; margin: 1rem 0; border-radius: 8px; }
 &lt;/style&gt;</code></pre>
               </div>
+
+              <!-- InstantSearch.js Tab -->
+              <div id="instantsearch" class="tab-content">
+                <h3>InstantSearch.js &mdash; Drop-in Algolia Replacement</h3>
+                <p>Use the official <a href="https://www.algolia.com/doc/guides/building-search-ui/what-is-instantsearch/js/" target="_blank">InstantSearch.js</a> library (React, Vue, or vanilla JS) with SonicJS as the backend. Zero UI changes needed if you&rsquo;re migrating from Algolia.</p>
+
+                <div class="info-box">
+                  <strong>How it works:</strong> SonicJS exposes a <code>POST /api/instantsearch</code> endpoint that speaks the Algolia multi-search protocol. You connect it with a 5-line <code>searchClient</code> shim &mdash; no npm adapter package required.
+                </div>
+
+                <h3>1. Install InstantSearch.js</h3>
+                <pre><code>npm install instantsearch.js
+# Or for React:
+npm install react-instantsearch
+# Or for Vue:
+npm install vue-instantsearch</code></pre>
+
+                <h3>2. Create the Search Client (5 lines)</h3>
+                <button class="copy-btn" onclick="copyCode('is-client')">Copy Code</button>
+                <pre id="is-client"><code>// searchClient.js
+const API_URL = 'https://your-sonicjs-site.com'; // Update this!
+
+export const searchClient = {
+  search(requests) {
+    return fetch(\`\${API_URL}/api/instantsearch\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests }),
+    }).then(res =&gt; res.json());
+  },
+};</code></pre>
+
+                <h3>3a. Vanilla InstantSearch.js</h3>
+                <button class="copy-btn" onclick="copyCode('is-vanilla')">Copy Code</button>
+                <pre id="is-vanilla"><code>import instantsearch from 'instantsearch.js';
+import { searchBox, hits, pagination } from 'instantsearch.js/es/widgets';
+import { searchClient } from './searchClient';
+
+const search = instantsearch({
+  indexName: 'posts',   // Your collection name, or "*" for all
+  searchClient,
+});
+
+search.addWidgets([
+  searchBox({ container: '#searchbox' }),
+  hits({
+    container: '#hits',
+    templates: {
+      item(hit, { html, components }) {
+        return html\`
+          &lt;div&gt;
+            &lt;h3&gt;\${components.Highlight({ hit, attribute: 'title' })}&lt;/h3&gt;
+            &lt;p&gt;\${components.Snippet({ hit, attribute: 'body' })}&lt;/p&gt;
+          &lt;/div&gt;
+        \`;
+      },
+    },
+  }),
+  pagination({ container: '#pagination' }),
+]);
+
+search.start();</code></pre>
+
+                <h3>3b. React InstantSearch</h3>
+                <button class="copy-btn" onclick="copyCode('is-react')">Copy Code</button>
+                <pre id="is-react"><code>import {
+  InstantSearch, SearchBox, Hits, Pagination, Highlight, Snippet,
+} from 'react-instantsearch';
+import { searchClient } from './searchClient';
+
+function Hit({ hit }) {
+  return (
+    &lt;div&gt;
+      &lt;h3&gt;&lt;Highlight attribute="title" hit={hit} /&gt;&lt;/h3&gt;
+      &lt;p&gt;&lt;Snippet attribute="body" hit={hit} /&gt;&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+
+export default function SearchPage() {
+  return (
+    &lt;InstantSearch searchClient={searchClient} indexName="posts"&gt;
+      &lt;SearchBox /&gt;
+      &lt;Hits hitComponent={Hit} /&gt;
+      &lt;Pagination /&gt;
+    &lt;/InstantSearch&gt;
+  );
+}</code></pre>
+
+                <h3>Index Name Mapping</h3>
+                <div class="info-box">
+                  <strong>Collection names:</strong> Use your SonicJS collection name as the <code>indexName</code> (e.g. <code>"posts"</code>, <code>"products"</code>).<br>
+                  <strong>Search all:</strong> Use <code>indexName: "*"</code> or <code>"all"</code> to search across every indexed collection.
+                </div>
+
+                <h3>Supported Features</h3>
+                <ul>
+                  <li><strong>Search:</strong> Full-text (FTS5), semantic (AI), and hybrid search</li>
+                  <li><strong>Highlighting:</strong> Automatic highlight &amp; snippet results</li>
+                  <li><strong>Pagination:</strong> Page-based navigation via <code>page</code> / <code>hitsPerPage</code></li>
+                  <li><strong>Facets (MVP):</strong> <code>collection_name</code> and <code>status</code> facets</li>
+                  <li><strong>Custom highlight tags:</strong> Configurable via <code>highlightPreTag</code> / <code>highlightPostTag</code></li>
+                </ul>
+              </div>
             </div>
 
             <!-- API Reference Section -->
@@ -5854,6 +5188,11 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
                   <h4>Autocomplete</h4>
                   <p><strong>GET</strong> <code>/api/search/suggest?q=query</code></p>
                   <p>Get instant suggestions (&lt;50ms)</p>
+                </div>
+                <div class="card">
+                  <h4>InstantSearch API</h4>
+                  <p><strong>POST</strong> <code>/api/instantsearch</code></p>
+                  <p>Algolia-compatible multi-search endpoint</p>
                 </div>
               </div>
 
@@ -6398,11 +5737,22 @@ testPageRoutes.get("/test", async (c) => {
             return div.innerHTML;
           }
 
-          function stripHtml(str) {
+          function sanitizeHighlight(str) {
             if (!str) return '';
+            // Preserve <mark> and </mark> tags, strip all other HTML, escape text
+            // 1. Replace <mark> with placeholder
+            var s = str.replace(/<mark>/gi, '\\x01MARK_OPEN\\x01').replace(/<\\/mark>/gi, '\\x01MARK_CLOSE\\x01');
+            // 2. Strip all remaining HTML tags
             var tmp = document.createElement('div');
-            tmp.innerHTML = str;
-            return tmp.textContent || tmp.innerText || '';
+            tmp.innerHTML = s;
+            var text = tmp.textContent || tmp.innerText || '';
+            // 3. Escape the text
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            var escaped = div.innerHTML;
+            // 4. Restore <mark> tags
+            escaped = escaped.replace(/\\x01MARK_OPEN\\x01/g, '<mark>').replace(/\\x01MARK_CLOSE\\x01/g, '</mark>');
+            return escaped;
           }
 
           function renderResultItem(result) {
@@ -6413,9 +5763,9 @@ testPageRoutes.get("/test", async (c) => {
             var scoreStr = score ? score.toFixed(3) : 'N/A';
             var scoreLabel = result.rerank_score ? 'Rerank' : result.rrf_score ? 'RRF' : result.bm25_score ? 'BM25' : 'Score';
 
-            // Strip HTML tags then escape to prevent XSS
-            var safeTitle = escapeHtml(stripHtml(rawTitle));
-            var safeSnippet = escapeHtml(stripHtml(rawSnippet));
+            // Sanitize: allow <mark> highlighting, strip all other HTML
+            var safeTitle = sanitizeHighlight(rawTitle);
+            var safeSnippet = sanitizeHighlight(rawSnippet);
 
             var titleHtml = safeTitle;
             if (result.id) {
@@ -6480,7 +5830,7 @@ var aiSearchPlugin = new chunk6FHNRRJ3_cjs.PluginBuilder({
 }).metadata({
   description: manifest_default.description,
   author: { name: manifest_default.author }
-}).addService("aiSearch", AISearchService).addService("indexManager", IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
+}).addService("aiSearch", chunkXUG7SRDU_cjs.AISearchService).addService("indexManager", chunkXUG7SRDU_cjs.IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/api/instantsearch", instantsearch_api_default).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", instantsearch_test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
 var magicLinkRequestSchema = zod.z.object({
   email: zod.z.string().email("Valid email is required")
 });
@@ -6627,12 +5977,12 @@ function createMagicLinkAuthPlugin() {
         SET used = 1, used_at = ?
         WHERE id = ?
       `).bind(Date.now(), magicLink.id).run();
-      const jwtToken = await chunkZS5MYHCW_cjs.AuthManager.generateToken(
+      const jwtToken = await chunkJ5AMF4T5_cjs.AuthManager.generateToken(
         user.id,
         user.email,
         user.role
       );
-      chunkZS5MYHCW_cjs.AuthManager.setAuthCookie(c, jwtToken);
+      chunkJ5AMF4T5_cjs.AuthManager.setAuthCookie(c, jwtToken);
       await db.prepare(`
         UPDATE users SET last_login_at = ? WHERE id = ?
       `).bind(Date.now(), user.id).run();
@@ -7739,7 +7089,7 @@ async function warmNamespace(namespace, entries) {
 }
 
 // src/templates/pages/admin-cache.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderCacheDashboard(data) {
   const pageContent = `
     <div class="space-y-6">
@@ -7918,7 +7268,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunkQVIYLOFA_cjs.renderConfirmationDialog({
+    ${chunkXUG7SRDU_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -7929,7 +7279,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunkQVIYLOFA_cjs.renderConfirmationDialog({
+    ${chunkXUG7SRDU_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -7940,7 +7290,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunkQVIYLOFA_cjs.getConfirmationDialogScript()}
+    ${chunkXUG7SRDU_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -7950,7 +7300,7 @@ function renderCacheDashboard(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function renderStatCard(label, value, color, icon, colorOverride) {
   const finalColor = colorOverride || color;
@@ -8662,14 +8012,14 @@ var seedDataPlugin = createSeedDataPlugin();
 // src/app.ts
 function createSonicJSApp(config = {}) {
   const app2 = new hono.Hono();
-  const appVersion = config.version || chunk5HMR2SJW_cjs.getCoreVersion();
+  const appVersion = config.version || chunkUOEIMC67_cjs.getCoreVersion();
   const appName = config.name || "SonicJS AI";
   app2.use("*", async (c, next) => {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkZS5MYHCW_cjs.metricsMiddleware());
-  app2.use("*", chunkZS5MYHCW_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkJ5AMF4T5_cjs.metricsMiddleware());
+  app2.use("*", chunkJ5AMF4T5_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -8686,21 +8036,22 @@ function createSonicJSApp(config = {}) {
       app2.use("*", middleware);
     }
   }
-  app2.route("/api", chunkQVIYLOFA_cjs.api_default);
-  app2.route("/api/media", chunkQVIYLOFA_cjs.api_media_default);
-  app2.route("/api/system", chunkQVIYLOFA_cjs.api_system_default);
-  app2.route("/admin/api", chunkQVIYLOFA_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunkQVIYLOFA_cjs.router);
-  app2.route("/admin/collections", chunkQVIYLOFA_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunkQVIYLOFA_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunkQVIYLOFA_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunkQVIYLOFA_cjs.public_forms_default);
-  app2.route("/api/forms", chunkQVIYLOFA_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunkQVIYLOFA_cjs.router2);
+  app2.route("/api", chunkXUG7SRDU_cjs.api_default);
+  app2.route("/api/media", chunkXUG7SRDU_cjs.api_media_default);
+  app2.route("/api/system", chunkXUG7SRDU_cjs.api_system_default);
+  app2.route("/admin/api", chunkXUG7SRDU_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunkXUG7SRDU_cjs.router);
+  app2.route("/admin/collections", chunkXUG7SRDU_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunkXUG7SRDU_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunkXUG7SRDU_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunkXUG7SRDU_cjs.public_forms_default);
+  app2.route("/api/forms", chunkXUG7SRDU_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunkXUG7SRDU_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunkQVIYLOFA_cjs.admin_content_default);
-  app2.route("/admin/media", chunkQVIYLOFA_cjs.adminMediaRoutes);
+  app2.route("/admin/content", chunkXUG7SRDU_cjs.admin_content_default);
+  app2.route("/admin/media", chunkXUG7SRDU_cjs.adminMediaRoutes);
+  app2.route("/admin/search", chunkXUG7SRDU_cjs.adminSearchRoutes);
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
     for (const route of aiSearchPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8712,11 +8063,11 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunkQVIYLOFA_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunkQVIYLOFA_cjs.adminLogsRoutes);
-  app2.route("/admin", chunkQVIYLOFA_cjs.userRoutes);
-  app2.route("/auth", chunkQVIYLOFA_cjs.auth_default);
-  app2.route("/", chunkQVIYLOFA_cjs.test_cleanup_default);
+  app2.route("/admin/plugins", chunkXUG7SRDU_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunkXUG7SRDU_cjs.adminLogsRoutes);
+  app2.route("/admin", chunkXUG7SRDU_cjs.userRoutes);
+  app2.route("/auth", chunkXUG7SRDU_cjs.auth_default);
+  app2.route("/", chunkXUG7SRDU_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8804,83 +8155,83 @@ function createDb(d1$1) {
 }
 
 // src/index.ts
-var VERSION = chunk5HMR2SJW_cjs.package_default.version;
+var VERSION = chunkUOEIMC67_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.ROUTES_INFO; }
+  get: function () { return chunkXUG7SRDU_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_api_default; }
+  get: function () { return chunkXUG7SRDU_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminCheckboxRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_code_examples_default; }
+  get: function () { return chunkXUG7SRDU_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminCollectionsRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_content_default; }
+  get: function () { return chunkXUG7SRDU_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.router; }
+  get: function () { return chunkXUG7SRDU_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminDesignRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminLogsRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminMediaRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminPluginRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminSettingsRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_testimonials_default; }
+  get: function () { return chunkXUG7SRDU_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.userRoutes; }
+  get: function () { return chunkXUG7SRDU_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_content_crud_default; }
+  get: function () { return chunkXUG7SRDU_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_media_default; }
+  get: function () { return chunkXUG7SRDU_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_default; }
+  get: function () { return chunkXUG7SRDU_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_system_default; }
+  get: function () { return chunkXUG7SRDU_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.auth_default; }
+  get: function () { return chunkXUG7SRDU_cjs.auth_default; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
@@ -9048,83 +8399,83 @@ Object.defineProperty(exports, "workflowHistory", {
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.AuthManager; }
+  get: function () { return chunkJ5AMF4T5_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.PermissionManager; }
+  get: function () { return chunkJ5AMF4T5_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.bootstrapMiddleware; }
+  get: function () { return chunkJ5AMF4T5_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.cacheHeaders; }
+  get: function () { return chunkJ5AMF4T5_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.compressionMiddleware; }
+  get: function () { return chunkJ5AMF4T5_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkJ5AMF4T5_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.getActivePlugins; }
+  get: function () { return chunkJ5AMF4T5_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.isPluginActive; }
+  get: function () { return chunkJ5AMF4T5_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.logActivity; }
+  get: function () { return chunkJ5AMF4T5_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.loggingMiddleware; }
+  get: function () { return chunkJ5AMF4T5_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.optionalAuth; }
+  get: function () { return chunkJ5AMF4T5_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkJ5AMF4T5_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireActivePlugin; }
+  get: function () { return chunkJ5AMF4T5_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireActivePlugins; }
+  get: function () { return chunkJ5AMF4T5_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireAnyPermission; }
+  get: function () { return chunkJ5AMF4T5_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireAuth; }
+  get: function () { return chunkJ5AMF4T5_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requirePermission; }
+  get: function () { return chunkJ5AMF4T5_cjs.requirePermission; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireRole; }
+  get: function () { return chunkJ5AMF4T5_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.securityHeaders; }
+  get: function () { return chunkJ5AMF4T5_cjs.securityHeaders; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkJ5AMF4T5_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
@@ -9180,39 +8531,39 @@ Object.defineProperty(exports, "validateCollectionConfig", {
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunkRZWYEWXM_cjs.MigrationService; }
+  get: function () { return chunkZ3TCJWCL_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,
-  get: function () { return chunkS6K2H2TS_cjs.renderFilterBar; }
+  get: function () { return chunk6WA4KFYZ_cjs.renderFilterBar; }
 });
 Object.defineProperty(exports, "getConfirmationDialogScript", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.getConfirmationDialogScript; }
+  get: function () { return chunkGMUS5V42_cjs.getConfirmationDialogScript; }
 });
 Object.defineProperty(exports, "renderAlert", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderAlert; }
+  get: function () { return chunkGMUS5V42_cjs.renderAlert; }
 });
 Object.defineProperty(exports, "renderConfirmationDialog", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderConfirmationDialog; }
+  get: function () { return chunkGMUS5V42_cjs.renderConfirmationDialog; }
 });
 Object.defineProperty(exports, "renderForm", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderForm; }
+  get: function () { return chunkGMUS5V42_cjs.renderForm; }
 });
 Object.defineProperty(exports, "renderFormField", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderFormField; }
+  get: function () { return chunkGMUS5V42_cjs.renderFormField; }
 });
 Object.defineProperty(exports, "renderPagination", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderPagination; }
+  get: function () { return chunkGMUS5V42_cjs.renderPagination; }
 });
 Object.defineProperty(exports, "renderTable", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderTable; }
+  get: function () { return chunkGMUS5V42_cjs.renderTable; }
 });
 Object.defineProperty(exports, "HookSystemImpl", {
   enumerable: true,
@@ -9248,43 +8599,43 @@ Object.defineProperty(exports, "PluginHelpers", {
 });
 Object.defineProperty(exports, "QueryFilterBuilder", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.QueryFilterBuilder; }
+  get: function () { return chunkUOEIMC67_cjs.QueryFilterBuilder; }
 });
 Object.defineProperty(exports, "SONICJS_VERSION", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.SONICJS_VERSION; }
+  get: function () { return chunkUOEIMC67_cjs.SONICJS_VERSION; }
 });
 Object.defineProperty(exports, "TemplateRenderer", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.TemplateRenderer; }
+  get: function () { return chunkUOEIMC67_cjs.TemplateRenderer; }
 });
 Object.defineProperty(exports, "buildQuery", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.buildQuery; }
+  get: function () { return chunkUOEIMC67_cjs.buildQuery; }
 });
 Object.defineProperty(exports, "escapeHtml", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.escapeHtml; }
+  get: function () { return chunkUOEIMC67_cjs.escapeHtml; }
 });
 Object.defineProperty(exports, "getCoreVersion", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.getCoreVersion; }
+  get: function () { return chunkUOEIMC67_cjs.getCoreVersion; }
 });
 Object.defineProperty(exports, "renderTemplate", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.renderTemplate; }
+  get: function () { return chunkUOEIMC67_cjs.renderTemplate; }
 });
 Object.defineProperty(exports, "sanitizeInput", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.sanitizeInput; }
+  get: function () { return chunkUOEIMC67_cjs.sanitizeInput; }
 });
 Object.defineProperty(exports, "sanitizeObject", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.sanitizeObject; }
+  get: function () { return chunkUOEIMC67_cjs.sanitizeObject; }
 });
 Object.defineProperty(exports, "templateRenderer", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.templateRenderer; }
+  get: function () { return chunkUOEIMC67_cjs.templateRenderer; }
 });
 Object.defineProperty(exports, "metricsTracker", {
   enumerable: true,

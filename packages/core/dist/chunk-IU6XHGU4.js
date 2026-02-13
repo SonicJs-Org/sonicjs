@@ -1,5 +1,3 @@
-'use strict';
-
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -1707,6 +1705,27 @@ CREATE INDEX IF NOT EXISTS idx_forms_turnstile ON forms(turnstile_enabled);
     filename: "033_fts5_fulltext_search.sql",
     description: "Migration 033: Fts5 Fulltext Search",
     sql: "-- Migration 033: FTS5 Full-Text Search for AI Search Plugin\n--\n-- Creates FTS5 virtual table for content full-text search with:\n-- - Porter stemming (running/runs/ran -> run)\n-- - Unicode support with diacritics/accent folding (cafe matches cafe)\n-- - BM25 ranking with field boosting (title > slug > body)\n--\n-- Tokenizer: porter wraps unicode61 (porter MUST come first as it's a wrapper)\n-- - porter: Applies Porter stemming algorithm to output of underlying tokenizer\n-- - unicode61: Unicode-aware tokenization with ASCII folding\n-- - remove_diacritics 2: Remove diacritics from ALL Unicode characters (level 2 = broadest)\n--\n-- Column order: Indexed columns first for cleaner bm25() weights\n\nCREATE VIRTUAL TABLE IF NOT EXISTS content_fts USING fts5(\n  title,                   -- column 0: Indexed (weight 5x at query time)\n  slug,                    -- column 1: Indexed (weight 2x at query time)\n  body,                    -- column 2: Main content extracted from JSON (weight 1x)\n  content_id UNINDEXED,    -- column 3: Original content ID for JOINs\n  collection_id UNINDEXED, -- column 4: Collection ID for filtering\n  tokenize='porter unicode61 remove_diacritics 2'\n);\n\n-- Sync tracking table for indexing status\nCREATE TABLE IF NOT EXISTS content_fts_sync (\n  content_id TEXT PRIMARY KEY,\n  collection_id TEXT NOT NULL,\n  indexed_at INTEGER NOT NULL,\n  status TEXT DEFAULT 'indexed'\n);\n\nCREATE INDEX IF NOT EXISTS idx_content_fts_sync_collection\n  ON content_fts_sync(collection_id);\n\nCREATE INDEX IF NOT EXISTS idx_content_fts_sync_status\n  ON content_fts_sync(status);\n"
+  },
+  {
+    id: "034",
+    name: "Ranking Pipeline",
+    filename: "034_ranking_pipeline.sql",
+    description: "Migration 034: Ranking Pipeline",
+    sql: "-- Migration 034: Ranking Pipeline for AI Search Plugin\n--\n-- Pipeline config stores an ordered list of scoring stages as JSON.\n-- Content scores store popularity/custom values for individual content items.\n\nCREATE TABLE IF NOT EXISTS ai_search_ranking_config (\n  id TEXT PRIMARY KEY DEFAULT 'default',\n  pipeline_json TEXT NOT NULL,\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nCREATE TABLE IF NOT EXISTS ai_search_content_scores (\n  content_id TEXT NOT NULL,\n  score_type TEXT NOT NULL CHECK (score_type IN ('popularity', 'custom')),\n  score REAL NOT NULL DEFAULT 0,\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  PRIMARY KEY (content_id, score_type)\n);\n\nCREATE INDEX IF NOT EXISTS idx_content_scores_type ON ai_search_content_scores(score_type);\n"
+  },
+  {
+    id: "035",
+    name: "Query Synonyms",
+    filename: "035_query_synonyms.sql",
+    description: "Migration 035: Query Synonyms",
+    sql: "-- Migration 035: Query Synonyms for AI Search Plugin\n--\n-- Stores bidirectional synonym groups where all terms are equivalent.\n-- Searching for any term in a group expands the query to include all terms.\n\nCREATE TABLE IF NOT EXISTS ai_search_synonyms (\n  id TEXT PRIMARY KEY,\n  terms TEXT NOT NULL,\n  enabled INTEGER NOT NULL DEFAULT 1,\n  created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nCREATE INDEX IF NOT EXISTS idx_ai_search_synonyms_enabled ON ai_search_synonyms(enabled);\n"
+  },
+  {
+    id: "036",
+    name: "Search Analytics",
+    filename: "036_search_analytics.sql",
+    description: "Migration 036: Search Analytics",
+    sql: "-- Add response time tracking to search history for analytics\nALTER TABLE ai_search_history ADD COLUMN response_time_ms INTEGER;\n\n-- Index for zero-result query lookups\nCREATE INDEX IF NOT EXISTS idx_ai_search_history_results ON ai_search_history(results_count);\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2114,6 +2133,6 @@ var MigrationService = class {
   }
 };
 
-exports.MigrationService = MigrationService;
-//# sourceMappingURL=chunk-RZWYEWXM.cjs.map
-//# sourceMappingURL=chunk-RZWYEWXM.cjs.map
+export { MigrationService };
+//# sourceMappingURL=chunk-IU6XHGU4.js.map
+//# sourceMappingURL=chunk-IU6XHGU4.js.map

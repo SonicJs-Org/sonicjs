@@ -280,6 +280,11 @@ declare const router: Hono<{
     Variables: Variables;
 }, hono_types.BlankSchema, "/">;
 
+declare const adminSearchRoutes: Hono<{
+    Bindings: Bindings$a;
+    Variables: Variables$b;
+}, hono_types.BlankSchema, "/">;
+
 /**
  * Routes Module Exports
  *
@@ -289,9 +294,9 @@ declare const router: Hono<{
 
 declare const ROUTES_INFO: {
     readonly message: "Core routes available";
-    readonly available: readonly ["apiRoutes", "apiContentCrudRoutes", "apiMediaRoutes", "apiSystemRoutes", "adminApiRoutes", "authRoutes", "testCleanupRoutes", "adminContentRoutes", "adminUsersRoutes", "adminMediaRoutes", "adminPluginRoutes", "adminLogsRoutes", "adminDesignRoutes", "adminCheckboxRoutes", "adminTestimonialsRoutes", "adminCodeExamplesRoutes", "adminDashboardRoutes", "adminCollectionsRoutes", "adminSettingsRoutes", "adminFormsRoutes", "publicFormsRoutes", "adminApiReferenceRoutes"];
+    readonly available: readonly ["apiRoutes", "apiContentCrudRoutes", "apiMediaRoutes", "apiSystemRoutes", "adminApiRoutes", "authRoutes", "testCleanupRoutes", "adminContentRoutes", "adminUsersRoutes", "adminMediaRoutes", "adminPluginRoutes", "adminLogsRoutes", "adminDesignRoutes", "adminCheckboxRoutes", "adminTestimonialsRoutes", "adminCodeExamplesRoutes", "adminDashboardRoutes", "adminCollectionsRoutes", "adminSettingsRoutes", "adminFormsRoutes", "publicFormsRoutes", "adminApiReferenceRoutes", "adminSearchRoutes"];
     readonly status: "Core package routes ready";
     readonly reference: "https://github.com/sonicjs/sonicjs";
 };
 
-export { ROUTES_INFO, router as adminApiReferenceRoutes, adminApiRoutes, adminCheckboxRoutes, adminCodeExamplesRoutes, adminCollectionsRoutes, adminContentRoutes, router$1 as adminDashboardRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, adminTestimonialsRoutes, userRoutes as adminUsersRoutes, apiContentCrudRoutes, apiMediaRoutes, apiRoutes, apiSystemRoutes, authRoutes, publicFormsRoutes, app as testCleanupRoutes };
+export { ROUTES_INFO, router as adminApiReferenceRoutes, adminApiRoutes, adminCheckboxRoutes, adminCodeExamplesRoutes, adminCollectionsRoutes, adminContentRoutes, router$1 as adminDashboardRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, adminTestimonialsRoutes, userRoutes as adminUsersRoutes, apiContentCrudRoutes, apiMediaRoutes, apiRoutes, apiSystemRoutes, authRoutes, publicFormsRoutes, app as testCleanupRoutes };

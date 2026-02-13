@@ -1,6 +1,4 @@
-'use strict';
-
-var chunkIGJUBJBW_cjs = require('./chunk-IGJUBJBW.cjs');
+import { __esm, __export, __toCommonJS } from './chunk-V4OQ3NZ2.js';
 
 // src/templates/components/logo.template.ts
 function renderLogo(data = {}) {
@@ -44,7 +42,7 @@ function renderLogo(data = {}) {
   return logoContent;
 }
 var sizeClasses;
-var init_logo_template = chunkIGJUBJBW_cjs.__esm({
+var init_logo_template = __esm({
   "src/templates/components/logo.template.ts"() {
     sizeClasses = {
       sm: "h-6 w-auto",
@@ -57,7 +55,7 @@ var init_logo_template = chunkIGJUBJBW_cjs.__esm({
 
 // src/templates/layouts/admin-layout-catalyst.template.ts
 var admin_layout_catalyst_template_exports = {};
-chunkIGJUBJBW_cjs.__export(admin_layout_catalyst_template_exports, {
+__export(admin_layout_catalyst_template_exports, {
   renderAdminLayoutCatalyst: () => renderAdminLayoutCatalyst,
   renderCatalystCheckbox: () => renderCatalystCheckbox
 });
@@ -483,6 +481,13 @@ function renderCatalystSidebar(currentPath = "", user, dynamicMenuItems, isMobil
       icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
         <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm14 1a1 1 0 11-2 0 1 1 0 012 0zM2 13a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2zm14 1a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/>
       </svg>`
+    },
+    {
+      label: "Search",
+      path: "/admin/search",
+      icon: `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>`
     }
   ];
   const settingsMenuItem = {
@@ -617,7 +622,7 @@ function renderCatalystSidebar(currentPath = "", user, dynamicMenuItems, isMobil
     </nav>
   `;
 }
-var init_admin_layout_catalyst_template = chunkIGJUBJBW_cjs.__esm({
+var init_admin_layout_catalyst_template = __esm({
   "src/templates/layouts/admin-layout-catalyst.template.ts"() {
     init_logo_template();
   }
@@ -1155,7 +1160,7 @@ init_logo_template();
 function renderAdminLayout(data) {
   const {
     renderAdminLayoutCatalyst: renderAdminLayoutCatalyst2
-  } = (init_admin_layout_catalyst_template(), chunkIGJUBJBW_cjs.__toCommonJS(admin_layout_catalyst_template_exports));
+  } = (init_admin_layout_catalyst_template(), __toCommonJS(admin_layout_catalyst_template_exports));
   return renderAdminLayoutCatalyst2(data);
 }
 function adminLayoutV2(data) {
@@ -1671,6 +1676,13 @@ function renderSidebar(currentPath, user, dynamicMenuItems) {
       path: "/admin/cache",
       icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>`
+    },
+    {
+      label: "Search",
+      path: "/admin/search",
+      icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>`
     },
     {
@@ -3544,22 +3556,6 @@ function renderFormField(field) {
   `;
 }
 
-exports.adminLayoutV2 = adminLayoutV2;
-exports.getConfirmationDialogScript = getConfirmationDialogScript;
-exports.init_admin_layout_catalyst_template = init_admin_layout_catalyst_template;
-exports.init_logo_template = init_logo_template;
-exports.renderAdminLayout = renderAdminLayout;
-exports.renderAdminLayoutCatalyst = renderAdminLayoutCatalyst;
-exports.renderAlert = renderAlert;
-exports.renderCheckboxPage = renderCheckboxPage;
-exports.renderCodeExamplesList = renderCodeExamplesList;
-exports.renderConfirmationDialog = renderConfirmationDialog;
-exports.renderDesignPage = renderDesignPage;
-exports.renderForm = renderForm;
-exports.renderFormField = renderFormField;
-exports.renderLogo = renderLogo;
-exports.renderPagination = renderPagination;
-exports.renderTable = renderTable;
-exports.renderTestimonialsList = renderTestimonialsList;
-//# sourceMappingURL=chunk-SHCYIZAN.cjs.map
-//# sourceMappingURL=chunk-SHCYIZAN.cjs.map
+export { adminLayoutV2, getConfirmationDialogScript, init_admin_layout_catalyst_template, init_logo_template, renderAdminLayout, renderAdminLayoutCatalyst, renderAlert, renderCheckboxPage, renderCodeExamplesList, renderConfirmationDialog, renderDesignPage, renderForm, renderFormField, renderLogo, renderPagination, renderTable, renderTestimonialsList };
+//# sourceMappingURL=chunk-AAU4BTDE.js.map
+//# sourceMappingURL=chunk-AAU4BTDE.js.map

@@ -1,4 +1,4 @@
-import { init_admin_layout_catalyst_template, init_logo_template, renderAdminLayoutCatalyst } from './chunk-VCH6HXVP.js';
+import { init_admin_layout_catalyst_template, init_logo_template, renderAdminLayoutCatalyst } from './chunk-AAU4BTDE.js';
 
 // src/templates/filter-bar.template.ts
 function renderFilterBar(data) {
@@ -2462,5 +2462,5 @@ function renderFormsExamplesPage(data) {
 }
 
 export { renderFilterBar, renderFormsDocsPage, renderFormsExamplesPage };
-//# sourceMappingURL=chunk-H7AMQWVI.js.map
-//# sourceMappingURL=chunk-H7AMQWVI.js.map
+//# sourceMappingURL=chunk-M3QJL5ZT.js.map
+//# sourceMappingURL=chunk-M3QJL5ZT.js.map

@@ -1,18 +1,16 @@
-'use strict';
-
-var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkZS5MYHCW_cjs = require('./chunk-ZS5MYHCW.cjs');
-var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkRZWYEWXM_cjs = require('./chunk-RZWYEWXM.cjs');
-var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
-var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
-var chunk5HMR2SJW_cjs = require('./chunk-5HMR2SJW.cjs');
-var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
-var hono = require('hono');
-var cors = require('hono/cors');
-var zod = require('zod');
-var cookie = require('hono/cookie');
-var html = require('hono/html');
+import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-QHSXUCM6.js';
+import { PluginService } from './chunk-YFJJU26H.js';
+import { MigrationService } from './chunk-IU6XHGU4.js';
+import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-AAU4BTDE.js';
+import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
+import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-7DXWBEQP.js';
+import { metricsTracker } from './chunk-FICTAGD4.js';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { z } from 'zod';
+import { setCookie } from 'hono/cookie';
+import { html, raw } from 'hono/html';
 
 // src/schemas/index.ts
 var schemaDefinitions = [];
@@ -32,14 +30,19 @@ var FTS5Service = class {
     highlightTag: "mark"
   };
   options;
+  synonymService;
+  /** Set synonym service for query expansion */
+  setSynonymService(service) {
+    this.synonymService = service;
+  }
   /**
    * Search using FTS5 with BM25 ranking and highlighting
    * Auto-indexes any missing content in selected collections before searching
    */
-  async search(query, settings) {
+  async search(query, settings, weightOverrides) {
     const startTime = Date.now();
     try {
-      const escapedQuery = this.sanitizeFTS5Query(query.query);
+      let escapedQuery = this.sanitizeFTS5Query(query.query);
       if (!escapedQuery || escapedQuery === '""') {
         return {
           results: [],
@@ -47,6 +50,9 @@ var FTS5Service = class {
           query_time_ms: Date.now() - startTime,
           mode: "fts5"
         };
+      }
+      if (this.synonymService && settings.query_synonyms_enabled !== false) {
+        escapedQuery = await this.expandWithSynonyms(escapedQuery);
       }
       const collections = query.filters?.collections?.length ? query.filters.collections : settings.selected_collections;
       if (collections.length === 0) {
@@ -60,12 +66,15 @@ var FTS5Service = class {
       await this.ensureCollectionsIndexed(collections);
       const collectionPlaceholders = collections.map(() => "?").join(", ");
       const tag = this.options.highlightTag || "mark";
+      const titleBoost = weightOverrides?.titleBoost ?? this.options.titleBoost;
+      const slugBoost = weightOverrides?.slugBoost ?? this.options.slugBoost;
+      const bodyBoost = weightOverrides?.bodyBoost ?? this.options.bodyBoost;
       const sql = `
         SELECT
           fts.content_id,
           fts.collection_id,
           fts.title,
-          bm25(content_fts, ${this.options.titleBoost}, ${this.options.slugBoost}, ${this.options.bodyBoost}, 0, 0) as score,
+          bm25(content_fts, ${titleBoost}, ${slugBoost}, ${bodyBoost}, 0, 0) as score,
           snippet(content_fts, 2, '<${tag}>', '</${tag}>', '...', ${this.options.snippetLength}) as body_snippet,
           highlight(content_fts, 0, '<${tag}>', '</${tag}>') as title_highlight,
           c.slug,
@@ -163,39 +172,74 @@ var FTS5Service = class {
           VALUES (?, ?, ?, 'indexed')
         `).bind(contentId, content.collection_id, Date.now())
       ]);
-      console.log(`[FTS5Service] Indexed content ${contentId}`);
     } catch (error) {
       console.error(`[FTS5Service] Error indexing ${contentId}:`, error);
       throw error;
     }
   }
   /**
-   * Index all published content in a collection
+   * Index all published content in a collection (bulk approach).
+   * Fetches all content in one query, processes text in memory,
+   * then inserts in D1 batches for efficiency.
    */
-  async indexCollection(collectionId) {
-    console.log(`[FTS5Service] Starting indexing for collection: ${collectionId}`);
+  async indexCollection(collectionId, onProgress) {
+    console.log(`[FTS5Service] Starting bulk indexing for collection: ${collectionId}`);
     try {
       const { results } = await this.db.prepare(`
-          SELECT id FROM content
+          SELECT id, title, slug, data, collection_id
+          FROM content
           WHERE collection_id = ? AND status != 'deleted'
         `).bind(collectionId).all();
       const totalItems = results?.length || 0;
       if (totalItems === 0) {
         console.log(`[FTS5Service] No content found in collection ${collectionId}`);
+        if (onProgress) await onProgress(0, 0);
         return { total_items: 0, indexed_items: 0, errors: 0 };
       }
+      await this.db.batch([
+        this.db.prepare("DELETE FROM content_fts WHERE collection_id = ?").bind(collectionId),
+        this.db.prepare("DELETE FROM content_fts_sync WHERE collection_id = ?").bind(collectionId)
+      ]);
       let indexedItems = 0;
       let errors = 0;
-      for (const item of results || []) {
-        try {
-          await this.indexContent(item.id);
-          indexedItems++;
-        } catch (error) {
-          console.error(`[FTS5Service] Error indexing item ${item.id}:`, error);
-          errors++;
+      const now = Date.now();
+      const BATCH_SIZE = 25;
+      for (let i = 0; i < totalItems; i += BATCH_SIZE) {
+        const batch = results.slice(i, i + BATCH_SIZE);
+        const statements = [];
+        for (const item of batch) {
+          try {
+            const bodyText = this.extractSearchableText(item.data);
+            statements.push(
+              this.db.prepare(`
+                INSERT INTO content_fts(title, slug, body, content_id, collection_id)
+                VALUES (?, ?, ?, ?, ?)
+              `).bind(item.title || "", item.slug || "", bodyText, item.id, item.collection_id)
+            );
+            statements.push(
+              this.db.prepare(`
+                INSERT OR REPLACE INTO content_fts_sync(content_id, collection_id, indexed_at, status)
+                VALUES (?, ?, ?, 'indexed')
+              `).bind(item.id, item.collection_id, now)
+            );
+          } catch (error) {
+            errors++;
+          }
+        }
+        if (statements.length > 0) {
+          try {
+            await this.db.batch(statements);
+            indexedItems += statements.length / 2;
+          } catch (error) {
+            console.error(`[FTS5Service] Batch insert error at offset ${i}:`, error);
+            errors += batch.length;
+          }
+        }
+        if (onProgress) {
+          await onProgress(indexedItems, totalItems);
         }
       }
-      console.log(`[FTS5Service] Indexing complete: ${indexedItems}/${totalItems} items, ${errors} errors`);
+      console.log(`[FTS5Service] Bulk indexing complete: ${indexedItems}/${totalItems} items, ${errors} errors`);
       return {
         total_items: totalItems,
         indexed_items: indexedItems,
@@ -205,6 +249,64 @@ var FTS5Service = class {
       console.error(`[FTS5Service] Error indexing collection ${collectionId}:`, error);
       throw error;
     }
+  }
+  /**
+   * Index a batch of content items from a collection using batch D1 inserts.
+   * Returns the number remaining so the caller can loop.
+   */
+  async indexCollectionBatch(collectionId, batchSize = 200) {
+    const { results } = await this.db.prepare(`
+        SELECT c.id, c.title, c.slug, c.data, c.collection_id
+        FROM content c
+        LEFT JOIN content_fts_sync s ON c.id = s.content_id
+        WHERE c.collection_id = ? AND c.status != 'deleted'
+          AND s.content_id IS NULL
+        LIMIT ?
+      `).bind(collectionId, batchSize).all();
+    const toIndex = results || [];
+    const now = Date.now();
+    let indexed = 0;
+    const SUB_BATCH = 25;
+    for (let i = 0; i < toIndex.length; i += SUB_BATCH) {
+      const batch = toIndex.slice(i, i + SUB_BATCH);
+      const statements = [];
+      for (const item of batch) {
+        try {
+          const bodyText = this.extractSearchableText(item.data);
+          statements.push(
+            this.db.prepare(
+              "INSERT INTO content_fts(title, slug, body, content_id, collection_id) VALUES (?, ?, ?, ?, ?)"
+            ).bind(item.title || "", item.slug || "", bodyText, item.id, item.collection_id)
+          );
+          statements.push(
+            this.db.prepare(
+              "INSERT OR REPLACE INTO content_fts_sync(content_id, collection_id, indexed_at, status) VALUES (?, ?, ?, 'indexed')"
+            ).bind(item.id, item.collection_id, now)
+          );
+        } catch (error) {
+        }
+      }
+      if (statements.length > 0) {
+        try {
+          await this.db.batch(statements);
+          indexed += statements.length / 2;
+        } catch (error) {
+          console.error(`[FTS5Service] Batch insert error at offset ${i}:`, error);
+        }
+      }
+    }
+    const remainResult = await this.db.prepare(`
+        SELECT COUNT(*) as cnt FROM content c
+        LEFT JOIN content_fts_sync s ON c.id = s.content_id
+        WHERE c.collection_id = ? AND c.status != 'deleted'
+          AND s.content_id IS NULL
+      `).bind(collectionId).first();
+    const totalResult = await this.db.prepare("SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'").bind(collectionId).first();
+    return {
+      indexed,
+      remaining: remainResult?.cnt || 0,
+      total: totalResult?.cnt || 0
+    };
   }
   /**
    * Remove content from FTS index
@@ -369,6 +471,36 @@ var FTS5Service = class {
     }
   }
   /**
+   * Expand a sanitized FTS5 query string with synonym terms.
+   * Input: "coffee*" (single) or "coffee OR beans" (multiple)
+   * Output: "coffee* OR espresso OR caffeine" or "coffee OR espresso OR beans"
+   */
+  async expandWithSynonyms(sanitizedQuery) {
+    try {
+      let terms;
+      let hasPrefixMatch = false;
+      if (sanitizedQuery.endsWith("*")) {
+        terms = [sanitizedQuery.slice(0, -1)];
+        hasPrefixMatch = true;
+      } else {
+        terms = sanitizedQuery.split(" OR ").map((t) => t.trim()).filter(Boolean);
+      }
+      if (terms.length === 0) return sanitizedQuery;
+      const expanded = await this.synonymService.expandQuery(terms);
+      if (expanded.length === terms.length) return sanitizedQuery;
+      const capped = expanded.slice(0, 20);
+      if (hasPrefixMatch && terms.length === 1) {
+        const original = terms[0] + "*";
+        const synonyms = capped.filter((t) => t !== terms[0]);
+        return [original, ...synonyms].join(" OR ");
+      }
+      return capped.join(" OR ");
+    } catch (error) {
+      console.error("[FTS5Service] Synonym expansion error (using original query):", error);
+      return sanitizedQuery;
+    }
+  }
+  /**
    * Sanitize user input for FTS5 MATCH clause
    * Removes operators and special characters that could cause errors
    */
@@ -376,20 +508,52 @@ var FTS5Service = class {
     if (!query || typeof query !== "string") {
       return '""';
     }
-    let sanitized = query.replace(/['"]/g, "").replace(/[()[\]{}]/g, "").replace(/\b(AND|OR|NOT|NEAR)\b/gi, "").replace(/\*/g, "").replace(/:/g, "").replace(/\^/g, "").replace(/-/g, " ").trim();
-    const terms = sanitized.split(/\s+/).filter((t) => t.length > 0);
+    let sanitized = query.replace(/-/g, " ").replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+    const stopWords = /* @__PURE__ */ new Set([
+      "a",
+      "an",
+      "the",
+      "is",
+      "are",
+      "was",
+      "were",
+      "be",
+      "to",
+      "of",
+      "in",
+      "on",
+      "at",
+      "by",
+      "or",
+      "and",
+      "not",
+      "for",
+      "it",
+      "as",
+      "do",
+      "if",
+      "no",
+      "so",
+      "up",
+      "but",
+      "its",
+      "has",
+      "had",
+      "near"
+    ]);
+    const terms = sanitized.split(/\s+/).filter((t) => t.length > 1 && !stopWords.has(t));
     if (terms.length === 0) {
       return '""';
     }
     if (terms.length === 1) {
-      return `"${terms[0]}"*`;
+      return `${terms[0]}*`;
     }
-    return terms.map((t) => `"${t}"`).join(" ");
+    return terms.join(" OR ");
   }
 };
 
 // src/routes/api-content-crud.ts
-var apiContentCrudRoutes = new hono.Hono();
+var apiContentCrudRoutes = new Hono();
 apiContentCrudRoutes.get("/check-slug", async (c) => {
   try {
     const db = c.env.DB;
@@ -449,7 +613,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -490,7 +654,7 @@ apiContentCrudRoutes.post("/", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
       now,
       now
     ).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     await cache.invalidate(`content:list:${collectionId}:*`);
     await cache.invalidate("content-filtered:*");
     const fts5Service = new FTS5Service(db);
@@ -521,7 +685,7 @@ apiContentCrudRoutes.post("/", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -559,7 +723,7 @@ apiContentCrudRoutes.put("/:id", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(...params).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
@@ -591,7 +755,7 @@ apiContentCrudRoutes.put("/:id", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -602,7 +766,7 @@ apiContentCrudRoutes.delete("/:id", chunkZS5MYHCW_cjs.requireAuth(), async (c) =
     }
     const deleteStmt = db.prepare("DELETE FROM content WHERE id = ?");
     await deleteStmt.bind(id).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
@@ -624,7 +788,7 @@ apiContentCrudRoutes.delete("/:id", chunkZS5MYHCW_cjs.requireAuth(), async (c) =
 var api_content_crud_default = apiContentCrudRoutes;
 
 // src/routes/api.ts
-var apiRoutes = new hono.Hono();
+var apiRoutes = new Hono();
 apiRoutes.use("*", async (c, next) => {
   const startTime = Date.now();
   c.set("startTime", startTime);
@@ -633,11 +797,11 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunkZS5MYHCW_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
-apiRoutes.use("*", cors.cors({
+apiRoutes.use("*", cors({
   origin: "*",
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"]
@@ -1059,7 +1223,7 @@ apiRoutes.get("/collections", async (c) => {
   try {
     const db = c.env.DB;
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("collections", "all");
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -1136,12 +1300,12 @@ apiRoutes.get("/content", async (c) => {
         });
       }
     }
-    const filter = chunk5HMR2SJW_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = QueryFilterBuilder.parseFromQuery(queryParams);
     if (!filter.limit) {
       filter.limit = 50;
     }
     filter.limit = Math.min(filter.limit, 1e3);
-    const builder3 = new chunk5HMR2SJW_cjs.QueryFilterBuilder();
+    const builder3 = new QueryFilterBuilder();
     const queryResult = builder3.build("content", filter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -1150,7 +1314,7 @@ apiRoutes.get("/content", async (c) => {
       }, 400);
     }
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("content-filtered", JSON.stringify({ filter, query: queryResult.sql }));
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -1228,7 +1392,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
     if (!collectionResult) {
       return c.json({ error: "Collection not found" }, 404);
     }
-    const filter = chunk5HMR2SJW_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = QueryFilterBuilder.parseFromQuery(queryParams);
     if (!filter.where) {
       filter.where = { and: [] };
     }
@@ -1244,7 +1408,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
       filter.limit = 50;
     }
     filter.limit = Math.min(filter.limit, 1e3);
-    const builder3 = new chunk5HMR2SJW_cjs.QueryFilterBuilder();
+    const builder3 = new QueryFilterBuilder();
     const queryResult = builder3.build("content", filter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -1253,7 +1417,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
       }, 400);
     }
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("collection-content-filtered", `${collection}:${JSON.stringify({ filter, query: queryResult.sql })}`);
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -1332,9 +1496,9 @@ function generateId() {
 async function emitEvent(eventName, data) {
   console.log(`[Event] ${eventName}:`, data);
 }
-var fileValidationSchema = zod.z.object({
-  name: zod.z.string().min(1).max(255),
-  type: zod.z.string().refine(
+var fileValidationSchema = z.object({
+  name: z.string().min(1).max(255),
+  type: z.string().refine(
     (type) => {
       const allowedTypes = [
         // Images
@@ -1365,11 +1529,11 @@ var fileValidationSchema = zod.z.object({
     },
     { message: "Unsupported file type" }
   ),
-  size: zod.z.number().min(1).max(50 * 1024 * 1024)
+  size: z.number().min(1).max(50 * 1024 * 1024)
   // 50MB max
 });
-var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var apiMediaRoutes = new Hono();
+apiMediaRoutes.use("*", requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -1951,7 +2115,7 @@ function getPNGDimensions(uint8Array) {
   };
 }
 var api_media_default = apiMediaRoutes;
-var apiSystemRoutes = new hono.Hono();
+var apiSystemRoutes = new Hono();
 apiSystemRoutes.get("/health", async (c) => {
   try {
     const startTime = Date.now();
@@ -2112,9 +2276,9 @@ apiSystemRoutes.get("/env", (c) => {
   });
 });
 var api_system_default = apiSystemRoutes;
-var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
-adminApiRoutes.use("*", chunkZS5MYHCW_cjs.requireRole(["admin", "editor"]));
+var adminApiRoutes = new Hono();
+adminApiRoutes.use("*", requireAuth());
+adminApiRoutes.use("*", requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -2244,19 +2408,19 @@ adminApiRoutes.get("/activity", async (c) => {
     return c.json({ error: "Failed to fetch recent activity" }, 500);
   }
 });
-var createCollectionSchema = zod.z.object({
-  name: zod.z.string().min(1).max(255).regex(/^[a-z0-9_]+$/, "Must contain only lowercase letters, numbers, and underscores"),
-  displayName: zod.z.string().min(1).max(255).optional(),
-  display_name: zod.z.string().min(1).max(255).optional(),
-  description: zod.z.string().optional()
+var createCollectionSchema = z.object({
+  name: z.string().min(1).max(255).regex(/^[a-z0-9_]+$/, "Must contain only lowercase letters, numbers, and underscores"),
+  displayName: z.string().min(1).max(255).optional(),
+  display_name: z.string().min(1).max(255).optional(),
+  description: z.string().optional()
 }).refine((data) => data.displayName || data.display_name, {
   message: "Either displayName or display_name is required",
   path: ["displayName"]
 });
-var updateCollectionSchema = zod.z.object({
-  display_name: zod.z.string().min(1).max(255).optional(),
-  description: zod.z.string().optional(),
-  is_active: zod.z.boolean().optional()
+var updateCollectionSchema = z.object({
+  display_name: z.string().min(1).max(255).optional(),
+  description: z.string().optional(),
+  is_active: z.boolean().optional()
 });
 adminApiRoutes.get("/collections", async (c) => {
   try {
@@ -2624,7 +2788,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-KMWEHV7B.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-EOUNLPV3.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2649,7 +2813,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-KMWEHV7B.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-EOUNLPV3.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2668,7 +2832,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-KMWEHV7B.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-EOUNLPV3.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -2743,8 +2907,8 @@ function renderLoginPage(data, demoLoginActive = false) {
         <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div class="bg-zinc-900 shadow-sm ring-1 ring-white/10 rounded-xl px-6 py-8 sm:px-10">
             <!-- Alerts -->
-            ${data.error ? `<div class="mb-6">${chunkSHCYIZAN_cjs.renderAlert({ type: "error", message: data.error })}</div>` : ""}
-            ${data.message ? `<div class="mb-6">${chunkSHCYIZAN_cjs.renderAlert({ type: "success", message: data.message })}</div>` : ""}
+            ${data.error ? `<div class="mb-6">${renderAlert({ type: "error", message: data.error })}</div>` : ""}
+            ${data.message ? `<div class="mb-6">${renderAlert({ type: "success", message: data.message })}</div>` : ""}
 
             <!-- Form Response (HTMX target) -->
             <div id="form-response" class="mb-6"></div>
@@ -2908,7 +3072,7 @@ function renderRegisterPage(data) {
         <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div class="bg-zinc-900 shadow-sm ring-1 ring-white/10 rounded-xl px-6 py-8 sm:px-10">
             <!-- Alerts -->
-            ${data.error ? `<div class="mb-6">${chunkSHCYIZAN_cjs.renderAlert({ type: "error", message: data.error })}</div>` : ""}
+            ${data.error ? `<div class="mb-6">${renderAlert({ type: "error", message: data.error })}</div>` : ""}
 
             <!-- Form -->
             <form
@@ -3042,12 +3206,12 @@ async function isFirstUserRegistration(db) {
     return false;
   }
 }
-var baseRegistrationSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required"),
-  password: zod.z.string().min(8, "Password must be at least 8 characters"),
-  username: zod.z.string().min(3, "Username must be at least 3 characters").optional(),
-  firstName: zod.z.string().min(1, "First name is required").optional(),
-  lastName: zod.z.string().min(1, "Last name is required").optional()
+var baseRegistrationSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  username: z.string().min(3, "Username must be at least 3 characters").optional(),
+  firstName: z.string().min(1, "First name is required").optional(),
+  lastName: z.string().min(1, "Last name is required").optional()
 });
 var authValidationService = {
   /**
@@ -3075,7 +3239,7 @@ var authValidationService = {
 };
 
 // src/routes/auth.ts
-var authRoutes = new hono.Hono();
+var authRoutes = new Hono();
 authRoutes.get("/login", async (c) => {
   const error = c.req.query("error");
   const message = c.req.query("message");
@@ -3108,9 +3272,9 @@ authRoutes.get("/register", async (c) => {
   };
   return c.html(renderRegisterPage(pageData));
 });
-var loginSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required"),
-  password: zod.z.string().min(1, "Password is required")
+var loginSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(1, "Password is required")
 });
 authRoutes.post(
   "/register",
@@ -3150,7 +3314,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunkZS5MYHCW_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -3170,8 +3334,8 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkZS5MYHCW_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
-      cookie.setCookie(c, "auth_token", token, {
+      const token = await AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
         sameSite: "Strict",
@@ -3211,7 +3375,7 @@ authRoutes.post("/login", async (c) => {
     const { email, password } = validation.data;
     const db = c.env.DB;
     const normalizedEmail = email.toLowerCase();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.user);
+    const cache = getCacheService(CACHE_CONFIGS.user);
     let user = await cache.get(cache.generateKey("user", `email:${normalizedEmail}`));
     if (!user) {
       user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
@@ -3223,12 +3387,12 @@ authRoutes.post("/login", async (c) => {
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await chunkZS5MYHCW_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await chunkZS5MYHCW_cjs.AuthManager.generateToken(user.id, user.email, user.role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(user.id, user.email, user.role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -3255,7 +3419,7 @@ authRoutes.post("/login", async (c) => {
   }
 });
 authRoutes.post("/logout", (c) => {
-  cookie.setCookie(c, "auth_token", "", {
+  setCookie(c, "auth_token", "", {
     httpOnly: true,
     secure: false,
     // Set to true in production with HTTPS
@@ -3266,7 +3430,7 @@ authRoutes.post("/logout", (c) => {
   return c.json({ message: "Logged out successfully" });
 });
 authRoutes.get("/logout", (c) => {
-  cookie.setCookie(c, "auth_token", "", {
+  setCookie(c, "auth_token", "", {
     httpOnly: true,
     secure: false,
     // Set to true in production with HTTPS
@@ -3276,7 +3440,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -3293,14 +3457,14 @@ authRoutes.get("/me", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunkZS5MYHCW_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunkZS5MYHCW_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(user.userId, user.email, user.role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -3320,7 +3484,7 @@ authRoutes.post("/register/form", async (c) => {
     if (!isFirstUser) {
       const registrationEnabled = await isRegistrationEnabled(db);
       if (!registrationEnabled) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             Registration is currently disabled. Please contact an administrator.
           </div>
@@ -3340,7 +3504,7 @@ authRoutes.post("/register/form", async (c) => {
     const validationSchema = await authValidationService.buildRegistrationSchema(db);
     const validation = await validationSchema.safeParseAsync(requestData);
     if (!validation.success) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           ${validation.error.issues.map((err) => err.message).join(", ")}
         </div>
@@ -3353,13 +3517,13 @@ authRoutes.post("/register/form", async (c) => {
     const lastName = validatedData.lastName || authValidationService.generateDefaultValue("lastName", validatedData);
     const existingUser = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind(normalizedEmail, username).first();
     if (existingUser) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           User with this email or username already exists
         </div>
       `);
     }
-    const passwordHash = await chunkZS5MYHCW_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -3379,8 +3543,8 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await chunkZS5MYHCW_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(userId, normalizedEmail, role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
       // Set to true in production with HTTPS
@@ -3389,7 +3553,7 @@ authRoutes.post("/register/form", async (c) => {
       // 24 hours
     });
     const redirectUrl = role === "admin" ? "/admin/dashboard" : "/admin/dashboard";
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Account created successfully! Redirecting...
         <script>
@@ -3401,7 +3565,7 @@ authRoutes.post("/register/form", async (c) => {
     `);
   } catch (error) {
     console.error("Registration error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Registration failed. Please try again.
       </div>
@@ -3416,7 +3580,7 @@ authRoutes.post("/login/form", async (c) => {
     const normalizedEmail = email.toLowerCase();
     const validation = loginSchema.safeParse({ email: normalizedEmail, password });
     if (!validation.success) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           ${validation.error.issues.map((err) => err.message).join(", ")}
         </div>
@@ -3425,22 +3589,22 @@ authRoutes.post("/login/form", async (c) => {
     const db = c.env.DB;
     const user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
     if (!user) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `);
     }
-    const isValidPassword = await chunkZS5MYHCW_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `);
     }
-    const token = await chunkZS5MYHCW_cjs.AuthManager.generateToken(user.id, user.email, user.role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(user.id, user.email, user.role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
       // Set to true in production with HTTPS
@@ -3449,7 +3613,7 @@ authRoutes.post("/login/form", async (c) => {
       // 24 hours
     });
     await db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").bind((/* @__PURE__ */ new Date()).getTime(), user.id).run();
-    return c.html(html.html`
+    return c.html(html`
       <div id="form-response">
         <div class="rounded-lg bg-green-100 dark:bg-lime-500/10 p-4 ring-1 ring-green-400 dark:ring-lime-500/20">
           <div class="flex items-start gap-x-3">
@@ -3470,7 +3634,7 @@ authRoutes.post("/login/form", async (c) => {
     `);
   } catch (error) {
     console.error("Login error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Login failed. Please try again.
       </div>
@@ -3498,7 +3662,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await chunkZS5MYHCW_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -3510,7 +3674,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await chunkZS5MYHCW_cjs.AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -3730,7 +3894,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunkZS5MYHCW_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -3749,8 +3913,8 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunkZS5MYHCW_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
-    cookie.setCookie(c, "auth_token", authToken, {
+    const authToken = await AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -3979,7 +4143,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunkZS5MYHCW_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -4014,7 +4178,7 @@ authRoutes.post("/reset-password", async (c) => {
   }
 });
 var auth_default = authRoutes;
-var app = new hono.Hono();
+var app = new Hono();
 app.post("/test-cleanup", async (c) => {
   const db = c.env.DB;
   if (c.env.ENVIRONMENT === "production") {
@@ -4237,7 +4401,7 @@ app.post("/test-cleanup/content", async (c) => {
 var test_cleanup_default = app;
 
 // src/templates/pages/admin-content-form.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 
 // src/templates/components/drag-sortable.template.ts
 function getDragSortableScript() {
@@ -5791,7 +5955,7 @@ function escapeHtml2(text) {
 }
 
 // src/plugins/available/tinymce-plugin/index.ts
-var builder = chunk6FHNRRJ3_cjs.PluginBuilder.create({
+var builder = PluginBuilder.create({
   name: "tinymce-plugin",
   version: "1.0.0",
   description: "Powerful WYSIWYG rich text editor for content creation"
@@ -6074,7 +6238,7 @@ function getQuillCDN(version = "2.0.2") {
   `;
 }
 function createQuillEditorPlugin() {
-  const builder3 = chunk6FHNRRJ3_cjs.PluginBuilder.create({
+  const builder3 = PluginBuilder.create({
     name: "quill-editor",
     version: "1.0.0",
     description: "Quill rich text editor integration for SonicJS"
@@ -6100,7 +6264,7 @@ function createQuillEditorPlugin() {
 createQuillEditorPlugin();
 
 // src/plugins/available/easy-mdx/index.ts
-var builder2 = chunk6FHNRRJ3_cjs.PluginBuilder.create({
+var builder2 = PluginBuilder.create({
   name: "easy-mdx",
   version: "1.0.0",
   description: "Lightweight markdown editor with live preview"
@@ -6391,8 +6555,8 @@ function renderContentFormPage(data) {
         <!-- Form Content -->
         <div class="px-6 py-6">
           <div id="form-messages">
-            ${data.error ? chunkSHCYIZAN_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-            ${data.success ? chunkSHCYIZAN_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+            ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+            ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -6627,7 +6791,7 @@ function renderContentFormPage(data) {
     </div>
 
     <!-- Confirmation Dialogs -->
-    ${chunkSHCYIZAN_cjs.renderConfirmationDialog({
+    ${renderConfirmationDialog({
     id: "duplicate-content-confirm",
     title: "Duplicate Content",
     message: "Create a copy of this content?",
@@ -6638,7 +6802,7 @@ function renderContentFormPage(data) {
     onConfirm: "performDuplicateContent()"
   })}
 
-    ${chunkSHCYIZAN_cjs.renderConfirmationDialog({
+    ${renderConfirmationDialog({
     id: "delete-content-confirm",
     title: "Delete Content",
     message: "Are you sure you want to delete this content? This action cannot be undone.",
@@ -6649,7 +6813,7 @@ function renderContentFormPage(data) {
     onConfirm: `performDeleteContent('${data.id}')`
   })}
 
-    ${chunkSHCYIZAN_cjs.getConfirmationDialogScript()}
+    ${getConfirmationDialogScript()}
 
     ${data.tinymceEnabled ? getTinyMCEScript(data.tinymceSettings?.apiKey) : "<!-- TinyMCE plugin not active -->"}
 
@@ -7280,11 +7444,11 @@ function renderContentFormPage(data) {
     content: pageContent,
     version: data.version
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-content-list.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderContentListPage(data) {
   const urlParams = new URLSearchParams();
   if (data.modelName && data.modelName !== "all") urlParams.set("model", data.modelName);
@@ -7688,8 +7852,8 @@ function renderContentListPage(data) {
       
       <!-- Content List -->
       <div id="content-list">
-        ${chunkSHCYIZAN_cjs.renderTable(tableData)}
-        ${chunkSHCYIZAN_cjs.renderPagination(paginationData)}
+        ${renderTable(tableData)}
+        ${renderPagination(paginationData)}
       </div>
       
     </div>
@@ -7899,7 +8063,7 @@ function renderContentListPage(data) {
     </script>
 
     <!-- Confirmation Dialog for Bulk Actions -->
-    ${chunkSHCYIZAN_cjs.renderConfirmationDialog({
+    ${renderConfirmationDialog({
     id: "bulk-action-confirm",
     title: "Confirm Bulk Action",
     message: "Are you sure you want to perform this action? This operation will affect multiple items.",
@@ -7911,7 +8075,7 @@ function renderContentListPage(data) {
   })}
 
     <!-- Confirmation Dialog Script -->
-    ${chunkSHCYIZAN_cjs.getConfirmationDialogScript()}
+    ${getConfirmationDialogScript()}
 
     <!-- Advanced Search Modal -->
     <div id="advancedSearchModal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -8208,7 +8372,7 @@ function renderContentListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/version-history.template.ts
@@ -8401,14 +8565,14 @@ async function isPluginActive2(db, pluginId) {
 }
 
 // src/routes/admin-content.ts
-var adminContentRoutes = new hono.Hono();
+var adminContentRoutes = new Hono();
 function parseFieldValue(field, formData, options = {}) {
   const { skipValidation = false } = options;
   const value = formData.get(field.field_name);
   const errors = [];
-  const blocksConfig = chunk5HMR2SJW_cjs.getBlocksFieldConfig(field.field_options);
+  const blocksConfig = getBlocksFieldConfig(field.field_options);
   if (blocksConfig) {
-    const parsed = chunk5HMR2SJW_cjs.parseBlocksValue(value, blocksConfig);
+    const parsed = parseBlocksValue(value, blocksConfig);
     if (!skipValidation && field.is_required && parsed.value.length === 0) {
       parsed.errors.push(`${field.field_label} is required`);
     }
@@ -8518,9 +8682,9 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+adminContentRoutes.use("*", requireAuth());
 async function getCollectionFields(db, collectionId) {
-  const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
+  const cache = getCacheService(CACHE_CONFIGS.collection);
   return cache.getOrSet(
     cache.generateKey("fields", collectionId),
     async () => {
@@ -8575,7 +8739,7 @@ async function getCollectionFields(db, collectionId) {
   );
 }
 async function getCollection(db, collectionId) {
-  const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
+  const cache = getCacheService(CACHE_CONFIGS.collection);
   return cache.getOrSet(
     cache.generateKey("collection", collectionId),
     async () => {
@@ -8800,21 +8964,21 @@ adminContentRoutes.get("/new", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -8864,7 +9028,7 @@ adminContentRoutes.get("/:id/edit", async (c) => {
     const db = c.env.DB;
     const url = new URL(c.req.url);
     const referrerParams = url.searchParams.get("ref") || "";
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     const content = await cache.getOrSet(
       cache.generateKey("content", id),
       async () => {
@@ -8905,21 +9069,21 @@ adminContentRoutes.get("/:id/edit", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -8975,7 +9139,7 @@ adminContentRoutes.post("/", async (c) => {
     const collectionId = formData.get("collection_id");
     const action = formData.get("action");
     if (!collectionId) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection ID is required.
         </div>
@@ -8984,7 +9148,7 @@ adminContentRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const collection = await getCollection(db, collectionId);
     if (!collection) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
@@ -9037,7 +9201,7 @@ adminContentRoutes.post("/", async (c) => {
       now,
       now
     ).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.invalidate(`content:list:${collectionId}:*`);
     const versionStmt = db.prepare(`
       INSERT INTO content_versions (id, content_id, version, data, author_id, created_at)
@@ -9082,7 +9246,7 @@ adminContentRoutes.post("/", async (c) => {
     }
   } catch (error) {
     console.error("Error creating content:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to create content. Please try again.
       </div>
@@ -9099,7 +9263,7 @@ adminContentRoutes.put("/:id", async (c) => {
     const contentStmt = db.prepare("SELECT * FROM content WHERE id = ?");
     const existingContent = await contentStmt.bind(id).first();
     if (!existingContent) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Content not found.
         </div>
@@ -9107,7 +9271,7 @@ adminContentRoutes.put("/:id", async (c) => {
     }
     const collection = await getCollection(db, existingContent.collection_id);
     if (!collection) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
@@ -9162,7 +9326,7 @@ adminContentRoutes.put("/:id", async (c) => {
       now,
       id
     ).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existingContent.collection_id}:*`);
     const existingData = JSON.parse(existingContent.data || "{}");
@@ -9216,7 +9380,7 @@ adminContentRoutes.put("/:id", async (c) => {
     }
   } catch (error) {
     console.error("Error updating content:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update content. Please try again.
       </div>
@@ -9441,7 +9605,7 @@ adminContentRoutes.post("/bulk-action", async (c) => {
     } else {
       return c.json({ success: false, error: "Invalid action" });
     }
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     for (const contentId of ids) {
       await cache.delete(cache.generateKey("content", contentId));
     }
@@ -9475,7 +9639,7 @@ adminContentRoutes.delete("/:id", async (c) => {
         (err) => console.error("[Content] FTS5 removal failed:", err)
       )
     );
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate("content:list:*");
     return c.html(`
@@ -9667,7 +9831,7 @@ ${JSON.stringify(data, null, 2)}
 var admin_content_default = adminContentRoutes;
 
 // src/templates/pages/admin-profile.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderAvatarImage(avatarUrl, firstName, lastName) {
   return `<div id="avatar-image-container" class="w-24 h-24 rounded-full mx-auto mb-4 overflow-hidden bg-gradient-to-br from-cyan-400 to-purple-400 flex items-center justify-center ring-4 ring-zinc-950/5 dark:ring-white/10">
     ${avatarUrl ? `<img src="${avatarUrl}" alt="Profile picture" class="w-full h-full object-cover">` : `<span class="text-2xl font-bold text-white">${firstName.charAt(0)}${lastName.charAt(0)}</span>`}
@@ -9687,8 +9851,8 @@ function renderProfilePage(data) {
       </div>
 
       <!-- Alert Messages -->
-      ${data.error ? chunkSHCYIZAN_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-      ${data.success ? chunkSHCYIZAN_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+      ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+      ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
 
       <!-- Profile Form -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -10075,7 +10239,7 @@ function renderProfilePage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/alert.template.ts
@@ -10358,7 +10522,7 @@ function renderActivityLogsPage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function getActionBadgeClass(action) {
   if (action.includes("login") || action.includes("logout")) {
@@ -10378,7 +10542,7 @@ function formatAction(action) {
 }
 
 // src/templates/pages/admin-user-edit.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 
 // src/templates/components/confirmation-dialog.template.ts
 function renderConfirmationDialog2(options) {
@@ -10499,8 +10663,8 @@ function renderUserEditPage(data) {
 
       <!-- Alert Messages -->
       <div id="form-messages">
-        ${data.error ? chunkSHCYIZAN_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-        ${data.success ? chunkSHCYIZAN_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+        ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+        ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
       </div>
 
       <!-- User Edit Form -->
@@ -10519,7 +10683,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="first_name"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.firstName || "")}"
+                      value="${escapeHtml(data.userToEdit.firstName || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10530,7 +10694,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="last_name"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.lastName || "")}"
+                      value="${escapeHtml(data.userToEdit.lastName || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10541,7 +10705,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="username"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.username || "")}"
+                      value="${escapeHtml(data.userToEdit.username || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10552,7 +10716,7 @@ function renderUserEditPage(data) {
                     <input
                       type="email"
                       name="email"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.email || "")}"
+                      value="${escapeHtml(data.userToEdit.email || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10563,7 +10727,7 @@ function renderUserEditPage(data) {
                     <input
                       type="tel"
                       name="phone"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.phone || "")}"
+                      value="${escapeHtml(data.userToEdit.phone || "")}"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
                   </div>
@@ -10577,7 +10741,7 @@ function renderUserEditPage(data) {
                         class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white/5 dark:bg-white/5 py-1.5 pl-3 pr-8 text-base text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-500/30 dark:outline-zinc-400/30 *:bg-white dark:*:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-zinc-500 dark:focus-visible:outline-zinc-400 sm:text-sm/6"
                       >
                         ${data.roles.map((role) => `
-                          <option value="${chunk5HMR2SJW_cjs.escapeHtml(role.value)}" ${data.userToEdit.role === role.value ? "selected" : ""}>${chunk5HMR2SJW_cjs.escapeHtml(role.label)}</option>
+                          <option value="${escapeHtml(role.value)}" ${data.userToEdit.role === role.value ? "selected" : ""}>${escapeHtml(role.label)}</option>
                         `).join("")}
                       </select>
                       <svg viewBox="0 0 16 16" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-zinc-600 dark:text-zinc-400 sm:size-4">
@@ -10598,7 +10762,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_display_name"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.profile?.displayName || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.displayName || "")}"
                       placeholder="Public display name"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10609,7 +10773,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_company"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.profile?.company || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.company || "")}"
                       placeholder="Company or organization"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10620,7 +10784,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_job_title"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.profile?.jobTitle || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.jobTitle || "")}"
                       placeholder="Job title or role"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10631,7 +10795,7 @@ function renderUserEditPage(data) {
                     <input
                       type="url"
                       name="profile_website"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.profile?.website || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.website || "")}"
                       placeholder="https://example.com"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10642,7 +10806,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_location"
-                      value="${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.profile?.location || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.location || "")}"
                       placeholder="City, Country"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -10666,7 +10830,7 @@ function renderUserEditPage(data) {
                     rows="3"
                     placeholder="Short bio or description"
                     class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                  >${chunk5HMR2SJW_cjs.escapeHtml(data.userToEdit.profile?.bio || "")}</textarea>
+                  >${escapeHtml(data.userToEdit.profile?.bio || "")}</textarea>
                 </div>
               </div>
 
@@ -10866,11 +11030,11 @@ function renderUserEditPage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-user-new.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderUserNewPage(data) {
   const pageContent = `
     <div>
@@ -10909,8 +11073,8 @@ function renderUserNewPage(data) {
 
       <!-- Alert Messages -->
       <div id="form-messages">
-        ${data.error ? chunkSHCYIZAN_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-        ${data.success ? chunkSHCYIZAN_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+        ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+        ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
       </div>
 
       <!-- User New Form -->
@@ -11154,11 +11318,11 @@ function renderUserNewPage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-users-list.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderUsersListPage(data) {
   const columns = [
     {
@@ -11309,8 +11473,8 @@ function renderUsersListPage(data) {
       </div>
 
       <!-- Alert Messages -->
-      ${data.error ? chunkSHCYIZAN_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-      ${data.success ? chunkSHCYIZAN_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+      ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+      ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
 
       <!-- Stats -->
       <div class="mb-6">
@@ -11487,10 +11651,10 @@ function renderUsersListPage(data) {
       </div>
 
       <!-- Users Table -->
-      ${chunkSHCYIZAN_cjs.renderTable(tableData)}
+      ${renderTable(tableData)}
 
       <!-- Pagination -->
-      ${data.pagination ? chunkSHCYIZAN_cjs.renderPagination(data.pagination) : ""}
+      ${data.pagination ? renderPagination(data.pagination) : ""}
     </div>
 
     <script>
@@ -11561,12 +11725,12 @@ function renderUsersListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-users.ts
-var userRoutes = new hono.Hono();
-userRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var userRoutes = new Hono();
+userRoutes.use("*", requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -11665,12 +11829,12 @@ userRoutes.put("/profile", async (c) => {
   const db = c.env.DB;
   try {
     const formData = await c.req.formData();
-    const firstName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("last_name")?.toString());
-    const username = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("username")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
+    const username = sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
-    const bio = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("bio")?.toString()) || null;
+    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
+    const bio = sanitizeInput(formData.get("bio")?.toString()) || null;
     const timezone = formData.get("timezone")?.toString() || "UTC";
     const language = formData.get("language")?.toString() || "en";
     const emailNotifications = formData.get("email_notifications") === "1";
@@ -11721,7 +11885,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "profile.update",
@@ -11784,7 +11948,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -11855,7 +12019,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunkZS5MYHCW_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -11863,7 +12027,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunkZS5MYHCW_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -11879,7 +12043,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -11946,7 +12110,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -12048,12 +12212,12 @@ userRoutes.post("/users/new", async (c) => {
   const user = c.get("user");
   try {
     const formData = await c.req.formData();
-    const firstName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("last_name")?.toString());
-    const username = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("username")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
+    const username = sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
-    const bio = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("bio")?.toString()) || null;
+    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
+    const bio = sanitizeInput(formData.get("bio")?.toString()) || null;
     const role = formData.get("role")?.toString() || "viewer";
     const password = formData.get("password")?.toString() || "";
     const confirmPassword = formData.get("confirm_password")?.toString() || "";
@@ -12100,7 +12264,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunkZS5MYHCW_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12123,7 +12287,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.create",
@@ -12161,7 +12325,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.view",
@@ -12269,20 +12433,20 @@ userRoutes.put("/users/:id", async (c) => {
   const userId = c.req.param("id");
   try {
     const formData = await c.req.formData();
-    const firstName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("last_name")?.toString());
-    const username = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("username")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
+    const username = sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
+    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
     const role = formData.get("role")?.toString() || "viewer";
     const isActive = formData.get("is_active") === "1";
     const emailVerified = formData.get("email_verified") === "1";
-    const profileDisplayName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("profile_display_name")?.toString()) || null;
-    const profileBio = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("profile_bio")?.toString()) || null;
-    const profileCompany = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("profile_company")?.toString()) || null;
-    const profileJobTitle = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("profile_job_title")?.toString()) || null;
+    const profileDisplayName = sanitizeInput(formData.get("profile_display_name")?.toString()) || null;
+    const profileBio = sanitizeInput(formData.get("profile_bio")?.toString()) || null;
+    const profileCompany = sanitizeInput(formData.get("profile_company")?.toString()) || null;
+    const profileJobTitle = sanitizeInput(formData.get("profile_job_title")?.toString()) || null;
     const profileWebsite = formData.get("profile_website")?.toString()?.trim() || null;
-    const profileLocation = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("profile_location")?.toString()) || null;
+    const profileLocation = sanitizeInput(formData.get("profile_location")?.toString()) || null;
     const profileDateOfBirthStr = formData.get("profile_date_of_birth")?.toString()?.trim() || null;
     const profileDateOfBirth = profileDateOfBirthStr ? new Date(profileDateOfBirthStr).getTime() : null;
     if (!firstName || !lastName || !username || !email) {
@@ -12386,7 +12550,7 @@ userRoutes.put("/users/:id", async (c) => {
         ).run();
       }
     }
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user.update",
@@ -12431,7 +12595,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -12472,7 +12636,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunkZS5MYHCW_cjs.logActivity(
+      await logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -12491,7 +12655,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunkZS5MYHCW_cjs.logActivity(
+      await logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -12518,8 +12682,8 @@ userRoutes.post("/invite-user", async (c) => {
     const formData = await c.req.formData();
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
     const role = formData.get("role")?.toString()?.trim() || "viewer";
-    const firstName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunk5HMR2SJW_cjs.sanitizeInput(formData.get("last_name")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
     if (!email || !firstName || !lastName) {
       return c.json({ error: "Email, first name, and last name are required" }, 400);
     }
@@ -12557,7 +12721,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -12614,7 +12778,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -12650,7 +12814,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -12733,7 +12897,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -12840,7 +13004,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunkZS5MYHCW_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -13058,7 +13222,7 @@ function getFileIcon(mimeType) {
 }
 
 // src/templates/pages/admin-media-library.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderMediaLibraryPage(data) {
   const pageContent = `
     <div>
@@ -13993,7 +14157,7 @@ function renderMediaLibraryPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/media-file-details.template.ts
@@ -14142,9 +14306,9 @@ function renderMediaFileDetails(data) {
 }
 
 // src/routes/admin-media.ts
-var fileValidationSchema2 = zod.z.object({
-  name: zod.z.string().min(1).max(255),
-  type: zod.z.string().refine(
+var fileValidationSchema2 = z.object({
+  name: z.string().min(1).max(255),
+  type: z.string().refine(
     (type) => {
       const allowedTypes = [
         // Images
@@ -14175,11 +14339,11 @@ var fileValidationSchema2 = zod.z.object({
     },
     { message: "Unsupported file type" }
   ),
-  size: zod.z.number().min(1).max(50 * 1024 * 1024)
+  size: z.number().min(1).max(50 * 1024 * 1024)
   // 50MB max
 });
-var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var adminMediaRoutes = new Hono();
+adminMediaRoutes.use("*", requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -14288,7 +14452,7 @@ adminMediaRoutes.get("/", async (c) => {
     return c.html(renderMediaLibraryPage(pageData));
   } catch (error) {
     console.error("Error loading media library:", error);
-    return c.html(html.html`<p>Error loading media library</p>`);
+    return c.html(html`<p>Error loading media library</p>`);
   }
 });
 adminMediaRoutes.get("/selector", async (c) => {
@@ -14323,7 +14487,7 @@ adminMediaRoutes.get("/selector", async (c) => {
       isVideo: row.mime_type.startsWith("video/"),
       isDocument: !row.mime_type.startsWith("image/") && !row.mime_type.startsWith("video/")
     }));
-    return c.html(html.html`
+    return c.html(html`
       <div class="mb-4">
         <input
           type="search"
@@ -14338,7 +14502,7 @@ adminMediaRoutes.get("/selector", async (c) => {
       </div>
 
       <div id="media-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-        ${html.raw(mediaFiles.map((file) => `
+        ${raw(mediaFiles.map((file) => `
           <div
             class="relative group cursor-pointer rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800 shadow-sm hover:shadow-md transition-shadow"
             data-media-id="${file.id}"
@@ -14391,7 +14555,7 @@ adminMediaRoutes.get("/selector", async (c) => {
         `).join(""))}
       </div>
 
-      ${mediaFiles.length === 0 ? html.html`
+      ${mediaFiles.length === 0 ? html`
         <div class="text-center py-12 text-zinc-500 dark:text-zinc-400">
           <svg class="mx-auto h-12 w-12 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
@@ -14402,7 +14566,7 @@ adminMediaRoutes.get("/selector", async (c) => {
     `);
   } catch (error) {
     console.error("Error loading media selector:", error);
-    return c.html(html.html`<div class="text-red-500 dark:text-red-400">Error loading media files</div>`);
+    return c.html(html`<div class="text-red-500 dark:text-red-400">Error loading media files</div>`);
   }
 });
 adminMediaRoutes.get("/search", async (c) => {
@@ -14458,7 +14622,7 @@ adminMediaRoutes.get("/search", async (c) => {
       isDocument: !row.mime_type.startsWith("image/") && !row.mime_type.startsWith("video/")
     }));
     const gridHTML = mediaFiles.map((file) => generateMediaItemHTML(file)).join("");
-    return c.html(html.raw(gridHTML));
+    return c.html(raw(gridHTML));
   } catch (error) {
     console.error("Error searching media:", error);
     return c.html('<div class="text-red-500">Error searching files</div>');
@@ -14513,7 +14677,7 @@ adminMediaRoutes.post("/upload", async (c) => {
       }
     }
     if (!files || files.length === 0) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           No files provided
         </div>
@@ -14526,7 +14690,7 @@ adminMediaRoutes.post("/upload", async (c) => {
     console.log("[MEDIA UPLOAD] MEDIA_BUCKET type:", typeof c.env.MEDIA_BUCKET);
     if (!c.env.MEDIA_BUCKET) {
       console.error("[MEDIA UPLOAD] MEDIA_BUCKET is not available! Available env keys:", Object.keys(c.env));
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Media storage (R2) is not configured. Please check your wrangler.toml configuration.
           <br><small>Debug: Available bindings: ${Object.keys(c.env).join(", ")}</small>
@@ -14649,25 +14813,25 @@ adminMediaRoutes.post("/upload", async (c) => {
         console.error("Error fetching updated media list:", error);
       }
     }
-    return c.html(html.html`
-      ${uploadResults.length > 0 ? html.html`
+    return c.html(html`
+      ${uploadResults.length > 0 ? html`
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
           Successfully uploaded ${uploadResults.length} file${uploadResults.length > 1 ? "s" : ""}
         </div>
       ` : ""}
 
-      ${errors.length > 0 ? html.html`
+      ${errors.length > 0 ? html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p class="font-medium">Upload errors:</p>
           <ul class="list-disc list-inside mt-2">
-            ${errors.map((error) => html.html`
+            ${errors.map((error) => html`
               <li>${error.filename}: ${error.error}</li>
             `)}
           </ul>
         </div>
       ` : ""}
 
-      ${uploadResults.length > 0 ? html.html`
+      ${uploadResults.length > 0 ? html`
         <script>
           // Close modal and refresh page after successful upload with cache busting
           setTimeout(() => {
@@ -14679,7 +14843,7 @@ adminMediaRoutes.post("/upload", async (c) => {
     `);
   } catch (error) {
     console.error("Upload error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Upload failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -14716,14 +14880,14 @@ adminMediaRoutes.put("/:id", async (c) => {
     const stmt = c.env.DB.prepare("SELECT * FROM media WHERE id = ? AND deleted_at IS NULL");
     const fileRecord = await stmt.bind(fileId).first();
     if (!fileRecord) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
         </div>
       `);
     }
     if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
         </div>
@@ -14745,7 +14909,7 @@ adminMediaRoutes.put("/:id", async (c) => {
       Math.floor(Date.now() / 1e3),
       fileId
     ).run();
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
         File updated successfully
       </div>
@@ -14758,14 +14922,14 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   } catch (error) {
     console.error("Update error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
         Update failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunkZS5MYHCW_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -14785,7 +14949,7 @@ adminMediaRoutes.delete("/cleanup", chunkZS5MYHCW_cjs.requireRole("admin"), asyn
     const mediaRows = allMedia || [];
     const unusedFiles = mediaRows.filter((file) => !referencedUrls.has(file.r2_key));
     if (unusedFiles.length === 0) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
           No unused media files found. All files are referenced in content.
         </div>
@@ -14812,19 +14976,19 @@ adminMediaRoutes.delete("/cleanup", chunkZS5MYHCW_cjs.requireRole("admin"), asyn
         });
       }
     }
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
         Successfully cleaned up ${deletedCount} unused media file${deletedCount !== 1 ? "s" : ""}.
-        ${errors.length > 0 ? html.html`
+        ${errors.length > 0 ? html`
           <br><span class="text-sm">Failed to delete ${errors.length} file${errors.length !== 1 ? "s" : ""}.</span>
         ` : ""}
       </div>
 
-      ${errors.length > 0 ? html.html`
+      ${errors.length > 0 ? html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p class="font-medium">Cleanup errors:</p>
           <ul class="list-disc list-inside mt-2 text-sm">
-            ${errors.map((error) => html.html`
+            ${errors.map((error) => html`
               <li>${error.filename}: ${error.error}</li>
             `)}
           </ul>
@@ -14840,7 +15004,7 @@ adminMediaRoutes.delete("/cleanup", chunkZS5MYHCW_cjs.requireRole("admin"), asyn
     `);
   } catch (error) {
     console.error("Cleanup error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Cleanup failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -14854,14 +15018,14 @@ adminMediaRoutes.delete("/:id", async (c) => {
     const stmt = c.env.DB.prepare("SELECT * FROM media WHERE id = ? AND deleted_at IS NULL");
     const fileRecord = await stmt.bind(fileId).first();
     if (!fileRecord) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
         </div>
       `);
     }
     if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
         </div>
@@ -14874,7 +15038,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
     }
     const deleteStmt = c.env.DB.prepare("UPDATE media SET deleted_at = ? WHERE id = ?");
     await deleteStmt.bind(Math.floor(Date.now() / 1e3), fileId).run();
-    return c.html(html.html`
+    return c.html(html`
       <script>
         // Close modal if open
         const modal = document.getElementById('file-modal');
@@ -14887,7 +15051,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
     `);
   } catch (error) {
     console.error("Delete error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
         Delete failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -15015,7 +15179,7 @@ function formatFileSize(bytes) {
 }
 
 // src/templates/pages/admin-plugins-list.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderPluginsListPage(data) {
   const categories = [
     { value: "content", label: "Content Management" },
@@ -15485,7 +15649,7 @@ function renderPluginsListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 function renderPluginCard(plugin) {
   const statusColors = {
@@ -16122,7 +16286,7 @@ function renderPluginSettingsPage(data) {
     user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function renderStatusBadge(status) {
   const statusColors = {
@@ -16174,24 +16338,8 @@ function renderSettingsTab(plugin) {
   const isTurnstilePlugin = plugin.id === "turnstile" || plugin.name === "turnstile";
   return `
     ${isSeedDataPlugin ? `
-      <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-semibold text-white mb-2">Seed Data Generator</h2>
-            <p class="text-gray-400">Generate realistic example data for testing and development.</p>
-          </div>
-          <a
-            href="/admin/seed-data"
-            target="_blank"
-            class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Open Seed Data Tool
-          </a>
-        </div>
-      </div>
+      <script>window.location.href = '/admin/seed-data';</script>
+      <noscript><meta http-equiv="refresh" content="0;url=/admin/seed-data"></noscript>
     ` : ""}
 
     <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6">
@@ -16987,8 +17135,8 @@ function renderEmailSettingsContent(plugin, settings) {
 }
 
 // src/routes/admin-plugins.ts
-var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var adminPluginRoutes = new Hono();
+adminPluginRoutes.use("*", requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -17115,7 +17263,7 @@ adminPluginRoutes.get("/", async (c) => {
     if (user?.role !== "admin") {
       return c.text("Access denied", 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     let installedPlugins = [];
     let stats = { total: 0, active: 0, inactive: 0, errors: 0, uninstalled: 0 };
     try {
@@ -17191,7 +17339,7 @@ adminPluginRoutes.get("/:id", async (c) => {
     if (user?.role !== "admin") {
       return c.redirect("/admin/plugins");
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     const plugin = await pluginService.getPlugin(pluginId);
     if (!plugin) {
       return c.text("Plugin not found", 404);
@@ -17275,7 +17423,7 @@ adminPluginRoutes.post("/:id/activate", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.activatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -17292,7 +17440,7 @@ adminPluginRoutes.post("/:id/deactivate", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.deactivatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -17309,7 +17457,7 @@ adminPluginRoutes.post("/install", async (c) => {
       return c.json({ error: "Access denied" }, 403);
     }
     const body = await c.req.json();
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     if (body.name === "faq-plugin") {
       const faqPlugin = await pluginService.installPlugin({
         id: "third-party-faq",
@@ -17579,7 +17727,7 @@ adminPluginRoutes.post("/:id/uninstall", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.uninstallPlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -17597,7 +17745,7 @@ adminPluginRoutes.post("/:id/settings", async (c) => {
       return c.json({ error: "Access denied" }, 403);
     }
     const settings = await c.req.json();
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.updatePluginSettings(pluginId, settings);
     return c.json({ success: true });
   } catch (error) {
@@ -17618,7 +17766,7 @@ function formatLastUpdated(timestamp) {
 }
 
 // src/templates/pages/admin-logs-list.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderLogsListPage(data) {
   const { logs, pagination, filters, user } = data;
   const content = `
@@ -17929,11 +18077,11 @@ function renderLogsListPage(data) {
     user,
     content
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 function renderLogDetailsPage(data) {
   const { log, user } = data;
-  const content = html.html`
+  const content = html`
     <div class="px-4 sm:px-6 lg:px-8">
       <div class="sm:flex sm:items-center">
         <div class="sm:flex-auto">
@@ -17994,59 +18142,59 @@ function renderLogDetailsPage(data) {
               </dd>
             </div>
             
-            ${log.source ? html.html`
+            ${log.source ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Source</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.source}</dd>
               </div>
             ` : ""}
             
-            ${log.userId ? html.html`
+            ${log.userId ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">User ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.userId}</dd>
               </div>
             ` : ""}
             
-            ${log.sessionId ? html.html`
+            ${log.sessionId ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Session ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.sessionId}</dd>
               </div>
             ` : ""}
             
-            ${log.requestId ? html.html`
+            ${log.requestId ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Request ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.requestId}</dd>
               </div>
             ` : ""}
             
-            ${log.ipAddress ? html.html`
+            ${log.ipAddress ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">IP Address</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.ipAddress}</dd>
               </div>
             ` : ""}
             
-            ${log.method && log.url ? html.html`
+            ${log.method && log.url ? html`
               <div class="sm:col-span-2">
                 <dt class="text-sm font-medium text-gray-500">HTTP Request</dt>
                 <dd class="mt-1 text-sm text-gray-900">
                   <span class="font-medium">${log.method}</span> ${log.url}
-                  ${log.statusCode ? html.html`<span class="ml-2 text-gray-500">(${log.statusCode})</span>` : ""}
+                  ${log.statusCode ? html`<span class="ml-2 text-gray-500">(${log.statusCode})</span>` : ""}
                 </dd>
               </div>
             ` : ""}
             
-            ${log.duration ? html.html`
+            ${log.duration ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Duration</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.formattedDuration}</dd>
               </div>
             ` : ""}
             
-            ${log.userAgent ? html.html`
+            ${log.userAgent ? html`
               <div class="sm:col-span-2">
                 <dt class="text-sm font-medium text-gray-500">User Agent</dt>
                 <dd class="mt-1 text-sm text-gray-900 break-all">${log.userAgent}</dd>
@@ -18069,14 +18217,14 @@ function renderLogDetailsPage(data) {
       </div>
 
       <!-- Tags -->
-      ${log.tags && log.tags.length > 0 ? html.html`
+      ${log.tags && log.tags.length > 0 ? html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Tags</h3>
           </div>
           <div class="px-6 py-4">
             <div class="flex flex-wrap gap-2">
-              ${log.tags.map((tag) => html.html`
+              ${log.tags.map((tag) => html`
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                   ${tag}
                 </span>
@@ -18087,7 +18235,7 @@ function renderLogDetailsPage(data) {
       ` : ""}
 
       <!-- Additional Data -->
-      ${log.data ? html.html`
+      ${log.data ? html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Additional Data</h3>
@@ -18099,7 +18247,7 @@ function renderLogDetailsPage(data) {
       ` : ""}
 
       <!-- Stack Trace -->
-      ${log.stackTrace ? html.html`
+      ${log.stackTrace ? html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Stack Trace</h3>
@@ -18120,7 +18268,7 @@ function renderLogDetailsPage(data) {
         </a>
         
         <div class="flex space-x-3">
-          ${log.level === "error" || log.level === "fatal" ? html.html`
+          ${log.level === "error" || log.level === "fatal" ? html`
             <button
               type="button"
               class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -18141,7 +18289,7 @@ function renderLogDetailsPage(data) {
       </div>
     </div>
   `;
-  return chunkSHCYIZAN_cjs.adminLayoutV2({
+  return adminLayoutV2({
     title: `Log Details - ${log.id}`,
     user,
     content
@@ -18149,7 +18297,7 @@ function renderLogDetailsPage(data) {
 }
 function renderLogConfigPage(data) {
   const { configs, user } = data;
-  const content = html.html`
+  const content = html`
     <div class="px-4 sm:px-6 lg:px-8">
       <div class="sm:flex sm:items-center">
         <div class="sm:flex-auto">
@@ -18221,17 +18369,17 @@ function renderLogConfigPage(data) {
 
       <!-- Configuration Cards -->
       <div class="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        ${configs.map((config) => html.html`
+        ${configs.map((config) => html`
           <div class="bg-white shadow rounded-lg overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">
               <div class="flex items-center justify-between">
                 <h3 class="text-lg font-medium text-gray-900 capitalize">${config.category}</h3>
                 <div class="flex items-center">
-                  ${config.enabled ? html.html`
+                  ${config.enabled ? html`
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                       Enabled
                     </span>
-                  ` : html.html`
+                  ` : html`
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                       Disabled
                     </span>
@@ -18384,7 +18532,7 @@ function renderLogConfigPage(data) {
 
     <script src="https://unpkg.com/htmx.org@1.9.6"></script>
   `;
-  return chunkSHCYIZAN_cjs.adminLayoutV2({
+  return adminLayoutV2({
     title: "Log Configuration",
     user,
     content
@@ -18392,12 +18540,12 @@ function renderLogConfigPage(data) {
 }
 
 // src/routes/admin-logs.ts
-var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var adminLogsRoutes = new Hono();
+adminLogsRoutes.use("*", requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const query = c.req.query();
     const page = parseInt(query.page || "1");
     const limit = parseInt(query.limit || "50");
@@ -18470,14 +18618,14 @@ adminLogsRoutes.get("/", async (c) => {
     return c.html(renderLogsListPage(pageData));
   } catch (error) {
     console.error("Error fetching logs:", error);
-    return c.html(html.html`<p>Error loading logs: ${error}</p>`);
+    return c.html(html`<p>Error loading logs: ${error}</p>`);
   }
 });
 adminLogsRoutes.get("/:id", async (c) => {
   try {
     const id = c.req.param("id");
     const user = c.get("user");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const { logs } = await logger.getLogs({
       limit: 1,
       offset: 0,
@@ -18486,7 +18634,7 @@ adminLogsRoutes.get("/:id", async (c) => {
     });
     const log = logs.find((l) => l.id === id);
     if (!log) {
-      return c.html(html.html`<p>Log entry not found</p>`);
+      return c.html(html`<p>Log entry not found</p>`);
     }
     const formattedLog = {
       ...log,
@@ -18508,13 +18656,13 @@ adminLogsRoutes.get("/:id", async (c) => {
     return c.html(renderLogDetailsPage(pageData));
   } catch (error) {
     console.error("Error fetching log details:", error);
-    return c.html(html.html`<p>Error loading log details: ${error}</p>`);
+    return c.html(html`<p>Error loading log details: ${error}</p>`);
   }
 });
 adminLogsRoutes.get("/config", async (c) => {
   try {
     const user = c.get("user");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const configs = await logger.getAllConfigs();
     const pageData = {
       configs,
@@ -18527,7 +18675,7 @@ adminLogsRoutes.get("/config", async (c) => {
     return c.html(renderLogConfigPage(pageData));
   } catch (error) {
     console.error("Error fetching log config:", error);
-    return c.html(html.html`<p>Error loading log configuration: ${error}</p>`);
+    return c.html(html`<p>Error loading log configuration: ${error}</p>`);
   }
 });
 adminLogsRoutes.post("/config/:category", async (c) => {
@@ -18538,21 +18686,21 @@ adminLogsRoutes.post("/config/:category", async (c) => {
     const level = formData.get("level");
     const retention = parseInt(formData.get("retention"));
     const maxSize = parseInt(formData.get("max_size"));
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     await logger.updateConfig(category, {
       enabled,
       level,
       retention,
       maxSize
     });
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Configuration updated successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error updating log config:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update configuration. Please try again.
       </div>
@@ -18567,7 +18715,7 @@ adminLogsRoutes.get("/export", async (c) => {
     const category = query.category;
     const startDate = query.start_date;
     const endDate = query.end_date;
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const filter = {
       limit: 1e4,
       // Export up to 10k logs
@@ -18648,16 +18796,16 @@ adminLogsRoutes.post("/cleanup", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     await logger.cleanupByRetention();
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Log cleanup completed successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error cleaning up logs:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to clean up logs. Please try again.
       </div>
@@ -18670,7 +18818,7 @@ adminLogsRoutes.post("/search", async (c) => {
     const search = formData.get("search");
     const level = formData.get("level");
     const category = formData.get("category");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const filter = {
       limit: 20,
       offset: 0,
@@ -18714,7 +18862,7 @@ adminLogsRoutes.post("/search", async (c) => {
     return c.html(rows);
   } catch (error) {
     console.error("Error searching logs:", error);
-    return c.html(html.html`<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error searching logs</td></tr>`);
+    return c.html(html`<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error searching logs</td></tr>`);
   }
 });
 function getLevelClass(level) {
@@ -18755,7 +18903,7 @@ function getCategoryClass(category) {
       return "bg-gray-100 text-gray-800";
   }
 }
-var adminDesignRoutes = new hono.Hono();
+var adminDesignRoutes = new Hono();
 adminDesignRoutes.get("/", (c) => {
   const user = c.get("user");
   const pageData = {
@@ -18765,9 +18913,9 @@ adminDesignRoutes.get("/", (c) => {
       role: user.role
     } : void 0
   };
-  return c.html(chunkSHCYIZAN_cjs.renderDesignPage(pageData));
+  return c.html(renderDesignPage(pageData));
 });
-var adminCheckboxRoutes = new hono.Hono();
+var adminCheckboxRoutes = new Hono();
 adminCheckboxRoutes.get("/", (c) => {
   const user = c.get("user");
   const pageData = {
@@ -18777,7 +18925,7 @@ adminCheckboxRoutes.get("/", (c) => {
       role: user.role
     } : void 0
   };
-  return c.html(chunkSHCYIZAN_cjs.renderCheckboxPage(pageData));
+  return c.html(renderCheckboxPage(pageData));
 });
 
 // src/templates/pages/admin-testimonials-form.template.ts
@@ -18805,7 +18953,7 @@ function renderTestimonialsForm(data) {
         </div>
       </div>
 
-      ${message ? chunkSHCYIZAN_cjs.renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
+      ${message ? renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
 
       <!-- Form -->
       <div class="backdrop-blur-xl bg-white/10 rounded-xl border border-white/20 shadow-2xl">
@@ -19034,23 +19182,23 @@ function renderTestimonialsForm(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function escapeHtml4(unsafe) {
   return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // src/routes/admin-testimonials.ts
-var testimonialSchema = zod.z.object({
-  authorName: zod.z.string().min(1, "Author name is required").max(100, "Author name must be under 100 characters"),
-  authorTitle: zod.z.string().optional(),
-  authorCompany: zod.z.string().optional(),
-  testimonialText: zod.z.string().min(1, "Testimonial is required").max(1e3, "Testimonial must be under 1000 characters"),
-  rating: zod.z.string().transform((val) => val ? parseInt(val, 10) : void 0).pipe(zod.z.number().min(1).max(5).optional()),
-  isPublished: zod.z.string().transform((val) => val === "true"),
-  sortOrder: zod.z.string().transform((val) => parseInt(val, 10)).pipe(zod.z.number().min(0))
+var testimonialSchema = z.object({
+  authorName: z.string().min(1, "Author name is required").max(100, "Author name must be under 100 characters"),
+  authorTitle: z.string().optional(),
+  authorCompany: z.string().optional(),
+  testimonialText: z.string().min(1, "Testimonial is required").max(1e3, "Testimonial must be under 1000 characters"),
+  rating: z.string().transform((val) => val ? parseInt(val, 10) : void 0).pipe(z.number().min(1).max(5).optional()),
+  isPublished: z.string().transform((val) => val === "true"),
+  sortOrder: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0))
 });
-var adminTestimonialsRoutes = new hono.Hono();
+var adminTestimonialsRoutes = new Hono();
 adminTestimonialsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -19060,7 +19208,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
     const offset = (currentPage - 1) * limit;
     const db = c.env?.DB;
     if (!db) {
-      return c.html(chunkSHCYIZAN_cjs.renderTestimonialsList({
+      return c.html(renderTestimonialsList({
         testimonials: [],
         totalCount: 0,
         currentPage: 1,
@@ -19100,7 +19248,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
     `;
     const { results: testimonials } = await db.prepare(dataQuery).bind(...params, limit, offset).all();
     const totalPages = Math.ceil(totalCount / limit);
-    return c.html(chunkSHCYIZAN_cjs.renderTestimonialsList({
+    return c.html(renderTestimonialsList({
       testimonials: testimonials || [],
       totalCount,
       currentPage,
@@ -19114,7 +19262,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching testimonials:", error);
     const user = c.get("user");
-    return c.html(chunkSHCYIZAN_cjs.renderTestimonialsList({
+    return c.html(renderTestimonialsList({
       testimonials: [],
       totalCount: 0,
       currentPage: 1,
@@ -19189,7 +19337,7 @@ adminTestimonialsRoutes.post("/", async (c) => {
   } catch (error) {
     console.error("Error creating testimonial:", error);
     const user = c.get("user");
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -19338,7 +19486,7 @@ adminTestimonialsRoutes.put("/:id", async (c) => {
     console.error("Error updating testimonial:", error);
     const user = c.get("user");
     const id = parseInt(c.req.param("id"));
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -19433,7 +19581,7 @@ function renderCodeExamplesForm(data) {
         </div>
       </div>
 
-      ${message ? chunkSHCYIZAN_cjs.renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
+      ${message ? renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
 
       <!-- Form -->
       <div class="backdrop-blur-xl bg-white/10 rounded-xl border border-white/20 shadow-2xl">
@@ -19703,24 +19851,24 @@ function renderCodeExamplesForm(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function escapeHtml5(unsafe) {
   return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // src/routes/admin-code-examples.ts
-var codeExampleSchema = zod.z.object({
-  title: zod.z.string().min(1, "Title is required").max(200, "Title must be under 200 characters"),
-  description: zod.z.string().max(500, "Description must be under 500 characters").optional(),
-  code: zod.z.string().min(1, "Code is required"),
-  language: zod.z.string().min(1, "Language is required"),
-  category: zod.z.string().max(50, "Category must be under 50 characters").optional(),
-  tags: zod.z.string().max(200, "Tags must be under 200 characters").optional(),
-  isPublished: zod.z.string().transform((val) => val === "true"),
-  sortOrder: zod.z.string().transform((val) => parseInt(val, 10)).pipe(zod.z.number().min(0))
+var codeExampleSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200, "Title must be under 200 characters"),
+  description: z.string().max(500, "Description must be under 500 characters").optional(),
+  code: z.string().min(1, "Code is required"),
+  language: z.string().min(1, "Language is required"),
+  category: z.string().max(50, "Category must be under 50 characters").optional(),
+  tags: z.string().max(200, "Tags must be under 200 characters").optional(),
+  isPublished: z.string().transform((val) => val === "true"),
+  sortOrder: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0))
 });
-var adminCodeExamplesRoutes = new hono.Hono();
+var adminCodeExamplesRoutes = new Hono();
 adminCodeExamplesRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -19730,7 +19878,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
     const offset = (currentPage - 1) * limit;
     const db = c.env?.DB;
     if (!db) {
-      return c.html(chunkSHCYIZAN_cjs.renderCodeExamplesList({
+      return c.html(renderCodeExamplesList({
         codeExamples: [],
         totalCount: 0,
         currentPage: 1,
@@ -19770,7 +19918,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
     `;
     const { results: codeExamples } = await db.prepare(dataQuery).bind(...params, limit, offset).all();
     const totalPages = Math.ceil(totalCount / limit);
-    return c.html(chunkSHCYIZAN_cjs.renderCodeExamplesList({
+    return c.html(renderCodeExamplesList({
       codeExamples: codeExamples || [],
       totalCount,
       currentPage,
@@ -19784,7 +19932,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching code examples:", error);
     const user = c.get("user");
-    return c.html(chunkSHCYIZAN_cjs.renderCodeExamplesList({
+    return c.html(renderCodeExamplesList({
       codeExamples: [],
       totalCount: 0,
       currentPage: 1,
@@ -19860,7 +20008,7 @@ adminCodeExamplesRoutes.post("/", async (c) => {
   } catch (error) {
     console.error("Error creating code example:", error);
     const user = c.get("user");
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20012,7 +20160,7 @@ adminCodeExamplesRoutes.put("/:id", async (c) => {
     console.error("Error updating code example:", error);
     const user = c.get("user");
     const id = parseInt(c.req.param("id"));
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20173,7 +20321,7 @@ function renderDashboardPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function renderStatsCards(stats) {
   const cards = [
@@ -20721,9 +20869,9 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 }
 
 // src/routes/admin-dashboard.ts
-var VERSION = chunk5HMR2SJW_cjs.getCoreVersion();
-var router = new hono.Hono();
-router.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var VERSION = getCoreVersion();
+var router = new Hono();
+router.use("*", requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -20877,9 +21025,9 @@ router.get("/recent-activity", async (c) => {
 });
 router.get("/api/metrics", async (c) => {
   return c.json({
-    requestsPerSecond: chunkRCQ2HIQD_cjs.metricsTracker.getRequestsPerSecond(),
-    totalRequests: chunkRCQ2HIQD_cjs.metricsTracker.getTotalRequests(),
-    averageRPS: Number(chunkRCQ2HIQD_cjs.metricsTracker.getAverageRPS().toFixed(2)),
+    requestsPerSecond: metricsTracker.getRequestsPerSecond(),
+    totalRequests: metricsTracker.getTotalRequests(),
+    averageRPS: Number(metricsTracker.getAverageRPS().toFixed(2)),
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
@@ -20948,7 +21096,7 @@ router.get("/system-status", async (c) => {
 });
 
 // src/templates/pages/admin-collections-list.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 
 // src/templates/components/table.template.ts
 function renderTable2(data) {
@@ -21422,11 +21570,11 @@ function renderCollectionsListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-collections-form.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function getFieldTypeBadge(fieldType) {
   const typeLabels = {
     "text": "Text",
@@ -21691,7 +21839,7 @@ function renderCollectionFormPage(data) {
             }
           </style>
           
-          ${chunkSHCYIZAN_cjs.renderForm(formData)}
+          ${renderForm(formData)}
 
           ${isEdit && data.managed ? `
             <!-- Read-Only Fields Display for Managed Collections -->
@@ -22498,12 +22646,12 @@ function renderCollectionFormPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-collections.ts
-var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var adminCollectionsRoutes = new Hono();
+adminCollectionsRoutes.use("*", requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -22570,7 +22718,7 @@ adminCollectionsRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching collections:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return c.html(html.html`<p>Error loading collections: ${errorMessage}</p>`);
+    return c.html(html`<p>Error loading collections: ${errorMessage}</p>`);
   }
 });
 adminCollectionsRoutes.get("/new", async (c) => {
@@ -22612,7 +22760,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (!name || !displayName) {
       const errorMsg = "Name and display name are required.";
       if (isHtmx) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -22624,7 +22772,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (!/^[a-z0-9_]+$/.test(name)) {
       const errorMsg = "Collection name must contain only lowercase letters, numbers, and underscores.";
       if (isHtmx) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -22639,7 +22787,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (existing) {
       const errorMsg = "A collection with this name already exists.";
       if (isHtmx) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -22696,7 +22844,7 @@ adminCollectionsRoutes.post("/", async (c) => {
       }
     }
     if (isHtmx) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
           Collection created successfully! Redirecting to edit mode...
           <script>
@@ -22713,7 +22861,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     console.error("Error creating collection:", error);
     const isHtmx = c.req.header("HX-Request") === "true";
     if (isHtmx) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Failed to create collection. Please try again.
         </div>
@@ -22881,7 +23029,7 @@ adminCollectionsRoutes.put("/:id", async (c) => {
     const displayName = formData.get("displayName");
     const description = formData.get("description");
     if (!displayName) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Display name is required.
         </div>
@@ -22894,14 +23042,14 @@ adminCollectionsRoutes.put("/:id", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(displayName, description || null, Date.now(), id).run();
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Collection updated successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error updating collection:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update collection. Please try again.
       </div>
@@ -22915,7 +23063,7 @@ adminCollectionsRoutes.delete("/:id", async (c) => {
     const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content WHERE collection_id = ?");
     const contentResult = await contentStmt.bind(id).first();
     if (contentResult && contentResult.count > 0) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Cannot delete collection: it contains ${contentResult.count} content item(s). Delete all content first.
         </div>
@@ -22925,14 +23073,14 @@ adminCollectionsRoutes.delete("/:id", async (c) => {
     await deleteFieldsStmt.bind(id).run();
     const deleteStmt = db.prepare("DELETE FROM collections WHERE id = ?");
     await deleteStmt.bind(id).run();
-    return c.html(html.html`
+    return c.html(html`
       <script>
         window.location.href = '/admin/collections';
       </script>
     `);
   } catch (error) {
     console.error("Error deleting collection:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to delete collection. Please try again.
       </div>
@@ -23228,7 +23376,7 @@ adminCollectionsRoutes.post("/:collectionId/fields/reorder", async (c) => {
 });
 
 // src/templates/pages/admin-settings.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderSettingsPage(data) {
   const activeTab = data.activeTab || "general";
   const pageContent = `
@@ -23610,7 +23758,7 @@ function renderSettingsPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 function renderTabButton(tabId, label, iconPath, activeTab) {
   const isActive = activeTab === tabId;
@@ -24691,8 +24839,8 @@ function renderDatabaseToolsSettings(settings) {
 }
 
 // src/routes/admin-settings.ts
-var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var adminSettingsRoutes = new Hono();
+adminSettingsRoutes.use("*", requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -24757,7 +24905,7 @@ adminSettingsRoutes.get("/", (c) => {
 adminSettingsRoutes.get("/general", async (c) => {
   const user = c.get("user");
   const db = c.env.DB;
-  const settingsService = new chunkVNLR35GO_cjs.SettingsService(db);
+  const settingsService = new SettingsService(db);
   const generalSettings = await settingsService.getGeneralSettings(user?.email);
   const mockSettings = getMockSettings(user);
   mockSettings.general = generalSettings;
@@ -24860,7 +25008,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkRZWYEWXM_cjs.MigrationService(db);
+    const migrationService = new MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -24884,7 +25032,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkRZWYEWXM_cjs.MigrationService(db);
+    const migrationService = new MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -24902,7 +25050,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkRZWYEWXM_cjs.MigrationService(db);
+    const migrationService = new MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -25059,7 +25207,7 @@ adminSettingsRoutes.post("/general", async (c) => {
     }
     const formData = await c.req.formData();
     const db = c.env.DB;
-    const settingsService = new chunkVNLR35GO_cjs.SettingsService(db);
+    const settingsService = new SettingsService(db);
     const settings = {
       siteName: formData.get("siteName"),
       siteDescription: formData.get("siteDescription"),
@@ -25099,7 +25247,7 @@ adminSettingsRoutes.post("/", async (c) => {
 });
 
 // src/templates/pages/admin-forms-list.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderFormsListPage(data) {
   const tableData = {
     tableId: "forms-table",
@@ -25361,11 +25509,11 @@ function renderFormsListPage(data) {
     user: data.user,
     version: data.version
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-builder.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function getTurnstileComponentScript() {
   return `
     (function() {
@@ -26578,11 +26726,11 @@ ${getTurnstileComponentScript()}
     user: data.user,
     version: data.version
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-create.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderFormCreatePage(data) {
   const pageContent = `
     <div class="max-w-3xl mx-auto">
@@ -26775,12 +26923,12 @@ function renderFormCreatePage(data) {
     user: data.user,
     version: data.version
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-forms.ts
-var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var adminFormsRoutes = new Hono();
+adminFormsRoutes.use("*", requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -26844,7 +26992,7 @@ adminFormsRoutes.get("/new", async (c) => {
 adminFormsRoutes.get("/docs", async (c) => {
   try {
     const user = c.get("user");
-    const { renderFormsDocsPage } = await import('./templates.cjs');
+    const { renderFormsDocsPage } = await import('./templates.js');
     const pageData = {
       user: user ? {
         name: user.email,
@@ -26862,7 +27010,7 @@ adminFormsRoutes.get("/docs", async (c) => {
 adminFormsRoutes.get("/examples", async (c) => {
   try {
     const user = c.get("user");
-    const { renderFormsExamplesPage } = await import('./templates.cjs');
+    const { renderFormsExamplesPage } = await import('./templates.js');
     const pageData = {
       user: user ? {
         name: user.email,
@@ -26944,7 +27092,7 @@ adminFormsRoutes.get("/:id/builder", async (c) => {
     if (!form) {
       return c.html("<p>Form not found</p>", 404);
     }
-    const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
+    const turnstileService = new TurnstileService(db);
     const turnstileSettings = await turnstileService.getSettings();
     const pageData = {
       id: form.id,
@@ -27081,7 +27229,7 @@ adminFormsRoutes.get("/:id/submissions", async (c) => {
     return c.html("<p>Error loading submissions</p>", 500);
   }
 });
-var publicFormsRoutes = new hono.Hono();
+var publicFormsRoutes = new Hono();
 publicFormsRoutes.get("/:identifier/turnstile-config", async (c) => {
   try {
     const db = c.env.DB;
@@ -27092,7 +27240,7 @@ publicFormsRoutes.get("/:identifier/turnstile-config", async (c) => {
     if (!form) {
       return c.json({ error: "Form not found" }, 404);
     }
-    const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
+    const turnstileService = new TurnstileService(db);
     const globalSettings = await turnstileService.getSettings();
     const formSettings = form.turnstile_settings ? JSON.parse(form.turnstile_settings) : { inherit: true };
     const enabled = form.turnstile_enabled === 1 || formSettings.inherit && globalSettings?.enabled;
@@ -27519,7 +27667,7 @@ publicFormsRoutes.post("/:identifier/submit", async (c) => {
     const turnstileEnabled = form.turnstile_enabled === 1;
     const turnstileSettings = form.turnstile_settings ? JSON.parse(form.turnstile_settings) : { inherit: true };
     if (turnstileEnabled || turnstileSettings.inherit) {
-      const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
+      const turnstileService = new TurnstileService(db);
       const globalEnabled = await turnstileService.isEnabled();
       if (globalEnabled || turnstileEnabled) {
         const turnstileToken = body.data?.turnstile || body.turnstile;
@@ -27579,7 +27727,7 @@ publicFormsRoutes.post("/:identifier/submit", async (c) => {
 var public_forms_default = publicFormsRoutes;
 
 // src/templates/pages/admin-api-reference.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderAPIReferencePage(data) {
   const endpointsByCategory = data.endpoints.reduce((acc, endpoint) => {
     if (!acc[endpoint.category]) {
@@ -27906,13 +28054,13 @@ function renderAPIReferencePage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-api-reference.ts
-var VERSION2 = chunk5HMR2SJW_cjs.getCoreVersion();
-var router2 = new hono.Hono();
-router2.use("*", chunkZS5MYHCW_cjs.requireAuth());
+var VERSION2 = getCoreVersion();
+var router2 = new Hono();
+router2.use("*", requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -28137,6 +28285,5389 @@ router2.get("/", async (c) => {
   }
 });
 
+// src/plugins/core-plugins/ai-search-plugin/services/embedding.service.ts
+var EmbeddingService = class {
+  constructor(ai) {
+    this.ai = ai;
+  }
+  /**
+   * Generate embedding for a single text
+   * 
+   * ⭐ Enhanced with Cloudflare Similarity-Based Caching
+   * - Automatically caches embeddings for 30 days
+   * - Similar queries share the same cache (semantic matching)
+   * - 90%+ speedup for repeated/similar queries (200ms → 5ms)
+   * - Zero infrastructure cost (included with Workers AI)
+   * 
+   * Example: "cloudflare workers" and "cloudflare worker" share cache
+   */
+  async generateEmbedding(text) {
+    try {
+      const response = await this.ai.run("@cf/baai/bge-base-en-v1.5", {
+        text: this.preprocessText(text)
+      }, {
+        // ⭐ Enable Cloudflare's Similarity-Based Caching
+        // This provides semantic cache matching across similar queries
+        cf: {
+          cacheTtl: 2592e3,
+          // 30 days (maximum allowed)
+          cacheEverything: true
+          // Cache all AI responses
+        }
+      });
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      throw new Error("No embedding data returned");
+    } catch (error) {
+      console.error("[EmbeddingService] Error generating embedding:", error);
+      throw error;
+    }
+  }
+  /**
+   * Generate embeddings for multiple texts using native batch API.
+   * Workers AI supports up to 100 texts per call for bge-base-en-v1.5.
+   */
+  async generateBatch(texts, onProgress) {
+    try {
+      const batchSize = 50;
+      const allEmbeddings = [];
+      for (let i = 0; i < texts.length; i += batchSize) {
+        const batch = texts.slice(i, i + batchSize);
+        const preprocessed = batch.map((t) => this.preprocessText(t));
+        const response = await this.ai.run("@cf/baai/bge-base-en-v1.5", {
+          text: preprocessed
+        });
+        if (response.data && Array.isArray(response.data)) {
+          allEmbeddings.push(...response.data);
+        } else {
+          throw new Error(`Unexpected embedding response at batch offset ${i}`);
+        }
+        if (onProgress) {
+          await onProgress(allEmbeddings.length, texts.length);
+        }
+      }
+      return allEmbeddings;
+    } catch (error) {
+      console.error("[EmbeddingService] Error generating batch embeddings:", error);
+      throw error;
+    }
+  }
+  /**
+   * Preprocess text before generating embedding
+   * - Trim whitespace
+   * - Limit length to avoid token limits
+   * - Remove special characters that might cause issues
+   */
+  preprocessText(text) {
+    if (!text) return "";
+    let processed = text.trim().replace(/\s+/g, " ");
+    if (processed.length > 8e3) {
+      processed = processed.substring(0, 8e3);
+    }
+    return processed;
+  }
+  /**
+   * Calculate cosine similarity between two embeddings
+   */
+  cosineSimilarity(a, b) {
+    if (a.length !== b.length) {
+      throw new Error("Embeddings must have same dimensions");
+    }
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < a.length; i++) {
+      const aVal = a[i] ?? 0;
+      const bVal = b[i] ?? 0;
+      dotProduct += aVal * bVal;
+      normA += aVal * aVal;
+      normB += bVal * bVal;
+    }
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/chunking.service.ts
+var ChunkingService = class {
+  // Default chunk size (in approximate tokens)
+  CHUNK_SIZE = 500;
+  CHUNK_OVERLAP = 50;
+  /**
+   * Chunk a single content item
+   */
+  chunkContent(contentId, collectionId, title, data, metadata = {}) {
+    const text = this.extractText(data);
+    if (!text || text.trim().length === 0) {
+      console.warn(`[ChunkingService] No text found for content ${contentId}`);
+      return [];
+    }
+    const textChunks = this.splitIntoChunks(text);
+    return textChunks.map((chunkText, index) => ({
+      id: `${contentId}_chunk_${index}`,
+      content_id: contentId,
+      collection_id: collectionId,
+      title,
+      text: chunkText,
+      chunk_index: index,
+      metadata: {
+        ...metadata,
+        total_chunks: textChunks.length
+      }
+    }));
+  }
+  /**
+   * Chunk multiple content items
+   */
+  chunkContentBatch(items) {
+    const allChunks = [];
+    for (const item of items) {
+      const chunks = this.chunkContent(
+        item.id,
+        item.collection_id,
+        item.title,
+        item.data,
+        item.metadata
+      );
+      allChunks.push(...chunks);
+    }
+    return allChunks;
+  }
+  /**
+   * Extract all text from content data
+   */
+  extractText(data) {
+    const parts = [];
+    if (data.title) parts.push(String(data.title));
+    if (data.name) parts.push(String(data.name));
+    if (data.description) parts.push(String(data.description));
+    if (data.content) parts.push(String(data.content));
+    if (data.body) parts.push(String(data.body));
+    if (data.text) parts.push(String(data.text));
+    if (data.summary) parts.push(String(data.summary));
+    const extractRecursive = (obj) => {
+      if (typeof obj === "string") {
+        if (obj.length > 10 && !obj.startsWith("http")) {
+          parts.push(obj);
+        }
+      } else if (Array.isArray(obj)) {
+        obj.forEach(extractRecursive);
+      } else if (obj && typeof obj === "object") {
+        const skipKeys = ["id", "slug", "url", "image", "thumbnail", "metadata"];
+        Object.entries(obj).forEach(([key, value]) => {
+          if (!skipKeys.includes(key.toLowerCase())) {
+            extractRecursive(value);
+          }
+        });
+      }
+    };
+    extractRecursive(data);
+    return parts.join("\n\n").trim();
+  }
+  /**
+   * Split text into overlapping chunks
+   */
+  splitIntoChunks(text) {
+    const words = text.split(/\s+/);
+    if (words.length <= this.CHUNK_SIZE) {
+      return [text];
+    }
+    const chunks = [];
+    let startIndex = 0;
+    while (startIndex < words.length) {
+      const endIndex = Math.min(startIndex + this.CHUNK_SIZE, words.length);
+      const chunk = words.slice(startIndex, endIndex).join(" ");
+      chunks.push(chunk);
+      startIndex += this.CHUNK_SIZE - this.CHUNK_OVERLAP;
+      if (startIndex >= words.length - this.CHUNK_OVERLAP) {
+        break;
+      }
+    }
+    return chunks;
+  }
+  /**
+   * Get optimal chunk size based on content type
+   */
+  getOptimalChunkSize(contentType) {
+    switch (contentType) {
+      case "blog_posts":
+      case "articles":
+        return 600;
+      // Larger chunks for long-form content
+      case "products":
+      case "pages":
+        return 400;
+      // Medium chunks for structured content
+      case "messages":
+      case "comments":
+        return 200;
+      // Small chunks for short content
+      default:
+        return this.CHUNK_SIZE;
+    }
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/custom-rag.service.ts
+var CustomRAGService = class {
+  constructor(db, ai, vectorize) {
+    this.db = db;
+    this.ai = ai;
+    this.vectorize = vectorize;
+    this.embeddingService = new EmbeddingService(ai);
+    this.chunkingService = new ChunkingService();
+  }
+  embeddingService;
+  chunkingService;
+  /**
+   * Index all content from a collection.
+   * onProgress reports (phase, processedItems, totalItems) so callers can update UI.
+   * Phases: 'chunking' → 'embedding' → 'storing'
+   */
+  async indexCollection(collectionId, onProgress) {
+    console.log(`[CustomRAG] Starting indexing for collection: ${collectionId}`);
+    try {
+      const { results: contentItems } = await this.db.prepare(`
+          SELECT c.id, c.title, c.data, c.collection_id, c.status,
+                 c.created_at, c.updated_at, c.author_id,
+                 col.name as collection_name, col.display_name as collection_display_name
+          FROM content c
+          JOIN collections col ON c.collection_id = col.id
+          WHERE c.collection_id = ? AND c.status != 'deleted'
+        `).bind(collectionId).all();
+      const totalItems = contentItems?.length || 0;
+      if (totalItems === 0) {
+        console.log(`[CustomRAG] No content found in collection ${collectionId}`);
+        return { total_items: 0, total_chunks: 0, indexed_chunks: 0, errors: 0 };
+      }
+      if (onProgress) await onProgress("chunking", 0, totalItems);
+      const items = (contentItems || []).map((item) => ({
+        id: item.id,
+        collection_id: item.collection_id,
+        title: item.title || "Untitled",
+        data: typeof item.data === "string" ? JSON.parse(item.data) : item.data,
+        metadata: {
+          status: item.status,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          author_id: item.author_id,
+          collection_name: item.collection_name,
+          collection_display_name: item.collection_display_name
+        }
+      }));
+      const chunks = this.chunkingService.chunkContentBatch(items);
+      const totalChunks = chunks.length;
+      console.log(`[CustomRAG] Generated ${totalChunks} chunks from ${totalItems} items`);
+      if (onProgress) await onProgress("embedding", 0, totalChunks);
+      const embeddings = await this.embeddingService.generateBatch(
+        chunks.map((c) => `${c.title}
+
+${c.text}`),
+        onProgress ? async (completed, total) => {
+          await onProgress("embedding", completed, total);
+        } : void 0
+      );
+      console.log(`[CustomRAG] Generated ${embeddings.length} embeddings`);
+      if (onProgress) await onProgress("storing", 0, totalChunks);
+      let indexedChunks = 0;
+      let errors = 0;
+      const batchSize = 100;
+      for (let i = 0; i < chunks.length; i += batchSize) {
+        const chunkBatch = chunks.slice(i, i + batchSize);
+        const embeddingBatch = embeddings.slice(i, i + batchSize);
+        try {
+          await this.vectorize.upsert(
+            chunkBatch.map((chunk, idx) => ({
+              id: chunk.id,
+              values: embeddingBatch[idx],
+              metadata: {
+                content_id: chunk.content_id,
+                collection_id: chunk.collection_id,
+                title: chunk.title,
+                text: chunk.text.substring(0, 500),
+                chunk_index: chunk.chunk_index,
+                ...chunk.metadata
+              }
+            }))
+          );
+          indexedChunks += chunkBatch.length;
+          if (onProgress) await onProgress("storing", indexedChunks, totalChunks);
+        } catch (error) {
+          console.error(`[CustomRAG] Error indexing batch ${i / batchSize + 1}:`, error);
+          errors += chunkBatch.length;
+        }
+      }
+      console.log(`[CustomRAG] Indexing complete: ${indexedChunks}/${totalChunks} chunks indexed`);
+      return {
+        total_items: totalItems,
+        total_chunks: totalChunks,
+        indexed_chunks: indexedChunks,
+        errors
+      };
+    } catch (error) {
+      console.error(`[CustomRAG] Error indexing collection ${collectionId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Auto-index content in selected collections that hasn't been indexed into Vectorize yet.
+   * Mirrors FTS5's ensureCollectionsIndexed() self-healing pattern.
+   */
+  async ensureCollectionsIndexed(collections) {
+    if (collections.length === 0) return;
+    try {
+      const placeholders = collections.map(() => "?").join(", ");
+      const { results: indexedCollections } = await this.db.prepare(`
+          SELECT collection_id, status, indexed_items FROM ai_search_index_meta
+          WHERE collection_id IN (${placeholders}) AND status = 'completed' AND indexed_items > 0
+        `).bind(...collections).all();
+      const completedIds = new Set((indexedCollections || []).map((r) => r.collection_id));
+      const unindexedCollections = collections.filter((id) => !completedIds.has(id));
+      if (unindexedCollections.length === 0) return;
+      console.log(`[CustomRAG] Auto-indexing ${unindexedCollections.length} collection(s) into Vectorize...`);
+      for (const collectionId of unindexedCollections) {
+        try {
+          await this.db.prepare(`
+              INSERT OR REPLACE INTO ai_search_index_meta(collection_id, collection_name, status, total_items, indexed_items)
+              VALUES (?, ?, 'indexing', 0, 0)
+            `).bind(collectionId, collectionId).run();
+          const result = await this.indexCollection(collectionId);
+          await this.db.prepare(`
+              UPDATE ai_search_index_meta
+              SET status = 'completed', total_items = ?, indexed_items = ?, last_sync_at = ?
+              WHERE collection_id = ?
+            `).bind(result.total_items, result.indexed_chunks, Date.now(), collectionId).run();
+          console.log(`[CustomRAG] Auto-indexed collection ${collectionId}: ${result.indexed_chunks} chunks from ${result.total_items} items`);
+        } catch (error) {
+          console.error(`[CustomRAG] Error auto-indexing collection ${collectionId}:`, error);
+          await this.db.prepare(`
+              UPDATE ai_search_index_meta SET status = 'error', error_message = ?
+              WHERE collection_id = ?
+            `).bind(String(error), collectionId).run().catch(() => {
+          });
+        }
+      }
+    } catch (error) {
+      console.error("[CustomRAG] Error during auto-indexing check:", error);
+    }
+  }
+  /**
+   * Search using RAG (semantic search with Vectorize)
+   */
+  async search(query, settings) {
+    const startTime = Date.now();
+    try {
+      const collections = query.filters?.collections?.length ? query.filters.collections : settings.selected_collections;
+      await this.ensureCollectionsIndexed(collections);
+      const queryEmbedding = await this.embeddingService.generateEmbedding(query.query);
+      const filter = {};
+      if (query.filters?.collections && query.filters.collections.length > 0) {
+        filter.collection_id = { $in: query.filters.collections };
+      } else if (settings.selected_collections.length > 0) {
+        filter.collection_id = { $in: settings.selected_collections };
+      }
+      if (query.filters?.status && query.filters.status.length > 0) {
+        filter.status = { $in: query.filters.status };
+      }
+      const vectorResults = await this.vectorize.query(queryEmbedding, {
+        topK: 50,
+        // Max allowed with returnMetadata: true
+        returnMetadata: "all"
+      });
+      let filteredMatches = vectorResults.matches || [];
+      if (filter.collection_id?.$in && Array.isArray(filter.collection_id.$in)) {
+        const allowedCollections = filter.collection_id.$in;
+        const beforeCount = filteredMatches.length;
+        filteredMatches = filteredMatches.filter(
+          (match) => allowedCollections.includes(match.metadata?.collection_id)
+        );
+      }
+      if (filter.status?.$in && Array.isArray(filter.status.$in)) {
+        const allowedStatuses = filter.status.$in;
+        filteredMatches = filteredMatches.filter(
+          (match) => allowedStatuses.includes(match.metadata?.status)
+        );
+      }
+      const topK = query.limit || settings.results_limit || 20;
+      filteredMatches = filteredMatches.slice(0, topK);
+      vectorResults.matches = filteredMatches;
+      if (!vectorResults.matches || vectorResults.matches.length === 0) {
+        return {
+          results: [],
+          total: 0,
+          query_time_ms: Date.now() - startTime,
+          mode: "ai"
+        };
+      }
+      const contentIds = [...new Set(
+        vectorResults.matches.map((m) => m.metadata.content_id)
+      )];
+      const placeholders = contentIds.map(() => "?").join(",");
+      const { results: contentItems } = await this.db.prepare(`
+          SELECT c.id, c.title, c.slug, c.collection_id, c.status,
+                 c.created_at, c.updated_at, c.author_id,
+                 col.display_name as collection_name
+          FROM content c
+          JOIN collections col ON c.collection_id = col.id
+          WHERE c.id IN (${placeholders})
+        `).bind(...contentIds).all();
+      const d1Map = new Map((contentItems || []).map((item) => [item.id, item]));
+      const bestByContent = /* @__PURE__ */ new Map();
+      for (const match of vectorResults.matches) {
+        const cid = match.metadata?.content_id;
+        if (!cid || !d1Map.has(cid)) continue;
+        const existing = bestByContent.get(cid);
+        if (!existing || match.score > existing.score) {
+          bestByContent.set(cid, match);
+        }
+      }
+      const MIN_RELEVANCE_SCORE = 0.6;
+      const SCORE_GAP_THRESHOLD = 0.05;
+      const sortedEntries = [...bestByContent.entries()].sort((a, b) => b[1].score - a[1].score);
+      const filteredEntries = [];
+      for (let i = 0; i < sortedEntries.length; i++) {
+        const entry = sortedEntries[i];
+        const score = entry[1].score;
+        if (score < MIN_RELEVANCE_SCORE) break;
+        if (i > 0) {
+          const prevScore = sortedEntries[i - 1][1].score;
+          const gap = prevScore - score;
+          if (gap > SCORE_GAP_THRESHOLD) {
+            break;
+          }
+        }
+        filteredEntries.push(entry);
+      }
+      bestByContent.clear();
+      for (const [key, value] of filteredEntries) {
+        bestByContent.set(key, value);
+      }
+      const searchResults = [];
+      for (const [contentId, bestMatch] of bestByContent) {
+        const d1Item = d1Map.get(contentId);
+        searchResults.push({
+          id: d1Item.id,
+          title: d1Item.title || "Untitled",
+          slug: d1Item.slug || "",
+          collection_id: d1Item.collection_id,
+          collection_name: d1Item.collection_name,
+          snippet: bestMatch.metadata?.text || "",
+          relevance_score: bestMatch.score || 0,
+          status: d1Item.status,
+          created_at: d1Item.created_at,
+          updated_at: d1Item.updated_at
+        });
+      }
+      searchResults.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
+      const queryTime = Date.now() - startTime;
+      console.log(`[CustomRAG] Search completed in ${queryTime}ms, ${searchResults.length} results`);
+      return {
+        results: searchResults,
+        total: searchResults.length,
+        query_time_ms: queryTime,
+        mode: "ai"
+      };
+    } catch (error) {
+      console.error("[CustomRAG] Search error:", error);
+      throw error;
+    }
+  }
+  /**
+   * Update index for a single content item
+   */
+  async updateContentIndex(contentId) {
+    try {
+      const content = await this.db.prepare(`
+          SELECT c.id, c.title, c.data, c.collection_id, c.status,
+                 c.created_at, c.updated_at, c.author_id,
+                 col.name as collection_name, col.display_name as collection_display_name
+          FROM content c
+          JOIN collections col ON c.collection_id = col.id
+          WHERE c.id = ?
+        `).bind(contentId).first();
+      if (!content) {
+        console.warn(`[CustomRAG] Content ${contentId} not found`);
+        return;
+      }
+      if (content.status !== "published") {
+        await this.removeContentFromIndex(contentId);
+        return;
+      }
+      const chunks = this.chunkingService.chunkContent(
+        content.id,
+        content.collection_id,
+        content.title || "Untitled",
+        typeof content.data === "string" ? JSON.parse(content.data) : content.data,
+        {
+          status: content.status,
+          created_at: content.created_at,
+          updated_at: content.updated_at,
+          author_id: content.author_id,
+          collection_name: content.collection_name,
+          collection_display_name: content.collection_display_name
+        }
+      );
+      const embeddings = await this.embeddingService.generateBatch(
+        chunks.map((c) => `${c.title}
+
+${c.text}`)
+      );
+      await this.vectorize.upsert(
+        chunks.map((chunk, idx) => ({
+          id: chunk.id,
+          values: embeddings[idx],
+          metadata: {
+            content_id: chunk.content_id,
+            collection_id: chunk.collection_id,
+            title: chunk.title,
+            text: chunk.text.substring(0, 500),
+            chunk_index: chunk.chunk_index,
+            ...chunk.metadata
+          }
+        }))
+      );
+      console.log(`[CustomRAG] Updated index for content ${contentId}: ${chunks.length} chunks`);
+    } catch (error) {
+      console.error(`[CustomRAG] Error updating index for ${contentId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Remove content from index
+   */
+  async removeContentFromIndex(contentId) {
+    try {
+      console.log(`[CustomRAG] Removing content ${contentId} from index`);
+    } catch (error) {
+      console.error(`[CustomRAG] Error removing content ${contentId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Get search suggestions based on query
+   */
+  async getSuggestions(partialQuery, limit = 5) {
+    try {
+      const queryEmbedding = await this.embeddingService.generateEmbedding(partialQuery);
+      const results = await this.vectorize.query(queryEmbedding, {
+        topK: limit * 2,
+        // Get more to filter
+        returnMetadata: true
+      });
+      const suggestions = [...new Set(
+        results.matches?.map((m) => m.metadata.title).filter(Boolean) || []
+      )].slice(0, limit);
+      return suggestions;
+    } catch (error) {
+      console.error("[CustomRAG] Error getting suggestions:", error);
+      return [];
+    }
+  }
+  /**
+   * Check if Vectorize is available and configured
+   */
+  isAvailable() {
+    return !!this.vectorize && !!this.ai;
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/hybrid-search.service.ts
+var RRF_K = 60;
+var HybridSearchService = class {
+  constructor(fts5Service, customRAG) {
+    this.fts5Service = fts5Service;
+    this.customRAG = customRAG;
+  }
+  /**
+   * Run FTS5 + AI searches in parallel, merge with RRF
+   * Uses Promise.allSettled for partial failure tolerance
+   *
+   * Each sub-search retrieves 3x the final limit to give RRF a larger
+   * candidate pool. This prevents relevant docs from one system being
+   * displaced by irrelevant docs from the other when results are sliced.
+   */
+  async search(query, settings) {
+    const startTime = Date.now();
+    const finalLimit = query.limit || settings.results_limit || 20;
+    const candidateLimit = finalLimit * 3;
+    const expandedQuery = { ...query, limit: candidateLimit };
+    const fts5Weights = {
+      titleBoost: settings.fts5_title_boost,
+      slugBoost: settings.fts5_slug_boost,
+      bodyBoost: settings.fts5_body_boost
+    };
+    const searches = [
+      this.fts5Service.search(expandedQuery, settings, fts5Weights)
+    ];
+    if (this.customRAG?.isAvailable()) {
+      searches.push(this.customRAG.search(expandedQuery, settings));
+    }
+    const settled = await Promise.allSettled(searches);
+    const fulfilled = [];
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        fulfilled.push(result.value);
+      } else {
+        console.error("[HybridSearch] One search leg failed:", result.reason);
+      }
+    }
+    if (fulfilled.length === 0) {
+      return {
+        results: [],
+        total: 0,
+        query_time_ms: Date.now() - startTime,
+        mode: "hybrid"
+      };
+    }
+    if (fulfilled.length === 1) {
+      const single = fulfilled[0];
+      return {
+        results: single.results,
+        total: single.total,
+        suggestions: single.suggestions,
+        mode: "hybrid",
+        query_time_ms: Date.now() - startTime
+      };
+    }
+    return this.mergeWithRRF(fulfilled[0], fulfilled[1], query, settings, startTime);
+  }
+  /**
+   * Reciprocal Rank Fusion (RRF)
+   *
+   * For each document d, compute:
+   *   RRF_score(d) = Σ 1/(k + rank_i(d))
+   * where rank_i(d) is the 1-based rank of d in system i.
+   *
+   * Docs found by both systems get two contributions (higher score).
+   * k=60 smooths out rank differences (standard value).
+   */
+  mergeWithRRF(fts5Response, aiResponse, query, settings, startTime) {
+    const rrfScores = /* @__PURE__ */ new Map();
+    const docData = /* @__PURE__ */ new Map();
+    aiResponse.results.forEach((doc, i) => {
+      const rank = i + 1;
+      const score = 1 / (RRF_K + rank);
+      rrfScores.set(doc.id, (rrfScores.get(doc.id) || 0) + score);
+      docData.set(doc.id, { ...doc });
+    });
+    fts5Response.results.forEach((doc, i) => {
+      const rank = i + 1;
+      const score = 1 / (RRF_K + rank);
+      rrfScores.set(doc.id, (rrfScores.get(doc.id) || 0) + score);
+      const existing = docData.get(doc.id);
+      if (existing) {
+        if (doc.highlights) existing.highlights = doc.highlights;
+        if (doc.bm25_score) existing.bm25_score = doc.bm25_score;
+      } else {
+        docData.set(doc.id, { ...doc });
+      }
+    });
+    const sorted = [...rrfScores.entries()].sort((a, b) => b[1] - a[1]);
+    const limit = query.limit || settings.results_limit || 20;
+    const results = sorted.slice(0, limit).map(([id, score]) => ({
+      ...docData.get(id),
+      relevance_score: score
+    }));
+    return {
+      mode: "hybrid",
+      results,
+      total: rrfScores.size,
+      query_time_ms: Date.now() - startTime
+    };
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/query-rewriter.service.ts
+var REWRITE_SYSTEM_PROMPT = `You are a search query optimizer. Given a user's search query, rewrite it to improve search results by:
+- Adding relevant synonyms or related terms
+- Expanding abbreviations
+- Keeping the core intent intact
+
+Rules:
+- Return ONLY the rewritten query, nothing else
+- Keep it concise (under 100 characters)
+- Do not add explanations or formatting
+- Do not wrap in quotes
+- If the query is already precise, return it unchanged`;
+var QueryRewriterService = class {
+  constructor(ai) {
+    this.ai = ai;
+  }
+  /**
+   * Rewrite a query using LLM expansion
+   * Returns original query on any failure
+   */
+  async rewrite(originalQuery) {
+    try {
+      const response = await this.ai.run(
+        "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+        {
+          messages: [
+            { role: "system", content: REWRITE_SYSTEM_PROMPT },
+            { role: "user", content: originalQuery }
+          ],
+          max_tokens: 100
+        }
+      );
+      const rewritten = response.response?.trim();
+      if (!rewritten) return originalQuery;
+      if (rewritten.length > originalQuery.length * 3) return originalQuery;
+      if (rewritten.length > 200) return originalQuery;
+      if (rewritten.includes("\n")) return originalQuery;
+      return rewritten;
+    } catch (error) {
+      console.error("[QueryRewriter] LLM call failed, using original query:", error);
+      return originalQuery;
+    }
+  }
+  /**
+   * Check if a query should be rewritten
+   * Short/precise queries don't benefit from rewriting
+   */
+  static shouldRewrite(query) {
+    return query.length >= 15;
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/types.ts
+var DEFAULT_RANKING_PIPELINE = [
+  { type: "exactMatch", weight: 10, enabled: true },
+  { type: "bm25", weight: 5, enabled: true },
+  { type: "semantic", weight: 3, enabled: true },
+  { type: "recency", weight: 1, enabled: true, config: { half_life_days: 30 } },
+  { type: "popularity", weight: 0, enabled: false },
+  { type: "custom", weight: 0, enabled: false }
+];
+
+// src/plugins/core-plugins/ai-search-plugin/services/ranking-pipeline.service.ts
+function clampWeight(val, fallback) {
+  const n = Number(val);
+  return isNaN(n) || !isFinite(n) ? fallback : Math.round(Math.min(10, Math.max(0, n)) * 10) / 10;
+}
+var VALID_STAGE_TYPES = /* @__PURE__ */ new Set(["exactMatch", "bm25", "semantic", "recency", "popularity", "custom"]);
+var RankingPipelineService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  // === Config CRUD ===
+  async getConfig() {
+    try {
+      const row = await this.db.prepare("SELECT pipeline_json FROM ai_search_ranking_config WHERE id = 'default' LIMIT 1").first();
+      if (!row?.pipeline_json) {
+        return structuredClone(DEFAULT_RANKING_PIPELINE);
+      }
+      return this.validateStages(JSON.parse(row.pipeline_json));
+    } catch {
+      return structuredClone(DEFAULT_RANKING_PIPELINE);
+    }
+  }
+  async saveConfig(stages) {
+    const validated = this.validateStages(stages);
+    await this.db.prepare(`
+        INSERT INTO ai_search_ranking_config (id, pipeline_json, updated_at)
+        VALUES ('default', ?, unixepoch())
+        ON CONFLICT(id) DO UPDATE SET pipeline_json = excluded.pipeline_json, updated_at = excluded.updated_at
+      `).bind(JSON.stringify(validated)).run();
+  }
+  validateStages(stages) {
+    if (!Array.isArray(stages)) return structuredClone(DEFAULT_RANKING_PIPELINE);
+    return stages.filter((s) => VALID_STAGE_TYPES.has(s.type)).map((s) => ({
+      type: s.type,
+      weight: clampWeight(s.weight, 0),
+      enabled: Boolean(s.enabled),
+      config: s.config || void 0
+    }));
+  }
+  // === Pipeline Execution ===
+  async apply(response, query) {
+    const results = response.results;
+    if (results.length === 0) return response;
+    const stages = await this.getConfig();
+    const activeStages = stages.filter((s) => s.enabled && s.weight > 0);
+    if (activeStages.length === 0) return response;
+    const totalWeight = activeStages.reduce((sum, s) => sum + s.weight, 0);
+    if (totalWeight === 0) return response;
+    let minBM25 = Infinity;
+    let maxBM25 = -Infinity;
+    const hasBM25 = activeStages.some((s) => s.type === "bm25");
+    if (hasBM25) {
+      for (const r of results) {
+        if (r.bm25_score != null) {
+          if (r.bm25_score < minBM25) minBM25 = r.bm25_score;
+          if (r.bm25_score > maxBM25) maxBM25 = r.bm25_score;
+        }
+      }
+      if (minBM25 === Infinity) {
+        minBM25 = 0;
+        maxBM25 = 0;
+      }
+    }
+    const contentIds = results.map((r) => r.id);
+    let popularityScores = /* @__PURE__ */ new Map();
+    let customScores = /* @__PURE__ */ new Map();
+    const needsPopularity = activeStages.some((s) => s.type === "popularity");
+    const needsCustom = activeStages.some((s) => s.type === "custom");
+    if (needsPopularity) {
+      popularityScores = await this.getContentScores(contentIds, "popularity");
+      this.normalizeScoresMinMax(popularityScores);
+    }
+    if (needsCustom) {
+      customScores = await this.getContentScores(contentIds, "custom");
+    }
+    for (const result of results) {
+      let weightedSum = 0;
+      for (const stage of activeStages) {
+        let score = 0;
+        switch (stage.type) {
+          case "exactMatch":
+            score = this.scoreExactMatch(result, query);
+            break;
+          case "bm25":
+            score = this.scoreBM25(result, minBM25, maxBM25);
+            break;
+          case "semantic":
+            score = this.scoreSemantic(result);
+            break;
+          case "recency":
+            score = this.scoreRecency(result, stage.config?.half_life_days ?? 30);
+            break;
+          case "popularity":
+            score = popularityScores.get(result.id) ?? 0;
+            break;
+          case "custom":
+            score = Math.max(0, Math.min(1, customScores.get(result.id) ?? 0));
+            break;
+        }
+        weightedSum += stage.weight * score;
+      }
+      result.pipeline_score = weightedSum / totalWeight;
+    }
+    results.sort((a, b) => (b.pipeline_score ?? 0) - (a.pipeline_score ?? 0));
+    return { ...response, results };
+  }
+  // === Content Scores CRUD ===
+  async getContentScores(contentIds, scoreType) {
+    if (contentIds.length === 0) return /* @__PURE__ */ new Map();
+    try {
+      const placeholders = contentIds.map(() => "?").join(",");
+      const { results } = await this.db.prepare(`SELECT content_id, score FROM ai_search_content_scores WHERE content_id IN (${placeholders}) AND score_type = ?`).bind(...contentIds, scoreType).all();
+      const map = /* @__PURE__ */ new Map();
+      for (const row of results || []) {
+        map.set(row.content_id, row.score);
+      }
+      return map;
+    } catch {
+      return /* @__PURE__ */ new Map();
+    }
+  }
+  async setContentScore(contentId, scoreType, score) {
+    const clamped = Math.max(0, Math.min(1, score));
+    await this.db.prepare(`
+        INSERT INTO ai_search_content_scores (content_id, score_type, score, updated_at)
+        VALUES (?, ?, ?, unixepoch())
+        ON CONFLICT(content_id, score_type) DO UPDATE SET score = excluded.score, updated_at = excluded.updated_at
+      `).bind(contentId, scoreType, clamped).run();
+  }
+  async deleteContentScore(contentId, scoreType) {
+    await this.db.prepare("DELETE FROM ai_search_content_scores WHERE content_id = ? AND score_type = ?").bind(contentId, scoreType).run();
+  }
+  // === Scoring Functions ===
+  scoreExactMatch(result, query) {
+    if (!query || !result.title) return 0;
+    return result.title.toLowerCase().includes(query.toLowerCase()) ? 1 : 0;
+  }
+  scoreBM25(result, minBM25, maxBM25) {
+    if (result.bm25_score == null) return 0;
+    if (maxBM25 === minBM25) return 1;
+    return (result.bm25_score - minBM25) / (maxBM25 - minBM25);
+  }
+  scoreSemantic(result) {
+    return result.relevance_score ?? 0;
+  }
+  scoreRecency(result, halfLifeDays) {
+    if (!result.created_at) return 0;
+    const nowMs = Date.now();
+    const createdMs = result.created_at > 1e12 ? result.created_at : result.created_at * 1e3;
+    const ageDays = (nowMs - createdMs) / (1e3 * 60 * 60 * 24);
+    if (ageDays <= 0) return 1;
+    if (halfLifeDays <= 0) return 0;
+    return Math.exp(-Math.LN2 * ageDays / halfLifeDays);
+  }
+  /** Min-max normalize a map of scores in-place */
+  normalizeScoresMinMax(scores) {
+    if (scores.size === 0) return;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const v of scores.values()) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    if (max === min) {
+      for (const k of scores.keys()) scores.set(k, scores.size > 0 ? 1 : 0);
+      return;
+    }
+    for (const [k, v] of scores) {
+      scores.set(k, (v - min) / (max - min));
+    }
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/synonym.service.ts
+var SynonymService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  // === CRUD ===
+  async getAll() {
+    try {
+      const { results } = await this.db.prepare("SELECT id, terms, enabled, created_at, updated_at FROM ai_search_synonyms ORDER BY created_at DESC").all();
+      return (results || []).map((row) => ({
+        id: row.id,
+        terms: JSON.parse(row.terms),
+        enabled: row.enabled === 1,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      }));
+    } catch {
+      return [];
+    }
+  }
+  async getById(id) {
+    try {
+      const row = await this.db.prepare("SELECT id, terms, enabled, created_at, updated_at FROM ai_search_synonyms WHERE id = ?").bind(id).first();
+      if (!row) return null;
+      return {
+        id: row.id,
+        terms: JSON.parse(row.terms),
+        enabled: row.enabled === 1,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    } catch {
+      return null;
+    }
+  }
+  async create(terms, enabled = true) {
+    const sanitized = this.sanitizeTerms(terms);
+    if (sanitized.length < 2) {
+      throw new Error("A synonym group must have at least 2 terms");
+    }
+    const id = crypto.randomUUID().replace(/-/g, "");
+    await this.db.prepare("INSERT INTO ai_search_synonyms (id, terms, enabled) VALUES (?, ?, ?)").bind(id, JSON.stringify(sanitized), enabled ? 1 : 0).run();
+    const created = await this.getById(id);
+    if (!created) throw new Error("Failed to create synonym group");
+    return created;
+  }
+  async update(id, data) {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    const terms = data.terms !== void 0 ? this.sanitizeTerms(data.terms) : existing.terms;
+    if (terms.length < 2) {
+      throw new Error("A synonym group must have at least 2 terms");
+    }
+    const enabled = data.enabled !== void 0 ? data.enabled : existing.enabled;
+    await this.db.prepare("UPDATE ai_search_synonyms SET terms = ?, enabled = ?, updated_at = unixepoch() WHERE id = ?").bind(JSON.stringify(terms), enabled ? 1 : 0, id).run();
+    return this.getById(id);
+  }
+  async delete(id) {
+    const result = await this.db.prepare("DELETE FROM ai_search_synonyms WHERE id = ?").bind(id).run();
+    return (result.meta?.changes ?? 0) > 0;
+  }
+  // === Query Expansion ===
+  /**
+   * Expand an array of sanitized search terms using enabled synonym groups.
+   * For each input term, if it appears in a group, all other terms from
+   * that group are added. Returns deduplicated expanded term list.
+   */
+  async expandQuery(terms) {
+    const groups = await this.getEnabled();
+    if (groups.length === 0) return terms;
+    const synonymMap = /* @__PURE__ */ new Map();
+    for (const group of groups) {
+      const lowerTerms = group.terms.map((t) => t.toLowerCase());
+      for (const term of lowerTerms) {
+        if (!synonymMap.has(term)) {
+          synonymMap.set(term, /* @__PURE__ */ new Set());
+        }
+        for (const synonym of lowerTerms) {
+          synonymMap.get(term).add(synonym);
+        }
+      }
+    }
+    const expanded = /* @__PURE__ */ new Set();
+    for (const term of terms) {
+      expanded.add(term.toLowerCase());
+      const synonyms = synonymMap.get(term.toLowerCase());
+      if (synonyms) {
+        for (const syn of synonyms) {
+          expanded.add(syn);
+        }
+      }
+    }
+    return Array.from(expanded);
+  }
+  // === Helpers ===
+  async getEnabled() {
+    try {
+      const { results } = await this.db.prepare("SELECT id, terms, enabled, created_at, updated_at FROM ai_search_synonyms WHERE enabled = 1").all();
+      return (results || []).map((row) => ({
+        id: row.id,
+        terms: JSON.parse(row.terms),
+        enabled: row.enabled === 1,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      }));
+    } catch {
+      return [];
+    }
+  }
+  /** Sanitize terms: trim, lowercase, deduplicate, remove empties */
+  sanitizeTerms(terms) {
+    const seen = /* @__PURE__ */ new Set();
+    const result = [];
+    for (const raw2 of terms) {
+      const term = raw2.trim().toLowerCase();
+      if (term && !seen.has(term)) {
+        seen.add(term);
+        result.push(term);
+      }
+    }
+    return result;
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/reranker.service.ts
+var RerankerService = class {
+  constructor(ai) {
+    this.ai = ai;
+  }
+  /**
+   * Rerank results using cross-encoder scoring
+   * Returns results sorted by reranker score with rerank_score field added
+   */
+  async rerank(query, results, topK) {
+    if (results.length <= 1) return results;
+    const limit = topK || results.length;
+    try {
+      const contexts = results.map((r) => ({
+        text: `${r.title}. ${r.snippet || ""}`
+      }));
+      const response = await this.ai.run("@cf/baai/bge-reranker-base", {
+        query,
+        contexts,
+        top_k: limit
+      });
+      const scores = Array.isArray(response) ? response : response.response;
+      if (!Array.isArray(scores) || scores.length === 0) {
+        console.warn("[Reranker] Unexpected response format, returning original order");
+        return results.slice(0, limit);
+      }
+      const reranked = scores.filter((s) => s.id >= 0 && s.id < results.length).map((s) => {
+        const result = results[s.id];
+        return { ...result, rerank_score: s.score };
+      });
+      return reranked.slice(0, limit);
+    } catch (error) {
+      console.error("[Reranker] Cross-encoder failed, returning original order:", error);
+      return results.slice(0, limit);
+    }
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts
+var AISearchService = class {
+  constructor(db, ai, vectorize) {
+    this.db = db;
+    this.ai = ai;
+    this.vectorize = vectorize;
+    if (this.ai && this.vectorize) {
+      this.customRAG = new CustomRAGService(db, ai, vectorize);
+      console.log("[AISearchService] Custom RAG initialized");
+    } else {
+      console.log("[AISearchService] Custom RAG not available, using keyword search only");
+    }
+    this.fts5Service = new FTS5Service(db);
+    console.log("[AISearchService] FTS5 service initialized");
+    this.hybridService = new HybridSearchService(this.fts5Service, this.customRAG);
+    console.log("[AISearchService] Hybrid search service initialized");
+    if (this.ai) {
+      this.queryRewriter = new QueryRewriterService(this.ai);
+      this.reranker = new RerankerService(this.ai);
+      console.log("[AISearchService] Query rewriter and reranker initialized");
+    }
+    this.synonymService = new SynonymService(db);
+    if (this.fts5Service) {
+      this.fts5Service.setSynonymService(this.synonymService);
+    }
+    this.rankingPipeline = new RankingPipelineService(db);
+  }
+  customRAG;
+  fts5Service;
+  hybridService;
+  queryRewriter;
+  reranker;
+  rankingPipeline;
+  synonymService;
+  /**
+   * Get plugin settings
+   */
+  async getSettings() {
+    try {
+      const plugin = await this.db.prepare(`SELECT settings FROM plugins WHERE id = ? LIMIT 1`).bind("ai-search").first();
+      if (!plugin || !plugin.settings) {
+        return this.getDefaultSettings();
+      }
+      return JSON.parse(plugin.settings);
+    } catch (error) {
+      console.error("Error fetching AI Search settings:", error);
+      return this.getDefaultSettings();
+    }
+  }
+  /**
+   * Get default settings
+   */
+  getDefaultSettings() {
+    return {
+      enabled: true,
+      ai_mode_enabled: true,
+      selected_collections: [],
+      dismissed_collections: [],
+      autocomplete_enabled: true,
+      cache_duration: 1,
+      results_limit: 20,
+      index_media: false,
+      query_rewriting_enabled: false,
+      reranking_enabled: true,
+      fts5_title_boost: 5,
+      fts5_slug_boost: 2,
+      fts5_body_boost: 1
+    };
+  }
+  /**
+   * Update plugin settings
+   */
+  async updateSettings(settings) {
+    const existing = await this.getSettings();
+    const updated = {
+      ...existing,
+      ...settings
+    };
+    try {
+      await this.db.prepare(`
+          UPDATE plugins
+          SET settings = ?,
+              updated_at = unixepoch()
+          WHERE id = 'ai-search'
+        `).bind(JSON.stringify(updated)).run();
+      return updated;
+    } catch (error) {
+      console.error("Error updating AI Search settings:", error);
+      throw error;
+    }
+  }
+  /**
+   * Detect new collections that aren't indexed or dismissed
+   */
+  async detectNewCollections() {
+    try {
+      const collectionsStmt = this.db.prepare(
+        "SELECT id, name, display_name, description FROM collections WHERE is_active = 1"
+      );
+      const { results: allCollections } = await collectionsStmt.all();
+      const collections = (allCollections || []).filter(
+        (col) => {
+          if (!col.name) return false;
+          const name = col.name.toLowerCase();
+          return !name.startsWith("test_") && !name.endsWith("_test") && name !== "test_collection" && !name.includes("_test_") && name !== "large_payload_test" && name !== "concurrent_test";
+        }
+      );
+      const settings = await this.getSettings();
+      const selected = settings?.selected_collections || [];
+      const dismissed = settings?.dismissed_collections || [];
+      const notifications = [];
+      for (const collection of collections || []) {
+        const collectionId = String(collection.id);
+        if (selected.includes(collectionId) || dismissed.includes(collectionId)) {
+          continue;
+        }
+        const countStmt = this.db.prepare(
+          "SELECT COUNT(*) as count FROM content WHERE collection_id = ?"
+        );
+        const countResult = await countStmt.bind(collectionId).first();
+        const itemCount = countResult?.count || 0;
+        notifications.push({
+          collection: {
+            id: collectionId,
+            name: collection.name,
+            display_name: collection.display_name,
+            description: collection.description,
+            item_count: itemCount,
+            is_indexed: false,
+            is_dismissed: false,
+            is_new: true
+          },
+          message: `New collection "${collection.display_name}" with ${itemCount} items available for indexing`
+        });
+      }
+      return notifications;
+    } catch (error) {
+      console.error("Error detecting new collections:", error);
+      return [];
+    }
+  }
+  /**
+   * Get all collections with indexing status
+   */
+  async getAllCollections() {
+    try {
+      const collectionsStmt = this.db.prepare(
+        "SELECT id, name, display_name, description FROM collections WHERE is_active = 1 ORDER BY display_name"
+      );
+      const { results: allCollections } = await collectionsStmt.all();
+      console.log("[AISearchService.getAllCollections] Raw collections from DB:", allCollections?.length || 0);
+      const firstCollection = allCollections?.[0];
+      if (firstCollection) {
+        console.log("[AISearchService.getAllCollections] Sample collection:", {
+          id: firstCollection.id,
+          name: firstCollection.name,
+          display_name: firstCollection.display_name
+        });
+      }
+      const collections = (allCollections || []).filter(
+        (col) => col.id && col.name
+      );
+      console.log("[AISearchService.getAllCollections] After filtering test collections:", collections.length);
+      console.log("[AISearchService.getAllCollections] Remaining collections:", collections.map((c) => c.name).join(", "));
+      const settings = await this.getSettings();
+      const selected = settings?.selected_collections || [];
+      const dismissed = settings?.dismissed_collections || [];
+      console.log("[AISearchService.getAllCollections] Settings:", {
+        selected_count: selected.length,
+        dismissed_count: dismissed.length,
+        selected
+      });
+      const collectionInfos = [];
+      for (const collection of collections) {
+        if (!collection.id || !collection.name) continue;
+        const collectionId = String(collection.id);
+        if (!collectionId) {
+          console.warn("[AISearchService] Skipping invalid collection:", collection);
+          continue;
+        }
+        const countStmt = this.db.prepare(
+          "SELECT COUNT(*) as count FROM content WHERE collection_id = ?"
+        );
+        const countResult = await countStmt.bind(collectionId).first();
+        const itemCount = countResult?.count || 0;
+        collectionInfos.push({
+          id: collectionId,
+          name: collection.name,
+          display_name: collection.display_name || collection.name,
+          description: collection.description,
+          item_count: itemCount,
+          is_indexed: selected.includes(collectionId),
+          is_dismissed: dismissed.includes(collectionId),
+          is_new: !selected.includes(collectionId) && !dismissed.includes(collectionId)
+        });
+      }
+      console.log("[AISearchService.getAllCollections] Returning collectionInfos:", collectionInfos.length);
+      const firstInfo = collectionInfos[0];
+      if (collectionInfos.length > 0 && firstInfo) {
+        console.log("[AISearchService.getAllCollections] First collectionInfo:", {
+          id: firstInfo.id,
+          name: firstInfo.name,
+          display_name: firstInfo.display_name,
+          item_count: firstInfo.item_count
+        });
+      }
+      return collectionInfos;
+    } catch (error) {
+      console.error("[AISearchService] Error fetching collections:", error);
+      return [];
+    }
+  }
+  /**
+   * Execute search query
+   * Supports three modes: 'ai' (semantic), 'fts5' (full-text), 'keyword' (basic)
+   */
+  async search(query) {
+    const settings = await this.getSettings();
+    if (!settings?.enabled) {
+      return {
+        results: [],
+        total: 0,
+        query_time_ms: 0,
+        mode: query.mode
+      };
+    }
+    let result;
+    if (query.mode === "hybrid") {
+      result = await this.searchHybrid(query, settings);
+    } else if (query.mode === "fts5") {
+      result = await this.searchFTS5(query, settings);
+    } else if (query.mode === "ai" && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+      result = await this.searchAI(query, settings);
+    } else {
+      result = await this.searchKeyword(query, settings);
+    }
+    try {
+      result = await this.rankingPipeline.apply(result, query.query);
+    } catch (error) {
+      console.warn("[AISearchService] Ranking pipeline error (preserving original order):", error);
+    }
+    return result;
+  }
+  /**
+   * FTS5 full-text search with BM25 ranking, stemming, and highlighting
+   */
+  async searchFTS5(query, settings) {
+    const startTime = Date.now();
+    try {
+      if (!this.fts5Service) {
+        console.warn("[AISearchService] FTS5 service not initialized, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      if (!await this.fts5Service.isAvailable()) {
+        console.warn("[AISearchService] FTS5 table not available, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      const result = await this.fts5Service.search(query, settings, {
+        titleBoost: settings.fts5_title_boost,
+        slugBoost: settings.fts5_slug_boost,
+        bodyBoost: settings.fts5_body_boost
+      });
+      const elapsed = Date.now() - startTime;
+      await this.logSearch(query.query, "fts5", result.results.length, elapsed);
+      return result;
+    } catch (error) {
+      console.error("[AISearchService] FTS5 search error, falling back to keyword:", error);
+      return this.searchKeyword(query, settings);
+    }
+  }
+  /**
+   * Hybrid search: FTS5 + AI combined with RRF, optional query rewriting + reranking
+   */
+  async searchHybrid(query, settings) {
+    const startTime = Date.now();
+    try {
+      if (!this.hybridService || !this.fts5Service) {
+        console.warn("[AISearchService] Hybrid service not available, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      if (!await this.fts5Service.isAvailable()) {
+        console.warn("[AISearchService] FTS5 not available for hybrid, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      let searchQuery = query;
+      const rewritingEnabled = settings.query_rewriting_enabled ?? false;
+      if (rewritingEnabled && this.queryRewriter && QueryRewriterService.shouldRewrite(query.query)) {
+        const rewritten = await this.queryRewriter.rewrite(query.query);
+        if (rewritten !== query.query) {
+          console.log(`[AISearchService] Query rewritten: "${query.query}" \u2192 "${rewritten}"`);
+          searchQuery = { ...query, query: rewritten };
+        }
+      }
+      let result = await this.hybridService.search(searchQuery, settings);
+      const elapsed = Date.now() - startTime;
+      await this.logSearch(query.query, "hybrid", result.results.length, elapsed);
+      return result;
+    } catch (error) {
+      console.error("[AISearchService] Hybrid search error, falling back to keyword:", error);
+      return this.searchKeyword(query, settings);
+    }
+  }
+  /**
+   * AI-powered semantic search using Custom RAG
+   */
+  async searchAI(query, settings) {
+    const startTime = Date.now();
+    try {
+      if (!this.customRAG) {
+        console.warn("[AISearchService] CustomRAG not available, falling back to keyword search");
+        return this.searchKeyword(query, settings);
+      }
+      const result = await this.customRAG.search(query, settings);
+      const elapsed = Date.now() - startTime;
+      await this.logSearch(query.query, "ai", result.results.length, elapsed);
+      return result;
+    } catch (error) {
+      console.error("[AISearchService] AI search error, falling back to keyword:", error);
+      return this.searchKeyword(query, settings);
+    }
+  }
+  /**
+   * Traditional keyword search
+   */
+  async searchKeyword(query, settings) {
+    const startTime = Date.now();
+    try {
+      const conditions = [];
+      const params = [];
+      if (query.query) {
+        conditions.push("(c.title LIKE ? OR c.slug LIKE ? OR c.data LIKE ?)");
+        const searchTerm = `%${query.query}%`;
+        params.push(searchTerm, searchTerm, searchTerm);
+      }
+      if (query.filters?.collections && query.filters.collections.length > 0) {
+        const placeholders = query.filters.collections.map(() => "?").join(",");
+        conditions.push(`c.collection_id IN (${placeholders})`);
+        params.push(...query.filters.collections);
+      } else if (settings.selected_collections.length > 0) {
+        const placeholders = settings.selected_collections.map(() => "?").join(",");
+        conditions.push(`c.collection_id IN (${placeholders})`);
+        params.push(...settings.selected_collections);
+      }
+      if (query.filters?.status && query.filters.status.length > 0) {
+        const placeholders = query.filters.status.map(() => "?").join(",");
+        conditions.push(`c.status IN (${placeholders})`);
+        params.push(...query.filters.status);
+      } else {
+        conditions.push("c.status != 'deleted'");
+      }
+      if (query.filters?.dateRange) {
+        const field = query.filters.dateRange.field || "created_at";
+        if (query.filters.dateRange.start) {
+          conditions.push(`c.${field} >= ?`);
+          params.push(query.filters.dateRange.start.getTime());
+        }
+        if (query.filters.dateRange.end) {
+          conditions.push(`c.${field} <= ?`);
+          params.push(query.filters.dateRange.end.getTime());
+        }
+      }
+      if (query.filters?.author) {
+        conditions.push("c.author_id = ?");
+        params.push(query.filters.author);
+      }
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const countStmt = this.db.prepare(`
+        SELECT COUNT(*) as count 
+        FROM content c
+        ${whereClause}
+      `);
+      const countResult = await countStmt.bind(...params).first();
+      const total = countResult?.count || 0;
+      const limit = query.limit || settings.results_limit;
+      const offset = query.offset || 0;
+      const resultsStmt = this.db.prepare(`
+        SELECT 
+          c.id, c.title, c.slug, c.collection_id, c.status,
+          c.created_at, c.updated_at, c.author_id, c.data,
+          col.name as collection_name, col.display_name as collection_display_name,
+          u.email as author_email
+        FROM content c
+        JOIN collections col ON c.collection_id = col.id
+        LEFT JOIN users u ON c.author_id = u.id
+        ${whereClause}
+        ORDER BY c.updated_at DESC
+        LIMIT ? OFFSET ?
+      `);
+      const { results } = await resultsStmt.bind(...params, limit, offset).all();
+      const searchResults = (results || []).map((row) => {
+        const snippet = this.extractSnippet(row.data, query.query);
+        const titleHighlight = this.highlightText(row.title || "Untitled", query.query);
+        return {
+          id: String(row.id),
+          title: row.title || "Untitled",
+          slug: row.slug || "",
+          collection_id: String(row.collection_id),
+          collection_name: row.collection_display_name || row.collection_name,
+          snippet,
+          highlights: {
+            title: titleHighlight,
+            body: snippet
+          },
+          status: row.status,
+          created_at: Number(row.created_at),
+          updated_at: Number(row.updated_at),
+          author_name: row.author_email
+        };
+      });
+      const queryTime = Date.now() - startTime;
+      await this.logSearch(query.query, query.mode, searchResults.length, queryTime);
+      return {
+        results: searchResults,
+        total,
+        query_time_ms: queryTime,
+        mode: query.mode
+      };
+    } catch (error) {
+      console.error("Keyword search error:", error);
+      return {
+        results: [],
+        total: 0,
+        query_time_ms: Date.now() - startTime,
+        mode: query.mode
+      };
+    }
+  }
+  /**
+   * Extract snippet from content data
+   * Pulls human-readable text from JSON data fields instead of raw JSON
+   */
+  extractSnippet(data, query) {
+    try {
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+      const textParts = [];
+      const textFields = ["description", "content", "body", "text", "summary", "excerpt"];
+      for (const field of textFields) {
+        if (parsed[field] && typeof parsed[field] === "string") {
+          textParts.push(parsed[field]);
+        }
+      }
+      if (textParts.length === 0) {
+        for (const value of Object.values(parsed)) {
+          if (typeof value === "string" && value.length > 20) {
+            textParts.push(value);
+          }
+        }
+      }
+      const text = textParts.join(" ").replace(/\s+/g, " ").trim();
+      if (!text) {
+        return "No preview available";
+      }
+      const queryLower = query.toLowerCase();
+      const textLower = text.toLowerCase();
+      const index = textLower.indexOf(queryLower);
+      if (index === -1) {
+        return text.substring(0, 200) + (text.length > 200 ? "..." : "");
+      }
+      const start = Math.max(0, index - 80);
+      const end = Math.min(text.length, index + query.length + 120);
+      const prefix = start > 0 ? "..." : "";
+      const suffix = end < text.length ? "..." : "";
+      const excerpt = text.substring(start, end);
+      return prefix + this.highlightText(excerpt, query) + suffix;
+    } catch {
+      return data.substring(0, 200) + "...";
+    }
+  }
+  /**
+   * Highlight query terms in text with <mark> tags
+   * Case-insensitive, highlights all occurrences
+   */
+  highlightText(text, query) {
+    if (!text || !query) return text;
+    try {
+      const words = query.trim().split(/\s+/).filter((w) => w.length > 1);
+      if (words.length === 0) return text;
+      const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+      return text.replace(pattern, "<mark>$1</mark>");
+    } catch {
+      return text;
+    }
+  }
+  /**
+   * Get search suggestions (autocomplete)
+   * Uses fast keyword prefix matching for instant results (<50ms)
+   */
+  async getSearchSuggestions(partial) {
+    try {
+      const settings = await this.getSettings();
+      if (!settings?.autocomplete_enabled) {
+        return [];
+      }
+      try {
+        const stmt = this.db.prepare(`
+          SELECT DISTINCT title 
+          FROM ai_search_index 
+          WHERE title LIKE ? 
+          ORDER BY title 
+          LIMIT 10
+        `);
+        const { results } = await stmt.bind(`%${partial}%`).all();
+        const suggestions = (results || []).map((r) => r.title).filter(Boolean);
+        if (suggestions.length > 0) {
+          return suggestions;
+        }
+      } catch (indexError) {
+        console.log("[AISearchService] Index table not available yet, using search history");
+      }
+      try {
+        const historyStmt = this.db.prepare(`
+          SELECT DISTINCT query 
+          FROM ai_search_history 
+          WHERE query LIKE ? 
+          ORDER BY created_at DESC 
+          LIMIT 10
+        `);
+        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all();
+        return (historyResults || []).map((r) => r.query);
+      } catch (historyError) {
+        console.log("[AISearchService] No suggestions available (tables not initialized)");
+        return [];
+      }
+    } catch (error) {
+      console.error("Error getting suggestions:", error);
+      return [];
+    }
+  }
+  /**
+   * Log search query to history
+   */
+  async logSearch(query, mode, resultsCount, responseTimeMs) {
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      await stmt.bind(query, mode, resultsCount, responseTimeMs ?? null, Date.now()).run();
+    } catch (error) {
+      console.error("Error logging search:", error);
+    }
+  }
+  /**
+   * Get search analytics
+   */
+  async getSearchAnalytics() {
+    try {
+      const totalStmt = this.db.prepare(`
+        SELECT COUNT(*) as count
+        FROM ai_search_history
+        WHERE created_at >= ?
+      `);
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1e3;
+      const totalResult = await totalStmt.bind(thirtyDaysAgo).first();
+      const modeStmt = this.db.prepare(`
+        SELECT mode, COUNT(*) as count
+        FROM ai_search_history
+        WHERE created_at >= ?
+        GROUP BY mode
+      `);
+      const { results: modeResults } = await modeStmt.bind(thirtyDaysAgo).all();
+      const aiCount = modeResults?.find((r) => r.mode === "ai")?.count || 0;
+      const keywordCount = modeResults?.find((r) => r.mode === "keyword")?.count || 0;
+      const fts5Count = modeResults?.find((r) => r.mode === "fts5")?.count || 0;
+      const hybridCount = modeResults?.find((r) => r.mode === "hybrid")?.count || 0;
+      const popularStmt = this.db.prepare(`
+        SELECT query, COUNT(*) as count
+        FROM ai_search_history
+        WHERE created_at >= ?
+        GROUP BY query
+        ORDER BY count DESC
+        LIMIT 10
+      `);
+      const { results: popularResults } = await popularStmt.bind(thirtyDaysAgo).all();
+      return {
+        total_queries: totalResult?.count || 0,
+        ai_queries: aiCount,
+        keyword_queries: keywordCount,
+        fts5_queries: fts5Count,
+        hybrid_queries: hybridCount,
+        popular_queries: (popularResults || []).map((r) => ({
+          query: r.query,
+          count: r.count
+        })),
+        average_query_time: 0
+        // TODO: Track query times
+      };
+    } catch (error) {
+      console.error("Error getting analytics:", error);
+      return {
+        total_queries: 0,
+        ai_queries: 0,
+        keyword_queries: 0,
+        fts5_queries: 0,
+        hybrid_queries: 0,
+        popular_queries: [],
+        average_query_time: 0
+      };
+    }
+  }
+  /**
+   * Get extended analytics for the Analytics tab
+   */
+  async getAnalyticsExtended() {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1e3;
+    const todayStart = /* @__PURE__ */ new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartMs = todayStart.getTime();
+    try {
+      const [
+        totalResult,
+        todayResult,
+        modeResults,
+        avgResults,
+        zeroCountResult,
+        avgTimeResult,
+        popularResults,
+        zeroResultResults,
+        recentResults,
+        dailyResults
+      ] = await Promise.all([
+        // Total queries (30 days)
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?").bind(thirtyDaysAgo).first(),
+        // Queries today
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?").bind(todayStartMs).first(),
+        // Mode breakdown
+        this.db.prepare("SELECT mode, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? GROUP BY mode").bind(thirtyDaysAgo).all(),
+        // Average results per query
+        this.db.prepare("SELECT AVG(results_count) as avg_results FROM ai_search_history WHERE created_at >= ?").bind(thirtyDaysAgo).first(),
+        // Zero result count
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ? AND results_count = 0").bind(thirtyDaysAgo).first(),
+        // Average response time
+        this.db.prepare("SELECT AVG(response_time_ms) as avg_time FROM ai_search_history WHERE created_at >= ? AND response_time_ms IS NOT NULL").bind(thirtyDaysAgo).first(),
+        // Popular queries (top 15)
+        this.db.prepare("SELECT query, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? GROUP BY query ORDER BY count DESC LIMIT 15").bind(thirtyDaysAgo).all(),
+        // Zero-result queries (top 20)
+        this.db.prepare("SELECT query, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? AND results_count = 0 GROUP BY query ORDER BY count DESC LIMIT 20").bind(thirtyDaysAgo).all(),
+        // Recent queries (last 25)
+        this.db.prepare("SELECT query, mode, results_count, response_time_ms, created_at FROM ai_search_history ORDER BY created_at DESC LIMIT 25").all(),
+        // Daily counts for last 30 days
+        this.db.prepare(`
+          SELECT date(created_at / 1000, 'unixepoch') as date, COUNT(*) as count
+          FROM ai_search_history
+          WHERE created_at >= ?
+          GROUP BY date(created_at / 1000, 'unixepoch')
+          ORDER BY date ASC
+        `).bind(thirtyDaysAgo).all()
+      ]);
+      const totalQueries = totalResult?.count || 0;
+      const zeroCount = zeroCountResult?.count || 0;
+      const modes = modeResults?.results || [];
+      return {
+        total_queries: totalQueries,
+        queries_today: todayResult?.count || 0,
+        ai_queries: modes.find((r) => r.mode === "ai")?.count || 0,
+        keyword_queries: modes.find((r) => r.mode === "keyword")?.count || 0,
+        fts5_queries: modes.find((r) => r.mode === "fts5")?.count || 0,
+        hybrid_queries: modes.find((r) => r.mode === "hybrid")?.count || 0,
+        avg_results_per_query: Math.round((avgResults?.avg_results ?? 0) * 10) / 10,
+        zero_result_rate: totalQueries > 0 ? Math.round(zeroCount / totalQueries * 1e3) / 10 : 0,
+        avg_response_time_ms: Math.round(avgTimeResult?.avg_time ?? 0),
+        popular_queries: (popularResults?.results || []).map((r) => ({ query: r.query, count: r.count })),
+        zero_result_queries: (zeroResultResults?.results || []).map((r) => ({ query: r.query, count: r.count })),
+        recent_queries: (recentResults?.results || []).map((r) => ({
+          query: r.query,
+          mode: r.mode,
+          results_count: r.results_count,
+          response_time_ms: r.response_time_ms,
+          created_at: r.created_at
+        })),
+        daily_counts: (dailyResults?.results || []).map((r) => ({ date: r.date, count: r.count }))
+      };
+    } catch (error) {
+      console.error("Error getting extended analytics:", error);
+      return {
+        total_queries: 0,
+        queries_today: 0,
+        ai_queries: 0,
+        keyword_queries: 0,
+        fts5_queries: 0,
+        hybrid_queries: 0,
+        avg_results_per_query: 0,
+        zero_result_rate: 0,
+        avg_response_time_ms: 0,
+        popular_queries: [],
+        zero_result_queries: [],
+        recent_queries: [],
+        daily_counts: []
+      };
+    }
+  }
+  /**
+   * Verify Custom RAG is available
+   */
+  verifyBinding() {
+    return this.customRAG?.isAvailable() ?? false;
+  }
+  /**
+   * Get Custom RAG service instance (for indexer)
+   */
+  getCustomRAG() {
+    return this.customRAG;
+  }
+  /**
+   * Get FTS5 service instance (for content sync and admin operations)
+   */
+  getFTS5Service() {
+    return this.fts5Service;
+  }
+  /**
+   * Get ranking pipeline service instance (for admin routes)
+   */
+  getRankingPipeline() {
+    return this.rankingPipeline;
+  }
+  /**
+   * Get synonym service instance (for admin routes)
+   */
+  getSynonymService() {
+    return this.synonymService;
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/indexer.ts
+var IndexManager = class {
+  constructor(db, ai, vectorize) {
+    this.db = db;
+    this.ai = ai;
+    this.vectorize = vectorize;
+    this.fts5Service = new FTS5Service(db);
+    if (this.ai && this.vectorize) {
+      this.customRAG = new CustomRAGService(db, ai, vectorize);
+      console.log("[IndexManager] Custom RAG initialized");
+    }
+  }
+  customRAG;
+  fts5Service;
+  /**
+   * Index all content items within a collection using Custom RAG
+   */
+  async indexCollection(collectionId) {
+    try {
+      const collectionStmt = this.db.prepare(
+        "SELECT id, name, display_name FROM collections WHERE id = ?"
+      );
+      const collection = await collectionStmt.bind(collectionId).first();
+      if (!collection) {
+        throw new Error(`Collection ${collectionId} not found`);
+      }
+      const countResult = await this.db.prepare(
+        "SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'"
+      ).bind(collectionId).first();
+      const totalItems = countResult?.cnt || 0;
+      await this.updateIndexStatus(collectionId, {
+        collection_id: collectionId,
+        collection_name: collection.display_name,
+        total_items: totalItems,
+        indexed_items: 0,
+        status: "indexing"
+      });
+      if (this.customRAG?.isAvailable()) {
+        console.log(`[IndexManager] Using Custom RAG to index collection ${collectionId}`);
+        let highWaterMark = 0;
+        let result;
+        try {
+          result = await this.customRAG.indexCollection(
+            collectionId,
+            async (phase, processed, total) => {
+              let itemProgress;
+              if (phase === "chunking") {
+                itemProgress = 0;
+              } else if (phase === "embedding") {
+                itemProgress = Math.round(processed / Math.max(total, 1) * totalItems * 0.9);
+              } else {
+                itemProgress = Math.round(totalItems * 0.9 + processed / Math.max(total, 1) * totalItems * 0.1);
+              }
+              itemProgress = Math.min(totalItems, itemProgress);
+              if (itemProgress > highWaterMark) {
+                highWaterMark = itemProgress;
+              }
+              await this.updateIndexStatus(collectionId, {
+                collection_id: collectionId,
+                collection_name: collection.display_name,
+                total_items: totalItems,
+                indexed_items: highWaterMark,
+                status: "indexing"
+              });
+            }
+          );
+        } catch (ragError) {
+          console.error(`[IndexManager] CustomRAG indexing failed for ${collectionId}:`, ragError);
+          await this.updateIndexStatus(collectionId, {
+            collection_id: collectionId,
+            collection_name: collection.display_name,
+            total_items: totalItems,
+            indexed_items: highWaterMark,
+            status: "error",
+            error_message: ragError instanceof Error ? ragError.message : String(ragError)
+          });
+          return {
+            collection_id: collectionId,
+            collection_name: collection.display_name,
+            total_items: totalItems,
+            indexed_items: highWaterMark,
+            status: "error",
+            error_message: ragError instanceof Error ? ragError.message : String(ragError)
+          };
+        }
+        const finalStatus = {
+          collection_id: collectionId,
+          collection_name: collection.display_name,
+          total_items: result.total_items,
+          indexed_items: result.total_items,
+          // Use total_items, not chunks, for final display
+          last_sync_at: Date.now(),
+          status: result.errors > 0 ? "error" : "completed",
+          error_message: result.errors > 0 ? `${result.errors} errors during indexing` : void 0
+        };
+        await this.updateIndexStatus(collectionId, finalStatus);
+        return finalStatus;
+      }
+      console.log(`[IndexManager] Using FTS5 to index collection ${collectionId}`);
+      const fts5Available = await this.fts5Service.isAvailable();
+      if (fts5Available) {
+        const fts5Result = await this.fts5Service.indexCollection(
+          collectionId,
+          async (indexed, total) => {
+            await this.updateIndexStatus(collectionId, {
+              collection_id: collectionId,
+              collection_name: collection.display_name,
+              total_items: total,
+              indexed_items: indexed,
+              status: "indexing"
+            });
+          }
+        );
+        const fallbackStatus2 = {
+          collection_id: collectionId,
+          collection_name: collection.display_name,
+          total_items: fts5Result.total_items,
+          indexed_items: fts5Result.indexed_items,
+          last_sync_at: Date.now(),
+          status: fts5Result.errors > 0 ? "error" : "completed",
+          error_message: fts5Result.errors > 0 ? `${fts5Result.errors} errors during FTS5 indexing` : void 0
+        };
+        await this.updateIndexStatus(collectionId, fallbackStatus2);
+        return fallbackStatus2;
+      }
+      console.warn(`[IndexManager] No FTS5 available, counting content items for ${collectionId}`);
+      const fallbackCount = await this.db.prepare(
+        "SELECT COUNT(*) as cnt FROM content WHERE collection_id = ?"
+      ).bind(collectionId).first();
+      const fallbackStatus = {
+        collection_id: collectionId,
+        collection_name: collection.display_name,
+        total_items: fallbackCount?.cnt || 0,
+        indexed_items: 0,
+        last_sync_at: Date.now(),
+        status: "completed",
+        error_message: "No search index available (Vectorize and FTS5 both unavailable)"
+      };
+      await this.updateIndexStatus(collectionId, fallbackStatus);
+      return fallbackStatus;
+    } catch (error) {
+      console.error(`[IndexManager] Error indexing collection ${collectionId}:`, error);
+      const errorStatus = {
+        collection_id: collectionId,
+        collection_name: "Unknown",
+        total_items: 0,
+        indexed_items: 0,
+        status: "error",
+        error_message: error instanceof Error ? error.message : String(error)
+      };
+      await this.updateIndexStatus(collectionId, errorStatus);
+      return errorStatus;
+    }
+  }
+  /**
+   * Index a single content item
+   */
+  async indexContentItem(item, collectionId) {
+    try {
+      let parsedData = {};
+      try {
+        parsedData = typeof item.data === "string" ? JSON.parse(item.data) : item.data;
+      } catch {
+        parsedData = {};
+      }
+      const document = {
+        id: `content_${item.id}`,
+        title: item.title || "Untitled",
+        slug: item.slug || "",
+        content: this.extractSearchableText(parsedData),
+        metadata: {
+          collection_id: collectionId,
+          collection_name: item.collection_name,
+          collection_display_name: item.collection_display_name,
+          status: item.status,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          author_id: item.author_id
+        }
+      };
+      console.log(`Indexed content item: ${item.id}`);
+    } catch (error) {
+      console.error(`Error indexing content item ${item.id}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Extract searchable text from content data
+   */
+  extractSearchableText(data) {
+    const parts = [];
+    if (data.title) parts.push(String(data.title));
+    if (data.name) parts.push(String(data.name));
+    if (data.description) parts.push(String(data.description));
+    if (data.content) parts.push(String(data.content));
+    if (data.body) parts.push(String(data.body));
+    if (data.text) parts.push(String(data.text));
+    const extractStrings = (obj) => {
+      if (typeof obj === "string") {
+        parts.push(obj);
+      } else if (Array.isArray(obj)) {
+        obj.forEach(extractStrings);
+      } else if (obj && typeof obj === "object") {
+        Object.values(obj).forEach(extractStrings);
+      }
+    };
+    extractStrings(data);
+    return parts.join(" ");
+  }
+  /**
+   * Update a single content item in the index
+   */
+  async updateIndex(collectionId, contentId) {
+    try {
+      const stmt = this.db.prepare(`
+            SELECT 
+              c.id, c.title, c.slug, c.data, c.status,
+              c.created_at, c.updated_at, c.author_id,
+              col.name as collection_name, col.display_name as collection_display_name
+            FROM content c
+            JOIN collections col ON c.collection_id = col.id
+            WHERE c.id = ? AND c.collection_id = ?
+          `);
+      const item = await stmt.bind(contentId, collectionId).first();
+      if (!item) {
+        throw new Error(`Content item ${contentId} not found`);
+      }
+      await this.indexContentItem(item, String(collectionId));
+      const status = await this.getIndexStatus(String(collectionId));
+      if (status) {
+        await this.updateIndexStatus(String(collectionId), {
+          ...status,
+          last_sync_at: Date.now()
+        });
+      }
+    } catch (error) {
+      console.error(`Error updating index for content ${contentId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Remove a content item from the index using Custom RAG
+   */
+  async removeFromIndex(collectionId, contentId) {
+    try {
+      if (this.customRAG?.isAvailable()) {
+        console.log(`[IndexManager] Removing content ${contentId} from index`);
+        await this.customRAG.removeContentFromIndex(contentId);
+      } else {
+        console.warn(`[IndexManager] Custom RAG not available, skipping removal for ${contentId}`);
+      }
+    } catch (error) {
+      console.error(`[IndexManager] Error removing content ${contentId} from index:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Get indexing status for a collection
+   */
+  async getIndexStatus(collectionId) {
+    try {
+      const stmt = this.db.prepare(
+        "SELECT * FROM ai_search_index_meta WHERE collection_id = ?"
+      );
+      const result = await stmt.bind(collectionId).first();
+      if (!result) {
+        return null;
+      }
+      return {
+        collection_id: String(result.collection_id),
+        collection_name: result.collection_name,
+        total_items: result.total_items,
+        indexed_items: result.indexed_items,
+        last_sync_at: result.last_sync_at,
+        status: result.status,
+        error_message: result.error_message
+      };
+    } catch (error) {
+      console.error(`Error getting index status for collection ${collectionId}:`, error);
+      return null;
+    }
+  }
+  /**
+   * Get indexing status for all collections
+   */
+  async getAllIndexStatus() {
+    try {
+      const stmt = this.db.prepare("SELECT * FROM ai_search_index_meta");
+      const { results } = await stmt.all();
+      const statusMap = {};
+      for (const row of results || []) {
+        const collectionId = String(row.collection_id);
+        statusMap[collectionId] = {
+          collection_id: collectionId,
+          collection_name: row.collection_name,
+          total_items: row.total_items,
+          indexed_items: row.indexed_items,
+          last_sync_at: row.last_sync_at,
+          status: row.status,
+          error_message: row.error_message
+        };
+      }
+      return statusMap;
+    } catch (error) {
+      console.error("Error getting all index status:", error);
+      return {};
+    }
+  }
+  /**
+   * Update index status in database
+   */
+  async updateIndexStatus(collectionId, status) {
+    try {
+      const checkStmt = this.db.prepare(
+        "SELECT id FROM ai_search_index_meta WHERE collection_id = ?"
+      );
+      const existing = await checkStmt.bind(collectionId).first();
+      if (existing) {
+        const stmt = this.db.prepare(`
+              UPDATE ai_search_index_meta 
+              SET collection_name = ?,
+                  total_items = ?,
+                  indexed_items = ?,
+                  last_sync_at = ?,
+                  status = ?,
+                  error_message = ?
+              WHERE collection_id = ?
+            `);
+        await stmt.bind(
+          status.collection_name,
+          status.total_items,
+          status.indexed_items,
+          status.last_sync_at || null,
+          status.status,
+          status.error_message || null,
+          String(collectionId)
+        ).run();
+      } else {
+        const stmt = this.db.prepare(`
+              INSERT INTO ai_search_index_meta (
+                collection_id, collection_name, total_items, indexed_items,
+                last_sync_at, status, error_message
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            `);
+        await stmt.bind(
+          String(status.collection_id),
+          status.collection_name,
+          status.total_items,
+          status.indexed_items,
+          status.last_sync_at || null,
+          status.status,
+          status.error_message || null
+        ).run();
+      }
+    } catch (error) {
+      console.error(`Error updating index status for collection ${collectionId}:`, error);
+      throw error;
+    }
+  }
+  /**
+   * Sync all selected collections
+   */
+  async syncAll(selectedCollections) {
+    for (const collectionId of selectedCollections) {
+      try {
+        await this.indexCollection(collectionId);
+      } catch (error) {
+        console.error(`Error syncing collection ${collectionId}:`, error);
+      }
+    }
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/data/benchmark-datasets.ts
+var BENCHMARK_DATASETS = [
+  {
+    id: "scifact",
+    name: "BEIR SciFact",
+    description: "Scientific fact verification \u2014 abstracts from S2ORC",
+    corpus_size: 5183,
+    query_count: 1109,
+    avg_qrels_per_query: 1.1,
+    license: "CC BY-SA 4.0"
+  },
+  {
+    id: "nfcorpus",
+    name: "BEIR NFCorpus",
+    description: "Bio-medical IR \u2014 NutritionFacts clinical documents",
+    corpus_size: 3633,
+    query_count: 323,
+    avg_qrels_per_query: 38.2,
+    license: "Mixed (see dataset)"
+  },
+  {
+    id: "fiqa",
+    name: "BEIR FiQA-2018",
+    description: "Financial Q&A \u2014 opinion-based questions from StackExchange/Reddit",
+    corpus_size: 57638,
+    query_count: 648,
+    avg_qrels_per_query: 2.6,
+    license: "Mixed (see dataset)"
+  }
+];
+
+// src/plugins/core-plugins/ai-search-plugin/services/benchmark.service.ts
+var BenchmarkService = class {
+  constructor(db, kv, vectorize, dataset = "scifact") {
+    this.db = db;
+    this.kv = kv;
+    this.vectorize = vectorize;
+    this.dataset = dataset;
+    this.idPrefix = `beir-${dataset}-`;
+    this.collectionId = `benchmark-${dataset}-collection`;
+    if (!BENCHMARK_DATASETS.find((d) => d.id === dataset)) {
+      throw new Error(`Unknown benchmark dataset: ${dataset}`);
+    }
+  }
+  dataset;
+  data = null;
+  idPrefix;
+  collectionId;
+  /**
+   * Load dataset from KV on first access. Cached for lifetime of the service instance.
+   *
+   * Corpus data may be stored as a single key or chunked across multiple keys
+   * (for datasets that exceed the 25 MiB KV value limit). Chunked data uses:
+   *   benchmark:{dataset}:corpus:meta  → { chunks: N, total: M }
+   *   benchmark:{dataset}:corpus:0     → first slice
+   *   benchmark:{dataset}:corpus:1     → second slice
+   *   ...
+   */
+  async loadData() {
+    if (this.data) return this.data;
+    const corpusKey = `benchmark:${this.dataset}:corpus`;
+    const [corpus, queries, qrels, corpusMeta] = await Promise.all([
+      this.kv.get(corpusKey, "json"),
+      this.kv.get(
+        `benchmark:${this.dataset}:queries`,
+        "json"
+      ),
+      this.kv.get(
+        `benchmark:${this.dataset}:qrels`,
+        "json"
+      ),
+      this.kv.get(
+        `${corpusKey}:meta`,
+        "json"
+      )
+    ]);
+    let resolvedCorpus = corpus;
+    if (!resolvedCorpus && corpusMeta) {
+      console.log(
+        `[BenchmarkService] Loading chunked corpus: ${corpusMeta.chunks} chunks, ${corpusMeta.total} docs`
+      );
+      const chunkPromises = [];
+      for (let i = 0; i < corpusMeta.chunks; i++) {
+        chunkPromises.push(
+          this.kv.get(`${corpusKey}:${i}`, "json")
+        );
+      }
+      const chunks = await Promise.all(chunkPromises);
+      resolvedCorpus = [];
+      for (const chunk of chunks) {
+        if (!chunk) {
+          throw new Error(
+            `Missing corpus chunk for dataset "${this.dataset}". Re-upload with: npx tsx scripts/generate-benchmark-data.ts --dataset ${this.dataset}`
+          );
+        }
+        resolvedCorpus.push(...chunk);
+      }
+      console.log(
+        `[BenchmarkService] Reassembled ${resolvedCorpus.length} docs from ${corpusMeta.chunks} chunks`
+      );
+    }
+    if (!resolvedCorpus || !queries || !qrels) {
+      throw new Error(
+        `Benchmark dataset "${this.dataset}" not found in KV. Run: npx tsx scripts/generate-benchmark-data.ts --dataset ${this.dataset}`
+      );
+    }
+    this.data = { corpus: resolvedCorpus, queries, qrels };
+    return this.data;
+  }
+  /**
+   * Get the subset of corpus documents: only those referenced in qrels + noise.
+   * Deterministic selection (sorted by ID) so results are reproducible.
+   */
+  async getSubsetCorpus() {
+    const { corpus, qrels } = await this.loadData();
+    const relevantDocIds = new Set(qrels.map((qr) => qr.doc_id));
+    const relevantDocs = corpus.filter((doc) => relevantDocIds.has(doc._id));
+    const noiseDocs = corpus.filter((doc) => !relevantDocIds.has(doc._id)).slice(0, 200);
+    return [...relevantDocs, ...noiseDocs];
+  }
+  /**
+   * Seed benchmark documents into the content table.
+   * Uses a dedicated collection per dataset created on-the-fly.
+   * Idempotent — skips if data already exists.
+   */
+  async seed(authorId, useSubset = true, onProgress) {
+    const existing = await this.db.prepare(
+      `SELECT COUNT(*) as count FROM content WHERE id LIKE '${this.idPrefix}%'`
+    ).first();
+    if (existing && existing.count > 0) {
+      return { seeded: existing.count, skipped: true };
+    }
+    const collectionId = await this.ensureBenchmarkCollection();
+    const { corpus: fullCorpus } = await this.loadData();
+    const corpus = useSubset ? await this.getSubsetCorpus() : fullCorpus;
+    const now = Date.now();
+    const batchSize = 50;
+    let inserted = 0;
+    for (let i = 0; i < corpus.length; i += batchSize) {
+      const batch = corpus.slice(i, i + batchSize);
+      const batchOps = batch.map((doc) => {
+        const id = `${this.idPrefix}${doc._id}`;
+        const slug = `${this.idPrefix}${doc._id}`;
+        const safeText = doc.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const data = JSON.stringify({
+          content: `<p>${safeText}</p>`,
+          excerpt: doc.text.substring(0, 200),
+          tags: [`beir-${this.dataset}`, "benchmark"]
+        });
+        return this.db.prepare(
+          `INSERT OR IGNORE INTO content
+             (id, collection_id, slug, title, data, status, author_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 'published', ?, ?, ?)`
+        ).bind(id, collectionId, slug, doc.title, data, authorId, now, now);
+      });
+      await this.db.batch(batchOps);
+      inserted += batch.length;
+      if (onProgress) {
+        onProgress({
+          phase: "inserting",
+          inserted,
+          total: corpus.length
+        });
+      }
+    }
+    if (onProgress) {
+      onProgress({
+        phase: "complete",
+        inserted: corpus.length,
+        total: corpus.length
+      });
+    }
+    return { seeded: corpus.length, skipped: false };
+  }
+  /**
+   * Remove all benchmark documents and related index entries for this dataset.
+   */
+  async purge() {
+    const result = await this.db.prepare(
+      `DELETE FROM content WHERE id LIKE '${this.idPrefix}%'`
+    ).run();
+    try {
+      await this.db.batch([
+        this.db.prepare(
+          `DELETE FROM content_fts WHERE content_id LIKE '${this.idPrefix}%'`
+        ),
+        this.db.prepare(
+          `DELETE FROM content_fts_sync WHERE content_id LIKE '${this.idPrefix}%'`
+        )
+      ]);
+    } catch (error) {
+      console.warn("[BenchmarkService] FTS5 cleanup skipped:", error);
+    }
+    try {
+      await this.db.prepare("DELETE FROM collections WHERE id = ?").bind(this.collectionId).run();
+    } catch (error) {
+      console.warn("[BenchmarkService] Collection cleanup skipped:", error);
+    }
+    try {
+      await this.db.prepare(
+        "DELETE FROM ai_search_index_meta WHERE collection_id = ?"
+      ).bind(this.collectionId).run();
+    } catch (error) {
+    }
+    if (this.vectorize) {
+      try {
+        const { corpus } = await this.loadData();
+        const vectorIds = [];
+        for (const doc of corpus) {
+          for (let i = 0; i < 5; i++) {
+            vectorIds.push(`${this.idPrefix}${doc._id}-chunk-${i}`);
+          }
+        }
+        const batchSize = 1e3;
+        for (let i = 0; i < vectorIds.length; i += batchSize) {
+          const batch = vectorIds.slice(i, i + batchSize);
+          await this.vectorize.deleteByIds(batch);
+        }
+        console.log(
+          `[BenchmarkService] Deleted up to ${vectorIds.length} vectors from Vectorize`
+        );
+      } catch (error) {
+        console.warn(
+          "[BenchmarkService] Vectorize cleanup error (non-fatal):",
+          error
+        );
+      }
+    }
+    return result.meta?.changes || 0;
+  }
+  /**
+   * Run benchmark queries against a search function and compute IR metrics.
+   */
+  async evaluate(searchFn, mode = "fts5", limit = 10, maxQueries = 0) {
+    const { corpus, queries, qrels } = await this.loadData();
+    const startTime = Date.now();
+    const perQuery = [];
+    const qrelsMap = /* @__PURE__ */ new Map();
+    for (const qrel of qrels) {
+      if (!qrelsMap.has(qrel.query_id))
+        qrelsMap.set(qrel.query_id, /* @__PURE__ */ new Map());
+      qrelsMap.get(qrel.query_id).set(qrel.doc_id, qrel.score);
+    }
+    const queriesWithJudgments = queries.filter(
+      (q) => qrelsMap.has(q._id) && qrelsMap.get(q._id).size > 0
+    );
+    const queriesToRun = maxQueries > 0 ? queriesWithJudgments.slice(0, maxQueries) : queriesWithJudgments;
+    let totalNDCG = 0;
+    let totalPrecision = 0;
+    let totalRecall = 0;
+    let totalMRR = 0;
+    for (const query of queriesToRun) {
+      const relevantDocs = qrelsMap.get(query._id);
+      const queryStart = Date.now();
+      let response;
+      try {
+        response = await searchFn(query.text, mode, limit);
+      } catch (error) {
+        console.error(
+          `[BenchmarkService] Search error for query ${query._id}:`,
+          error
+        );
+        perQuery.push({
+          query_id: query._id,
+          query_text: query.text,
+          ndcg: 0,
+          precision: 0,
+          recall: 0,
+          mrr: 0,
+          hits: 0,
+          expected: relevantDocs.size,
+          returned: 0,
+          query_time_ms: Date.now() - queryStart
+        });
+        continue;
+      }
+      const queryTime = Date.now() - queryStart;
+      const rankedDocIds = response.results.map(
+        (r) => r.id.startsWith(this.idPrefix) ? r.id.slice(this.idPrefix.length) : r.id
+      );
+      const ndcg = computeNDCG(rankedDocIds, relevantDocs, limit);
+      const precision = computePrecision(rankedDocIds, relevantDocs, limit);
+      const recall = computeRecall(rankedDocIds, relevantDocs);
+      const mrr = computeMRR(rankedDocIds, relevantDocs);
+      totalNDCG += ndcg;
+      totalPrecision += precision;
+      totalRecall += recall;
+      totalMRR += mrr;
+      perQuery.push({
+        query_id: query._id,
+        query_text: query.text,
+        ndcg,
+        precision,
+        recall,
+        mrr,
+        hits: rankedDocIds.filter((id) => relevantDocs.has(id)).length,
+        expected: relevantDocs.size,
+        returned: rankedDocIds.length,
+        query_time_ms: queryTime
+      });
+    }
+    const totalTime = Date.now() - startTime;
+    const evaluated = queriesToRun.length;
+    return {
+      mode,
+      limit,
+      corpus_size: corpus.length,
+      queries_evaluated: evaluated,
+      total_time_ms: totalTime,
+      avg_query_time_ms: evaluated > 0 ? Math.round(totalTime / evaluated) : 0,
+      metrics: {
+        ndcg_at_k: evaluated > 0 ? totalNDCG / evaluated : 0,
+        precision_at_k: evaluated > 0 ? totalPrecision / evaluated : 0,
+        recall_at_k: evaluated > 0 ? totalRecall / evaluated : 0,
+        mrr: evaluated > 0 ? totalMRR / evaluated : 0
+      },
+      per_query: perQuery
+    };
+  }
+  /**
+   * Get the list of query IDs that have relevance judgments, optionally limited.
+   */
+  async getEvaluableQueryIds(maxQueries = 0) {
+    const { queries, qrels } = await this.loadData();
+    const qrelsMap = /* @__PURE__ */ new Map();
+    for (const qrel of qrels) {
+      if (!qrelsMap.has(qrel.query_id))
+        qrelsMap.set(qrel.query_id, /* @__PURE__ */ new Map());
+      qrelsMap.get(qrel.query_id).set(qrel.doc_id, qrel.score);
+    }
+    const ids = queries.filter((q) => qrelsMap.has(q._id) && qrelsMap.get(q._id).size > 0).map((q) => q._id);
+    return maxQueries > 0 ? ids.slice(0, maxQueries) : ids;
+  }
+  /**
+   * Evaluate a batch of queries by their IDs.
+   * Returns per-query results for the batch so the client can accumulate and compute aggregates.
+   */
+  async evaluateBatch(searchFn, mode, limit, queryIds) {
+    const { queries, qrels } = await this.loadData();
+    const qrelsMap = /* @__PURE__ */ new Map();
+    for (const qrel of qrels) {
+      if (!qrelsMap.has(qrel.query_id))
+        qrelsMap.set(qrel.query_id, /* @__PURE__ */ new Map());
+      qrelsMap.get(qrel.query_id).set(qrel.doc_id, qrel.score);
+    }
+    const queryMap = new Map(queries.map((q) => [q._id, q]));
+    const results = [];
+    for (const qid of queryIds) {
+      const query = queryMap.get(qid);
+      const relevantDocs = qrelsMap.get(qid);
+      if (!query || !relevantDocs) continue;
+      const queryStart = Date.now();
+      let response;
+      try {
+        response = await searchFn(query.text, mode, limit);
+      } catch (error) {
+        console.error(
+          `[BenchmarkService] Search error for query ${qid}:`,
+          error
+        );
+        results.push({
+          query_id: qid,
+          query_text: query.text,
+          ndcg: 0,
+          precision: 0,
+          recall: 0,
+          mrr: 0,
+          hits: 0,
+          expected: relevantDocs.size,
+          returned: 0,
+          query_time_ms: Date.now() - queryStart
+        });
+        continue;
+      }
+      const queryTime = Date.now() - queryStart;
+      const rankedDocIds = response.results.map(
+        (r) => r.id.startsWith(this.idPrefix) ? r.id.slice(this.idPrefix.length) : r.id
+      );
+      const ndcg = computeNDCG(rankedDocIds, relevantDocs, limit);
+      const precision = computePrecision(rankedDocIds, relevantDocs, limit);
+      const recall = computeRecall(rankedDocIds, relevantDocs);
+      const mrr = computeMRR(rankedDocIds, relevantDocs);
+      results.push({
+        query_id: qid,
+        query_text: query.text,
+        ndcg,
+        precision,
+        recall,
+        mrr,
+        hits: rankedDocIds.filter((id) => relevantDocs.has(id)).length,
+        expected: relevantDocs.size,
+        returned: rankedDocIds.length,
+        query_time_ms: queryTime
+      });
+    }
+    return results;
+  }
+  /**
+   * Get dataset metadata from the compiled-in registry (no KV needed).
+   */
+  getMeta() {
+    return BENCHMARK_DATASETS.find((d) => d.id === this.dataset);
+  }
+  getCorpusSize() {
+    return this.getMeta().corpus_size;
+  }
+  getQueryCount() {
+    return this.getMeta().query_count;
+  }
+  getDatasetId() {
+    return this.dataset;
+  }
+  getIdPrefix() {
+    return this.idPrefix;
+  }
+  getCollectionId() {
+    return this.collectionId;
+  }
+  async getSubsetSize() {
+    const subset = await this.getSubsetCorpus();
+    return subset.length;
+  }
+  /**
+   * Check if benchmark data is currently seeded for this dataset.
+   */
+  async isSeeded() {
+    const result = await this.db.prepare(
+      `SELECT COUNT(*) as count FROM content WHERE id LIKE '${this.idPrefix}%'`
+    ).first();
+    const count = result?.count || 0;
+    return { seeded: count > 0, count };
+  }
+  /**
+   * Check if dataset data exists in KV.
+   */
+  async isDataAvailable() {
+    const queries = await this.kv.get(
+      `benchmark:${this.dataset}:queries`
+    );
+    return queries !== null;
+  }
+  /**
+   * Ensure a benchmark collection exists in the collections table.
+   * Returns the collection ID.
+   */
+  async ensureBenchmarkCollection() {
+    const existing = await this.db.prepare("SELECT id FROM collections WHERE id = ?").bind(this.collectionId).first();
+    if (existing) {
+      return this.collectionId;
+    }
+    const meta = this.getMeta();
+    const schema = JSON.stringify({
+      type: "object",
+      properties: {
+        title: { type: "string", title: "Title", required: true },
+        content: { type: "string", title: "Content", format: "richtext" },
+        excerpt: { type: "string", title: "Excerpt" },
+        tags: { type: "array", title: "Tags", items: { type: "string" } }
+      },
+      required: ["title"]
+    });
+    await this.db.prepare(
+      `INSERT OR IGNORE INTO collections (id, name, display_name, description, schema, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, unixepoch(), unixepoch())`
+    ).bind(
+      this.collectionId,
+      `benchmark_${this.dataset}`,
+      `${meta.name} Benchmark`,
+      meta.description,
+      schema
+    ).run();
+    return this.collectionId;
+  }
+};
+function computeNDCG(ranked, qrels, k) {
+  let dcg = 0;
+  for (let i = 0; i < Math.min(ranked.length, k); i++) {
+    const rel = qrels.get(ranked[i]) || 0;
+    dcg += rel / Math.log2(i + 2);
+  }
+  const ideal = Array.from(qrels.values()).sort((a, b) => b - a).slice(0, k);
+  let idcg = 0;
+  for (let i = 0; i < ideal.length; i++) {
+    idcg += ideal[i] / Math.log2(i + 2);
+  }
+  return idcg === 0 ? 0 : dcg / idcg;
+}
+function computePrecision(ranked, qrels, k) {
+  const topK = ranked.slice(0, k);
+  const hits = topK.filter((id) => (qrels.get(id) || 0) > 0).length;
+  return hits / k;
+}
+function computeRecall(ranked, qrels) {
+  const totalRelevant = Array.from(qrels.values()).filter(
+    (v) => v > 0
+  ).length;
+  if (totalRelevant === 0) return 0;
+  const hits = ranked.filter((id) => (qrels.get(id) || 0) > 0).length;
+  return hits / totalRelevant;
+}
+function computeMRR(ranked, qrels) {
+  for (let i = 0; i < ranked.length; i++) {
+    if ((qrels.get(ranked[i]) || 0) > 0) return 1 / (i + 1);
+  }
+  return 0;
+}
+
+// src/templates/pages/admin-search.template.ts
+init_admin_layout_catalyst_template();
+function renderSearchDashboard(data) {
+  const settings = data.settings || {
+    enabled: false,
+    ai_mode_enabled: true,
+    selected_collections: [],
+    dismissed_collections: [],
+    autocomplete_enabled: true,
+    cache_duration: 1,
+    results_limit: 20,
+    index_media: false
+  };
+  const selectedCollections = Array.isArray(settings.selected_collections) ? settings.selected_collections : [];
+  const dismissedCollections = Array.isArray(settings.dismissed_collections) ? settings.dismissed_collections : [];
+  const enabled = settings.enabled === true;
+  const aiModeEnabled = settings.ai_mode_enabled !== false;
+  const autocompleteEnabled = settings.autocomplete_enabled !== false;
+  const indexMedia = settings.index_media === true;
+  const selectedCollectionIds = new Set(selectedCollections.map((id) => String(id)));
+  const dismissedCollectionIds = new Set(dismissedCollections.map((id) => String(id)));
+  const collections = Array.isArray(data.collections) ? data.collections : [];
+  const fts5Status = data.fts5Status;
+  const fts5Available = fts5Status ? fts5Status.available : false;
+  const fts5TotalIndexed = fts5Status ? fts5Status.total_indexed : 0;
+  const indexStatus = data.indexStatus || {};
+  let vectorizeTotalItems = 0;
+  let vectorizeIndexedItems = 0;
+  let vectorizeHasData = false;
+  for (const colId of Object.keys(indexStatus)) {
+    const s = indexStatus[colId];
+    if (s) {
+      vectorizeTotalItems += s.total_items || 0;
+      vectorizeIndexedItems += s.indexed_items || 0;
+      vectorizeHasData = true;
+    }
+  }
+  const vectorizeStatusText = vectorizeHasData ? `Vectorize index: ${vectorizeIndexedItems} items indexed` : "Click reindex to rebuild the vector index for all selected collections";
+  const searchMode = aiModeEnabled ? "Hybrid" : "FTS5 Only";
+  const totalQueries = data.analytics ? data.analytics.total_queries : 0;
+  const pageContent = `
+    <div class="space-y-6">
+      <!-- Tab Navigation -->
+      <div class="border-b border-zinc-200 dark:border-zinc-700">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+          <button id="tab-btn-overview" onclick="switchTab('overview')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-indigo-500 text-indigo-600 dark:text-indigo-400">
+            Overview
+          </button>
+          <button id="tab-btn-configuration" onclick="switchTab('configuration')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Configuration
+          </button>
+          <button id="tab-btn-benchmark" onclick="switchTab('benchmark')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Benchmark
+          </button>
+          <button id="tab-btn-relevance" onclick="switchTab('relevance')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Relevance &amp; Ranking
+          </button>
+          <button id="tab-btn-analytics" onclick="switchTab('analytics')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Analytics
+          </button>
+        </nav>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 1: Overview                            -->
+      <!-- ========================================== -->
+      <div id="tab-overview" class="tab-panel">
+        <!-- Header -->
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Search</h1>
+            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Monitor and configure search across your content
+            </p>
+          </div>
+          <div class="flex gap-3">
+            <a
+              href="/admin/plugins/ai-search/test"
+              target="_blank"
+              class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+              Test Search
+            </a>
+            <a
+              href="/admin/plugins/ai-search/instantsearch"
+              target="_blank"
+              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+              InstantSearch
+            </a>
+            <a
+              href="/admin/plugins/ai-search/integration"
+              target="_blank"
+              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+              </svg>
+              Integration Guide
+            </a>
+          </div>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-6">
+          ${renderStatCard("Total Indexed Docs", String(fts5TotalIndexed), "lime", `
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+          `)}
+
+          ${renderStatCard("FTS5 Status", fts5Available ? "Available" : "Unavailable", fts5Available ? "lime" : "red", `
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          `)}
+
+          ${renderStatCard("Search Mode", searchMode, "purple", `
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          `)}
+
+          ${renderStatCard("Total Queries", String(totalQueries), "sky", `
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+            </svg>
+          `)}
+        </div>
+
+        <!-- System Status -->
+        <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 mt-6">
+          <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+            <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">System Status</h2>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Binding Availability</h3>
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-zinc-600 dark:text-zinc-400">FTS5 (SQLite)</span>
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${fts5Available ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20"}">${fts5Available ? "Available" : "Unavailable"}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-zinc-600 dark:text-zinc-400">AI / Vectorize</span>
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${aiModeEnabled ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20"}">${aiModeEnabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-zinc-600 dark:text-zinc-400">Search Enabled</span>
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${enabled ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20"}">${enabled ? "Yes" : "No"}</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Index Summary</h3>
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-zinc-600 dark:text-zinc-400">Indexed Collections</span>
+                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${fts5Status ? Object.keys(fts5Status.by_collection || {}).length : 0}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-zinc-600 dark:text-zinc-400">Total Documents</span>
+                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${fts5TotalIndexed}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-zinc-600 dark:text-zinc-400">Selected Collections</span>
+                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${selectedCollections.length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 2: Configuration                       -->
+      <!-- ========================================== -->
+      <div id="tab-configuration" class="tab-panel hidden">
+        <form id="settingsForm" class="space-y-6">
+
+          <!-- Collections to Index -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-4">
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white mb-1">Collections to Index</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">Select which collections are included in search. Rebuild indexes below after changes.</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2" id="collections-list">
+              ${collections.length === 0 ? '<p class="text-sm text-zinc-500 dark:text-zinc-400 col-span-2">No collections available.</p>' : collections.map((collection) => {
+    const collectionId = String(collection.id);
+    const isChecked = selectedCollectionIds.has(collectionId);
+    const isDismissed = dismissedCollectionIds.has(collectionId);
+    const colStatus = (data.indexStatus || {})[collectionId];
+    const isNew = collection.is_new === true && !isDismissed && !colStatus;
+    return `<label for="col_${collectionId}" class="flex items-center gap-2.5 px-3 py-2 rounded-md border ${isChecked ? "border-indigo-300 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-900/20" : "border-zinc-200 dark:border-zinc-700"} hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer select-none transition-colors">
+                    <input type="checkbox" id="col_${collectionId}" name="selected_collections" value="${collectionId}" ${isChecked ? "checked" : ""}
+                      class="w-4 h-4 text-indigo-600 bg-white border-gray-300 rounded focus:ring-indigo-500 cursor-pointer" style="flex-shrink:0" />
+                    <span class="flex-1 min-w-0 text-sm text-zinc-900 dark:text-zinc-100 truncate">${collection.display_name || collection.name || "Unnamed"}</span>
+                    <span class="text-xs text-zinc-400 dark:text-zinc-500 whitespace-nowrap">${collection.item_count || 0}</span>
+                    ${isNew ? '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">NEW</span>' : ""}
+                  </label>`;
+  }).join("")}
+            </div>
+          </div>
+
+          <!-- Settings: two-column -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-5">
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white mb-1">Settings</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">Configure search behavior, hybrid mode, and advanced options.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <!-- Left: Enable Search + Options -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">Search Mode</h3>
+                <div class="flex items-center gap-3 p-3 border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                  <input type="checkbox" id="enabled" name="enabled" ${enabled ? "checked" : ""} class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                  <div class="flex-1">
+                    <label for="enabled" class="text-sm font-medium text-zinc-900 dark:text-white select-none cursor-pointer block">Enable Search</label>
+                    <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Turn on search capabilities across your content</p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="flex items-center gap-2.5 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
+                    <input type="checkbox" id="autocomplete_enabled" name="autocomplete_enabled" ${autocompleteEnabled ? "checked" : ""} class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                    <div>
+                      <label for="autocomplete_enabled" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer block">Autocomplete</label>
+                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Suggestions as you type</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2.5 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
+                    <input type="checkbox" id="index_media" name="index_media" ${indexMedia ? "checked" : ""} class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                    <div>
+                      <label for="index_media" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer block">Index Media</label>
+                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Include media in results</p>
+                    </div>
+                  </div>
+                  <div class="p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
+                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1.5">Cache (hours)</label>
+                    <input type="number" id="cache_duration" name="cache_duration" value="${settings.cache_duration || 1}" min="0" max="24" class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
+                  </div>
+                  <div class="p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
+                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1.5">Results / Page</label>
+                    <input type="number" id="results_limit" name="results_limit" value="${settings.results_limit || 20}" min="10" max="100" class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right: AI / Semantic + Hybrid -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">AI / Semantic Search</h3>
+                <div class="flex items-center gap-3 p-3 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <input type="checkbox" id="ai_mode_enabled" name="ai_mode_enabled" ${aiModeEnabled ? "checked" : ""} class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                  <div class="flex-1">
+                    <label for="ai_mode_enabled" class="text-sm font-medium text-zinc-900 dark:text-white select-none cursor-pointer block">Enable AI / Semantic Search</label>
+                    <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Natural language queries via Workers AI <a href="https://developers.cloudflare.com/workers-ai/" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">Setup</a></p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 border border-purple-200 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <input type="checkbox" id="reranking_enabled" name="reranking_enabled" ${settings.reranking_enabled !== false ? "checked" : ""} class="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
+                  <div class="flex-1">
+                    <label for="reranking_enabled" class="text-sm font-medium text-zinc-900 dark:text-white select-none cursor-pointer block">AI Reranking</label>
+                    <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Cross-encoder reranks for better relevance (+50-150ms)</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                  <input type="checkbox" id="query_rewriting_enabled" name="query_rewriting_enabled" ${settings.query_rewriting_enabled ? "checked" : ""} class="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
+                  <div class="flex-1">
+                    <label for="query_rewriting_enabled" class="text-sm font-medium text-zinc-900 dark:text-white select-none cursor-pointer block">Query Rewriting (LLM)</label>
+                    <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Expands vague queries for better recall (+100-300ms)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reindexing: two-column -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-5">
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white mb-1">Reindexing</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">Rebuild search indexes after changing collections or importing content.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <!-- Left: FTS5 -->
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider mb-2">FTS5 Full-Text Search</h3>
+                <p class="text-xs text-zinc-600 dark:text-zinc-400 mb-3">BM25 ranking, stemming, and highlighting. No AI binding required.</p>
+                <div id="fts5-status" class="p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
+                  <div>
+                    <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300" id="fts5-status-text">Checking FTS5 status...</span>
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1" id="fts5-stats-text"></p>
+                  </div>
+                  <button
+                    type="button"
+                    id="fts5-reindex-btn"
+                    onclick="reindexFTS5All()"
+                    class="mt-3 w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Reindex FTS5
+                  </button>
+                </div>
+              </div>
+
+              <!-- Right: Vectorize -->
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider mb-2">Vectorize (AI / Hybrid)</h3>
+                <p class="text-xs text-zinc-600 dark:text-zinc-400 mb-3">Semantic search via AI embeddings. Required for AI and Hybrid modes.</p>
+                <div class="p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
+                  <div>
+                    <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300" id="vectorize-status-text">Vectorize binding available</span>
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1" id="vectorize-stats-text">${vectorizeStatusText}</p>
+                  </div>
+                  <button
+                    type="button"
+                    id="vectorize-reindex-btn"
+                    onclick="reindexVectorizeAll()"
+                    class="mt-3 w-full px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Reindex Vectorize
+                  </button>
+                  <div id="vectorize-progress-wrap" class="mt-3 hidden">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-xs text-zinc-500 dark:text-zinc-400" id="vectorize-progress-label">Embedding...</span>
+                      <span class="text-xs font-medium text-zinc-700 dark:text-zinc-300" id="vectorize-progress-count">0/0</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div id="vectorize-progress-bar" class="bg-purple-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Save Button -->
+          <div class="flex items-center justify-end">
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm transition-colors">
+              Save Settings
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 3: Benchmark                           -->
+      <!-- ========================================== -->
+      <div id="tab-benchmark" class="tab-panel hidden">
+        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+          <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Search Benchmark</h2>
+          <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4" id="bench-description">
+            BEIR benchmark datasets with ground-truth relevance judgments.
+            Seed the data, index it, then evaluate search quality with standard IR metrics (nDCG@10, Precision, Recall, MRR).
+          </p>
+
+          <!-- Dataset Selector -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex items-center gap-2">
+              <label for="bench-dataset" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Dataset:</label>
+              <select id="bench-dataset" onchange="switchBenchmarkDataset()"
+                class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                <option value="scifact">SciFact (5,183 docs, scientific)</option>
+                <option value="nfcorpus">NFCorpus (3,633 docs, biomedical)</option>
+                <option value="fiqa">FiQA-2018 (57,638 docs, financial Q&amp;A)</option>
+              </select>
+            </div>
+            <span id="bench-data-badge" class="hidden text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+              Data not uploaded to KV
+            </span>
+          </div>
+
+          <div id="benchmark-status" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Checking benchmark status...</div>
+
+          <!-- Corpus Size + Seed Row -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex items-center gap-2">
+              <label for="bench-corpus-size" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Corpus:</label>
+              <select id="bench-corpus-size" onchange="updateBenchmarkStatusText()"
+                class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                <option value="subset">Subset</option>
+                <option value="full">Full corpus</option>
+              </select>
+            </div>
+            <button onclick="seedBenchmark()" id="bench-seed-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+              Seed Data
+            </button>
+            <button onclick="indexBenchmark()" id="bench-index-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Index (FTS5)
+            </button>
+            <button onclick="indexBenchmarkVectorize()" id="bench-vectorize-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Index (Vectorize)
+            </button>
+            <button onclick="purgeBenchmark()" id="bench-purge-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Purge Data
+            </button>
+          </div>
+
+          <!-- Evaluate Buttons Row -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Evaluate:</span>
+            <div class="flex items-center gap-2">
+              <label for="bench-query-count" class="text-sm text-zinc-600 dark:text-zinc-400">Queries:</label>
+              <select id="bench-query-count"
+                class="rounded-lg bg-white dark:bg-zinc-800 px-2 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                <option value="15">15</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="0" selected>All</option>
+              </select>
+            </div>
+            <button onclick="runBenchmark('fts5')" id="bench-fts5-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              FTS5
+            </button>
+            <button onclick="runBenchmark('keyword')" id="bench-keyword-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-zinc-600 hover:bg-zinc-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Keyword
+            </button>
+            <button onclick="runBenchmark('hybrid')" id="bench-hybrid-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Hybrid
+            </button>
+            <button onclick="runBenchmark('ai')" id="bench-ai-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              AI (Vectorize)
+            </button>
+          </div>
+          <p class="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
+            Hybrid and AI modes require Vectorize index binding. If unavailable, they will return an error.
+          </p>
+
+          <div id="benchmark-progress" class="hidden mb-4">
+            <div class="text-sm text-zinc-600 dark:text-zinc-400 mb-1" id="benchmark-progress-text">Running...</div>
+            <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
+              <div id="benchmark-progress-bar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+          </div>
+          <div id="benchmark-results" class="hidden">
+            <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
+              <h3 class="text-sm font-semibold text-zinc-950 dark:text-white mb-3" id="benchmark-results-title">Results</h3>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" id="benchmark-metrics"></div>
+              <div class="text-xs text-zinc-500 dark:text-zinc-400" id="benchmark-details"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 4: Relevance & Ranking                 -->
+      <!-- ========================================== -->
+      <div id="tab-relevance" class="tab-panel hidden">
+        <div class="space-y-6">
+          <!-- Ranking Pipeline Section -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Ranking Pipeline</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                Composable scoring stages that post-process search results from any mode. Each stage produces a [0, 1] score, combined via weighted sum.
+              </p>
+            </div>
+
+            <div id="pipeline-stages" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="text-sm text-zinc-500 dark:text-zinc-400">Loading pipeline configuration...</div>
+            </div>
+
+            <!-- Formula Info -->
+            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
+              <div class="flex gap-3">
+                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="text-sm">
+                  <p class="font-medium text-blue-900 dark:text-blue-100">How scoring works</p>
+                  <p class="text-blue-700 dark:text-blue-300 mt-1">
+                    <code class="text-xs bg-blue-100 dark:bg-blue-800/50 px-1.5 py-0.5 rounded">pipeline_score = sum(weight x score) / sum(weight)</code>
+                    <br/>Only enabled stages with weight &gt; 0 participate. If no stages are active, the original search order is preserved.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                type="button"
+                onclick="resetPipeline()"
+                class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                Reset to Defaults
+              </button>
+              <button
+                type="button"
+                id="savePipelineBtn"
+                onclick="savePipeline()"
+                class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm"
+              >
+                Save Pipeline
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Preview -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-4">
+              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-1">Live Preview</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                Test search results with current pipeline and field weight settings. Results update automatically as you adjust controls.
+              </p>
+            </div>
+
+            <div class="flex items-center gap-3 mb-4">
+              <input
+                type="text"
+                id="preview-query"
+                placeholder="Type a search query..."
+                class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();previewSearch()}"
+              />
+              <button
+                type="button"
+                id="preview-search-btn"
+                onclick="previewSearch()"
+                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                Search
+              </button>
+            </div>
+
+            <!-- Preview Results -->
+            <div id="preview-results" class="hidden">
+              <div id="preview-meta" class="flex items-center justify-between mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+              </div>
+              <div id="preview-list" class="space-y-3">
+              </div>
+            </div>
+
+            <div id="preview-empty" class="hidden text-center py-6">
+              <p class="text-sm text-zinc-500 dark:text-zinc-400">No results found for this query with current weights.</p>
+            </div>
+
+            <div id="preview-error" class="hidden rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
+              <p class="text-sm text-red-700 dark:text-red-300" id="preview-error-text"></p>
+            </div>
+          </div>
+
+          <!-- Field Weights Section -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Field Weights</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                Adjust BM25 field boosting for FTS5 and hybrid search modes. Higher weights increase the importance of matches in that field.
+              </p>
+            </div>
+
+            <form id="relevanceForm" class="space-y-6">
+              <div class="space-y-5">
+                <!-- Title Weight -->
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label for="fts5_title_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
+                      Title Weight
+                    </label>
+                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
+                      <span id="title-weight-value" class="font-mono font-semibold text-indigo-600 dark:text-indigo-400">${settings.fts5_title_boost ?? 5}</span>
+                      <span class="text-xs ml-1">(default: 5.0)</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="fts5_title_boost"
+                    name="fts5_title_boost"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value="${settings.fts5_title_boost ?? 5}"
+                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    oninput="document.getElementById('title-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
+                  />
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    Boost relevance for title matches \u2014 the most important field for keyword search
+                  </p>
+                </div>
+
+                <!-- Slug Weight -->
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label for="fts5_slug_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
+                      Slug Weight
+                    </label>
+                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
+                      <span id="slug-weight-value" class="font-mono font-semibold text-purple-600 dark:text-purple-400">${settings.fts5_slug_boost ?? 2}</span>
+                      <span class="text-xs ml-1">(default: 2.0)</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="fts5_slug_boost"
+                    name="fts5_slug_boost"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value="${settings.fts5_slug_boost ?? 2}"
+                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                    oninput="document.getElementById('slug-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
+                  />
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    Boost relevance for URL slug matches
+                  </p>
+                </div>
+
+                <!-- Body Weight -->
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label for="fts5_body_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
+                      Body Weight
+                    </label>
+                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
+                      <span id="body-weight-value" class="font-mono font-semibold text-sky-600 dark:text-sky-400">${settings.fts5_body_boost ?? 1}</span>
+                      <span class="text-xs ml-1">(default: 1.0)</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="fts5_body_boost"
+                    name="fts5_body_boost"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value="${settings.fts5_body_boost ?? 1}"
+                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-sky-600"
+                    oninput="document.getElementById('body-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
+                  />
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    Boost relevance for body content matches \u2014 the baseline field
+                  </p>
+                </div>
+              </div>
+
+              <hr class="border-zinc-200 dark:border-zinc-800">
+
+              <!-- Impact Notice -->
+              <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
+                <div class="flex gap-3">
+                  <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <div class="text-sm">
+                    <p class="font-medium text-blue-900 dark:text-blue-100">Applies to FTS5 and Hybrid search modes</p>
+                    <p class="text-blue-700 dark:text-blue-300 mt-1">
+                      Field weights control BM25 relevance scoring. Changes apply immediately to new searches.
+                      Use the <a href="/admin/plugins/ai-search/test" class="underline font-medium hover:text-blue-900 dark:hover:text-blue-100">Test Search</a> page to evaluate different weight configurations.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onclick="resetFieldWeights()"
+                  class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                >
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                  </svg>
+                  Reset to Defaults
+                </button>
+                <button
+                  type="submit"
+                  id="saveWeightsBtn"
+                  class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm"
+                >
+                  Save Field Weights
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Query Synonyms Section -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Custom Synonyms</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                  Define custom synonym groups for domain-specific terms, brand names, or acronyms. For general synonym expansion, enable Query Rewriting (LLM) in Configuration.
+                </p>
+              </div>
+              <label class="flex items-center gap-2 cursor-pointer flex-shrink-0 ml-4">
+                <span class="text-sm text-zinc-600 dark:text-zinc-400">Enabled</span>
+                <input
+                  type="checkbox"
+                  id="synonyms-global-toggle"
+                  ${settings.query_synonyms_enabled !== false ? "checked" : ""}
+                  onchange="toggleSynonymsGlobal(this.checked)"
+                  class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            <!-- Synonym count summary -->
+            <div id="synonyms-summary" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
+              Loading synonym groups...
+            </div>
+
+            <!-- Synonym groups list -->
+            <div id="synonyms-list" class="space-y-2 mb-4">
+            </div>
+
+            <!-- Add new synonym group form (hidden by default) -->
+            <div id="synonym-add-form" class="hidden border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-4 mb-4">
+              <div class="flex items-center gap-3">
+                <input
+                  type="text"
+                  id="synonym-new-terms"
+                  placeholder="Enter comma-separated terms (e.g., coffee, espresso, caffeine)"
+                  class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();saveSynonymGroup()}"
+                />
+                <button
+                  type="button"
+                  onclick="saveSynonymGroup()"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onclick="cancelSynonymAdd()"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+              </div>
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                All terms in a group are equivalent. Minimum 2 terms required.
+              </p>
+            </div>
+
+            <!-- Add button -->
+            <button
+              type="button"
+              id="synonym-add-btn"
+              onclick="showSynonymAddForm()"
+              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add Synonym Group
+            </button>
+
+            <!-- Info callout -->
+            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
+              <div class="flex gap-3">
+                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="text-sm">
+                  <p class="font-medium text-blue-900 dark:text-blue-100">Deterministic &amp; fast \u2014 complements LLM Query Rewriting</p>
+                  <p class="text-blue-700 dark:text-blue-300 mt-1">
+                    Custom synonyms use a lookup table (no AI cost, zero latency). Best for exact mappings like brand names, acronyms, and domain jargon. For broad synonym coverage, use Query Rewriting in the Configuration tab.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Future: Pin/Boost/Bury rules -->
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 5: Analytics (Placeholder)              -->
+      <!-- ========================================== -->
+      <div id="tab-analytics" class="tab-panel hidden">
+        <div class="space-y-6">
+
+          <!-- Stat Cards -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Total Queries (30d)</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-total-queries">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Avg Response Time</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-avg-time">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Zero-Result Rate</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-zero-rate">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Queries Today</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-today">&mdash;</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Row: two-column -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Queries Over Time -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Queries Over Time</h3>
+              <div style="height: 260px; position: relative;">
+                <canvas id="ana-daily-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Mode Distribution -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Mode Distribution</h3>
+              <div style="height: 260px; position: relative;" class="flex items-center justify-center">
+                <canvas id="ana-mode-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tables Row: two-column -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Popular Queries -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Popular Queries</h3>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-popular-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Zero-Result Queries -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Zero-Result Queries</h3>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Content gaps \u2014 what users search for but can't find</p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-zero-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Queries: full-width -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Recent Queries</h3>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Mode</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Results</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Time</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">When</th>
+                  </tr>
+                </thead>
+                <tbody id="ana-recent-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <tr><td colspan="5" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Success Message -->
+      <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">Settings Saved Successfully!</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // =============================================
+      // Tab switching logic
+      // =============================================
+      function switchTab(tabId) {
+        document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.add('hidden'); });
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+          b.classList.remove('border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400');
+          b.classList.add('border-transparent', 'text-zinc-500', 'dark:text-zinc-400');
+        });
+        var panel = document.getElementById('tab-' + tabId);
+        var btn = document.getElementById('tab-btn-' + tabId);
+        if (panel) panel.classList.remove('hidden');
+        if (btn) {
+          btn.classList.remove('border-transparent', 'text-zinc-500', 'dark:text-zinc-400');
+          btn.classList.add('border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400');
+        }
+        window.location.hash = tabId;
+      }
+      // Init from hash or default
+      var initTab = window.location.hash.replace('#', '') || 'overview';
+      switchTab(initTab);
+
+      // =============================================
+      // Form submission with error handling
+      // =============================================
+      document.getElementById('settingsForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        console.log('[AI Search Client] Form submitted');
+
+        try {
+          var btn = e.submitter;
+          btn.innerText = 'Saving...';
+          btn.disabled = true;
+
+          var formData = new FormData(e.target);
+          var selectedCollections = Array.from(formData.getAll('selected_collections')).map(String);
+
+          var data = {
+            enabled: document.getElementById('enabled').checked,
+            ai_mode_enabled: document.getElementById('ai_mode_enabled').checked,
+            selected_collections: selectedCollections,
+            autocomplete_enabled: document.getElementById('autocomplete_enabled').checked,
+            cache_duration: Number(formData.get('cache_duration')),
+            results_limit: Number(formData.get('results_limit')),
+            index_media: document.getElementById('index_media').checked,
+            reranking_enabled: document.getElementById('reranking_enabled').checked,
+            query_rewriting_enabled: document.getElementById('query_rewriting_enabled').checked,
+          };
+
+          console.log('[AI Search Client] Sending data:', data);
+          console.log('[AI Search Client] Selected collections:', selectedCollections);
+
+          var res = await fetch('/admin/plugins/ai-search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+          });
+
+          console.log('[AI Search Client] Response status:', res.status);
+
+          if (res.ok) {
+            var result = await res.json();
+            console.log('[AI Search Client] Save successful:', result);
+            document.getElementById('msg').classList.remove('hidden');
+            setTimeout(function() {
+              document.getElementById('msg').classList.add('hidden');
+              location.reload();
+            }, 2000);
+          } else {
+            var error = await res.text();
+            console.error('[AI Search Client] Save failed:', error);
+            alert('Failed to save settings: ' + error);
+          }
+
+          btn.innerText = 'Save Settings';
+          btn.disabled = false;
+        } catch (error) {
+          console.error('[AI Search Client] Error:', error);
+          alert('Error saving settings: ' + error.message);
+        }
+      });
+
+      // =============================================
+      // Add collection to index
+      // =============================================
+      async function addCollectionToIndex(collectionId) {
+        var form = document.getElementById('settingsForm');
+        var checkbox = document.getElementById('collection_' + collectionId);
+        if (checkbox) {
+          checkbox.checked = true;
+          form.dispatchEvent(new Event('submit'));
+        }
+      }
+
+      // =============================================
+      // Dismiss collection
+      // =============================================
+      async function dismissCollection(collectionId) {
+        var res = await fetch('/admin/plugins/ai-search', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            dismissed_collections: [collectionId]
+          })
+        });
+        if (res.ok) {
+          location.reload();
+        }
+      }
+
+      // =============================================
+      // FTS5 status check on load
+      // =============================================
+      (async function checkFTS5Status() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/fts5/status');
+          if (res.ok) {
+            var body = await res.json();
+            var data = body.data;
+            var statusText = document.getElementById('fts5-status-text');
+            var statsText = document.getElementById('fts5-stats-text');
+            var reindexBtn = document.getElementById('fts5-reindex-btn');
+            if (data.available) {
+              statusText.textContent = 'FTS5 is available';
+              statsText.textContent = data.total_indexed + ' items indexed across ' + Object.keys(data.by_collection || {}).length + ' collections';
+              reindexBtn.disabled = false;
+            } else {
+              statusText.textContent = 'FTS5 tables not created yet';
+              statsText.textContent = 'Run migrations to enable FTS5 full-text search.';
+            }
+          }
+        } catch (e) {
+          console.error('FTS5 status check failed:', e);
+        }
+      })();
+
+      // =============================================
+      // Reindex all collections for FTS5
+      // =============================================
+      async function reindexFTS5All() {
+        var btn = document.getElementById('fts5-reindex-btn');
+        btn.disabled = true;
+        btn.textContent = 'Reindexing...';
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/fts5/reindex-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (res.ok) {
+            var result = await res.json();
+            alert('FTS5 reindex started for ' + (result.collections ? result.collections.length : 0) + ' collections');
+            setTimeout(function() { location.reload(); }, 3000);
+          } else {
+            alert('Failed to start FTS5 reindex');
+            btn.disabled = false;
+            btn.textContent = 'Reindex FTS5';
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Reindex FTS5';
+        }
+      }
+
+      // =============================================
+      // Reindex all collections for Vectorize
+      // =============================================
+      var vectorizePollTimer = null;
+
+      async function reindexVectorizeAll() {
+        var btn = document.getElementById('vectorize-reindex-btn');
+        btn.disabled = true;
+        btn.textContent = 'Reindexing...';
+        var statsText = document.getElementById('vectorize-stats-text');
+        var progressWrap = document.getElementById('vectorize-progress-wrap');
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/vectorize/reindex-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (res.ok) {
+            var result = await res.json();
+            var count = result.collections ? result.collections.length : 0;
+            if (statsText) statsText.textContent = 'Reindexing ' + count + ' collection(s)...';
+            if (progressWrap) progressWrap.classList.remove('hidden');
+            startVectorizePoll();
+          } else {
+            var error = await res.json().catch(function() { return {}; });
+            alert('Failed to start Vectorize reindex: ' + (error.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.textContent = 'Reindex Vectorize';
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Reindex Vectorize';
+        }
+      }
+
+      function startVectorizePoll() {
+        if (vectorizePollTimer) clearTimeout(vectorizePollTimer);
+        pollVectorizeStatus();
+      }
+
+      async function pollVectorizeStatus() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/status');
+          if (!res.ok) { vectorizePollTimer = setTimeout(pollVectorizeStatus, 3000); return; }
+          var json = await res.json();
+          var data = json.data || {};
+          var totalItems = 0, indexedItems = 0, hasIndexing = false, hasCompleted = false;
+          for (var colId in data) {
+            var s = data[colId];
+            totalItems += (s.total_items || 0);
+            indexedItems += (s.indexed_items || 0);
+            if (s.status === 'indexing') hasIndexing = true;
+            if (s.status === 'completed') hasCompleted = true;
+          }
+          var pct = totalItems > 0 ? Math.round((indexedItems / totalItems) * 100) : 0;
+          var bar = document.getElementById('vectorize-progress-bar');
+          var label = document.getElementById('vectorize-progress-label');
+          var countEl = document.getElementById('vectorize-progress-count');
+          var statsText = document.getElementById('vectorize-stats-text');
+          if (bar) bar.style.width = pct + '%';
+          if (countEl) countEl.textContent = indexedItems + '/' + totalItems;
+          if (label) label.textContent = hasIndexing ? 'Embedding & indexing...' : 'Complete';
+
+          if (hasIndexing) {
+            if (statsText) statsText.textContent = 'Indexing: ' + indexedItems + '/' + totalItems + ' items (' + pct + '%)';
+            vectorizePollTimer = setTimeout(pollVectorizeStatus, 3000);
+          } else {
+            // Done
+            var btn = document.getElementById('vectorize-reindex-btn');
+            btn.disabled = false;
+            btn.textContent = 'Reindex Vectorize';
+            if (bar) bar.style.width = '100%';
+            if (label) label.textContent = 'Complete';
+            if (countEl) countEl.textContent = indexedItems + '/' + totalItems;
+            if (statsText) statsText.textContent = 'Vectorize index: ' + totalItems + ' items indexed';
+            setTimeout(function() {
+              var wrap = document.getElementById('vectorize-progress-wrap');
+              if (wrap) wrap.classList.add('hidden');
+            }, 5000);
+          }
+        } catch (e) {
+          vectorizePollTimer = setTimeout(pollVectorizeStatus, 5000);
+        }
+      }
+
+      // Auto-start Vectorize polling if indexing is already in progress
+      (async function checkVectorizeOnLoad() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/status');
+          if (res.ok) {
+            var json = await res.json();
+            var data = json.data || {};
+            var hasIndexing = false;
+            for (var colId in data) {
+              if (data[colId].status === 'indexing') hasIndexing = true;
+            }
+            if (hasIndexing) {
+              var wrap = document.getElementById('vectorize-progress-wrap');
+              var btn = document.getElementById('vectorize-reindex-btn');
+              if (wrap) wrap.classList.remove('hidden');
+              if (btn) { btn.disabled = true; btn.textContent = 'Reindexing...'; }
+              startVectorizePoll();
+            }
+          }
+        } catch (e) { /* ignore */ }
+      })();
+
+      // =============================================
+      // Benchmark Functions
+      // =============================================
+
+      var benchDescriptions = {
+        scifact: 'BEIR SciFact \u2014 scientific abstracts with 300+ test queries and ground-truth relevance judgments.',
+        nfcorpus: 'BEIR NFCorpus \u2014 biomedical IR from NutritionFacts with 323 queries and rich multi-level relevance (38 qrels/query).',
+        fiqa: 'BEIR FiQA-2018 \u2014 financial opinion Q&A from StackExchange/Reddit with 648 test queries.'
+      };
+
+      function getBenchDataset() {
+        return document.getElementById('bench-dataset').value;
+      }
+
+      async function switchBenchmarkDataset() {
+        var dataset = getBenchDataset();
+        // Update description
+        document.getElementById('bench-description').textContent = benchDescriptions[dataset] ||
+          'BEIR benchmark dataset. Seed, index, then evaluate with IR metrics.';
+        // Reset UI
+        document.getElementById('benchmark-status').textContent = 'Checking benchmark status...';
+        document.getElementById('benchmark-results').classList.add('hidden');
+        ['seed','index','vectorize','fts5','keyword','hybrid','ai','purge'].forEach(function(id) {
+          var btn = document.getElementById('bench-' + id + '-btn');
+          if (btn) btn.disabled = true;
+        });
+        document.getElementById('bench-seed-btn').disabled = false;
+        document.getElementById('bench-seed-btn').textContent = 'Seed Data';
+        document.getElementById('bench-data-badge').classList.add('hidden');
+        await checkBenchmarkStatus(dataset);
+        // Re-render saved results (filtered to selected dataset)
+        renderAllBenchmarkRuns();
+      }
+
+      // Check benchmark status on page load
+      // Cached status data for reactive UI updates
+      var _lastBenchStatus = null;
+
+      function updateBenchmarkStatusText() {
+        var d = _lastBenchStatus;
+        if (!d) return;
+        var statusEl = document.getElementById('benchmark-status');
+        var corpusSelect = document.getElementById('bench-corpus-size');
+        var evalCount = d.evaluable_queries || d.query_count;
+        var selectedSize = corpusSelect.value;
+
+        if (d.seeded) {
+          // Determine expected doc count for the selected corpus option
+          var expectedCount = selectedSize === 'full' ? d.corpus_size : d.subset_size;
+          if (expectedCount && d.seeded_count !== expectedCount) {
+            statusEl.textContent = 'Seeded: ' + d.seeded_count.toLocaleString() + ' docs \u2014 selected: ' +
+              corpusSelect.options[corpusSelect.selectedIndex].textContent +
+              '. Click "Re-seed Data" to update.';
+          } else {
+            statusEl.textContent = 'Benchmark data seeded: ' + d.seeded_count.toLocaleString() + ' documents (' + evalCount + ' evaluable queries)';
+          }
+        } else {
+          statusEl.textContent = 'Dataset: ' + d.dataset + ' (' + d.corpus_size.toLocaleString() + ' docs, ' + evalCount + ' evaluable queries) \u2014 Not yet seeded';
+        }
+      }
+
+      async function checkBenchmarkStatus(dataset) {
+        if (!dataset) dataset = getBenchDataset();
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/benchmark/status?dataset=' + dataset);
+          if (res.ok) {
+            var body = await res.json();
+            var d = body.data;
+            _lastBenchStatus = d;
+            var statusEl = document.getElementById('benchmark-status');
+            var corpusSelect = document.getElementById('bench-corpus-size');
+            var dataBadge = document.getElementById('bench-data-badge');
+
+            // Show/hide KV data badge
+            if (d.data_available) {
+              dataBadge.classList.add('hidden');
+            } else {
+              dataBadge.classList.remove('hidden');
+              statusEl.textContent = 'Dataset data not uploaded to KV. Run: npx tsx scripts/generate-benchmark-data.ts --dataset ' + dataset;
+              return;
+            }
+
+            // Update corpus size options with actual counts
+            if (d.subset_size && d.corpus_size) {
+              corpusSelect.options[0].textContent = 'Subset (' + d.subset_size.toLocaleString() + ' docs)';
+              corpusSelect.options[1].textContent = 'Full corpus (' + d.corpus_size.toLocaleString() + ' docs)';
+            } else if (d.corpus_size) {
+              corpusSelect.options[1].textContent = 'Full corpus (' + d.corpus_size.toLocaleString() + ' docs)';
+            }
+
+            // Auto-select the corpus option matching what's currently seeded
+            if (d.seeded && d.subset_size && d.seeded_count <= d.subset_size) {
+              corpusSelect.value = 'subset';
+            } else if (d.seeded) {
+              corpusSelect.value = 'full';
+            }
+
+            // Update Queries dropdown "All" option with actual evaluable count
+            var querySelect = document.getElementById('bench-query-count');
+            var evalCount = d.evaluable_queries || d.query_count;
+            var allOption = querySelect.options[querySelect.options.length - 1];
+            allOption.textContent = 'All (' + evalCount.toLocaleString() + ')';
+
+            if (d.seeded) {
+              document.getElementById('bench-seed-btn').textContent = 'Re-seed Data';
+              document.getElementById('bench-index-btn').disabled = false;
+              document.getElementById('bench-vectorize-btn').disabled = false;
+              document.getElementById('bench-fts5-btn').disabled = false;
+              document.getElementById('bench-keyword-btn').disabled = false;
+              document.getElementById('bench-hybrid-btn').disabled = false;
+              document.getElementById('bench-ai-btn').disabled = false;
+              document.getElementById('bench-purge-btn').disabled = false;
+            }
+
+            // Set status text (uses cached _lastBenchStatus)
+            updateBenchmarkStatusText();
+          }
+        } catch (e) {
+          document.getElementById('benchmark-status').textContent = 'Could not check benchmark status: ' + e.message;
+        }
+      }
+      checkBenchmarkStatus();
+
+      async function seedBenchmark() {
+        var btn = document.getElementById('bench-seed-btn');
+        var corpusSize = document.getElementById('bench-corpus-size').value;
+        var dataset = getBenchDataset();
+        btn.textContent = 'Seeding (' + corpusSize + ')...';
+        btn.disabled = true;
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/benchmark/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ corpus_size: corpusSize, dataset: dataset })
+          });
+          var data = await res.json();
+          if (data.success) {
+            document.getElementById('benchmark-status').textContent = data.message;
+            btn.textContent = 'Re-seed Data';
+            document.getElementById('bench-index-btn').disabled = false;
+            document.getElementById('bench-vectorize-btn').disabled = false;
+            document.getElementById('bench-fts5-btn').disabled = false;
+            document.getElementById('bench-keyword-btn').disabled = false;
+            document.getElementById('bench-hybrid-btn').disabled = false;
+            document.getElementById('bench-ai-btn').disabled = false;
+            document.getElementById('bench-purge-btn').disabled = false;
+          } else {
+            alert('Seed failed: ' + (data.error || 'Unknown error'));
+            btn.textContent = 'Seed Data';
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+          btn.textContent = 'Seed Data';
+        }
+        btn.disabled = false;
+      }
+
+      async function indexBenchmark() {
+        var btn = document.getElementById('bench-index-btn');
+        btn.disabled = true;
+        var statusEl = document.getElementById('benchmark-status');
+        var dataset = getBenchDataset();
+
+        var totalIndexed = 0;
+        var remaining = 1;
+        var batchNum = 0;
+
+        while (remaining > 0) {
+          batchNum++;
+          btn.textContent = 'Indexing batch ' + batchNum + '...';
+          try {
+            var res = await fetch('/admin/plugins/ai-search/api/benchmark/index-fts5-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ batch_size: 200, dataset: dataset })
+            });
+            var data = await res.json();
+            if (!data.success) {
+              alert('FTS5 indexing failed: ' + (data.error || 'Unknown error'));
+              break;
+            }
+            totalIndexed += data.indexed;
+            remaining = data.remaining;
+            var done = data.total - remaining;
+            statusEl.textContent = 'FTS5 indexing: ' + done + '/' + data.total + ' docs indexed...';
+            btn.textContent = 'Indexing... (' + done + '/' + data.total + ')';
+          } catch (e) {
+            alert('FTS5 indexing error: ' + e.message);
+            break;
+          }
+        }
+
+        statusEl.textContent = 'FTS5 indexing complete: ' + totalIndexed + ' docs indexed in ' + batchNum + ' batches.';
+        btn.textContent = 'Index (FTS5)';
+        btn.disabled = false;
+      }
+
+      async function indexBenchmarkVectorize() {
+        var btn = document.getElementById('bench-vectorize-btn');
+        btn.disabled = true;
+        var statusEl = document.getElementById('benchmark-status');
+        var dataset = getBenchDataset();
+
+        // Reset index meta first
+        try {
+          await fetch('/admin/plugins/ai-search/api/benchmark/index-vectorize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataset: dataset })
+          });
+        } catch (e) { /* continue anyway */ }
+
+        var offset = 0;
+        var remaining = 1;
+        var batchNum = 0;
+        var totalChunks = 0;
+
+        while (remaining > 0) {
+          batchNum++;
+          btn.textContent = 'Embedding batch ' + batchNum + '...';
+          try {
+            var res = await fetch('/admin/plugins/ai-search/api/benchmark/index-vectorize-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ batch_size: 25, offset: offset, dataset: dataset })
+            });
+            var data = await res.json();
+            if (!data.success) {
+              alert('Vectorize indexing failed: ' + (data.error || 'Unknown error'));
+              break;
+            }
+            totalChunks += data.indexed;
+            offset = data.offset;
+            remaining = data.remaining;
+            var done = data.total - remaining;
+            statusEl.textContent = 'Vectorize: ' + done + '/' + data.total + ' docs embedded (' + totalChunks + ' chunks)...';
+            btn.textContent = 'Embedding... (' + done + '/' + data.total + ')';
+          } catch (e) {
+            alert('Vectorize indexing error: ' + e.message);
+            break;
+          }
+        }
+
+        statusEl.textContent = 'Vectorize indexing complete: ' + totalChunks + ' chunks indexed in ' + batchNum + ' batches.';
+        btn.textContent = 'Index (Vectorize)';
+        btn.disabled = false;
+      }
+
+      async function runBenchmark(mode) {
+        var btn = document.getElementById('bench-' + mode + '-btn');
+        var origText = btn.textContent;
+        btn.textContent = 'Running...';
+        btn.disabled = true;
+
+        var progressDiv = document.getElementById('benchmark-progress');
+        var progressText = document.getElementById('benchmark-progress-text');
+        var progressBar = document.getElementById('benchmark-progress-bar');
+        progressDiv.classList.remove('hidden');
+        progressBar.style.width = '2%';
+
+        var maxQueries = parseInt(document.getElementById('bench-query-count').value, 10);
+        var dataset = getBenchDataset();
+        var BATCH_SIZE = 15;
+        var startTime = Date.now();
+
+        try {
+          // Step 1: Get evaluable query IDs
+          progressText.textContent = 'Fetching query list...';
+          var idsRes = await fetch('/admin/plugins/ai-search/api/benchmark/query-ids?max_queries=' + maxQueries + '&dataset=' + dataset);
+          var idsData = await idsRes.json();
+          if (!idsData.success) {
+            alert('Failed to get query IDs: ' + (idsData.error || 'Unknown error'));
+            progressDiv.classList.add('hidden');
+            btn.textContent = origText;
+            btn.disabled = false;
+            return;
+          }
+
+          var allQueryIds = idsData.query_ids;
+          var totalQueries = allQueryIds.length;
+          progressText.textContent = 'Evaluating ' + mode + ' mode: 0/' + totalQueries + ' queries...';
+
+          // Step 2: Process in batches
+          var allPerQuery = [];
+          for (var i = 0; i < totalQueries; i += BATCH_SIZE) {
+            var batchIds = allQueryIds.slice(i, i + BATCH_SIZE);
+            var batchRes = await fetch('/admin/plugins/ai-search/api/benchmark/evaluate-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mode: mode, limit: 10, query_ids: batchIds, dataset: dataset })
+            });
+            var batchData = await batchRes.json();
+
+            if (!batchData.success) {
+              alert('Batch evaluation failed: ' + (batchData.error || 'Unknown error'));
+              break;
+            }
+
+            allPerQuery = allPerQuery.concat(batchData.per_query);
+            var done = Math.min(i + BATCH_SIZE, totalQueries);
+            var pct = Math.round((done / totalQueries) * 100);
+            progressBar.style.width = pct + '%';
+            progressText.textContent = 'Evaluating ' + mode + ' mode: ' + done + '/' + totalQueries + ' queries...';
+          }
+
+          // Step 3: Compute aggregate metrics client-side
+          var totalTime = Date.now() - startTime;
+          var n = allPerQuery.length;
+          if (n > 0) {
+            var sumNDCG = 0, sumPrec = 0, sumRecall = 0, sumMRR = 0;
+            for (var j = 0; j < n; j++) {
+              sumNDCG += allPerQuery[j].ndcg;
+              sumPrec += allPerQuery[j].precision;
+              sumRecall += allPerQuery[j].recall;
+              sumMRR += allPerQuery[j].mrr;
+            }
+            var data = {
+              success: true,
+              mode: mode,
+              limit: 10,
+              queries_evaluated: n,
+              total_time_ms: totalTime,
+              avg_query_time_ms: Math.round(totalTime / n),
+              metrics: {
+                ndcg_at_k: sumNDCG / n,
+                precision_at_k: sumPrec / n,
+                recall_at_k: sumRecall / n,
+                mrr: sumMRR / n
+              },
+              per_query: allPerQuery
+            };
+            progressBar.style.width = '100%';
+            showBenchmarkResults(data, mode);
+          } else {
+            alert('No queries were evaluated.');
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+
+        progressDiv.classList.add('hidden');
+        btn.textContent = origText;
+        btn.disabled = false;
+      }
+
+      // Persist benchmark results in localStorage across page refreshes
+      var BENCH_STORAGE_KEY = 'sonicjs_benchmark_runs';
+
+      function loadBenchmarkRuns() {
+        try {
+          var stored = localStorage.getItem(BENCH_STORAGE_KEY);
+          return stored ? JSON.parse(stored) : [];
+        } catch (e) { return []; }
+      }
+
+      function saveBenchmarkRuns(runs) {
+        try { localStorage.setItem(BENCH_STORAGE_KEY, JSON.stringify(runs)); } catch (e) { /* ignore */ }
+      }
+
+      var benchmarkRuns = loadBenchmarkRuns();
+      var benchmarkHistory = [];
+
+      // Restore and render saved results on page load
+      if (benchmarkRuns.length > 0) {
+        renderAllBenchmarkRuns();
+      }
+
+      function showBenchmarkResults(data, mode) {
+        var resultsDiv = document.getElementById('benchmark-results');
+        var dataset = getBenchDataset();
+
+        // Store in current session history
+        benchmarkHistory = benchmarkHistory.filter(function(h) { return h.mode !== mode || h.dataset !== dataset; });
+        benchmarkHistory.push({ mode: mode, dataset: dataset, data: data });
+
+        // Also persist to localStorage with dataset + corpus label
+        var corpusLabel = document.getElementById('bench-corpus-size').value;
+        var runKey = dataset + '_' + corpusLabel + '_' + mode;
+        var runEntry = {
+          key: runKey,
+          mode: mode,
+          dataset: dataset,
+          corpus: corpusLabel,
+          corpus_size: data.corpus_size,
+          metrics: data.metrics,
+          limit: data.limit,
+          queries_evaluated: data.queries_evaluated,
+          total_time_ms: data.total_time_ms,
+          avg_query_time_ms: data.avg_query_time_ms,
+          timestamp: new Date().toISOString()
+        };
+        benchmarkRuns = benchmarkRuns.filter(function(r) { return r.key !== runKey; });
+        benchmarkRuns.push(runEntry);
+        saveBenchmarkRuns(benchmarkRuns);
+
+        renderAllBenchmarkRuns();
+        resultsDiv.classList.remove('hidden');
+      }
+
+      function renderAllBenchmarkRuns() {
+        var resultsDiv = document.getElementById('benchmark-results');
+        var titleEl = document.getElementById('benchmark-results-title');
+        var metricsDiv = document.getElementById('benchmark-metrics');
+        var detailsDiv = document.getElementById('benchmark-details');
+
+        if (benchmarkRuns.length === 0) {
+          resultsDiv.classList.add('hidden');
+          return;
+        }
+
+        var datasetNames = { scifact: 'SciFact', nfcorpus: 'NFCorpus', fiqa: 'FiQA-2018' };
+        var modeOrder = ['fts5', 'hybrid', 'ai', 'keyword'];
+        var modeLabels = { fts5: 'FTS5', keyword: 'Keyword', hybrid: 'Hybrid', ai: 'AI/Vectorize' };
+
+        titleEl.textContent = 'Benchmark Results (k=10)';
+
+        // Group by dataset \u2192 corpus \u2192 mode
+        var byDataset = {};
+        var datasetOrder = ['scifact', 'nfcorpus', 'fiqa'];
+        for (var i = 0; i < benchmarkRuns.length; i++) {
+          var r = benchmarkRuns[i];
+          var ds = r.dataset || 'scifact';
+          if (!byDataset[ds]) byDataset[ds] = {};
+          var corpus = r.corpus || 'subset';
+          if (!byDataset[ds][corpus]) byDataset[ds][corpus] = [];
+          byDataset[ds][corpus].push(r);
+        }
+
+        // Build a comparison table for each dataset+corpus group
+        var html = '';
+        for (var di = 0; di < datasetOrder.length; di++) {
+          var dsKey = datasetOrder[di];
+          if (!byDataset[dsKey]) continue;
+          var corpusGroups = byDataset[dsKey];
+          var corpusKeys = Object.keys(corpusGroups).sort();
+
+          for (var ci = 0; ci < corpusKeys.length; ci++) {
+            var corpusKey = corpusKeys[ci];
+            var runs = corpusGroups[corpusKey];
+            runs.sort(function(a, b) { return modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode); });
+            var sizeLabel = runs[0].corpus_size ? runs[0].corpus_size.toLocaleString() + ' docs' : '';
+            var corpusDisplay = corpusKey === 'full' ? 'Full' : 'Subset';
+            if (sizeLabel) corpusDisplay += ' (' + sizeLabel + ')';
+
+            // Section header
+            html += '<div class="col-span-2 md:col-span-4' + (di > 0 || ci > 0 ? ' mt-5 pt-4 border-t border-zinc-200 dark:border-zinc-700' : '') + '">' +
+              '<div class="flex items-center gap-2 mb-2">' +
+                '<span class="text-sm font-bold text-zinc-900 dark:text-white">' + (datasetNames[dsKey] || dsKey) + '</span>' +
+                '<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">' + corpusDisplay + '</span>' +
+              '</div>' +
+            '</div>';
+
+            // Table header
+            html += '<div class="col-span-2 md:col-span-4">' +
+              '<table class="w-full text-sm" style="table-layout:fixed">' +
+              '<colgroup>' +
+                '<col style="width:18%">' +
+                '<col style="width:15%">' +
+                '<col style="width:13%">' +
+                '<col style="width:15%">' +
+                '<col style="width:13%">' +
+                '<col style="width:13%">' +
+                '<col style="width:13%">' +
+              '</colgroup>' +
+              '<thead><tr class="text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">' +
+              '<th class="text-left py-2 font-medium">Mode</th>' +
+              '<th class="text-right py-2 font-medium">nDCG@10</th>' +
+              '<th class="text-right py-2 font-medium">P@10</th>' +
+              '<th class="text-right py-2 font-medium">Recall@10</th>' +
+              '<th class="text-right py-2 font-medium">MRR</th>' +
+              '<th class="text-right py-2 font-medium">Queries</th>' +
+              '<th class="text-right py-2 font-medium">Avg ms</th>' +
+              '</tr></thead><tbody>';
+
+            for (var ri = 0; ri < runs.length; ri++) {
+              var run = runs[ri];
+              var m = run.metrics;
+              var mc = run.mode === 'fts5' ? 'indigo' : run.mode === 'ai' ? 'cyan' : run.mode === 'hybrid' ? 'purple' : 'zinc';
+
+              html += '<tr class="border-b border-zinc-100 dark:border-zinc-800">' +
+                '<td class="py-2.5 font-semibold text-' + mc + '-600 dark:text-' + mc + '-400">' + (modeLabels[run.mode] || run.mode.toUpperCase()) + '</td>' +
+                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.ndcg_at_k * 100).toFixed(1) + '%</td>' +
+                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.precision_at_k * 100).toFixed(1) + '%</td>' +
+                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.recall_at_k * 100).toFixed(1) + '%</td>' +
+                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.mrr * 100).toFixed(1) + '%</td>' +
+                '<td class="py-2.5 text-right text-zinc-500 dark:text-zinc-400">' + run.queries_evaluated + '</td>' +
+                '<td class="py-2.5 text-right text-zinc-500 dark:text-zinc-400">' + run.avg_query_time_ms + 'ms</td>' +
+              '</tr>';
+            }
+
+            html += '</tbody></table></div>';
+          }
+        }
+
+        // Summary + clear button
+        html += '<div class="col-span-2 md:col-span-4 mt-4 flex items-center justify-between">' +
+          '<span class="text-xs text-zinc-400">' + benchmarkRuns.length + ' total runs across ' + Object.keys(byDataset).length + ' datasets</span>' +
+          '<button onclick="clearBenchmarkHistory()" class="text-xs text-zinc-400 hover:text-red-500 underline">Clear all results</button>' +
+          '</div>';
+
+        metricsDiv.innerHTML = html;
+        detailsDiv.textContent = '';
+        resultsDiv.classList.remove('hidden');
+      }
+
+      function getRelativeTime(date) {
+        var now = new Date();
+        var diff = Math.floor((now - date) / 1000);
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return Math.floor(diff / 86400) + 'd ago';
+      }
+
+      function clearBenchmarkHistory() {
+        if (!confirm('Clear all saved benchmark results?')) return;
+        benchmarkRuns = [];
+        benchmarkHistory = [];
+        saveBenchmarkRuns([]);
+        document.getElementById('benchmark-results').classList.add('hidden');
+      }
+
+      async function purgeBenchmark() {
+        var dataset = getBenchDataset();
+        if (!confirm('Remove all ' + dataset + ' benchmark data? This will delete benchmark documents and index entries.')) return;
+        var btn = document.getElementById('bench-purge-btn');
+        btn.textContent = 'Purging...';
+        btn.disabled = true;
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/benchmark/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataset: dataset })
+          });
+          var data = await res.json();
+          if (data.success) {
+            document.getElementById('benchmark-status').textContent = data.message + '. Benchmark data removed.';
+            document.getElementById('benchmark-results').classList.add('hidden');
+            benchmarkHistory = benchmarkHistory.filter(function(h) { return h.dataset !== dataset; });
+            document.getElementById('bench-seed-btn').textContent = 'Seed Data';
+            document.getElementById('bench-index-btn').disabled = true;
+            document.getElementById('bench-vectorize-btn').disabled = true;
+            document.getElementById('bench-fts5-btn').disabled = true;
+            document.getElementById('bench-keyword-btn').disabled = true;
+            document.getElementById('bench-hybrid-btn').disabled = true;
+            document.getElementById('bench-ai-btn').disabled = true;
+            document.getElementById('bench-purge-btn').disabled = true;
+          } else {
+            alert('Purge failed: ' + (data.error || 'Unknown error'));
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+        btn.textContent = 'Purge Data';
+        btn.disabled = false;
+      }
+
+      // =============================================
+      // Relevance: Field Weights
+      // =============================================
+      document.getElementById('relevanceForm')?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var btn = document.getElementById('saveWeightsBtn');
+        var origText = btn.textContent;
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+
+        try {
+          var formData = new FormData(e.target);
+          var data = {
+            fts5_title_boost: parseFloat(formData.get('fts5_title_boost')),
+            fts5_slug_boost: parseFloat(formData.get('fts5_slug_boost')),
+            fts5_body_boost: parseFloat(formData.get('fts5_body_boost'))
+          };
+
+          var res = await fetch('/admin/plugins/ai-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+
+          if (res.ok) {
+            document.getElementById('msg').classList.remove('hidden');
+            setTimeout(function() {
+              document.getElementById('msg').classList.add('hidden');
+            }, 2000);
+          } else {
+            var error = await res.text();
+            alert('Failed to save field weights: ' + error);
+          }
+        } catch (err) {
+          alert('Error saving field weights: ' + err.message);
+        }
+
+        btn.textContent = origText;
+        btn.disabled = false;
+      });
+
+      function resetFieldWeights() {
+        if (!confirm('Reset all field weights to defaults (Title: 5.0, Slug: 2.0, Body: 1.0)?')) return;
+
+        document.getElementById('fts5_title_boost').value = 5.0;
+        document.getElementById('fts5_slug_boost').value = 2.0;
+        document.getElementById('fts5_body_boost').value = 1.0;
+
+        document.getElementById('title-weight-value').textContent = '5.0';
+        document.getElementById('slug-weight-value').textContent = '2.0';
+        document.getElementById('body-weight-value').textContent = '1.0';
+
+        schedulePreview();
+      }
+
+      // =============================================
+      // Ranking Pipeline
+      // =============================================
+      var pipelineStages = [];
+
+      var STAGE_META = {
+        exactMatch: { name: 'Exact Match', desc: 'Score 1.0 if query appears verbatim in title, 0.0 otherwise' },
+        bm25:       { name: 'BM25 Score',  desc: 'Normalized BM25 score from FTS5 full-text search' },
+        semantic:   { name: 'Semantic Score', desc: 'Cosine similarity from Vectorize AI embeddings' },
+        recency:    { name: 'Recency',     desc: 'Exponential decay based on content age (configurable half-life)' },
+        popularity: { name: 'Popularity',  desc: 'External popularity score (set via API or future analytics)' },
+        custom:     { name: 'Custom Boost', desc: 'Manual pin/boost score for specific content items' }
+      };
+
+      (async function loadPipeline() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/pipeline');
+          var data = await res.json();
+          if (data.success && data.data) {
+            pipelineStages = data.data;
+            renderPipelineStages();
+          }
+        } catch (e) {
+          console.error('Failed to load pipeline config:', e);
+          document.getElementById('pipeline-stages').innerHTML =
+            '<p class="text-sm text-red-500">Failed to load pipeline configuration.</p>';
+        }
+      })();
+
+      function renderPipelineStages() {
+        var container = document.getElementById('pipeline-stages');
+        var html = '';
+
+        for (var i = 0; i < pipelineStages.length; i++) {
+          var s = pipelineStages[i];
+          var meta = STAGE_META[s.type] || { name: s.type, desc: '' };
+          var checked = s.enabled ? 'checked' : '';
+          var weight = parseFloat(s.weight).toFixed(1);
+
+          html += '<div class="p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 ' +
+            (s.enabled ? 'bg-white dark:bg-zinc-800/50' : 'bg-zinc-50 dark:bg-zinc-900 opacity-60') + '" title="' + meta.desc + '">' +
+            '<div class="flex items-center justify-between mb-2">' +
+              '<label class="flex items-center gap-2 cursor-pointer">' +
+                '<input type="checkbox" id="stage-' + s.type + '-enabled" ' + checked + ' ' +
+                  'onchange="toggleStage(\\'' + s.type + '\\', this.checked)" ' +
+                  'class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">' +
+                '<span class="text-sm font-medium text-zinc-950 dark:text-white">' + meta.name + '</span>' +
+              '</label>' +
+              '<span id="stage-' + s.type + '-weight-value" class="text-sm font-mono font-semibold text-indigo-600 dark:text-indigo-400">' + weight + '</span>' +
+            '</div>' +
+            '<input type="range" id="stage-' + s.type + '-weight" min="0" max="10" step="0.1" value="' + weight + '" ' +
+              'class="w-full h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-600" ' +
+              'oninput="updateStageWeight(\\'' + s.type + '\\', this.value)">';
+
+          // Recency half-life config
+          if (s.type === 'recency') {
+            var halfLife = (s.config && s.config.half_life_days) || 30;
+            html += '<div class="flex items-center gap-2 mt-2">' +
+              '<label class="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Half-life:</label>' +
+              '<input type="number" id="stage-recency-halflife" min="1" max="365" value="' + halfLife + '" ' +
+                'class="w-14 rounded bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white px-2 py-0.5 text-xs ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600">' +
+              '<span class="text-xs text-zinc-400">days</span>' +
+            '</div>';
+          }
+
+          html += '</div>';
+        }
+
+        container.innerHTML = html;
+      }
+
+      function toggleStage(type, enabled) {
+        for (var i = 0; i < pipelineStages.length; i++) {
+          if (pipelineStages[i].type === type) {
+            pipelineStages[i].enabled = enabled;
+            break;
+          }
+        }
+        renderPipelineStages();
+        schedulePreview();
+      }
+
+      function updateStageWeight(type, value) {
+        var val = parseFloat(value).toFixed(1);
+        var label = document.getElementById('stage-' + type + '-weight-value');
+        if (label) label.textContent = val;
+        for (var i = 0; i < pipelineStages.length; i++) {
+          if (pipelineStages[i].type === type) {
+            pipelineStages[i].weight = parseFloat(val);
+            break;
+          }
+        }
+        schedulePreview();
+      }
+
+      function resetPipeline() {
+        pipelineStages = [
+          { type: 'exactMatch', weight: 10, enabled: true },
+          { type: 'bm25',       weight: 5,  enabled: true },
+          { type: 'semantic',    weight: 3,  enabled: true },
+          { type: 'recency',     weight: 1,  enabled: true, config: { half_life_days: 30 } },
+          { type: 'popularity',  weight: 0,  enabled: false },
+          { type: 'custom',      weight: 0,  enabled: false }
+        ];
+        renderPipelineStages();
+        schedulePreview();
+      }
+
+      async function savePipeline() {
+        var btn = document.getElementById('savePipelineBtn');
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+
+        // Read recency half-life from input
+        var halfLifeInput = document.getElementById('stage-recency-halflife');
+        if (halfLifeInput) {
+          for (var i = 0; i < pipelineStages.length; i++) {
+            if (pipelineStages[i].type === 'recency') {
+              if (!pipelineStages[i].config) pipelineStages[i].config = {};
+              pipelineStages[i].config.half_life_days = parseInt(halfLifeInput.value, 10) || 30;
+              break;
+            }
+          }
+        }
+
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/pipeline', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stages: pipelineStages })
+          });
+
+          if (res.ok) {
+            document.getElementById('msg').classList.remove('hidden');
+            setTimeout(function() { document.getElementById('msg').classList.add('hidden'); }, 2000);
+          } else {
+            var error = await res.json().catch(function() { return {}; });
+            alert('Failed to save pipeline: ' + (error.error || 'Unknown error'));
+          }
+        } catch (err) {
+          alert('Error saving pipeline: ' + err.message);
+        }
+
+        btn.textContent = 'Save Pipeline';
+        btn.disabled = false;
+      }
+
+      // =============================================
+      // Live Preview: search with current slider values
+      // =============================================
+      var previewTimer = null;
+
+      function schedulePreview() {
+        var query = document.getElementById('preview-query').value.trim();
+        if (!query) return;
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(previewSearch, 600);
+      }
+
+      function sanitizePreviewHtml(html) {
+        if (!html) return '';
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        // Walk nodes: keep only text and <mark> tags
+        var result = '';
+        function walk(node) {
+          if (node.nodeType === 3) {
+            // Text node \u2014 escape HTML entities
+            result += node.textContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          } else if (node.nodeType === 1) {
+            if (node.tagName === 'MARK') {
+              result += '<mark class="bg-yellow-200 dark:bg-yellow-700/50 px-0.5 rounded">';
+              for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i]);
+              result += '</mark>';
+            } else {
+              for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i]);
+            }
+          }
+        }
+        for (var i = 0; i < tmp.childNodes.length; i++) walk(tmp.childNodes[i]);
+        return result;
+      }
+
+      async function previewSearch() {
+        var queryInput = document.getElementById('preview-query');
+        var query = queryInput.value.trim();
+        if (!query) return;
+
+        var btn = document.getElementById('preview-search-btn');
+        var resultsDiv = document.getElementById('preview-results');
+        var emptyDiv = document.getElementById('preview-empty');
+        var errorDiv = document.getElementById('preview-error');
+
+        // Hide previous state
+        resultsDiv.classList.add('hidden');
+        emptyDiv.classList.add('hidden');
+        errorDiv.classList.add('hidden');
+
+        btn.disabled = true;
+        btn.querySelector('svg').classList.add('animate-spin');
+
+        try {
+          var titleWeight = parseFloat(document.getElementById('fts5_title_boost').value);
+          var slugWeight = parseFloat(document.getElementById('fts5_slug_boost').value);
+          var bodyWeight = parseFloat(document.getElementById('fts5_body_boost').value);
+
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: query,
+              title_weight: titleWeight,
+              slug_weight: slugWeight,
+              body_weight: bodyWeight,
+              limit: 10
+            })
+          });
+
+          if (!res.ok) {
+            var errData = await res.json().catch(function() { return { error: 'Request failed' }; });
+            throw new Error(errData.error || 'Preview search failed');
+          }
+
+          var json = await res.json();
+          var data = json.data;
+
+          if (!data.results || data.results.length === 0) {
+            emptyDiv.classList.remove('hidden');
+          } else {
+            renderPreviewResults(data);
+            resultsDiv.classList.remove('hidden');
+          }
+        } catch (err) {
+          document.getElementById('preview-error-text').textContent = err.message;
+          errorDiv.classList.remove('hidden');
+        }
+
+        btn.disabled = false;
+        btn.querySelector('svg').classList.remove('animate-spin');
+      }
+
+      function renderPreviewResults(data) {
+        var metaDiv = document.getElementById('preview-meta');
+        var listDiv = document.getElementById('preview-list');
+
+        // Meta line
+        metaDiv.innerHTML =
+          '<span>' + data.total + ' result' + (data.total !== 1 ? 's' : '') + ' in ' + (data.query_time_ms || 0) + 'ms' +
+          (data.pipeline_applied ? ' <span class="text-purple-600 dark:text-purple-400">(pipeline active)</span>' : '') +
+          '</span>' +
+          '<span class="font-mono">T:' + data.weights.title.toFixed(1) + ' S:' + data.weights.slug.toFixed(1) + ' B:' + data.weights.body.toFixed(1) + '</span>';
+
+        // Result cards
+        var html = '';
+        for (var i = 0; i < data.results.length; i++) {
+          var r = data.results[i];
+          var rank = i + 1;
+          var title = sanitizePreviewHtml(r.highlighted_title || r.title || 'Untitled');
+          var snippet = sanitizePreviewHtml(r.highlighted_body || r.body || '');
+          // Truncate snippet to ~200 chars
+          if (snippet.length > 250) {
+            var cutoff = snippet.lastIndexOf(' ', 250);
+            if (cutoff < 100) cutoff = 250;
+            snippet = snippet.substring(0, cutoff) + '...';
+          }
+          var score = r.bm25_score != null ? parseFloat(r.bm25_score).toFixed(3) : (r.score != null ? parseFloat(r.score).toFixed(3) : '\u2014');
+          var pipelineScore = r.pipeline_score != null ? parseFloat(r.pipeline_score).toFixed(3) : null;
+          var pipelineBadge = pipelineScore !== null
+            ? '<span class="flex-shrink-0 inline-flex items-center rounded-full bg-purple-50 dark:bg-purple-900/30 px-2 py-0.5 text-xs font-mono font-semibold text-purple-700 dark:text-purple-300 ring-1 ring-inset ring-purple-600/20 dark:ring-purple-500/20 ml-1" title="Pipeline Score">' + pipelineScore + '</span>'
+            : '';
+          var collection = r.collection_id || r.collectionId || '';
+
+          html +=
+            '<div class="flex items-start gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">' +
+              '<span class="flex-shrink-0 w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold">' + rank + '</span>' +
+              '<div class="flex-1 min-w-0">' +
+                '<div class="flex items-center justify-between gap-2">' +
+                  '<h4 class="text-sm font-medium text-zinc-950 dark:text-white truncate">' + title + '</h4>' +
+                  '<div class="flex items-center flex-shrink-0">' +
+                    '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 text-xs font-mono font-semibold text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' + score + '</span>' +
+                    pipelineBadge +
+                  '</div>' +
+                '</div>' +
+                (collection ? '<p class="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">' + collection + '</p>' : '') +
+                (snippet ? '<p class="text-xs text-zinc-600 dark:text-zinc-400 mt-1 line-clamp-2">' + snippet + '</p>' : '') +
+              '</div>' +
+            '</div>';
+        }
+
+        listDiv.innerHTML = html;
+      }
+      // =============================================
+      // Query Synonyms
+      // =============================================
+      var synonymGroups = [];
+      var editingSynonymId = null;
+
+      (async function loadSynonyms() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms');
+          var data = await res.json();
+          if (data.success && data.data) {
+            synonymGroups = data.data;
+            renderSynonyms();
+          }
+        } catch (e) {
+          console.error('Failed to load synonym groups:', e);
+          document.getElementById('synonyms-summary').textContent = 'Failed to load synonym groups.';
+        }
+      })();
+
+      function renderSynonyms() {
+        var container = document.getElementById('synonyms-list');
+        var summary = document.getElementById('synonyms-summary');
+        var enabledCount = synonymGroups.filter(function(g) { return g.enabled; }).length;
+        summary.textContent = synonymGroups.length + ' synonym group' + (synonymGroups.length !== 1 ? 's' : '') +
+          ' (' + enabledCount + ' enabled)';
+
+        if (synonymGroups.length === 0) {
+          container.innerHTML = '<p class="text-sm text-zinc-500 dark:text-zinc-400 py-4 text-center">No synonym groups defined. Click "Add Synonym Group" to create one.</p>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < synonymGroups.length; i++) {
+          var g = synonymGroups[i];
+          var isEditing = editingSynonymId === g.id;
+
+          html += '<div class="flex items-center gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 ' +
+            (g.enabled ? 'bg-white dark:bg-zinc-800/50' : 'bg-zinc-50 dark:bg-zinc-900 opacity-60') + '">';
+
+          // Enable/disable toggle
+          html += '<input type="checkbox" ' + (g.enabled ? 'checked' : '') +
+            ' onchange="toggleSynonymGroup(\\'' + g.id + '\\', this.checked)" ' +
+            'class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0" title="Enable/disable this group">';
+
+          if (isEditing) {
+            // Editing mode: show input
+            var termsEscaped = g.terms.join(', ').replace(/"/g, '&quot;');
+            html += '<input type="text" id="synonym-edit-input" value="' + termsEscaped + '" ' +
+              'class="flex-1 rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500" ' +
+              'onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();saveEditSynonym(\\'' + g.id + '\\')}">';
+            html += '<button type="button" onclick="saveEditSynonym(\\'' + g.id + '\\')" ' +
+              'class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 px-2 py-1">Save</button>';
+            html += '<button type="button" onclick="cancelEditSynonym()" ' +
+              'class="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1">Cancel</button>';
+          } else {
+            // Display mode: show term chips
+            html += '<div class="flex-1 flex flex-wrap gap-1.5">';
+            for (var j = 0; j < g.terms.length; j++) {
+              html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' +
+                g.terms[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+            }
+            html += '</div>';
+
+            // Edit & Delete buttons
+            html += '<button type="button" onclick="startEditSynonym(\\'' + g.id + '\\')" ' +
+              'class="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1 flex-shrink-0" title="Edit">Edit</button>';
+            html += '<button type="button" onclick="deleteSynonymGroup(\\'' + g.id + '\\')" ' +
+              'class="text-xs font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 px-2 py-1 flex-shrink-0" title="Delete">Delete</button>';
+          }
+
+          html += '</div>';
+        }
+
+        container.innerHTML = html;
+      }
+
+      function showSynonymAddForm() {
+        document.getElementById('synonym-add-form').classList.remove('hidden');
+        document.getElementById('synonym-add-btn').classList.add('hidden');
+        document.getElementById('synonym-new-terms').focus();
+      }
+
+      function cancelSynonymAdd() {
+        document.getElementById('synonym-add-form').classList.add('hidden');
+        document.getElementById('synonym-add-btn').classList.remove('hidden');
+        document.getElementById('synonym-new-terms').value = '';
+      }
+
+      async function saveSynonymGroup() {
+        var input = document.getElementById('synonym-new-terms');
+        var terms = input.value.split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t.length > 0; });
+        if (terms.length < 2) {
+          alert('Please enter at least 2 comma-separated terms.');
+          return;
+        }
+
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ terms: terms })
+          });
+          var data = await res.json();
+          if (data.success) {
+            synonymGroups.unshift(data.data);
+            renderSynonyms();
+            cancelSynonymAdd();
+            document.getElementById('msg').classList.remove('hidden');
+            setTimeout(function() { document.getElementById('msg').classList.add('hidden'); }, 2000);
+          } else {
+            alert('Error: ' + (data.error || 'Failed to create synonym group'));
+          }
+        } catch (e) {
+          alert('Error creating synonym group: ' + e.message);
+        }
+      }
+
+      async function toggleSynonymGroup(id, enabled) {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enabled })
+          });
+          var data = await res.json();
+          if (data.success) {
+            for (var i = 0; i < synonymGroups.length; i++) {
+              if (synonymGroups[i].id === id) {
+                synonymGroups[i].enabled = enabled;
+                break;
+              }
+            }
+            renderSynonyms();
+          }
+        } catch (e) {
+          console.error('Error toggling synonym group:', e);
+        }
+      }
+
+      function startEditSynonym(id) {
+        editingSynonymId = id;
+        renderSynonyms();
+        var input = document.getElementById('synonym-edit-input');
+        if (input) input.focus();
+      }
+
+      function cancelEditSynonym() {
+        editingSynonymId = null;
+        renderSynonyms();
+      }
+
+      async function saveEditSynonym(id) {
+        var input = document.getElementById('synonym-edit-input');
+        if (!input) return;
+        var terms = input.value.split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t.length > 0; });
+        if (terms.length < 2) {
+          alert('Please enter at least 2 comma-separated terms.');
+          return;
+        }
+
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ terms: terms })
+          });
+          var data = await res.json();
+          if (data.success) {
+            for (var i = 0; i < synonymGroups.length; i++) {
+              if (synonymGroups[i].id === id) {
+                synonymGroups[i] = data.data;
+                break;
+              }
+            }
+            editingSynonymId = null;
+            renderSynonyms();
+          } else {
+            alert('Error: ' + (data.error || 'Failed to update'));
+          }
+        } catch (e) {
+          alert('Error updating synonym group: ' + e.message);
+        }
+      }
+
+      async function deleteSynonymGroup(id) {
+        if (!confirm('Delete this synonym group?')) return;
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms/' + id, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          var data = await res.json();
+          if (data.success) {
+            synonymGroups = synonymGroups.filter(function(g) { return g.id !== id; });
+            renderSynonyms();
+          }
+        } catch (e) {
+          alert('Error deleting synonym group: ' + e.message);
+        }
+      }
+
+      async function toggleSynonymsGlobal(enabled) {
+        try {
+          var res = await fetch('/admin/plugins/ai-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query_synonyms_enabled: enabled })
+          });
+          if (res.ok) {
+            document.getElementById('msg').classList.remove('hidden');
+            setTimeout(function() { document.getElementById('msg').classList.add('hidden'); }, 2000);
+          } else {
+            alert('Failed to update synonym setting');
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+      }
+
+      // =============================================
+      // Analytics Tab
+      // =============================================
+      var analyticsLoaded = false;
+      var dailyChart = null;
+      var modeChart = null;
+
+      // Load analytics when tab is switched to (or on page load if hash is #analytics)
+      var origSwitchTab = switchTab;
+      switchTab = function(tabId) {
+        origSwitchTab(tabId);
+        if (tabId === 'analytics' && !analyticsLoaded) {
+          loadAnalytics();
+        }
+      };
+
+      async function loadAnalytics() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/analytics/extended');
+          if (!res.ok) throw new Error('Failed to fetch analytics');
+          var json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Unknown error');
+          var d = json.data;
+          analyticsLoaded = true;
+
+          // Stat cards
+          document.getElementById('ana-total-queries').textContent = d.total_queries.toLocaleString();
+          document.getElementById('ana-avg-time').textContent = d.avg_response_time_ms > 0 ? d.avg_response_time_ms + 'ms' : 'N/A';
+          document.getElementById('ana-zero-rate').textContent = d.zero_result_rate + '%';
+          document.getElementById('ana-today').textContent = d.queries_today.toLocaleString();
+
+          // Daily chart
+          renderDailyChart(d.daily_counts);
+
+          // Mode chart
+          renderModeChart(d);
+
+          // Popular queries table
+          renderQueryTable('ana-popular-tbody', d.popular_queries, false);
+
+          // Zero-result queries table
+          renderQueryTable('ana-zero-tbody', d.zero_result_queries, true);
+
+          // Recent queries table
+          renderRecentTable(d.recent_queries);
+
+        } catch (e) {
+          console.error('Analytics load error:', e);
+          document.getElementById('ana-total-queries').textContent = 'Error';
+        }
+      }
+
+      function renderDailyChart(dailyCounts) {
+        var canvas = document.getElementById('ana-daily-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        // Fill in missing days with 0
+        var labels = [];
+        var data = [];
+        var countMap = {};
+        for (var i = 0; i < dailyCounts.length; i++) {
+          countMap[dailyCounts[i].date] = dailyCounts[i].count;
+        }
+        var now = new Date();
+        for (var d = 29; d >= 0; d--) {
+          var dt = new Date(now);
+          dt.setDate(dt.getDate() - d);
+          var key = dt.toISOString().split('T')[0];
+          labels.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+          data.push(countMap[key] || 0);
+        }
+
+        var isDark = document.documentElement.classList.contains('dark');
+        var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+        var textColor = isDark ? '#a1a1aa' : '#71717a';
+
+        if (dailyChart) dailyChart.destroy();
+        dailyChart = new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Queries',
+              data: data,
+              borderColor: '#6366f1',
+              backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.3,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              pointHoverBackgroundColor: '#6366f1'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#27272a' : '#fff',
+                titleColor: isDark ? '#e4e4e7' : '#18181b',
+                bodyColor: isDark ? '#a1a1aa' : '#52525b',
+                borderColor: isDark ? '#3f3f46' : '#e4e4e7',
+                borderWidth: 1
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: gridColor },
+                ticks: { color: textColor, maxTicksLimit: 8, font: { size: 11 } }
+              },
+              y: {
+                beginAtZero: true,
+                grid: { color: gridColor },
+                ticks: { color: textColor, font: { size: 11 }, precision: 0 }
+              }
+            }
+          }
+        });
+      }
+
+      function renderModeChart(d) {
+        var canvas = document.getElementById('ana-mode-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        var total = d.fts5_queries + d.keyword_queries + d.ai_queries + d.hybrid_queries;
+        if (total === 0) {
+          canvas.parentElement.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500">No search data yet</p>';
+          return;
+        }
+
+        var isDark = document.documentElement.classList.contains('dark');
+
+        if (modeChart) modeChart.destroy();
+        modeChart = new Chart(canvas, {
+          type: 'doughnut',
+          data: {
+            labels: ['FTS5', 'Keyword', 'AI', 'Hybrid'],
+            datasets: [{
+              data: [d.fts5_queries, d.keyword_queries, d.ai_queries, d.hybrid_queries],
+              backgroundColor: ['#6366f1', '#71717a', '#06b6d4', '#a855f7'],
+              borderColor: isDark ? '#18181b' : '#ffffff',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  color: isDark ? '#a1a1aa' : '#52525b',
+                  padding: 16,
+                  usePointStyle: true,
+                  pointStyleWidth: 10,
+                  font: { size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: isDark ? '#27272a' : '#fff',
+                titleColor: isDark ? '#e4e4e7' : '#18181b',
+                bodyColor: isDark ? '#a1a1aa' : '#52525b',
+                borderColor: isDark ? '#3f3f46' : '#e4e4e7',
+                borderWidth: 1,
+                callbacks: {
+                  label: function(ctx) {
+                    var val = ctx.parsed;
+                    var pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                    return ctx.label + ': ' + val + ' (' + pct + '%)';
+                  }
+                }
+              }
+            },
+            cutout: '60%'
+          }
+        });
+      }
+
+      function escapeAnalyticsHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function renderQueryTable(tbodyId, queries, isZeroResult) {
+        var tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+
+        if (!queries || queries.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="2" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">' +
+            (isZeroResult ? 'No zero-result queries found' : 'No search data yet') + '</td></tr>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < queries.length; i++) {
+          var q = queries[i];
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100">' + escapeAnalyticsHtml(q.query) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + q.count + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
+      function renderRecentTable(queries) {
+        var tbody = document.getElementById('ana-recent-tbody');
+        if (!tbody) return;
+
+        if (!queries || queries.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">No recent queries</td></tr>';
+          return;
+        }
+
+        var modeColors = {
+          fts5: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+          keyword: 'bg-zinc-100 dark:bg-zinc-700/50 text-zinc-700 dark:text-zinc-300',
+          ai: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300',
+          hybrid: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+        };
+
+        var html = '';
+        var now = Date.now();
+        for (var i = 0; i < queries.length; i++) {
+          var q = queries[i];
+          var modeClass = modeColors[q.mode] || modeColors.keyword;
+          var timeStr = q.response_time_ms != null ? q.response_time_ms + 'ms' : '\u2014';
+          var ago = formatTimeAgo(now - q.created_at);
+
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100 max-w-xs truncate">' + escapeAnalyticsHtml(q.query) + '</td>' +
+            '<td class="px-6 py-3"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ' + modeClass + '">' + q.mode + '</span></td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + q.results_count + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + timeStr + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-500 dark:text-zinc-400 text-right whitespace-nowrap">' + ago + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
+      function formatTimeAgo(ms) {
+        var sec = Math.floor(ms / 1000);
+        if (sec < 60) return 'just now';
+        var min = Math.floor(sec / 60);
+        if (min < 60) return min + 'm ago';
+        var hr = Math.floor(min / 60);
+        if (hr < 24) return hr + 'h ago';
+        var days = Math.floor(hr / 24);
+        return days + 'd ago';
+      }
+
+      // Auto-load if we navigated directly to #analytics
+      if (initTab === 'analytics') {
+        loadAnalytics();
+      }
+    </script>
+  `;
+  const layoutData = {
+    title: "Search",
+    pageTitle: "Search",
+    currentPath: "/admin/search",
+    user: data.user,
+    version: data.version,
+    content: pageContent
+  };
+  return renderAdminLayoutCatalyst(layoutData);
+}
+function renderStatCard(label, value, color, icon, colorOverride) {
+  const finalColor = color;
+  const colorClasses = {
+    lime: "bg-lime-50 dark:bg-lime-500/10 text-lime-600 dark:text-lime-400 ring-lime-600/20 dark:ring-lime-500/20",
+    blue: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-600/20 dark:ring-blue-500/20",
+    purple: "bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 ring-purple-600/20 dark:ring-purple-500/20",
+    sky: "bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-sky-600/20 dark:ring-sky-500/20",
+    amber: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-600/20 dark:ring-amber-500/20",
+    red: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 ring-red-600/20 dark:ring-red-500/20"
+  };
+  return `
+    <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+      <div class="p-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="rounded-lg p-2 ring-1 ring-inset ${colorClasses[finalColor] || colorClasses.blue}">
+              ${icon}
+            </div>
+            <div>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">${label}</p>
+              <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white">${value}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// src/routes/admin-search.ts
+var adminSearchRoutes = new Hono();
+adminSearchRoutes.use("*", requireAuth());
+adminSearchRoutes.get("/", async (c) => {
+  try {
+    const user = c.get("user");
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    const service = new AISearchService(db, ai, vectorize);
+    const indexer = new IndexManager(db, ai, vectorize);
+    const fts5Service = new FTS5Service(db);
+    const kv = c.env.CACHE_KV;
+    const benchmarkService = new BenchmarkService(db, kv);
+    const [settings, collections, newCollections, indexStatus, analytics] = await Promise.all([
+      service.getSettings(),
+      service.getAllCollections(),
+      service.detectNewCollections(),
+      indexer.getAllIndexStatus(),
+      service.getSearchAnalytics()
+    ]);
+    let fts5Status = null;
+    try {
+      const isAvailable = await fts5Service.isAvailable();
+      if (isAvailable) {
+        const stats = await fts5Service.getStats();
+        fts5Status = { available: true, total_indexed: stats.total_indexed, by_collection: stats.by_collection };
+      } else {
+        fts5Status = { available: false, total_indexed: 0, by_collection: {} };
+      }
+    } catch {
+      fts5Status = { available: false, total_indexed: 0, by_collection: {} };
+    }
+    let benchmarkStatus = null;
+    try {
+      const { seeded, count } = await benchmarkService.isSeeded();
+      const meta = benchmarkService.getMeta();
+      benchmarkStatus = {
+        seeded,
+        seeded_count: count,
+        corpus_size: meta.corpus_size,
+        query_count: meta.query_count
+      };
+    } catch {
+      benchmarkStatus = null;
+    }
+    return c.html(
+      renderSearchDashboard({
+        settings,
+        collections: collections || [],
+        newCollections: (newCollections || []).map((n) => ({ id: String(n.collection.id), name: n.collection.name })),
+        indexStatus: indexStatus || {},
+        analytics,
+        fts5Status,
+        benchmarkStatus,
+        user: user ? { name: user.email, email: user.email, role: user.role } : void 0,
+        version: getCoreVersion()
+      })
+    );
+  } catch (error) {
+    console.error("Error rendering Search admin page:", error);
+    return c.html(`<p>Error loading search dashboard: ${error instanceof Error ? error.message : String(error)}</p>`, 500);
+  }
+});
+
 // src/routes/index.ts
 var ROUTES_INFO = {
   message: "Core routes available",
@@ -28162,37 +33693,13 @@ var ROUTES_INFO = {
     "adminSettingsRoutes",
     "adminFormsRoutes",
     "publicFormsRoutes",
-    "adminApiReferenceRoutes"
+    "adminApiReferenceRoutes",
+    "adminSearchRoutes"
   ],
   status: "Core package routes ready",
   reference: "https://github.com/sonicjs/sonicjs"
 };
 
-exports.FTS5Service = FTS5Service;
-exports.ROUTES_INFO = ROUTES_INFO;
-exports.adminCheckboxRoutes = adminCheckboxRoutes;
-exports.adminCollectionsRoutes = adminCollectionsRoutes;
-exports.adminDesignRoutes = adminDesignRoutes;
-exports.adminFormsRoutes = adminFormsRoutes;
-exports.adminLogsRoutes = adminLogsRoutes;
-exports.adminMediaRoutes = adminMediaRoutes;
-exports.adminPluginRoutes = adminPluginRoutes;
-exports.adminSettingsRoutes = adminSettingsRoutes;
-exports.admin_api_default = admin_api_default;
-exports.admin_code_examples_default = admin_code_examples_default;
-exports.admin_content_default = admin_content_default;
-exports.admin_testimonials_default = admin_testimonials_default;
-exports.api_content_crud_default = api_content_crud_default;
-exports.api_default = api_default;
-exports.api_media_default = api_media_default;
-exports.api_system_default = api_system_default;
-exports.auth_default = auth_default;
-exports.getConfirmationDialogScript = getConfirmationDialogScript2;
-exports.public_forms_default = public_forms_default;
-exports.renderConfirmationDialog = renderConfirmationDialog2;
-exports.router = router;
-exports.router2 = router2;
-exports.test_cleanup_default = test_cleanup_default;
-exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-QVIYLOFA.cjs.map
-//# sourceMappingURL=chunk-QVIYLOFA.cjs.map
+export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, IndexManager, ROUTES_INFO, RankingPipelineService, SynonymService, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
+//# sourceMappingURL=chunk-KHDT2FGO.js.map
+//# sourceMappingURL=chunk-KHDT2FGO.js.map

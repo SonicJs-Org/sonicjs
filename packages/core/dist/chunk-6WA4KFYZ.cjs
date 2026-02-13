@@ -1,6 +1,6 @@
 'use strict';
 
-var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
+var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
 
 // src/templates/filter-bar.template.ts
 function renderFilterBar(data) {
@@ -68,11 +68,11 @@ function renderFilterBar(data) {
 }
 
 // src/templates/index.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
-chunkSHCYIZAN_cjs.init_logo_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_logo_template();
 
 // src/templates/pages/admin-forms-docs.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderFormsDocsPage(data) {
   const pageContent = `
     <style>
@@ -1353,11 +1353,11 @@ function MyForm() {
     user: data.user,
     version: data.version
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-examples.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderFormsExamplesPage(data) {
   const pageContent = `
     <style>
@@ -2460,11 +2460,11 @@ function renderFormsExamplesPage(data) {
     user: data.user,
     version: data.version
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 exports.renderFilterBar = renderFilterBar;
 exports.renderFormsDocsPage = renderFormsDocsPage;
 exports.renderFormsExamplesPage = renderFormsExamplesPage;
-//# sourceMappingURL=chunk-S6K2H2TS.cjs.map
-//# sourceMappingURL=chunk-S6K2H2TS.cjs.map
+//# sourceMappingURL=chunk-6WA4KFYZ.cjs.map
+//# sourceMappingURL=chunk-6WA4KFYZ.cjs.map

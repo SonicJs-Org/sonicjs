@@ -2,12 +2,14 @@ import type { D1Database } from '@cloudflare/workers-types'
 import type {
   AISearchSettings,
   CollectionInfo,
+  FacetResult,
   NewCollectionNotification,
   SearchQuery,
   SearchResponse,
   SearchResult,
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { FacetService } from './facet.service'
 import { FTS5Service } from './fts5.service'
 import { HybridSearchService } from './hybrid-search.service'
 import { QueryRewriterService } from './query-rewriter.service'
@@ -324,34 +326,124 @@ export class AISearchService {
       }
     }
 
-    let result: SearchResponse
+    // Determine if facets should be computed
+    const shouldComputeFacets = query.facets && settings.facets_enabled
+
+    // Auto-generate facet config on first enable (if none exists)
+    if (shouldComputeFacets && (!settings.facet_config || settings.facet_config.length === 0)) {
+      try {
+        const facetService = new FacetService(this.db)
+        const discovered = await facetService.discoverFields()
+        const config = facetService.autoGenerateConfig(discovered)
+        if (config.length > 0) {
+          await this.updateSettings({ facet_config: config })
+          settings.facet_config = config
+        }
+      } catch (error) {
+        console.warn('[AISearchService] Auto-generate facet config failed:', error)
+      }
+    }
+
+    // Build the search promise
+    let searchPromise: Promise<SearchResponse>
 
     // Hybrid mode - FTS5 + AI combined with RRF, optional rewriting + reranking
     if (query.mode === 'hybrid') {
-      result = await this.searchHybrid(query, settings)
+      searchPromise = this.searchHybrid(query, settings)
     }
     // FTS5 mode - full-text search with BM25 ranking and highlighting
     else if (query.mode === 'fts5') {
-      result = await this.searchFTS5(query, settings)
+      searchPromise = this.searchFTS5(query, settings)
     }
     // AI mode - semantic search using Custom RAG with Vectorize
     else if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
-      result = await this.searchAI(query, settings)
+      searchPromise = this.searchAI(query, settings)
     }
     // Fallback to keyword search
     else {
-      result = await this.searchKeyword(query, settings)
+      searchPromise = this.searchKeyword(query, settings)
+    }
+
+    // Build the facet promise (runs in parallel with search)
+    let facetPromise: Promise<FacetResult[]> | null = null
+    if (shouldComputeFacets && settings.facet_config && settings.facet_config.length > 0) {
+      facetPromise = this.computeFacets(query, settings)
+    }
+
+    // Execute search + facets in parallel
+    const [result, facets] = await Promise.all([
+      searchPromise,
+      facetPromise || Promise.resolve(null),
+    ])
+
+    // Attach facets to response
+    if (facets && facets.length > 0) {
+      result.facets = facets
+    }
+
+    // For AI mode, compute facets from result IDs (can't run in parallel)
+    if (shouldComputeFacets && query.mode === 'ai' && result.results.length > 0 && settings.facet_config?.length) {
+      try {
+        const facetService = new FacetService(this.db)
+        const contentIds = result.results.map(r => r.id).slice(0, 50)
+        result.facets = await facetService.computeFacetsFromIds(
+          settings.facet_config,
+          contentIds,
+          settings.facet_max_values || 20
+        )
+      } catch (error) {
+        console.warn('[AISearchService] AI mode facet computation failed:', error)
+      }
     }
 
     // Apply ranking pipeline (post-processing: re-scores and re-sorts)
     // Zero-cost when no stages are enabled
     try {
-      result = await this.rankingPipeline.apply(result, query.query)
+      const ranked = await this.rankingPipeline.apply(result, query.query)
+      return ranked
     } catch (error) {
       console.warn('[AISearchService] Ranking pipeline error (preserving original order):', error)
+      return result
     }
+  }
 
-    return result
+  /**
+   * Compute facets for the current search query.
+   * Delegates to FacetService with mode-appropriate strategy.
+   */
+  private async computeFacets(
+    query: SearchQuery,
+    settings: AISearchSettings
+  ): Promise<FacetResult[]> {
+    const facetService = new FacetService(this.db)
+    const config = settings.facet_config!
+    const maxValues = settings.facet_max_values || 20
+
+    // Determine collection IDs for facet queries
+    const collectionIds = query.filters?.collections?.length
+      ? query.filters.collections
+      : settings.selected_collections
+
+    try {
+      // FTS5 and hybrid: SQL GROUP BY with FTS5 MATCH
+      if (query.mode === 'fts5' || query.mode === 'hybrid') {
+        const matchQuery = FacetService.sanitizeFTS5Query(query.query)
+        return await facetService.computeFacetsFts(config, matchQuery, collectionIds, maxValues)
+      }
+
+      // Keyword: SQL GROUP BY with LIKE
+      if (query.mode === 'keyword') {
+        return await facetService.computeFacetsKeyword(config, query.query, collectionIds, maxValues)
+      }
+
+      // AI mode: compute from result IDs (limited to top 50)
+      // For AI mode, we can't run SQL facets in parallel because we need
+      // the result IDs first. Return empty and let the caller post-fill.
+      return []
+    } catch (error) {
+      console.warn('[AISearchService] Facet computation failed:', error)
+      return []
+    }
   }
 
   /**
@@ -871,6 +963,11 @@ export class AISearchService {
     ctr_over_time: Array<{ date: string; searches: number; clicks: number; ctr: number }>
     most_clicked_content: Array<{ content_id: string; content_title: string; click_count: number }>
     no_click_searches: Array<{ query: string; search_count: number; results_count_avg: number }>
+    // Facet analytics
+    total_facet_clicks_30d: number
+    top_facet_fields: Array<{ facet_field: string; click_count: number }>
+    top_facet_values: Array<{ facet_field: string; facet_value: string; click_count: number }>
+    facet_clicks_over_time: Array<{ date: string; count: number }>
   }> {
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
     const todayStart = new Date()
@@ -896,6 +993,11 @@ export class AISearchService {
         ctrOverTimeResults,
         mostClickedResults,
         noClickResults,
+        // Facet analytics
+        facetClickCountResult,
+        topFacetFieldsResult,
+        topFacetValuesResult,
+        facetClicksOverTimeResult,
       ] = await Promise.all([
         // Total queries (30 days)
         this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?')
@@ -985,6 +1087,39 @@ export class AISearchService {
           ORDER BY search_count DESC
           LIMIT 20
         `).bind(thirtyDaysAgo).all<{ query: string; search_count: number; results_count_avg: number }>().catch(() => ({ results: [] })),
+
+        // Facet analytics: total facet clicks (30 days)
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_facet_clicks WHERE created_at > datetime('now', '-30 days')")
+          .first<{ count: number }>().catch(() => ({ count: 0 })),
+
+        // Facet analytics: top facet fields by click count (30 days)
+        this.db.prepare(`
+          SELECT facet_field, COUNT(*) as click_count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY facet_field
+          ORDER BY click_count DESC
+          LIMIT 10
+        `).all<{ facet_field: string; click_count: number }>().catch(() => ({ results: [] })),
+
+        // Facet analytics: top facet values by click count (30 days)
+        this.db.prepare(`
+          SELECT facet_field, facet_value, COUNT(*) as click_count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY facet_field, facet_value
+          ORDER BY click_count DESC
+          LIMIT 15
+        `).all<{ facet_field: string; facet_value: string; click_count: number }>().catch(() => ({ results: [] })),
+
+        // Facet analytics: facet clicks over time (daily, 30 days)
+        this.db.prepare(`
+          SELECT date(created_at) as date, COUNT(*) as count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY date(created_at)
+          ORDER BY date ASC
+        `).all<{ date: string; count: number }>().catch(() => ({ results: [] })),
       ])
 
       const totalQueries = totalResult?.count || 0
@@ -1037,6 +1172,21 @@ export class AISearchService {
           search_count: r.search_count,
           results_count_avg: r.results_count_avg,
         })),
+        // Facet analytics
+        total_facet_clicks_30d: (facetClickCountResult as any)?.count || 0,
+        top_facet_fields: ((topFacetFieldsResult as any)?.results || []).map((r: any) => ({
+          facet_field: r.facet_field,
+          click_count: r.click_count,
+        })),
+        top_facet_values: ((topFacetValuesResult as any)?.results || []).map((r: any) => ({
+          facet_field: r.facet_field,
+          facet_value: r.facet_value,
+          click_count: r.click_count,
+        })),
+        facet_clicks_over_time: ((facetClicksOverTimeResult as any)?.results || []).map((r: any) => ({
+          date: r.date,
+          count: r.count,
+        })),
       }
     } catch (error) {
       console.error('Error getting extended analytics:', error)
@@ -1060,6 +1210,10 @@ export class AISearchService {
         ctr_over_time: [],
         most_clicked_content: [],
         no_click_searches: [],
+        total_facet_clicks_30d: 0,
+        top_facet_fields: [],
+        top_facet_values: [],
+        facet_clicks_over_time: [],
       }
     }
   }

@@ -428,6 +428,54 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
             </div>
           </div>
 
+          <!-- Faceted Search -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-4 flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-zinc-950 dark:text-white mb-1">Faceted Search</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                  Auto-discovers filterable fields from your collection schemas.
+                  Enable facets to show filter panels alongside search results.
+                </p>
+              </div>
+              <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="facets_enabled" name="facets_enabled" class="sr-only peer" onchange="toggleFacetsEnabled(this.checked)">
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <span class="ml-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">Enable</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="facet-config-section" class="hidden">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm text-zinc-600 dark:text-zinc-400" id="facet-config-status">Loading facet configuration...</span>
+                <button type="button" onclick="rediscoverFacets()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Re-discover Fields</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm" id="facet-config-table">
+                  <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700">
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Enabled</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Name</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Field</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Type</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody id="facet-config-body">
+                    <tr><td colspan="5" class="py-4 text-center text-zinc-400">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="mt-3 flex justify-end">
+                <button type="button" onclick="saveFacetConfig()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                  Save Facet Config
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Save Button -->
           <div class="flex items-center justify-end">
             <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm transition-colors">
@@ -948,6 +996,75 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
             </div>
           </div>
 
+          <!-- Facet Analytics Section -->
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Analytics</h3>
+
+            <!-- Facet stat card -->
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+              <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="p-5">
+                  <p class="text-sm text-zinc-600 dark:text-zinc-400">Facet Clicks (30d)</p>
+                  <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-facet-clicks">&mdash;</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Facet clicks over time chart -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Clicks Over Time</h3>
+              <div style="height: 220px; position: relative;">
+                <canvas id="ana-facet-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Facet tables: two-column -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <!-- Top Facet Fields -->
+              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Most Used Facets</h3>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Which facet filters users click most (30 days)</p>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                      <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet Field</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ana-facet-fields-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                      <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Top Facet Values -->
+              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Top Facet Values</h3>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Most clicked filter values (30 days)</p>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                      <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Value</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ana-facet-values-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                      <tr><td colspan="3" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Tables Row: two-column -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Popular Queries -->
@@ -1120,6 +1237,8 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
             index_media: document.getElementById('index_media').checked,
             reranking_enabled: document.getElementById('reranking_enabled').checked,
             query_rewriting_enabled: document.getElementById('query_rewriting_enabled').checked,
+            facets_enabled: document.getElementById('facets_enabled').checked,
+            facet_config: facetConfigData.length > 0 ? facetConfigData : undefined,
           };
 
           console.log('[AI Search Client] Sending data:', data);
@@ -2482,6 +2601,9 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
         if (tabId === 'analytics' && !analyticsLoaded) {
           loadAnalytics();
         }
+        if (tabId === 'configuration') {
+          loadFacetConfig();
+        }
       };
 
       async function loadAnalytics() {
@@ -2526,6 +2648,13 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
 
           // No-click searches table
           renderNoClickTable(d.no_click_searches);
+
+          // Facet analytics
+          document.getElementById('ana-facet-clicks').textContent =
+            d.total_facet_clicks_30d > 0 ? d.total_facet_clicks_30d.toLocaleString() : 'No data';
+          renderFacetClicksChart(d.facet_clicks_over_time || []);
+          renderFacetFieldsTable(d.top_facet_fields || []);
+          renderFacetValuesTable(d.top_facet_values || []);
 
         } catch (e) {
           console.error('Analytics load error:', e);
@@ -2841,6 +2970,118 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
         tbody.innerHTML = html;
       }
 
+      var facetClicksChart = null;
+
+      function renderFacetClicksChart(dailyCounts) {
+        var canvas = document.getElementById('ana-facet-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        if (!dailyCounts || dailyCounts.length === 0) {
+          canvas.parentElement.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500">No facet click data yet</p>';
+          return;
+        }
+
+        var labels = [];
+        var data = [];
+        var countMap = {};
+        for (var i = 0; i < dailyCounts.length; i++) {
+          countMap[dailyCounts[i].date] = dailyCounts[i].count;
+        }
+        var now = new Date();
+        for (var dd = 29; dd >= 0; dd--) {
+          var dt = new Date(now);
+          dt.setDate(dt.getDate() - dd);
+          var key = dt.toISOString().split('T')[0];
+          labels.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+          data.push(countMap[key] || 0);
+        }
+
+        var isDark = document.documentElement.classList.contains('dark');
+        var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+        var textColor = isDark ? '#a1a1aa' : '#71717a';
+
+        if (facetClicksChart) facetClicksChart.destroy();
+        facetClicksChart = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Facet Clicks',
+              data: data,
+              backgroundColor: isDark ? 'rgba(168,85,247,0.4)' : 'rgba(168,85,247,0.6)',
+              borderColor: '#a855f7',
+              borderWidth: 1,
+              borderRadius: 3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#27272a' : '#fff',
+                titleColor: isDark ? '#e4e4e7' : '#18181b',
+                bodyColor: isDark ? '#a1a1aa' : '#52525b',
+                borderColor: isDark ? '#3f3f46' : '#e4e4e7',
+                borderWidth: 1
+              }
+            },
+            scales: {
+              x: { grid: { color: gridColor }, ticks: { color: textColor, maxTicksLimit: 8, font: { size: 11 } } },
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 }, precision: 0 } }
+            }
+          }
+        });
+      }
+
+      function renderFacetFieldsTable(items) {
+        var tbody = document.getElementById('ana-facet-fields-tbody');
+        if (!tbody) return;
+
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="2" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">No facet click data yet</td></tr>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var displayName = item.facet_field;
+          if (displayName.startsWith('$.')) displayName = displayName.slice(2);
+          displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100">' + escapeAnalyticsHtml(displayName) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + item.click_count + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
+      function renderFacetValuesTable(items) {
+        var tbody = document.getElementById('ana-facet-values-tbody');
+        if (!tbody) return;
+
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">No facet click data yet</td></tr>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var fieldDisplay = item.facet_field;
+          if (fieldDisplay.startsWith('$.')) fieldDisplay = fieldDisplay.slice(2);
+          fieldDisplay = fieldDisplay.charAt(0).toUpperCase() + fieldDisplay.slice(1);
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-500 dark:text-zinc-400">' + escapeAnalyticsHtml(fieldDisplay) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100">' + escapeAnalyticsHtml(item.facet_value) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + item.click_count + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
       function formatTimeAgo(ms) {
         var sec = Math.floor(ms / 1000);
         if (sec < 60) return 'just now';
@@ -2855,6 +3096,188 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
       // Auto-load if we navigated directly to #analytics
       if (initTab === 'analytics') {
         loadAnalytics();
+      }
+
+      // ==========================================
+      // Faceted Search Configuration
+      // ==========================================
+      var facetConfigData = []; // Current facet config array
+
+      var facetConfigLoaded = false;
+
+      function toggleFacetsEnabled(enabled) {
+        var section = document.getElementById('facet-config-section');
+        if (enabled) {
+          section.classList.remove('hidden');
+          if (!facetConfigLoaded) {
+            loadFacetConfig(true);
+          }
+        } else {
+          section.classList.add('hidden');
+        }
+      }
+
+      async function loadFacetConfig(keepToggleState) {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/facets/config');
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to load config');
+
+          var toggle = document.getElementById('facets_enabled');
+
+          // Only set the toggle from DB on initial page load, not when
+          // the user just clicked it (keepToggleState = true)
+          if (!keepToggleState) {
+            toggle.checked = json.data.enabled;
+            if (json.data.enabled) {
+              document.getElementById('facet-config-section').classList.remove('hidden');
+            }
+          }
+
+          facetConfigData = json.data.config || [];
+          facetConfigLoaded = true;
+
+          if (facetConfigData.length === 0 && (toggle.checked || json.data.enabled)) {
+            // Auto-generate on first load
+            await autoGenerateFacets();
+            return;
+          }
+
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error loading facet config:', error);
+          document.getElementById('facet-config-status').textContent = 'Error loading facet configuration';
+        }
+      }
+
+      async function autoGenerateFacets() {
+        try {
+          document.getElementById('facet-config-status').textContent = 'Auto-discovering fields...';
+          var res = await fetch('/admin/plugins/ai-search/api/facets/auto-generate', { method: 'POST' });
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to auto-generate');
+
+          facetConfigData = json.data.config || [];
+          document.getElementById('facet-config-status').textContent =
+            'Discovered ' + json.data.discovered_count + ' fields, auto-enabled ' + json.data.auto_enabled_count;
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error auto-generating facets:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      async function rediscoverFacets() {
+        try {
+          document.getElementById('facet-config-status').textContent = 'Re-discovering fields...';
+          var res = await fetch('/admin/plugins/ai-search/api/facets/discover');
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to discover');
+
+          var discovered = json.data || [];
+          // Merge: keep existing config, add new discovered fields
+          var existingFields = new Set(facetConfigData.map(function(f) { return f.field; }));
+          var newFields = discovered.filter(function(d) { return !existingFields.has(d.field); });
+
+          for (var i = 0; i < newFields.length; i++) {
+            facetConfigData.push({
+              name: newFields[i].title,
+              field: newFields[i].field,
+              type: newFields[i].type,
+              collections: newFields[i].collections.map(function(c) { return c.id; }),
+              enabled: newFields[i].recommended,
+              source: 'auto',
+              position: facetConfigData.length
+            });
+          }
+
+          document.getElementById('facet-config-status').textContent =
+            discovered.length + ' fields found' + (newFields.length > 0 ? ', ' + newFields.length + ' new' : '');
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error re-discovering facets:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      function renderFacetConfigTable(config) {
+        var tbody = document.getElementById('facet-config-body');
+        if (!config || config.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-zinc-400">No facets configured. Click "Re-discover Fields" to scan collection schemas.</td></tr>';
+          return;
+        }
+
+        var typeBadge = function(type) {
+          switch (type) {
+            case 'builtin': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">built-in</span>';
+            case 'json_array': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">array</span>';
+            case 'json_scalar': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">scalar</span>';
+            default: return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-zinc-100 text-zinc-600">' + type + '</span>';
+          }
+        };
+        var sourceBadge = function(source) {
+          switch (source) {
+            case 'auto': return '<span class="text-xs text-zinc-400">auto</span>';
+            case 'manual': return '<span class="text-xs text-indigo-500">manual</span>';
+            case 'agent': return '<span class="text-xs text-purple-500">agent</span>';
+            default: return '<span class="text-xs text-zinc-400">' + (source || 'auto') + '</span>';
+          }
+        };
+
+        var html = '';
+        for (var i = 0; i < config.length; i++) {
+          var f = config[i];
+          html += '<tr class="border-b border-zinc-100 dark:border-zinc-800">' +
+            '<td class="py-2 px-2"><input type="checkbox" ' + (f.enabled ? 'checked' : '') + ' onchange="toggleFacetConfig(' + i + ', this.checked)" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"></td>' +
+            '<td class="py-2 px-2 text-sm text-zinc-900 dark:text-zinc-100">' + (f.name || f.field) + '</td>' +
+            '<td class="py-2 px-2 text-xs font-mono text-zinc-500 dark:text-zinc-400">' + f.field + '</td>' +
+            '<td class="py-2 px-2">' + typeBadge(f.type) + '</td>' +
+            '<td class="py-2 px-2">' + sourceBadge(f.source) + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+        document.getElementById('facet-config-status').textContent = config.length + ' facets configured, ' + config.filter(function(f) { return f.enabled; }).length + ' enabled';
+      }
+
+      function toggleFacetConfig(index, enabled) {
+        if (facetConfigData[index]) {
+          facetConfigData[index].enabled = enabled;
+          // If manually changed, update source
+          if (facetConfigData[index].source !== 'manual') {
+            facetConfigData[index].source = 'manual';
+          }
+          renderFacetConfigTable(facetConfigData);
+        }
+      }
+
+      async function saveFacetConfig() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/facets/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              enabled: document.getElementById('facets_enabled').checked,
+              config: facetConfigData
+            })
+          });
+          var json = await res.json();
+          if (json.success) {
+            document.getElementById('facet-config-status').textContent = 'Facet configuration saved!';
+            setTimeout(function() {
+              renderFacetConfigTable(facetConfigData);
+            }, 2000);
+          } else {
+            document.getElementById('facet-config-status').textContent = 'Error saving: ' + (json.error || 'Unknown error');
+          }
+        } catch (error) {
+          console.error('Error saving facet config:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      // Load facet config on page load (if on configuration tab)
+      if (initTab === 'configuration') {
+        loadFacetConfig();
       }
     </script>
   `

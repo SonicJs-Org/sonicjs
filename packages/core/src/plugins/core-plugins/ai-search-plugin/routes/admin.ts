@@ -4,13 +4,14 @@ import { requireAuth } from '../../../../middleware'
 import { AISearchService } from '../services/ai-search'
 import { IndexManager } from '../services/indexer'
 import { FTS5Service } from '../services/fts5.service'
+import { FacetService } from '../services/facet.service'
 import { BenchmarkService } from '../services/benchmark.service'
 import { BENCHMARK_DATASETS } from '../data/benchmark-datasets'
 import { RankingPipelineService } from '../services/ranking-pipeline.service'
 import { SynonymService } from '../services/synonym.service'
 import { EmbeddingService } from '../services/embedding.service'
 import { ChunkingService } from '../services/chunking.service'
-import type { AISearchSettings, SearchQuery } from '../types'
+import type { AISearchSettings, FacetDefinition, SearchQuery } from '../types'
 
 type Variables = {
   user: {
@@ -73,6 +74,9 @@ adminRoutes.post('/', async (c) => {
       fts5_slug_boost: body.fts5_slug_boost !== undefined ? clampWeight(body.fts5_slug_boost, currentSettings?.fts5_slug_boost ?? 2.0) : currentSettings?.fts5_slug_boost,
       fts5_body_boost: body.fts5_body_boost !== undefined ? clampWeight(body.fts5_body_boost, currentSettings?.fts5_body_boost ?? 1.0) : currentSettings?.fts5_body_boost,
       query_synonyms_enabled: body.query_synonyms_enabled !== undefined ? Boolean(body.query_synonyms_enabled) : currentSettings?.query_synonyms_enabled,
+      facets_enabled: body.facets_enabled !== undefined ? Boolean(body.facets_enabled) : currentSettings?.facets_enabled,
+      facet_config: Array.isArray(body.facet_config) ? body.facet_config : currentSettings?.facet_config,
+      facet_max_values: body.facet_max_values !== undefined ? Number(body.facet_max_values) : currentSettings?.facet_max_values,
     }
 
     console.log('[AI Search POST] Updated settings selected_collections:', updatedSettings.selected_collections)
@@ -665,6 +669,266 @@ adminRoutes.delete('/api/relevance/synonyms/:id', async (c) => {
   } catch (error) {
     console.error('Error deleting synonym group:', error)
     return c.json({ error: 'Failed to delete synonym group' }, 500)
+  }
+})
+
+// ==========================================
+// Facet Routes
+// ==========================================
+
+/**
+ * GET /admin/api/ai-search/facets/discover
+ * Discover facetable fields from all collection schemas
+ */
+adminRoutes.get('/api/facets/discover', async (c) => {
+  try {
+    const facetService = new FacetService(c.env.DB)
+    const discovered = await facetService.discoverFields()
+    return c.json({ success: true, data: discovered })
+  } catch (error) {
+    console.error('Error discovering facet fields:', error)
+    return c.json({ error: 'Failed to discover facet fields' }, 500)
+  }
+})
+
+// Fields that shadow built-in facets — strip from saved config to clean up stale data
+const BUILTIN_SHADOW_FIELDS = new Set(['$.author', '$.status'])
+function stripShadowFacets(config: FacetDefinition[]): FacetDefinition[] {
+  return config.filter(f => !BUILTIN_SHADOW_FIELDS.has(f.field))
+}
+
+/**
+ * GET /admin/api/ai-search/facets/config
+ * Get current facet configuration from settings
+ */
+adminRoutes.get('/api/facets/config', async (c) => {
+  try {
+    const service = new AISearchService(c.env.DB)
+    const settings = await service.getSettings()
+    const config = stripShadowFacets(settings?.facet_config ?? [])
+    return c.json({
+      success: true,
+      data: {
+        enabled: settings?.facets_enabled ?? false,
+        config,
+        max_values: settings?.facet_max_values ?? 20,
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching facet config:', error)
+    return c.json({ error: 'Failed to fetch facet config' }, 500)
+  }
+})
+
+/**
+ * POST /admin/api/ai-search/facets/config
+ * Save facet configuration
+ * Body: { enabled: boolean, config: FacetDefinition[], max_values?: number }
+ */
+adminRoutes.post('/api/facets/config', async (c) => {
+  try {
+    const body = await c.req.json()
+    const service = new AISearchService(c.env.DB)
+
+    const updates: Partial<AISearchSettings> = {}
+    if (body.enabled !== undefined) updates.facets_enabled = Boolean(body.enabled)
+    if (Array.isArray(body.config)) updates.facet_config = stripShadowFacets(body.config as FacetDefinition[])
+    if (body.max_values !== undefined) updates.facet_max_values = Number(body.max_values)
+
+    const saved = await service.updateSettings(updates)
+    return c.json({
+      success: true,
+      data: {
+        enabled: saved.facets_enabled ?? false,
+        config: saved.facet_config ?? [],
+        max_values: saved.facet_max_values ?? 20,
+      }
+    })
+  } catch (error) {
+    console.error('Error saving facet config:', error)
+    return c.json({ error: 'Failed to save facet config' }, 500)
+  }
+})
+
+/**
+ * POST /admin/api/ai-search/facets/auto-generate
+ * Run discovery and auto-generate facet config from recommended fields
+ */
+adminRoutes.post('/api/facets/auto-generate', async (c) => {
+  try {
+    const facetService = new FacetService(c.env.DB)
+    const discovered = await facetService.discoverFields()
+    const config = facetService.autoGenerateConfig(discovered)
+
+    // Save to settings
+    const service = new AISearchService(c.env.DB)
+    const saved = await service.updateSettings({
+      facets_enabled: true,
+      facet_config: config,
+    })
+
+    return c.json({
+      success: true,
+      data: {
+        enabled: true,
+        config: saved.facet_config ?? config,
+        discovered_count: discovered.length,
+        auto_enabled_count: config.length,
+      }
+    })
+  } catch (error) {
+    console.error('Error auto-generating facet config:', error)
+    return c.json({ error: 'Failed to auto-generate facet config' }, 500)
+  }
+})
+
+// ==========================================
+// Seeding Routes (Dev/Test)
+// ==========================================
+
+/**
+ * POST /admin/api/ai-search/seed/clicks
+ * Seed synthetic click tracking data spread over 30 days.
+ * Body: { searches: Array<{ query, mode, results_count, response_time_ms, clicks: Array<{ content_id, content_title, position }> }>, days?: number }
+ * Each search gets a historical timestamp; clicks link to their search_id.
+ */
+adminRoutes.post('/api/seed/clicks', async (c) => {
+  try {
+    const body = await c.req.json<{
+      searches: Array<{
+        query: string
+        mode: string
+        results_count: number
+        response_time_ms: number
+        clicks: Array<{ content_id: string; content_title: string; position: number }>
+      }>
+      days?: number
+    }>()
+
+    if (!Array.isArray(body.searches) || body.searches.length === 0) {
+      return c.json({ error: 'searches array is required' }, 400)
+    }
+
+    const db = c.env.DB
+    const days = body.days || 30
+    const now = Date.now()
+    const msPerDay = 24 * 60 * 60 * 1000
+    let searchCount = 0
+    let clickCount = 0
+
+    for (const [i, s] of body.searches.entries()) {
+      // Spread searches across the time range with some randomness
+      const daysAgo = (i / body.searches.length) * days
+      const jitter = (Math.random() - 0.5) * msPerDay // +/- 12 hours
+      const searchTimestamp = now - (daysAgo * msPerDay) + jitter
+
+      // Insert search history record
+      const historyResult = await db.prepare(
+        `INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(s.query, s.mode, s.results_count, s.response_time_ms, Math.floor(searchTimestamp)).run()
+
+      const searchId = historyResult.meta?.last_row_id?.toString()
+      searchCount++
+
+      // Insert click records linked to this search
+      if (s.clicks && searchId) {
+        for (const click of s.clicks) {
+          const clickId = crypto.randomUUID()
+          // Click happens shortly after search (1-60 seconds)
+          const clickOffset = Math.floor(Math.random() * 60) * 1000
+          const clickDatetime = new Date(searchTimestamp + clickOffset).toISOString().replace('T', ' ').replace('Z', '').slice(0, 19)
+
+          await db.prepare(
+            `INSERT INTO ai_search_clicks (id, search_id, query, mode, clicked_content_id, clicked_content_title, click_position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(clickId, searchId, s.query, s.mode, click.content_id, click.content_title, click.position, clickDatetime).run()
+          clickCount++
+        }
+      }
+    }
+
+    return c.json({
+      success: true,
+      data: { searches_inserted: searchCount, clicks_inserted: clickCount }
+    })
+  } catch (error) {
+    console.error('Error seeding click data:', error)
+    return c.json({ error: `Seed failed: ${error instanceof Error ? error.message : String(error)}` }, 500)
+  }
+})
+
+/**
+ * POST /admin/api/ai-search/seed/facet-clicks
+ * Seed synthetic facet click data spread over 30 days.
+ * Body: { clicks: Array<{ facet_field, facet_value, search_id? }>, days?: number }
+ */
+adminRoutes.post('/api/seed/facet-clicks', async (c) => {
+  try {
+    const body = await c.req.json<{
+      clicks: Array<{ facet_field: string; facet_value: string; search_id?: string }>
+      days?: number
+    }>()
+
+    if (!Array.isArray(body.clicks) || body.clicks.length === 0) {
+      return c.json({ error: 'clicks array is required' }, 400)
+    }
+
+    const db = c.env.DB
+    const days = body.days || 30
+    const now = Date.now()
+    const msPerDay = 24 * 60 * 60 * 1000
+    let insertCount = 0
+
+    for (const [i, fc] of body.clicks.entries()) {
+      const id = crypto.randomUUID()
+
+      // Spread across time range
+      const daysAgo = (i / body.clicks.length) * days
+      const jitter = (Math.random() - 0.5) * msPerDay
+      const timestamp = now - (daysAgo * msPerDay) + jitter
+      const datetime = new Date(timestamp).toISOString().replace('T', ' ').replace('Z', '').slice(0, 19)
+
+      await db.prepare(
+        `INSERT INTO ai_search_facet_clicks (id, search_id, facet_field, facet_value, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(id, fc.search_id || null, fc.facet_field, fc.facet_value, datetime).run()
+      insertCount++
+    }
+
+    return c.json({
+      success: true,
+      data: { facet_clicks_inserted: insertCount }
+    })
+  } catch (error) {
+    console.error('Error seeding facet click data:', error)
+    return c.json({ error: `Seed failed: ${error instanceof Error ? error.message : String(error)}` }, 500)
+  }
+})
+
+/**
+ * DELETE /admin/api/ai-search/seed/clicks
+ * Clear all seeded/synthetic click + search history data (for re-seeding)
+ */
+adminRoutes.delete('/api/seed/clicks', async (c) => {
+  try {
+    const db = c.env.DB
+    await db.prepare('DELETE FROM ai_search_clicks').run()
+    await db.prepare('DELETE FROM ai_search_history').run()
+    return c.json({ success: true, message: 'Cleared click tracking and search history data' })
+  } catch (error) {
+    return c.json({ error: `Clear failed: ${error instanceof Error ? error.message : String(error)}` }, 500)
+  }
+})
+
+/**
+ * DELETE /admin/api/ai-search/seed/facet-clicks
+ * Clear all facet click data (for re-seeding)
+ */
+adminRoutes.delete('/api/seed/facet-clicks', async (c) => {
+  try {
+    const db = c.env.DB
+    await db.prepare('DELETE FROM ai_search_facet_clicks').run()
+    return c.json({ success: true, message: 'Cleared facet click data' })
+  } catch (error) {
+    return c.json({ error: `Clear failed: ${error instanceof Error ? error.message : String(error)}` }, 500)
   }
 })
 

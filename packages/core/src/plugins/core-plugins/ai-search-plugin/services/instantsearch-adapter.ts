@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type {
   AISearchSettings,
+  FacetResult,
   InstantSearchHit,
   InstantSearchParams,
   InstantSearchRequest,
@@ -44,6 +45,7 @@ export class InstantSearchAdapter {
         collections: collections.length > 0 ? collections : undefined,
         status: this.parseStatusFilter(params.filters),
       },
+      facets: (params.facets && params.facets.length > 0) ? true : undefined,
     }
   }
 
@@ -61,7 +63,12 @@ export class InstantSearchAdapter {
 
     const hits = response.results.map((r) => this.toHit(r, params))
     const nbPages = hitsPerPage > 0 ? Math.ceil(response.total / hitsPerPage) : 0
-    const facets = this.computeFacets(response.results, params.facets)
+
+    // Use FacetService facets from SearchResponse when available,
+    // otherwise fall back to page-level counting (MVP behavior)
+    const facets = response.facets && response.facets.length > 0
+      ? this.mapFacetResults(response.facets, params.facets)
+      : this.computeFacets(response.results, params.facets)
 
     return {
       hits,
@@ -176,8 +183,34 @@ export class InstantSearchAdapter {
   }
 
   /**
+   * Map FacetResult[] from FacetService to Algolia format.
+   * Filters to only the facets requested by InstantSearch params.
+   */
+  private mapFacetResults(
+    facetResults: FacetResult[],
+    requested?: string[]
+  ): Record<string, Record<string, number>> {
+    if (!requested || requested.length === 0) return {}
+    const facets: Record<string, Record<string, number>> = {}
+    const requestedSet = new Set(requested)
+
+    for (const fr of facetResults) {
+      // Match by field name (e.g. "collection_name", "status", "$.tags")
+      if (requestedSet.has(fr.field) || requestedSet.has(fr.name) || requestedSet.has('*')) {
+        const counts: Record<string, number> = {}
+        for (const fv of fr.values) {
+          counts[fv.value] = fv.count
+        }
+        facets[fr.field] = counts
+      }
+    }
+
+    return facets
+  }
+
+  /**
    * Compute facet counts from the current result page.
-   * MVP: collection_name and status only.
+   * Fallback when FacetService data is not available.
    */
   private computeFacets(
     results: SearchResult[],

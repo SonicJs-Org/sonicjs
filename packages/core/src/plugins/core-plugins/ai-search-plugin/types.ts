@@ -25,6 +25,10 @@ export interface AISearchSettings {
   fts5_body_boost?: number  // Default: 1.0
   // Phase 2C: Query Synonyms
   query_synonyms_enabled?: boolean // Default: true
+  // Faceted Search
+  facets_enabled?: boolean             // Master toggle (default: false)
+  facet_config?: FacetDefinition[]     // Ordered list of configured facets
+  facet_max_values?: number            // Global max values per facet (default: 20)
 }
 
 export interface IndexStatus {
@@ -43,6 +47,7 @@ export interface SearchQuery {
   filters?: SearchFilters
   limit?: number
   offset?: number
+  facets?: boolean // Request facet computation alongside results
 }
 
 export interface SearchFilters {
@@ -90,6 +95,7 @@ export interface SearchResponse {
   mode: 'ai' | 'keyword' | 'fts5' | 'hybrid'
   search_id?: string // ID linking to ai_search_history row for click tracking
   suggestions?: string[] // Autocomplete suggestions
+  facets?: FacetResult[] // Facet counts from full result set
 }
 
 export interface SearchHistory {
@@ -143,6 +149,45 @@ export const DEFAULT_RANKING_PIPELINE: RankingStage[] = [
   { type: 'popularity',  weight: 0,  enabled: false },
   { type: 'custom',      weight: 0,  enabled: false },
 ]
+
+// ==========================================
+// Faceted Search Types
+// ==========================================
+
+/** Persisted facet configuration — stored in AISearchSettings.facet_config */
+export interface FacetDefinition {
+  name: string               // Display name ("Tags", "Category", "Status")
+  field: string              // "collection_name" | "status" | "author" | "$.tags" | "$.category"
+  type: 'builtin' | 'json_scalar' | 'json_array'
+  collections?: string[]     // Collection IDs that have this field (empty = all)
+  maxValues?: number         // Per-facet limit override (default: 20)
+  sortBy?: 'count' | 'alpha' // Default: 'count'
+  enabled: boolean
+  source: 'auto' | 'manual' | 'agent' // Who created this config entry
+  position: number           // Display order (Phase 6 agent can optimize)
+}
+
+/** Facet counts returned in search response */
+export interface FacetResult {
+  name: string               // Display name
+  field: string              // Field identifier
+  values: FacetValue[]
+}
+
+export interface FacetValue {
+  value: string
+  count: number
+}
+
+/** Field discovered from collection schemas — returned by discover endpoint */
+export interface DiscoveredField {
+  field: string              // JSON path or built-in name ("$.tags", "collection_name")
+  title: string              // Human label from schema or built-in
+  type: 'builtin' | 'json_scalar' | 'json_array'
+  recommended: boolean       // true for enum, array, boolean fields
+  collections: Array<{ id: string; name: string }> // Which collections have this field
+  enumValues?: string[]      // Known values for enum-type fields
+}
 
 // ==========================================
 // InstantSearch.js Protocol Types (Algolia-compatible)

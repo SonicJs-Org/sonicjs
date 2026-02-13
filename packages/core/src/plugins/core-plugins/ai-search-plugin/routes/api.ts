@@ -32,6 +32,7 @@ apiRoutes.post('/', async (c) => {
       filters: body.filters || {},
       limit: body.limit ? Number(body.limit) : undefined,
       offset: body.offset ? Number(body.offset) : undefined,
+      facets: body.facets === true,
     }
 
     // Convert date strings to Date objects if present
@@ -157,6 +158,42 @@ apiRoutes.post('/click', async (c) => {
     return c.json({ success: true })
   } catch (error) {
     console.error('Click tracking error:', error)
+    return c.json({ success: true }) // Don't fail the client for tracking errors
+  }
+})
+
+/**
+ * POST /api/search/facet-click
+ * Record a facet interaction for Phase 6 agent optimization
+ */
+apiRoutes.post('/facet-click', async (c) => {
+  try {
+    const db = c.env.DB
+    const body = await c.req.json()
+
+    const facetField = body.facet_field
+    const facetValue = body.facet_value
+    const searchId = body.search_id
+
+    if (!facetField || typeof facetField !== 'string') {
+      return c.json({ success: false, error: 'facet_field is required' }, 400)
+    }
+    if (!facetValue || typeof facetValue !== 'string') {
+      return c.json({ success: false, error: 'facet_value is required' }, 400)
+    }
+
+    const id = crypto.randomUUID()
+    await db
+      .prepare(`
+        INSERT INTO ai_search_facet_clicks (id, search_id, facet_field, facet_value, created_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+      `)
+      .bind(id, searchId || null, facetField, facetValue)
+      .run()
+
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Facet click tracking error:', error)
     return c.json({ success: true }) // Don't fail the client for tracking errors
   }
 })

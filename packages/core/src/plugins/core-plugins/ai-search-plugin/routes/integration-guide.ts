@@ -907,6 +907,85 @@ navigator.sendBeacon('/api/search/click', JSON.stringify({
   click_position: index + 1                   // 1-based position in results
 }));</code></pre>
               <p><small>Click tracking is optional but recommended. Uses <code>sendBeacon</code> for reliability during navigation.</small></p>
+
+              <h3>Faceted Search</h3>
+              <p>Request facet counts alongside search results by passing <code>facets: true</code>. Facets reflect the full matching result set, not just the current page.</p>
+              <pre><code>// Request with facets
+const response = await fetch('/api/search', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: 'tutorial',
+    mode: 'fts5',
+    facets: true
+  })
+});
+
+// Response includes facets array
+{
+  "success": true,
+  "data": {
+    "results": [...],
+    "total": 42,
+    "facets": [
+      { "name": "Collection", "field": "collection_name", "values": [
+        { "value": "Blog Posts", "count": 28 },
+        { "value": "Docs", "count": 14 }
+      ]},
+      { "name": "Status", "field": "status", "values": [
+        { "value": "published", "count": 40 },
+        { "value": "draft", "count": 2 }
+      ]},
+      { "name": "Tags", "field": "$.tags", "values": [
+        { "value": "javascript", "count": 15 },
+        { "value": "react", "count": 12 }
+      ]}
+    ]
+  }
+}</code></pre>
+
+              <h4>Frontend Facet Sidebar Example</h4>
+              <pre><code>// Render facet checkboxes
+function renderFacets(facets) {
+  return facets.map(facet =&gt; \`
+    &lt;div class="facet-group"&gt;
+      &lt;h4&gt;\${facet.name}&lt;/h4&gt;
+      \${facet.values.map(v =&gt; \`
+        &lt;label&gt;
+          &lt;input type="checkbox" value="\${v.value}"
+            onchange="filterByFacet('\${facet.field}', '\${v.value}')"&gt;
+          \${v.value} (\${v.count})
+        &lt;/label&gt;
+      \`).join('')}
+    &lt;/div&gt;
+  \`).join('');
+}
+
+// Track facet interactions (optional, powers admin analytics)
+function filterByFacet(field, value) {
+  navigator.sendBeacon('/api/search/facet-click', JSON.stringify({
+    facet_field: field,
+    facet_value: value,
+    search_id: currentSearchId
+  }));
+  // Re-run search with the filter applied
+}</code></pre>
+
+              <h4>InstantSearch.js RefinementList</h4>
+              <p>If you use InstantSearch.js, facets work automatically with the <code>RefinementList</code> widget:</p>
+              <pre><code>import { refinementList } from 'instantsearch.js/es/widgets';
+
+search.addWidgets([
+  refinementList({
+    container: '#status-filter',
+    attribute: 'status',
+  }),
+  refinementList({
+    container: '#collection-filter',
+    attribute: 'collection_name',
+  })
+]);</code></pre>
+              <p><small>Enable faceted search in the admin dashboard (Configuration tab) to auto-discover facets from your collection schemas.</small></p>
             </div>
 
             <!-- Performance Tips Section -->

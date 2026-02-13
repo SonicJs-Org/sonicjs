@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-2BOJAJ2B.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-VLEFQUWR.js';
 import { PluginService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-XX5D375L.js';
+import { MigrationService } from './chunk-TBKAT4NK.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-AAU4BTDE.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-7DXWBEQP.js';
@@ -2788,7 +2788,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-ILXZE4EU.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-I5O3GQIM.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2813,7 +2813,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-ILXZE4EU.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-I5O3GQIM.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2832,7 +2832,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-ILXZE4EU.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-I5O3GQIM.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -28871,6 +28871,460 @@ ${c.text}`)
   }
 };
 
+// src/plugins/core-plugins/ai-search-plugin/services/facet.service.ts
+var NON_FACETABLE_FORMATS = /* @__PURE__ */ new Set(["richtext", "media", "date-time", "slug"]);
+var BUILTIN_FIELD_NAMES = /* @__PURE__ */ new Set(["author", "status"]);
+var FacetService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  // =============================================
+  // Discovery — introspect collection schemas
+  // =============================================
+  /**
+   * Discover facetable fields from all active collection schemas.
+   * Returns built-in facets + custom fields classified by type.
+   */
+  async discoverFields() {
+    const discovered = [];
+    discovered.push(
+      { field: "collection_name", title: "Collection", type: "builtin", recommended: true, collections: [] },
+      { field: "status", title: "Status", type: "builtin", recommended: true, collections: [], enumValues: ["draft", "published", "archived"] },
+      { field: "author", title: "Author", type: "builtin", recommended: true, collections: [] }
+    );
+    try {
+      const { results } = await this.db.prepare(`SELECT id, name, display_name, schema FROM collections WHERE is_active = 1`).all();
+      if (!results?.length) return discovered;
+      const fieldMap = /* @__PURE__ */ new Map();
+      for (const col of results) {
+        let schema;
+        try {
+          schema = typeof col.schema === "string" ? JSON.parse(col.schema) : col.schema;
+        } catch {
+          continue;
+        }
+        const properties = schema?.properties;
+        if (!properties || typeof properties !== "object") continue;
+        for (const [fieldName, fieldDef] of Object.entries(properties)) {
+          const def = fieldDef;
+          if (!def || typeof def !== "object") continue;
+          if (BUILTIN_FIELD_NAMES.has(fieldName)) continue;
+          const classification = this.classifyField(fieldName, def);
+          if (!classification) continue;
+          const path = `$.${fieldName}`;
+          const existing = fieldMap.get(path);
+          if (existing) {
+            existing.collections.push({ id: col.id, name: col.display_name });
+          } else {
+            fieldMap.set(path, {
+              title: def.title || fieldName,
+              type: classification.type,
+              recommended: classification.recommended,
+              collections: [{ id: col.id, name: col.display_name }],
+              enumValues: classification.enumValues
+            });
+          }
+        }
+      }
+      for (const [field, info] of fieldMap) {
+        discovered.push({
+          field,
+          title: info.title,
+          type: info.type,
+          recommended: info.recommended,
+          collections: info.collections,
+          enumValues: info.enumValues
+        });
+      }
+    } catch (error) {
+      console.error("[FacetService] Discovery error:", error);
+    }
+    return discovered;
+  }
+  /**
+   * Classify a field definition from collection schema.
+   * Returns null if the field is not facetable.
+   */
+  classifyField(fieldName, def) {
+    const fieldType = def.type;
+    const format = def.format;
+    if (format && NON_FACETABLE_FORMATS.has(format)) return null;
+    if (fieldType === "object") return null;
+    if (fieldType === "number" || fieldType === "integer") return null;
+    if (fieldType === "array" && def.items?.type === "string") {
+      return { type: "json_array", recommended: true };
+    }
+    if (fieldType === "string" && Array.isArray(def.enum) && def.enum.length > 0) {
+      return { type: "json_scalar", recommended: true, enumValues: def.enum };
+    }
+    if (fieldType === "boolean") {
+      return { type: "json_scalar", recommended: true, enumValues: ["true", "false"] };
+    }
+    if (fieldType === "string" && !format) {
+      return { type: "json_scalar", recommended: false };
+    }
+    return null;
+  }
+  // =============================================
+  // Auto-generation — create default config
+  // =============================================
+  /**
+   * Generate default facet config from discovered fields.
+   * Only enables recommended fields.
+   */
+  autoGenerateConfig(discovered) {
+    return discovered.filter((d) => d.recommended).map((d, i) => ({
+      name: d.title,
+      field: d.field,
+      type: d.type,
+      collections: d.collections.map((c) => c.id),
+      enabled: true,
+      source: "auto",
+      position: i,
+      sortBy: "count"
+    }));
+  }
+  // =============================================
+  // Computation — SQL GROUP BY (FTS5/keyword)
+  // =============================================
+  /**
+   * Compute facets for FTS5 mode using parallel SQL GROUP BY queries.
+   * Counts reflect the full matching result set (not just current page).
+   */
+  async computeFacetsFts(config, matchQuery, collectionIds, maxValues) {
+    const enabled = config.filter((f) => f.enabled);
+    if (enabled.length === 0 || collectionIds.length === 0) return [];
+    const collPlaceholders = collectionIds.map(() => "?").join(", ");
+    const promises = enabled.map(async (facet) => {
+      const limit = facet.maxValues || maxValues;
+      try {
+        const values = await this.runFtsFacetQuery(facet, matchQuery, collectionIds, collPlaceholders, limit);
+        return this.sortFacetValues(facet, values);
+      } catch (error) {
+        console.error(`[FacetService] Facet query error for ${facet.field}:`, error);
+        return { name: facet.name, field: facet.field, values: [] };
+      }
+    });
+    return Promise.all(promises);
+  }
+  async runFtsFacetQuery(facet, matchQuery, collectionIds, collPlaceholders, limit) {
+    let sql;
+    let params;
+    switch (facet.field) {
+      case "collection_name":
+        sql = `
+          SELECT col.display_name as value, COUNT(*) as count
+          FROM content_fts fts
+          JOIN content c ON fts.content_id = c.id
+          JOIN collections col ON fts.collection_id = col.id
+          WHERE content_fts MATCH ?
+            AND fts.collection_id IN (${collPlaceholders})
+            AND c.status != 'deleted'
+          GROUP BY value ORDER BY count DESC LIMIT ?
+        `;
+        params = [matchQuery, ...collectionIds, limit];
+        break;
+      case "status":
+        sql = `
+          SELECT c.status as value, COUNT(*) as count
+          FROM content_fts fts
+          JOIN content c ON fts.content_id = c.id
+          WHERE content_fts MATCH ?
+            AND fts.collection_id IN (${collPlaceholders})
+            AND c.status != 'deleted'
+          GROUP BY c.status ORDER BY count DESC LIMIT ?
+        `;
+        params = [matchQuery, ...collectionIds, limit];
+        break;
+      case "author":
+        sql = `
+          SELECT COALESCE(u.email, 'Unknown') as value, COUNT(*) as count
+          FROM content_fts fts
+          JOIN content c ON fts.content_id = c.id
+          LEFT JOIN users u ON c.author_id = u.id
+          WHERE content_fts MATCH ?
+            AND fts.collection_id IN (${collPlaceholders})
+            AND c.status != 'deleted'
+          GROUP BY value ORDER BY count DESC LIMIT ?
+        `;
+        params = [matchQuery, ...collectionIds, limit];
+        break;
+      default:
+        if (facet.type === "json_array") {
+          const jsonPath = facet.field;
+          sql = `
+            SELECT j.value as value, COUNT(*) as count
+            FROM content_fts fts
+            JOIN content c ON fts.content_id = c.id,
+            json_each(json_extract(c.data, '${jsonPath}')) j
+            WHERE content_fts MATCH ?
+              AND fts.collection_id IN (${collPlaceholders})
+              AND c.status != 'deleted'
+            GROUP BY j.value ORDER BY count DESC LIMIT ?
+          `;
+        } else {
+          const jsonPath = facet.field;
+          sql = `
+            SELECT json_extract(c.data, '${jsonPath}') as value, COUNT(*) as count
+            FROM content_fts fts
+            JOIN content c ON fts.content_id = c.id
+            WHERE content_fts MATCH ?
+              AND fts.collection_id IN (${collPlaceholders})
+              AND c.status != 'deleted'
+              AND json_extract(c.data, '${jsonPath}') IS NOT NULL
+            GROUP BY value ORDER BY count DESC LIMIT ?
+          `;
+        }
+        params = [matchQuery, ...collectionIds, limit];
+    }
+    const { results } = await this.db.prepare(sql).bind(...params).all();
+    return (results || []).map((r) => ({
+      value: String(r.value),
+      count: r.count
+    }));
+  }
+  /**
+   * Compute facets for keyword mode using parallel SQL GROUP BY queries.
+   */
+  async computeFacetsKeyword(config, queryTerm, collectionIds, maxValues) {
+    const enabled = config.filter((f) => f.enabled);
+    if (enabled.length === 0 || collectionIds.length === 0) return [];
+    const collPlaceholders = collectionIds.map(() => "?").join(", ");
+    const likeTerm = `%${queryTerm}%`;
+    const promises = enabled.map(async (facet) => {
+      const limit = facet.maxValues || maxValues;
+      try {
+        const values = await this.runKeywordFacetQuery(facet, likeTerm, collectionIds, collPlaceholders, limit);
+        return this.sortFacetValues(facet, values);
+      } catch (error) {
+        console.error(`[FacetService] Keyword facet error for ${facet.field}:`, error);
+        return { name: facet.name, field: facet.field, values: [] };
+      }
+    });
+    return Promise.all(promises);
+  }
+  async runKeywordFacetQuery(facet, likeTerm, collectionIds, collPlaceholders, limit) {
+    const baseWhere = `
+      c.collection_id IN (${collPlaceholders})
+      AND c.status != 'deleted'
+      AND (c.title LIKE ? OR c.slug LIKE ? OR c.data LIKE ?)
+    `;
+    const baseParams = [...collectionIds, likeTerm, likeTerm, likeTerm];
+    let sql;
+    let params;
+    switch (facet.field) {
+      case "collection_name":
+        sql = `
+          SELECT col.display_name as value, COUNT(*) as count
+          FROM content c
+          JOIN collections col ON c.collection_id = col.id
+          WHERE ${baseWhere}
+          GROUP BY value ORDER BY count DESC LIMIT ?
+        `;
+        params = [...baseParams, limit];
+        break;
+      case "status":
+        sql = `
+          SELECT c.status as value, COUNT(*) as count
+          FROM content c
+          WHERE ${baseWhere}
+          GROUP BY c.status ORDER BY count DESC LIMIT ?
+        `;
+        params = [...baseParams, limit];
+        break;
+      case "author":
+        sql = `
+          SELECT COALESCE(u.email, 'Unknown') as value, COUNT(*) as count
+          FROM content c
+          LEFT JOIN users u ON c.author_id = u.id
+          WHERE ${baseWhere}
+          GROUP BY value ORDER BY count DESC LIMIT ?
+        `;
+        params = [...baseParams, limit];
+        break;
+      default:
+        if (facet.type === "json_array") {
+          sql = `
+            SELECT j.value as value, COUNT(*) as count
+            FROM content c,
+            json_each(json_extract(c.data, '${facet.field}')) j
+            WHERE ${baseWhere}
+            GROUP BY j.value ORDER BY count DESC LIMIT ?
+          `;
+        } else {
+          sql = `
+            SELECT json_extract(c.data, '${facet.field}') as value, COUNT(*) as count
+            FROM content c
+            WHERE ${baseWhere}
+              AND json_extract(c.data, '${facet.field}') IS NOT NULL
+            GROUP BY value ORDER BY count DESC LIMIT ?
+          `;
+        }
+        params = [...baseParams, limit];
+    }
+    const { results } = await this.db.prepare(sql).bind(...params).all();
+    return (results || []).map((r) => ({
+      value: String(r.value),
+      count: r.count
+    }));
+  }
+  // =============================================
+  // Computation — in-memory (AI/hybrid modes)
+  // =============================================
+  /**
+   * Compute facets from a set of content IDs by fetching their data
+   * and counting in-memory. Used for AI and hybrid modes where
+   * Vectorize returns max 50 results.
+   */
+  async computeFacetsFromIds(config, contentIds, maxValues) {
+    const enabled = config.filter((f) => f.enabled);
+    if (enabled.length === 0 || contentIds.length === 0) return [];
+    const placeholders = contentIds.map(() => "?").join(", ");
+    const { results: rows } = await this.db.prepare(`
+        SELECT c.id, c.data, c.status, c.collection_id, c.author_id,
+               col.display_name as collection_name,
+               u.email as author_email
+        FROM content c
+        JOIN collections col ON c.collection_id = col.id
+        LEFT JOIN users u ON c.author_id = u.id
+        WHERE c.id IN (${placeholders})
+      `).bind(...contentIds).all();
+    if (!rows?.length) {
+      return enabled.map((f) => ({ name: f.name, field: f.field, values: [] }));
+    }
+    return enabled.map((facet) => {
+      const limit = facet.maxValues || maxValues;
+      const counts = /* @__PURE__ */ new Map();
+      for (const row of rows) {
+        const values = this.extractFacetValues(facet, row);
+        for (const v of values) {
+          counts.set(v, (counts.get(v) || 0) + 1);
+        }
+      }
+      let facetValues = Array.from(counts.entries()).map(([value, count]) => ({ value, count }));
+      facetValues = this.sortValues(facet, facetValues).slice(0, limit);
+      return { name: facet.name, field: facet.field, values: facetValues };
+    });
+  }
+  /**
+   * Also supports counting from already-loaded SearchResult array
+   * (used by InstantSearch adapter when facets come from search response).
+   */
+  computeFacetsFromResults(config, results, maxValues) {
+    const enabled = config.filter((f) => f.enabled);
+    if (enabled.length === 0 || results.length === 0) {
+      return enabled.map((f) => ({ name: f.name, field: f.field, values: [] }));
+    }
+    return enabled.map((facet) => {
+      const limit = facet.maxValues || maxValues;
+      const counts = /* @__PURE__ */ new Map();
+      for (const r of results) {
+        let value;
+        switch (facet.field) {
+          case "collection_name":
+            value = r.collection_name;
+            break;
+          case "status":
+            value = r.status;
+            break;
+          case "author":
+            value = r.author_name;
+            break;
+        }
+        if (value) counts.set(value, (counts.get(value) || 0) + 1);
+      }
+      let facetValues = Array.from(counts.entries()).map(([value, count]) => ({ value, count }));
+      facetValues = this.sortValues(facet, facetValues).slice(0, limit);
+      return { name: facet.name, field: facet.field, values: facetValues };
+    });
+  }
+  // =============================================
+  // Helpers
+  // =============================================
+  extractFacetValues(facet, row) {
+    switch (facet.field) {
+      case "collection_name":
+        return [row.collection_name];
+      case "status":
+        return [row.status];
+      case "author":
+        return [row.author_email || "Unknown"];
+      default: {
+        try {
+          const parsed = typeof row.data === "string" ? JSON.parse(row.data) : row.data;
+          const fieldName = facet.field.startsWith("$.") ? facet.field.slice(2) : facet.field;
+          const val = parsed[fieldName];
+          if (val == null) return [];
+          if (facet.type === "json_array" && Array.isArray(val)) {
+            return val.filter((v) => typeof v === "string");
+          }
+          return [String(val)];
+        } catch {
+          return [];
+        }
+      }
+    }
+  }
+  sortFacetValues(facet, values) {
+    return {
+      name: facet.name,
+      field: facet.field,
+      values: this.sortValues(facet, values)
+    };
+  }
+  sortValues(facet, values) {
+    if (facet.sortBy === "alpha") {
+      return values.sort((a, b) => a.value.localeCompare(b.value));
+    }
+    return values.sort((a, b) => b.count - a.count);
+  }
+  /**
+   * Sanitize a query string for FTS5 MATCH syntax.
+   * Mirrors the logic in FTS5Service.sanitizeFTS5Query so facet GROUP BY
+   * queries use the same MATCH expression as the main search.
+   */
+  static sanitizeFTS5Query(query) {
+    if (!query || typeof query !== "string") return '""';
+    let sanitized = query.replace(/-/g, " ").replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+    const stopWords = /* @__PURE__ */ new Set([
+      "a",
+      "an",
+      "the",
+      "is",
+      "are",
+      "was",
+      "were",
+      "be",
+      "to",
+      "of",
+      "in",
+      "on",
+      "at",
+      "by",
+      "or",
+      "and",
+      "not",
+      "for",
+      "it",
+      "as",
+      "do",
+      "if",
+      "no",
+      "so",
+      "up",
+      "but",
+      "its",
+      "has",
+      "had",
+      "near"
+    ]);
+    const terms = sanitized.split(/\s+/).filter((t) => t.length > 1 && !stopWords.has(t));
+    if (terms.length === 0) return '""';
+    if (terms.length === 1) return `${terms[0]}*`;
+    return terms.join(" OR ");
+  }
+};
+
 // src/plugins/core-plugins/ai-search-plugin/services/hybrid-search.service.ts
 var RRF_K = 60;
 var HybridSearchService = class {
@@ -29600,22 +30054,84 @@ var AISearchService = class {
         mode: query.mode
       };
     }
-    let result;
+    const shouldComputeFacets = query.facets && settings.facets_enabled;
+    if (shouldComputeFacets && (!settings.facet_config || settings.facet_config.length === 0)) {
+      try {
+        const facetService = new FacetService(this.db);
+        const discovered = await facetService.discoverFields();
+        const config = facetService.autoGenerateConfig(discovered);
+        if (config.length > 0) {
+          await this.updateSettings({ facet_config: config });
+          settings.facet_config = config;
+        }
+      } catch (error) {
+        console.warn("[AISearchService] Auto-generate facet config failed:", error);
+      }
+    }
+    let searchPromise;
     if (query.mode === "hybrid") {
-      result = await this.searchHybrid(query, settings);
+      searchPromise = this.searchHybrid(query, settings);
     } else if (query.mode === "fts5") {
-      result = await this.searchFTS5(query, settings);
+      searchPromise = this.searchFTS5(query, settings);
     } else if (query.mode === "ai" && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
-      result = await this.searchAI(query, settings);
+      searchPromise = this.searchAI(query, settings);
     } else {
-      result = await this.searchKeyword(query, settings);
+      searchPromise = this.searchKeyword(query, settings);
+    }
+    let facetPromise = null;
+    if (shouldComputeFacets && settings.facet_config && settings.facet_config.length > 0) {
+      facetPromise = this.computeFacets(query, settings);
+    }
+    const [result, facets] = await Promise.all([
+      searchPromise,
+      facetPromise || Promise.resolve(null)
+    ]);
+    if (facets && facets.length > 0) {
+      result.facets = facets;
+    }
+    if (shouldComputeFacets && query.mode === "ai" && result.results.length > 0 && settings.facet_config?.length) {
+      try {
+        const facetService = new FacetService(this.db);
+        const contentIds = result.results.map((r) => r.id).slice(0, 50);
+        result.facets = await facetService.computeFacetsFromIds(
+          settings.facet_config,
+          contentIds,
+          settings.facet_max_values || 20
+        );
+      } catch (error) {
+        console.warn("[AISearchService] AI mode facet computation failed:", error);
+      }
     }
     try {
-      result = await this.rankingPipeline.apply(result, query.query);
+      const ranked = await this.rankingPipeline.apply(result, query.query);
+      return ranked;
     } catch (error) {
       console.warn("[AISearchService] Ranking pipeline error (preserving original order):", error);
+      return result;
     }
-    return result;
+  }
+  /**
+   * Compute facets for the current search query.
+   * Delegates to FacetService with mode-appropriate strategy.
+   */
+  async computeFacets(query, settings) {
+    const facetService = new FacetService(this.db);
+    const config = settings.facet_config;
+    const maxValues = settings.facet_max_values || 20;
+    const collectionIds = query.filters?.collections?.length ? query.filters.collections : settings.selected_collections;
+    try {
+      if (query.mode === "fts5" || query.mode === "hybrid") {
+        const matchQuery = FacetService.sanitizeFTS5Query(query.query);
+        return await facetService.computeFacetsFts(config, matchQuery, collectionIds, maxValues);
+      }
+      if (query.mode === "keyword") {
+        return await facetService.computeFacetsKeyword(config, query.query, collectionIds, maxValues);
+      }
+      return [];
+    } catch (error) {
+      console.warn("[AISearchService] Facet computation failed:", error);
+      return [];
+    }
   }
   /**
    * FTS5 full-text search with BM25 ranking, stemming, and highlighting
@@ -30006,7 +30522,12 @@ var AISearchService = class {
         avgClickPosResult,
         ctrOverTimeResults,
         mostClickedResults,
-        noClickResults
+        noClickResults,
+        // Facet analytics
+        facetClickCountResult,
+        topFacetFieldsResult,
+        topFacetValuesResult,
+        facetClicksOverTimeResult
       ] = await Promise.all([
         // Total queries (30 days)
         this.db.prepare("SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?").bind(thirtyDaysAgo).first(),
@@ -30070,7 +30591,35 @@ var AISearchService = class {
           GROUP BY h.query
           ORDER BY search_count DESC
           LIMIT 20
-        `).bind(thirtyDaysAgo).all().catch(() => ({ results: [] }))
+        `).bind(thirtyDaysAgo).all().catch(() => ({ results: [] })),
+        // Facet analytics: total facet clicks (30 days)
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_facet_clicks WHERE created_at > datetime('now', '-30 days')").first().catch(() => ({ count: 0 })),
+        // Facet analytics: top facet fields by click count (30 days)
+        this.db.prepare(`
+          SELECT facet_field, COUNT(*) as click_count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY facet_field
+          ORDER BY click_count DESC
+          LIMIT 10
+        `).all().catch(() => ({ results: [] })),
+        // Facet analytics: top facet values by click count (30 days)
+        this.db.prepare(`
+          SELECT facet_field, facet_value, COUNT(*) as click_count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY facet_field, facet_value
+          ORDER BY click_count DESC
+          LIMIT 15
+        `).all().catch(() => ({ results: [] })),
+        // Facet analytics: facet clicks over time (daily, 30 days)
+        this.db.prepare(`
+          SELECT date(created_at) as date, COUNT(*) as count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY date(created_at)
+          ORDER BY date ASC
+        `).all().catch(() => ({ results: [] }))
       ]);
       const totalQueries = totalResult?.count || 0;
       const zeroCount = zeroCountResult?.count || 0;
@@ -30118,6 +30667,21 @@ var AISearchService = class {
           query: r.query,
           search_count: r.search_count,
           results_count_avg: r.results_count_avg
+        })),
+        // Facet analytics
+        total_facet_clicks_30d: facetClickCountResult?.count || 0,
+        top_facet_fields: (topFacetFieldsResult?.results || []).map((r) => ({
+          facet_field: r.facet_field,
+          click_count: r.click_count
+        })),
+        top_facet_values: (topFacetValuesResult?.results || []).map((r) => ({
+          facet_field: r.facet_field,
+          facet_value: r.facet_value,
+          click_count: r.click_count
+        })),
+        facet_clicks_over_time: (facetClicksOverTimeResult?.results || []).map((r) => ({
+          date: r.date,
+          count: r.count
         }))
       };
     } catch (error) {
@@ -30141,7 +30705,11 @@ var AISearchService = class {
         avg_click_position_30d: 0,
         ctr_over_time: [],
         most_clicked_content: [],
-        no_click_searches: []
+        no_click_searches: [],
+        total_facet_clicks_30d: 0,
+        top_facet_fields: [],
+        top_facet_values: [],
+        facet_clicks_over_time: []
       };
     }
   }
@@ -31412,6 +31980,54 @@ function renderSearchDashboard(data) {
             </div>
           </div>
 
+          <!-- Faceted Search -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-4 flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-zinc-950 dark:text-white mb-1">Faceted Search</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                  Auto-discovers filterable fields from your collection schemas.
+                  Enable facets to show filter panels alongside search results.
+                </p>
+              </div>
+              <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="facets_enabled" name="facets_enabled" class="sr-only peer" onchange="toggleFacetsEnabled(this.checked)">
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <span class="ml-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">Enable</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="facet-config-section" class="hidden">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm text-zinc-600 dark:text-zinc-400" id="facet-config-status">Loading facet configuration...</span>
+                <button type="button" onclick="rediscoverFacets()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Re-discover Fields</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm" id="facet-config-table">
+                  <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700">
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Enabled</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Name</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Field</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Type</th>
+                      <th class="text-left py-2 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody id="facet-config-body">
+                    <tr><td colspan="5" class="py-4 text-center text-zinc-400">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="mt-3 flex justify-end">
+                <button type="button" onclick="saveFacetConfig()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                  Save Facet Config
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Save Button -->
           <div class="flex items-center justify-end">
             <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm transition-colors">
@@ -31932,6 +32548,75 @@ function renderSearchDashboard(data) {
             </div>
           </div>
 
+          <!-- Facet Analytics Section -->
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Analytics</h3>
+
+            <!-- Facet stat card -->
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+              <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="p-5">
+                  <p class="text-sm text-zinc-600 dark:text-zinc-400">Facet Clicks (30d)</p>
+                  <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-facet-clicks">&mdash;</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Facet clicks over time chart -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Clicks Over Time</h3>
+              <div style="height: 220px; position: relative;">
+                <canvas id="ana-facet-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Facet tables: two-column -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <!-- Top Facet Fields -->
+              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Most Used Facets</h3>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Which facet filters users click most (30 days)</p>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                      <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet Field</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ana-facet-fields-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                      <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Top Facet Values -->
+              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Top Facet Values</h3>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Most clicked filter values (30 days)</p>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                      <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Value</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ana-facet-values-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                      <tr><td colspan="3" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Tables Row: two-column -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Popular Queries -->
@@ -32104,6 +32789,8 @@ function renderSearchDashboard(data) {
             index_media: document.getElementById('index_media').checked,
             reranking_enabled: document.getElementById('reranking_enabled').checked,
             query_rewriting_enabled: document.getElementById('query_rewriting_enabled').checked,
+            facets_enabled: document.getElementById('facets_enabled').checked,
+            facet_config: facetConfigData.length > 0 ? facetConfigData : undefined,
           };
 
           console.log('[AI Search Client] Sending data:', data);
@@ -33466,6 +34153,9 @@ function renderSearchDashboard(data) {
         if (tabId === 'analytics' && !analyticsLoaded) {
           loadAnalytics();
         }
+        if (tabId === 'configuration') {
+          loadFacetConfig();
+        }
       };
 
       async function loadAnalytics() {
@@ -33510,6 +34200,13 @@ function renderSearchDashboard(data) {
 
           // No-click searches table
           renderNoClickTable(d.no_click_searches);
+
+          // Facet analytics
+          document.getElementById('ana-facet-clicks').textContent =
+            d.total_facet_clicks_30d > 0 ? d.total_facet_clicks_30d.toLocaleString() : 'No data';
+          renderFacetClicksChart(d.facet_clicks_over_time || []);
+          renderFacetFieldsTable(d.top_facet_fields || []);
+          renderFacetValuesTable(d.top_facet_values || []);
 
         } catch (e) {
           console.error('Analytics load error:', e);
@@ -33825,6 +34522,118 @@ function renderSearchDashboard(data) {
         tbody.innerHTML = html;
       }
 
+      var facetClicksChart = null;
+
+      function renderFacetClicksChart(dailyCounts) {
+        var canvas = document.getElementById('ana-facet-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        if (!dailyCounts || dailyCounts.length === 0) {
+          canvas.parentElement.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500">No facet click data yet</p>';
+          return;
+        }
+
+        var labels = [];
+        var data = [];
+        var countMap = {};
+        for (var i = 0; i < dailyCounts.length; i++) {
+          countMap[dailyCounts[i].date] = dailyCounts[i].count;
+        }
+        var now = new Date();
+        for (var dd = 29; dd >= 0; dd--) {
+          var dt = new Date(now);
+          dt.setDate(dt.getDate() - dd);
+          var key = dt.toISOString().split('T')[0];
+          labels.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+          data.push(countMap[key] || 0);
+        }
+
+        var isDark = document.documentElement.classList.contains('dark');
+        var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+        var textColor = isDark ? '#a1a1aa' : '#71717a';
+
+        if (facetClicksChart) facetClicksChart.destroy();
+        facetClicksChart = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Facet Clicks',
+              data: data,
+              backgroundColor: isDark ? 'rgba(168,85,247,0.4)' : 'rgba(168,85,247,0.6)',
+              borderColor: '#a855f7',
+              borderWidth: 1,
+              borderRadius: 3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#27272a' : '#fff',
+                titleColor: isDark ? '#e4e4e7' : '#18181b',
+                bodyColor: isDark ? '#a1a1aa' : '#52525b',
+                borderColor: isDark ? '#3f3f46' : '#e4e4e7',
+                borderWidth: 1
+              }
+            },
+            scales: {
+              x: { grid: { color: gridColor }, ticks: { color: textColor, maxTicksLimit: 8, font: { size: 11 } } },
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 }, precision: 0 } }
+            }
+          }
+        });
+      }
+
+      function renderFacetFieldsTable(items) {
+        var tbody = document.getElementById('ana-facet-fields-tbody');
+        if (!tbody) return;
+
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="2" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">No facet click data yet</td></tr>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var displayName = item.facet_field;
+          if (displayName.startsWith('$.')) displayName = displayName.slice(2);
+          displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100">' + escapeAnalyticsHtml(displayName) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + item.click_count + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
+      function renderFacetValuesTable(items) {
+        var tbody = document.getElementById('ana-facet-values-tbody');
+        if (!tbody) return;
+
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="px-6 py-8 text-sm text-zinc-400 dark:text-zinc-500 text-center">No facet click data yet</td></tr>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var fieldDisplay = item.facet_field;
+          if (fieldDisplay.startsWith('$.')) fieldDisplay = fieldDisplay.slice(2);
+          fieldDisplay = fieldDisplay.charAt(0).toUpperCase() + fieldDisplay.slice(1);
+          html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">' +
+            '<td class="px-6 py-3 text-sm text-zinc-500 dark:text-zinc-400">' + escapeAnalyticsHtml(fieldDisplay) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-900 dark:text-zinc-100">' + escapeAnalyticsHtml(item.facet_value) + '</td>' +
+            '<td class="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + item.click_count + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+      }
+
       function formatTimeAgo(ms) {
         var sec = Math.floor(ms / 1000);
         if (sec < 60) return 'just now';
@@ -33839,6 +34648,188 @@ function renderSearchDashboard(data) {
       // Auto-load if we navigated directly to #analytics
       if (initTab === 'analytics') {
         loadAnalytics();
+      }
+
+      // ==========================================
+      // Faceted Search Configuration
+      // ==========================================
+      var facetConfigData = []; // Current facet config array
+
+      var facetConfigLoaded = false;
+
+      function toggleFacetsEnabled(enabled) {
+        var section = document.getElementById('facet-config-section');
+        if (enabled) {
+          section.classList.remove('hidden');
+          if (!facetConfigLoaded) {
+            loadFacetConfig(true);
+          }
+        } else {
+          section.classList.add('hidden');
+        }
+      }
+
+      async function loadFacetConfig(keepToggleState) {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/facets/config');
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to load config');
+
+          var toggle = document.getElementById('facets_enabled');
+
+          // Only set the toggle from DB on initial page load, not when
+          // the user just clicked it (keepToggleState = true)
+          if (!keepToggleState) {
+            toggle.checked = json.data.enabled;
+            if (json.data.enabled) {
+              document.getElementById('facet-config-section').classList.remove('hidden');
+            }
+          }
+
+          facetConfigData = json.data.config || [];
+          facetConfigLoaded = true;
+
+          if (facetConfigData.length === 0 && (toggle.checked || json.data.enabled)) {
+            // Auto-generate on first load
+            await autoGenerateFacets();
+            return;
+          }
+
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error loading facet config:', error);
+          document.getElementById('facet-config-status').textContent = 'Error loading facet configuration';
+        }
+      }
+
+      async function autoGenerateFacets() {
+        try {
+          document.getElementById('facet-config-status').textContent = 'Auto-discovering fields...';
+          var res = await fetch('/admin/plugins/ai-search/api/facets/auto-generate', { method: 'POST' });
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to auto-generate');
+
+          facetConfigData = json.data.config || [];
+          document.getElementById('facet-config-status').textContent =
+            'Discovered ' + json.data.discovered_count + ' fields, auto-enabled ' + json.data.auto_enabled_count;
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error auto-generating facets:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      async function rediscoverFacets() {
+        try {
+          document.getElementById('facet-config-status').textContent = 'Re-discovering fields...';
+          var res = await fetch('/admin/plugins/ai-search/api/facets/discover');
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to discover');
+
+          var discovered = json.data || [];
+          // Merge: keep existing config, add new discovered fields
+          var existingFields = new Set(facetConfigData.map(function(f) { return f.field; }));
+          var newFields = discovered.filter(function(d) { return !existingFields.has(d.field); });
+
+          for (var i = 0; i < newFields.length; i++) {
+            facetConfigData.push({
+              name: newFields[i].title,
+              field: newFields[i].field,
+              type: newFields[i].type,
+              collections: newFields[i].collections.map(function(c) { return c.id; }),
+              enabled: newFields[i].recommended,
+              source: 'auto',
+              position: facetConfigData.length
+            });
+          }
+
+          document.getElementById('facet-config-status').textContent =
+            discovered.length + ' fields found' + (newFields.length > 0 ? ', ' + newFields.length + ' new' : '');
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error re-discovering facets:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      function renderFacetConfigTable(config) {
+        var tbody = document.getElementById('facet-config-body');
+        if (!config || config.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-zinc-400">No facets configured. Click "Re-discover Fields" to scan collection schemas.</td></tr>';
+          return;
+        }
+
+        var typeBadge = function(type) {
+          switch (type) {
+            case 'builtin': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">built-in</span>';
+            case 'json_array': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">array</span>';
+            case 'json_scalar': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">scalar</span>';
+            default: return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-zinc-100 text-zinc-600">' + type + '</span>';
+          }
+        };
+        var sourceBadge = function(source) {
+          switch (source) {
+            case 'auto': return '<span class="text-xs text-zinc-400">auto</span>';
+            case 'manual': return '<span class="text-xs text-indigo-500">manual</span>';
+            case 'agent': return '<span class="text-xs text-purple-500">agent</span>';
+            default: return '<span class="text-xs text-zinc-400">' + (source || 'auto') + '</span>';
+          }
+        };
+
+        var html = '';
+        for (var i = 0; i < config.length; i++) {
+          var f = config[i];
+          html += '<tr class="border-b border-zinc-100 dark:border-zinc-800">' +
+            '<td class="py-2 px-2"><input type="checkbox" ' + (f.enabled ? 'checked' : '') + ' onchange="toggleFacetConfig(' + i + ', this.checked)" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"></td>' +
+            '<td class="py-2 px-2 text-sm text-zinc-900 dark:text-zinc-100">' + (f.name || f.field) + '</td>' +
+            '<td class="py-2 px-2 text-xs font-mono text-zinc-500 dark:text-zinc-400">' + f.field + '</td>' +
+            '<td class="py-2 px-2">' + typeBadge(f.type) + '</td>' +
+            '<td class="py-2 px-2">' + sourceBadge(f.source) + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+        document.getElementById('facet-config-status').textContent = config.length + ' facets configured, ' + config.filter(function(f) { return f.enabled; }).length + ' enabled';
+      }
+
+      function toggleFacetConfig(index, enabled) {
+        if (facetConfigData[index]) {
+          facetConfigData[index].enabled = enabled;
+          // If manually changed, update source
+          if (facetConfigData[index].source !== 'manual') {
+            facetConfigData[index].source = 'manual';
+          }
+          renderFacetConfigTable(facetConfigData);
+        }
+      }
+
+      async function saveFacetConfig() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/facets/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              enabled: document.getElementById('facets_enabled').checked,
+              config: facetConfigData
+            })
+          });
+          var json = await res.json();
+          if (json.success) {
+            document.getElementById('facet-config-status').textContent = 'Facet configuration saved!';
+            setTimeout(function() {
+              renderFacetConfigTable(facetConfigData);
+            }, 2000);
+          } else {
+            document.getElementById('facet-config-status').textContent = 'Error saving: ' + (json.error || 'Unknown error');
+          }
+        } catch (error) {
+          console.error('Error saving facet config:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      // Load facet config on page load (if on configuration tab)
+      if (initTab === 'configuration') {
+        loadFacetConfig();
       }
     </script>
   `;
@@ -33978,6 +34969,6 @@ var ROUTES_INFO = {
   reference: "https://github.com/sonicjs/sonicjs"
 };
 
-export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, IndexManager, ROUTES_INFO, RankingPipelineService, SynonymService, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-MVFZOTLG.js.map
-//# sourceMappingURL=chunk-MVFZOTLG.js.map
+export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, FacetService, IndexManager, ROUTES_INFO, RankingPipelineService, SynonymService, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
+//# sourceMappingURL=chunk-TIHD5DRK.js.map
+//# sourceMappingURL=chunk-TIHD5DRK.js.map

@@ -1,3 +1,5 @@
+'use strict';
+
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -1733,6 +1735,24 @@ CREATE INDEX IF NOT EXISTS idx_forms_turnstile ON forms(turnstile_enabled);
     filename: "037_click_tracking.sql",
     description: "Migration 037: Click Tracking",
     sql: "-- Click events table\nCREATE TABLE IF NOT EXISTS ai_search_clicks (\n  id TEXT PRIMARY KEY,\n  search_id TEXT,                -- references ai_search_history.id (nullable for older searches)\n  query TEXT NOT NULL,           -- denormalized for fast analytics queries\n  mode TEXT,                     -- search mode used\n  clicked_content_id TEXT NOT NULL,  -- the content item ID that was clicked\n  clicked_content_title TEXT,    -- denormalized title for reporting without joins\n  click_position INTEGER NOT NULL,   -- 1-based position in results list (1 = first result)\n  created_at TEXT DEFAULT (datetime('now'))\n);\n\n-- Indexes for analytics queries\nCREATE INDEX IF NOT EXISTS idx_clicks_search_id ON ai_search_clicks(search_id);\nCREATE INDEX IF NOT EXISTS idx_clicks_query ON ai_search_clicks(query, created_at);\nCREATE INDEX IF NOT EXISTS idx_clicks_content ON ai_search_clicks(clicked_content_id, created_at);\nCREATE INDEX IF NOT EXISTS idx_clicks_created ON ai_search_clicks(created_at);\n"
+  },
+  {
+    id: "038",
+    name: "Facet Tracking",
+    filename: "038_facet_tracking.sql",
+    description: "Migration 038: Facet Tracking",
+    sql: `-- Facet interaction tracking for Phase 6 agent optimization
+CREATE TABLE IF NOT EXISTS ai_search_facet_clicks (
+  id TEXT PRIMARY KEY,
+  search_id TEXT,              -- references ai_search_history.id (nullable)
+  facet_field TEXT NOT NULL,   -- e.g. "collection_name", "$.tags", "status"
+  facet_value TEXT NOT NULL,   -- the value that was clicked/selected
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Index for agent weekly analysis (field usage over time)
+CREATE INDEX IF NOT EXISTS idx_facet_clicks_field ON ai_search_facet_clicks(facet_field, created_at);
+`
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2140,6 +2160,6 @@ var MigrationService = class {
   }
 };
 
-export { MigrationService };
-//# sourceMappingURL=chunk-XX5D375L.js.map
-//# sourceMappingURL=chunk-XX5D375L.js.map
+exports.MigrationService = MigrationService;
+//# sourceMappingURL=chunk-SRJ3K343.cjs.map
+//# sourceMappingURL=chunk-SRJ3K343.cjs.map

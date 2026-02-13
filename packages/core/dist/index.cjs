@@ -1,10 +1,10 @@
 'use strict';
 
-var chunkCH73AO44_cjs = require('./chunk-CH73AO44.cjs');
+var chunkGK4OTROV_cjs = require('./chunk-GK4OTROV.cjs');
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkO4UES3RC_cjs = require('./chunk-O4UES3RC.cjs');
+var chunkJMF2KCEP_cjs = require('./chunk-JMF2KCEP.cjs');
 var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkZX676GCT_cjs = require('./chunk-ZX676GCT.cjs');
+var chunkSRJ3K343_cjs = require('./chunk-SRJ3K343.cjs');
 var chunk6WA4KFYZ_cjs = require('./chunk-6WA4KFYZ.cjs');
 var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
 var chunkMNFY6DWY_cjs = require('./chunk-MNFY6DWY.cjs');
@@ -559,7 +559,7 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkO4UES3RC_cjs.requireAuth());
+  router3.use("*", chunkJMF2KCEP_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
@@ -2721,7 +2721,7 @@ function createOTPLoginPlugin() {
           error: "Account is deactivated"
         }, 403);
       }
-      const token = await chunkO4UES3RC_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+      const token = await chunkJMF2KCEP_cjs.AuthManager.generateToken(user.id, user.email, user.role);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2804,7 +2804,7 @@ var clampWeight = (val, fallback) => {
   return isNaN(n) || !isFinite(n) ? fallback : Math.round(Math.min(10, Math.max(0, n)) * 10) / 10;
 };
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkO4UES3RC_cjs.requireAuth());
+adminRoutes.use("*", chunkJMF2KCEP_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
   return c.redirect("/admin/search");
 });
@@ -2813,8 +2813,8 @@ adminRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
-    const indexer = new chunkCH73AO44_cjs.IndexManager(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
+    const indexer = new chunkGK4OTROV_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     console.log("[AI Search POST] Received body:", JSON.stringify(body, null, 2));
     const currentSettings = await service.getSettings();
@@ -2833,7 +2833,10 @@ adminRoutes.post("/", async (c) => {
       fts5_title_boost: body.fts5_title_boost !== void 0 ? clampWeight(body.fts5_title_boost, currentSettings?.fts5_title_boost ?? 5) : currentSettings?.fts5_title_boost,
       fts5_slug_boost: body.fts5_slug_boost !== void 0 ? clampWeight(body.fts5_slug_boost, currentSettings?.fts5_slug_boost ?? 2) : currentSettings?.fts5_slug_boost,
       fts5_body_boost: body.fts5_body_boost !== void 0 ? clampWeight(body.fts5_body_boost, currentSettings?.fts5_body_boost ?? 1) : currentSettings?.fts5_body_boost,
-      query_synonyms_enabled: body.query_synonyms_enabled !== void 0 ? Boolean(body.query_synonyms_enabled) : currentSettings?.query_synonyms_enabled
+      query_synonyms_enabled: body.query_synonyms_enabled !== void 0 ? Boolean(body.query_synonyms_enabled) : currentSettings?.query_synonyms_enabled,
+      facets_enabled: body.facets_enabled !== void 0 ? Boolean(body.facets_enabled) : currentSettings?.facets_enabled,
+      facet_config: Array.isArray(body.facet_config) ? body.facet_config : currentSettings?.facet_config,
+      facet_max_values: body.facet_max_values !== void 0 ? Number(body.facet_max_values) : currentSettings?.facet_max_values
     };
     console.log("[AI Search POST] Updated settings selected_collections:", updatedSettings.selected_collections);
     const collectionsChanged = JSON.stringify(updatedSettings.selected_collections) !== JSON.stringify(currentSettings?.selected_collections || []);
@@ -2856,7 +2859,7 @@ adminRoutes.get("/api/settings", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const settings = await service.getSettings();
     return c.json({ success: true, data: settings });
   } catch (error) {
@@ -2869,7 +2872,7 @@ adminRoutes.get("/api/new-collections", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const notifications = await service.detectNewCollections();
     return c.json({ success: true, data: notifications });
   } catch (error) {
@@ -2882,7 +2885,7 @@ adminRoutes.get("/api/status", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new chunkCH73AO44_cjs.IndexManager(db, ai, vectorize);
+    const indexer = new chunkGK4OTROV_cjs.IndexManager(db, ai, vectorize);
     const status = await indexer.getAllIndexStatus();
     return c.json({ success: true, data: status });
   } catch (error) {
@@ -2895,7 +2898,7 @@ adminRoutes.post("/api/reindex", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new chunkCH73AO44_cjs.IndexManager(db, ai, vectorize);
+    const indexer = new chunkGK4OTROV_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     const collectionIdRaw = body.collection_id;
     const collectionId = collectionIdRaw ? String(collectionIdRaw) : "";
@@ -2914,7 +2917,7 @@ adminRoutes.post("/api/reindex", async (c) => {
 adminRoutes.get("/api/fts5/status", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkCH73AO44_cjs.FTS5Service(db);
+    const fts5Service = new chunkGK4OTROV_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -2942,7 +2945,7 @@ adminRoutes.get("/api/fts5/status", async (c) => {
 adminRoutes.post("/api/fts5/index-collection", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkCH73AO44_cjs.FTS5Service(db);
+    const fts5Service = new chunkGK4OTROV_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -2976,8 +2979,8 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
-    const fts5Service = new chunkCH73AO44_cjs.FTS5Service(db);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
+    const fts5Service = new chunkGK4OTROV_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -3037,7 +3040,7 @@ adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
     if (!ai || !vectorize) {
       return c.json({ error: "Vectorize reindexing requires AI and VECTORIZE_INDEX bindings." }, 400);
     }
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const settings = await service.getSettings();
     const collections2 = settings?.selected_collections || [];
     if (collections2.length === 0) {
@@ -3068,7 +3071,7 @@ adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
     }
     try {
       const benchmarkIds = [];
-      for (const dsId of chunkCH73AO44_cjs.BENCHMARK_DATASETS.map((d) => d.id)) {
+      for (const dsId of chunkGK4OTROV_cjs.BENCHMARK_DATASETS.map((d) => d.id)) {
         for (let i = 0; i < 6e3; i++) {
           for (let chunk = 0; chunk < 3; chunk++) {
             benchmarkIds.push(`beir-${dsId}-${i}-chunk-${chunk}`);
@@ -3082,7 +3085,7 @@ adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
     } catch (e) {
       console.warn("[Vectorize Reindex] Orphan cleanup failed (non-fatal):", e);
     }
-    const indexer = new chunkCH73AO44_cjs.IndexManager(db, ai, vectorize);
+    const indexer = new chunkGK4OTROV_cjs.IndexManager(db, ai, vectorize);
     c.executionCtx.waitUntil(
       indexer.syncAll(collections2).then(() => console.log("[Vectorize Reindex] All collections reindexed")).catch((error) => console.error("[Vectorize Reindex] Error:", error))
     );
@@ -3103,7 +3106,7 @@ adminRoutes.post("/api/relevance/preview", async (c) => {
     const query = body.query?.trim();
     if (!query) return c.json({ error: "query is required" }, 400);
     const limit = Math.min(body.limit || 10, 20);
-    const service = new chunkCH73AO44_cjs.AISearchService(db);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db);
     const settings = await service.getSettings();
     const titleWeight = clampWeight(body.title_weight, settings?.fts5_title_boost ?? 5);
     const slugWeight = clampWeight(body.slug_weight, settings?.fts5_slug_boost ?? 2);
@@ -3114,13 +3117,13 @@ adminRoutes.post("/api/relevance/preview", async (c) => {
       fts5_slug_boost: slugWeight,
       fts5_body_boost: bodyWeight
     };
-    const fts5Service = new chunkCH73AO44_cjs.FTS5Service(db);
+    const fts5Service = new chunkGK4OTROV_cjs.FTS5Service(db);
     let result = await fts5Service.search(
       { query, mode: "fts5", limit, offset: 0 },
       previewSettings,
       { titleBoost: titleWeight, slugBoost: slugWeight, bodyBoost: bodyWeight }
     );
-    const pipelineService = new chunkCH73AO44_cjs.RankingPipelineService(db);
+    const pipelineService = new chunkGK4OTROV_cjs.RankingPipelineService(db);
     let pipelineApplied = false;
     try {
       const config = await pipelineService.getConfig();
@@ -3149,7 +3152,7 @@ adminRoutes.post("/api/relevance/preview", async (c) => {
 });
 adminRoutes.get("/api/relevance/pipeline", async (c) => {
   try {
-    const pipelineService = new chunkCH73AO44_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkGK4OTROV_cjs.RankingPipelineService(c.env.DB);
     const config = await pipelineService.getConfig();
     return c.json({ success: true, data: config });
   } catch (error) {
@@ -3163,7 +3166,7 @@ adminRoutes.post("/api/relevance/pipeline", async (c) => {
     if (!Array.isArray(body.stages)) {
       return c.json({ error: "stages must be an array" }, 400);
     }
-    const pipelineService = new chunkCH73AO44_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkGK4OTROV_cjs.RankingPipelineService(c.env.DB);
     await pipelineService.saveConfig(body.stages);
     const saved = await pipelineService.getConfig();
     return c.json({ success: true, data: saved });
@@ -3179,7 +3182,7 @@ adminRoutes.get("/api/relevance/content-scores", async (c) => {
     if (!contentId) {
       return c.json({ error: "content_id query parameter is required" }, 400);
     }
-    const pipelineService = new chunkCH73AO44_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkGK4OTROV_cjs.RankingPipelineService(c.env.DB);
     const scores = await pipelineService.getContentScores([contentId], scoreType);
     return c.json({
       success: true,
@@ -3200,7 +3203,7 @@ adminRoutes.post("/api/relevance/content-scores", async (c) => {
     if (!["popularity", "custom"].includes(scoreType)) {
       return c.json({ error: 'score_type must be "popularity" or "custom"' }, 400);
     }
-    const pipelineService = new chunkCH73AO44_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkGK4OTROV_cjs.RankingPipelineService(c.env.DB);
     await pipelineService.setContentScore(String(contentId), scoreType, Number(score));
     return c.json({ success: true });
   } catch (error) {
@@ -3215,7 +3218,7 @@ adminRoutes.delete("/api/relevance/content-scores", async (c) => {
     if (!contentId || !scoreType) {
       return c.json({ error: "content_id and score_type are required" }, 400);
     }
-    const pipelineService = new chunkCH73AO44_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkGK4OTROV_cjs.RankingPipelineService(c.env.DB);
     await pipelineService.deleteContentScore(String(contentId), scoreType);
     return c.json({ success: true });
   } catch (error) {
@@ -3225,7 +3228,7 @@ adminRoutes.delete("/api/relevance/content-scores", async (c) => {
 });
 adminRoutes.get("/api/relevance/synonyms", async (c) => {
   try {
-    const synonymService = new chunkCH73AO44_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkGK4OTROV_cjs.SynonymService(c.env.DB);
     const groups = await synonymService.getAll();
     return c.json({ success: true, data: groups });
   } catch (error) {
@@ -3239,7 +3242,7 @@ adminRoutes.post("/api/relevance/synonyms", async (c) => {
     if (!Array.isArray(body.terms) || body.terms.length < 2) {
       return c.json({ error: "terms must be an array with at least 2 items" }, 400);
     }
-    const synonymService = new chunkCH73AO44_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkGK4OTROV_cjs.SynonymService(c.env.DB);
     const group = await synonymService.create(body.terms, body.enabled !== false);
     return c.json({ success: true, data: group });
   } catch (error) {
@@ -3251,7 +3254,7 @@ adminRoutes.put("/api/relevance/synonyms/:id", async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json();
-    const synonymService = new chunkCH73AO44_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkGK4OTROV_cjs.SynonymService(c.env.DB);
     const group = await synonymService.update(id, {
       terms: body.terms,
       enabled: body.enabled
@@ -3268,7 +3271,7 @@ adminRoutes.put("/api/relevance/synonyms/:id", async (c) => {
 adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    const synonymService = new chunkCH73AO44_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkGK4OTROV_cjs.SynonymService(c.env.DB);
     const deleted = await synonymService.delete(id);
     if (!deleted) {
       return c.json({ error: "Synonym group not found" }, 404);
@@ -3279,12 +3282,182 @@ adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
     return c.json({ error: "Failed to delete synonym group" }, 500);
   }
 });
+adminRoutes.get("/api/facets/discover", async (c) => {
+  try {
+    const facetService = new chunkGK4OTROV_cjs.FacetService(c.env.DB);
+    const discovered = await facetService.discoverFields();
+    return c.json({ success: true, data: discovered });
+  } catch (error) {
+    console.error("Error discovering facet fields:", error);
+    return c.json({ error: "Failed to discover facet fields" }, 500);
+  }
+});
+var BUILTIN_SHADOW_FIELDS = /* @__PURE__ */ new Set(["$.author", "$.status"]);
+function stripShadowFacets(config) {
+  return config.filter((f) => !BUILTIN_SHADOW_FIELDS.has(f.field));
+}
+adminRoutes.get("/api/facets/config", async (c) => {
+  try {
+    const service = new chunkGK4OTROV_cjs.AISearchService(c.env.DB);
+    const settings = await service.getSettings();
+    const config = stripShadowFacets(settings?.facet_config ?? []);
+    return c.json({
+      success: true,
+      data: {
+        enabled: settings?.facets_enabled ?? false,
+        config,
+        max_values: settings?.facet_max_values ?? 20
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching facet config:", error);
+    return c.json({ error: "Failed to fetch facet config" }, 500);
+  }
+});
+adminRoutes.post("/api/facets/config", async (c) => {
+  try {
+    const body = await c.req.json();
+    const service = new chunkGK4OTROV_cjs.AISearchService(c.env.DB);
+    const updates = {};
+    if (body.enabled !== void 0) updates.facets_enabled = Boolean(body.enabled);
+    if (Array.isArray(body.config)) updates.facet_config = stripShadowFacets(body.config);
+    if (body.max_values !== void 0) updates.facet_max_values = Number(body.max_values);
+    const saved = await service.updateSettings(updates);
+    return c.json({
+      success: true,
+      data: {
+        enabled: saved.facets_enabled ?? false,
+        config: saved.facet_config ?? [],
+        max_values: saved.facet_max_values ?? 20
+      }
+    });
+  } catch (error) {
+    console.error("Error saving facet config:", error);
+    return c.json({ error: "Failed to save facet config" }, 500);
+  }
+});
+adminRoutes.post("/api/facets/auto-generate", async (c) => {
+  try {
+    const facetService = new chunkGK4OTROV_cjs.FacetService(c.env.DB);
+    const discovered = await facetService.discoverFields();
+    const config = facetService.autoGenerateConfig(discovered);
+    const service = new chunkGK4OTROV_cjs.AISearchService(c.env.DB);
+    const saved = await service.updateSettings({
+      facets_enabled: true,
+      facet_config: config
+    });
+    return c.json({
+      success: true,
+      data: {
+        enabled: true,
+        config: saved.facet_config ?? config,
+        discovered_count: discovered.length,
+        auto_enabled_count: config.length
+      }
+    });
+  } catch (error) {
+    console.error("Error auto-generating facet config:", error);
+    return c.json({ error: "Failed to auto-generate facet config" }, 500);
+  }
+});
+adminRoutes.post("/api/seed/clicks", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.searches) || body.searches.length === 0) {
+      return c.json({ error: "searches array is required" }, 400);
+    }
+    const db = c.env.DB;
+    const days = body.days || 30;
+    const now = Date.now();
+    const msPerDay = 24 * 60 * 60 * 1e3;
+    let searchCount = 0;
+    let clickCount = 0;
+    for (const [i, s] of body.searches.entries()) {
+      const daysAgo = i / body.searches.length * days;
+      const jitter = (Math.random() - 0.5) * msPerDay;
+      const searchTimestamp = now - daysAgo * msPerDay + jitter;
+      const historyResult = await db.prepare(
+        `INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(s.query, s.mode, s.results_count, s.response_time_ms, Math.floor(searchTimestamp)).run();
+      const searchId = historyResult.meta?.last_row_id?.toString();
+      searchCount++;
+      if (s.clicks && searchId) {
+        for (const click of s.clicks) {
+          const clickId = crypto.randomUUID();
+          const clickOffset = Math.floor(Math.random() * 60) * 1e3;
+          const clickDatetime = new Date(searchTimestamp + clickOffset).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+          await db.prepare(
+            `INSERT INTO ai_search_clicks (id, search_id, query, mode, clicked_content_id, clicked_content_title, click_position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(clickId, searchId, s.query, s.mode, click.content_id, click.content_title, click.position, clickDatetime).run();
+          clickCount++;
+        }
+      }
+    }
+    return c.json({
+      success: true,
+      data: { searches_inserted: searchCount, clicks_inserted: clickCount }
+    });
+  } catch (error) {
+    console.error("Error seeding click data:", error);
+    return c.json({ error: `Seed failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/seed/facet-clicks", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.clicks) || body.clicks.length === 0) {
+      return c.json({ error: "clicks array is required" }, 400);
+    }
+    const db = c.env.DB;
+    const days = body.days || 30;
+    const now = Date.now();
+    const msPerDay = 24 * 60 * 60 * 1e3;
+    let insertCount = 0;
+    for (const [i, fc] of body.clicks.entries()) {
+      const id = crypto.randomUUID();
+      const daysAgo = i / body.clicks.length * days;
+      const jitter = (Math.random() - 0.5) * msPerDay;
+      const timestamp = now - daysAgo * msPerDay + jitter;
+      const datetime = new Date(timestamp).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+      await db.prepare(
+        `INSERT INTO ai_search_facet_clicks (id, search_id, facet_field, facet_value, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(id, fc.search_id || null, fc.facet_field, fc.facet_value, datetime).run();
+      insertCount++;
+    }
+    return c.json({
+      success: true,
+      data: { facet_clicks_inserted: insertCount }
+    });
+  } catch (error) {
+    console.error("Error seeding facet click data:", error);
+    return c.json({ error: `Seed failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.delete("/api/seed/clicks", async (c) => {
+  try {
+    const db = c.env.DB;
+    await db.prepare("DELETE FROM ai_search_clicks").run();
+    await db.prepare("DELETE FROM ai_search_history").run();
+    return c.json({ success: true, message: "Cleared click tracking and search history data" });
+  } catch (error) {
+    return c.json({ error: `Clear failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.delete("/api/seed/facet-clicks", async (c) => {
+  try {
+    const db = c.env.DB;
+    await db.prepare("DELETE FROM ai_search_facet_clicks").run();
+    return c.json({ success: true, message: "Cleared facet click data" });
+  } catch (error) {
+    return c.json({ error: `Clear failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
 adminRoutes.get("/api/analytics/extended", async (c) => {
   try {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const data = await service.getAnalyticsExtended();
     return c.json({ success: true, data });
   } catch (error) {
@@ -3293,14 +3466,14 @@ adminRoutes.get("/api/analytics/extended", async (c) => {
   }
 });
 adminRoutes.get("/api/benchmark/datasets", async (c) => {
-  return c.json({ success: true, datasets: chunkCH73AO44_cjs.BENCHMARK_DATASETS });
+  return c.json({ success: true, datasets: chunkGK4OTROV_cjs.BENCHMARK_DATASETS });
 });
 adminRoutes.get("/api/benchmark/status", async (c) => {
   try {
     const db = c.env.DB;
     const kv = c.env.CACHE_KV;
     const dataset = c.req.query("dataset") || "scifact";
-    const benchmarkService = new chunkCH73AO44_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkGK4OTROV_cjs.BenchmarkService(db, kv, void 0, dataset);
     const { seeded, count } = await benchmarkService.isSeeded();
     const meta = benchmarkService.getMeta();
     const dataAvailable = await benchmarkService.isDataAvailable();
@@ -3345,12 +3518,12 @@ adminRoutes.post("/api/benchmark/seed", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const dataset = body.dataset || "scifact";
     const useSubset = body.corpus_size !== "full";
-    const benchmarkService = new chunkCH73AO44_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkGK4OTROV_cjs.BenchmarkService(db, kv, void 0, dataset);
     const collectionId = benchmarkService.getCollectionId();
     const userId = user.userId || user.id;
     const result = await benchmarkService.seed(String(userId), useSubset);
     if (useSubset) {
-      const fts5Service = new chunkCH73AO44_cjs.FTS5Service(db);
+      const fts5Service = new chunkGK4OTROV_cjs.FTS5Service(db);
       c.executionCtx.waitUntil(
         fts5Service.indexCollection(collectionId).then((r) => console.log(`[Benchmark:${dataset}] FTS5 indexed ${r.indexed_items}/${r.total_items} docs`)).catch((e) => console.error(`[Benchmark:${dataset}] FTS5 indexing error:`, e))
       );
@@ -3386,7 +3559,7 @@ adminRoutes.post("/api/benchmark/purge", async (c) => {
     const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
     const body = await c.req.json().catch(() => ({}));
     const dataset = body.dataset || "scifact";
-    const benchmarkService = new chunkCH73AO44_cjs.BenchmarkService(db, kv, vectorize, dataset);
+    const benchmarkService = new chunkGK4OTROV_cjs.BenchmarkService(db, kv, vectorize, dataset);
     const deleted = await benchmarkService.purge();
     return c.json({
       success: true,
@@ -3401,7 +3574,7 @@ adminRoutes.post("/api/benchmark/purge", async (c) => {
 adminRoutes.post("/api/benchmark/index-fts5-batch", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkCH73AO44_cjs.FTS5Service(db);
+    const fts5Service = new chunkGK4OTROV_cjs.FTS5Service(db);
     if (!await fts5Service.isAvailable()) {
       return c.json({ error: "FTS5 tables not available." }, 400);
     }
@@ -3437,10 +3610,10 @@ adminRoutes.post("/api/benchmark/index-vectorize-batch", async (c) => {
     const batchSize = body.batch_size || 25;
     const offset = body.offset || 0;
     const benchmarkCollectionId = `benchmark-${dataset}-collection`;
-    const datasetInfo = chunkCH73AO44_cjs.BENCHMARK_DATASETS.find((d) => d.id === dataset);
+    const datasetInfo = chunkGK4OTROV_cjs.BENCHMARK_DATASETS.find((d) => d.id === dataset);
     const displayName = datasetInfo ? `${datasetInfo.name} Benchmark` : `BEIR ${dataset} Benchmark`;
-    const embeddingService = new chunkCH73AO44_cjs.EmbeddingService(ai);
-    const chunkingService = new chunkCH73AO44_cjs.ChunkingService();
+    const embeddingService = new chunkGK4OTROV_cjs.EmbeddingService(ai);
+    const chunkingService = new chunkGK4OTROV_cjs.ChunkingService();
     const totalResult = await db.prepare("SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'").bind(benchmarkCollectionId).first();
     const total = totalResult?.cnt || 0;
     if (offset >= total) {
@@ -3550,7 +3723,7 @@ adminRoutes.post("/api/benchmark/index-vectorize", async (c) => {
     }
     const body = await c.req.json().catch(() => ({}));
     const dataset = body.dataset || "scifact";
-    const benchmarkService = new chunkCH73AO44_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkGK4OTROV_cjs.BenchmarkService(db, kv, void 0, dataset);
     const { seeded } = await benchmarkService.isSeeded();
     if (!seeded) {
       return c.json({ error: "Benchmark data not seeded. Seed first." }, 400);
@@ -3586,7 +3759,7 @@ adminRoutes.post("/api/benchmark/evaluate", async (c) => {
     const limit = body.limit || 10;
     const maxQueries = body.max_queries || 0;
     const dataset = body.dataset || "scifact";
-    const benchmarkService = new chunkCH73AO44_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkGK4OTROV_cjs.BenchmarkService(db, kv, void 0, dataset);
     const collectionId = benchmarkService.getCollectionId();
     const { seeded } = await benchmarkService.isSeeded();
     if (!seeded) {
@@ -3596,7 +3769,7 @@ adminRoutes.post("/api/benchmark/evaluate", async (c) => {
       );
     }
     if (mode === "fts5" || mode === "hybrid") {
-      const fts5Service = new chunkCH73AO44_cjs.FTS5Service(db);
+      const fts5Service = new chunkGK4OTROV_cjs.FTS5Service(db);
       if (await fts5Service.isAvailable()) {
         const ftsCount = await db.prepare("SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?").bind(collectionId).first();
         if (!ftsCount || ftsCount.cnt === 0) {
@@ -3635,7 +3808,7 @@ adminRoutes.post("/api/benchmark/evaluate", async (c) => {
         );
       }
     }
-    const aiSearchService = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const aiSearchService = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const searchFn = async (query, searchMode, searchLimit) => {
       const response = await aiSearchService.search({
         query,
@@ -3666,7 +3839,7 @@ adminRoutes.get("/api/benchmark/query-ids", async (c) => {
     const dataset = c.req.query("dataset") || "scifact";
     const db = c.env.DB;
     const kv = c.env.CACHE_KV;
-    const benchmarkService = new chunkCH73AO44_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkGK4OTROV_cjs.BenchmarkService(db, kv, void 0, dataset);
     const ids = await benchmarkService.getEvaluableQueryIds(maxQueries);
     return c.json({ success: true, query_ids: ids, total: ids.length });
   } catch (error) {
@@ -3690,9 +3863,9 @@ adminRoutes.post("/api/benchmark/evaluate-batch", async (c) => {
     if ((mode === "ai" || mode === "hybrid") && !vectorize) {
       return c.json({ error: `${mode.toUpperCase()} mode requires Vectorize binding.` }, 400);
     }
-    const benchmarkService = new chunkCH73AO44_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkGK4OTROV_cjs.BenchmarkService(db, kv, void 0, dataset);
     const collectionId = benchmarkService.getCollectionId();
-    const aiSearchService = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const aiSearchService = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const searchFn = async (query, searchMode, searchLimit) => {
       const response = await aiSearchService.search({
         query,
@@ -3720,14 +3893,15 @@ apiRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const body = await c.req.json();
     const query = {
       query: body.query || "",
       mode: body.mode || "keyword",
       filters: body.filters || {},
       limit: body.limit ? Number(body.limit) : void 0,
-      offset: body.offset ? Number(body.offset) : void 0
+      offset: body.offset ? Number(body.offset) : void 0,
+      facets: body.facets === true
     };
     if (query.filters?.dateRange) {
       if (typeof query.filters.dateRange.start === "string") {
@@ -3759,7 +3933,7 @@ apiRoutes.get("/suggest", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const query = c.req.query("q") || "";
     if (!query || query.length < 2) {
       return c.json({ success: true, data: [] });
@@ -3824,12 +3998,36 @@ apiRoutes.post("/click", async (c) => {
     return c.json({ success: true });
   }
 });
+apiRoutes.post("/facet-click", async (c) => {
+  try {
+    const db = c.env.DB;
+    const body = await c.req.json();
+    const facetField = body.facet_field;
+    const facetValue = body.facet_value;
+    const searchId = body.search_id;
+    if (!facetField || typeof facetField !== "string") {
+      return c.json({ success: false, error: "facet_field is required" }, 400);
+    }
+    if (!facetValue || typeof facetValue !== "string") {
+      return c.json({ success: false, error: "facet_value is required" }, 400);
+    }
+    const id = crypto.randomUUID();
+    await db.prepare(`
+        INSERT INTO ai_search_facet_clicks (id, search_id, facet_field, facet_value, created_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+      `).bind(id, searchId || null, facetField, facetValue).run();
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Facet click tracking error:", error);
+    return c.json({ success: true });
+  }
+});
 apiRoutes.get("/analytics", async (c) => {
   try {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const analytics = await service.getSearchAnalytics();
     return c.json({
       success: true,
@@ -3871,7 +4069,8 @@ var InstantSearchAdapter = class {
       filters: {
         collections: collections2.length > 0 ? collections2 : void 0,
         status: this.parseStatusFilter(params.filters)
-      }
+      },
+      facets: params.facets && params.facets.length > 0 ? true : void 0
     };
   }
   /**
@@ -3883,7 +4082,7 @@ var InstantSearchAdapter = class {
     const hitsPerPage = Math.min(params.hitsPerPage ?? 20, 200);
     const hits = response.results.map((r) => this.toHit(r, params));
     const nbPages = hitsPerPage > 0 ? Math.ceil(response.total / hitsPerPage) : 0;
-    const facets = this.computeFacets(response.results, params.facets);
+    const facets = response.facets && response.facets.length > 0 ? this.mapFacetResults(response.facets, params.facets) : this.computeFacets(response.results, params.facets);
     return {
       hits,
       nbHits: response.total,
@@ -3978,8 +4177,27 @@ var InstantSearchAdapter = class {
     return m?.[1] ? [m[1]] : void 0;
   }
   /**
+   * Map FacetResult[] from FacetService to Algolia format.
+   * Filters to only the facets requested by InstantSearch params.
+   */
+  mapFacetResults(facetResults, requested) {
+    if (!requested || requested.length === 0) return {};
+    const facets = {};
+    const requestedSet = new Set(requested);
+    for (const fr of facetResults) {
+      if (requestedSet.has(fr.field) || requestedSet.has(fr.name) || requestedSet.has("*")) {
+        const counts = {};
+        for (const fv of fr.values) {
+          counts[fv.value] = fv.count;
+        }
+        facets[fr.field] = counts;
+      }
+    }
+    return facets;
+  }
+  /**
    * Compute facet counts from the current result page.
-   * MVP: collection_name and status only.
+   * Fallback when FacetService data is not available.
    */
   computeFacets(results, requested) {
     if (!requested || requested.length === 0) return {};
@@ -4030,7 +4248,7 @@ instantSearchRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const searchService = new chunkCH73AO44_cjs.AISearchService(db, ai, vectorize);
+    const searchService = new chunkGK4OTROV_cjs.AISearchService(db, ai, vectorize);
     const adapter = new InstantSearchAdapter(db);
     const body = await c.req.json();
     if (!body.requests || !Array.isArray(body.requests)) {
@@ -5290,6 +5508,85 @@ navigator.sendBeacon('/api/search/click', JSON.stringify({
   click_position: index + 1                   // 1-based position in results
 }));</code></pre>
               <p><small>Click tracking is optional but recommended. Uses <code>sendBeacon</code> for reliability during navigation.</small></p>
+
+              <h3>Faceted Search</h3>
+              <p>Request facet counts alongside search results by passing <code>facets: true</code>. Facets reflect the full matching result set, not just the current page.</p>
+              <pre><code>// Request with facets
+const response = await fetch('/api/search', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: 'tutorial',
+    mode: 'fts5',
+    facets: true
+  })
+});
+
+// Response includes facets array
+{
+  "success": true,
+  "data": {
+    "results": [...],
+    "total": 42,
+    "facets": [
+      { "name": "Collection", "field": "collection_name", "values": [
+        { "value": "Blog Posts", "count": 28 },
+        { "value": "Docs", "count": 14 }
+      ]},
+      { "name": "Status", "field": "status", "values": [
+        { "value": "published", "count": 40 },
+        { "value": "draft", "count": 2 }
+      ]},
+      { "name": "Tags", "field": "$.tags", "values": [
+        { "value": "javascript", "count": 15 },
+        { "value": "react", "count": 12 }
+      ]}
+    ]
+  }
+}</code></pre>
+
+              <h4>Frontend Facet Sidebar Example</h4>
+              <pre><code>// Render facet checkboxes
+function renderFacets(facets) {
+  return facets.map(facet =&gt; \`
+    &lt;div class="facet-group"&gt;
+      &lt;h4&gt;\${facet.name}&lt;/h4&gt;
+      \${facet.values.map(v =&gt; \`
+        &lt;label&gt;
+          &lt;input type="checkbox" value="\${v.value}"
+            onchange="filterByFacet('\${facet.field}', '\${v.value}')"&gt;
+          \${v.value} (\${v.count})
+        &lt;/label&gt;
+      \`).join('')}
+    &lt;/div&gt;
+  \`).join('');
+}
+
+// Track facet interactions (optional, powers admin analytics)
+function filterByFacet(field, value) {
+  navigator.sendBeacon('/api/search/facet-click', JSON.stringify({
+    facet_field: field,
+    facet_value: value,
+    search_id: currentSearchId
+  }));
+  // Re-run search with the filter applied
+}</code></pre>
+
+              <h4>InstantSearch.js RefinementList</h4>
+              <p>If you use InstantSearch.js, facets work automatically with the <code>RefinementList</code> widget:</p>
+              <pre><code>import { refinementList } from 'instantsearch.js/es/widgets';
+
+search.addWidgets([
+  refinementList({
+    container: '#status-filter',
+    attribute: 'status',
+  }),
+  refinementList({
+    container: '#collection-filter',
+    attribute: 'collection_name',
+  })
+]);</code></pre>
+              <p><small>Enable faceted search in the admin dashboard (Configuration tab) to auto-discover facets from your collection schemas.</small></p>
             </div>
 
             <!-- Performance Tips Section -->
@@ -5892,7 +6189,7 @@ var aiSearchPlugin = new chunk6FHNRRJ3_cjs.PluginBuilder({
 }).metadata({
   description: manifest_default.description,
   author: { name: manifest_default.author }
-}).addService("aiSearch", chunkCH73AO44_cjs.AISearchService).addService("indexManager", chunkCH73AO44_cjs.IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/api/instantsearch", instantsearch_api_default).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", instantsearch_test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
+}).addService("aiSearch", chunkGK4OTROV_cjs.AISearchService).addService("indexManager", chunkGK4OTROV_cjs.IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/api/instantsearch", instantsearch_api_default).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", instantsearch_test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
 var magicLinkRequestSchema = zod.z.object({
   email: zod.z.string().email("Valid email is required")
 });
@@ -6039,12 +6336,12 @@ function createMagicLinkAuthPlugin() {
         SET used = 1, used_at = ?
         WHERE id = ?
       `).bind(Date.now(), magicLink.id).run();
-      const jwtToken = await chunkO4UES3RC_cjs.AuthManager.generateToken(
+      const jwtToken = await chunkJMF2KCEP_cjs.AuthManager.generateToken(
         user.id,
         user.email,
         user.role
       );
-      chunkO4UES3RC_cjs.AuthManager.setAuthCookie(c, jwtToken);
+      chunkJMF2KCEP_cjs.AuthManager.setAuthCookie(c, jwtToken);
       await db.prepare(`
         UPDATE users SET last_login_at = ? WHERE id = ?
       `).bind(Date.now(), user.id).run();
@@ -7330,7 +7627,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunkCH73AO44_cjs.renderConfirmationDialog({
+    ${chunkGK4OTROV_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -7341,7 +7638,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunkCH73AO44_cjs.renderConfirmationDialog({
+    ${chunkGK4OTROV_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -7352,7 +7649,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunkCH73AO44_cjs.getConfirmationDialogScript()}
+    ${chunkGK4OTROV_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -8080,8 +8377,8 @@ function createSonicJSApp(config = {}) {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkO4UES3RC_cjs.metricsMiddleware());
-  app2.use("*", chunkO4UES3RC_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkJMF2KCEP_cjs.metricsMiddleware());
+  app2.use("*", chunkJMF2KCEP_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -8098,22 +8395,22 @@ function createSonicJSApp(config = {}) {
       app2.use("*", middleware);
     }
   }
-  app2.route("/api", chunkCH73AO44_cjs.api_default);
-  app2.route("/api/media", chunkCH73AO44_cjs.api_media_default);
-  app2.route("/api/system", chunkCH73AO44_cjs.api_system_default);
-  app2.route("/admin/api", chunkCH73AO44_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunkCH73AO44_cjs.router);
-  app2.route("/admin/collections", chunkCH73AO44_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunkCH73AO44_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunkCH73AO44_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunkCH73AO44_cjs.public_forms_default);
-  app2.route("/api/forms", chunkCH73AO44_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunkCH73AO44_cjs.router2);
+  app2.route("/api", chunkGK4OTROV_cjs.api_default);
+  app2.route("/api/media", chunkGK4OTROV_cjs.api_media_default);
+  app2.route("/api/system", chunkGK4OTROV_cjs.api_system_default);
+  app2.route("/admin/api", chunkGK4OTROV_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunkGK4OTROV_cjs.router);
+  app2.route("/admin/collections", chunkGK4OTROV_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunkGK4OTROV_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunkGK4OTROV_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunkGK4OTROV_cjs.public_forms_default);
+  app2.route("/api/forms", chunkGK4OTROV_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunkGK4OTROV_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunkCH73AO44_cjs.admin_content_default);
-  app2.route("/admin/media", chunkCH73AO44_cjs.adminMediaRoutes);
-  app2.route("/admin/search", chunkCH73AO44_cjs.adminSearchRoutes);
+  app2.route("/admin/content", chunkGK4OTROV_cjs.admin_content_default);
+  app2.route("/admin/media", chunkGK4OTROV_cjs.adminMediaRoutes);
+  app2.route("/admin/search", chunkGK4OTROV_cjs.adminSearchRoutes);
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
     for (const route of aiSearchPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8125,11 +8422,11 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunkCH73AO44_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunkCH73AO44_cjs.adminLogsRoutes);
-  app2.route("/admin", chunkCH73AO44_cjs.userRoutes);
-  app2.route("/auth", chunkCH73AO44_cjs.auth_default);
-  app2.route("/", chunkCH73AO44_cjs.test_cleanup_default);
+  app2.route("/admin/plugins", chunkGK4OTROV_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunkGK4OTROV_cjs.adminLogsRoutes);
+  app2.route("/admin", chunkGK4OTROV_cjs.userRoutes);
+  app2.route("/auth", chunkGK4OTROV_cjs.auth_default);
+  app2.route("/", chunkGK4OTROV_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8221,79 +8518,79 @@ var VERSION = chunkUOEIMC67_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.ROUTES_INFO; }
+  get: function () { return chunkGK4OTROV_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.admin_api_default; }
+  get: function () { return chunkGK4OTROV_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.adminCheckboxRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.admin_code_examples_default; }
+  get: function () { return chunkGK4OTROV_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.adminCollectionsRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.admin_content_default; }
+  get: function () { return chunkGK4OTROV_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.router; }
+  get: function () { return chunkGK4OTROV_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.adminDesignRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.adminLogsRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.adminMediaRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.adminPluginRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.adminSettingsRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.admin_testimonials_default; }
+  get: function () { return chunkGK4OTROV_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.userRoutes; }
+  get: function () { return chunkGK4OTROV_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.api_content_crud_default; }
+  get: function () { return chunkGK4OTROV_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.api_media_default; }
+  get: function () { return chunkGK4OTROV_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.api_default; }
+  get: function () { return chunkGK4OTROV_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.api_system_default; }
+  get: function () { return chunkGK4OTROV_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkCH73AO44_cjs.auth_default; }
+  get: function () { return chunkGK4OTROV_cjs.auth_default; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
@@ -8461,83 +8758,83 @@ Object.defineProperty(exports, "workflowHistory", {
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.AuthManager; }
+  get: function () { return chunkJMF2KCEP_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.PermissionManager; }
+  get: function () { return chunkJMF2KCEP_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.bootstrapMiddleware; }
+  get: function () { return chunkJMF2KCEP_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.cacheHeaders; }
+  get: function () { return chunkJMF2KCEP_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.compressionMiddleware; }
+  get: function () { return chunkJMF2KCEP_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkJMF2KCEP_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.getActivePlugins; }
+  get: function () { return chunkJMF2KCEP_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.isPluginActive; }
+  get: function () { return chunkJMF2KCEP_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.logActivity; }
+  get: function () { return chunkJMF2KCEP_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.loggingMiddleware; }
+  get: function () { return chunkJMF2KCEP_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.optionalAuth; }
+  get: function () { return chunkJMF2KCEP_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkJMF2KCEP_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.requireActivePlugin; }
+  get: function () { return chunkJMF2KCEP_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.requireActivePlugins; }
+  get: function () { return chunkJMF2KCEP_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.requireAnyPermission; }
+  get: function () { return chunkJMF2KCEP_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.requireAuth; }
+  get: function () { return chunkJMF2KCEP_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.requirePermission; }
+  get: function () { return chunkJMF2KCEP_cjs.requirePermission; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.requireRole; }
+  get: function () { return chunkJMF2KCEP_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.securityHeaders; }
+  get: function () { return chunkJMF2KCEP_cjs.securityHeaders; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkO4UES3RC_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkJMF2KCEP_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
@@ -8593,7 +8890,7 @@ Object.defineProperty(exports, "validateCollectionConfig", {
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunkZX676GCT_cjs.MigrationService; }
+  get: function () { return chunkSRJ3K343_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,

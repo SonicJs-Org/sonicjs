@@ -2,6 +2,8 @@ import { PluginBuilder } from '../../sdk/plugin-builder'
 import manifest from './manifest.json'
 import adminRoutes from './routes/admin'
 import apiRoutes from './routes/api'
+import instantSearchRoutes from './routes/instantsearch-api'
+import instantSearchTestRoutes from './routes/instantsearch-test-page'
 import integrationGuideRoutes from './routes/integration-guide'
 import testPageRoutes from './routes/test-page'
 import { AISearchService } from './services/ai-search'
@@ -47,7 +49,9 @@ export const aiSearchPlugin = new PluginBuilder({
   .addService('indexManager', IndexManager)
   .addRoute('/admin/plugins/ai-search', adminRoutes as any)
   .addRoute('/api/search', apiRoutes as any)
+  .addRoute('/api/instantsearch', instantSearchRoutes as any)
   .addRoute('/admin/plugins/ai-search', testPageRoutes as any)
+  .addRoute('/admin/plugins/ai-search', instantSearchTestRoutes as any)
   .addRoute('/admin/plugins/ai-search', integrationGuideRoutes as any)
   .build()
 
@@ -59,6 +63,10 @@ export type {
   AISearchSettings, CollectionInfo,
   IndexStatus, SearchQuery,
   SearchResponse,
-  SearchResult
+  SearchResult,
+  InstantSearchRequest,
+  InstantSearchResult,
+  InstantSearchHit,
+  InstantSearchMultiResponse,
 } from './types'
 

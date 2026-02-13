@@ -216,6 +216,7 @@ integrationGuideRoutes.get('/integration', async (c) => {
                 <button class="tab" onclick="showTab('react')">React</button>
                 <button class="tab" onclick="showTab('vue')">Vue</button>
                 <button class="tab" onclick="showTab('astro')">Astro</button>
+                <button class="tab" onclick="showTab('instantsearch')">InstantSearch.js</button>
               </div>
 
               <!-- Vanilla JS Tab -->
@@ -728,6 +729,110 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
 .result { padding: 1rem; background: #f8f9fa; border-left: 4px solid #667eea; margin: 1rem 0; border-radius: 8px; }
 &lt;/style&gt;</code></pre>
               </div>
+
+              <!-- InstantSearch.js Tab -->
+              <div id="instantsearch" class="tab-content">
+                <h3>InstantSearch.js &mdash; Drop-in Algolia Replacement</h3>
+                <p>Use the official <a href="https://www.algolia.com/doc/guides/building-search-ui/what-is-instantsearch/js/" target="_blank">InstantSearch.js</a> library (React, Vue, or vanilla JS) with SonicJS as the backend. Zero UI changes needed if you&rsquo;re migrating from Algolia.</p>
+
+                <div class="info-box">
+                  <strong>How it works:</strong> SonicJS exposes a <code>POST /api/instantsearch</code> endpoint that speaks the Algolia multi-search protocol. You connect it with a 5-line <code>searchClient</code> shim &mdash; no npm adapter package required.
+                </div>
+
+                <h3>1. Install InstantSearch.js</h3>
+                <pre><code>npm install instantsearch.js
+# Or for React:
+npm install react-instantsearch
+# Or for Vue:
+npm install vue-instantsearch</code></pre>
+
+                <h3>2. Create the Search Client (5 lines)</h3>
+                <button class="copy-btn" onclick="copyCode('is-client')">Copy Code</button>
+                <pre id="is-client"><code>// searchClient.js
+const API_URL = 'https://your-sonicjs-site.com'; // Update this!
+
+export const searchClient = {
+  search(requests) {
+    return fetch(\`\${API_URL}/api/instantsearch\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests }),
+    }).then(res =&gt; res.json());
+  },
+};</code></pre>
+
+                <h3>3a. Vanilla InstantSearch.js</h3>
+                <button class="copy-btn" onclick="copyCode('is-vanilla')">Copy Code</button>
+                <pre id="is-vanilla"><code>import instantsearch from 'instantsearch.js';
+import { searchBox, hits, pagination } from 'instantsearch.js/es/widgets';
+import { searchClient } from './searchClient';
+
+const search = instantsearch({
+  indexName: 'posts',   // Your collection name, or "*" for all
+  searchClient,
+});
+
+search.addWidgets([
+  searchBox({ container: '#searchbox' }),
+  hits({
+    container: '#hits',
+    templates: {
+      item(hit, { html, components }) {
+        return html\`
+          &lt;div&gt;
+            &lt;h3&gt;\${components.Highlight({ hit, attribute: 'title' })}&lt;/h3&gt;
+            &lt;p&gt;\${components.Snippet({ hit, attribute: 'body' })}&lt;/p&gt;
+          &lt;/div&gt;
+        \`;
+      },
+    },
+  }),
+  pagination({ container: '#pagination' }),
+]);
+
+search.start();</code></pre>
+
+                <h3>3b. React InstantSearch</h3>
+                <button class="copy-btn" onclick="copyCode('is-react')">Copy Code</button>
+                <pre id="is-react"><code>import {
+  InstantSearch, SearchBox, Hits, Pagination, Highlight, Snippet,
+} from 'react-instantsearch';
+import { searchClient } from './searchClient';
+
+function Hit({ hit }) {
+  return (
+    &lt;div&gt;
+      &lt;h3&gt;&lt;Highlight attribute="title" hit={hit} /&gt;&lt;/h3&gt;
+      &lt;p&gt;&lt;Snippet attribute="body" hit={hit} /&gt;&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+
+export default function SearchPage() {
+  return (
+    &lt;InstantSearch searchClient={searchClient} indexName="posts"&gt;
+      &lt;SearchBox /&gt;
+      &lt;Hits hitComponent={Hit} /&gt;
+      &lt;Pagination /&gt;
+    &lt;/InstantSearch&gt;
+  );
+}</code></pre>
+
+                <h3>Index Name Mapping</h3>
+                <div class="info-box">
+                  <strong>Collection names:</strong> Use your SonicJS collection name as the <code>indexName</code> (e.g. <code>"posts"</code>, <code>"products"</code>).<br>
+                  <strong>Search all:</strong> Use <code>indexName: "*"</code> or <code>"all"</code> to search across every indexed collection.
+                </div>
+
+                <h3>Supported Features</h3>
+                <ul>
+                  <li><strong>Search:</strong> Full-text (FTS5), semantic (AI), and hybrid search</li>
+                  <li><strong>Highlighting:</strong> Automatic highlight &amp; snippet results</li>
+                  <li><strong>Pagination:</strong> Page-based navigation via <code>page</code> / <code>hitsPerPage</code></li>
+                  <li><strong>Facets (MVP):</strong> <code>collection_name</code> and <code>status</code> facets</li>
+                  <li><strong>Custom highlight tags:</strong> Configurable via <code>highlightPreTag</code> / <code>highlightPostTag</code></li>
+                </ul>
+              </div>
             </div>
 
             <!-- API Reference Section -->
@@ -744,6 +849,11 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
                   <h4>Autocomplete</h4>
                   <p><strong>GET</strong> <code>/api/search/suggest?q=query</code></p>
                   <p>Get instant suggestions (&lt;50ms)</p>
+                </div>
+                <div class="card">
+                  <h4>InstantSearch API</h4>
+                  <p><strong>POST</strong> <code>/api/instantsearch</code></p>
+                  <p>Algolia-compatible multi-search endpoint</p>
                 </div>
               </div>
 

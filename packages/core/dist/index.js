@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-KHDT2FGO.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-KHDT2FGO.js';
+import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-MVFZOTLG.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-MVFZOTLG.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-QHSXUCM6.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-QHSXUCM6.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-2BOJAJ2B.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-2BOJAJ2B.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-IU6XHGU4.js';
+export { MigrationService } from './chunk-XX5D375L.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -3784,6 +3784,50 @@ apiRoutes.get("/suggest", async (c) => {
     );
   }
 });
+apiRoutes.post("/click", async (c) => {
+  try {
+    const db = c.env.DB;
+    const body = await c.req.json();
+    const searchId = body.search_id;
+    const contentId = body.content_id;
+    const clickPosition = body.click_position;
+    if (!contentId || typeof contentId !== "string") {
+      return c.json({ success: false, error: "content_id is required" }, 400);
+    }
+    if (!clickPosition || typeof clickPosition !== "number" || clickPosition < 1 || !Number.isInteger(clickPosition)) {
+      return c.json({ success: false, error: "click_position must be a positive integer" }, 400);
+    }
+    let query = null;
+    let mode = null;
+    if (searchId) {
+      try {
+        const historyRow = await db.prepare("SELECT query, mode FROM ai_search_history WHERE id = ? LIMIT 1").bind(Number(searchId)).first();
+        if (historyRow) {
+          query = historyRow.query;
+          mode = historyRow.mode;
+        }
+      } catch {
+      }
+    }
+    const clickId = crypto.randomUUID();
+    await db.prepare(`
+        INSERT INTO ai_search_clicks (id, search_id, query, mode, clicked_content_id, clicked_content_title, click_position, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).bind(
+      clickId,
+      searchId || null,
+      query,
+      mode,
+      contentId,
+      body.content_title || null,
+      clickPosition
+    ).run();
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Click tracking error:", error);
+    return c.json({ success: true });
+  }
+});
 apiRoutes.get("/analytics", async (c) => {
   try {
     const db = c.env.DB;
@@ -5198,6 +5242,11 @@ export default function SearchPage() {
                   <p><strong>POST</strong> <code>/api/instantsearch</code></p>
                   <p>Algolia-compatible multi-search endpoint</p>
                 </div>
+                <div class="card">
+                  <h4>Click Tracking</h4>
+                  <p><strong>POST</strong> <code>/api/search/click</code></p>
+                  <p>Record result clicks for CTR analytics</p>
+                </div>
               </div>
 
               <h3>Search Request</h3>
@@ -5216,6 +5265,7 @@ export default function SearchPage() {
               <pre><code>{
   "success": true,
   "data": {
+    "search_id": "a1b2c3d4-...",  // Use for click tracking
     "results": [{
       "id": "123",
       "title": "Getting Started",
@@ -5233,6 +5283,17 @@ export default function SearchPage() {
     "mode": "ai"
   }
 }</code></pre>
+
+              <h3>Click Tracking</h3>
+              <p>Record when users click search results. This powers CTR analytics in the admin dashboard.</p>
+              <pre><code>// Fire-and-forget when user clicks a result
+navigator.sendBeacon('/api/search/click', JSON.stringify({
+  search_id: searchResponse.data.search_id,  // from search response
+  content_id: result.id,                      // clicked result ID
+  content_title: result.title,                // for analytics display
+  click_position: index + 1                   // 1-based position in results
+}));</code></pre>
+              <p><small>Click tracking is optional but recommended. Uses <code>sendBeacon</code> for reliability during navigation.</small></p>
             </div>
 
             <!-- Performance Tips Section -->
@@ -5294,6 +5355,7 @@ app.use('/api/*', cors({
                 <li>Added loading states</li>
                 <li>Styled to match your design</li>
                 <li>Added error handling</li>
+                <li>Added click tracking (optional)</li>
                 <li>Tested on mobile</li>
               </ul>
             </div>

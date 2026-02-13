@@ -1728,6 +1728,13 @@ CREATE INDEX IF NOT EXISTS idx_forms_turnstile ON forms(turnstile_enabled);
     filename: "036_search_analytics.sql",
     description: "Migration 036: Search Analytics",
     sql: "-- Add response time tracking to search history for analytics\nALTER TABLE ai_search_history ADD COLUMN response_time_ms INTEGER;\n\n-- Index for zero-result query lookups\nCREATE INDEX IF NOT EXISTS idx_ai_search_history_results ON ai_search_history(results_count);\n"
+  },
+  {
+    id: "037",
+    name: "Click Tracking",
+    filename: "037_click_tracking.sql",
+    description: "Migration 037: Click Tracking",
+    sql: "-- Click events table\nCREATE TABLE IF NOT EXISTS ai_search_clicks (\n  id TEXT PRIMARY KEY,\n  search_id TEXT,                -- references ai_search_history.id (nullable for older searches)\n  query TEXT NOT NULL,           -- denormalized for fast analytics queries\n  mode TEXT,                     -- search mode used\n  clicked_content_id TEXT NOT NULL,  -- the content item ID that was clicked\n  clicked_content_title TEXT,    -- denormalized title for reporting without joins\n  click_position INTEGER NOT NULL,   -- 1-based position in results list (1 = first result)\n  created_at TEXT DEFAULT (datetime('now'))\n);\n\n-- Indexes for analytics queries\nCREATE INDEX IF NOT EXISTS idx_clicks_search_id ON ai_search_clicks(search_id);\nCREATE INDEX IF NOT EXISTS idx_clicks_query ON ai_search_clicks(query, created_at);\nCREATE INDEX IF NOT EXISTS idx_clicks_content ON ai_search_clicks(clicked_content_id, created_at);\nCREATE INDEX IF NOT EXISTS idx_clicks_created ON ai_search_clicks(created_at);\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2136,5 +2143,5 @@ var MigrationService = class {
 };
 
 exports.MigrationService = MigrationService;
-//# sourceMappingURL=chunk-Z3TCJWCL.cjs.map
-//# sourceMappingURL=chunk-Z3TCJWCL.cjs.map
+//# sourceMappingURL=chunk-ZX676GCT.cjs.map
+//# sourceMappingURL=chunk-ZX676GCT.cjs.map

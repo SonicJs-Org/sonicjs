@@ -203,6 +203,7 @@ export interface InstantSearchParams {
   page?: number
   hitsPerPage?: number
   facets?: string[]
+  facetFilters?: string[] | string[][] // Algolia facet filter format
   filters?: string
   highlightPreTag?: string
   highlightPostTag?: string

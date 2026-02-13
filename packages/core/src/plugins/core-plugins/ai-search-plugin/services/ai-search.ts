@@ -376,6 +376,13 @@ export class AISearchService {
       facetPromise || Promise.resolve(null),
     ])
 
+    // In-memory facet filtering for AI/hybrid modes (SQL-based modes filter at query level)
+    if (query.filters?.custom && Object.keys(query.filters.custom).length > 0
+        && (query.mode === 'ai' || query.mode === 'hybrid')) {
+      result.results = this.filterResultsByFacets(result.results, query.filters.custom)
+      result.total = result.results.length
+    }
+
     // Attach facets to response
     if (facets && facets.length > 0) {
       result.facets = facets
@@ -424,16 +431,18 @@ export class AISearchService {
       ? query.filters.collections
       : settings.selected_collections
 
+    const activeFilters = query.filters?.custom
+
     try {
       // FTS5 and hybrid: SQL GROUP BY with FTS5 MATCH
       if (query.mode === 'fts5' || query.mode === 'hybrid') {
         const matchQuery = FacetService.sanitizeFTS5Query(query.query)
-        return await facetService.computeFacetsFts(config, matchQuery, collectionIds, maxValues)
+        return await facetService.computeFacetsFts(config, matchQuery, collectionIds, maxValues, activeFilters)
       }
 
       // Keyword: SQL GROUP BY with LIKE
       if (query.mode === 'keyword') {
-        return await facetService.computeFacetsKeyword(config, query.query, collectionIds, maxValues)
+        return await facetService.computeFacetsKeyword(config, query.query, collectionIds, maxValues, activeFilters)
       }
 
       // AI mode: compute from result IDs (limited to top 50)
@@ -625,6 +634,16 @@ export class AISearchService {
         params.push(query.filters.author)
       }
 
+      // Facet filter conditions (from active facet selections)
+      if (query.filters?.custom && settings.facet_config?.length) {
+        const { conditions: filterConditions, params: filterParams } = FacetService.buildFacetFilterSQL(
+          query.filters.custom,
+          settings.facet_config
+        )
+        conditions.push(...filterConditions)
+        params.push(...filterParams)
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
       // Get total count
@@ -784,6 +803,39 @@ export class AISearchService {
     } catch {
       return text
     }
+  }
+
+  /**
+   * Filter search results in-memory by active facet selections.
+   * Used for AI/hybrid modes where SQL-level filtering isn't possible.
+   */
+  private filterResultsByFacets(
+    results: SearchResult[],
+    customFilters: Record<string, any>
+  ): SearchResult[] {
+    if (!customFilters || Object.keys(customFilters).length === 0) return results
+
+    return results.filter(result => {
+      for (const [field, values] of Object.entries(customFilters)) {
+        if (!values || (Array.isArray(values) && values.length === 0)) continue
+        const valueArr = Array.isArray(values) ? values : [values]
+        if (valueArr.length === 0) continue
+
+        switch (field) {
+          case 'collection_name':
+            if (!valueArr.includes(result.collection_name)) return false
+            break
+          case 'status':
+            if (!valueArr.includes(result.status)) return false
+            break
+          case 'author':
+            if (!result.author_name || !valueArr.includes(result.author_name)) return false
+            break
+          // JSON fields not available on SearchResult — filtered at SQL level for FTS5/keyword
+        }
+      }
+      return true
+    })
   }
 
   /**

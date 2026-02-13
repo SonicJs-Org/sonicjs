@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono'
-import { html } from 'hono/html'
+import { html, raw } from 'hono/html'
 import type { Bindings } from '../../../../app'
 
 const instantSearchTestRoutes = new Hono<{ Bindings: Bindings }>()
@@ -149,7 +149,7 @@ instantSearchTestRoutes.get('/instantsearch', async (c) => {
           <div class="config-bar">
             <div class="field">
               <label for="idx">Index (Collection)</label>
-              <select id="idx">${collectionOptions}</select>
+              <select id="idx">${raw(collectionOptions)}</select>
             </div>
             <div class="field">
               <label for="hpp">Hits / Page</label>

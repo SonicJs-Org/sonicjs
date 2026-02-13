@@ -11,6 +11,7 @@
 
 import type { D1Database } from '@cloudflare/workers-types'
 import type { SearchQuery, SearchResult, SearchResponse, AISearchSettings } from '../types'
+import { FacetService } from './facet.service'
 import type { SynonymService } from './synonym.service'
 
 export interface FTS5SearchOptions {
@@ -113,6 +114,20 @@ export class FTS5Service {
       const slugBoost = weightOverrides?.slugBoost ?? this.options.slugBoost
       const bodyBoost = weightOverrides?.bodyBoost ?? this.options.bodyBoost
 
+      // Build facet filter conditions (narrows results by active facet selections)
+      let filterWhere = ''
+      let filterParams: any[] = []
+      if (query.filters?.custom && settings.facet_config?.length) {
+        const { conditions, params: fParams } = FacetService.buildFacetFilterSQL(
+          query.filters.custom,
+          settings.facet_config
+        )
+        if (conditions.length > 0) {
+          filterWhere = '\n          ' + conditions.map(c => `AND ${c}`).join('\n          ')
+          filterParams = fParams
+        }
+      }
+
       // FTS5 query with BM25 ranking and field boosting
       // bm25 weights: title, slug, body, content_id(0), collection_id(0)
       const sql = `
@@ -133,7 +148,7 @@ export class FTS5Service {
         JOIN collections col ON fts.collection_id = col.id
         WHERE content_fts MATCH ?
           AND fts.collection_id IN (${collectionPlaceholders})
-          AND c.status != 'deleted'
+          AND c.status != 'deleted'${filterWhere}
         ORDER BY score
         LIMIT ? OFFSET ?
       `
@@ -143,7 +158,7 @@ export class FTS5Service {
 
       const { results } = await this.db
         .prepare(sql)
-        .bind(escapedQuery, ...collections, limit, offset)
+        .bind(escapedQuery, ...collections, ...filterParams, limit, offset)
         .all<{
           content_id: string
           collection_id: string
@@ -165,11 +180,11 @@ export class FTS5Service {
         JOIN content c ON fts.content_id = c.id
         WHERE content_fts MATCH ?
           AND fts.collection_id IN (${collectionPlaceholders})
-          AND c.status != 'deleted'
+          AND c.status != 'deleted'${filterWhere}
       `
       const countResult = await this.db
         .prepare(countSql)
-        .bind(escapedQuery, ...collections)
+        .bind(escapedQuery, ...collections, ...filterParams)
         .first<{ total: number }>()
 
       // Map results with highlighting

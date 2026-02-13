@@ -190,7 +190,8 @@ export class FacetService {
     config: FacetDefinition[],
     matchQuery: string,
     collectionIds: string[],
-    maxValues: number
+    maxValues: number,
+    activeFilters?: Record<string, any>
   ): Promise<FacetResult[]> {
     const enabled = config.filter(f => f.enabled)
     if (enabled.length === 0 || collectionIds.length === 0) return []
@@ -199,8 +200,16 @@ export class FacetService {
 
     const promises = enabled.map(async (facet): Promise<FacetResult> => {
       const limit = facet.maxValues || maxValues
+      // Cross-filtering: apply all active filters EXCEPT this facet's own field
+      let extraConditions: string[] = []
+      let extraParams: any[] = []
+      if (activeFilters && Object.keys(activeFilters).length > 0) {
+        const cross = FacetService.buildFacetFilterSQL(activeFilters, config, facet.field)
+        extraConditions = cross.conditions
+        extraParams = cross.params
+      }
       try {
-        const values = await this.runFtsFacetQuery(facet, matchQuery, collectionIds, collPlaceholders, limit)
+        const values = await this.runFtsFacetQuery(facet, matchQuery, collectionIds, collPlaceholders, limit, extraConditions, extraParams)
         return this.sortFacetValues(facet, values)
       } catch (error) {
         console.error(`[FacetService] Facet query error for ${facet.field}:`, error)
@@ -216,8 +225,14 @@ export class FacetService {
     matchQuery: string,
     collectionIds: string[],
     collPlaceholders: string,
-    limit: number
+    limit: number,
+    extraConditions: string[] = [],
+    extraParams: any[] = []
   ): Promise<FacetValue[]> {
+    const extraWhere = extraConditions.length > 0
+      ? '\n            ' + extraConditions.map(c => `AND ${c}`).join('\n            ')
+      : ''
+
     let sql: string
     let params: any[]
 
@@ -230,10 +245,10 @@ export class FacetService {
           JOIN collections col ON fts.collection_id = col.id
           WHERE content_fts MATCH ?
             AND fts.collection_id IN (${collPlaceholders})
-            AND c.status != 'deleted'
+            AND c.status != 'deleted'${extraWhere}
           GROUP BY value ORDER BY count DESC LIMIT ?
         `
-        params = [matchQuery, ...collectionIds, limit]
+        params = [matchQuery, ...collectionIds, ...extraParams, limit]
         break
 
       case 'status':
@@ -243,10 +258,10 @@ export class FacetService {
           JOIN content c ON fts.content_id = c.id
           WHERE content_fts MATCH ?
             AND fts.collection_id IN (${collPlaceholders})
-            AND c.status != 'deleted'
+            AND c.status != 'deleted'${extraWhere}
           GROUP BY c.status ORDER BY count DESC LIMIT ?
         `
-        params = [matchQuery, ...collectionIds, limit]
+        params = [matchQuery, ...collectionIds, ...extraParams, limit]
         break
 
       case 'author':
@@ -257,10 +272,10 @@ export class FacetService {
           LEFT JOIN users u ON c.author_id = u.id
           WHERE content_fts MATCH ?
             AND fts.collection_id IN (${collPlaceholders})
-            AND c.status != 'deleted'
+            AND c.status != 'deleted'${extraWhere}
           GROUP BY value ORDER BY count DESC LIMIT ?
         `
-        params = [matchQuery, ...collectionIds, limit]
+        params = [matchQuery, ...collectionIds, ...extraParams, limit]
         break
 
       default:
@@ -274,7 +289,7 @@ export class FacetService {
             json_each(json_extract(c.data, '${jsonPath}')) j
             WHERE content_fts MATCH ?
               AND fts.collection_id IN (${collPlaceholders})
-              AND c.status != 'deleted'
+              AND c.status != 'deleted'${extraWhere}
             GROUP BY j.value ORDER BY count DESC LIMIT ?
           `
         } else {
@@ -286,11 +301,11 @@ export class FacetService {
             WHERE content_fts MATCH ?
               AND fts.collection_id IN (${collPlaceholders})
               AND c.status != 'deleted'
-              AND json_extract(c.data, '${jsonPath}') IS NOT NULL
+              AND json_extract(c.data, '${jsonPath}') IS NOT NULL${extraWhere}
             GROUP BY value ORDER BY count DESC LIMIT ?
           `
         }
-        params = [matchQuery, ...collectionIds, limit]
+        params = [matchQuery, ...collectionIds, ...extraParams, limit]
     }
 
     const { results } = await this.db.prepare(sql).bind(...params)
@@ -309,7 +324,8 @@ export class FacetService {
     config: FacetDefinition[],
     queryTerm: string,
     collectionIds: string[],
-    maxValues: number
+    maxValues: number,
+    activeFilters?: Record<string, any>
   ): Promise<FacetResult[]> {
     const enabled = config.filter(f => f.enabled)
     if (enabled.length === 0 || collectionIds.length === 0) return []
@@ -319,8 +335,16 @@ export class FacetService {
 
     const promises = enabled.map(async (facet): Promise<FacetResult> => {
       const limit = facet.maxValues || maxValues
+      // Cross-filtering: apply all active filters EXCEPT this facet's own field
+      let extraConditions: string[] = []
+      let extraParams: any[] = []
+      if (activeFilters && Object.keys(activeFilters).length > 0) {
+        const cross = FacetService.buildFacetFilterSQL(activeFilters, config, facet.field)
+        extraConditions = cross.conditions
+        extraParams = cross.params
+      }
       try {
-        const values = await this.runKeywordFacetQuery(facet, likeTerm, collectionIds, collPlaceholders, limit)
+        const values = await this.runKeywordFacetQuery(facet, likeTerm, collectionIds, collPlaceholders, limit, extraConditions, extraParams)
         return this.sortFacetValues(facet, values)
       } catch (error) {
         console.error(`[FacetService] Keyword facet error for ${facet.field}:`, error)
@@ -336,15 +360,21 @@ export class FacetService {
     likeTerm: string,
     collectionIds: string[],
     collPlaceholders: string,
-    limit: number
+    limit: number,
+    extraConditions: string[] = [],
+    extraParams: any[] = []
   ): Promise<FacetValue[]> {
+    const extraWhere = extraConditions.length > 0
+      ? '\n      ' + extraConditions.map(c => `AND ${c}`).join('\n      ')
+      : ''
+
     // Base WHERE clause for keyword search
     const baseWhere = `
       c.collection_id IN (${collPlaceholders})
       AND c.status != 'deleted'
-      AND (c.title LIKE ? OR c.slug LIKE ? OR c.data LIKE ?)
+      AND (c.title LIKE ? OR c.slug LIKE ? OR c.data LIKE ?)${extraWhere}
     `
-    const baseParams = [...collectionIds, likeTerm, likeTerm, likeTerm]
+    const baseParams = [...collectionIds, likeTerm, likeTerm, likeTerm, ...extraParams]
 
     let sql: string
     let params: any[]
@@ -553,6 +583,72 @@ export class FacetService {
       return values.sort((a, b) => a.value.localeCompare(b.value))
     }
     return values.sort((a, b) => b.count - a.count)
+  }
+
+  /**
+   * Convert filters.custom to SQL WHERE clause fragments.
+   * All conditions reference only the `c` (content) table alias,
+   * making them safe to inject into any query that joins content.
+   * Used by both search queries (narrowing results) and facet computation (cross-filtering).
+   *
+   * @param excludeField — For cross-filtering: skip this field so facet X
+   *                        shows counts unaffected by its own selection.
+   */
+  static buildFacetFilterSQL(
+    customFilters: Record<string, any>,
+    facetConfig: FacetDefinition[],
+    excludeField?: string
+  ): { conditions: string[]; params: any[] } {
+    const conditions: string[] = []
+    const params: any[] = []
+
+    if (!customFilters || typeof customFilters !== 'object') {
+      return { conditions, params }
+    }
+
+    const configMap = new Map<string, FacetDefinition>()
+    for (const fc of facetConfig) {
+      configMap.set(fc.field, fc)
+    }
+
+    for (const [field, values] of Object.entries(customFilters)) {
+      if (!values || (Array.isArray(values) && values.length === 0)) continue
+      if (excludeField && field === excludeField) continue
+
+      const valueArr = Array.isArray(values) ? values : [values]
+      if (valueArr.length === 0) continue
+      const placeholders = valueArr.map(() => '?').join(', ')
+
+      switch (field) {
+        case 'collection_name':
+          conditions.push(`c.collection_id IN (SELECT id FROM collections WHERE display_name IN (${placeholders}))`)
+          params.push(...valueArr)
+          break
+        case 'status':
+          conditions.push(`c.status IN (${placeholders})`)
+          params.push(...valueArr)
+          break
+        case 'author':
+          conditions.push(`c.author_id IN (SELECT id FROM users WHERE email IN (${placeholders}))`)
+          params.push(...valueArr)
+          break
+        default: {
+          const config = configMap.get(field)
+          if (!config) break
+          if (config.type === 'json_array') {
+            conditions.push(
+              `EXISTS(SELECT 1 FROM json_each(json_extract(c.data, '${field}')) t WHERE t.value IN (${placeholders}))`
+            )
+          } else {
+            conditions.push(`json_extract(c.data, '${field}') IN (${placeholders})`)
+          }
+          params.push(...valueArr)
+          break
+        }
+      }
+    }
+
+    return { conditions, params }
   }
 
   /**

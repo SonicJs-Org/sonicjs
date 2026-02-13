@@ -36,6 +36,8 @@ export class InstantSearchAdapter {
     const collections = await this.resolveCollections(request.indexName)
     const mode = this.determineSearchMode(settings)
 
+    const customFilters = this.parseFacetFilters(params.facetFilters)
+
     return {
       query: params.query || '',
       mode,
@@ -44,6 +46,7 @@ export class InstantSearchAdapter {
       filters: {
         collections: collections.length > 0 ? collections : undefined,
         status: this.parseStatusFilter(params.filters),
+        ...(Object.keys(customFilters).length > 0 ? { custom: customFilters } : {}),
       },
       facets: (params.facets && params.facets.length > 0) ? true : undefined,
     }
@@ -170,6 +173,41 @@ export class InstantSearchAdapter {
   private determineSearchMode(settings: AISearchSettings): SearchQuery['mode'] {
     if (settings.ai_mode_enabled) return 'hybrid'
     return 'fts5'
+  }
+
+  /**
+   * Parse Algolia's facetFilters parameter into filters.custom format.
+   * Supports: ["field:value", ...] and [["field:val1", "field:val2"], ...]
+   */
+  private parseFacetFilters(facetFilters?: string[] | string[][]): Record<string, string[]> {
+    if (!facetFilters || facetFilters.length === 0) return {}
+
+    const result: Record<string, string[]> = {}
+
+    for (const filter of facetFilters) {
+      if (typeof filter === 'string') {
+        const colonIndex = filter.indexOf(':')
+        if (colonIndex > 0) {
+          const field = filter.substring(0, colonIndex)
+          const value = filter.substring(colonIndex + 1)
+          if (!result[field]) result[field] = []
+          result[field].push(value)
+        }
+      } else if (Array.isArray(filter)) {
+        // OR group: ["status:published", "status:draft"]
+        for (const f of filter) {
+          const colonIndex = f.indexOf(':')
+          if (colonIndex > 0) {
+            const field = f.substring(0, colonIndex)
+            const value = f.substring(colonIndex + 1)
+            if (!result[field]) result[field] = []
+            result[field].push(value)
+          }
+        }
+      }
+    }
+
+    return result
   }
 
   /**

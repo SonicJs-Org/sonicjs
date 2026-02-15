@@ -1,18 +1,16 @@
-'use strict';
-
-var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkHTUZE2B6_cjs = require('./chunk-HTUZE2B6.cjs');
-var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkG5UQHRZC_cjs = require('./chunk-G5UQHRZC.cjs');
-var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
-var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
-var chunkUOEIMC67_cjs = require('./chunk-UOEIMC67.cjs');
-var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
-var hono = require('hono');
-var cors = require('hono/cors');
-var zod = require('zod');
-var cookie = require('hono/cookie');
-var html = require('hono/html');
+import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-FSZEAQDY.js';
+import { PluginService } from './chunk-YFJJU26H.js';
+import { MigrationService } from './chunk-FH6MVXDQ.js';
+import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-AAU4BTDE.js';
+import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
+import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-7DXWBEQP.js';
+import { metricsTracker } from './chunk-FICTAGD4.js';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { z } from 'zod';
+import { setCookie } from 'hono/cookie';
+import { html, raw } from 'hono/html';
 
 // src/schemas/index.ts
 var schemaDefinitions = [];
@@ -1092,7 +1090,7 @@ var FTS5Service = class {
 };
 
 // src/routes/api-content-crud.ts
-var apiContentCrudRoutes = new hono.Hono();
+var apiContentCrudRoutes = new Hono();
 apiContentCrudRoutes.get("/check-slug", async (c) => {
   try {
     const db = c.env.DB;
@@ -1152,7 +1150,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -1193,7 +1191,7 @@ apiContentCrudRoutes.post("/", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
       now,
       now
     ).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     await cache.invalidate(`content:list:${collectionId}:*`);
     await cache.invalidate("content-filtered:*");
     const fts5Service = new FTS5Service(db);
@@ -1224,7 +1222,7 @@ apiContentCrudRoutes.post("/", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1262,7 +1260,7 @@ apiContentCrudRoutes.put("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(...params).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
@@ -1294,7 +1292,7 @@ apiContentCrudRoutes.put("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1305,7 +1303,7 @@ apiContentCrudRoutes.delete("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) =
     }
     const deleteStmt = db.prepare("DELETE FROM content WHERE id = ?");
     await deleteStmt.bind(id).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
@@ -1327,7 +1325,7 @@ apiContentCrudRoutes.delete("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) =
 var api_content_crud_default = apiContentCrudRoutes;
 
 // src/routes/api.ts
-var apiRoutes = new hono.Hono();
+var apiRoutes = new Hono();
 apiRoutes.use("*", async (c, next) => {
   const startTime = Date.now();
   c.set("startTime", startTime);
@@ -1336,11 +1334,11 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunkHTUZE2B6_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
-apiRoutes.use("*", cors.cors({
+apiRoutes.use("*", cors({
   origin: "*",
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"]
@@ -1762,7 +1760,7 @@ apiRoutes.get("/collections", async (c) => {
   try {
     const db = c.env.DB;
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("collections", "all");
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -1839,12 +1837,12 @@ apiRoutes.get("/content", async (c) => {
         });
       }
     }
-    const filter = chunkUOEIMC67_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = QueryFilterBuilder.parseFromQuery(queryParams);
     if (!filter.limit) {
       filter.limit = 50;
     }
     filter.limit = Math.min(filter.limit, 1e3);
-    const builder3 = new chunkUOEIMC67_cjs.QueryFilterBuilder();
+    const builder3 = new QueryFilterBuilder();
     const queryResult = builder3.build("content", filter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -1853,7 +1851,7 @@ apiRoutes.get("/content", async (c) => {
       }, 400);
     }
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("content-filtered", JSON.stringify({ filter, query: queryResult.sql }));
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -1931,7 +1929,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
     if (!collectionResult) {
       return c.json({ error: "Collection not found" }, 404);
     }
-    const filter = chunkUOEIMC67_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = QueryFilterBuilder.parseFromQuery(queryParams);
     if (!filter.where) {
       filter.where = { and: [] };
     }
@@ -1947,7 +1945,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
       filter.limit = 50;
     }
     filter.limit = Math.min(filter.limit, 1e3);
-    const builder3 = new chunkUOEIMC67_cjs.QueryFilterBuilder();
+    const builder3 = new QueryFilterBuilder();
     const queryResult = builder3.build("content", filter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -1956,7 +1954,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
       }, 400);
     }
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
+    const cache = getCacheService(CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("collection-content-filtered", `${collection}:${JSON.stringify({ filter, query: queryResult.sql })}`);
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -2035,9 +2033,9 @@ function generateId() {
 async function emitEvent(eventName, data) {
   console.log(`[Event] ${eventName}:`, data);
 }
-var fileValidationSchema = zod.z.object({
-  name: zod.z.string().min(1).max(255),
-  type: zod.z.string().refine(
+var fileValidationSchema = z.object({
+  name: z.string().min(1).max(255),
+  type: z.string().refine(
     (type) => {
       const allowedTypes = [
         // Images
@@ -2068,11 +2066,11 @@ var fileValidationSchema = zod.z.object({
     },
     { message: "Unsupported file type" }
   ),
-  size: zod.z.number().min(1).max(50 * 1024 * 1024)
+  size: z.number().min(1).max(50 * 1024 * 1024)
   // 50MB max
 });
-var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var apiMediaRoutes = new Hono();
+apiMediaRoutes.use("*", requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -2654,7 +2652,7 @@ function getPNGDimensions(uint8Array) {
   };
 }
 var api_media_default = apiMediaRoutes;
-var apiSystemRoutes = new hono.Hono();
+var apiSystemRoutes = new Hono();
 apiSystemRoutes.get("/health", async (c) => {
   try {
     const startTime = Date.now();
@@ -2815,9 +2813,9 @@ apiSystemRoutes.get("/env", (c) => {
   });
 });
 var api_system_default = apiSystemRoutes;
-var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
-adminApiRoutes.use("*", chunkHTUZE2B6_cjs.requireRole(["admin", "editor"]));
+var adminApiRoutes = new Hono();
+adminApiRoutes.use("*", requireAuth());
+adminApiRoutes.use("*", requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -2947,19 +2945,19 @@ adminApiRoutes.get("/activity", async (c) => {
     return c.json({ error: "Failed to fetch recent activity" }, 500);
   }
 });
-var createCollectionSchema = zod.z.object({
-  name: zod.z.string().min(1).max(255).regex(/^[a-z0-9_]+$/, "Must contain only lowercase letters, numbers, and underscores"),
-  displayName: zod.z.string().min(1).max(255).optional(),
-  display_name: zod.z.string().min(1).max(255).optional(),
-  description: zod.z.string().optional()
+var createCollectionSchema = z.object({
+  name: z.string().min(1).max(255).regex(/^[a-z0-9_]+$/, "Must contain only lowercase letters, numbers, and underscores"),
+  displayName: z.string().min(1).max(255).optional(),
+  display_name: z.string().min(1).max(255).optional(),
+  description: z.string().optional()
 }).refine((data) => data.displayName || data.display_name, {
   message: "Either displayName or display_name is required",
   path: ["displayName"]
 });
-var updateCollectionSchema = zod.z.object({
-  display_name: zod.z.string().min(1).max(255).optional(),
-  description: zod.z.string().optional(),
-  is_active: zod.z.boolean().optional()
+var updateCollectionSchema = z.object({
+  display_name: z.string().min(1).max(255).optional(),
+  description: z.string().optional(),
+  is_active: z.boolean().optional()
 });
 adminApiRoutes.get("/collections", async (c) => {
   try {
@@ -3327,7 +3325,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-D3FNMXAM.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-VLFL4MCS.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -3352,7 +3350,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-D3FNMXAM.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-VLFL4MCS.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -3371,7 +3369,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-D3FNMXAM.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-VLFL4MCS.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -3446,8 +3444,8 @@ function renderLoginPage(data, demoLoginActive = false) {
         <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div class="bg-zinc-900 shadow-sm ring-1 ring-white/10 rounded-xl px-6 py-8 sm:px-10">
             <!-- Alerts -->
-            ${data.error ? `<div class="mb-6">${chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error })}</div>` : ""}
-            ${data.message ? `<div class="mb-6">${chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.message })}</div>` : ""}
+            ${data.error ? `<div class="mb-6">${renderAlert({ type: "error", message: data.error })}</div>` : ""}
+            ${data.message ? `<div class="mb-6">${renderAlert({ type: "success", message: data.message })}</div>` : ""}
 
             <!-- Form Response (HTMX target) -->
             <div id="form-response" class="mb-6"></div>
@@ -3611,7 +3609,7 @@ function renderRegisterPage(data) {
         <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div class="bg-zinc-900 shadow-sm ring-1 ring-white/10 rounded-xl px-6 py-8 sm:px-10">
             <!-- Alerts -->
-            ${data.error ? `<div class="mb-6">${chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error })}</div>` : ""}
+            ${data.error ? `<div class="mb-6">${renderAlert({ type: "error", message: data.error })}</div>` : ""}
 
             <!-- Form -->
             <form
@@ -3745,12 +3743,12 @@ async function isFirstUserRegistration(db) {
     return false;
   }
 }
-var baseRegistrationSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required"),
-  password: zod.z.string().min(8, "Password must be at least 8 characters"),
-  username: zod.z.string().min(3, "Username must be at least 3 characters").optional(),
-  firstName: zod.z.string().min(1, "First name is required").optional(),
-  lastName: zod.z.string().min(1, "Last name is required").optional()
+var baseRegistrationSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  username: z.string().min(3, "Username must be at least 3 characters").optional(),
+  firstName: z.string().min(1, "First name is required").optional(),
+  lastName: z.string().min(1, "Last name is required").optional()
 });
 var authValidationService = {
   /**
@@ -3778,7 +3776,7 @@ var authValidationService = {
 };
 
 // src/routes/auth.ts
-var authRoutes = new hono.Hono();
+var authRoutes = new Hono();
 authRoutes.get("/login", async (c) => {
   const error = c.req.query("error");
   const message = c.req.query("message");
@@ -3811,9 +3809,9 @@ authRoutes.get("/register", async (c) => {
   };
   return c.html(renderRegisterPage(pageData));
 });
-var loginSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required"),
-  password: zod.z.string().min(1, "Password is required")
+var loginSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(1, "Password is required")
 });
 authRoutes.post(
   "/register",
@@ -3853,7 +3851,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -3873,8 +3871,8 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
-      cookie.setCookie(c, "auth_token", token, {
+      const token = await AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
         sameSite: "Strict",
@@ -3918,12 +3916,12 @@ authRoutes.post("/login", async (c) => {
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await chunkHTUZE2B6_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(user.id, user.email, user.role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(user.id, user.email, user.role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -3948,7 +3946,7 @@ authRoutes.post("/login", async (c) => {
   }
 });
 authRoutes.post("/logout", (c) => {
-  cookie.setCookie(c, "auth_token", "", {
+  setCookie(c, "auth_token", "", {
     httpOnly: true,
     secure: false,
     // Set to true in production with HTTPS
@@ -3959,7 +3957,7 @@ authRoutes.post("/logout", (c) => {
   return c.json({ message: "Logged out successfully" });
 });
 authRoutes.get("/logout", (c) => {
-  cookie.setCookie(c, "auth_token", "", {
+  setCookie(c, "auth_token", "", {
     httpOnly: true,
     secure: false,
     // Set to true in production with HTTPS
@@ -3969,7 +3967,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -3986,14 +3984,14 @@ authRoutes.get("/me", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(user.userId, user.email, user.role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -4013,7 +4011,7 @@ authRoutes.post("/register/form", async (c) => {
     if (!isFirstUser) {
       const registrationEnabled = await isRegistrationEnabled(db);
       if (!registrationEnabled) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             Registration is currently disabled. Please contact an administrator.
           </div>
@@ -4033,7 +4031,7 @@ authRoutes.post("/register/form", async (c) => {
     const validationSchema = await authValidationService.buildRegistrationSchema(db);
     const validation = await validationSchema.safeParseAsync(requestData);
     if (!validation.success) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           ${validation.error.issues.map((err) => err.message).join(", ")}
         </div>
@@ -4046,13 +4044,13 @@ authRoutes.post("/register/form", async (c) => {
     const lastName = validatedData.lastName || authValidationService.generateDefaultValue("lastName", validatedData);
     const existingUser = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind(normalizedEmail, username).first();
     if (existingUser) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           User with this email or username already exists
         </div>
       `);
     }
-    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -4072,8 +4070,8 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(userId, normalizedEmail, role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
       // Set to true in production with HTTPS
@@ -4082,7 +4080,7 @@ authRoutes.post("/register/form", async (c) => {
       // 24 hours
     });
     const redirectUrl = role === "admin" ? "/admin/dashboard" : "/admin/dashboard";
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Account created successfully! Redirecting...
         <script>
@@ -4094,7 +4092,7 @@ authRoutes.post("/register/form", async (c) => {
     `);
   } catch (error) {
     console.error("Registration error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Registration failed. Please try again.
       </div>
@@ -4109,7 +4107,7 @@ authRoutes.post("/login/form", async (c) => {
     const normalizedEmail = email.toLowerCase();
     const validation = loginSchema.safeParse({ email: normalizedEmail, password });
     if (!validation.success) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           ${validation.error.issues.map((err) => err.message).join(", ")}
         </div>
@@ -4118,22 +4116,22 @@ authRoutes.post("/login/form", async (c) => {
     const db = c.env.DB;
     const user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
     if (!user) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `);
     }
-    const isValidPassword = await chunkHTUZE2B6_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `);
     }
-    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(user.id, user.email, user.role);
-    cookie.setCookie(c, "auth_token", token, {
+    const token = await AuthManager.generateToken(user.id, user.email, user.role);
+    setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
       // Set to true in production with HTTPS
@@ -4142,7 +4140,7 @@ authRoutes.post("/login/form", async (c) => {
       // 24 hours
     });
     await db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").bind((/* @__PURE__ */ new Date()).getTime(), user.id).run();
-    return c.html(html.html`
+    return c.html(html`
       <div id="form-response">
         <div class="rounded-lg bg-green-100 dark:bg-lime-500/10 p-4 ring-1 ring-green-400 dark:ring-lime-500/20">
           <div class="flex items-start gap-x-3">
@@ -4163,7 +4161,7 @@ authRoutes.post("/login/form", async (c) => {
     `);
   } catch (error) {
     console.error("Login error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Login failed. Please try again.
       </div>
@@ -4191,7 +4189,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await chunkHTUZE2B6_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -4203,7 +4201,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -4423,7 +4421,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -4442,8 +4440,8 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunkHTUZE2B6_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
-    cookie.setCookie(c, "auth_token", authToken, {
+    const authToken = await AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -4672,7 +4670,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -4707,7 +4705,7 @@ authRoutes.post("/reset-password", async (c) => {
   }
 });
 var auth_default = authRoutes;
-var app = new hono.Hono();
+var app = new Hono();
 app.post("/test-cleanup", async (c) => {
   const db = c.env.DB;
   if (c.env.ENVIRONMENT === "production") {
@@ -4930,7 +4928,7 @@ app.post("/test-cleanup/content", async (c) => {
 var test_cleanup_default = app;
 
 // src/templates/pages/admin-content-form.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 
 // src/templates/components/drag-sortable.template.ts
 function getDragSortableScript() {
@@ -6484,7 +6482,7 @@ function escapeHtml2(text) {
 }
 
 // src/plugins/available/tinymce-plugin/index.ts
-var builder = chunk6FHNRRJ3_cjs.PluginBuilder.create({
+var builder = PluginBuilder.create({
   name: "tinymce-plugin",
   version: "1.0.0",
   description: "Powerful WYSIWYG rich text editor for content creation"
@@ -6767,7 +6765,7 @@ function getQuillCDN(version = "2.0.2") {
   `;
 }
 function createQuillEditorPlugin() {
-  const builder3 = chunk6FHNRRJ3_cjs.PluginBuilder.create({
+  const builder3 = PluginBuilder.create({
     name: "quill-editor",
     version: "1.0.0",
     description: "Quill rich text editor integration for SonicJS"
@@ -6793,7 +6791,7 @@ function createQuillEditorPlugin() {
 createQuillEditorPlugin();
 
 // src/plugins/available/easy-mdx/index.ts
-var builder2 = chunk6FHNRRJ3_cjs.PluginBuilder.create({
+var builder2 = PluginBuilder.create({
   name: "easy-mdx",
   version: "1.0.0",
   description: "Lightweight markdown editor with live preview"
@@ -7084,8 +7082,8 @@ function renderContentFormPage(data) {
         <!-- Form Content -->
         <div class="px-6 py-6">
           <div id="form-messages">
-            ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-            ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+            ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+            ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -7320,7 +7318,7 @@ function renderContentFormPage(data) {
     </div>
 
     <!-- Confirmation Dialogs -->
-    ${chunkGMUS5V42_cjs.renderConfirmationDialog({
+    ${renderConfirmationDialog({
     id: "duplicate-content-confirm",
     title: "Duplicate Content",
     message: "Create a copy of this content?",
@@ -7331,7 +7329,7 @@ function renderContentFormPage(data) {
     onConfirm: "performDuplicateContent()"
   })}
 
-    ${chunkGMUS5V42_cjs.renderConfirmationDialog({
+    ${renderConfirmationDialog({
     id: "delete-content-confirm",
     title: "Delete Content",
     message: "Are you sure you want to delete this content? This action cannot be undone.",
@@ -7342,7 +7340,7 @@ function renderContentFormPage(data) {
     onConfirm: `performDeleteContent('${data.id}')`
   })}
 
-    ${chunkGMUS5V42_cjs.getConfirmationDialogScript()}
+    ${getConfirmationDialogScript()}
 
     ${data.tinymceEnabled ? getTinyMCEScript(data.tinymceSettings?.apiKey) : "<!-- TinyMCE plugin not active -->"}
 
@@ -7973,11 +7971,11 @@ function renderContentFormPage(data) {
     content: pageContent,
     version: data.version
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-content-list.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderContentListPage(data) {
   const urlParams = new URLSearchParams();
   if (data.modelName && data.modelName !== "all") urlParams.set("model", data.modelName);
@@ -8381,8 +8379,8 @@ function renderContentListPage(data) {
       
       <!-- Content List -->
       <div id="content-list">
-        ${chunkGMUS5V42_cjs.renderTable(tableData)}
-        ${chunkGMUS5V42_cjs.renderPagination(paginationData)}
+        ${renderTable(tableData)}
+        ${renderPagination(paginationData)}
       </div>
       
     </div>
@@ -8592,7 +8590,7 @@ function renderContentListPage(data) {
     </script>
 
     <!-- Confirmation Dialog for Bulk Actions -->
-    ${chunkGMUS5V42_cjs.renderConfirmationDialog({
+    ${renderConfirmationDialog({
     id: "bulk-action-confirm",
     title: "Confirm Bulk Action",
     message: "Are you sure you want to perform this action? This operation will affect multiple items.",
@@ -8604,7 +8602,7 @@ function renderContentListPage(data) {
   })}
 
     <!-- Confirmation Dialog Script -->
-    ${chunkGMUS5V42_cjs.getConfirmationDialogScript()}
+    ${getConfirmationDialogScript()}
 
     <!-- Advanced Search Modal -->
     <div id="advancedSearchModal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -8901,7 +8899,7 @@ function renderContentListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/version-history.template.ts
@@ -9094,14 +9092,14 @@ async function isPluginActive2(db, pluginId) {
 }
 
 // src/routes/admin-content.ts
-var adminContentRoutes = new hono.Hono();
+var adminContentRoutes = new Hono();
 function parseFieldValue(field, formData, options = {}) {
   const { skipValidation = false } = options;
   const value = formData.get(field.field_name);
   const errors = [];
-  const blocksConfig = chunkUOEIMC67_cjs.getBlocksFieldConfig(field.field_options);
+  const blocksConfig = getBlocksFieldConfig(field.field_options);
   if (blocksConfig) {
-    const parsed = chunkUOEIMC67_cjs.parseBlocksValue(value, blocksConfig);
+    const parsed = parseBlocksValue(value, blocksConfig);
     if (!skipValidation && field.is_required && parsed.value.length === 0) {
       parsed.errors.push(`${field.field_label} is required`);
     }
@@ -9211,9 +9209,9 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+adminContentRoutes.use("*", requireAuth());
 async function getCollectionFields(db, collectionId) {
-  const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
+  const cache = getCacheService(CACHE_CONFIGS.collection);
   return cache.getOrSet(
     cache.generateKey("fields", collectionId),
     async () => {
@@ -9268,7 +9266,7 @@ async function getCollectionFields(db, collectionId) {
   );
 }
 async function getCollection(db, collectionId) {
-  const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
+  const cache = getCacheService(CACHE_CONFIGS.collection);
   return cache.getOrSet(
     cache.generateKey("collection", collectionId),
     async () => {
@@ -9493,21 +9491,21 @@ adminContentRoutes.get("/new", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -9557,7 +9555,7 @@ adminContentRoutes.get("/:id/edit", async (c) => {
     const db = c.env.DB;
     const url = new URL(c.req.url);
     const referrerParams = url.searchParams.get("ref") || "";
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     const content = await cache.getOrSet(
       cache.generateKey("content", id),
       async () => {
@@ -9598,21 +9596,21 @@ adminContentRoutes.get("/:id/edit", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+      const pluginService = new PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -9668,7 +9666,7 @@ adminContentRoutes.post("/", async (c) => {
     const collectionId = formData.get("collection_id");
     const action = formData.get("action");
     if (!collectionId) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection ID is required.
         </div>
@@ -9677,7 +9675,7 @@ adminContentRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const collection = await getCollection(db, collectionId);
     if (!collection) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
@@ -9730,7 +9728,7 @@ adminContentRoutes.post("/", async (c) => {
       now,
       now
     ).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.invalidate(`content:list:${collectionId}:*`);
     const versionStmt = db.prepare(`
       INSERT INTO content_versions (id, content_id, version, data, author_id, created_at)
@@ -9775,7 +9773,7 @@ adminContentRoutes.post("/", async (c) => {
     }
   } catch (error) {
     console.error("Error creating content:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to create content. Please try again.
       </div>
@@ -9792,7 +9790,7 @@ adminContentRoutes.put("/:id", async (c) => {
     const contentStmt = db.prepare("SELECT * FROM content WHERE id = ?");
     const existingContent = await contentStmt.bind(id).first();
     if (!existingContent) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Content not found.
         </div>
@@ -9800,7 +9798,7 @@ adminContentRoutes.put("/:id", async (c) => {
     }
     const collection = await getCollection(db, existingContent.collection_id);
     if (!collection) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
@@ -9855,7 +9853,7 @@ adminContentRoutes.put("/:id", async (c) => {
       now,
       id
     ).run();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existingContent.collection_id}:*`);
     const existingData = JSON.parse(existingContent.data || "{}");
@@ -9909,7 +9907,7 @@ adminContentRoutes.put("/:id", async (c) => {
     }
   } catch (error) {
     console.error("Error updating content:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update content. Please try again.
       </div>
@@ -10134,7 +10132,7 @@ adminContentRoutes.post("/bulk-action", async (c) => {
     } else {
       return c.json({ success: false, error: "Invalid action" });
     }
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     for (const contentId of ids) {
       await cache.delete(cache.generateKey("content", contentId));
     }
@@ -10168,7 +10166,7 @@ adminContentRoutes.delete("/:id", async (c) => {
         (err) => console.error("[Content] FTS5 removal failed:", err)
       )
     );
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
+    const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate("content:list:*");
     return c.html(`
@@ -10360,7 +10358,7 @@ ${JSON.stringify(data, null, 2)}
 var admin_content_default = adminContentRoutes;
 
 // src/templates/pages/admin-profile.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderAvatarImage(avatarUrl, firstName, lastName) {
   return `<div id="avatar-image-container" class="w-24 h-24 rounded-full mx-auto mb-4 overflow-hidden bg-gradient-to-br from-cyan-400 to-purple-400 flex items-center justify-center ring-4 ring-zinc-950/5 dark:ring-white/10">
     ${avatarUrl ? `<img src="${avatarUrl}" alt="Profile picture" class="w-full h-full object-cover">` : `<span class="text-2xl font-bold text-white">${firstName.charAt(0)}${lastName.charAt(0)}</span>`}
@@ -10380,8 +10378,8 @@ function renderProfilePage(data) {
       </div>
 
       <!-- Alert Messages -->
-      ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-      ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+      ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+      ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
 
       <!-- Profile Form -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -10768,7 +10766,7 @@ function renderProfilePage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/alert.template.ts
@@ -11051,7 +11049,7 @@ function renderActivityLogsPage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function getActionBadgeClass(action) {
   if (action.includes("login") || action.includes("logout")) {
@@ -11071,7 +11069,7 @@ function formatAction(action) {
 }
 
 // src/templates/pages/admin-user-edit.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 
 // src/templates/components/confirmation-dialog.template.ts
 function renderConfirmationDialog2(options) {
@@ -11192,8 +11190,8 @@ function renderUserEditPage(data) {
 
       <!-- Alert Messages -->
       <div id="form-messages">
-        ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-        ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+        ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+        ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
       </div>
 
       <!-- User Edit Form -->
@@ -11212,7 +11210,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="first_name"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.firstName || "")}"
+                      value="${escapeHtml(data.userToEdit.firstName || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11223,7 +11221,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="last_name"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.lastName || "")}"
+                      value="${escapeHtml(data.userToEdit.lastName || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11234,7 +11232,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="username"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.username || "")}"
+                      value="${escapeHtml(data.userToEdit.username || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11245,7 +11243,7 @@ function renderUserEditPage(data) {
                     <input
                       type="email"
                       name="email"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.email || "")}"
+                      value="${escapeHtml(data.userToEdit.email || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11256,7 +11254,7 @@ function renderUserEditPage(data) {
                     <input
                       type="tel"
                       name="phone"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.phone || "")}"
+                      value="${escapeHtml(data.userToEdit.phone || "")}"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
                   </div>
@@ -11270,7 +11268,7 @@ function renderUserEditPage(data) {
                         class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white/5 dark:bg-white/5 py-1.5 pl-3 pr-8 text-base text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-500/30 dark:outline-zinc-400/30 *:bg-white dark:*:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-zinc-500 dark:focus-visible:outline-zinc-400 sm:text-sm/6"
                       >
                         ${data.roles.map((role) => `
-                          <option value="${chunkUOEIMC67_cjs.escapeHtml(role.value)}" ${data.userToEdit.role === role.value ? "selected" : ""}>${chunkUOEIMC67_cjs.escapeHtml(role.label)}</option>
+                          <option value="${escapeHtml(role.value)}" ${data.userToEdit.role === role.value ? "selected" : ""}>${escapeHtml(role.label)}</option>
                         `).join("")}
                       </select>
                       <svg viewBox="0 0 16 16" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-zinc-600 dark:text-zinc-400 sm:size-4">
@@ -11291,7 +11289,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_display_name"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.displayName || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.displayName || "")}"
                       placeholder="Public display name"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11302,7 +11300,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_company"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.company || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.company || "")}"
                       placeholder="Company or organization"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11313,7 +11311,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_job_title"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.jobTitle || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.jobTitle || "")}"
                       placeholder="Job title or role"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11324,7 +11322,7 @@ function renderUserEditPage(data) {
                     <input
                       type="url"
                       name="profile_website"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.website || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.website || "")}"
                       placeholder="https://example.com"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11335,7 +11333,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_location"
-                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.location || "")}"
+                      value="${escapeHtml(data.userToEdit.profile?.location || "")}"
                       placeholder="City, Country"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11359,7 +11357,7 @@ function renderUserEditPage(data) {
                     rows="3"
                     placeholder="Short bio or description"
                     class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                  >${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.bio || "")}</textarea>
+                  >${escapeHtml(data.userToEdit.profile?.bio || "")}</textarea>
                 </div>
               </div>
 
@@ -11559,11 +11557,11 @@ function renderUserEditPage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-user-new.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderUserNewPage(data) {
   const pageContent = `
     <div>
@@ -11602,8 +11600,8 @@ function renderUserNewPage(data) {
 
       <!-- Alert Messages -->
       <div id="form-messages">
-        ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-        ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+        ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+        ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
       </div>
 
       <!-- User New Form -->
@@ -11847,11 +11845,11 @@ function renderUserNewPage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-users-list.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderUsersListPage(data) {
   const columns = [
     {
@@ -12002,8 +12000,8 @@ function renderUsersListPage(data) {
       </div>
 
       <!-- Alert Messages -->
-      ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-      ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+      ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+      ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
 
       <!-- Stats -->
       <div class="mb-6">
@@ -12180,10 +12178,10 @@ function renderUsersListPage(data) {
       </div>
 
       <!-- Users Table -->
-      ${chunkGMUS5V42_cjs.renderTable(tableData)}
+      ${renderTable(tableData)}
 
       <!-- Pagination -->
-      ${data.pagination ? chunkGMUS5V42_cjs.renderPagination(data.pagination) : ""}
+      ${data.pagination ? renderPagination(data.pagination) : ""}
     </div>
 
     <script>
@@ -12254,12 +12252,12 @@ function renderUsersListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-users.ts
-var userRoutes = new hono.Hono();
-userRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var userRoutes = new Hono();
+userRoutes.use("*", requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -12358,12 +12356,12 @@ userRoutes.put("/profile", async (c) => {
   const db = c.env.DB;
   try {
     const formData = await c.req.formData();
-    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
-    const username = chunkUOEIMC67_cjs.sanitizeInput(formData.get("username")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
+    const username = sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = chunkUOEIMC67_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
-    const bio = chunkUOEIMC67_cjs.sanitizeInput(formData.get("bio")?.toString()) || null;
+    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
+    const bio = sanitizeInput(formData.get("bio")?.toString()) || null;
     const timezone = formData.get("timezone")?.toString() || "UTC";
     const language = formData.get("language")?.toString() || "en";
     const emailNotifications = formData.get("email_notifications") === "1";
@@ -12414,7 +12412,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "profile.update",
@@ -12477,7 +12475,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -12548,7 +12546,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunkHTUZE2B6_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -12556,7 +12554,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -12572,7 +12570,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -12639,7 +12637,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -12741,12 +12739,12 @@ userRoutes.post("/users/new", async (c) => {
   const user = c.get("user");
   try {
     const formData = await c.req.formData();
-    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
-    const username = chunkUOEIMC67_cjs.sanitizeInput(formData.get("username")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
+    const username = sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = chunkUOEIMC67_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
-    const bio = chunkUOEIMC67_cjs.sanitizeInput(formData.get("bio")?.toString()) || null;
+    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
+    const bio = sanitizeInput(formData.get("bio")?.toString()) || null;
     const role = formData.get("role")?.toString() || "viewer";
     const password = formData.get("password")?.toString() || "";
     const confirmPassword = formData.get("confirm_password")?.toString() || "";
@@ -12793,7 +12791,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12816,7 +12814,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.create",
@@ -12854,7 +12852,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.view",
@@ -12966,20 +12964,20 @@ userRoutes.put("/users/:id", async (c) => {
   const userId = c.req.param("id");
   try {
     const formData = await c.req.formData();
-    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
-    const username = chunkUOEIMC67_cjs.sanitizeInput(formData.get("username")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
+    const username = sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = chunkUOEIMC67_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
+    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
     const role = formData.get("role")?.toString() || "viewer";
     const isActive = formData.get("is_active") === "1";
     const emailVerified = formData.get("email_verified") === "1";
-    const profileDisplayName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_display_name")?.toString()) || null;
-    const profileBio = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_bio")?.toString()) || null;
-    const profileCompany = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_company")?.toString()) || null;
-    const profileJobTitle = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_job_title")?.toString()) || null;
+    const profileDisplayName = sanitizeInput(formData.get("profile_display_name")?.toString()) || null;
+    const profileBio = sanitizeInput(formData.get("profile_bio")?.toString()) || null;
+    const profileCompany = sanitizeInput(formData.get("profile_company")?.toString()) || null;
+    const profileJobTitle = sanitizeInput(formData.get("profile_job_title")?.toString()) || null;
     const profileWebsite = formData.get("profile_website")?.toString()?.trim() || null;
-    const profileLocation = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_location")?.toString()) || null;
+    const profileLocation = sanitizeInput(formData.get("profile_location")?.toString()) || null;
     const profileDateOfBirthStr = formData.get("profile_date_of_birth")?.toString()?.trim() || null;
     const profileDateOfBirth = profileDateOfBirthStr ? new Date(profileDateOfBirthStr).getTime() : null;
     if (!firstName || !lastName || !username || !email) {
@@ -13103,7 +13101,7 @@ userRoutes.put("/users/:id", async (c) => {
         console.error("Failed to save user profile data:", profileError);
       }
     }
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user.update",
@@ -13148,7 +13146,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -13189,7 +13187,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunkHTUZE2B6_cjs.logActivity(
+      await logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -13208,7 +13206,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunkHTUZE2B6_cjs.logActivity(
+      await logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -13235,8 +13233,8 @@ userRoutes.post("/invite-user", async (c) => {
     const formData = await c.req.formData();
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
     const role = formData.get("role")?.toString()?.trim() || "viewer";
-    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
+    const firstName = sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = sanitizeInput(formData.get("last_name")?.toString());
     if (!email || !firstName || !lastName) {
       return c.json({ error: "Email, first name, and last name are required" }, 400);
     }
@@ -13274,7 +13272,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -13331,7 +13329,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -13367,7 +13365,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -13450,7 +13448,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -13557,7 +13555,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunkHTUZE2B6_cjs.logActivity(
+    await logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -13775,7 +13773,7 @@ function getFileIcon(mimeType) {
 }
 
 // src/templates/pages/admin-media-library.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderMediaLibraryPage(data) {
   const pageContent = `
     <div>
@@ -14710,7 +14708,7 @@ function renderMediaLibraryPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/media-file-details.template.ts
@@ -14859,9 +14857,9 @@ function renderMediaFileDetails(data) {
 }
 
 // src/routes/admin-media.ts
-var fileValidationSchema2 = zod.z.object({
-  name: zod.z.string().min(1).max(255),
-  type: zod.z.string().refine(
+var fileValidationSchema2 = z.object({
+  name: z.string().min(1).max(255),
+  type: z.string().refine(
     (type) => {
       const allowedTypes = [
         // Images
@@ -14892,11 +14890,11 @@ var fileValidationSchema2 = zod.z.object({
     },
     { message: "Unsupported file type" }
   ),
-  size: zod.z.number().min(1).max(50 * 1024 * 1024)
+  size: z.number().min(1).max(50 * 1024 * 1024)
   // 50MB max
 });
-var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var adminMediaRoutes = new Hono();
+adminMediaRoutes.use("*", requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -15005,7 +15003,7 @@ adminMediaRoutes.get("/", async (c) => {
     return c.html(renderMediaLibraryPage(pageData));
   } catch (error) {
     console.error("Error loading media library:", error);
-    return c.html(html.html`<p>Error loading media library</p>`);
+    return c.html(html`<p>Error loading media library</p>`);
   }
 });
 adminMediaRoutes.get("/selector", async (c) => {
@@ -15040,7 +15038,7 @@ adminMediaRoutes.get("/selector", async (c) => {
       isVideo: row.mime_type.startsWith("video/"),
       isDocument: !row.mime_type.startsWith("image/") && !row.mime_type.startsWith("video/")
     }));
-    return c.html(html.html`
+    return c.html(html`
       <div class="mb-4">
         <input
           type="search"
@@ -15055,7 +15053,7 @@ adminMediaRoutes.get("/selector", async (c) => {
       </div>
 
       <div id="media-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-        ${html.raw(mediaFiles.map((file) => `
+        ${raw(mediaFiles.map((file) => `
           <div
             class="relative group cursor-pointer rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800 shadow-sm hover:shadow-md transition-shadow"
             data-media-id="${file.id}"
@@ -15108,7 +15106,7 @@ adminMediaRoutes.get("/selector", async (c) => {
         `).join(""))}
       </div>
 
-      ${mediaFiles.length === 0 ? html.html`
+      ${mediaFiles.length === 0 ? html`
         <div class="text-center py-12 text-zinc-500 dark:text-zinc-400">
           <svg class="mx-auto h-12 w-12 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
@@ -15119,7 +15117,7 @@ adminMediaRoutes.get("/selector", async (c) => {
     `);
   } catch (error) {
     console.error("Error loading media selector:", error);
-    return c.html(html.html`<div class="text-red-500 dark:text-red-400">Error loading media files</div>`);
+    return c.html(html`<div class="text-red-500 dark:text-red-400">Error loading media files</div>`);
   }
 });
 adminMediaRoutes.get("/search", async (c) => {
@@ -15175,7 +15173,7 @@ adminMediaRoutes.get("/search", async (c) => {
       isDocument: !row.mime_type.startsWith("image/") && !row.mime_type.startsWith("video/")
     }));
     const gridHTML = mediaFiles.map((file) => generateMediaItemHTML(file)).join("");
-    return c.html(html.raw(gridHTML));
+    return c.html(raw(gridHTML));
   } catch (error) {
     console.error("Error searching media:", error);
     return c.html('<div class="text-red-500">Error searching files</div>');
@@ -15230,7 +15228,7 @@ adminMediaRoutes.post("/upload", async (c) => {
       }
     }
     if (!files || files.length === 0) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           No files provided
         </div>
@@ -15243,7 +15241,7 @@ adminMediaRoutes.post("/upload", async (c) => {
     console.log("[MEDIA UPLOAD] MEDIA_BUCKET type:", typeof c.env.MEDIA_BUCKET);
     if (!c.env.MEDIA_BUCKET) {
       console.error("[MEDIA UPLOAD] MEDIA_BUCKET is not available! Available env keys:", Object.keys(c.env));
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Media storage (R2) is not configured. Please check your wrangler.toml configuration.
           <br><small>Debug: Available bindings: ${Object.keys(c.env).join(", ")}</small>
@@ -15366,25 +15364,25 @@ adminMediaRoutes.post("/upload", async (c) => {
         console.error("Error fetching updated media list:", error);
       }
     }
-    return c.html(html.html`
-      ${uploadResults.length > 0 ? html.html`
+    return c.html(html`
+      ${uploadResults.length > 0 ? html`
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
           Successfully uploaded ${uploadResults.length} file${uploadResults.length > 1 ? "s" : ""}
         </div>
       ` : ""}
 
-      ${errors.length > 0 ? html.html`
+      ${errors.length > 0 ? html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p class="font-medium">Upload errors:</p>
           <ul class="list-disc list-inside mt-2">
-            ${errors.map((error) => html.html`
+            ${errors.map((error) => html`
               <li>${error.filename}: ${error.error}</li>
             `)}
           </ul>
         </div>
       ` : ""}
 
-      ${uploadResults.length > 0 ? html.html`
+      ${uploadResults.length > 0 ? html`
         <script>
           // Close modal and refresh page after successful upload with cache busting
           setTimeout(() => {
@@ -15396,7 +15394,7 @@ adminMediaRoutes.post("/upload", async (c) => {
     `);
   } catch (error) {
     console.error("Upload error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Upload failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -15433,14 +15431,14 @@ adminMediaRoutes.put("/:id", async (c) => {
     const stmt = c.env.DB.prepare("SELECT * FROM media WHERE id = ? AND deleted_at IS NULL");
     const fileRecord = await stmt.bind(fileId).first();
     if (!fileRecord) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
         </div>
       `);
     }
     if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
         </div>
@@ -15462,7 +15460,7 @@ adminMediaRoutes.put("/:id", async (c) => {
       Math.floor(Date.now() / 1e3),
       fileId
     ).run();
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
         File updated successfully
       </div>
@@ -15475,14 +15473,14 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   } catch (error) {
     console.error("Update error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
         Update failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunkHTUZE2B6_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -15502,7 +15500,7 @@ adminMediaRoutes.delete("/cleanup", chunkHTUZE2B6_cjs.requireRole("admin"), asyn
     const mediaRows = allMedia || [];
     const unusedFiles = mediaRows.filter((file) => !referencedUrls.has(file.r2_key));
     if (unusedFiles.length === 0) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
           No unused media files found. All files are referenced in content.
         </div>
@@ -15529,19 +15527,19 @@ adminMediaRoutes.delete("/cleanup", chunkHTUZE2B6_cjs.requireRole("admin"), asyn
         });
       }
     }
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
         Successfully cleaned up ${deletedCount} unused media file${deletedCount !== 1 ? "s" : ""}.
-        ${errors.length > 0 ? html.html`
+        ${errors.length > 0 ? html`
           <br><span class="text-sm">Failed to delete ${errors.length} file${errors.length !== 1 ? "s" : ""}.</span>
         ` : ""}
       </div>
 
-      ${errors.length > 0 ? html.html`
+      ${errors.length > 0 ? html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p class="font-medium">Cleanup errors:</p>
           <ul class="list-disc list-inside mt-2 text-sm">
-            ${errors.map((error) => html.html`
+            ${errors.map((error) => html`
               <li>${error.filename}: ${error.error}</li>
             `)}
           </ul>
@@ -15557,7 +15555,7 @@ adminMediaRoutes.delete("/cleanup", chunkHTUZE2B6_cjs.requireRole("admin"), asyn
     `);
   } catch (error) {
     console.error("Cleanup error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Cleanup failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -15571,14 +15569,14 @@ adminMediaRoutes.delete("/:id", async (c) => {
     const stmt = c.env.DB.prepare("SELECT * FROM media WHERE id = ? AND deleted_at IS NULL");
     const fileRecord = await stmt.bind(fileId).first();
     if (!fileRecord) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
         </div>
       `);
     }
     if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
         </div>
@@ -15591,7 +15589,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
     }
     const deleteStmt = c.env.DB.prepare("UPDATE media SET deleted_at = ? WHERE id = ?");
     await deleteStmt.bind(Math.floor(Date.now() / 1e3), fileId).run();
-    return c.html(html.html`
+    return c.html(html`
       <script>
         // Close modal if open
         const modal = document.getElementById('file-modal');
@@ -15604,7 +15602,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
     `);
   } catch (error) {
     console.error("Delete error:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
         Delete failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -15732,7 +15730,7 @@ function formatFileSize(bytes) {
 }
 
 // src/templates/pages/admin-plugins-list.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderPluginsListPage(data) {
   const categories = [
     { value: "content", label: "Content Management" },
@@ -16202,7 +16200,7 @@ function renderPluginsListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 function renderPluginCard(plugin) {
   const statusColors = {
@@ -16839,7 +16837,7 @@ function renderPluginSettingsPage(data) {
     user,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function renderStatusBadge(status) {
   const statusColors = {
@@ -17688,8 +17686,8 @@ function renderEmailSettingsContent(plugin, settings) {
 }
 
 // src/routes/admin-plugins.ts
-var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var adminPluginRoutes = new Hono();
+adminPluginRoutes.use("*", requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -17816,7 +17814,7 @@ adminPluginRoutes.get("/", async (c) => {
     if (user?.role !== "admin") {
       return c.text("Access denied", 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     let installedPlugins = [];
     let stats = { total: 0, active: 0, inactive: 0, errors: 0, uninstalled: 0 };
     try {
@@ -17892,7 +17890,7 @@ adminPluginRoutes.get("/:id", async (c) => {
     if (user?.role !== "admin") {
       return c.redirect("/admin/plugins");
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     const plugin = await pluginService.getPlugin(pluginId);
     if (!plugin) {
       return c.text("Plugin not found", 404);
@@ -17976,7 +17974,7 @@ adminPluginRoutes.post("/:id/activate", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.activatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -17993,7 +17991,7 @@ adminPluginRoutes.post("/:id/deactivate", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.deactivatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18010,7 +18008,7 @@ adminPluginRoutes.post("/install", async (c) => {
       return c.json({ error: "Access denied" }, 403);
     }
     const body = await c.req.json();
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     if (body.name === "faq-plugin") {
       const faqPlugin = await pluginService.installPlugin({
         id: "third-party-faq",
@@ -18280,7 +18278,7 @@ adminPluginRoutes.post("/:id/uninstall", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.uninstallPlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18298,7 +18296,7 @@ adminPluginRoutes.post("/:id/settings", async (c) => {
       return c.json({ error: "Access denied" }, 403);
     }
     const settings = await c.req.json();
-    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
+    const pluginService = new PluginService(db);
     await pluginService.updatePluginSettings(pluginId, settings);
     return c.json({ success: true });
   } catch (error) {
@@ -18319,7 +18317,7 @@ function formatLastUpdated(timestamp) {
 }
 
 // src/templates/pages/admin-logs-list.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderLogsListPage(data) {
   const { logs, pagination, filters, user } = data;
   const content = `
@@ -18630,11 +18628,11 @@ function renderLogsListPage(data) {
     user,
     content
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 function renderLogDetailsPage(data) {
   const { log, user } = data;
-  const content = html.html`
+  const content = html`
     <div class="px-4 sm:px-6 lg:px-8">
       <div class="sm:flex sm:items-center">
         <div class="sm:flex-auto">
@@ -18695,59 +18693,59 @@ function renderLogDetailsPage(data) {
               </dd>
             </div>
             
-            ${log.source ? html.html`
+            ${log.source ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Source</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.source}</dd>
               </div>
             ` : ""}
             
-            ${log.userId ? html.html`
+            ${log.userId ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">User ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.userId}</dd>
               </div>
             ` : ""}
             
-            ${log.sessionId ? html.html`
+            ${log.sessionId ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Session ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.sessionId}</dd>
               </div>
             ` : ""}
             
-            ${log.requestId ? html.html`
+            ${log.requestId ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Request ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.requestId}</dd>
               </div>
             ` : ""}
             
-            ${log.ipAddress ? html.html`
+            ${log.ipAddress ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">IP Address</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.ipAddress}</dd>
               </div>
             ` : ""}
             
-            ${log.method && log.url ? html.html`
+            ${log.method && log.url ? html`
               <div class="sm:col-span-2">
                 <dt class="text-sm font-medium text-gray-500">HTTP Request</dt>
                 <dd class="mt-1 text-sm text-gray-900">
                   <span class="font-medium">${log.method}</span> ${log.url}
-                  ${log.statusCode ? html.html`<span class="ml-2 text-gray-500">(${log.statusCode})</span>` : ""}
+                  ${log.statusCode ? html`<span class="ml-2 text-gray-500">(${log.statusCode})</span>` : ""}
                 </dd>
               </div>
             ` : ""}
             
-            ${log.duration ? html.html`
+            ${log.duration ? html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Duration</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.formattedDuration}</dd>
               </div>
             ` : ""}
             
-            ${log.userAgent ? html.html`
+            ${log.userAgent ? html`
               <div class="sm:col-span-2">
                 <dt class="text-sm font-medium text-gray-500">User Agent</dt>
                 <dd class="mt-1 text-sm text-gray-900 break-all">${log.userAgent}</dd>
@@ -18770,14 +18768,14 @@ function renderLogDetailsPage(data) {
       </div>
 
       <!-- Tags -->
-      ${log.tags && log.tags.length > 0 ? html.html`
+      ${log.tags && log.tags.length > 0 ? html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Tags</h3>
           </div>
           <div class="px-6 py-4">
             <div class="flex flex-wrap gap-2">
-              ${log.tags.map((tag) => html.html`
+              ${log.tags.map((tag) => html`
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                   ${tag}
                 </span>
@@ -18788,7 +18786,7 @@ function renderLogDetailsPage(data) {
       ` : ""}
 
       <!-- Additional Data -->
-      ${log.data ? html.html`
+      ${log.data ? html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Additional Data</h3>
@@ -18800,7 +18798,7 @@ function renderLogDetailsPage(data) {
       ` : ""}
 
       <!-- Stack Trace -->
-      ${log.stackTrace ? html.html`
+      ${log.stackTrace ? html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Stack Trace</h3>
@@ -18821,7 +18819,7 @@ function renderLogDetailsPage(data) {
         </a>
         
         <div class="flex space-x-3">
-          ${log.level === "error" || log.level === "fatal" ? html.html`
+          ${log.level === "error" || log.level === "fatal" ? html`
             <button
               type="button"
               class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -18842,7 +18840,7 @@ function renderLogDetailsPage(data) {
       </div>
     </div>
   `;
-  return chunkGMUS5V42_cjs.adminLayoutV2({
+  return adminLayoutV2({
     title: `Log Details - ${log.id}`,
     user,
     content
@@ -18850,7 +18848,7 @@ function renderLogDetailsPage(data) {
 }
 function renderLogConfigPage(data) {
   const { configs, user } = data;
-  const content = html.html`
+  const content = html`
     <div class="px-4 sm:px-6 lg:px-8">
       <div class="sm:flex sm:items-center">
         <div class="sm:flex-auto">
@@ -18922,17 +18920,17 @@ function renderLogConfigPage(data) {
 
       <!-- Configuration Cards -->
       <div class="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        ${configs.map((config) => html.html`
+        ${configs.map((config) => html`
           <div class="bg-white shadow rounded-lg overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">
               <div class="flex items-center justify-between">
                 <h3 class="text-lg font-medium text-gray-900 capitalize">${config.category}</h3>
                 <div class="flex items-center">
-                  ${config.enabled ? html.html`
+                  ${config.enabled ? html`
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                       Enabled
                     </span>
-                  ` : html.html`
+                  ` : html`
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                       Disabled
                     </span>
@@ -19085,7 +19083,7 @@ function renderLogConfigPage(data) {
 
     <script src="https://unpkg.com/htmx.org@1.9.6"></script>
   `;
-  return chunkGMUS5V42_cjs.adminLayoutV2({
+  return adminLayoutV2({
     title: "Log Configuration",
     user,
     content
@@ -19093,12 +19091,12 @@ function renderLogConfigPage(data) {
 }
 
 // src/routes/admin-logs.ts
-var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var adminLogsRoutes = new Hono();
+adminLogsRoutes.use("*", requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const query = c.req.query();
     const page = parseInt(query.page || "1");
     const limit = parseInt(query.limit || "50");
@@ -19171,14 +19169,14 @@ adminLogsRoutes.get("/", async (c) => {
     return c.html(renderLogsListPage(pageData));
   } catch (error) {
     console.error("Error fetching logs:", error);
-    return c.html(html.html`<p>Error loading logs: ${error}</p>`);
+    return c.html(html`<p>Error loading logs: ${error}</p>`);
   }
 });
 adminLogsRoutes.get("/:id", async (c) => {
   try {
     const id = c.req.param("id");
     const user = c.get("user");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const { logs } = await logger.getLogs({
       limit: 1,
       offset: 0,
@@ -19187,7 +19185,7 @@ adminLogsRoutes.get("/:id", async (c) => {
     });
     const log = logs.find((l) => l.id === id);
     if (!log) {
-      return c.html(html.html`<p>Log entry not found</p>`);
+      return c.html(html`<p>Log entry not found</p>`);
     }
     const formattedLog = {
       ...log,
@@ -19209,13 +19207,13 @@ adminLogsRoutes.get("/:id", async (c) => {
     return c.html(renderLogDetailsPage(pageData));
   } catch (error) {
     console.error("Error fetching log details:", error);
-    return c.html(html.html`<p>Error loading log details: ${error}</p>`);
+    return c.html(html`<p>Error loading log details: ${error}</p>`);
   }
 });
 adminLogsRoutes.get("/config", async (c) => {
   try {
     const user = c.get("user");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const configs = await logger.getAllConfigs();
     const pageData = {
       configs,
@@ -19228,7 +19226,7 @@ adminLogsRoutes.get("/config", async (c) => {
     return c.html(renderLogConfigPage(pageData));
   } catch (error) {
     console.error("Error fetching log config:", error);
-    return c.html(html.html`<p>Error loading log configuration: ${error}</p>`);
+    return c.html(html`<p>Error loading log configuration: ${error}</p>`);
   }
 });
 adminLogsRoutes.post("/config/:category", async (c) => {
@@ -19239,21 +19237,21 @@ adminLogsRoutes.post("/config/:category", async (c) => {
     const level = formData.get("level");
     const retention = parseInt(formData.get("retention"));
     const maxSize = parseInt(formData.get("max_size"));
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     await logger.updateConfig(category, {
       enabled,
       level,
       retention,
       maxSize
     });
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Configuration updated successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error updating log config:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update configuration. Please try again.
       </div>
@@ -19268,7 +19266,7 @@ adminLogsRoutes.get("/export", async (c) => {
     const category = query.category;
     const startDate = query.start_date;
     const endDate = query.end_date;
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const filter = {
       limit: 1e4,
       // Export up to 10k logs
@@ -19349,16 +19347,16 @@ adminLogsRoutes.post("/cleanup", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     await logger.cleanupByRetention();
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Log cleanup completed successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error cleaning up logs:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to clean up logs. Please try again.
       </div>
@@ -19371,7 +19369,7 @@ adminLogsRoutes.post("/search", async (c) => {
     const search = formData.get("search");
     const level = formData.get("level");
     const category = formData.get("category");
-    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
+    const logger = getLogger(c.env.DB);
     const filter = {
       limit: 20,
       offset: 0,
@@ -19415,7 +19413,7 @@ adminLogsRoutes.post("/search", async (c) => {
     return c.html(rows);
   } catch (error) {
     console.error("Error searching logs:", error);
-    return c.html(html.html`<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error searching logs</td></tr>`);
+    return c.html(html`<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error searching logs</td></tr>`);
   }
 });
 function getLevelClass(level) {
@@ -19456,7 +19454,7 @@ function getCategoryClass(category) {
       return "bg-gray-100 text-gray-800";
   }
 }
-var adminDesignRoutes = new hono.Hono();
+var adminDesignRoutes = new Hono();
 adminDesignRoutes.get("/", (c) => {
   const user = c.get("user");
   const pageData = {
@@ -19466,9 +19464,9 @@ adminDesignRoutes.get("/", (c) => {
       role: user.role
     } : void 0
   };
-  return c.html(chunkGMUS5V42_cjs.renderDesignPage(pageData));
+  return c.html(renderDesignPage(pageData));
 });
-var adminCheckboxRoutes = new hono.Hono();
+var adminCheckboxRoutes = new Hono();
 adminCheckboxRoutes.get("/", (c) => {
   const user = c.get("user");
   const pageData = {
@@ -19478,7 +19476,7 @@ adminCheckboxRoutes.get("/", (c) => {
       role: user.role
     } : void 0
   };
-  return c.html(chunkGMUS5V42_cjs.renderCheckboxPage(pageData));
+  return c.html(renderCheckboxPage(pageData));
 });
 
 // src/templates/pages/admin-testimonials-form.template.ts
@@ -19506,7 +19504,7 @@ function renderTestimonialsForm(data) {
         </div>
       </div>
 
-      ${message ? chunkGMUS5V42_cjs.renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
+      ${message ? renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
 
       <!-- Form -->
       <div class="backdrop-blur-xl bg-white/10 rounded-xl border border-white/20 shadow-2xl">
@@ -19735,23 +19733,23 @@ function renderTestimonialsForm(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function escapeHtml4(unsafe) {
   return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // src/routes/admin-testimonials.ts
-var testimonialSchema = zod.z.object({
-  authorName: zod.z.string().min(1, "Author name is required").max(100, "Author name must be under 100 characters"),
-  authorTitle: zod.z.string().optional(),
-  authorCompany: zod.z.string().optional(),
-  testimonialText: zod.z.string().min(1, "Testimonial is required").max(1e3, "Testimonial must be under 1000 characters"),
-  rating: zod.z.string().transform((val) => val ? parseInt(val, 10) : void 0).pipe(zod.z.number().min(1).max(5).optional()),
-  isPublished: zod.z.string().transform((val) => val === "true"),
-  sortOrder: zod.z.string().transform((val) => parseInt(val, 10)).pipe(zod.z.number().min(0))
+var testimonialSchema = z.object({
+  authorName: z.string().min(1, "Author name is required").max(100, "Author name must be under 100 characters"),
+  authorTitle: z.string().optional(),
+  authorCompany: z.string().optional(),
+  testimonialText: z.string().min(1, "Testimonial is required").max(1e3, "Testimonial must be under 1000 characters"),
+  rating: z.string().transform((val) => val ? parseInt(val, 10) : void 0).pipe(z.number().min(1).max(5).optional()),
+  isPublished: z.string().transform((val) => val === "true"),
+  sortOrder: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0))
 });
-var adminTestimonialsRoutes = new hono.Hono();
+var adminTestimonialsRoutes = new Hono();
 adminTestimonialsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -19761,7 +19759,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
     const offset = (currentPage - 1) * limit;
     const db = c.env?.DB;
     if (!db) {
-      return c.html(chunkGMUS5V42_cjs.renderTestimonialsList({
+      return c.html(renderTestimonialsList({
         testimonials: [],
         totalCount: 0,
         currentPage: 1,
@@ -19801,7 +19799,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
     `;
     const { results: testimonials } = await db.prepare(dataQuery).bind(...params, limit, offset).all();
     const totalPages = Math.ceil(totalCount / limit);
-    return c.html(chunkGMUS5V42_cjs.renderTestimonialsList({
+    return c.html(renderTestimonialsList({
       testimonials: testimonials || [],
       totalCount,
       currentPage,
@@ -19815,7 +19813,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching testimonials:", error);
     const user = c.get("user");
-    return c.html(chunkGMUS5V42_cjs.renderTestimonialsList({
+    return c.html(renderTestimonialsList({
       testimonials: [],
       totalCount: 0,
       currentPage: 1,
@@ -19890,7 +19888,7 @@ adminTestimonialsRoutes.post("/", async (c) => {
   } catch (error) {
     console.error("Error creating testimonial:", error);
     const user = c.get("user");
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20039,7 +20037,7 @@ adminTestimonialsRoutes.put("/:id", async (c) => {
     console.error("Error updating testimonial:", error);
     const user = c.get("user");
     const id = parseInt(c.req.param("id"));
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20134,7 +20132,7 @@ function renderCodeExamplesForm(data) {
         </div>
       </div>
 
-      ${message ? chunkGMUS5V42_cjs.renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
+      ${message ? renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
 
       <!-- Form -->
       <div class="backdrop-blur-xl bg-white/10 rounded-xl border border-white/20 shadow-2xl">
@@ -20404,24 +20402,24 @@ function renderCodeExamplesForm(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function escapeHtml5(unsafe) {
   return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // src/routes/admin-code-examples.ts
-var codeExampleSchema = zod.z.object({
-  title: zod.z.string().min(1, "Title is required").max(200, "Title must be under 200 characters"),
-  description: zod.z.string().max(500, "Description must be under 500 characters").optional(),
-  code: zod.z.string().min(1, "Code is required"),
-  language: zod.z.string().min(1, "Language is required"),
-  category: zod.z.string().max(50, "Category must be under 50 characters").optional(),
-  tags: zod.z.string().max(200, "Tags must be under 200 characters").optional(),
-  isPublished: zod.z.string().transform((val) => val === "true"),
-  sortOrder: zod.z.string().transform((val) => parseInt(val, 10)).pipe(zod.z.number().min(0))
+var codeExampleSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200, "Title must be under 200 characters"),
+  description: z.string().max(500, "Description must be under 500 characters").optional(),
+  code: z.string().min(1, "Code is required"),
+  language: z.string().min(1, "Language is required"),
+  category: z.string().max(50, "Category must be under 50 characters").optional(),
+  tags: z.string().max(200, "Tags must be under 200 characters").optional(),
+  isPublished: z.string().transform((val) => val === "true"),
+  sortOrder: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0))
 });
-var adminCodeExamplesRoutes = new hono.Hono();
+var adminCodeExamplesRoutes = new Hono();
 adminCodeExamplesRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -20431,7 +20429,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
     const offset = (currentPage - 1) * limit;
     const db = c.env?.DB;
     if (!db) {
-      return c.html(chunkGMUS5V42_cjs.renderCodeExamplesList({
+      return c.html(renderCodeExamplesList({
         codeExamples: [],
         totalCount: 0,
         currentPage: 1,
@@ -20471,7 +20469,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
     `;
     const { results: codeExamples } = await db.prepare(dataQuery).bind(...params, limit, offset).all();
     const totalPages = Math.ceil(totalCount / limit);
-    return c.html(chunkGMUS5V42_cjs.renderCodeExamplesList({
+    return c.html(renderCodeExamplesList({
       codeExamples: codeExamples || [],
       totalCount,
       currentPage,
@@ -20485,7 +20483,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching code examples:", error);
     const user = c.get("user");
-    return c.html(chunkGMUS5V42_cjs.renderCodeExamplesList({
+    return c.html(renderCodeExamplesList({
       codeExamples: [],
       totalCount: 0,
       currentPage: 1,
@@ -20561,7 +20559,7 @@ adminCodeExamplesRoutes.post("/", async (c) => {
   } catch (error) {
     console.error("Error creating code example:", error);
     const user = c.get("user");
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20713,7 +20711,7 @@ adminCodeExamplesRoutes.put("/:id", async (c) => {
     console.error("Error updating code example:", error);
     const user = c.get("user");
     const id = parseInt(c.req.param("id"));
-    if (error instanceof zod.z.ZodError) {
+    if (error instanceof z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20874,7 +20872,7 @@ function renderDashboardPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
+  return renderAdminLayout(layoutData);
 }
 function renderStatsCards(stats) {
   const cards = [
@@ -21422,9 +21420,9 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 }
 
 // src/routes/admin-dashboard.ts
-var VERSION = chunkUOEIMC67_cjs.getCoreVersion();
-var router = new hono.Hono();
-router.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var VERSION = getCoreVersion();
+var router = new Hono();
+router.use("*", requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -21578,9 +21576,9 @@ router.get("/recent-activity", async (c) => {
 });
 router.get("/api/metrics", async (c) => {
   return c.json({
-    requestsPerSecond: chunkRCQ2HIQD_cjs.metricsTracker.getRequestsPerSecond(),
-    totalRequests: chunkRCQ2HIQD_cjs.metricsTracker.getTotalRequests(),
-    averageRPS: Number(chunkRCQ2HIQD_cjs.metricsTracker.getAverageRPS().toFixed(2)),
+    requestsPerSecond: metricsTracker.getRequestsPerSecond(),
+    totalRequests: metricsTracker.getTotalRequests(),
+    averageRPS: Number(metricsTracker.getAverageRPS().toFixed(2)),
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
@@ -21649,7 +21647,7 @@ router.get("/system-status", async (c) => {
 });
 
 // src/templates/pages/admin-collections-list.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 
 // src/templates/components/table.template.ts
 function renderTable2(data) {
@@ -22123,11 +22121,11 @@ function renderCollectionsListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-collections-form.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function getFieldTypeBadge(fieldType) {
   const typeLabels = {
     "text": "Text",
@@ -22392,7 +22390,7 @@ function renderCollectionFormPage(data) {
             }
           </style>
           
-          ${chunkGMUS5V42_cjs.renderForm(formData)}
+          ${renderForm(formData)}
 
           ${isEdit && data.managed ? `
             <!-- Read-Only Fields Display for Managed Collections -->
@@ -23199,12 +23197,12 @@ function renderCollectionFormPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-collections.ts
-var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var adminCollectionsRoutes = new Hono();
+adminCollectionsRoutes.use("*", requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -23271,7 +23269,7 @@ adminCollectionsRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching collections:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return c.html(html.html`<p>Error loading collections: ${errorMessage}</p>`);
+    return c.html(html`<p>Error loading collections: ${errorMessage}</p>`);
   }
 });
 adminCollectionsRoutes.get("/new", async (c) => {
@@ -23313,7 +23311,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (!name || !displayName) {
       const errorMsg = "Name and display name are required.";
       if (isHtmx) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -23325,7 +23323,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (!/^[a-z0-9_]+$/.test(name)) {
       const errorMsg = "Collection name must contain only lowercase letters, numbers, and underscores.";
       if (isHtmx) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -23340,7 +23338,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (existing) {
       const errorMsg = "A collection with this name already exists.";
       if (isHtmx) {
-        return c.html(html.html`
+        return c.html(html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -23397,7 +23395,7 @@ adminCollectionsRoutes.post("/", async (c) => {
       }
     }
     if (isHtmx) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
           Collection created successfully! Redirecting to edit mode...
           <script>
@@ -23414,7 +23412,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     console.error("Error creating collection:", error);
     const isHtmx = c.req.header("HX-Request") === "true";
     if (isHtmx) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Failed to create collection. Please try again.
         </div>
@@ -23584,7 +23582,7 @@ adminCollectionsRoutes.put("/:id", async (c) => {
     const displayName = formData.get("displayName");
     const description = formData.get("description");
     if (!displayName) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Display name is required.
         </div>
@@ -23597,14 +23595,14 @@ adminCollectionsRoutes.put("/:id", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(displayName, description || null, Date.now(), id).run();
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Collection updated successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error updating collection:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update collection. Please try again.
       </div>
@@ -23618,7 +23616,7 @@ adminCollectionsRoutes.delete("/:id", async (c) => {
     const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content WHERE collection_id = ?");
     const contentResult = await contentStmt.bind(id).first();
     if (contentResult && contentResult.count > 0) {
-      return c.html(html.html`
+      return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Cannot delete collection: it contains ${contentResult.count} content item(s). Delete all content first.
         </div>
@@ -23628,14 +23626,14 @@ adminCollectionsRoutes.delete("/:id", async (c) => {
     await deleteFieldsStmt.bind(id).run();
     const deleteStmt = db.prepare("DELETE FROM collections WHERE id = ?");
     await deleteStmt.bind(id).run();
-    return c.html(html.html`
+    return c.html(html`
       <script>
         window.location.href = '/admin/collections';
       </script>
     `);
   } catch (error) {
     console.error("Error deleting collection:", error);
-    return c.html(html.html`
+    return c.html(html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to delete collection. Please try again.
       </div>
@@ -23937,7 +23935,7 @@ adminCollectionsRoutes.post("/:collectionId/fields/reorder", async (c) => {
 });
 
 // src/templates/pages/admin-settings.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderSettingsPage(data) {
   const activeTab = data.activeTab || "general";
   const pageContent = `
@@ -24319,7 +24317,7 @@ function renderSettingsPage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 function renderTabButton(tabId, label, iconPath, activeTab) {
   const isActive = activeTab === tabId;
@@ -25400,8 +25398,8 @@ function renderDatabaseToolsSettings(settings) {
 }
 
 // src/routes/admin-settings.ts
-var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var adminSettingsRoutes = new Hono();
+adminSettingsRoutes.use("*", requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -25466,7 +25464,7 @@ adminSettingsRoutes.get("/", (c) => {
 adminSettingsRoutes.get("/general", async (c) => {
   const user = c.get("user");
   const db = c.env.DB;
-  const settingsService = new chunkVNLR35GO_cjs.SettingsService(db);
+  const settingsService = new SettingsService(db);
   const generalSettings = await settingsService.getGeneralSettings(user?.email);
   const mockSettings = getMockSettings(user);
   mockSettings.general = generalSettings;
@@ -25569,7 +25567,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkG5UQHRZC_cjs.MigrationService(db);
+    const migrationService = new MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -25593,7 +25591,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkG5UQHRZC_cjs.MigrationService(db);
+    const migrationService = new MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -25611,7 +25609,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkG5UQHRZC_cjs.MigrationService(db);
+    const migrationService = new MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -25768,7 +25766,7 @@ adminSettingsRoutes.post("/general", async (c) => {
     }
     const formData = await c.req.formData();
     const db = c.env.DB;
-    const settingsService = new chunkVNLR35GO_cjs.SettingsService(db);
+    const settingsService = new SettingsService(db);
     const settings = {
       siteName: formData.get("siteName"),
       siteDescription: formData.get("siteDescription"),
@@ -25808,7 +25806,7 @@ adminSettingsRoutes.post("/", async (c) => {
 });
 
 // src/templates/pages/admin-forms-list.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderFormsListPage(data) {
   const tableData = {
     tableId: "forms-table",
@@ -26070,11 +26068,11 @@ function renderFormsListPage(data) {
     user: data.user,
     version: data.version
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-builder.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function getTurnstileComponentScript() {
   return `
     (function() {
@@ -27287,11 +27285,11 @@ ${getTurnstileComponentScript()}
     user: data.user,
     version: data.version
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-create.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderFormCreatePage(data) {
   const pageContent = `
     <div class="max-w-3xl mx-auto">
@@ -27484,12 +27482,12 @@ function renderFormCreatePage(data) {
     user: data.user,
     version: data.version
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-forms.ts
-var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var adminFormsRoutes = new Hono();
+adminFormsRoutes.use("*", requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -27553,7 +27551,7 @@ adminFormsRoutes.get("/new", async (c) => {
 adminFormsRoutes.get("/docs", async (c) => {
   try {
     const user = c.get("user");
-    const { renderFormsDocsPage } = await import('./templates.cjs');
+    const { renderFormsDocsPage } = await import('./templates.js');
     const pageData = {
       user: user ? {
         name: user.email,
@@ -27571,7 +27569,7 @@ adminFormsRoutes.get("/docs", async (c) => {
 adminFormsRoutes.get("/examples", async (c) => {
   try {
     const user = c.get("user");
-    const { renderFormsExamplesPage } = await import('./templates.cjs');
+    const { renderFormsExamplesPage } = await import('./templates.js');
     const pageData = {
       user: user ? {
         name: user.email,
@@ -27653,7 +27651,7 @@ adminFormsRoutes.get("/:id/builder", async (c) => {
     if (!form) {
       return c.html("<p>Form not found</p>", 404);
     }
-    const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
+    const turnstileService = new TurnstileService(db);
     const turnstileSettings = await turnstileService.getSettings();
     const pageData = {
       id: form.id,
@@ -27790,7 +27788,7 @@ adminFormsRoutes.get("/:id/submissions", async (c) => {
     return c.html("<p>Error loading submissions</p>", 500);
   }
 });
-var publicFormsRoutes = new hono.Hono();
+var publicFormsRoutes = new Hono();
 publicFormsRoutes.get("/:identifier/turnstile-config", async (c) => {
   try {
     const db = c.env.DB;
@@ -27801,7 +27799,7 @@ publicFormsRoutes.get("/:identifier/turnstile-config", async (c) => {
     if (!form) {
       return c.json({ error: "Form not found" }, 404);
     }
-    const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
+    const turnstileService = new TurnstileService(db);
     const globalSettings = await turnstileService.getSettings();
     const formSettings = form.turnstile_settings ? JSON.parse(form.turnstile_settings) : { inherit: true };
     const enabled = form.turnstile_enabled === 1 || formSettings.inherit && globalSettings?.enabled;
@@ -28228,7 +28226,7 @@ publicFormsRoutes.post("/:identifier/submit", async (c) => {
     const turnstileEnabled = form.turnstile_enabled === 1;
     const turnstileSettings = form.turnstile_settings ? JSON.parse(form.turnstile_settings) : { inherit: true };
     if (turnstileEnabled || turnstileSettings.inherit) {
-      const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
+      const turnstileService = new TurnstileService(db);
       const globalEnabled = await turnstileService.isEnabled();
       if (globalEnabled || turnstileEnabled) {
         const turnstileToken = body.data?.turnstile || body.turnstile;
@@ -28288,7 +28286,7 @@ publicFormsRoutes.post("/:identifier/submit", async (c) => {
 var public_forms_default = publicFormsRoutes;
 
 // src/templates/pages/admin-api-reference.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
+init_admin_layout_catalyst_template();
 function renderAPIReferencePage(data) {
   const endpointsByCategory = data.endpoints.reduce((acc, endpoint) => {
     if (!acc[endpoint.category]) {
@@ -28615,13 +28613,13 @@ function renderAPIReferencePage(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-api-reference.ts
-var VERSION2 = chunkUOEIMC67_cjs.getCoreVersion();
-var router2 = new hono.Hono();
-router2.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var VERSION2 = getCoreVersion();
+var router2 = new Hono();
+router2.use("*", requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -31772,125 +31770,30 @@ function computeMRR(ranked, qrels) {
 }
 
 // src/templates/pages/admin-search.template.ts
-chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
-function renderSearchDashboard(data) {
-  const settings = data.settings || {
-    enabled: false,
-    ai_mode_enabled: true,
-    selected_collections: [],
-    dismissed_collections: [],
-    autocomplete_enabled: true,
-    cache_duration: 1,
-    results_limit: 20,
-    index_media: false
-  };
-  const selectedCollections = Array.isArray(settings.selected_collections) ? settings.selected_collections : [];
-  const dismissedCollections = Array.isArray(settings.dismissed_collections) ? settings.dismissed_collections : [];
-  const enabled = settings.enabled === true;
-  const aiModeEnabled = settings.ai_mode_enabled !== false;
-  const autocompleteEnabled = settings.autocomplete_enabled !== false;
-  const indexMedia = settings.index_media === true;
-  const selectedCollectionIds = new Set(selectedCollections.map((id) => String(id)));
-  const dismissedCollectionIds = new Set(dismissedCollections.map((id) => String(id)));
-  const collections = Array.isArray(data.collections) ? data.collections : [];
-  const fts5Status = data.fts5Status;
-  const fts5Available = fts5Status ? fts5Status.available : false;
-  const fts5TotalIndexed = fts5Status ? fts5Status.total_indexed : 0;
-  const indexStatus = data.indexStatus || {};
-  let vectorizeTotalItems = 0;
-  let vectorizeIndexedItems = 0;
-  let vectorizeHasData = false;
-  for (const colId of Object.keys(indexStatus)) {
-    const s = indexStatus[colId];
-    if (s) {
-      vectorizeTotalItems += s.total_items || 0;
-      vectorizeIndexedItems += s.indexed_items || 0;
-      vectorizeHasData = true;
-    }
-  }
-  const vectorizeStatusText = vectorizeHasData ? `Vectorize index: ${vectorizeIndexedItems} items indexed` : "Click reindex to rebuild the vector index for all selected collections";
-  const totalQueries = data.analytics ? data.analytics.total_queries : 0;
-  const queriesToday = data.queriesToday ?? 0;
-  const totalClicks30d = data.totalClicks30d ?? 0;
-  const zeroResults30d = data.zeroResults30d ?? 0;
-  const avgQueryTime = data.analytics ? data.analytics.average_query_time : 0;
-  const ctr = totalQueries > 0 ? (totalClicks30d / totalQueries * 100).toFixed(1) : null;
-  const popularQueries = data.analytics ? data.analytics.popular_queries || [] : [];
-  const facetsEnabled = settings.facets_enabled === true;
-  const pageContent = `
-    <div class="space-y-6">
-      <!-- Tab Navigation -->
-      <div class="border-b border-zinc-200 dark:border-zinc-700">
-        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-          <button id="tab-btn-overview" onclick="switchTab('overview')" type="button"
-            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-indigo-500 text-indigo-600 dark:text-indigo-400">
-            Overview
-          </button>
-          <button id="tab-btn-configuration" onclick="switchTab('configuration')" type="button"
-            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
-            Configuration
-          </button>
-          <button id="tab-btn-benchmark" onclick="switchTab('benchmark')" type="button"
-            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
-            Benchmark
-          </button>
-          <button id="tab-btn-relevance" onclick="switchTab('relevance')" type="button"
-            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
-            Relevance &amp; Ranking
-          </button>
-          <button id="tab-btn-analytics" onclick="switchTab('analytics')" type="button"
-            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
-            Analytics
-          </button>
-        </nav>
-      </div>
+init_admin_layout_catalyst_template();
 
-      <!-- ========================================== -->
-      <!-- TAB 1: Overview                            -->
-      <!-- ========================================== -->
+// src/templates/pages/admin-search-overview.template.ts
+function renderOverviewTab(props) {
+  const {
+    fts5TotalIndexed,
+    queriesToday,
+    avgQueryTime,
+    ctr,
+    enabled,
+    aiModeEnabled,
+    facetsEnabled,
+    settings,
+    totalQueries,
+    totalClicks30d,
+    zeroResults30d,
+    popularQueries,
+    fts5Available,
+    vectorizeIndexedItems,
+    selectedCollections,
+    collections
+  } = props;
+  return `
       <div id="tab-overview" class="tab-panel">
-        <!-- Header -->
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Search</h1>
-            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Monitor and configure search across your content
-            </p>
-          </div>
-          <div class="flex gap-3">
-            <a
-              href="/admin/plugins/ai-search/test"
-              target="_blank"
-              class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-            >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-              </svg>
-              Test Search
-            </a>
-            <a
-              href="/admin/plugins/ai-search/instantsearch"
-              target="_blank"
-              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-            >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-              </svg>
-              InstantSearch
-            </a>
-            <a
-              href="/admin/plugins/ai-search/integration"
-              target="_blank"
-              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-            >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-              </svg>
-              Integration Guide
-            </a>
-          </div>
-        </div>
-
         <!-- Stat Cards -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-6">
           ${renderStatCard("Indexed Documents", String(fts5TotalIndexed), "lime", `
@@ -32019,10 +31922,24 @@ function renderSearchDashboard(data) {
           </div>
         </div>
       </div>
+  `;
+}
 
-      <!-- ========================================== -->
-      <!-- TAB 2: Configuration                       -->
-      <!-- ========================================== -->
+// src/templates/pages/admin-search-config.template.ts
+function renderConfigTab(props) {
+  const {
+    collections,
+    selectedCollectionIds,
+    dismissedCollectionIds,
+    enabled,
+    aiModeEnabled,
+    autocompleteEnabled,
+    indexMedia,
+    settings,
+    vectorizeStatusText,
+    data
+  } = props;
+  return `
       <div id="tab-configuration" class="tab-panel hidden">
         <form id="settingsForm" class="space-y-6">
 
@@ -32243,734 +32160,10 @@ function renderSearchDashboard(data) {
           </div>
         </form>
       </div>
-
-      <!-- ========================================== -->
-      <!-- TAB 3: Benchmark                           -->
-      <!-- ========================================== -->
-      <div id="tab-benchmark" class="tab-panel hidden">
-        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-          <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Search Benchmark</h2>
-          <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4" id="bench-description">
-            BEIR benchmark datasets with ground-truth relevance judgments.
-            Seed the data, index it, then evaluate search quality with standard IR metrics (nDCG@10, Precision, Recall, MRR).
-          </p>
-
-          <!-- Dataset Selector -->
-          <div class="flex flex-wrap items-center gap-3 mb-4">
-            <div class="flex items-center gap-2">
-              <label for="bench-dataset" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Dataset:</label>
-              <select id="bench-dataset" onchange="switchBenchmarkDataset()"
-                class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
-                <option value="scifact">SciFact (5,183 docs, scientific)</option>
-                <option value="nfcorpus">NFCorpus (3,633 docs, biomedical)</option>
-                <option value="fiqa">FiQA-2018 (57,638 docs, financial Q&amp;A)</option>
-              </select>
-            </div>
-            <span id="bench-data-badge" class="hidden text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-              Data not uploaded to KV
-            </span>
-          </div>
-
-          <div id="benchmark-status" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Checking benchmark status...</div>
-
-          <!-- Corpus Size + Seed Row -->
-          <div class="flex flex-wrap items-center gap-3 mb-4">
-            <div class="flex items-center gap-2">
-              <label for="bench-corpus-size" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Corpus:</label>
-              <select id="bench-corpus-size" onchange="updateBenchmarkStatusText()"
-                class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
-                <option value="subset">Subset</option>
-                <option value="full">Full corpus</option>
-              </select>
-            </div>
-            <button onclick="seedBenchmark()" id="bench-seed-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
-              Seed Data
-            </button>
-            <button onclick="indexBenchmark()" id="bench-index-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              Index (FTS5)
-            </button>
-            <button onclick="indexBenchmarkVectorize()" id="bench-vectorize-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              Index (Vectorize)
-            </button>
-            <button onclick="purgeBenchmark()" id="bench-purge-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              Purge Data
-            </button>
-          </div>
-
-          <!-- Evaluate Buttons Row -->
-          <div class="flex flex-wrap items-center gap-3 mb-4">
-            <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Evaluate:</span>
-            <div class="flex items-center gap-2">
-              <label for="bench-query-count" class="text-sm text-zinc-600 dark:text-zinc-400">Queries:</label>
-              <select id="bench-query-count"
-                class="rounded-lg bg-white dark:bg-zinc-800 px-2 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
-                <option value="15">15</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-                <option value="0" selected>All</option>
-              </select>
-            </div>
-            <button onclick="runBenchmark('fts5')" id="bench-fts5-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              FTS5
-            </button>
-            <button onclick="runBenchmark('keyword')" id="bench-keyword-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-zinc-600 hover:bg-zinc-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              Keyword
-            </button>
-            <button onclick="runBenchmark('hybrid')" id="bench-hybrid-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              Hybrid
-            </button>
-            <button onclick="runBenchmark('ai')" id="bench-ai-btn"
-              class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-              AI (Vectorize)
-            </button>
-          </div>
-          <p class="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
-            Hybrid and AI modes require Vectorize index binding. If unavailable, they will return an error.
-          </p>
-
-          <div id="benchmark-progress" class="hidden mb-4">
-            <div class="text-sm text-zinc-600 dark:text-zinc-400 mb-1" id="benchmark-progress-text">Running...</div>
-            <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
-              <div id="benchmark-progress-bar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-            </div>
-          </div>
-          <div id="benchmark-results" class="hidden">
-            <div class="space-y-6">
-              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white" id="benchmark-results-title">Results</h3>
-              <div id="benchmark-metrics"></div>
-              <div class="text-xs text-zinc-500 dark:text-zinc-400" id="benchmark-details"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ========================================== -->
-      <!-- TAB 4: Relevance & Ranking                 -->
-      <!-- ========================================== -->
-      <div id="tab-relevance" class="tab-panel hidden">
-        <div class="space-y-6">
-          <!-- Ranking Pipeline Section -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-            <div class="mb-6">
-              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Ranking Pipeline</h2>
-              <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                Composable scoring stages that post-process search results from any mode. Each stage produces a [0, 1] score, combined via weighted sum.
-              </p>
-            </div>
-
-            <div id="pipeline-stages" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div class="text-sm text-zinc-500 dark:text-zinc-400">Loading pipeline configuration...</div>
-            </div>
-
-            <!-- Formula Info -->
-            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
-              <div class="flex gap-3">
-                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <div class="text-sm">
-                  <p class="font-medium text-blue-900 dark:text-blue-100">How scoring works</p>
-                  <p class="text-blue-700 dark:text-blue-300 mt-1">
-                    <code class="text-xs bg-blue-100 dark:bg-blue-800/50 px-1.5 py-0.5 rounded">pipeline_score = sum(weight x score) / sum(weight)</code>
-                    <br/>Only enabled stages with weight &gt; 0 participate. If no stages are active, the original search order is preserved.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zinc-200 dark:border-zinc-800">
-              <button
-                type="button"
-                onclick="resetPipeline()"
-                class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-              >
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                </svg>
-                Reset to Defaults
-              </button>
-              <button
-                type="button"
-                id="savePipelineBtn"
-                onclick="savePipeline()"
-                class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm"
-              >
-                Save Pipeline
-              </button>
-            </div>
-          </div>
-
-          <!-- Live Preview -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-            <div class="mb-4">
-              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-1">Live Preview</h2>
-              <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                Test search results with current pipeline and field weight settings. Results update automatically as you adjust controls.
-              </p>
-            </div>
-
-            <div class="flex items-center gap-3 mb-4">
-              <input
-                type="text"
-                id="preview-query"
-                placeholder="Type a search query..."
-                class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();previewSearch()}"
-              />
-              <button
-                type="button"
-                id="preview-search-btn"
-                onclick="previewSearch()"
-                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-                Search
-              </button>
-            </div>
-
-            <!-- Preview Results -->
-            <div id="preview-results" class="hidden">
-              <div id="preview-meta" class="flex items-center justify-between mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-              </div>
-              <div id="preview-list" class="space-y-3">
-              </div>
-            </div>
-
-            <div id="preview-empty" class="hidden text-center py-6">
-              <p class="text-sm text-zinc-500 dark:text-zinc-400">No results found for this query with current weights.</p>
-            </div>
-
-            <div id="preview-error" class="hidden rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
-              <p class="text-sm text-red-700 dark:text-red-300" id="preview-error-text"></p>
-            </div>
-          </div>
-
-          <!-- Field Weights Section -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-            <div class="mb-6">
-              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Field Weights</h2>
-              <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                Adjust BM25 field boosting for FTS5 and hybrid search modes. Higher weights increase the importance of matches in that field.
-              </p>
-            </div>
-
-            <form id="relevanceForm" class="space-y-6">
-              <div class="space-y-5">
-                <!-- Title Weight -->
-                <div>
-                  <div class="flex items-center justify-between mb-2">
-                    <label for="fts5_title_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
-                      Title Weight
-                    </label>
-                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
-                      <span id="title-weight-value" class="font-mono font-semibold text-indigo-600 dark:text-indigo-400">${settings.fts5_title_boost ?? 5}</span>
-                      <span class="text-xs ml-1">(default: 5.0)</span>
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    id="fts5_title_boost"
-                    name="fts5_title_boost"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    value="${settings.fts5_title_boost ?? 5}"
-                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                    oninput="document.getElementById('title-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
-                  />
-                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                    Boost relevance for title matches \u2014 the most important field for keyword search
-                  </p>
-                </div>
-
-                <!-- Slug Weight -->
-                <div>
-                  <div class="flex items-center justify-between mb-2">
-                    <label for="fts5_slug_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
-                      Slug Weight
-                    </label>
-                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
-                      <span id="slug-weight-value" class="font-mono font-semibold text-purple-600 dark:text-purple-400">${settings.fts5_slug_boost ?? 2}</span>
-                      <span class="text-xs ml-1">(default: 2.0)</span>
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    id="fts5_slug_boost"
-                    name="fts5_slug_boost"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    value="${settings.fts5_slug_boost ?? 2}"
-                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                    oninput="document.getElementById('slug-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
-                  />
-                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                    Boost relevance for URL slug matches
-                  </p>
-                </div>
-
-                <!-- Body Weight -->
-                <div>
-                  <div class="flex items-center justify-between mb-2">
-                    <label for="fts5_body_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
-                      Body Weight
-                    </label>
-                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
-                      <span id="body-weight-value" class="font-mono font-semibold text-sky-600 dark:text-sky-400">${settings.fts5_body_boost ?? 1}</span>
-                      <span class="text-xs ml-1">(default: 1.0)</span>
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    id="fts5_body_boost"
-                    name="fts5_body_boost"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    value="${settings.fts5_body_boost ?? 1}"
-                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-sky-600"
-                    oninput="document.getElementById('body-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
-                  />
-                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                    Boost relevance for body content matches \u2014 the baseline field
-                  </p>
-                </div>
-              </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- Impact Notice -->
-              <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
-                <div class="flex gap-3">
-                  <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  <div class="text-sm">
-                    <p class="font-medium text-blue-900 dark:text-blue-100">Applies to FTS5 and Hybrid search modes</p>
-                    <p class="text-blue-700 dark:text-blue-300 mt-1">
-                      Field weights control BM25 relevance scoring. Changes apply immediately to new searches.
-                      Use the <a href="/admin/plugins/ai-search/test" class="underline font-medium hover:text-blue-900 dark:hover:text-blue-100">Test Search</a> page to evaluate different weight configurations.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="flex items-center justify-between pt-2">
-                <button
-                  type="button"
-                  onclick="resetFieldWeights()"
-                  class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                >
-                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                  </svg>
-                  Reset to Defaults
-                </button>
-                <button
-                  type="submit"
-                  id="saveWeightsBtn"
-                  class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm"
-                >
-                  Save Field Weights
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <!-- Query Synonyms Section -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-            <div class="flex items-center justify-between mb-6">
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Custom Synonyms</h2>
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                  Define custom synonym groups for domain-specific terms, brand names, or acronyms. For general synonym expansion, enable Query Rewriting (LLM) in Configuration.
-                </p>
-              </div>
-              <label class="flex items-center gap-2 cursor-pointer flex-shrink-0 ml-4">
-                <span class="text-sm text-zinc-600 dark:text-zinc-400">Enabled</span>
-                <input
-                  type="checkbox"
-                  id="synonyms-global-toggle"
-                  ${settings.query_synonyms_enabled !== false ? "checked" : ""}
-                  onchange="toggleSynonymsGlobal(this.checked)"
-                  class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-              </label>
-            </div>
-
-            <!-- Synonym count summary -->
-            <div id="synonyms-summary" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
-              Loading synonym groups...
-            </div>
-
-            <!-- Synonym groups list -->
-            <div id="synonyms-list" class="space-y-2 mb-4">
-            </div>
-
-            <!-- Add new synonym group form (hidden by default) -->
-            <div id="synonym-add-form" class="hidden border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-4 mb-4">
-              <div class="flex items-center gap-3">
-                <input
-                  type="text"
-                  id="synonym-new-terms"
-                  placeholder="Enter comma-separated terms (e.g., coffee, espresso, caffeine)"
-                  class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
-                  onkeydown="if(event.key==='Enter'){event.preventDefault();saveSynonymGroup()}"
-                />
-                <button
-                  type="button"
-                  onclick="saveSynonymGroup()"
-                  class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onclick="cancelSynonymAdd()"
-                  class="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                >
-                  Cancel
-                </button>
-              </div>
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
-                All terms in a group are equivalent. Minimum 2 terms required.
-              </p>
-            </div>
-
-            <!-- Add button -->
-            <button
-              type="button"
-              id="synonym-add-btn"
-              onclick="showSynonymAddForm()"
-              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-            >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-              </svg>
-              Add Synonym Group
-            </button>
-
-            <!-- Info callout -->
-            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
-              <div class="flex gap-3">
-                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <div class="text-sm">
-                  <p class="font-medium text-blue-900 dark:text-blue-100">Deterministic &amp; fast \u2014 complements LLM Query Rewriting</p>
-                  <p class="text-blue-700 dark:text-blue-300 mt-1">
-                    Custom synonyms use a lookup table (no AI cost, zero latency). Best for exact mappings like brand names, acronyms, and domain jargon. For broad synonym coverage, use Query Rewriting in the Configuration tab.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Future: Pin/Boost/Bury rules -->
-        </div>
-      </div>
-
-      <!-- ========================================== -->
-      <!-- TAB 5: Analytics (Placeholder)              -->
-      <!-- ========================================== -->
-      <div id="tab-analytics" class="tab-panel hidden">
-        <div class="space-y-6">
-
-          <!-- Stat Cards -->
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="p-5">
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">Total Queries (30d)</p>
-                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-total-queries">&mdash;</p>
-              </div>
-            </div>
-            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="p-5">
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">Avg Response Time</p>
-                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-avg-time">&mdash;</p>
-              </div>
-            </div>
-            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="p-5">
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">Zero-Result Rate</p>
-                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-zero-rate">&mdash;</p>
-              </div>
-            </div>
-            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="p-5">
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">Queries Today</p>
-                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-today">&mdash;</p>
-              </div>
-            </div>
-            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="p-5">
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">Click-Through Rate (30d)</p>
-                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-ctr">&mdash;</p>
-              </div>
-            </div>
-            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="p-5">
-                <p class="text-sm text-zinc-600 dark:text-zinc-400">Avg Click Position</p>
-                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-avg-pos">&mdash;</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Charts Row: two-column -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Queries Over Time -->
-            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Queries Over Time</h3>
-              <div style="height: 260px; position: relative;">
-                <canvas id="ana-daily-chart"></canvas>
-              </div>
-            </div>
-
-            <!-- Mode Distribution -->
-            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Mode Distribution</h3>
-              <div style="height: 260px; position: relative;" class="flex items-center justify-center">
-                <canvas id="ana-mode-chart"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <!-- CTR Over Time Chart -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-            <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Click-Through Rate Over Time</h3>
-            <div style="height: 260px; position: relative;">
-              <canvas id="ana-ctr-chart"></canvas>
-            </div>
-          </div>
-
-          <!-- Facet Analytics Section -->
-          <div class="pt-2">
-            <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Analytics</h3>
-
-            <!-- Facet stat card -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
-              <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
-                <div class="p-5">
-                  <p class="text-sm text-zinc-600 dark:text-zinc-400">Facet Clicks (30d)</p>
-                  <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-facet-clicks">&mdash;</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Facet clicks over time chart -->
-            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
-              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Clicks Over Time</h3>
-              <div style="height: 220px; position: relative;">
-                <canvas id="ana-facet-chart"></canvas>
-              </div>
-            </div>
-
-            <!-- Facet tables: two-column -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <!-- Top Facet Fields -->
-              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
-                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Most Used Facets</h3>
-                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Which facet filters users click most (30 days)</p>
-                </div>
-                <div class="overflow-x-auto">
-                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
-                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
-                      <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet Field</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
-                      </tr>
-                    </thead>
-                    <tbody id="ana-facet-fields-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
-                      <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- Top Facet Values -->
-              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
-                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Top Facet Values</h3>
-                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Most clicked filter values (30 days)</p>
-                </div>
-                <div class="overflow-x-auto">
-                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
-                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
-                      <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Value</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
-                      </tr>
-                    </thead>
-                    <tbody id="ana-facet-values-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
-                      <tr><td colspan="3" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tables Row: two-column -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Popular Queries -->
-            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Popular Queries</h3>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
-                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
-                    <tr>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
-                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody id="ana-popular-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
-                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Zero-Result Queries -->
-            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Zero-Result Queries</h3>
-                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Content gaps \u2014 what users search for but can't find</p>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
-                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
-                    <tr>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
-                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody id="ana-zero-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
-                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Click Analytics Tables -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Most Clicked Content -->
-            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Most Clicked Content</h3>
-                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Top content by click count (30 days)</p>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
-                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
-                    <tr>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Content</th>
-                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
-                    </tr>
-                  </thead>
-                  <tbody id="ana-clicked-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
-                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Searches With No Clicks -->
-            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
-              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Searches With No Clicks</h3>
-                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Queries that returned results but users didn't click</p>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
-                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
-                    <tr>
-                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
-                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Searches</th>
-                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Avg Results</th>
-                    </tr>
-                  </thead>
-                  <tbody id="ana-noclick-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
-                    <tr><td colspan="3" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent Queries: full-width -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
-            <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Recent Queries</h3>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
-                <thead class="bg-zinc-50 dark:bg-zinc-800/50">
-                  <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Mode</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Results</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Time</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">When</th>
-                  </tr>
-                </thead>
-                <tbody id="ana-recent-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
-                  <tr><td colspan="5" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- Success Message -->
-      <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
-        <div class="flex items-center gap-2">
-          <span class="font-semibold">Settings Saved Successfully!</span>
-        </div>
-      </div>
-    </div>
-
-    <script>
-      // =============================================
-      // Tab switching logic
-      // =============================================
-      function switchTab(tabId) {
-        document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.add('hidden'); });
-        document.querySelectorAll('.tab-btn').forEach(function(b) {
-          b.classList.remove('border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400');
-          b.classList.add('border-transparent', 'text-zinc-500', 'dark:text-zinc-400');
-        });
-        var panel = document.getElementById('tab-' + tabId);
-        var btn = document.getElementById('tab-btn-' + tabId);
-        if (panel) panel.classList.remove('hidden');
-        if (btn) {
-          btn.classList.remove('border-transparent', 'text-zinc-500', 'dark:text-zinc-400');
-          btn.classList.add('border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400');
-        }
-        window.location.hash = tabId;
-      }
-      // Init from hash or default
-      var initTab = window.location.hash.replace('#', '') || 'overview';
-      switchTab(initTab);
-
+  `;
+}
+function renderConfigScript() {
+  return `
       // =============================================
       // Form submission with error handling
       // =============================================
@@ -33222,6 +32415,300 @@ function renderSearchDashboard(data) {
         } catch (e) { /* ignore */ }
       })();
 
+      // ==========================================
+      // Faceted Search Configuration
+      // ==========================================
+      var facetConfigData = []; // Current facet config array
+
+      var facetConfigLoaded = false;
+
+      function toggleFacetsEnabled(enabled) {
+        var section = document.getElementById('facet-config-section');
+        if (enabled) {
+          section.classList.remove('hidden');
+          if (!facetConfigLoaded) {
+            loadFacetConfig(true);
+          }
+        } else {
+          section.classList.add('hidden');
+        }
+      }
+
+      async function loadFacetConfig(keepToggleState) {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/facets/config');
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to load config');
+
+          var toggle = document.getElementById('facets_enabled');
+
+          // Only set the toggle from DB on initial page load, not when
+          // the user just clicked it (keepToggleState = true)
+          if (!keepToggleState) {
+            toggle.checked = json.data.enabled;
+            if (json.data.enabled) {
+              document.getElementById('facet-config-section').classList.remove('hidden');
+            }
+          }
+
+          facetConfigData = json.data.config || [];
+          facetConfigLoaded = true;
+
+          if (facetConfigData.length === 0 && (toggle.checked || json.data.enabled)) {
+            // Auto-generate on first load
+            await autoGenerateFacets();
+            return;
+          }
+
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error loading facet config:', error);
+          document.getElementById('facet-config-status').textContent = 'Error loading facet configuration';
+        }
+      }
+
+      async function autoGenerateFacets() {
+        try {
+          document.getElementById('facet-config-status').textContent = 'Auto-discovering fields...';
+          var res = await fetch('/admin/plugins/ai-search/api/facets/auto-generate', { method: 'POST' });
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to auto-generate');
+
+          facetConfigData = json.data.config || [];
+          document.getElementById('facet-config-status').textContent =
+            'Discovered ' + json.data.discovered_count + ' fields, auto-enabled ' + json.data.auto_enabled_count;
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error auto-generating facets:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      async function rediscoverFacets() {
+        try {
+          document.getElementById('facet-config-status').textContent = 'Re-discovering fields...';
+          var res = await fetch('/admin/plugins/ai-search/api/facets/discover');
+          var json = await res.json();
+          if (!json.success) throw new Error('Failed to discover');
+
+          var discovered = json.data || [];
+          // Merge: keep existing config, add new discovered fields
+          var existingFields = new Set(facetConfigData.map(function(f) { return f.field; }));
+          var newFields = discovered.filter(function(d) { return !existingFields.has(d.field); });
+
+          for (var i = 0; i < newFields.length; i++) {
+            facetConfigData.push({
+              name: newFields[i].title,
+              field: newFields[i].field,
+              type: newFields[i].type,
+              collections: newFields[i].collections.map(function(c) { return c.id; }),
+              enabled: newFields[i].recommended,
+              source: 'auto',
+              position: facetConfigData.length
+            });
+          }
+
+          document.getElementById('facet-config-status').textContent =
+            discovered.length + ' fields found' + (newFields.length > 0 ? ', ' + newFields.length + ' new' : '');
+          renderFacetConfigTable(facetConfigData);
+        } catch (error) {
+          console.error('Error re-discovering facets:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      function renderFacetConfigTable(config) {
+        var tbody = document.getElementById('facet-config-body');
+        if (!config || config.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-zinc-400">No facets configured. Click "Re-discover Fields" to scan collection schemas.</td></tr>';
+          return;
+        }
+
+        var typeBadge = function(type) {
+          switch (type) {
+            case 'builtin': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">built-in</span>';
+            case 'json_array': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">array</span>';
+            case 'json_scalar': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">scalar</span>';
+            default: return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-zinc-100 text-zinc-600">' + type + '</span>';
+          }
+        };
+        var sourceBadge = function(source) {
+          switch (source) {
+            case 'auto': return '<span class="text-xs text-zinc-400">auto</span>';
+            case 'manual': return '<span class="text-xs text-indigo-500">manual</span>';
+            case 'agent': return '<span class="text-xs text-purple-500">agent</span>';
+            default: return '<span class="text-xs text-zinc-400">' + (source || 'auto') + '</span>';
+          }
+        };
+
+        var html = '';
+        for (var i = 0; i < config.length; i++) {
+          var f = config[i];
+          html += '<tr class="border-b border-zinc-100 dark:border-zinc-800">' +
+            '<td class="py-2 px-2"><input type="checkbox" ' + (f.enabled ? 'checked' : '') + ' onchange="toggleFacetConfig(' + i + ', this.checked)" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"></td>' +
+            '<td class="py-2 px-2 text-sm text-zinc-900 dark:text-zinc-100">' + (f.name || f.field) + '</td>' +
+            '<td class="py-2 px-2 text-xs font-mono text-zinc-500 dark:text-zinc-400">' + f.field + '</td>' +
+            '<td class="py-2 px-2">' + typeBadge(f.type) + '</td>' +
+            '<td class="py-2 px-2">' + sourceBadge(f.source) + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+        document.getElementById('facet-config-status').textContent = config.length + ' facets configured, ' + config.filter(function(f) { return f.enabled; }).length + ' enabled';
+      }
+
+      function toggleFacetConfig(index, enabled) {
+        if (facetConfigData[index]) {
+          facetConfigData[index].enabled = enabled;
+          // If manually changed, update source
+          if (facetConfigData[index].source !== 'manual') {
+            facetConfigData[index].source = 'manual';
+          }
+          renderFacetConfigTable(facetConfigData);
+        }
+      }
+
+      async function saveFacetConfig() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/facets/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              enabled: document.getElementById('facets_enabled').checked,
+              config: facetConfigData
+            })
+          });
+          var json = await res.json();
+          if (json.success) {
+            document.getElementById('facet-config-status').textContent = 'Facet configuration saved!';
+            setTimeout(function() {
+              renderFacetConfigTable(facetConfigData);
+            }, 2000);
+          } else {
+            document.getElementById('facet-config-status').textContent = 'Error saving: ' + (json.error || 'Unknown error');
+          }
+        } catch (error) {
+          console.error('Error saving facet config:', error);
+          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
+        }
+      }
+
+      // Load facet config on page load (if on configuration tab)
+      if (initTab === 'configuration') {
+        loadFacetConfig();
+      }
+  `;
+}
+
+// src/templates/pages/admin-search-benchmark.template.ts
+function renderBenchmarkTab() {
+  return `
+      <div id="tab-benchmark" class="tab-panel hidden">
+        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+          <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Search Benchmark</h2>
+          <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4" id="bench-description">
+            BEIR benchmark datasets with ground-truth relevance judgments.
+            Seed the data, index it, then evaluate search quality with standard IR metrics (nDCG@10, Precision, Recall, MRR).
+          </p>
+
+          <!-- Dataset Selector -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex items-center gap-2">
+              <label for="bench-dataset" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Dataset:</label>
+              <select id="bench-dataset" onchange="switchBenchmarkDataset()"
+                class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                <option value="scifact">SciFact (5,183 docs, scientific)</option>
+                <option value="nfcorpus">NFCorpus (3,633 docs, biomedical)</option>
+                <option value="fiqa">FiQA-2018 (57,638 docs, financial Q&amp;A)</option>
+              </select>
+            </div>
+            <span id="bench-data-badge" class="hidden text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+              Data not uploaded to KV
+            </span>
+          </div>
+
+          <div id="benchmark-status" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Checking benchmark status...</div>
+
+          <!-- Corpus Size + Seed Row -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex items-center gap-2">
+              <label for="bench-corpus-size" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Corpus:</label>
+              <select id="bench-corpus-size" onchange="updateBenchmarkStatusText()"
+                class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                <option value="subset">Subset</option>
+                <option value="full">Full corpus</option>
+              </select>
+            </div>
+            <button onclick="seedBenchmark()" id="bench-seed-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+              Seed Data
+            </button>
+            <button onclick="indexBenchmark()" id="bench-index-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Index (FTS5)
+            </button>
+            <button onclick="indexBenchmarkVectorize()" id="bench-vectorize-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Index (Vectorize)
+            </button>
+            <button onclick="purgeBenchmark()" id="bench-purge-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Purge Data
+            </button>
+          </div>
+
+          <!-- Evaluate Buttons Row -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Evaluate:</span>
+            <div class="flex items-center gap-2">
+              <label for="bench-query-count" class="text-sm text-zinc-600 dark:text-zinc-400">Queries:</label>
+              <select id="bench-query-count"
+                class="rounded-lg bg-white dark:bg-zinc-800 px-2 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                <option value="15">15</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="0" selected>All</option>
+              </select>
+            </div>
+            <button onclick="runBenchmark('fts5')" id="bench-fts5-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              FTS5
+            </button>
+            <button onclick="runBenchmark('keyword')" id="bench-keyword-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-zinc-600 hover:bg-zinc-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Keyword
+            </button>
+            <button onclick="runBenchmark('hybrid')" id="bench-hybrid-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              Hybrid
+            </button>
+            <button onclick="runBenchmark('ai')" id="bench-ai-btn"
+              class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+              AI (Vectorize)
+            </button>
+          </div>
+          <p class="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
+            Hybrid and AI modes require Vectorize index binding. If unavailable, they will return an error.
+          </p>
+
+          <div id="benchmark-progress" class="hidden mb-4">
+            <div class="text-sm text-zinc-600 dark:text-zinc-400 mb-1" id="benchmark-progress-text">Running...</div>
+            <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
+              <div id="benchmark-progress-bar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+          </div>
+          <div id="benchmark-results" class="hidden">
+            <div class="space-y-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white" id="benchmark-results-title">Results</h3>
+              <div id="benchmark-metrics"></div>
+              <div class="text-xs text-zinc-500 dark:text-zinc-400" id="benchmark-details"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+  `;
+}
+function renderBenchmarkScript() {
+  return `
       // =============================================
       // Benchmark Functions
       // =============================================
@@ -33645,7 +33132,7 @@ function renderSearchDashboard(data) {
 
         titleEl.textContent = 'Benchmark Results (k=10)';
 
-        // Group by dataset \u2192 corpus \u2192 mode
+        // Group by dataset -> corpus -> mode
         var byDataset = {};
         var datasetOrder = ['scifact', 'nfcorpus', 'fiqa'];
         for (var i = 0; i < benchmarkRuns.length; i++) {
@@ -33683,7 +33170,7 @@ function renderSearchDashboard(data) {
             runs.sort(function(a, b) { return modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode); });
             var sizeLabel = runs[0].corpus_size ? runs[0].corpus_size.toLocaleString() + ' docs' : '';
             var corpusDisplay = corpusKey === 'full' ? 'Full corpus' : 'Subset';
-            if (sizeLabel) corpusDisplay += ' \xB7 ' + sizeLabel;
+            if (sizeLabel) corpusDisplay += ' \\u00b7 ' + sizeLabel;
             var bests = findBests(runs);
 
             // Card wrapper per dataset+corpus
@@ -33810,7 +33297,344 @@ function renderSearchDashboard(data) {
         btn.textContent = 'Purge Data';
         btn.disabled = false;
       }
+  `;
+}
 
+// src/templates/pages/admin-search-relevance.template.ts
+function renderRelevanceTab(props) {
+  const { settings } = props;
+  return `
+      <div id="tab-relevance" class="tab-panel hidden">
+        <div class="space-y-6">
+          <!-- Ranking Pipeline Section -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Ranking Pipeline</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                Composable scoring stages that post-process search results from any mode. Each stage produces a [0, 1] score, combined via weighted sum.
+              </p>
+            </div>
+
+            <div id="pipeline-stages" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="text-sm text-zinc-500 dark:text-zinc-400">Loading pipeline configuration...</div>
+            </div>
+
+            <!-- Formula Info -->
+            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
+              <div class="flex gap-3">
+                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="text-sm">
+                  <p class="font-medium text-blue-900 dark:text-blue-100">How scoring works</p>
+                  <p class="text-blue-700 dark:text-blue-300 mt-1">
+                    <code class="text-xs bg-blue-100 dark:bg-blue-800/50 px-1.5 py-0.5 rounded">pipeline_score = sum(weight x score) / sum(weight)</code>
+                    <br/>Only enabled stages with weight &gt; 0 participate. If no stages are active, the original search order is preserved.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between pt-4 mt-4 border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                type="button"
+                onclick="resetPipeline()"
+                class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                Reset to Defaults
+              </button>
+              <button
+                type="button"
+                id="savePipelineBtn"
+                onclick="savePipeline()"
+                class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm"
+              >
+                Save Pipeline
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Preview -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-4">
+              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-1">Live Preview</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                Test search results with current pipeline and field weight settings. Results update automatically as you adjust controls.
+              </p>
+            </div>
+
+            <div class="flex items-center gap-3 mb-4">
+              <input
+                type="text"
+                id="preview-query"
+                placeholder="Type a search query..."
+                class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();previewSearch()}"
+              />
+              <button
+                type="button"
+                id="preview-search-btn"
+                onclick="previewSearch()"
+                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                Search
+              </button>
+            </div>
+
+            <!-- Preview Results -->
+            <div id="preview-results" class="hidden">
+              <div id="preview-meta" class="flex items-center justify-between mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+              </div>
+              <div id="preview-list" class="space-y-3">
+              </div>
+            </div>
+
+            <div id="preview-empty" class="hidden text-center py-6">
+              <p class="text-sm text-zinc-500 dark:text-zinc-400">No results found for this query with current weights.</p>
+            </div>
+
+            <div id="preview-error" class="hidden rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
+              <p class="text-sm text-red-700 dark:text-red-300" id="preview-error-text"></p>
+            </div>
+          </div>
+
+          <!-- Field Weights Section -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Field Weights</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                Adjust BM25 field boosting for FTS5 and hybrid search modes. Higher weights increase the importance of matches in that field.
+              </p>
+            </div>
+
+            <form id="relevanceForm" class="space-y-6">
+              <div class="space-y-5">
+                <!-- Title Weight -->
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label for="fts5_title_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
+                      Title Weight
+                    </label>
+                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
+                      <span id="title-weight-value" class="font-mono font-semibold text-indigo-600 dark:text-indigo-400">${settings.fts5_title_boost ?? 5}</span>
+                      <span class="text-xs ml-1">(default: 5.0)</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="fts5_title_boost"
+                    name="fts5_title_boost"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value="${settings.fts5_title_boost ?? 5}"
+                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    oninput="document.getElementById('title-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
+                  />
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    Boost relevance for title matches \u2014 the most important field for keyword search
+                  </p>
+                </div>
+
+                <!-- Slug Weight -->
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label for="fts5_slug_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
+                      Slug Weight
+                    </label>
+                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
+                      <span id="slug-weight-value" class="font-mono font-semibold text-purple-600 dark:text-purple-400">${settings.fts5_slug_boost ?? 2}</span>
+                      <span class="text-xs ml-1">(default: 2.0)</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="fts5_slug_boost"
+                    name="fts5_slug_boost"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value="${settings.fts5_slug_boost ?? 2}"
+                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                    oninput="document.getElementById('slug-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
+                  />
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    Boost relevance for URL slug matches
+                  </p>
+                </div>
+
+                <!-- Body Weight -->
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <label for="fts5_body_boost" class="text-sm font-medium text-zinc-950 dark:text-white">
+                      Body Weight
+                    </label>
+                    <span class="text-sm text-zinc-600 dark:text-zinc-400">
+                      <span id="body-weight-value" class="font-mono font-semibold text-sky-600 dark:text-sky-400">${settings.fts5_body_boost ?? 1}</span>
+                      <span class="text-xs ml-1">(default: 1.0)</span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    id="fts5_body_boost"
+                    name="fts5_body_boost"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    value="${settings.fts5_body_boost ?? 1}"
+                    class="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-sky-600"
+                    oninput="document.getElementById('body-weight-value').textContent = parseFloat(this.value).toFixed(1); schedulePreview()"
+                  />
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    Boost relevance for body content matches \u2014 the baseline field
+                  </p>
+                </div>
+              </div>
+
+              <hr class="border-zinc-200 dark:border-zinc-800">
+
+              <!-- Impact Notice -->
+              <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
+                <div class="flex gap-3">
+                  <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <div class="text-sm">
+                    <p class="font-medium text-blue-900 dark:text-blue-100">Applies to FTS5 and Hybrid search modes</p>
+                    <p class="text-blue-700 dark:text-blue-300 mt-1">
+                      Field weights control BM25 relevance scoring. Changes apply immediately to new searches.
+                      Use the <a href="/admin/plugins/ai-search/test" class="underline font-medium hover:text-blue-900 dark:hover:text-blue-100">Test Search</a> page to evaluate different weight configurations.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onclick="resetFieldWeights()"
+                  class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                >
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                  </svg>
+                  Reset to Defaults
+                </button>
+                <button
+                  type="submit"
+                  id="saveWeightsBtn"
+                  class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm"
+                >
+                  Save Field Weights
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Query Synonyms Section -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Custom Synonyms</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                  Define custom synonym groups for domain-specific terms, brand names, or acronyms. For general synonym expansion, enable Query Rewriting (LLM) in Configuration.
+                </p>
+              </div>
+              <label class="flex items-center gap-2 cursor-pointer flex-shrink-0 ml-4">
+                <span class="text-sm text-zinc-600 dark:text-zinc-400">Enabled</span>
+                <input
+                  type="checkbox"
+                  id="synonyms-global-toggle"
+                  ${settings.query_synonyms_enabled !== false ? "checked" : ""}
+                  onchange="toggleSynonymsGlobal(this.checked)"
+                  class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+              </label>
+            </div>
+
+            <!-- Synonym count summary -->
+            <div id="synonyms-summary" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
+              Loading synonym groups...
+            </div>
+
+            <!-- Synonym groups list -->
+            <div id="synonyms-list" class="space-y-2 mb-4">
+            </div>
+
+            <!-- Add new synonym group form (hidden by default) -->
+            <div id="synonym-add-form" class="hidden border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-4 mb-4">
+              <div class="flex items-center gap-3">
+                <input
+                  type="text"
+                  id="synonym-new-terms"
+                  placeholder="Enter comma-separated terms (e.g., coffee, espresso, caffeine)"
+                  class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();saveSynonymGroup()}"
+                />
+                <button
+                  type="button"
+                  onclick="saveSynonymGroup()"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onclick="cancelSynonymAdd()"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+              </div>
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                All terms in a group are equivalent. Minimum 2 terms required.
+              </p>
+            </div>
+
+            <!-- Add button -->
+            <button
+              type="button"
+              id="synonym-add-btn"
+              onclick="showSynonymAddForm()"
+              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add Synonym Group
+            </button>
+
+            <!-- Info callout -->
+            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
+              <div class="flex gap-3">
+                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="text-sm">
+                  <p class="font-medium text-blue-900 dark:text-blue-100">Deterministic &amp; fast \u2014 complements LLM Query Rewriting</p>
+                  <p class="text-blue-700 dark:text-blue-300 mt-1">
+                    Custom synonyms use a lookup table (no AI cost, zero latency). Best for exact mappings like brand names, acronyms, and domain jargon. For broad synonym coverage, use Query Rewriting in the Configuration tab.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Future: Pin/Boost/Bury rules -->
+        </div>
+      </div>
+  `;
+}
+function renderRelevanceScript() {
+  return `
       // =============================================
       // Relevance: Field Weights
       // =============================================
@@ -34376,7 +34200,270 @@ function renderSearchDashboard(data) {
           alert('Error: ' + e.message);
         }
       }
+  `;
+}
 
+// src/templates/pages/admin-search-analytics.template.ts
+function renderAnalyticsTab() {
+  return `
+      <div id="tab-analytics" class="tab-panel hidden">
+        <div class="space-y-6">
+
+          <!-- Stat Cards -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Total Queries (30d)</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-total-queries">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Avg Response Time</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-avg-time">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Zero-Result Rate</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-zero-rate">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Queries Today</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-today">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Click-Through Rate (30d)</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-ctr">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Avg Click Position</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-avg-pos">&mdash;</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Row: two-column -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Queries Over Time -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Queries Over Time</h3>
+              <div style="height: 260px; position: relative;">
+                <canvas id="ana-daily-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Mode Distribution -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Mode Distribution</h3>
+              <div style="height: 260px; position: relative;" class="flex items-center justify-center">
+                <canvas id="ana-mode-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- CTR Over Time Chart -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Click-Through Rate Over Time</h3>
+            <div style="height: 260px; position: relative;">
+              <canvas id="ana-ctr-chart"></canvas>
+            </div>
+          </div>
+
+          <!-- Facet Analytics Section -->
+          <div class="pt-2">
+            <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Analytics</h3>
+
+            <!-- Facet stat card -->
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+              <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="p-5">
+                  <p class="text-sm text-zinc-600 dark:text-zinc-400">Facet Clicks (30d)</p>
+                  <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="ana-facet-clicks">&mdash;</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Facet clicks over time chart -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Facet Clicks Over Time</h3>
+              <div style="height: 220px; position: relative;">
+                <canvas id="ana-facet-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Facet tables: two-column -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <!-- Top Facet Fields -->
+              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Most Used Facets</h3>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Which facet filters users click most (30 days)</p>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                      <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet Field</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ana-facet-fields-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                      <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Top Facet Values -->
+              <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+                <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                  <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Top Facet Values</h3>
+                  <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Most clicked filter values (30 days)</p>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                      <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Facet</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Value</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ana-facet-values-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                      <tr><td colspan="3" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tables Row: two-column -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Popular Queries -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Popular Queries</h3>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-popular-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Zero-Result Queries -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Zero-Result Queries</h3>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Content gaps \u2014 what users search for but can't find</p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-zero-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Click Analytics Tables -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Most Clicked Content -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Most Clicked Content</h3>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Top content by click count (30 days)</p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Content</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Clicks</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-clicked-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="2" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Searches With No Clicks -->
+            <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Searches With No Clicks</h3>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Queries that returned results but users didn't click</p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Searches</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Avg Results</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-noclick-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="3" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Queries: full-width -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Recent Queries</h3>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Query</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Mode</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Results</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Time</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">When</th>
+                  </tr>
+                </thead>
+                <tbody id="ana-recent-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <tr><td colspan="5" class="px-6 py-4 text-sm text-zinc-400 dark:text-zinc-500">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+  `;
+}
+function renderAnalyticsScript() {
+  return `
       // =============================================
       // Analytics Tab
       // =============================================
@@ -34385,10 +34472,10 @@ function renderSearchDashboard(data) {
       var modeChart = null;
       var ctrChart = null;
 
-      // Load analytics when tab is switched to (or on page load if hash is #analytics)
-      var origSwitchTab = switchTab;
+      // Extend switchTab to trigger lazy loading
+      var _origSwitchTab = switchTab;
       switchTab = function(tabId) {
-        origSwitchTab(tabId);
+        _origSwitchTab(tabId);
         if (tabId === 'analytics' && !analyticsLoaded) {
           loadAnalytics();
         }
@@ -34888,188 +34975,187 @@ function renderSearchDashboard(data) {
       if (initTab === 'analytics') {
         loadAnalytics();
       }
+  `;
+}
 
-      // ==========================================
-      // Faceted Search Configuration
-      // ==========================================
-      var facetConfigData = []; // Current facet config array
+// src/templates/pages/admin-search.template.ts
+function renderSearchDashboard(data) {
+  const settings = data.settings || {
+    enabled: false,
+    ai_mode_enabled: true,
+    selected_collections: [],
+    dismissed_collections: [],
+    autocomplete_enabled: true,
+    cache_duration: 1,
+    results_limit: 20,
+    index_media: false
+  };
+  const selectedCollections = Array.isArray(settings.selected_collections) ? settings.selected_collections : [];
+  const dismissedCollections = Array.isArray(settings.dismissed_collections) ? settings.dismissed_collections : [];
+  const enabled = settings.enabled === true;
+  const aiModeEnabled = settings.ai_mode_enabled !== false;
+  const autocompleteEnabled = settings.autocomplete_enabled !== false;
+  const indexMedia = settings.index_media === true;
+  const selectedCollectionIds = new Set(selectedCollections.map((id) => String(id)));
+  const dismissedCollectionIds = new Set(dismissedCollections.map((id) => String(id)));
+  const collections = Array.isArray(data.collections) ? data.collections : [];
+  const fts5Status = data.fts5Status;
+  const fts5Available = fts5Status ? fts5Status.available : false;
+  const fts5TotalIndexed = fts5Status ? fts5Status.total_indexed : 0;
+  const indexStatus = data.indexStatus || {};
+  let vectorizeIndexedItems = 0;
+  let vectorizeHasData = false;
+  for (const colId of Object.keys(indexStatus)) {
+    const s = indexStatus[colId];
+    if (s) {
+      vectorizeIndexedItems += s.indexed_items || 0;
+      vectorizeHasData = true;
+    }
+  }
+  const vectorizeStatusText = vectorizeHasData ? `Vectorize index: ${vectorizeIndexedItems} items indexed` : "Click reindex to rebuild the vector index for all selected collections";
+  const totalQueries = data.analytics ? data.analytics.total_queries : 0;
+  const queriesToday = data.queriesToday ?? 0;
+  const totalClicks30d = data.totalClicks30d ?? 0;
+  const zeroResults30d = data.zeroResults30d ?? 0;
+  const avgQueryTime = data.analytics ? data.analytics.average_query_time : 0;
+  const ctr = totalQueries > 0 ? (totalClicks30d / totalQueries * 100).toFixed(1) : null;
+  const popularQueries = data.analytics ? data.analytics.popular_queries || [] : [];
+  const facetsEnabled = settings.facets_enabled === true;
+  const props = {
+    settings,
+    collections,
+    selectedCollections,
+    selectedCollectionIds,
+    dismissedCollectionIds,
+    enabled,
+    aiModeEnabled,
+    autocompleteEnabled,
+    indexMedia,
+    fts5Available,
+    fts5TotalIndexed,
+    vectorizeIndexedItems,
+    vectorizeStatusText,
+    totalQueries,
+    queriesToday,
+    totalClicks30d,
+    zeroResults30d,
+    avgQueryTime,
+    ctr,
+    popularQueries,
+    facetsEnabled,
+    data
+  };
+  const pageContent = `
+    <div class="space-y-6">
+      <!-- Header -->
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Search</h1>
+          <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Monitor and configure search across your content
+          </p>
+        </div>
+        <div class="flex gap-3">
+          <a
+            href="/admin/plugins/ai-search/test"
+            target="_blank"
+            class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            Test Search
+          </a>
+          <a
+            href="/admin/plugins/ai-search/instantsearch"
+            target="_blank"
+            class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            InstantSearch
+          </a>
+          <a
+            href="/admin/plugins/ai-search/integration"
+            target="_blank"
+            class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+            </svg>
+            Integration Guide
+          </a>
+        </div>
+      </div>
 
-      var facetConfigLoaded = false;
+      <!-- Tab Navigation -->
+      <div class="border-b border-zinc-200 dark:border-zinc-700">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+          <button id="tab-btn-overview" onclick="switchTab('overview')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-indigo-500 text-indigo-600 dark:text-indigo-400">
+            Overview
+          </button>
+          <button id="tab-btn-configuration" onclick="switchTab('configuration')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Configuration
+          </button>
+          <button id="tab-btn-benchmark" onclick="switchTab('benchmark')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Benchmark
+          </button>
+          <button id="tab-btn-relevance" onclick="switchTab('relevance')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Relevance &amp; Ranking
+          </button>
+          <button id="tab-btn-analytics" onclick="switchTab('analytics')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Analytics
+          </button>
+        </nav>
+      </div>
 
-      function toggleFacetsEnabled(enabled) {
-        var section = document.getElementById('facet-config-section');
-        if (enabled) {
-          section.classList.remove('hidden');
-          if (!facetConfigLoaded) {
-            loadFacetConfig(true);
-          }
-        } else {
-          section.classList.add('hidden');
+      ${renderOverviewTab(props)}
+      ${renderConfigTab(props)}
+      ${renderBenchmarkTab()}
+      ${renderRelevanceTab(props)}
+      ${renderAnalyticsTab()}
+
+      <!-- Success Message -->
+      <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold">Settings Saved Successfully!</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // =============================================
+      // Tab switching logic
+      // =============================================
+      function switchTab(tabId) {
+        document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.add('hidden'); });
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+          b.classList.remove('border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400');
+          b.classList.add('border-transparent', 'text-zinc-500', 'dark:text-zinc-400');
+        });
+        var panel = document.getElementById('tab-' + tabId);
+        var btn = document.getElementById('tab-btn-' + tabId);
+        if (panel) panel.classList.remove('hidden');
+        if (btn) {
+          btn.classList.remove('border-transparent', 'text-zinc-500', 'dark:text-zinc-400');
+          btn.classList.add('border-indigo-500', 'text-indigo-600', 'dark:text-indigo-400');
         }
+        window.location.hash = tabId;
       }
+      // Init from hash or default
+      var initTab = window.location.hash.replace('#', '') || 'overview';
+      switchTab(initTab);
 
-      async function loadFacetConfig(keepToggleState) {
-        try {
-          var res = await fetch('/admin/plugins/ai-search/api/facets/config');
-          var json = await res.json();
-          if (!json.success) throw new Error('Failed to load config');
-
-          var toggle = document.getElementById('facets_enabled');
-
-          // Only set the toggle from DB on initial page load, not when
-          // the user just clicked it (keepToggleState = true)
-          if (!keepToggleState) {
-            toggle.checked = json.data.enabled;
-            if (json.data.enabled) {
-              document.getElementById('facet-config-section').classList.remove('hidden');
-            }
-          }
-
-          facetConfigData = json.data.config || [];
-          facetConfigLoaded = true;
-
-          if (facetConfigData.length === 0 && (toggle.checked || json.data.enabled)) {
-            // Auto-generate on first load
-            await autoGenerateFacets();
-            return;
-          }
-
-          renderFacetConfigTable(facetConfigData);
-        } catch (error) {
-          console.error('Error loading facet config:', error);
-          document.getElementById('facet-config-status').textContent = 'Error loading facet configuration';
-        }
-      }
-
-      async function autoGenerateFacets() {
-        try {
-          document.getElementById('facet-config-status').textContent = 'Auto-discovering fields...';
-          var res = await fetch('/admin/plugins/ai-search/api/facets/auto-generate', { method: 'POST' });
-          var json = await res.json();
-          if (!json.success) throw new Error('Failed to auto-generate');
-
-          facetConfigData = json.data.config || [];
-          document.getElementById('facet-config-status').textContent =
-            'Discovered ' + json.data.discovered_count + ' fields, auto-enabled ' + json.data.auto_enabled_count;
-          renderFacetConfigTable(facetConfigData);
-        } catch (error) {
-          console.error('Error auto-generating facets:', error);
-          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
-        }
-      }
-
-      async function rediscoverFacets() {
-        try {
-          document.getElementById('facet-config-status').textContent = 'Re-discovering fields...';
-          var res = await fetch('/admin/plugins/ai-search/api/facets/discover');
-          var json = await res.json();
-          if (!json.success) throw new Error('Failed to discover');
-
-          var discovered = json.data || [];
-          // Merge: keep existing config, add new discovered fields
-          var existingFields = new Set(facetConfigData.map(function(f) { return f.field; }));
-          var newFields = discovered.filter(function(d) { return !existingFields.has(d.field); });
-
-          for (var i = 0; i < newFields.length; i++) {
-            facetConfigData.push({
-              name: newFields[i].title,
-              field: newFields[i].field,
-              type: newFields[i].type,
-              collections: newFields[i].collections.map(function(c) { return c.id; }),
-              enabled: newFields[i].recommended,
-              source: 'auto',
-              position: facetConfigData.length
-            });
-          }
-
-          document.getElementById('facet-config-status').textContent =
-            discovered.length + ' fields found' + (newFields.length > 0 ? ', ' + newFields.length + ' new' : '');
-          renderFacetConfigTable(facetConfigData);
-        } catch (error) {
-          console.error('Error re-discovering facets:', error);
-          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
-        }
-      }
-
-      function renderFacetConfigTable(config) {
-        var tbody = document.getElementById('facet-config-body');
-        if (!config || config.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-zinc-400">No facets configured. Click "Re-discover Fields" to scan collection schemas.</td></tr>';
-          return;
-        }
-
-        var typeBadge = function(type) {
-          switch (type) {
-            case 'builtin': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">built-in</span>';
-            case 'json_array': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">array</span>';
-            case 'json_scalar': return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">scalar</span>';
-            default: return '<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-zinc-100 text-zinc-600">' + type + '</span>';
-          }
-        };
-        var sourceBadge = function(source) {
-          switch (source) {
-            case 'auto': return '<span class="text-xs text-zinc-400">auto</span>';
-            case 'manual': return '<span class="text-xs text-indigo-500">manual</span>';
-            case 'agent': return '<span class="text-xs text-purple-500">agent</span>';
-            default: return '<span class="text-xs text-zinc-400">' + (source || 'auto') + '</span>';
-          }
-        };
-
-        var html = '';
-        for (var i = 0; i < config.length; i++) {
-          var f = config[i];
-          html += '<tr class="border-b border-zinc-100 dark:border-zinc-800">' +
-            '<td class="py-2 px-2"><input type="checkbox" ' + (f.enabled ? 'checked' : '') + ' onchange="toggleFacetConfig(' + i + ', this.checked)" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"></td>' +
-            '<td class="py-2 px-2 text-sm text-zinc-900 dark:text-zinc-100">' + (f.name || f.field) + '</td>' +
-            '<td class="py-2 px-2 text-xs font-mono text-zinc-500 dark:text-zinc-400">' + f.field + '</td>' +
-            '<td class="py-2 px-2">' + typeBadge(f.type) + '</td>' +
-            '<td class="py-2 px-2">' + sourceBadge(f.source) + '</td>' +
-            '</tr>';
-        }
-        tbody.innerHTML = html;
-        document.getElementById('facet-config-status').textContent = config.length + ' facets configured, ' + config.filter(function(f) { return f.enabled; }).length + ' enabled';
-      }
-
-      function toggleFacetConfig(index, enabled) {
-        if (facetConfigData[index]) {
-          facetConfigData[index].enabled = enabled;
-          // If manually changed, update source
-          if (facetConfigData[index].source !== 'manual') {
-            facetConfigData[index].source = 'manual';
-          }
-          renderFacetConfigTable(facetConfigData);
-        }
-      }
-
-      async function saveFacetConfig() {
-        try {
-          var res = await fetch('/admin/plugins/ai-search/api/facets/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              enabled: document.getElementById('facets_enabled').checked,
-              config: facetConfigData
-            })
-          });
-          var json = await res.json();
-          if (json.success) {
-            document.getElementById('facet-config-status').textContent = 'Facet configuration saved!';
-            setTimeout(function() {
-              renderFacetConfigTable(facetConfigData);
-            }, 2000);
-          } else {
-            document.getElementById('facet-config-status').textContent = 'Error saving: ' + (json.error || 'Unknown error');
-          }
-        } catch (error) {
-          console.error('Error saving facet config:', error);
-          document.getElementById('facet-config-status').textContent = 'Error: ' + error.message;
-        }
-      }
-
-      // Load facet config on page load (if on configuration tab)
-      if (initTab === 'configuration') {
-        loadFacetConfig();
-      }
+      ${renderConfigScript()}
+      ${renderBenchmarkScript()}
+      ${renderRelevanceScript()}
+      ${renderAnalyticsScript()}
     </script>
   `;
   const layoutData = {
@@ -35080,7 +35166,7 @@ function renderSearchDashboard(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
+  return renderAdminLayoutCatalyst(layoutData);
 }
 function renderStatCard(label, value, color, icon, colorOverride) {
   const finalColor = color;
@@ -35128,8 +35214,8 @@ function escapeHtml6(str) {
 }
 
 // src/routes/admin-search.ts
-var adminSearchRoutes = new hono.Hono();
-adminSearchRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+var adminSearchRoutes = new Hono();
+adminSearchRoutes.use("*", requireAuth());
 adminSearchRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -35193,7 +35279,7 @@ adminSearchRoutes.get("/", async (c) => {
         totalClicks30d: totalClicks30dRow?.count ?? 0,
         zeroResults30d: zeroResults30dRow?.count ?? 0,
         user: user ? { name: user.email, email: user.email, role: user.role } : void 0,
-        version: chunkUOEIMC67_cjs.getCoreVersion()
+        version: getCoreVersion()
       })
     );
   } catch (error) {
@@ -35234,41 +35320,6 @@ var ROUTES_INFO = {
   reference: "https://github.com/sonicjs/sonicjs"
 };
 
-exports.AISearchService = AISearchService;
-exports.BENCHMARK_DATASETS = BENCHMARK_DATASETS;
-exports.BenchmarkService = BenchmarkService;
-exports.ChunkingService = ChunkingService;
-exports.EmbeddingService = EmbeddingService;
-exports.FTS5Service = FTS5Service;
-exports.FacetService = FacetService;
-exports.IndexManager = IndexManager;
-exports.ROUTES_INFO = ROUTES_INFO;
-exports.RankingPipelineService = RankingPipelineService;
-exports.SynonymService = SynonymService;
-exports.adminCheckboxRoutes = adminCheckboxRoutes;
-exports.adminCollectionsRoutes = adminCollectionsRoutes;
-exports.adminDesignRoutes = adminDesignRoutes;
-exports.adminFormsRoutes = adminFormsRoutes;
-exports.adminLogsRoutes = adminLogsRoutes;
-exports.adminMediaRoutes = adminMediaRoutes;
-exports.adminPluginRoutes = adminPluginRoutes;
-exports.adminSearchRoutes = adminSearchRoutes;
-exports.adminSettingsRoutes = adminSettingsRoutes;
-exports.admin_api_default = admin_api_default;
-exports.admin_code_examples_default = admin_code_examples_default;
-exports.admin_content_default = admin_content_default;
-exports.admin_testimonials_default = admin_testimonials_default;
-exports.api_content_crud_default = api_content_crud_default;
-exports.api_default = api_default;
-exports.api_media_default = api_media_default;
-exports.api_system_default = api_system_default;
-exports.auth_default = auth_default;
-exports.getConfirmationDialogScript = getConfirmationDialogScript2;
-exports.public_forms_default = public_forms_default;
-exports.renderConfirmationDialog = renderConfirmationDialog2;
-exports.router = router;
-exports.router2 = router2;
-exports.test_cleanup_default = test_cleanup_default;
-exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-DPQE5JKI.cjs.map
-//# sourceMappingURL=chunk-DPQE5JKI.cjs.map
+export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, FacetService, IndexManager, ROUTES_INFO, RankingPipelineService, SynonymService, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
+//# sourceMappingURL=chunk-G6ZV2SEY.js.map
+//# sourceMappingURL=chunk-G6ZV2SEY.js.map

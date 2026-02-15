@@ -267,7 +267,7 @@ export interface InstantSearchMultiResponse {
 // ==========================================
 
 export type RecommendationCategory = 'synonym' | 'query_rule' | 'low_ctr' | 'unused_facet' | 'content_gap'
-export type RecommendationStatus = 'pending' | 'approved' | 'rejected' | 'applied' | 'dismissed'
+export type RecommendationStatus = 'pending' | 'applied' | 'dismissed'
 
 export interface Recommendation {
   id: string

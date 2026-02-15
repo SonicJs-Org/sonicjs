@@ -179,7 +179,9 @@ export class RecommendationService {
   }
 
   /**
-   * Find zero-result queries similar to successful queries via Levenshtein distance or token overlap.
+   * Find zero-result queries similar to successful queries.
+   * Both Levenshtein distance (<=2) AND token overlap (>=50%) must be satisfied
+   * to reduce false positives. Stopwords and very short queries are excluded.
    */
   private async analyzeSynonymOpportunities(runId: string): Promise<number> {
     let count = 0
@@ -214,13 +216,18 @@ export class RecommendationService {
       if (!successResults || successResults.length === 0) return 0
 
       for (const zr of zeroResults) {
+        // Skip stopwords and very short queries (< 3 chars)
+        if (zr.query.length < 3 || STOPWORDS.has(zr.query)) continue
+
         for (const sr of successResults) {
+          if (sr.query.length < 3 || STOPWORDS.has(sr.query)) continue
           if (zr.query === sr.query) continue
 
           const distance = levenshteinDistance(zr.query, sr.query)
           const tokenOverlap = getTokenOverlap(zr.query, sr.query)
 
-          if (distance <= 2 || tokenOverlap >= 0.5) {
+          // Both criteria must be satisfied (AND) to reduce false positives
+          if (distance <= 2 && tokenOverlap >= 0.5) {
             const fingerprint = fnv1aHash(`synonym:${[zr.query, sr.query].sort().join('|')}`)
             const exists = await this.checkFingerprint(fingerprint)
             if (exists) continue
@@ -628,6 +635,16 @@ export class RecommendationService {
 // =============================================
 // Pure utility functions
 // =============================================
+
+/** Common English stopwords — excluded from synonym analysis to avoid noise */
+const STOPWORDS = new Set([
+  'a', 'an', 'the', 'is', 'it', 'in', 'on', 'at', 'to', 'of', 'and', 'or',
+  'for', 'by', 'as', 'be', 'do', 'he', 'she', 'we', 'my', 'me', 'no', 'so',
+  'up', 'if', 'am', 'us', 'i', 'not', 'but', 'are', 'was', 'has', 'had',
+  'all', 'can', 'her', 'his', 'its', 'may', 'our', 'own', 'too', 'who',
+  'did', 'get', 'got', 'him', 'how', 'let', 'new', 'now', 'old', 'out',
+  'say', 'she', 'use', 'way', 'why', 'yes', 'yet', 'you',
+])
 
 /** FNV-1a hash for deterministic fingerprinting */
 function fnv1aHash(input: string): string {

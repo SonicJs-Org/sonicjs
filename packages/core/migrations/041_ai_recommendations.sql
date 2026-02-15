@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS ai_search_recommendations (
   description TEXT NOT NULL,
   supporting_data TEXT NOT NULL,
   action_payload TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'applied', 'dismissed')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'dismissed')),
   fingerprint TEXT NOT NULL,
   run_id TEXT NOT NULL,
   applied_at INTEGER,

@@ -840,7 +840,7 @@ export class AISearchService {
 
   /**
    * Get search suggestions (autocomplete)
-   * Uses fast keyword prefix matching for instant results (<50ms)
+   * Routes to trending queries (empty/short input) or prefix suggestions (2+ chars)
    */
   async getSearchSuggestions(partial: string): Promise<string[]> {
     try {
@@ -849,47 +849,124 @@ export class AISearchService {
         return []
       }
 
-      // Fast keyword prefix matching from indexed content
-      // This provides instant autocomplete (<50ms) without AI overhead
-      try {
-        const stmt = this.db.prepare(`
-          SELECT DISTINCT title 
-          FROM ai_search_index 
-          WHERE title LIKE ? 
-          ORDER BY title 
-          LIMIT 10
-        `)
-        const { results } = await stmt.bind(`%${partial}%`).all<{ title: string }>()
-
-        const suggestions = (results || []).map((r) => r.title).filter(Boolean)
-
-        if (suggestions.length > 0) {
-          return suggestions
-        }
-      } catch (indexError) {
-        // Table doesn't exist yet or is empty - that's okay, fall back to history
-        console.log('[AISearchService] Index table not available yet, using search history')
+      const trimmed = partial.trim()
+      if (trimmed.length < 2) {
+        return this.getTrendingQueries()
       }
-
-      // Fallback to search history if no indexed titles match
-      try {
-        const historyStmt = this.db.prepare(`
-          SELECT DISTINCT query 
-          FROM ai_search_history 
-          WHERE query LIKE ? 
-          ORDER BY created_at DESC 
-          LIMIT 10
-        `)
-        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all<{ query: string }>()
-
-        return (historyResults || []).map((r) => r.query)
-      } catch (historyError) {
-        // History table might not exist either - return empty
-        console.log('[AISearchService] No suggestions available (tables not initialized)')
-        return []
-      }
+      return this.getPrefixSuggestions(trimmed)
     } catch (error) {
       console.error('Error getting suggestions:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get trending queries from last 7 days, ranked by frequency.
+   * Excludes zero-result queries (AVG results_count < 0.5).
+   */
+  private async getTrendingQueries(): Promise<string[]> {
+    try {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+      const stmt = this.db.prepare(`
+        SELECT query, COUNT(*) as cnt, AVG(results_count) as avg_res
+        FROM ai_search_history
+        WHERE created_at >= ?
+        GROUP BY LOWER(query)
+        HAVING avg_res >= 0.5
+        ORDER BY cnt DESC
+        LIMIT 10
+      `)
+      const { results } = await stmt.bind(sevenDaysAgo).all<{ query: string; cnt: number; avg_res: number }>()
+      return (results || []).map((r) => r.query).filter(Boolean)
+    } catch (error) {
+      console.log('[AISearchService] Trending queries unavailable:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get prefix suggestions by blending popular query prefixes (30d) + FTS5 content title prefixes.
+   * Popular queries appear first (real user intent), content titles fill remaining slots.
+   */
+  private async getPrefixSuggestions(prefix: string): Promise<string[]> {
+    const [popularQueries, contentTitles] = await Promise.all([
+      this.getPopularQueryPrefixes(prefix, 5),
+      this.getContentTitlePrefixes(prefix, 5),
+    ])
+
+    // Dedup: popular queries first, then content titles that aren't already included
+    const seen = new Set(popularQueries.map((q) => q.toLowerCase()))
+    const merged = [...popularQueries]
+    for (const title of contentTitles) {
+      if (!seen.has(title.toLowerCase())) {
+        merged.push(title)
+        seen.add(title.toLowerCase())
+      }
+      if (merged.length >= 10) break
+    }
+    return merged
+  }
+
+  /**
+   * Popular query prefixes from search history (last 30 days).
+   * Ranked by frequency, excludes zero-result queries.
+   */
+  private async getPopularQueryPrefixes(prefix: string, limit: number): Promise<string[]> {
+    try {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const stmt = this.db.prepare(`
+        SELECT query, COUNT(*) as cnt, AVG(results_count) as avg_res
+        FROM ai_search_history
+        WHERE created_at >= ? AND LOWER(query) LIKE ?
+        GROUP BY LOWER(query)
+        HAVING avg_res >= 0.5
+        ORDER BY cnt DESC
+        LIMIT ?
+      `)
+      const { results } = await stmt
+        .bind(thirtyDaysAgo, `${prefix.toLowerCase()}%`, limit)
+        .all<{ query: string; cnt: number; avg_res: number }>()
+      return (results || []).map((r) => r.query).filter(Boolean)
+    } catch (error) {
+      console.log('[AISearchService] Popular query prefixes unavailable:', error)
+      return []
+    }
+  }
+
+  /**
+   * Content title prefixes via FTS5 prefix matching.
+   * Falls back to ai_search_index LIKE if FTS5 is unavailable.
+   */
+  private async getContentTitlePrefixes(prefix: string, limit: number): Promise<string[]> {
+    // Try FTS5 prefix match first (fast + ranked by BM25)
+    try {
+      // Sanitize prefix for FTS5: remove special chars, keep alphanumeric + spaces
+      const sanitized = prefix.replace(/[^\w\s]/g, '').trim()
+      if (!sanitized) return []
+
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT title FROM content_fts
+        WHERE content_fts MATCH ?
+        ORDER BY bm25(content_fts, 5.0, 2.0, 1.0)
+        LIMIT ?
+      `)
+      const { results } = await stmt.bind(`${sanitized}*`, limit).all<{ title: string }>()
+      return (results || []).map((r) => r.title).filter(Boolean)
+    } catch {
+      // FTS5 table may not exist — fall back to ai_search_index
+    }
+
+    // Fallback: simple LIKE prefix on ai_search_index
+    try {
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT title FROM ai_search_index
+        WHERE LOWER(title) LIKE ?
+        ORDER BY title
+        LIMIT ?
+      `)
+      const { results } = await stmt.bind(`${prefix.toLowerCase()}%`, limit).all<{ title: string }>()
+      return (results || []).map((r) => r.title).filter(Boolean)
+    } catch {
       return []
     }
   }

@@ -189,24 +189,22 @@ export function renderSearchModal(data: SearchModalData): string {
 
       // Autocomplete
       let autocompleteTimeout;
-      document.getElementById('searchQuery').addEventListener('input', (e) => {
-        const query = e.target.value.trim();
+
+      function fetchSuggestions(query) {
         const suggestionsDiv = document.getElementById('searchSuggestions');
-        
         clearTimeout(autocompleteTimeout);
-        
-        if (query.length < 2) {
-          suggestionsDiv.classList.add('hidden');
-          return;
-        }
 
         autocompleteTimeout = setTimeout(async () => {
           try {
             const res = await fetch(\`/api/search/suggest?q=\${encodeURIComponent(query)}\`);
             const { data } = await res.json();
-            
+
             if (data && data.length > 0) {
-              suggestionsDiv.innerHTML = data.map(s => \`
+              const isTrending = query.length < 2;
+              const header = isTrending
+                ? '<div class="px-4 py-1.5 text-xs font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Trending Searches</div>'
+                : '';
+              suggestionsDiv.innerHTML = header + data.map(s => \`
                 <div class="px-4 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer" onclick="selectSuggestion('\${s}')">\${s}</div>
               \`).join('');
               suggestionsDiv.classList.remove('hidden');
@@ -216,7 +214,21 @@ export function renderSearchModal(data: SearchModalData): string {
           } catch (error) {
             console.error('Autocomplete error:', error);
           }
-        }, 300);
+        }, query.length < 2 ? 100 : 300);
+      }
+
+      // Show trending on focus
+      document.getElementById('searchQuery').addEventListener('focus', (e) => {
+        const query = e.target.value.trim();
+        if (query.length < 2) {
+          fetchSuggestions('');
+        }
+      });
+
+      // Prefix suggestions on input
+      document.getElementById('searchQuery').addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        fetchSuggestions(query);
       });
 
       function selectSuggestion(suggestion) {

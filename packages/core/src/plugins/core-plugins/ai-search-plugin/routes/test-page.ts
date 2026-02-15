@@ -227,7 +227,7 @@ testPageRoutes.get('/test', async (c) => {
             <strong>Performance Testing:</strong> Watch how similarity caching speeds up repeated queries.
             First query to a term may take 500-800ms, but similar queries should be much faster!
             <br><br>
-            <strong>Autocomplete:</strong> Type 2+ characters to see instant suggestions (<50ms).
+            <strong>Autocomplete:</strong> Focus the search box to see trending searches, or type to get data-driven suggestions (<50ms).
             <br><br>
             <strong>For Developers:</strong> Want to add AI search to your own frontend? 
             <a href="/admin/plugins/ai-search/integration"
@@ -302,16 +302,9 @@ testPageRoutes.get('/test', async (c) => {
 
           let suggestionTimeout;
 
-          // Autocomplete
-          searchInput.addEventListener('input', async (e) => {
-            const query = e.target.value.trim();
-            
+          function fetchTestSuggestions(query) {
             clearTimeout(suggestionTimeout);
-            
-            if (query.length < 2) {
-              suggestionsDiv.classList.remove('show');
-              return;
-            }
+            const debounceMs = query.length < 2 ? 100 : 200;
 
             suggestionTimeout = setTimeout(async () => {
               const startTime = performance.now();
@@ -320,22 +313,40 @@ testPageRoutes.get('/test', async (c) => {
                 const data = await response.json();
                 const endTime = performance.now();
                 const duration = Math.round(endTime - startTime);
-                
+
                 if (data.success && data.data.length > 0) {
-                  suggestionsDiv.innerHTML = data.data.map(s => 
+                  const isTrending = query.length < 2;
+                  const header = isTrending
+                    ? '<div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.05em;">Trending Searches</div>'
+                    : '';
+                  suggestionsDiv.innerHTML = header + data.data.map(s =>
                     \`<div class="suggestion-item" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')">
                       <strong>\${s}</strong>
                     </div>\`
                   ).join('');
                   suggestionsDiv.classList.add('show');
-                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\`);
+                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\${isTrending ? ' (trending)' : ''}\`);
                 } else {
                   suggestionsDiv.classList.remove('show');
                 }
               } catch (error) {
                 console.error('Autocomplete error:', error);
               }
-            }, 200); // Fast debounce for instant feel
+            }, debounceMs);
+          }
+
+          // Trending on focus
+          searchInput.addEventListener('focus', (e) => {
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+              fetchTestSuggestions('');
+            }
+          });
+
+          // Prefix suggestions on input
+          searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            fetchTestSuggestions(query);
           });
 
           // Hide suggestions on click outside

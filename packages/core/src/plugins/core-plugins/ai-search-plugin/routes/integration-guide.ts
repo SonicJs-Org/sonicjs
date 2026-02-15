@@ -256,27 +256,32 @@ integrationGuideRoutes.get('/integration', async (c) => {
     const resultsDiv = document.getElementById('results');
     let timeout;
 
-    // Autocomplete
-    searchInput.addEventListener('input', async (e) =&gt; {
-      const query = e.target.value.trim();
+    // Autocomplete — trending on focus, prefix suggestions on input
+    function fetchSuggestions(query) {
       clearTimeout(timeout);
-      
-      if (query.length &lt; 2) {
-        suggestionsDiv.style.display = 'none';
-        return;
-      }
-
       timeout = setTimeout(async () =&gt; {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:8px 10px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${header}\${
             data.data.map(s =&gt; \`&lt;div class="suggestion" onclick="search('\${s}')"&gt;\${s}&lt;/div&gt;\`).join('')
           }&lt;/div&gt;\`;
           suggestionsDiv.style.display = 'block';
+        } else {
+          suggestionsDiv.style.display = 'none';
         }
-      }, 300);
+      }, query.length &lt; 2 ? 100 : 300);
+    }
+
+    searchInput.addEventListener('focus', () =&gt; {
+      if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+    });
+
+    searchInput.addEventListener('input', (e) =&gt; {
+      fetchSuggestions(e.target.value.trim());
     });
 
     // Search
@@ -335,21 +340,16 @@ export function AISearch() {
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
-  // Autocomplete
+  // Autocomplete — returns trending for empty/short input, prefix suggestions for 2+ chars
   useEffect(() =&gt; {
-    if (query.length &lt; 2) {
-      setSuggestions([]);
-      return;
-    }
-    
     const timeout = setTimeout(async () =&gt; {
       const res = await fetch(
         \`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`
       );
       const data = await res.json();
       if (data.success) setSuggestions(data.data);
-    }, 300);
-    
+    }, query.length &lt; 2 ? 100 : 300);
+
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
@@ -510,24 +510,18 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
   let searchTimeout;
   let suggestTimeout;
 
-  // Autocomplete
-  searchInput.addEventListener('input', async (e) =&gt; {
-    const query = e.target.value.trim();
-    
+  // Autocomplete — trending on focus, prefix on input
+  function fetchSuggestions(query) {
     clearTimeout(suggestTimeout);
-    
-    if (query.length &lt; 2) {
-      suggestionsDiv.classList.remove('show');
-      return;
-    }
-
     suggestTimeout = setTimeout(async () =&gt; {
       try {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = data.data
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = header + data.data
             .map(s =&gt; \`&lt;div class="suggestion" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')"&gt;\${s}&lt;/div&gt;\`)
             .join('');
           suggestionsDiv.classList.add('show');
@@ -537,7 +531,15 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
       } catch (error) {
         console.error('Autocomplete error:', error);
       }
-    }, 300);
+    }, query.length &lt; 2 ? 100 : 300);
+  }
+
+  searchInput.addEventListener('focus', () =&gt; {
+    if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+  });
+
+  searchInput.addEventListener('input', (e) =&gt; {
+    fetchSuggestions(e.target.value.trim());
   });
 
   // Search with debounce
@@ -678,19 +680,17 @@ let searchTimeout;
 let suggestTimeout;
 
 watch(query, (newQuery) =&gt; {
-  if (newQuery.length &lt; 2) {
+  // Search (only for 2+ chars)
+  if (newQuery.length &gt;= 2) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
+  } else {
     results.value = [];
-    suggestions.value = [];
-    return;
   }
-  
-  // Search
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
-  
-  // Autocomplete
+
+  // Autocomplete — trending for empty/short, prefix for 2+ chars
   clearTimeout(suggestTimeout);
-  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), 300);
+  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), newQuery.length &lt; 2 ? 100 : 300);
 });
 
 async function performSearch(q) {
@@ -848,7 +848,7 @@ export default function SearchPage() {
                 <div class="card">
                   <h4>Autocomplete</h4>
                   <p><strong>GET</strong> <code>/api/search/suggest?q=query</code></p>
-                  <p>Get instant suggestions (&lt;50ms)</p>
+                  <p>Trending queries on empty input, data-driven prefix suggestions on 2+ chars (&lt;50ms)</p>
                 </div>
                 <div class="card">
                   <h4>InstantSearch API</h4>
@@ -860,6 +860,21 @@ export default function SearchPage() {
                   <p><strong>POST</strong> <code>/api/search/click</code></p>
                   <p>Record result clicks for CTR analytics</p>
                 </div>
+              </div>
+
+              <h3>Autocomplete / Suggest</h3>
+              <p>The suggest endpoint provides <strong>data-driven suggestions</strong> powered by real search analytics:</p>
+              <pre><code>GET /api/search/suggest?q=         // Empty → trending queries (top 10, last 7 days)
+GET /api/search/suggest?q=cl       // Short → trending queries
+GET /api/search/suggest?q=cloud    // 2+ chars → popular query prefixes + content titles</code></pre>
+              <div class="info-box">
+                <strong>Key features:</strong>
+                <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                  <li>Suggestions ranked by real search frequency (not just recency)</li>
+                  <li>Zero-result queries are automatically filtered out</li>
+                  <li>Content title prefix matching via FTS5 fills gaps when query history is sparse</li>
+                  <li>Focus the search box to show trending searches before the user types</li>
+                </ul>
               </div>
 
               <h3>Search Request</h3>

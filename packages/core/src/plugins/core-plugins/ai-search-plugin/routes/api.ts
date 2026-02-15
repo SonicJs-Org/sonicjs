@@ -77,10 +77,6 @@ apiRoutes.get('/suggest', async (c) => {
 
     const query = c.req.query('q') || ''
 
-    if (!query || query.length < 2) {
-      return c.json({ success: true, data: [] })
-    }
-
     const suggestions = await service.getSearchSuggestions(query)
 
     return c.json({

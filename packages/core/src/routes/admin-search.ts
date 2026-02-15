@@ -26,10 +26,10 @@ adminSearchRoutes.get('/', async (c) => {
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
 
-    const service = new AISearchService(db, ai, vectorize)
+    const kv = c.env.CACHE_KV
+    const service = new AISearchService(db, ai, vectorize, kv)
     const indexer = new IndexManager(db, ai, vectorize)
     const fts5Service = new FTS5Service(db)
-    const kv = c.env.CACHE_KV
     const benchmarkService = new BenchmarkService(db, kv)
 
     // Gather all data in parallel

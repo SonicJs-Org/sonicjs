@@ -48,6 +48,7 @@ export interface SearchQuery {
   limit?: number
   offset?: number
   facets?: boolean // Request facet computation alongside results
+  cache?: boolean  // Set to false to bypass KV result cache (default: true)
 }
 
 export interface SearchFilters {
@@ -98,6 +99,7 @@ export interface SearchResponse {
   facets?: FacetResult[] // Facet counts from full result set
   original_query?: string // Set when a query substitution rule was applied
   applied_rule_id?: string // ID of the substitution rule that matched
+  cached?: boolean // True when result was served from KV cache
 }
 
 export interface SearchHistory {

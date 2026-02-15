@@ -38,8 +38,9 @@ instantSearchRoutes.post('/', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
+    const kv = c.env.CACHE_KV
 
-    const searchService = new AISearchService(db, ai, vectorize)
+    const searchService = new AISearchService(db, ai, vectorize, kv)
     const adapter = new InstantSearchAdapter(db)
 
     // Parse request

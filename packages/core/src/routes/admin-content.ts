@@ -11,6 +11,7 @@ import type { Bindings, Variables } from '../app'
 import { PluginService } from '../services/plugin-service'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
 import { FTS5Service } from '../plugins/core-plugins/ai-search-plugin/services/fts5.service'
+import { SearchCacheService } from '../plugins/core-plugins/ai-search-plugin/services/search-cache.service'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -852,6 +853,12 @@ adminContentRoutes.post('/', async (c) => {
       )
     )
 
+    // Invalidate search result cache (non-blocking)
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV)
+      c.executionCtx.waitUntil(searchCache.invalidateAll())
+    }
+
     // Handle different actions
     const referrerParams = formData.get('referrer_params') as string
     const redirectUrl = action === 'save_and_continue'
@@ -1034,6 +1041,12 @@ adminContentRoutes.put('/:id', async (c) => {
         console.error('[Content] FTS5 reindexing failed:', err)
       )
     )
+
+    // Invalidate search result cache (non-blocking)
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV)
+      c.executionCtx.waitUntil(searchCache.invalidateAll())
+    }
 
     // Handle different actions
     const referrerParams = formData.get('referrer_params') as string
@@ -1363,6 +1376,12 @@ adminContentRoutes.delete('/:id', async (c) => {
         console.error('[Content] FTS5 removal failed:', err)
       )
     )
+
+    // Invalidate search result cache (non-blocking)
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV)
+      c.executionCtx.waitUntil(searchCache.invalidateAll())
+    }
 
     // Invalidate cache
     const cache = getCacheService(CACHE_CONFIGS.content!)

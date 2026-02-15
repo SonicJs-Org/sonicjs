@@ -17,6 +17,7 @@ import { QueryRulesService } from './query-rules.service'
 import { RankingPipelineService } from './ranking-pipeline.service'
 import { SynonymService } from './synonym.service'
 import { RerankerService } from './reranker.service'
+import { SearchCacheService } from './search-cache.service'
 
 /**
  * AI Search Service
@@ -32,11 +33,13 @@ export class AISearchService {
   private rankingPipeline: RankingPipelineService
   private synonymService: SynonymService
   private queryRulesService: QueryRulesService
+  private searchCache?: SearchCacheService
 
   constructor(
     private db: D1Database,
     private ai?: any, // Workers AI for embeddings
-    private vectorize?: any // Vectorize for vector search
+    private vectorize?: any, // Vectorize for vector search
+    private kv?: any // KVNamespace for search result caching
   ) {
     // Initialize Custom RAG if bindings are available
     if (this.ai && this.vectorize) {
@@ -72,6 +75,11 @@ export class AISearchService {
 
     // Ranking pipeline (always available, zero cost when no stages active)
     this.rankingPipeline = new RankingPipelineService(db)
+
+    // Search result cache (available when KV binding is present)
+    if (this.kv) {
+      this.searchCache = new SearchCacheService(this.kv)
+    }
   }
 
   /**
@@ -341,6 +349,27 @@ export class AISearchService {
       query = { ...query, query: ruleResult.query }
     }
 
+    // Cache check: after rule expansion so the key reflects the actual query
+    if (this.searchCache) {
+      const cacheKey = await this.searchCache.buildKey(query)
+      if (cacheKey) {
+        const cached = await this.searchCache.get(cacheKey)
+        if (cached) {
+          // Cache hit — log search (cached=true), return with fresh search_id
+          const elapsed = Date.now() - startTime
+          const searchId = await this.logSearch(query.query, query.mode, cached.results.length, elapsed, true)
+          return {
+            ...cached,
+            query_time_ms: elapsed,
+            search_id: searchId,
+            cached: true,
+            // Re-attach rule metadata (not cached)
+            ...(originalQuery ? { original_query: originalQuery, applied_rule_id: appliedRuleId } : {}),
+          }
+        }
+      }
+    }
+
     // Determine if facets should be computed
     const shouldComputeFacets = query.facets && settings.facets_enabled
 
@@ -426,13 +455,28 @@ export class AISearchService {
 
     // Apply ranking pipeline (post-processing: re-scores and re-sorts)
     // Zero-cost when no stages are enabled
+    let finalResult: SearchResponse
     try {
-      const ranked = await this.rankingPipeline.apply(result, query.query)
-      return ranked
+      finalResult = await this.rankingPipeline.apply(result, query.query)
     } catch (error) {
       console.warn('[AISearchService] Ranking pipeline error (preserving original order):', error)
-      return result
+      finalResult = result
     }
+
+    // Cache write (awaited — KV put is ~5ms, and fire-and-forget won't complete on Workers)
+    if (this.searchCache && settings.cache_duration > 0) {
+      const cacheKey = await this.searchCache.buildKey(query)
+      if (cacheKey) {
+        const ttlSeconds = settings.cache_duration * 3600 // cache_duration is in hours
+        try {
+          await this.searchCache.put(cacheKey, finalResult, ttlSeconds)
+        } catch (err) {
+          console.warn('[AISearchService] Cache write failed:', err)
+        }
+      }
+    }
+
+    return finalResult
   }
 
   /**
@@ -995,12 +1039,12 @@ export class AISearchService {
   /**
    * Log search query to history, returns the generated search_id
    */
-  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number, responseTimeMs?: number): Promise<string | undefined> {
+  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number, responseTimeMs?: number, cached?: boolean): Promise<string | undefined> {
     try {
       const result = await this.db.prepare(`
-        INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(query, mode, resultsCount, responseTimeMs ?? null, Date.now()).run()
+        INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, cached, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(query, mode, resultsCount, responseTimeMs ?? null, cached ? 1 : 0, Date.now()).run()
       // D1 returns the auto-incremented rowid via meta.last_row_id
       const rowId = result?.meta?.last_row_id
       return rowId ? String(rowId) : undefined
@@ -1408,5 +1452,12 @@ export class AISearchService {
    */
   getQueryRulesService(): QueryRulesService {
     return this.queryRulesService
+  }
+
+  /**
+   * Get search cache service instance (for cache invalidation from content CRUD hooks)
+   */
+  getSearchCache(): SearchCacheService | undefined {
+    return this.searchCache
   }
 }

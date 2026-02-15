@@ -22,7 +22,8 @@ apiRoutes.post('/', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    const kv = c.env.CACHE_KV
+    const service = new AISearchService(db, ai, vectorize, kv)
 
     const body = await c.req.json()
 
@@ -33,6 +34,7 @@ apiRoutes.post('/', async (c) => {
       limit: body.limit ? Number(body.limit) : undefined,
       offset: body.offset ? Number(body.offset) : undefined,
       facets: body.facets === true,
+      cache: body.cache !== false,
     }
 
     // Convert date strings to Date objects if present

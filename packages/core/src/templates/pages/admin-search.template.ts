@@ -24,6 +24,7 @@ export interface SearchDashboardData {
     fts5_title_boost?: number
     fts5_slug_boost?: number
     fts5_body_boost?: number
+    facets_enabled?: boolean
   } | null
   collections: Array<{
     id: string | number
@@ -46,6 +47,9 @@ export interface SearchDashboardData {
   }
   fts5Status: { available: boolean; total_indexed: number; by_collection: Record<string, number> } | null
   benchmarkStatus: { seeded: boolean; seeded_count: number; corpus_size: number; query_count: number } | null
+  queriesToday?: number
+  totalClicks30d?: number
+  zeroResults30d?: number
   user?: { name: string; email: string; role: string }
   version?: string
 }
@@ -100,6 +104,13 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
 
   const searchMode = aiModeEnabled ? 'Hybrid' : 'FTS5 Only'
   const totalQueries = data.analytics ? data.analytics.total_queries : 0
+  const queriesToday = data.queriesToday ?? 0
+  const totalClicks30d = data.totalClicks30d ?? 0
+  const zeroResults30d = data.zeroResults30d ?? 0
+  const avgQueryTime = data.analytics ? data.analytics.average_query_time : 0
+  const ctr = totalQueries > 0 ? ((totalClicks30d / totalQueries) * 100).toFixed(1) : null
+  const popularQueries = data.analytics ? data.analytics.popular_queries || [] : []
+  const facetsEnabled = settings.facets_enabled === true
 
   const pageContent = `
     <div class="space-y-6">
@@ -177,81 +188,133 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
 
         <!-- Stat Cards -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-6">
-          ${renderStatCard('Total Indexed Docs', String(fts5TotalIndexed), 'lime', `
+          ${renderStatCard('Indexed Documents', String(fts5TotalIndexed), 'lime', `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
           `)}
 
-          ${renderStatCard('FTS5 Status', fts5Available ? 'Available' : 'Unavailable', fts5Available ? 'lime' : 'red', `
+          ${renderStatCard('Queries Today', String(queriesToday), 'sky', `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
           `)}
 
-          ${renderStatCard('Search Mode', searchMode, 'purple', `
+          ${renderStatCard('Avg Response Time', avgQueryTime > 0 ? avgQueryTime + 'ms' : 'N/A', 'purple', `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           `)}
 
-          ${renderStatCard('Total Queries', String(totalQueries), 'sky', `
+          ${renderStatCard('Click-Through Rate', ctr !== null ? ctr + '%' : 'N/A', 'amber', `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
             </svg>
           `)}
         </div>
 
-        <!-- System Status -->
-        <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 mt-6">
-          <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-            <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">System Status</h2>
+        <!-- Feature Status & Search Activity -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <!-- Feature Status -->
+          <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Feature Status</h2>
+            </div>
+            <div class="p-6">
+              <div class="grid grid-cols-2 gap-x-8 gap-y-3">
+                ${renderFeatureToggle('Search', enabled)}
+                ${renderFeatureToggle('AI Mode', aiModeEnabled)}
+                ${renderFeatureToggle('Faceted Search', facetsEnabled)}
+                ${renderFeatureToggle('Query Rewriting', settings.query_rewriting_enabled === true)}
+                ${renderFeatureToggle('Reranking', settings.reranking_enabled === true)}
+                ${renderFeatureToggle('Synonyms', settings.query_synonyms_enabled !== false)}
+              </div>
+            </div>
           </div>
-          <div class="p-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Binding Availability</h3>
-                <div class="space-y-2">
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">FTS5 (SQLite)</span>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${fts5Available
-                      ? 'bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20'
-                      : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20'
-                    }">${fts5Available ? 'Available' : 'Unavailable'}</span>
+
+          <!-- Search Activity -->
+          <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Search Activity</h2>
+            </div>
+            <div class="p-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Quick Stats -->
+                <div>
+                  <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Quick Stats</h3>
+                  <div class="space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Total Queries (30d)</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${totalQueries}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Queries Today</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${queriesToday}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Total Clicks (30d)</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${totalClicks30d}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Zero-Result Queries</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${zeroResults30d}</span>
+                    </div>
                   </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">AI / Vectorize</span>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${aiModeEnabled
-                      ? 'bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20'
-                      : 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20'
-                    }">${aiModeEnabled ? 'Enabled' : 'Disabled'}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Search Enabled</span>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${enabled
-                      ? 'bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20'
-                      : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20'
-                    }">${enabled ? 'Yes' : 'No'}</span>
-                  </div>
+                </div>
+                <!-- Popular Queries -->
+                <div>
+                  <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Popular Queries</h3>
+                  ${popularQueries.length > 0 ? `
+                    <div class="space-y-2">
+                      ${popularQueries.slice(0, 5).map(q => `
+                        <div class="flex items-center justify-between text-sm">
+                          <span class="text-zinc-600 dark:text-zinc-400 truncate mr-2">${escapeHtml(q.query)}</span>
+                          <span class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-400">${q.count}</span>
+                        </div>
+                      `).join('')}
+                      <button onclick="switchTab('analytics')" class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
+                        View all in Analytics &rarr;
+                      </button>
+                    </div>
+                  ` : `
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">No queries recorded yet.</p>
+                  `}
                 </div>
               </div>
-              <div>
-                <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Index Summary</h3>
-                <div class="space-y-2">
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Indexed Collections</span>
-                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${fts5Status ? Object.keys(fts5Status.by_collection || {}).length : 0}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Total Documents</span>
-                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${fts5TotalIndexed}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Selected Collections</span>
-                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${selectedCollections.length}</span>
-                  </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Index Health -->
+        <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 mt-6">
+          <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+            <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Index Health</h2>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-zinc-600 dark:text-zinc-400">FTS5</span>
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${fts5Available
+                    ? 'bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20'
+                    : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20'
+                  }">${fts5Available ? 'Available' : 'Unavailable'}</span>
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">${fts5TotalIndexed} docs</span>
                 </div>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-zinc-600 dark:text-zinc-400">Vectorize</span>
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${aiModeEnabled
+                    ? 'bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20'
+                    : 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20'
+                  }">${aiModeEnabled ? 'Enabled' : 'Disabled'}</span>
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">${vectorizeIndexedItems} items</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-zinc-600 dark:text-zinc-400">Collections</span>
+                <span class="font-medium text-zinc-900 dark:text-zinc-100">${selectedCollections.length} selected / ${collections.length} total</span>
               </div>
             </div>
           </div>
@@ -583,9 +646,9 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
             </div>
           </div>
           <div id="benchmark-results" class="hidden">
-            <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-              <h3 class="text-sm font-semibold text-zinc-950 dark:text-white mb-3" id="benchmark-results-title">Results</h3>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" id="benchmark-metrics"></div>
+            <div class="space-y-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white" id="benchmark-results-title">Results</h3>
+              <div id="benchmark-metrics"></div>
               <div class="text-xs text-zinc-500 dark:text-zinc-400" id="benchmark-details"></div>
             </div>
           </div>
@@ -1874,8 +1937,15 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
         }
 
         var datasetNames = { scifact: 'SciFact', nfcorpus: 'NFCorpus', fiqa: 'FiQA-2018' };
+        var datasetDomains = { scifact: 'Scientific claims', nfcorpus: 'Biomedical', fiqa: 'Financial Q&A' };
         var modeOrder = ['fts5', 'hybrid', 'ai', 'keyword'];
         var modeLabels = { fts5: 'FTS5', keyword: 'Keyword', hybrid: 'Hybrid', ai: 'AI/Vectorize' };
+        var modeBgClasses = {
+          fts5: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20',
+          ai: 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 ring-1 ring-inset ring-cyan-600/20 dark:ring-cyan-500/20',
+          hybrid: 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 ring-1 ring-inset ring-purple-600/20 dark:ring-purple-500/20',
+          keyword: 'bg-zinc-100 dark:bg-zinc-700/50 text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20'
+        };
 
         titleEl.textContent = 'Benchmark Results (k=10)';
 
@@ -1891,7 +1961,19 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
           byDataset[ds][corpus].push(r);
         }
 
-        // Build a comparison table for each dataset+corpus group
+        // Find best value per metric per dataset+corpus group
+        function findBests(runs) {
+          var bests = { ndcg: -1, precision: -1, recall: -1, mrr: -1 };
+          for (var i = 0; i < runs.length; i++) {
+            var m = runs[i].metrics;
+            if (m.ndcg_at_k > bests.ndcg) bests.ndcg = m.ndcg_at_k;
+            if (m.precision_at_k > bests.precision) bests.precision = m.precision_at_k;
+            if (m.recall_at_k > bests.recall) bests.recall = m.recall_at_k;
+            if (m.mrr > bests.mrr) bests.mrr = m.mrr;
+          }
+          return bests;
+        }
+
         var html = '';
         for (var di = 0; di < datasetOrder.length; di++) {
           var dsKey = datasetOrder[di];
@@ -1904,63 +1986,76 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
             var runs = corpusGroups[corpusKey];
             runs.sort(function(a, b) { return modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode); });
             var sizeLabel = runs[0].corpus_size ? runs[0].corpus_size.toLocaleString() + ' docs' : '';
-            var corpusDisplay = corpusKey === 'full' ? 'Full' : 'Subset';
-            if (sizeLabel) corpusDisplay += ' (' + sizeLabel + ')';
+            var corpusDisplay = corpusKey === 'full' ? 'Full corpus' : 'Subset';
+            if (sizeLabel) corpusDisplay += ' \u00b7 ' + sizeLabel;
+            var bests = findBests(runs);
 
-            // Section header
-            html += '<div class="col-span-2 md:col-span-4' + (di > 0 || ci > 0 ? ' mt-5 pt-4 border-t border-zinc-200 dark:border-zinc-700' : '') + '">' +
-              '<div class="flex items-center gap-2 mb-2">' +
-                '<span class="text-sm font-bold text-zinc-900 dark:text-white">' + (datasetNames[dsKey] || dsKey) + '</span>' +
-                '<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">' + corpusDisplay + '</span>' +
+            // Card wrapper per dataset+corpus
+            html += '<div class="rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 overflow-hidden">';
+
+            // Card header
+            html += '<div class="px-5 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700">' +
+              '<div class="flex items-center justify-between">' +
+                '<div class="flex items-center gap-3">' +
+                  '<h4 class="text-base font-semibold text-zinc-950 dark:text-white">' + (datasetNames[dsKey] || dsKey) + '</h4>' +
+                  '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + (datasetDomains[dsKey] || '') + '</span>' +
+                '</div>' +
+                '<span class="text-xs px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium">' + corpusDisplay + '</span>' +
               '</div>' +
             '</div>';
 
-            // Table header
-            html += '<div class="col-span-2 md:col-span-4">' +
-              '<table class="w-full text-sm" style="table-layout:fixed">' +
-              '<colgroup>' +
-                '<col style="width:18%">' +
-                '<col style="width:15%">' +
-                '<col style="width:13%">' +
-                '<col style="width:15%">' +
-                '<col style="width:13%">' +
-                '<col style="width:13%">' +
-                '<col style="width:13%">' +
-              '</colgroup>' +
-              '<thead><tr class="text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">' +
-              '<th class="text-left py-2 font-medium">Mode</th>' +
-              '<th class="text-right py-2 font-medium">nDCG@10</th>' +
-              '<th class="text-right py-2 font-medium">P@10</th>' +
-              '<th class="text-right py-2 font-medium">Recall@10</th>' +
-              '<th class="text-right py-2 font-medium">MRR</th>' +
-              '<th class="text-right py-2 font-medium">Queries</th>' +
-              '<th class="text-right py-2 font-medium">Avg ms</th>' +
+            // Table
+            html += '<div class="overflow-x-auto">' +
+              '<table class="w-full text-sm">' +
+              '<thead><tr class="border-b border-zinc-200 dark:border-zinc-700">' +
+              '<th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Mode</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">nDCG@10</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">P@10</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Recall@10</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">MRR</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Queries</th>' +
+              '<th class="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Latency</th>' +
               '</tr></thead><tbody>';
 
             for (var ri = 0; ri < runs.length; ri++) {
               var run = runs[ri];
               var m = run.metrics;
-              var mc = run.mode === 'fts5' ? 'indigo' : run.mode === 'ai' ? 'cyan' : run.mode === 'hybrid' ? 'purple' : 'zinc';
+              var isLast = ri === runs.length - 1;
+              var rowBorder = isLast ? '' : ' border-b border-zinc-100 dark:border-zinc-800';
 
-              html += '<tr class="border-b border-zinc-100 dark:border-zinc-800">' +
-                '<td class="py-2.5 font-semibold text-' + mc + '-600 dark:text-' + mc + '-400">' + (modeLabels[run.mode] || run.mode.toUpperCase()) + '</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.ndcg_at_k * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.precision_at_k * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.recall_at_k * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.mrr * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right text-zinc-500 dark:text-zinc-400">' + run.queries_evaluated + '</td>' +
-                '<td class="py-2.5 text-right text-zinc-500 dark:text-zinc-400">' + run.avg_query_time_ms + 'ms</td>' +
+              // Highlight best values
+              var ndcgBest = m.ndcg_at_k === bests.ndcg && runs.length > 1;
+              var precBest = m.precision_at_k === bests.precision && runs.length > 1;
+              var recBest = m.recall_at_k === bests.recall && runs.length > 1;
+              var mrrBest = m.mrr === bests.mrr && runs.length > 1;
+
+              function metricCell(val, isBest) {
+                var pct = (val * 100).toFixed(1) + '%';
+                if (isBest) {
+                  return '<span class="font-semibold text-zinc-950 dark:text-white">' + pct + '</span>';
+                }
+                return '<span class="text-zinc-600 dark:text-zinc-400">' + pct + '</span>';
+              }
+
+              html += '<tr class="' + rowBorder + ' hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">' +
+                '<td class="px-5 py-3"><span class="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ' + (modeBgClasses[run.mode] || modeBgClasses.keyword) + '">' + (modeLabels[run.mode] || run.mode) + '</span></td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.ndcg_at_k, ndcgBest) + '</td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.precision_at_k, precBest) + '</td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.recall_at_k, recBest) + '</td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.mrr, mrrBest) + '</td>' +
+                '<td class="px-4 py-3 text-right text-xs text-zinc-500 dark:text-zinc-400">' + run.queries_evaluated + '</td>' +
+                '<td class="px-5 py-3 text-right text-xs text-zinc-500 dark:text-zinc-400">' + run.avg_query_time_ms + 'ms</td>' +
               '</tr>';
             }
 
-            html += '</tbody></table></div>';
+            html += '</tbody></table></div></div>';
           }
         }
 
         // Summary + clear button
-        html += '<div class="col-span-2 md:col-span-4 mt-4 flex items-center justify-between">' +
-          '<span class="text-xs text-zinc-400">' + benchmarkRuns.length + ' total runs across ' + Object.keys(byDataset).length + ' datasets</span>' +
-          '<button onclick="clearBenchmarkHistory()" class="text-xs text-zinc-400 hover:text-red-500 underline">Clear all results</button>' +
+        html += '<div class="flex items-center justify-between pt-2">' +
+          '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + benchmarkRuns.length + ' runs across ' + Object.keys(byDataset).length + ' dataset' + (Object.keys(byDataset).length !== 1 ? 's' : '') + '</span>' +
+          '<button onclick="clearBenchmarkHistory()" class="text-xs text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">Clear all results</button>' +
           '</div>';
 
         metricsDiv.innerHTML = html;
@@ -3322,4 +3417,26 @@ function renderStatCard(label: string, value: string, color: string, icon: strin
       </div>
     </div>
   `
+}
+
+function renderFeatureToggle(name: string, isOn: boolean): string {
+  const dotClass = isOn
+    ? 'bg-lime-500'
+    : 'bg-zinc-300 dark:bg-zinc-600'
+  const labelClass = isOn
+    ? 'text-lime-700 dark:text-lime-400'
+    : 'text-zinc-500 dark:text-zinc-400'
+  return `
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-zinc-700 dark:text-zinc-300">${name}</span>
+      <span class="inline-flex items-center gap-1.5 ${labelClass}">
+        <span class="h-2 w-2 rounded-full ${dotClass}"></span>
+        ${isOn ? 'On' : 'Off'}
+      </span>
+    </div>
+  `
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

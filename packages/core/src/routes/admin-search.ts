@@ -33,12 +33,20 @@ adminSearchRoutes.get('/', async (c) => {
     const benchmarkService = new BenchmarkService(db, kv)
 
     // Gather all data in parallel
-    const [settings, collections, newCollections, indexStatus, analytics] = await Promise.all([
+    const now = Date.now()
+    const midnightToday = new Date()
+    midnightToday.setHours(0, 0, 0, 0)
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000
+
+    const [settings, collections, newCollections, indexStatus, analytics, queriesTodayRow, totalClicks30dRow, zeroResults30dRow] = await Promise.all([
       service.getSettings(),
       service.getAllCollections(),
       service.detectNewCollections(),
       indexer.getAllIndexStatus(),
       service.getSearchAnalytics(),
+      db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?').bind(midnightToday.getTime()).first<{ count: number }>().catch(() => null),
+      db.prepare("SELECT COUNT(*) as count FROM ai_search_clicks WHERE created_at > datetime('now', '-30 days')").first<{ count: number }>().catch(() => null),
+      db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE results_count = 0 AND created_at >= ?').bind(thirtyDaysAgo).first<{ count: number }>().catch(() => null),
     ])
 
     // FTS5 status
@@ -79,6 +87,9 @@ adminSearchRoutes.get('/', async (c) => {
         analytics,
         fts5Status,
         benchmarkStatus,
+        queriesToday: queriesTodayRow?.count ?? 0,
+        totalClicks30d: totalClicks30dRow?.count ?? 0,
+        zeroResults30d: zeroResults30dRow?.count ?? 0,
         user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
         version: getCoreVersion(),
       })

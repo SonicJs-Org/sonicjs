@@ -261,3 +261,35 @@ export interface InstantSearchResult {
 export interface InstantSearchMultiResponse {
   results: InstantSearchResult[]
 }
+
+// ==========================================
+// AI Search Quality Agent Types
+// ==========================================
+
+export type RecommendationCategory = 'synonym' | 'query_rule' | 'low_ctr' | 'unused_facet' | 'content_gap'
+export type RecommendationStatus = 'pending' | 'approved' | 'rejected' | 'applied' | 'dismissed'
+
+export interface Recommendation {
+  id: string
+  category: RecommendationCategory
+  title: string
+  description: string
+  supporting_data: Record<string, any>
+  action_payload: Record<string, any> | null
+  status: RecommendationStatus
+  fingerprint: string
+  run_id: string
+  applied_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+export interface AgentRun {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  recommendations_count: number
+  duration_ms: number | null
+  error_message: string | null
+  created_at: number
+  completed_at: number | null
+}

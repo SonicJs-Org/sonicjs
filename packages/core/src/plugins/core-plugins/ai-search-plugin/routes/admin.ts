@@ -12,6 +12,7 @@ import { SynonymService } from '../services/synonym.service'
 import { QueryRulesService } from '../services/query-rules.service'
 import { EmbeddingService } from '../services/embedding.service'
 import { ChunkingService } from '../services/chunking.service'
+import { RecommendationService } from '../services/recommendation.service'
 import type { AISearchSettings, FacetDefinition, SearchQuery } from '../types'
 
 type Variables = {
@@ -1605,6 +1606,158 @@ adminRoutes.post('/api/benchmark/evaluate-batch', async (c) => {
   } catch (error) {
     console.error('Error in batch evaluation:', error)
     return c.json({ error: String(error) }, 500)
+  }
+})
+
+// ==========================================
+// Search Quality Agent Routes
+// ==========================================
+
+/** POST /api/agent/run — Trigger analysis via waitUntil() */
+adminRoutes.post('/api/agent/run', async (c) => {
+  try {
+    const db = c.env.DB
+    const recService = new RecommendationService(db)
+
+    // Check if already running
+    const latest = await recService.getLatestRun()
+    if (latest && latest.status === 'running') {
+      return c.json({ error: 'Analysis already running' }, 409)
+    }
+
+    // Run analysis in background via waitUntil
+    const runIdPromise = recService.runAnalysis()
+
+    // We need the runId to return it immediately, but runAnalysis creates the run
+    // internally. Instead, start the run, return immediately, UI polls for status.
+    c.executionCtx.waitUntil(runIdPromise.then(runId => {
+      console.log(`[Agent] Analysis run ${runId} completed`)
+    }).catch(error => {
+      console.error('[Agent] Analysis failed:', error)
+    }))
+
+    return c.json({ success: true, message: 'Analysis started' })
+  } catch (error) {
+    console.error('Error starting agent analysis:', error)
+    return c.json({ error: 'Failed to start analysis' }, 500)
+  }
+})
+
+/** GET /api/agent/status — Latest run + aggregate stats */
+adminRoutes.get('/api/agent/status', async (c) => {
+  try {
+    const db = c.env.DB
+    const recService = new RecommendationService(db)
+
+    const [latestRun, stats] = await Promise.all([
+      recService.getLatestRun(),
+      recService.getStats(),
+    ])
+
+    return c.json({
+      success: true,
+      data: {
+        latest_run: latestRun,
+        stats,
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching agent status:', error)
+    return c.json({ error: 'Failed to fetch agent status' }, 500)
+  }
+})
+
+/** GET /api/agent/recommendations — List with ?status=&category= filters */
+adminRoutes.get('/api/agent/recommendations', async (c) => {
+  try {
+    const db = c.env.DB
+    const recService = new RecommendationService(db)
+
+    const status = c.req.query('status') || undefined
+    const category = c.req.query('category') || undefined
+    const limit = parseInt(c.req.query('limit') || '100', 10)
+    const offset = parseInt(c.req.query('offset') || '0', 10)
+
+    const recs = await recService.getAll({
+      status: status as any,
+      category: category as any,
+      limit,
+      offset,
+    })
+
+    return c.json({ success: true, data: recs })
+  } catch (error) {
+    console.error('Error fetching recommendations:', error)
+    return c.json({ error: 'Failed to fetch recommendations' }, 500)
+  }
+})
+
+/** POST /api/agent/recommendations/:id/apply — Auto-apply (creates synonym/rule) */
+adminRoutes.post('/api/agent/recommendations/:id/apply', async (c) => {
+  try {
+    const db = c.env.DB
+    const recService = new RecommendationService(db)
+    const id = c.req.param('id')
+
+    const result = await recService.applyRecommendation(id)
+    if (!result.success) {
+      return c.json({ success: false, error: result.message }, 400)
+    }
+
+    return c.json({ success: true, message: result.message })
+  } catch (error) {
+    console.error('Error applying recommendation:', error)
+    return c.json({ error: 'Failed to apply recommendation' }, 500)
+  }
+})
+
+/** POST /api/agent/recommendations/:id/dismiss — Dismiss single */
+adminRoutes.post('/api/agent/recommendations/:id/dismiss', async (c) => {
+  try {
+    const db = c.env.DB
+    const recService = new RecommendationService(db)
+    const id = c.req.param('id')
+
+    const updated = await recService.updateStatus(id, 'dismissed')
+    if (!updated) {
+      return c.json({ error: 'Recommendation not found' }, 404)
+    }
+
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error dismissing recommendation:', error)
+    return c.json({ error: 'Failed to dismiss recommendation' }, 500)
+  }
+})
+
+/** POST /api/agent/recommendations/dismiss-all — Dismiss all pending */
+adminRoutes.post('/api/agent/recommendations/dismiss-all', async (c) => {
+  try {
+    const db = c.env.DB
+    const recService = new RecommendationService(db)
+
+    const dismissed = await recService.dismissAll()
+
+    return c.json({ success: true, data: { dismissed } })
+  } catch (error) {
+    console.error('Error dismissing all recommendations:', error)
+    return c.json({ error: 'Failed to dismiss recommendations' }, 500)
+  }
+})
+
+/** GET /api/agent/runs — Run history */
+adminRoutes.get('/api/agent/runs', async (c) => {
+  try {
+    const db = c.env.DB
+    const recService = new RecommendationService(db)
+
+    const limit = parseInt(c.req.query('limit') || '20', 10)
+    const runs = await recService.getRunHistory(limit)
+
+    return c.json({ success: true, data: runs })
+  } catch (error) {
+    console.error('Error fetching run history:', error)
+    return c.json({ error: 'Failed to fetch run history' }, 500)
   }
 })
 

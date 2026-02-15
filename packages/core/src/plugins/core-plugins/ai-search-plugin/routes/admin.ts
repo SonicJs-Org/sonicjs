@@ -9,6 +9,7 @@ import { BenchmarkService } from '../services/benchmark.service'
 import { BENCHMARK_DATASETS } from '../data/benchmark-datasets'
 import { RankingPipelineService } from '../services/ranking-pipeline.service'
 import { SynonymService } from '../services/synonym.service'
+import { QueryRulesService } from '../services/query-rules.service'
 import { EmbeddingService } from '../services/embedding.service'
 import { ChunkingService } from '../services/chunking.service'
 import type { AISearchSettings, FacetDefinition, SearchQuery } from '../types'
@@ -669,6 +670,83 @@ adminRoutes.delete('/api/relevance/synonyms/:id', async (c) => {
   } catch (error) {
     console.error('Error deleting synonym group:', error)
     return c.json({ error: 'Failed to delete synonym group' }, 500)
+  }
+})
+
+// ==========================================
+// Query Substitution Rules Routes
+// ==========================================
+
+/** GET /api/relevance/rules — list all query substitution rules */
+adminRoutes.get('/api/relevance/rules', async (c) => {
+  try {
+    const rulesService = new QueryRulesService(c.env.DB)
+    const rules = await rulesService.getAll()
+    return c.json({ success: true, data: rules })
+  } catch (error) {
+    console.error('Error fetching query rules:', error)
+    return c.json({ error: 'Failed to fetch query rules' }, 500)
+  }
+})
+
+/** POST /api/relevance/rules — create a query substitution rule */
+adminRoutes.post('/api/relevance/rules', async (c) => {
+  try {
+    const body = await c.req.json()
+    if (!body.match_pattern || !body.substitute_query) {
+      return c.json({ error: 'match_pattern and substitute_query are required' }, 400)
+    }
+    const rulesService = new QueryRulesService(c.env.DB)
+    const rule = await rulesService.create({
+      match_pattern: body.match_pattern,
+      match_type: body.match_type,
+      substitute_query: body.substitute_query,
+      enabled: body.enabled,
+      priority: body.priority,
+    })
+    return c.json({ success: true, data: rule })
+  } catch (error) {
+    console.error('Error creating query rule:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to create query rule' }, 500)
+  }
+})
+
+/** PUT /api/relevance/rules/:id — update a query substitution rule */
+adminRoutes.put('/api/relevance/rules/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const body = await c.req.json()
+    const rulesService = new QueryRulesService(c.env.DB)
+    const rule = await rulesService.update(id, {
+      match_pattern: body.match_pattern,
+      match_type: body.match_type,
+      substitute_query: body.substitute_query,
+      enabled: body.enabled,
+      priority: body.priority,
+    })
+    if (!rule) {
+      return c.json({ error: 'Query rule not found' }, 404)
+    }
+    return c.json({ success: true, data: rule })
+  } catch (error) {
+    console.error('Error updating query rule:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to update query rule' }, 500)
+  }
+})
+
+/** DELETE /api/relevance/rules/:id — delete a query substitution rule */
+adminRoutes.delete('/api/relevance/rules/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const rulesService = new QueryRulesService(c.env.DB)
+    const deleted = await rulesService.delete(id)
+    if (!deleted) {
+      return c.json({ error: 'Query rule not found' }, 404)
+    }
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting query rule:', error)
+    return c.json({ error: 'Failed to delete query rule' }, 500)
   }
 })
 

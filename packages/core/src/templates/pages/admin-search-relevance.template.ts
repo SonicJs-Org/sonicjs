@@ -334,7 +334,121 @@ export function renderRelevanceTab(props: TabProps): string {
             </div>
           </div>
 
-          <!-- Future: Pin/Boost/Bury rules -->
+          <!-- Query Substitution Rules Section -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Query Substitution Rules</h2>
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                  Deterministic query replacement: "if user searches X, replace with Y". Runs before all search modes. First matching rule wins (priority order).
+                </p>
+              </div>
+            </div>
+
+            <!-- Rules count summary -->
+            <div id="rules-summary" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
+              Loading query rules...
+            </div>
+
+            <!-- Rules list -->
+            <div id="rules-list" class="space-y-2 mb-4">
+            </div>
+
+            <!-- Add new rule form (hidden by default) -->
+            <div id="rule-add-form" class="hidden border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-4 mb-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Match Pattern</label>
+                  <input
+                    type="text"
+                    id="rule-new-pattern"
+                    placeholder="e.g., overview"
+                    class="w-full rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Replace With</label>
+                  <input
+                    type="text"
+                    id="rule-new-substitute"
+                    placeholder="e.g., getting started"
+                    class="w-full rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();saveQueryRule()}"
+                  />
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Match Type</label>
+                  <select
+                    id="rule-new-match-type"
+                    class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="exact">Exact</option>
+                    <option value="prefix">Prefix</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Priority</label>
+                  <input
+                    type="number"
+                    id="rule-new-priority"
+                    value="0"
+                    min="0"
+                    max="1000"
+                    class="w-20 rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div class="flex items-end gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onclick="saveQueryRule()"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onclick="cancelRuleAdd()"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                <strong>Exact</strong> matches the full query. <strong>Prefix</strong> matches the start and preserves any suffix (e.g., "docs api" with prefix rule "docs" &rarr; "documentation api").
+              </p>
+            </div>
+
+            <!-- Add button -->
+            <button
+              type="button"
+              id="rule-add-btn"
+              onclick="showRuleAddForm()"
+              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add Substitution Rule
+            </button>
+
+            <!-- Info callout -->
+            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
+              <div class="flex gap-3">
+                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="text-sm">
+                  <p class="font-medium text-blue-900 dark:text-blue-100">Pre-dispatch &mdash; affects all search modes</p>
+                  <p class="text-blue-700 dark:text-blue-300 mt-1">
+                    Rules run before FTS5, AI, keyword, and hybrid search. The API response includes <code class="text-xs bg-blue-100 dark:bg-blue-800/50 px-1 py-0.5 rounded">original_query</code> when a substitution occurs, so the frontend can show "Showing results for Y instead of X".
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
   `
@@ -905,6 +1019,251 @@ export function renderRelevanceScript(): string {
           }
         } catch (e) {
           alert('Error: ' + e.message);
+        }
+      }
+
+      // =============================================
+      // Query Substitution Rules
+      // =============================================
+      var queryRules = [];
+      var editingRuleId = null;
+
+      (async function loadQueryRules() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/rules');
+          var data = await res.json();
+          if (data.success && data.data) {
+            queryRules = data.data;
+            renderQueryRules();
+          }
+        } catch (e) {
+          console.error('Failed to load query rules:', e);
+          document.getElementById('rules-summary').textContent = 'Failed to load query rules.';
+        }
+      })();
+
+      function renderQueryRules() {
+        var container = document.getElementById('rules-list');
+        var summary = document.getElementById('rules-summary');
+        var enabledCount = queryRules.filter(function(r) { return r.enabled; }).length;
+        summary.textContent = queryRules.length + ' rule' + (queryRules.length !== 1 ? 's' : '') +
+          ' (' + enabledCount + ' enabled)';
+
+        if (queryRules.length === 0) {
+          container.innerHTML = '<p class="text-sm text-zinc-500 dark:text-zinc-400 py-4 text-center">No substitution rules defined. Click "Add Substitution Rule" to create one.</p>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < queryRules.length; i++) {
+          var r = queryRules[i];
+          var isEditing = editingRuleId === r.id;
+          var matchTypeBadge = r.match_type === 'prefix'
+            ? '<span class="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-600/20 dark:ring-amber-500/20">prefix</span>'
+            : '<span class="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-600/20 dark:ring-emerald-500/20">exact</span>';
+
+          html += '<div class="flex items-center gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 ' +
+            (r.enabled ? 'bg-white dark:bg-zinc-800/50' : 'bg-zinc-50 dark:bg-zinc-900 opacity-60') + '">';
+
+          // Enable/disable toggle
+          html += '<input type="checkbox" ' + (r.enabled ? 'checked' : '') +
+            ' onchange="toggleQueryRule(\\'' + r.id + '\\', this.checked)" ' +
+            'class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0" title="Enable/disable this rule">';
+
+          if (isEditing) {
+            // Editing mode
+            var patternEscaped = r.match_pattern.replace(/"/g, '&quot;');
+            var substituteEscaped = r.substitute_query.replace(/"/g, '&quot;');
+            html += '<div class="flex-1 grid grid-cols-1 md:grid-cols-4 gap-2">' +
+              '<input type="text" id="rule-edit-pattern" value="' + patternEscaped + '" placeholder="Pattern" ' +
+                'class="rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">' +
+              '<input type="text" id="rule-edit-substitute" value="' + substituteEscaped + '" placeholder="Replace with" ' +
+                'class="rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500" ' +
+                'onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();saveEditRule(\\'' + r.id + '\\')}">' +
+              '<select id="rule-edit-match-type" class="rounded-lg bg-white dark:bg-zinc-800 px-2 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10">' +
+                '<option value="exact"' + (r.match_type === 'exact' ? ' selected' : '') + '>Exact</option>' +
+                '<option value="prefix"' + (r.match_type === 'prefix' ? ' selected' : '') + '>Prefix</option>' +
+              '</select>' +
+              '<input type="number" id="rule-edit-priority" value="' + r.priority + '" min="0" max="1000" ' +
+                'class="w-20 rounded-lg bg-white dark:bg-zinc-800 px-2 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10">' +
+            '</div>';
+            html += '<button type="button" onclick="saveEditRule(\\'' + r.id + '\\')" ' +
+              'class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 px-2 py-1">Save</button>';
+            html += '<button type="button" onclick="cancelEditRule()" ' +
+              'class="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1">Cancel</button>';
+          } else {
+            // Display mode
+            html += '<div class="flex-1 flex items-center gap-2 min-w-0">' +
+              matchTypeBadge +
+              '<span class="text-sm font-medium text-zinc-950 dark:text-white truncate">' +
+                r.match_pattern.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+              '</span>' +
+              '<svg class="h-4 w-4 text-zinc-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>' +
+              '<span class="text-sm text-indigo-600 dark:text-indigo-400 truncate">' +
+                r.substitute_query.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+              '</span>' +
+              (r.priority > 0 ? '<span class="text-xs text-zinc-400 flex-shrink-0">p' + r.priority + '</span>' : '') +
+            '</div>';
+
+            // Edit & Delete buttons
+            html += '<button type="button" onclick="startEditRule(\\'' + r.id + '\\')" ' +
+              'class="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1 flex-shrink-0" title="Edit">Edit</button>';
+            html += '<button type="button" onclick="deleteQueryRule(\\'' + r.id + '\\')" ' +
+              'class="text-xs font-medium text-red-500 hover:text-red-700 dark:hover:text-red-300 px-2 py-1 flex-shrink-0" title="Delete">Delete</button>';
+          }
+
+          html += '</div>';
+        }
+
+        container.innerHTML = html;
+      }
+
+      function showRuleAddForm() {
+        document.getElementById('rule-add-form').classList.remove('hidden');
+        document.getElementById('rule-add-btn').classList.add('hidden');
+        document.getElementById('rule-new-pattern').focus();
+      }
+
+      function cancelRuleAdd() {
+        document.getElementById('rule-add-form').classList.add('hidden');
+        document.getElementById('rule-add-btn').classList.remove('hidden');
+        document.getElementById('rule-new-pattern').value = '';
+        document.getElementById('rule-new-substitute').value = '';
+        document.getElementById('rule-new-match-type').value = 'exact';
+        document.getElementById('rule-new-priority').value = '0';
+      }
+
+      async function saveQueryRule() {
+        var pattern = document.getElementById('rule-new-pattern').value.trim();
+        var substitute = document.getElementById('rule-new-substitute').value.trim();
+        var matchType = document.getElementById('rule-new-match-type').value;
+        var priority = parseInt(document.getElementById('rule-new-priority').value, 10) || 0;
+
+        if (!pattern || !substitute) {
+          alert('Both pattern and replacement are required.');
+          return;
+        }
+
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              match_pattern: pattern,
+              match_type: matchType,
+              substitute_query: substitute,
+              priority: priority
+            })
+          });
+          var data = await res.json();
+          if (data.success) {
+            queryRules.unshift(data.data);
+            // Re-sort by priority DESC
+            queryRules.sort(function(a, b) { return b.priority - a.priority; });
+            renderQueryRules();
+            cancelRuleAdd();
+            document.getElementById('msg').classList.remove('hidden');
+            setTimeout(function() { document.getElementById('msg').classList.add('hidden'); }, 2000);
+          } else {
+            alert('Error: ' + (data.error || 'Failed to create rule'));
+          }
+        } catch (e) {
+          alert('Error creating rule: ' + e.message);
+        }
+      }
+
+      async function toggleQueryRule(id, enabled) {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/rules/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enabled })
+          });
+          var data = await res.json();
+          if (data.success) {
+            for (var i = 0; i < queryRules.length; i++) {
+              if (queryRules[i].id === id) {
+                queryRules[i].enabled = enabled;
+                break;
+              }
+            }
+            renderQueryRules();
+          }
+        } catch (e) {
+          console.error('Error toggling query rule:', e);
+        }
+      }
+
+      function startEditRule(id) {
+        editingRuleId = id;
+        renderQueryRules();
+        var input = document.getElementById('rule-edit-pattern');
+        if (input) input.focus();
+      }
+
+      function cancelEditRule() {
+        editingRuleId = null;
+        renderQueryRules();
+      }
+
+      async function saveEditRule(id) {
+        var pattern = document.getElementById('rule-edit-pattern');
+        var substitute = document.getElementById('rule-edit-substitute');
+        var matchType = document.getElementById('rule-edit-match-type');
+        var priority = document.getElementById('rule-edit-priority');
+        if (!pattern || !substitute) return;
+
+        var patternVal = pattern.value.trim();
+        var substituteVal = substitute.value.trim();
+        if (!patternVal || !substituteVal) {
+          alert('Both pattern and replacement are required.');
+          return;
+        }
+
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/rules/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              match_pattern: patternVal,
+              match_type: matchType.value,
+              substitute_query: substituteVal,
+              priority: parseInt(priority.value, 10) || 0
+            })
+          });
+          var data = await res.json();
+          if (data.success) {
+            for (var i = 0; i < queryRules.length; i++) {
+              if (queryRules[i].id === id) {
+                queryRules[i] = data.data;
+                break;
+              }
+            }
+            editingRuleId = null;
+            queryRules.sort(function(a, b) { return b.priority - a.priority; });
+            renderQueryRules();
+          } else {
+            alert('Error: ' + (data.error || 'Failed to update'));
+          }
+        } catch (e) {
+          alert('Error updating rule: ' + e.message);
+        }
+      }
+
+      async function deleteQueryRule(id) {
+        if (!confirm('Delete this substitution rule?')) return;
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/rules/' + id, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          var data = await res.json();
+          if (data.success) {
+            queryRules = queryRules.filter(function(r) { return r.id !== id; });
+            renderQueryRules();
+          }
+        } catch (e) {
+          alert('Error deleting rule: ' + e.message);
         }
       }
   `

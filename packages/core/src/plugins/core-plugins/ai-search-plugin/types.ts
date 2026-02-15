@@ -96,6 +96,8 @@ export interface SearchResponse {
   search_id?: string // ID linking to ai_search_history row for click tracking
   suggestions?: string[] // Autocomplete suggestions
   facets?: FacetResult[] // Facet counts from full result set
+  original_query?: string // Set when a query substitution rule was applied
+  applied_rule_id?: string // ID of the substitution rule that matched
 }
 
 export interface SearchHistory {
@@ -136,6 +138,18 @@ export interface SynonymGroup {
   id: string
   terms: string[]
   enabled: boolean
+  created_at: number
+  updated_at: number
+}
+
+/** A deterministic query substitution rule — "if user searches X, replace with Y" */
+export interface QueryRule {
+  id: string
+  match_pattern: string
+  match_type: 'exact' | 'prefix'
+  substitute_query: string
+  enabled: boolean
+  priority: number
   created_at: number
   updated_at: number
 }

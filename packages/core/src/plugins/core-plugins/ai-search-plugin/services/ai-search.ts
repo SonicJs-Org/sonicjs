@@ -13,6 +13,7 @@ import { FacetService } from './facet.service'
 import { FTS5Service } from './fts5.service'
 import { HybridSearchService } from './hybrid-search.service'
 import { QueryRewriterService } from './query-rewriter.service'
+import { QueryRulesService } from './query-rules.service'
 import { RankingPipelineService } from './ranking-pipeline.service'
 import { SynonymService } from './synonym.service'
 import { RerankerService } from './reranker.service'
@@ -30,6 +31,7 @@ export class AISearchService {
   private reranker?: RerankerService
   private rankingPipeline: RankingPipelineService
   private synonymService: SynonymService
+  private queryRulesService: QueryRulesService
 
   constructor(
     private db: D1Database,
@@ -64,6 +66,9 @@ export class AISearchService {
     if (this.fts5Service) {
       this.fts5Service.setSynonymService(this.synonymService)
     }
+
+    // Query substitution rules (always available, degrades gracefully if table doesn't exist)
+    this.queryRulesService = new QueryRulesService(db)
 
     // Ranking pipeline (always available, zero cost when no stages active)
     this.rankingPipeline = new RankingPipelineService(db)
@@ -326,6 +331,16 @@ export class AISearchService {
       }
     }
 
+    // Apply query substitution rules (pre-dispatch, affects all modes)
+    let originalQuery: string | undefined
+    let appliedRuleId: string | undefined
+    const ruleResult = await this.queryRulesService.applyRules(query.query)
+    if (ruleResult.originalQuery) {
+      originalQuery = ruleResult.originalQuery
+      appliedRuleId = ruleResult.ruleId
+      query = { ...query, query: ruleResult.query }
+    }
+
     // Determine if facets should be computed
     const shouldComputeFacets = query.facets && settings.facets_enabled
 
@@ -401,6 +416,12 @@ export class AISearchService {
       } catch (error) {
         console.warn('[AISearchService] AI mode facet computation failed:', error)
       }
+    }
+
+    // Attach query substitution metadata
+    if (originalQuery) {
+      result.original_query = originalQuery
+      result.applied_rule_id = appliedRuleId
     }
 
     // Apply ranking pipeline (post-processing: re-scores and re-sorts)
@@ -1380,5 +1401,12 @@ export class AISearchService {
    */
   getSynonymService(): SynonymService {
     return this.synonymService
+  }
+
+  /**
+   * Get query rules service instance (for admin routes)
+   */
+  getQueryRulesService(): QueryRulesService {
+    return this.queryRulesService
   }
 }

@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-FSZEAQDY.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-GKY7WVJS.js';
 import { PluginService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-FH6MVXDQ.js';
+import { MigrationService } from './chunk-V5662WE5.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-AAU4BTDE.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-7DXWBEQP.js';
@@ -3325,7 +3325,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-VLFL4MCS.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-JAURAE6Y.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -3350,7 +3350,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-VLFL4MCS.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-JAURAE6Y.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -3369,7 +3369,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-VLFL4MCS.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-JAURAE6Y.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -30524,7 +30524,7 @@ var AISearchService = class {
   }
   /**
    * Get search suggestions (autocomplete)
-   * Uses fast keyword prefix matching for instant results (<50ms)
+   * Routes to trending queries (empty/short input) or prefix suggestions (2+ chars)
    */
   async getSearchSuggestions(partial) {
     try {
@@ -30532,38 +30532,110 @@ var AISearchService = class {
       if (!settings?.autocomplete_enabled) {
         return [];
       }
-      try {
-        const stmt = this.db.prepare(`
-          SELECT DISTINCT title 
-          FROM ai_search_index 
-          WHERE title LIKE ? 
-          ORDER BY title 
-          LIMIT 10
-        `);
-        const { results } = await stmt.bind(`%${partial}%`).all();
-        const suggestions = (results || []).map((r) => r.title).filter(Boolean);
-        if (suggestions.length > 0) {
-          return suggestions;
-        }
-      } catch (indexError) {
-        console.log("[AISearchService] Index table not available yet, using search history");
+      const trimmed = partial.trim();
+      if (trimmed.length < 2) {
+        return this.getTrendingQueries();
       }
-      try {
-        const historyStmt = this.db.prepare(`
-          SELECT DISTINCT query 
-          FROM ai_search_history 
-          WHERE query LIKE ? 
-          ORDER BY created_at DESC 
-          LIMIT 10
-        `);
-        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all();
-        return (historyResults || []).map((r) => r.query);
-      } catch (historyError) {
-        console.log("[AISearchService] No suggestions available (tables not initialized)");
-        return [];
-      }
+      return this.getPrefixSuggestions(trimmed);
     } catch (error) {
       console.error("Error getting suggestions:", error);
+      return [];
+    }
+  }
+  /**
+   * Get trending queries from last 7 days, ranked by frequency.
+   * Excludes zero-result queries (AVG results_count < 0.5).
+   */
+  async getTrendingQueries() {
+    try {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1e3;
+      const stmt = this.db.prepare(`
+        SELECT query, COUNT(*) as cnt, AVG(results_count) as avg_res
+        FROM ai_search_history
+        WHERE created_at >= ?
+        GROUP BY LOWER(query)
+        HAVING avg_res >= 0.5
+        ORDER BY cnt DESC
+        LIMIT 10
+      `);
+      const { results } = await stmt.bind(sevenDaysAgo).all();
+      return (results || []).map((r) => r.query).filter(Boolean);
+    } catch (error) {
+      console.log("[AISearchService] Trending queries unavailable:", error);
+      return [];
+    }
+  }
+  /**
+   * Get prefix suggestions by blending popular query prefixes (30d) + FTS5 content title prefixes.
+   * Popular queries appear first (real user intent), content titles fill remaining slots.
+   */
+  async getPrefixSuggestions(prefix) {
+    const [popularQueries, contentTitles] = await Promise.all([
+      this.getPopularQueryPrefixes(prefix, 5),
+      this.getContentTitlePrefixes(prefix, 5)
+    ]);
+    const seen = new Set(popularQueries.map((q) => q.toLowerCase()));
+    const merged = [...popularQueries];
+    for (const title of contentTitles) {
+      if (!seen.has(title.toLowerCase())) {
+        merged.push(title);
+        seen.add(title.toLowerCase());
+      }
+      if (merged.length >= 10) break;
+    }
+    return merged;
+  }
+  /**
+   * Popular query prefixes from search history (last 30 days).
+   * Ranked by frequency, excludes zero-result queries.
+   */
+  async getPopularQueryPrefixes(prefix, limit) {
+    try {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1e3;
+      const stmt = this.db.prepare(`
+        SELECT query, COUNT(*) as cnt, AVG(results_count) as avg_res
+        FROM ai_search_history
+        WHERE created_at >= ? AND LOWER(query) LIKE ?
+        GROUP BY LOWER(query)
+        HAVING avg_res >= 0.5
+        ORDER BY cnt DESC
+        LIMIT ?
+      `);
+      const { results } = await stmt.bind(thirtyDaysAgo, `${prefix.toLowerCase()}%`, limit).all();
+      return (results || []).map((r) => r.query).filter(Boolean);
+    } catch (error) {
+      console.log("[AISearchService] Popular query prefixes unavailable:", error);
+      return [];
+    }
+  }
+  /**
+   * Content title prefixes via FTS5 prefix matching.
+   * Falls back to ai_search_index LIKE if FTS5 is unavailable.
+   */
+  async getContentTitlePrefixes(prefix, limit) {
+    try {
+      const sanitized = prefix.replace(/[^\w\s]/g, "").trim();
+      if (!sanitized) return [];
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT title FROM content_fts
+        WHERE content_fts MATCH ?
+        ORDER BY bm25(content_fts, 5.0, 2.0, 1.0)
+        LIMIT ?
+      `);
+      const { results } = await stmt.bind(`${sanitized}*`, limit).all();
+      return (results || []).map((r) => r.title).filter(Boolean);
+    } catch {
+    }
+    try {
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT title FROM ai_search_index
+        WHERE LOWER(title) LIKE ?
+        ORDER BY title
+        LIMIT ?
+      `);
+      const { results } = await stmt.bind(`${prefix.toLowerCase()}%`, limit).all();
+      return (results || []).map((r) => r.title).filter(Boolean);
+    } catch {
       return [];
     }
   }
@@ -35321,5 +35393,5 @@ var ROUTES_INFO = {
 };
 
 export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, FacetService, IndexManager, ROUTES_INFO, RankingPipelineService, SynonymService, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-G6ZV2SEY.js.map
-//# sourceMappingURL=chunk-G6ZV2SEY.js.map
+//# sourceMappingURL=chunk-N5YXQ2Q2.js.map
+//# sourceMappingURL=chunk-N5YXQ2Q2.js.map

@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-G6ZV2SEY.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-G6ZV2SEY.js';
+import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-N5YXQ2Q2.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-N5YXQ2Q2.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-FSZEAQDY.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-FSZEAQDY.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-GKY7WVJS.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-GKY7WVJS.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-FH6MVXDQ.js';
+export { MigrationService } from './chunk-V5662WE5.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -4066,9 +4066,6 @@ apiRoutes.get("/suggest", async (c) => {
     const vectorize = c.env.VECTORIZE_INDEX;
     const service = new AISearchService(db, ai, vectorize);
     const query = c.req.query("q") || "";
-    if (!query || query.length < 2) {
-      return c.json({ success: true, data: [] });
-    }
     const suggestions = await service.getSearchSuggestions(query);
     return c.json({
       success: true,
@@ -5024,27 +5021,32 @@ integrationGuideRoutes.get("/integration", async (c) => {
     const resultsDiv = document.getElementById('results');
     let timeout;
 
-    // Autocomplete
-    searchInput.addEventListener('input', async (e) =&gt; {
-      const query = e.target.value.trim();
+    // Autocomplete — trending on focus, prefix suggestions on input
+    function fetchSuggestions(query) {
       clearTimeout(timeout);
-      
-      if (query.length &lt; 2) {
-        suggestionsDiv.style.display = 'none';
-        return;
-      }
-
       timeout = setTimeout(async () =&gt; {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:8px 10px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${header}\${
             data.data.map(s =&gt; \`&lt;div class="suggestion" onclick="search('\${s}')"&gt;\${s}&lt;/div&gt;\`).join('')
           }&lt;/div&gt;\`;
           suggestionsDiv.style.display = 'block';
+        } else {
+          suggestionsDiv.style.display = 'none';
         }
-      }, 300);
+      }, query.length &lt; 2 ? 100 : 300);
+    }
+
+    searchInput.addEventListener('focus', () =&gt; {
+      if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+    });
+
+    searchInput.addEventListener('input', (e) =&gt; {
+      fetchSuggestions(e.target.value.trim());
     });
 
     // Search
@@ -5103,21 +5105,16 @@ export function AISearch() {
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
-  // Autocomplete
+  // Autocomplete — returns trending for empty/short input, prefix suggestions for 2+ chars
   useEffect(() =&gt; {
-    if (query.length &lt; 2) {
-      setSuggestions([]);
-      return;
-    }
-    
     const timeout = setTimeout(async () =&gt; {
       const res = await fetch(
         \`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`
       );
       const data = await res.json();
       if (data.success) setSuggestions(data.data);
-    }, 300);
-    
+    }, query.length &lt; 2 ? 100 : 300);
+
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
@@ -5278,24 +5275,18 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
   let searchTimeout;
   let suggestTimeout;
 
-  // Autocomplete
-  searchInput.addEventListener('input', async (e) =&gt; {
-    const query = e.target.value.trim();
-    
+  // Autocomplete — trending on focus, prefix on input
+  function fetchSuggestions(query) {
     clearTimeout(suggestTimeout);
-    
-    if (query.length &lt; 2) {
-      suggestionsDiv.classList.remove('show');
-      return;
-    }
-
     suggestTimeout = setTimeout(async () =&gt; {
       try {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = data.data
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = header + data.data
             .map(s =&gt; \`&lt;div class="suggestion" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')"&gt;\${s}&lt;/div&gt;\`)
             .join('');
           suggestionsDiv.classList.add('show');
@@ -5305,7 +5296,15 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
       } catch (error) {
         console.error('Autocomplete error:', error);
       }
-    }, 300);
+    }, query.length &lt; 2 ? 100 : 300);
+  }
+
+  searchInput.addEventListener('focus', () =&gt; {
+    if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+  });
+
+  searchInput.addEventListener('input', (e) =&gt; {
+    fetchSuggestions(e.target.value.trim());
   });
 
   // Search with debounce
@@ -5446,19 +5445,17 @@ let searchTimeout;
 let suggestTimeout;
 
 watch(query, (newQuery) =&gt; {
-  if (newQuery.length &lt; 2) {
+  // Search (only for 2+ chars)
+  if (newQuery.length &gt;= 2) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
+  } else {
     results.value = [];
-    suggestions.value = [];
-    return;
   }
-  
-  // Search
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
-  
-  // Autocomplete
+
+  // Autocomplete — trending for empty/short, prefix for 2+ chars
   clearTimeout(suggestTimeout);
-  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), 300);
+  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), newQuery.length &lt; 2 ? 100 : 300);
 });
 
 async function performSearch(q) {
@@ -5616,7 +5613,7 @@ export default function SearchPage() {
                 <div class="card">
                   <h4>Autocomplete</h4>
                   <p><strong>GET</strong> <code>/api/search/suggest?q=query</code></p>
-                  <p>Get instant suggestions (&lt;50ms)</p>
+                  <p>Trending queries on empty input, data-driven prefix suggestions on 2+ chars (&lt;50ms)</p>
                 </div>
                 <div class="card">
                   <h4>InstantSearch API</h4>
@@ -5628,6 +5625,21 @@ export default function SearchPage() {
                   <p><strong>POST</strong> <code>/api/search/click</code></p>
                   <p>Record result clicks for CTR analytics</p>
                 </div>
+              </div>
+
+              <h3>Autocomplete / Suggest</h3>
+              <p>The suggest endpoint provides <strong>data-driven suggestions</strong> powered by real search analytics:</p>
+              <pre><code>GET /api/search/suggest?q=         // Empty → trending queries (top 10, last 7 days)
+GET /api/search/suggest?q=cl       // Short → trending queries
+GET /api/search/suggest?q=cloud    // 2+ chars → popular query prefixes + content titles</code></pre>
+              <div class="info-box">
+                <strong>Key features:</strong>
+                <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                  <li>Suggestions ranked by real search frequency (not just recency)</li>
+                  <li>Zero-result queries are automatically filtered out</li>
+                  <li>Content title prefix matching via FTS5 fills gaps when query history is sparse</li>
+                  <li>Focus the search box to show trending searches before the user types</li>
+                </ul>
               </div>
 
               <h3>Search Request</h3>
@@ -6083,7 +6095,7 @@ testPageRoutes.get("/test", async (c) => {
             <strong>Performance Testing:</strong> Watch how similarity caching speeds up repeated queries.
             First query to a term may take 500-800ms, but similar queries should be much faster!
             <br><br>
-            <strong>Autocomplete:</strong> Type 2+ characters to see instant suggestions (<50ms).
+            <strong>Autocomplete:</strong> Focus the search box to see trending searches, or type to get data-driven suggestions (<50ms).
             <br><br>
             <strong>For Developers:</strong> Want to add AI search to your own frontend? 
             <a href="/admin/plugins/ai-search/integration"
@@ -6158,16 +6170,9 @@ testPageRoutes.get("/test", async (c) => {
 
           let suggestionTimeout;
 
-          // Autocomplete
-          searchInput.addEventListener('input', async (e) => {
-            const query = e.target.value.trim();
-            
+          function fetchTestSuggestions(query) {
             clearTimeout(suggestionTimeout);
-            
-            if (query.length < 2) {
-              suggestionsDiv.classList.remove('show');
-              return;
-            }
+            const debounceMs = query.length < 2 ? 100 : 200;
 
             suggestionTimeout = setTimeout(async () => {
               const startTime = performance.now();
@@ -6176,22 +6181,40 @@ testPageRoutes.get("/test", async (c) => {
                 const data = await response.json();
                 const endTime = performance.now();
                 const duration = Math.round(endTime - startTime);
-                
+
                 if (data.success && data.data.length > 0) {
-                  suggestionsDiv.innerHTML = data.data.map(s => 
+                  const isTrending = query.length < 2;
+                  const header = isTrending
+                    ? '<div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.05em;">Trending Searches</div>'
+                    : '';
+                  suggestionsDiv.innerHTML = header + data.data.map(s =>
                     \`<div class="suggestion-item" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')">
                       <strong>\${s}</strong>
                     </div>\`
                   ).join('');
                   suggestionsDiv.classList.add('show');
-                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\`);
+                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\${isTrending ? ' (trending)' : ''}\`);
                 } else {
                   suggestionsDiv.classList.remove('show');
                 }
               } catch (error) {
                 console.error('Autocomplete error:', error);
               }
-            }, 200); // Fast debounce for instant feel
+            }, debounceMs);
+          }
+
+          // Trending on focus
+          searchInput.addEventListener('focus', (e) => {
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+              fetchTestSuggestions('');
+            }
+          });
+
+          // Prefix suggestions on input
+          searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            fetchTestSuggestions(query);
           });
 
           // Hide suggestions on click outside

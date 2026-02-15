@@ -1,10 +1,10 @@
 'use strict';
 
-var chunkIRLPSU3C_cjs = require('./chunk-IRLPSU3C.cjs');
+var chunkHLEV3RSK_cjs = require('./chunk-HLEV3RSK.cjs');
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkHHLIMKET_cjs = require('./chunk-HHLIMKET.cjs');
+var chunkLOL3ENL7_cjs = require('./chunk-LOL3ENL7.cjs');
 var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunk4Y5EPOEV_cjs = require('./chunk-4Y5EPOEV.cjs');
+var chunkGGCCETDO_cjs = require('./chunk-GGCCETDO.cjs');
 var chunk6WA4KFYZ_cjs = require('./chunk-6WA4KFYZ.cjs');
 var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
 var chunkMNFY6DWY_cjs = require('./chunk-MNFY6DWY.cjs');
@@ -559,7 +559,7 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkHHLIMKET_cjs.requireAuth());
+  router3.use("*", chunkLOL3ENL7_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
@@ -2848,7 +2848,7 @@ function createOTPLoginPlugin() {
           error: "Account is deactivated"
         }, 403);
       }
-      const token = await chunkHHLIMKET_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+      const token = await chunkLOL3ENL7_cjs.AuthManager.generateToken(user.id, user.email, user.role);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2931,7 +2931,7 @@ var clampWeight = (val, fallback) => {
   return isNaN(n) || !isFinite(n) ? fallback : Math.round(Math.min(10, Math.max(0, n)) * 10) / 10;
 };
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkHHLIMKET_cjs.requireAuth());
+adminRoutes.use("*", chunkLOL3ENL7_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
   return c.redirect("/admin/search");
 });
@@ -2940,8 +2940,8 @@ adminRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
-    const indexer = new chunkIRLPSU3C_cjs.IndexManager(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
+    const indexer = new chunkHLEV3RSK_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     console.log("[AI Search POST] Received body:", JSON.stringify(body, null, 2));
     const currentSettings = await service.getSettings();
@@ -2986,7 +2986,7 @@ adminRoutes.get("/api/settings", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const settings = await service.getSettings();
     return c.json({ success: true, data: settings });
   } catch (error) {
@@ -2999,7 +2999,7 @@ adminRoutes.get("/api/new-collections", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const notifications = await service.detectNewCollections();
     return c.json({ success: true, data: notifications });
   } catch (error) {
@@ -3012,7 +3012,7 @@ adminRoutes.get("/api/status", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new chunkIRLPSU3C_cjs.IndexManager(db, ai, vectorize);
+    const indexer = new chunkHLEV3RSK_cjs.IndexManager(db, ai, vectorize);
     const status = await indexer.getAllIndexStatus();
     return c.json({ success: true, data: status });
   } catch (error) {
@@ -3025,7 +3025,7 @@ adminRoutes.post("/api/reindex", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new chunkIRLPSU3C_cjs.IndexManager(db, ai, vectorize);
+    const indexer = new chunkHLEV3RSK_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     const collectionIdRaw = body.collection_id;
     const collectionId = collectionIdRaw ? String(collectionIdRaw) : "";
@@ -3044,7 +3044,7 @@ adminRoutes.post("/api/reindex", async (c) => {
 adminRoutes.get("/api/fts5/status", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkIRLPSU3C_cjs.FTS5Service(db);
+    const fts5Service = new chunkHLEV3RSK_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -3072,7 +3072,7 @@ adminRoutes.get("/api/fts5/status", async (c) => {
 adminRoutes.post("/api/fts5/index-collection", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkIRLPSU3C_cjs.FTS5Service(db);
+    const fts5Service = new chunkHLEV3RSK_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -3106,8 +3106,8 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
-    const fts5Service = new chunkIRLPSU3C_cjs.FTS5Service(db);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
+    const fts5Service = new chunkHLEV3RSK_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -3167,7 +3167,7 @@ adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
     if (!ai || !vectorize) {
       return c.json({ error: "Vectorize reindexing requires AI and VECTORIZE_INDEX bindings." }, 400);
     }
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const settings = await service.getSettings();
     const collections2 = settings?.selected_collections || [];
     if (collections2.length === 0) {
@@ -3198,7 +3198,7 @@ adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
     }
     try {
       const benchmarkIds = [];
-      for (const dsId of chunkIRLPSU3C_cjs.BENCHMARK_DATASETS.map((d) => d.id)) {
+      for (const dsId of chunkHLEV3RSK_cjs.BENCHMARK_DATASETS.map((d) => d.id)) {
         for (let i = 0; i < 6e3; i++) {
           for (let chunk = 0; chunk < 3; chunk++) {
             benchmarkIds.push(`beir-${dsId}-${i}-chunk-${chunk}`);
@@ -3212,7 +3212,7 @@ adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
     } catch (e) {
       console.warn("[Vectorize Reindex] Orphan cleanup failed (non-fatal):", e);
     }
-    const indexer = new chunkIRLPSU3C_cjs.IndexManager(db, ai, vectorize);
+    const indexer = new chunkHLEV3RSK_cjs.IndexManager(db, ai, vectorize);
     c.executionCtx.waitUntil(
       indexer.syncAll(collections2).then(() => console.log("[Vectorize Reindex] All collections reindexed")).catch((error) => console.error("[Vectorize Reindex] Error:", error))
     );
@@ -3233,7 +3233,7 @@ adminRoutes.post("/api/relevance/preview", async (c) => {
     const query = body.query?.trim();
     if (!query) return c.json({ error: "query is required" }, 400);
     const limit = Math.min(body.limit || 10, 20);
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db);
     const settings = await service.getSettings();
     const titleWeight = clampWeight(body.title_weight, settings?.fts5_title_boost ?? 5);
     const slugWeight = clampWeight(body.slug_weight, settings?.fts5_slug_boost ?? 2);
@@ -3244,13 +3244,13 @@ adminRoutes.post("/api/relevance/preview", async (c) => {
       fts5_slug_boost: slugWeight,
       fts5_body_boost: bodyWeight
     };
-    const fts5Service = new chunkIRLPSU3C_cjs.FTS5Service(db);
+    const fts5Service = new chunkHLEV3RSK_cjs.FTS5Service(db);
     let result = await fts5Service.search(
       { query, mode: "fts5", limit, offset: 0 },
       previewSettings,
       { titleBoost: titleWeight, slugBoost: slugWeight, bodyBoost: bodyWeight }
     );
-    const pipelineService = new chunkIRLPSU3C_cjs.RankingPipelineService(db);
+    const pipelineService = new chunkHLEV3RSK_cjs.RankingPipelineService(db);
     let pipelineApplied = false;
     try {
       const config = await pipelineService.getConfig();
@@ -3279,7 +3279,7 @@ adminRoutes.post("/api/relevance/preview", async (c) => {
 });
 adminRoutes.get("/api/relevance/pipeline", async (c) => {
   try {
-    const pipelineService = new chunkIRLPSU3C_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkHLEV3RSK_cjs.RankingPipelineService(c.env.DB);
     const config = await pipelineService.getConfig();
     return c.json({ success: true, data: config });
   } catch (error) {
@@ -3293,7 +3293,7 @@ adminRoutes.post("/api/relevance/pipeline", async (c) => {
     if (!Array.isArray(body.stages)) {
       return c.json({ error: "stages must be an array" }, 400);
     }
-    const pipelineService = new chunkIRLPSU3C_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkHLEV3RSK_cjs.RankingPipelineService(c.env.DB);
     await pipelineService.saveConfig(body.stages);
     const saved = await pipelineService.getConfig();
     return c.json({ success: true, data: saved });
@@ -3309,7 +3309,7 @@ adminRoutes.get("/api/relevance/content-scores", async (c) => {
     if (!contentId) {
       return c.json({ error: "content_id query parameter is required" }, 400);
     }
-    const pipelineService = new chunkIRLPSU3C_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkHLEV3RSK_cjs.RankingPipelineService(c.env.DB);
     const scores = await pipelineService.getContentScores([contentId], scoreType);
     return c.json({
       success: true,
@@ -3330,7 +3330,7 @@ adminRoutes.post("/api/relevance/content-scores", async (c) => {
     if (!["popularity", "custom"].includes(scoreType)) {
       return c.json({ error: 'score_type must be "popularity" or "custom"' }, 400);
     }
-    const pipelineService = new chunkIRLPSU3C_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkHLEV3RSK_cjs.RankingPipelineService(c.env.DB);
     await pipelineService.setContentScore(String(contentId), scoreType, Number(score));
     return c.json({ success: true });
   } catch (error) {
@@ -3345,7 +3345,7 @@ adminRoutes.delete("/api/relevance/content-scores", async (c) => {
     if (!contentId || !scoreType) {
       return c.json({ error: "content_id and score_type are required" }, 400);
     }
-    const pipelineService = new chunkIRLPSU3C_cjs.RankingPipelineService(c.env.DB);
+    const pipelineService = new chunkHLEV3RSK_cjs.RankingPipelineService(c.env.DB);
     await pipelineService.deleteContentScore(String(contentId), scoreType);
     return c.json({ success: true });
   } catch (error) {
@@ -3355,7 +3355,7 @@ adminRoutes.delete("/api/relevance/content-scores", async (c) => {
 });
 adminRoutes.get("/api/relevance/synonyms", async (c) => {
   try {
-    const synonymService = new chunkIRLPSU3C_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkHLEV3RSK_cjs.SynonymService(c.env.DB);
     const groups = await synonymService.getAll();
     return c.json({ success: true, data: groups });
   } catch (error) {
@@ -3369,7 +3369,7 @@ adminRoutes.post("/api/relevance/synonyms", async (c) => {
     if (!Array.isArray(body.terms) || body.terms.length < 2) {
       return c.json({ error: "terms must be an array with at least 2 items" }, 400);
     }
-    const synonymService = new chunkIRLPSU3C_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkHLEV3RSK_cjs.SynonymService(c.env.DB);
     const group = await synonymService.create(body.terms, body.enabled !== false);
     return c.json({ success: true, data: group });
   } catch (error) {
@@ -3381,7 +3381,7 @@ adminRoutes.put("/api/relevance/synonyms/:id", async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json();
-    const synonymService = new chunkIRLPSU3C_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkHLEV3RSK_cjs.SynonymService(c.env.DB);
     const group = await synonymService.update(id, {
       terms: body.terms,
       enabled: body.enabled
@@ -3398,7 +3398,7 @@ adminRoutes.put("/api/relevance/synonyms/:id", async (c) => {
 adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    const synonymService = new chunkIRLPSU3C_cjs.SynonymService(c.env.DB);
+    const synonymService = new chunkHLEV3RSK_cjs.SynonymService(c.env.DB);
     const deleted = await synonymService.delete(id);
     if (!deleted) {
       return c.json({ error: "Synonym group not found" }, 404);
@@ -3411,7 +3411,7 @@ adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
 });
 adminRoutes.get("/api/facets/discover", async (c) => {
   try {
-    const facetService = new chunkIRLPSU3C_cjs.FacetService(c.env.DB);
+    const facetService = new chunkHLEV3RSK_cjs.FacetService(c.env.DB);
     const discovered = await facetService.discoverFields();
     return c.json({ success: true, data: discovered });
   } catch (error) {
@@ -3425,7 +3425,7 @@ function stripShadowFacets(config) {
 }
 adminRoutes.get("/api/facets/config", async (c) => {
   try {
-    const service = new chunkIRLPSU3C_cjs.AISearchService(c.env.DB);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(c.env.DB);
     const settings = await service.getSettings();
     const config = stripShadowFacets(settings?.facet_config ?? []);
     return c.json({
@@ -3444,7 +3444,7 @@ adminRoutes.get("/api/facets/config", async (c) => {
 adminRoutes.post("/api/facets/config", async (c) => {
   try {
     const body = await c.req.json();
-    const service = new chunkIRLPSU3C_cjs.AISearchService(c.env.DB);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(c.env.DB);
     const updates = {};
     if (body.enabled !== void 0) updates.facets_enabled = Boolean(body.enabled);
     if (Array.isArray(body.config)) updates.facet_config = stripShadowFacets(body.config);
@@ -3465,10 +3465,10 @@ adminRoutes.post("/api/facets/config", async (c) => {
 });
 adminRoutes.post("/api/facets/auto-generate", async (c) => {
   try {
-    const facetService = new chunkIRLPSU3C_cjs.FacetService(c.env.DB);
+    const facetService = new chunkHLEV3RSK_cjs.FacetService(c.env.DB);
     const discovered = await facetService.discoverFields();
     const config = facetService.autoGenerateConfig(discovered);
-    const service = new chunkIRLPSU3C_cjs.AISearchService(c.env.DB);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(c.env.DB);
     const saved = await service.updateSettings({
       facets_enabled: true,
       facet_config: config
@@ -3584,7 +3584,7 @@ adminRoutes.get("/api/analytics/extended", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const data = await service.getAnalyticsExtended();
     return c.json({ success: true, data });
   } catch (error) {
@@ -3593,14 +3593,14 @@ adminRoutes.get("/api/analytics/extended", async (c) => {
   }
 });
 adminRoutes.get("/api/benchmark/datasets", async (c) => {
-  return c.json({ success: true, datasets: chunkIRLPSU3C_cjs.BENCHMARK_DATASETS });
+  return c.json({ success: true, datasets: chunkHLEV3RSK_cjs.BENCHMARK_DATASETS });
 });
 adminRoutes.get("/api/benchmark/status", async (c) => {
   try {
     const db = c.env.DB;
     const kv = c.env.CACHE_KV;
     const dataset = c.req.query("dataset") || "scifact";
-    const benchmarkService = new chunkIRLPSU3C_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkHLEV3RSK_cjs.BenchmarkService(db, kv, void 0, dataset);
     const { seeded, count } = await benchmarkService.isSeeded();
     const meta = benchmarkService.getMeta();
     const dataAvailable = await benchmarkService.isDataAvailable();
@@ -3645,12 +3645,12 @@ adminRoutes.post("/api/benchmark/seed", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const dataset = body.dataset || "scifact";
     const useSubset = body.corpus_size !== "full";
-    const benchmarkService = new chunkIRLPSU3C_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkHLEV3RSK_cjs.BenchmarkService(db, kv, void 0, dataset);
     const collectionId = benchmarkService.getCollectionId();
     const userId = user.userId || user.id;
     const result = await benchmarkService.seed(String(userId), useSubset);
     if (useSubset) {
-      const fts5Service = new chunkIRLPSU3C_cjs.FTS5Service(db);
+      const fts5Service = new chunkHLEV3RSK_cjs.FTS5Service(db);
       c.executionCtx.waitUntil(
         fts5Service.indexCollection(collectionId).then((r) => console.log(`[Benchmark:${dataset}] FTS5 indexed ${r.indexed_items}/${r.total_items} docs`)).catch((e) => console.error(`[Benchmark:${dataset}] FTS5 indexing error:`, e))
       );
@@ -3686,7 +3686,7 @@ adminRoutes.post("/api/benchmark/purge", async (c) => {
     const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
     const body = await c.req.json().catch(() => ({}));
     const dataset = body.dataset || "scifact";
-    const benchmarkService = new chunkIRLPSU3C_cjs.BenchmarkService(db, kv, vectorize, dataset);
+    const benchmarkService = new chunkHLEV3RSK_cjs.BenchmarkService(db, kv, vectorize, dataset);
     const deleted = await benchmarkService.purge();
     return c.json({
       success: true,
@@ -3701,7 +3701,7 @@ adminRoutes.post("/api/benchmark/purge", async (c) => {
 adminRoutes.post("/api/benchmark/index-fts5-batch", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkIRLPSU3C_cjs.FTS5Service(db);
+    const fts5Service = new chunkHLEV3RSK_cjs.FTS5Service(db);
     if (!await fts5Service.isAvailable()) {
       return c.json({ error: "FTS5 tables not available." }, 400);
     }
@@ -3737,10 +3737,10 @@ adminRoutes.post("/api/benchmark/index-vectorize-batch", async (c) => {
     const batchSize = body.batch_size || 25;
     const offset = body.offset || 0;
     const benchmarkCollectionId = `benchmark-${dataset}-collection`;
-    const datasetInfo = chunkIRLPSU3C_cjs.BENCHMARK_DATASETS.find((d) => d.id === dataset);
+    const datasetInfo = chunkHLEV3RSK_cjs.BENCHMARK_DATASETS.find((d) => d.id === dataset);
     const displayName = datasetInfo ? `${datasetInfo.name} Benchmark` : `BEIR ${dataset} Benchmark`;
-    const embeddingService = new chunkIRLPSU3C_cjs.EmbeddingService(ai);
-    const chunkingService = new chunkIRLPSU3C_cjs.ChunkingService();
+    const embeddingService = new chunkHLEV3RSK_cjs.EmbeddingService(ai);
+    const chunkingService = new chunkHLEV3RSK_cjs.ChunkingService();
     const totalResult = await db.prepare("SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'").bind(benchmarkCollectionId).first();
     const total = totalResult?.cnt || 0;
     if (offset >= total) {
@@ -3850,7 +3850,7 @@ adminRoutes.post("/api/benchmark/index-vectorize", async (c) => {
     }
     const body = await c.req.json().catch(() => ({}));
     const dataset = body.dataset || "scifact";
-    const benchmarkService = new chunkIRLPSU3C_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkHLEV3RSK_cjs.BenchmarkService(db, kv, void 0, dataset);
     const { seeded } = await benchmarkService.isSeeded();
     if (!seeded) {
       return c.json({ error: "Benchmark data not seeded. Seed first." }, 400);
@@ -3886,7 +3886,7 @@ adminRoutes.post("/api/benchmark/evaluate", async (c) => {
     const limit = body.limit || 10;
     const maxQueries = body.max_queries || 0;
     const dataset = body.dataset || "scifact";
-    const benchmarkService = new chunkIRLPSU3C_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkHLEV3RSK_cjs.BenchmarkService(db, kv, void 0, dataset);
     const collectionId = benchmarkService.getCollectionId();
     const { seeded } = await benchmarkService.isSeeded();
     if (!seeded) {
@@ -3896,7 +3896,7 @@ adminRoutes.post("/api/benchmark/evaluate", async (c) => {
       );
     }
     if (mode === "fts5" || mode === "hybrid") {
-      const fts5Service = new chunkIRLPSU3C_cjs.FTS5Service(db);
+      const fts5Service = new chunkHLEV3RSK_cjs.FTS5Service(db);
       if (await fts5Service.isAvailable()) {
         const ftsCount = await db.prepare("SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?").bind(collectionId).first();
         if (!ftsCount || ftsCount.cnt === 0) {
@@ -3935,7 +3935,7 @@ adminRoutes.post("/api/benchmark/evaluate", async (c) => {
         );
       }
     }
-    const aiSearchService = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const aiSearchService = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const searchFn = async (query, searchMode, searchLimit) => {
       const response = await aiSearchService.search({
         query,
@@ -3966,7 +3966,7 @@ adminRoutes.get("/api/benchmark/query-ids", async (c) => {
     const dataset = c.req.query("dataset") || "scifact";
     const db = c.env.DB;
     const kv = c.env.CACHE_KV;
-    const benchmarkService = new chunkIRLPSU3C_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkHLEV3RSK_cjs.BenchmarkService(db, kv, void 0, dataset);
     const ids = await benchmarkService.getEvaluableQueryIds(maxQueries);
     return c.json({ success: true, query_ids: ids, total: ids.length });
   } catch (error) {
@@ -3990,9 +3990,9 @@ adminRoutes.post("/api/benchmark/evaluate-batch", async (c) => {
     if ((mode === "ai" || mode === "hybrid") && !vectorize) {
       return c.json({ error: `${mode.toUpperCase()} mode requires Vectorize binding.` }, 400);
     }
-    const benchmarkService = new chunkIRLPSU3C_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const benchmarkService = new chunkHLEV3RSK_cjs.BenchmarkService(db, kv, void 0, dataset);
     const collectionId = benchmarkService.getCollectionId();
-    const aiSearchService = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const aiSearchService = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const searchFn = async (query, searchMode, searchLimit) => {
       const response = await aiSearchService.search({
         query,
@@ -4020,7 +4020,7 @@ apiRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const body = await c.req.json();
     const query = {
       query: body.query || "",
@@ -4060,11 +4060,8 @@ apiRoutes.get("/suggest", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const query = c.req.query("q") || "";
-    if (!query || query.length < 2) {
-      return c.json({ success: true, data: [] });
-    }
     const suggestions = await service.getSearchSuggestions(query);
     return c.json({
       success: true,
@@ -4154,7 +4151,7 @@ apiRoutes.get("/analytics", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const service = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const analytics = await service.getSearchAnalytics();
     return c.json({
       success: true,
@@ -4406,7 +4403,7 @@ instantSearchRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const searchService = new chunkIRLPSU3C_cjs.AISearchService(db, ai, vectorize);
+    const searchService = new chunkHLEV3RSK_cjs.AISearchService(db, ai, vectorize);
     const adapter = new InstantSearchAdapter(db);
     const body = await c.req.json();
     if (!body.requests || !Array.isArray(body.requests)) {
@@ -5020,27 +5017,32 @@ integrationGuideRoutes.get("/integration", async (c) => {
     const resultsDiv = document.getElementById('results');
     let timeout;
 
-    // Autocomplete
-    searchInput.addEventListener('input', async (e) =&gt; {
-      const query = e.target.value.trim();
+    // Autocomplete — trending on focus, prefix suggestions on input
+    function fetchSuggestions(query) {
       clearTimeout(timeout);
-      
-      if (query.length &lt; 2) {
-        suggestionsDiv.style.display = 'none';
-        return;
-      }
-
       timeout = setTimeout(async () =&gt; {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:8px 10px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${header}\${
             data.data.map(s =&gt; \`&lt;div class="suggestion" onclick="search('\${s}')"&gt;\${s}&lt;/div&gt;\`).join('')
           }&lt;/div&gt;\`;
           suggestionsDiv.style.display = 'block';
+        } else {
+          suggestionsDiv.style.display = 'none';
         }
-      }, 300);
+      }, query.length &lt; 2 ? 100 : 300);
+    }
+
+    searchInput.addEventListener('focus', () =&gt; {
+      if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+    });
+
+    searchInput.addEventListener('input', (e) =&gt; {
+      fetchSuggestions(e.target.value.trim());
     });
 
     // Search
@@ -5099,21 +5101,16 @@ export function AISearch() {
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
-  // Autocomplete
+  // Autocomplete — returns trending for empty/short input, prefix suggestions for 2+ chars
   useEffect(() =&gt; {
-    if (query.length &lt; 2) {
-      setSuggestions([]);
-      return;
-    }
-    
     const timeout = setTimeout(async () =&gt; {
       const res = await fetch(
         \`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`
       );
       const data = await res.json();
       if (data.success) setSuggestions(data.data);
-    }, 300);
-    
+    }, query.length &lt; 2 ? 100 : 300);
+
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
@@ -5274,24 +5271,18 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
   let searchTimeout;
   let suggestTimeout;
 
-  // Autocomplete
-  searchInput.addEventListener('input', async (e) =&gt; {
-    const query = e.target.value.trim();
-    
+  // Autocomplete — trending on focus, prefix on input
+  function fetchSuggestions(query) {
     clearTimeout(suggestTimeout);
-    
-    if (query.length &lt; 2) {
-      suggestionsDiv.classList.remove('show');
-      return;
-    }
-
     suggestTimeout = setTimeout(async () =&gt; {
       try {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = data.data
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = header + data.data
             .map(s =&gt; \`&lt;div class="suggestion" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')"&gt;\${s}&lt;/div&gt;\`)
             .join('');
           suggestionsDiv.classList.add('show');
@@ -5301,7 +5292,15 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
       } catch (error) {
         console.error('Autocomplete error:', error);
       }
-    }, 300);
+    }, query.length &lt; 2 ? 100 : 300);
+  }
+
+  searchInput.addEventListener('focus', () =&gt; {
+    if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+  });
+
+  searchInput.addEventListener('input', (e) =&gt; {
+    fetchSuggestions(e.target.value.trim());
   });
 
   // Search with debounce
@@ -5442,19 +5441,17 @@ let searchTimeout;
 let suggestTimeout;
 
 watch(query, (newQuery) =&gt; {
-  if (newQuery.length &lt; 2) {
+  // Search (only for 2+ chars)
+  if (newQuery.length &gt;= 2) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
+  } else {
     results.value = [];
-    suggestions.value = [];
-    return;
   }
-  
-  // Search
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
-  
-  // Autocomplete
+
+  // Autocomplete — trending for empty/short, prefix for 2+ chars
   clearTimeout(suggestTimeout);
-  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), 300);
+  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), newQuery.length &lt; 2 ? 100 : 300);
 });
 
 async function performSearch(q) {
@@ -5612,7 +5609,7 @@ export default function SearchPage() {
                 <div class="card">
                   <h4>Autocomplete</h4>
                   <p><strong>GET</strong> <code>/api/search/suggest?q=query</code></p>
-                  <p>Get instant suggestions (&lt;50ms)</p>
+                  <p>Trending queries on empty input, data-driven prefix suggestions on 2+ chars (&lt;50ms)</p>
                 </div>
                 <div class="card">
                   <h4>InstantSearch API</h4>
@@ -5624,6 +5621,21 @@ export default function SearchPage() {
                   <p><strong>POST</strong> <code>/api/search/click</code></p>
                   <p>Record result clicks for CTR analytics</p>
                 </div>
+              </div>
+
+              <h3>Autocomplete / Suggest</h3>
+              <p>The suggest endpoint provides <strong>data-driven suggestions</strong> powered by real search analytics:</p>
+              <pre><code>GET /api/search/suggest?q=         // Empty → trending queries (top 10, last 7 days)
+GET /api/search/suggest?q=cl       // Short → trending queries
+GET /api/search/suggest?q=cloud    // 2+ chars → popular query prefixes + content titles</code></pre>
+              <div class="info-box">
+                <strong>Key features:</strong>
+                <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                  <li>Suggestions ranked by real search frequency (not just recency)</li>
+                  <li>Zero-result queries are automatically filtered out</li>
+                  <li>Content title prefix matching via FTS5 fills gaps when query history is sparse</li>
+                  <li>Focus the search box to show trending searches before the user types</li>
+                </ul>
               </div>
 
               <h3>Search Request</h3>
@@ -6079,7 +6091,7 @@ testPageRoutes.get("/test", async (c) => {
             <strong>Performance Testing:</strong> Watch how similarity caching speeds up repeated queries.
             First query to a term may take 500-800ms, but similar queries should be much faster!
             <br><br>
-            <strong>Autocomplete:</strong> Type 2+ characters to see instant suggestions (<50ms).
+            <strong>Autocomplete:</strong> Focus the search box to see trending searches, or type to get data-driven suggestions (<50ms).
             <br><br>
             <strong>For Developers:</strong> Want to add AI search to your own frontend? 
             <a href="/admin/plugins/ai-search/integration"
@@ -6154,16 +6166,9 @@ testPageRoutes.get("/test", async (c) => {
 
           let suggestionTimeout;
 
-          // Autocomplete
-          searchInput.addEventListener('input', async (e) => {
-            const query = e.target.value.trim();
-            
+          function fetchTestSuggestions(query) {
             clearTimeout(suggestionTimeout);
-            
-            if (query.length < 2) {
-              suggestionsDiv.classList.remove('show');
-              return;
-            }
+            const debounceMs = query.length < 2 ? 100 : 200;
 
             suggestionTimeout = setTimeout(async () => {
               const startTime = performance.now();
@@ -6172,22 +6177,40 @@ testPageRoutes.get("/test", async (c) => {
                 const data = await response.json();
                 const endTime = performance.now();
                 const duration = Math.round(endTime - startTime);
-                
+
                 if (data.success && data.data.length > 0) {
-                  suggestionsDiv.innerHTML = data.data.map(s => 
+                  const isTrending = query.length < 2;
+                  const header = isTrending
+                    ? '<div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.05em;">Trending Searches</div>'
+                    : '';
+                  suggestionsDiv.innerHTML = header + data.data.map(s =>
                     \`<div class="suggestion-item" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')">
                       <strong>\${s}</strong>
                     </div>\`
                   ).join('');
                   suggestionsDiv.classList.add('show');
-                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\`);
+                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\${isTrending ? ' (trending)' : ''}\`);
                 } else {
                   suggestionsDiv.classList.remove('show');
                 }
               } catch (error) {
                 console.error('Autocomplete error:', error);
               }
-            }, 200); // Fast debounce for instant feel
+            }, debounceMs);
+          }
+
+          // Trending on focus
+          searchInput.addEventListener('focus', (e) => {
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+              fetchTestSuggestions('');
+            }
+          });
+
+          // Prefix suggestions on input
+          searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            fetchTestSuggestions(query);
           });
 
           // Hide suggestions on click outside
@@ -6352,7 +6375,7 @@ var aiSearchPlugin = new chunk6FHNRRJ3_cjs.PluginBuilder({
 }).metadata({
   description: manifest_default.description,
   author: { name: manifest_default.author }
-}).addService("aiSearch", chunkIRLPSU3C_cjs.AISearchService).addService("indexManager", chunkIRLPSU3C_cjs.IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/api/instantsearch", instantsearch_api_default).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", instantsearch_test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
+}).addService("aiSearch", chunkHLEV3RSK_cjs.AISearchService).addService("indexManager", chunkHLEV3RSK_cjs.IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/api/instantsearch", instantsearch_api_default).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", instantsearch_test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
 var magicLinkRequestSchema = zod.z.object({
   email: zod.z.string().email("Valid email is required")
 });
@@ -6499,12 +6522,12 @@ function createMagicLinkAuthPlugin() {
         SET used = 1, used_at = ?
         WHERE id = ?
       `).bind(Date.now(), magicLink.id).run();
-      const jwtToken = await chunkHHLIMKET_cjs.AuthManager.generateToken(
+      const jwtToken = await chunkLOL3ENL7_cjs.AuthManager.generateToken(
         user.id,
         user.email,
         user.role
       );
-      chunkHHLIMKET_cjs.AuthManager.setAuthCookie(c, jwtToken);
+      chunkLOL3ENL7_cjs.AuthManager.setAuthCookie(c, jwtToken);
       await db.prepare(`
         UPDATE users SET last_login_at = ? WHERE id = ?
       `).bind(Date.now(), user.id).run();
@@ -7790,7 +7813,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunkIRLPSU3C_cjs.renderConfirmationDialog({
+    ${chunkHLEV3RSK_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -7801,7 +7824,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunkIRLPSU3C_cjs.renderConfirmationDialog({
+    ${chunkHLEV3RSK_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -7812,7 +7835,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunkIRLPSU3C_cjs.getConfirmationDialogScript()}
+    ${chunkHLEV3RSK_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -8540,8 +8563,8 @@ function createSonicJSApp(config = {}) {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkHHLIMKET_cjs.metricsMiddleware());
-  app2.use("*", chunkHHLIMKET_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkLOL3ENL7_cjs.metricsMiddleware());
+  app2.use("*", chunkLOL3ENL7_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -8558,22 +8581,22 @@ function createSonicJSApp(config = {}) {
       app2.use("*", middleware);
     }
   }
-  app2.route("/api", chunkIRLPSU3C_cjs.api_default);
-  app2.route("/api/media", chunkIRLPSU3C_cjs.api_media_default);
-  app2.route("/api/system", chunkIRLPSU3C_cjs.api_system_default);
-  app2.route("/admin/api", chunkIRLPSU3C_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunkIRLPSU3C_cjs.router);
-  app2.route("/admin/collections", chunkIRLPSU3C_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunkIRLPSU3C_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunkIRLPSU3C_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunkIRLPSU3C_cjs.public_forms_default);
-  app2.route("/api/forms", chunkIRLPSU3C_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunkIRLPSU3C_cjs.router2);
+  app2.route("/api", chunkHLEV3RSK_cjs.api_default);
+  app2.route("/api/media", chunkHLEV3RSK_cjs.api_media_default);
+  app2.route("/api/system", chunkHLEV3RSK_cjs.api_system_default);
+  app2.route("/admin/api", chunkHLEV3RSK_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunkHLEV3RSK_cjs.router);
+  app2.route("/admin/collections", chunkHLEV3RSK_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunkHLEV3RSK_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunkHLEV3RSK_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunkHLEV3RSK_cjs.public_forms_default);
+  app2.route("/api/forms", chunkHLEV3RSK_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunkHLEV3RSK_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunkIRLPSU3C_cjs.admin_content_default);
-  app2.route("/admin/media", chunkIRLPSU3C_cjs.adminMediaRoutes);
-  app2.route("/admin/search", chunkIRLPSU3C_cjs.adminSearchRoutes);
+  app2.route("/admin/content", chunkHLEV3RSK_cjs.admin_content_default);
+  app2.route("/admin/media", chunkHLEV3RSK_cjs.adminMediaRoutes);
+  app2.route("/admin/search", chunkHLEV3RSK_cjs.adminSearchRoutes);
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
     for (const route of aiSearchPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8585,11 +8608,11 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunkIRLPSU3C_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunkIRLPSU3C_cjs.adminLogsRoutes);
-  app2.route("/admin", chunkIRLPSU3C_cjs.userRoutes);
-  app2.route("/auth", chunkIRLPSU3C_cjs.auth_default);
-  app2.route("/", chunkIRLPSU3C_cjs.test_cleanup_default);
+  app2.route("/admin/plugins", chunkHLEV3RSK_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunkHLEV3RSK_cjs.adminLogsRoutes);
+  app2.route("/admin", chunkHLEV3RSK_cjs.userRoutes);
+  app2.route("/auth", chunkHLEV3RSK_cjs.auth_default);
+  app2.route("/", chunkHLEV3RSK_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8681,79 +8704,79 @@ var VERSION = chunkUOEIMC67_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.ROUTES_INFO; }
+  get: function () { return chunkHLEV3RSK_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.admin_api_default; }
+  get: function () { return chunkHLEV3RSK_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.adminCheckboxRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.admin_code_examples_default; }
+  get: function () { return chunkHLEV3RSK_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.adminCollectionsRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.admin_content_default; }
+  get: function () { return chunkHLEV3RSK_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.router; }
+  get: function () { return chunkHLEV3RSK_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.adminDesignRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.adminLogsRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.adminMediaRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.adminPluginRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.adminSettingsRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.admin_testimonials_default; }
+  get: function () { return chunkHLEV3RSK_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.userRoutes; }
+  get: function () { return chunkHLEV3RSK_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.api_content_crud_default; }
+  get: function () { return chunkHLEV3RSK_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.api_media_default; }
+  get: function () { return chunkHLEV3RSK_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.api_default; }
+  get: function () { return chunkHLEV3RSK_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.api_system_default; }
+  get: function () { return chunkHLEV3RSK_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkIRLPSU3C_cjs.auth_default; }
+  get: function () { return chunkHLEV3RSK_cjs.auth_default; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
@@ -8921,83 +8944,83 @@ Object.defineProperty(exports, "workflowHistory", {
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.AuthManager; }
+  get: function () { return chunkLOL3ENL7_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.PermissionManager; }
+  get: function () { return chunkLOL3ENL7_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.bootstrapMiddleware; }
+  get: function () { return chunkLOL3ENL7_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.cacheHeaders; }
+  get: function () { return chunkLOL3ENL7_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.compressionMiddleware; }
+  get: function () { return chunkLOL3ENL7_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkLOL3ENL7_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.getActivePlugins; }
+  get: function () { return chunkLOL3ENL7_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.isPluginActive; }
+  get: function () { return chunkLOL3ENL7_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.logActivity; }
+  get: function () { return chunkLOL3ENL7_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.loggingMiddleware; }
+  get: function () { return chunkLOL3ENL7_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.optionalAuth; }
+  get: function () { return chunkLOL3ENL7_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkLOL3ENL7_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.requireActivePlugin; }
+  get: function () { return chunkLOL3ENL7_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.requireActivePlugins; }
+  get: function () { return chunkLOL3ENL7_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.requireAnyPermission; }
+  get: function () { return chunkLOL3ENL7_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.requireAuth; }
+  get: function () { return chunkLOL3ENL7_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.requirePermission; }
+  get: function () { return chunkLOL3ENL7_cjs.requirePermission; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.requireRole; }
+  get: function () { return chunkLOL3ENL7_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.securityHeaders; }
+  get: function () { return chunkLOL3ENL7_cjs.securityHeaders; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkHHLIMKET_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkLOL3ENL7_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
@@ -9053,7 +9076,7 @@ Object.defineProperty(exports, "validateCollectionConfig", {
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunk4Y5EPOEV_cjs.MigrationService; }
+  get: function () { return chunkGGCCETDO_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,

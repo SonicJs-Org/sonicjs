@@ -1,9 +1,9 @@
 'use strict';
 
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkYZRINJP5_cjs = require('./chunk-YZRINJP5.cjs');
+var chunkHTUZE2B6_cjs = require('./chunk-HTUZE2B6.cjs');
 var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkVVY7W23T_cjs = require('./chunk-VVY7W23T.cjs');
+var chunkG5UQHRZC_cjs = require('./chunk-G5UQHRZC.cjs');
 var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
 var chunkUOEIMC67_cjs = require('./chunk-UOEIMC67.cjs');
@@ -1152,7 +1152,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -1224,7 +1224,7 @@ apiContentCrudRoutes.post("/", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1294,7 +1294,7 @@ apiContentCrudRoutes.put("/:id", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1336,7 +1336,7 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunkYZRINJP5_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkHTUZE2B6_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
@@ -2072,7 +2072,7 @@ var fileValidationSchema = zod.z.object({
   // 50MB max
 });
 var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+apiMediaRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -2816,8 +2816,8 @@ apiSystemRoutes.get("/env", (c) => {
 });
 var api_system_default = apiSystemRoutes;
 var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
-adminApiRoutes.use("*", chunkYZRINJP5_cjs.requireRole(["admin", "editor"]));
+adminApiRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
+adminApiRoutes.use("*", chunkHTUZE2B6_cjs.requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -3327,7 +3327,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-BEJC4WS3.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-D3FNMXAM.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -3352,7 +3352,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-BEJC4WS3.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-D3FNMXAM.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -3371,7 +3371,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-BEJC4WS3.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-D3FNMXAM.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -3853,7 +3853,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunkYZRINJP5_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -3873,7 +3873,7 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkYZRINJP5_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -3914,23 +3914,15 @@ authRoutes.post("/login", async (c) => {
     const { email, password } = validation.data;
     const db = c.env.DB;
     const normalizedEmail = email.toLowerCase();
-    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.user);
-    let user = await cache.get(cache.generateKey("user", `email:${normalizedEmail}`));
-    if (!user) {
-      user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
-      if (user) {
-        await cache.set(cache.generateKey("user", `email:${normalizedEmail}`), user);
-        await cache.set(cache.generateKey("user", user.id), user);
-      }
-    }
+    const user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await chunkYZRINJP5_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkHTUZE2B6_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await chunkYZRINJP5_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -3939,8 +3931,6 @@ authRoutes.post("/login", async (c) => {
       // 24 hours
     });
     await db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").bind((/* @__PURE__ */ new Date()).getTime(), user.id).run();
-    await cache.delete(cache.generateKey("user", user.id));
-    await cache.delete(cache.generateKey("user", `email:${normalizedEmail}`));
     return c.json({
       user: {
         id: user.id,
@@ -3979,7 +3969,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -3996,13 +3986,13 @@ authRoutes.get("/me", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunkYZRINJP5_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", chunkHTUZE2B6_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunkYZRINJP5_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
+    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -4062,7 +4052,7 @@ authRoutes.post("/register/form", async (c) => {
         </div>
       `);
     }
-    const passwordHash = await chunkYZRINJP5_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -4082,7 +4072,7 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await chunkYZRINJP5_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
+    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -4134,7 +4124,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const isValidPassword = await chunkYZRINJP5_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkHTUZE2B6_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -4142,7 +4132,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const token = await chunkYZRINJP5_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkHTUZE2B6_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -4201,7 +4191,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await chunkYZRINJP5_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await chunkHTUZE2B6_cjs.AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -4213,7 +4203,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await chunkYZRINJP5_cjs.AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -4433,7 +4423,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunkYZRINJP5_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -4452,7 +4442,7 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunkYZRINJP5_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    const authToken = await chunkHTUZE2B6_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
     cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
@@ -4682,7 +4672,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunkYZRINJP5_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -9221,7 +9211,7 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminContentRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
   const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
@@ -11887,7 +11877,7 @@ function renderUsersListPage(data) {
       sortable: true,
       sortType: "string",
       render: (_value, row) => {
-        const escapeHtml6 = (text) => text.replace(/[&<>"']/g, (char) => ({
+        const escapeHtml7 = (text) => text.replace(/[&<>"']/g, (char) => ({
           "&": "&amp;",
           "<": "&lt;",
           ">": "&gt;",
@@ -11896,9 +11886,9 @@ function renderUsersListPage(data) {
         })[char] || char);
         const truncatedFirstName = row.firstName.length > 25 ? row.firstName.substring(0, 25) + "..." : row.firstName;
         const truncatedLastName = row.lastName.length > 25 ? row.lastName.substring(0, 25) + "..." : row.lastName;
-        const fullName = escapeHtml6(`${truncatedFirstName} ${truncatedLastName}`);
+        const fullName = escapeHtml7(`${truncatedFirstName} ${truncatedLastName}`);
         const truncatedUsername = row.username.length > 100 ? row.username.substring(0, 100) + "..." : row.username;
-        const username = escapeHtml6(truncatedUsername);
+        const username = escapeHtml7(truncatedUsername);
         const statusBadge = row.isActive ? '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-300 ring-1 ring-inset ring-lime-700/10 dark:ring-lime-400/20 ml-2">Active</span>' : '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-700/10 dark:ring-red-500/20 ml-2">Inactive</span>';
         return `
           <div>
@@ -11914,14 +11904,14 @@ function renderUsersListPage(data) {
       sortable: true,
       sortType: "string",
       render: (value) => {
-        const escapeHtml6 = (text) => text.replace(/[&<>"']/g, (char) => ({
+        const escapeHtml7 = (text) => text.replace(/[&<>"']/g, (char) => ({
           "&": "&amp;",
           "<": "&lt;",
           ">": "&gt;",
           '"': "&quot;",
           "'": "&#39;"
         })[char] || char);
-        const escapedEmail = escapeHtml6(value);
+        const escapedEmail = escapeHtml7(value);
         return `<a href="mailto:${escapedEmail}" class="text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition-colors">${escapedEmail}</a>`;
       }
     },
@@ -12269,7 +12259,7 @@ function renderUsersListPage(data) {
 
 // src/routes/admin-users.ts
 var userRoutes = new hono.Hono();
-userRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+userRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -12424,7 +12414,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -12487,7 +12477,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -12558,7 +12548,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunkYZRINJP5_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkHTUZE2B6_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -12566,7 +12556,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunkYZRINJP5_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -12582,7 +12572,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -12649,7 +12639,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -12803,7 +12793,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunkYZRINJP5_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkHTUZE2B6_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12826,7 +12816,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -12864,7 +12854,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -12916,21 +12906,25 @@ userRoutes.get("/users/:id/edit", async (c) => {
         dismissible: true
       }), 404);
     }
-    const profileStmt = db.prepare(`
-      SELECT display_name, bio, company, job_title, website, location, date_of_birth
-      FROM user_profiles
-      WHERE user_id = ?
-    `);
-    const profileData = await profileStmt.bind(userId).first();
-    const profile = profileData ? {
-      displayName: profileData.display_name,
-      bio: profileData.bio,
-      company: profileData.company,
-      jobTitle: profileData.job_title,
-      website: profileData.website,
-      location: profileData.location,
-      dateOfBirth: profileData.date_of_birth
-    } : void 0;
+    let profile = void 0;
+    try {
+      const profileStmt = db.prepare(`
+        SELECT display_name, bio, company, job_title, website, location, date_of_birth
+        FROM user_profiles
+        WHERE user_id = ?
+      `);
+      const profileData = await profileStmt.bind(userId).first();
+      profile = profileData ? {
+        displayName: profileData.display_name,
+        bio: profileData.bio,
+        company: profileData.company,
+        jobTitle: profileData.job_title,
+        website: profileData.website,
+        location: profileData.location,
+        dateOfBirth: profileData.date_of_birth
+      } : void 0;
+    } catch (_) {
+    }
     const editData = {
       id: userToEdit.id,
       email: userToEdit.email,
@@ -13048,48 +13042,68 @@ userRoutes.put("/users/:id", async (c) => {
     const hasProfileData = profileDisplayName || profileBio || profileCompany || profileJobTitle || profileWebsite || profileLocation || profileDateOfBirth;
     if (hasProfileData) {
       const now = Date.now();
-      const profileCheckStmt = db.prepare(`SELECT id FROM user_profiles WHERE user_id = ?`);
-      const existingProfile = await profileCheckStmt.bind(userId).first();
-      if (existingProfile) {
-        const updateProfileStmt = db.prepare(`
-          UPDATE user_profiles SET
-            display_name = ?, bio = ?, company = ?, job_title = ?,
-            website = ?, location = ?, date_of_birth = ?, updated_at = ?
-          WHERE user_id = ?
-        `);
-        await updateProfileStmt.bind(
-          profileDisplayName,
-          profileBio,
-          profileCompany,
-          profileJobTitle,
-          profileWebsite,
-          profileLocation,
-          profileDateOfBirth,
-          now,
-          userId
-        ).run();
-      } else {
-        const profileId = `profile_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        const insertProfileStmt = db.prepare(`
-          INSERT INTO user_profiles (id, user_id, display_name, bio, company, job_title, website, location, date_of_birth, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        await insertProfileStmt.bind(
-          profileId,
-          userId,
-          profileDisplayName,
-          profileBio,
-          profileCompany,
-          profileJobTitle,
-          profileWebsite,
-          profileLocation,
-          profileDateOfBirth,
-          now,
-          now
-        ).run();
+      try {
+        await db.prepare(`
+          CREATE TABLE IF NOT EXISTS user_profiles (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            display_name TEXT,
+            bio TEXT,
+            company TEXT,
+            job_title TEXT,
+            website TEXT,
+            location TEXT,
+            date_of_birth TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(user_id)
+          )
+        `).run();
+        const profileCheckStmt = db.prepare(`SELECT id FROM user_profiles WHERE user_id = ?`);
+        const existingProfile = await profileCheckStmt.bind(userId).first();
+        if (existingProfile) {
+          const updateProfileStmt = db.prepare(`
+            UPDATE user_profiles SET
+              display_name = ?, bio = ?, company = ?, job_title = ?,
+              website = ?, location = ?, date_of_birth = ?, updated_at = ?
+            WHERE user_id = ?
+          `);
+          await updateProfileStmt.bind(
+            profileDisplayName,
+            profileBio,
+            profileCompany,
+            profileJobTitle,
+            profileWebsite,
+            profileLocation,
+            profileDateOfBirth,
+            now,
+            userId
+          ).run();
+        } else {
+          const profileId = `profile_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          const insertProfileStmt = db.prepare(`
+            INSERT INTO user_profiles (id, user_id, display_name, bio, company, job_title, website, location, date_of_birth, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          await insertProfileStmt.bind(
+            profileId,
+            userId,
+            profileDisplayName,
+            profileBio,
+            profileCompany,
+            profileJobTitle,
+            profileWebsite,
+            profileLocation,
+            profileDateOfBirth,
+            now,
+            now
+          ).run();
+        }
+      } catch (profileError) {
+        console.error("Failed to save user profile data:", profileError);
       }
     }
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -13134,7 +13148,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -13175,7 +13189,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunkYZRINJP5_cjs.logActivity(
+      await chunkHTUZE2B6_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -13194,7 +13208,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunkYZRINJP5_cjs.logActivity(
+      await chunkHTUZE2B6_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -13260,7 +13274,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -13317,7 +13331,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -13353,7 +13367,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -13436,7 +13450,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -13543,7 +13557,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunkYZRINJP5_cjs.logActivity(
+    await chunkHTUZE2B6_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -14882,7 +14896,7 @@ var fileValidationSchema2 = zod.z.object({
   // 50MB max
 });
 var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminMediaRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -15468,7 +15482,7 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunkYZRINJP5_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkHTUZE2B6_cjs.requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -17675,7 +17689,7 @@ function renderEmailSettingsContent(plugin, settings) {
 
 // src/routes/admin-plugins.ts
 var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminPluginRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -19080,7 +19094,7 @@ function renderLogConfigPage(data) {
 
 // src/routes/admin-logs.ts
 var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminLogsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -21410,7 +21424,7 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 // src/routes/admin-dashboard.ts
 var VERSION = chunkUOEIMC67_cjs.getCoreVersion();
 var router = new hono.Hono();
-router.use("*", chunkYZRINJP5_cjs.requireAuth());
+router.use("*", chunkHTUZE2B6_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -23190,7 +23204,7 @@ function renderCollectionFormPage(data) {
 
 // src/routes/admin-collections.ts
 var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminCollectionsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -25387,7 +25401,7 @@ function renderDatabaseToolsSettings(settings) {
 
 // src/routes/admin-settings.ts
 var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminSettingsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -25555,7 +25569,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkVVY7W23T_cjs.MigrationService(db);
+    const migrationService = new chunkG5UQHRZC_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -25579,7 +25593,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkVVY7W23T_cjs.MigrationService(db);
+    const migrationService = new chunkG5UQHRZC_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -25597,7 +25611,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkVVY7W23T_cjs.MigrationService(db);
+    const migrationService = new chunkG5UQHRZC_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -27475,7 +27489,7 @@ function renderFormCreatePage(data) {
 
 // src/routes/admin-forms.ts
 var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminFormsRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -28607,7 +28621,7 @@ function renderAPIReferencePage(data) {
 // src/routes/admin-api-reference.ts
 var VERSION2 = chunkUOEIMC67_cjs.getCoreVersion();
 var router2 = new hono.Hono();
-router2.use("*", chunkYZRINJP5_cjs.requireAuth());
+router2.use("*", chunkHTUZE2B6_cjs.requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -31795,8 +31809,14 @@ function renderSearchDashboard(data) {
     }
   }
   const vectorizeStatusText = vectorizeHasData ? `Vectorize index: ${vectorizeIndexedItems} items indexed` : "Click reindex to rebuild the vector index for all selected collections";
-  const searchMode = aiModeEnabled ? "Hybrid" : "FTS5 Only";
   const totalQueries = data.analytics ? data.analytics.total_queries : 0;
+  const queriesToday = data.queriesToday ?? 0;
+  const totalClicks30d = data.totalClicks30d ?? 0;
+  const zeroResults30d = data.zeroResults30d ?? 0;
+  const avgQueryTime = data.analytics ? data.analytics.average_query_time : 0;
+  const ctr = totalQueries > 0 ? (totalClicks30d / totalQueries * 100).toFixed(1) : null;
+  const popularQueries = data.analytics ? data.analytics.popular_queries || [] : [];
+  const facetsEnabled = settings.facets_enabled === true;
   const pageContent = `
     <div class="space-y-6">
       <!-- Tab Navigation -->
@@ -31873,72 +31893,127 @@ function renderSearchDashboard(data) {
 
         <!-- Stat Cards -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-6">
-          ${renderStatCard("Total Indexed Docs", String(fts5TotalIndexed), "lime", `
+          ${renderStatCard("Indexed Documents", String(fts5TotalIndexed), "lime", `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
           `)}
 
-          ${renderStatCard("FTS5 Status", fts5Available ? "Available" : "Unavailable", fts5Available ? "lime" : "red", `
+          ${renderStatCard("Queries Today", String(queriesToday), "sky", `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
           `)}
 
-          ${renderStatCard("Search Mode", searchMode, "purple", `
+          ${renderStatCard("Avg Response Time", avgQueryTime > 0 ? avgQueryTime + "ms" : "N/A", "purple", `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           `)}
 
-          ${renderStatCard("Total Queries", String(totalQueries), "sky", `
+          ${renderStatCard("Click-Through Rate", ctr !== null ? ctr + "%" : "N/A", "amber", `
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
             </svg>
           `)}
         </div>
 
-        <!-- System Status -->
-        <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 mt-6">
-          <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
-            <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">System Status</h2>
+        <!-- Feature Status & Search Activity -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <!-- Feature Status -->
+          <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Feature Status</h2>
+            </div>
+            <div class="p-6">
+              <div class="grid grid-cols-2 gap-x-8 gap-y-3">
+                ${renderFeatureToggle("Search", enabled)}
+                ${renderFeatureToggle("AI Mode", aiModeEnabled)}
+                ${renderFeatureToggle("Faceted Search", facetsEnabled)}
+                ${renderFeatureToggle("Query Rewriting", settings.query_rewriting_enabled === true)}
+                ${renderFeatureToggle("Reranking", settings.reranking_enabled === true)}
+                ${renderFeatureToggle("Synonyms", settings.query_synonyms_enabled !== false)}
+              </div>
+            </div>
           </div>
-          <div class="p-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Binding Availability</h3>
-                <div class="space-y-2">
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">FTS5 (SQLite)</span>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${fts5Available ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20"}">${fts5Available ? "Available" : "Unavailable"}</span>
+
+          <!-- Search Activity -->
+          <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Search Activity</h2>
+            </div>
+            <div class="p-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Quick Stats -->
+                <div>
+                  <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Quick Stats</h3>
+                  <div class="space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Total Queries (30d)</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${totalQueries}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Queries Today</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${queriesToday}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Total Clicks (30d)</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${totalClicks30d}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                      <span class="text-zinc-600 dark:text-zinc-400">Zero-Result Queries</span>
+                      <span class="font-medium text-zinc-900 dark:text-zinc-100">${zeroResults30d}</span>
+                    </div>
                   </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">AI / Vectorize</span>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${aiModeEnabled ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20"}">${aiModeEnabled ? "Enabled" : "Disabled"}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Search Enabled</span>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${enabled ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20"}">${enabled ? "Yes" : "No"}</span>
-                  </div>
+                </div>
+                <!-- Popular Queries -->
+                <div>
+                  <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Popular Queries</h3>
+                  ${popularQueries.length > 0 ? `
+                    <div class="space-y-2">
+                      ${popularQueries.slice(0, 5).map((q) => `
+                        <div class="flex items-center justify-between text-sm">
+                          <span class="text-zinc-600 dark:text-zinc-400 truncate mr-2">${escapeHtml6(q.query)}</span>
+                          <span class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-400">${q.count}</span>
+                        </div>
+                      `).join("")}
+                      <button onclick="switchTab('analytics')" class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
+                        View all in Analytics &rarr;
+                      </button>
+                    </div>
+                  ` : `
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">No queries recorded yet.</p>
+                  `}
                 </div>
               </div>
-              <div>
-                <h3 class="text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-3">Index Summary</h3>
-                <div class="space-y-2">
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Indexed Collections</span>
-                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${fts5Status ? Object.keys(fts5Status.by_collection || {}).length : 0}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Total Documents</span>
-                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${fts5TotalIndexed}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-sm">
-                    <span class="text-zinc-600 dark:text-zinc-400">Selected Collections</span>
-                    <span class="font-medium text-zinc-900 dark:text-zinc-100">${selectedCollections.length}</span>
-                  </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Index Health -->
+        <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 mt-6">
+          <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+            <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Index Health</h2>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-zinc-600 dark:text-zinc-400">FTS5</span>
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${fts5Available ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20"}">${fts5Available ? "Available" : "Unavailable"}</span>
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">${fts5TotalIndexed} docs</span>
                 </div>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-zinc-600 dark:text-zinc-400">Vectorize</span>
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${aiModeEnabled ? "bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-400 ring-1 ring-inset ring-lime-600/20 dark:ring-lime-500/20" : "bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20"}">${aiModeEnabled ? "Enabled" : "Disabled"}</span>
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">${vectorizeIndexedItems} items</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-zinc-600 dark:text-zinc-400">Collections</span>
+                <span class="font-medium text-zinc-900 dark:text-zinc-100">${selectedCollections.length} selected / ${collections.length} total</span>
               </div>
             </div>
           </div>
@@ -32267,9 +32342,9 @@ function renderSearchDashboard(data) {
             </div>
           </div>
           <div id="benchmark-results" class="hidden">
-            <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-              <h3 class="text-sm font-semibold text-zinc-950 dark:text-white mb-3" id="benchmark-results-title">Results</h3>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" id="benchmark-metrics"></div>
+            <div class="space-y-6">
+              <h3 class="text-lg font-semibold text-zinc-950 dark:text-white" id="benchmark-results-title">Results</h3>
+              <div id="benchmark-metrics"></div>
               <div class="text-xs text-zinc-500 dark:text-zinc-400" id="benchmark-details"></div>
             </div>
           </div>
@@ -33558,8 +33633,15 @@ function renderSearchDashboard(data) {
         }
 
         var datasetNames = { scifact: 'SciFact', nfcorpus: 'NFCorpus', fiqa: 'FiQA-2018' };
+        var datasetDomains = { scifact: 'Scientific claims', nfcorpus: 'Biomedical', fiqa: 'Financial Q&A' };
         var modeOrder = ['fts5', 'hybrid', 'ai', 'keyword'];
         var modeLabels = { fts5: 'FTS5', keyword: 'Keyword', hybrid: 'Hybrid', ai: 'AI/Vectorize' };
+        var modeBgClasses = {
+          fts5: 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20',
+          ai: 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 ring-1 ring-inset ring-cyan-600/20 dark:ring-cyan-500/20',
+          hybrid: 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 ring-1 ring-inset ring-purple-600/20 dark:ring-purple-500/20',
+          keyword: 'bg-zinc-100 dark:bg-zinc-700/50 text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20'
+        };
 
         titleEl.textContent = 'Benchmark Results (k=10)';
 
@@ -33575,7 +33657,19 @@ function renderSearchDashboard(data) {
           byDataset[ds][corpus].push(r);
         }
 
-        // Build a comparison table for each dataset+corpus group
+        // Find best value per metric per dataset+corpus group
+        function findBests(runs) {
+          var bests = { ndcg: -1, precision: -1, recall: -1, mrr: -1 };
+          for (var i = 0; i < runs.length; i++) {
+            var m = runs[i].metrics;
+            if (m.ndcg_at_k > bests.ndcg) bests.ndcg = m.ndcg_at_k;
+            if (m.precision_at_k > bests.precision) bests.precision = m.precision_at_k;
+            if (m.recall_at_k > bests.recall) bests.recall = m.recall_at_k;
+            if (m.mrr > bests.mrr) bests.mrr = m.mrr;
+          }
+          return bests;
+        }
+
         var html = '';
         for (var di = 0; di < datasetOrder.length; di++) {
           var dsKey = datasetOrder[di];
@@ -33588,63 +33682,76 @@ function renderSearchDashboard(data) {
             var runs = corpusGroups[corpusKey];
             runs.sort(function(a, b) { return modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode); });
             var sizeLabel = runs[0].corpus_size ? runs[0].corpus_size.toLocaleString() + ' docs' : '';
-            var corpusDisplay = corpusKey === 'full' ? 'Full' : 'Subset';
-            if (sizeLabel) corpusDisplay += ' (' + sizeLabel + ')';
+            var corpusDisplay = corpusKey === 'full' ? 'Full corpus' : 'Subset';
+            if (sizeLabel) corpusDisplay += ' \xB7 ' + sizeLabel;
+            var bests = findBests(runs);
 
-            // Section header
-            html += '<div class="col-span-2 md:col-span-4' + (di > 0 || ci > 0 ? ' mt-5 pt-4 border-t border-zinc-200 dark:border-zinc-700' : '') + '">' +
-              '<div class="flex items-center gap-2 mb-2">' +
-                '<span class="text-sm font-bold text-zinc-900 dark:text-white">' + (datasetNames[dsKey] || dsKey) + '</span>' +
-                '<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">' + corpusDisplay + '</span>' +
+            // Card wrapper per dataset+corpus
+            html += '<div class="rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 overflow-hidden">';
+
+            // Card header
+            html += '<div class="px-5 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700">' +
+              '<div class="flex items-center justify-between">' +
+                '<div class="flex items-center gap-3">' +
+                  '<h4 class="text-base font-semibold text-zinc-950 dark:text-white">' + (datasetNames[dsKey] || dsKey) + '</h4>' +
+                  '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + (datasetDomains[dsKey] || '') + '</span>' +
+                '</div>' +
+                '<span class="text-xs px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium">' + corpusDisplay + '</span>' +
               '</div>' +
             '</div>';
 
-            // Table header
-            html += '<div class="col-span-2 md:col-span-4">' +
-              '<table class="w-full text-sm" style="table-layout:fixed">' +
-              '<colgroup>' +
-                '<col style="width:18%">' +
-                '<col style="width:15%">' +
-                '<col style="width:13%">' +
-                '<col style="width:15%">' +
-                '<col style="width:13%">' +
-                '<col style="width:13%">' +
-                '<col style="width:13%">' +
-              '</colgroup>' +
-              '<thead><tr class="text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">' +
-              '<th class="text-left py-2 font-medium">Mode</th>' +
-              '<th class="text-right py-2 font-medium">nDCG@10</th>' +
-              '<th class="text-right py-2 font-medium">P@10</th>' +
-              '<th class="text-right py-2 font-medium">Recall@10</th>' +
-              '<th class="text-right py-2 font-medium">MRR</th>' +
-              '<th class="text-right py-2 font-medium">Queries</th>' +
-              '<th class="text-right py-2 font-medium">Avg ms</th>' +
+            // Table
+            html += '<div class="overflow-x-auto">' +
+              '<table class="w-full text-sm">' +
+              '<thead><tr class="border-b border-zinc-200 dark:border-zinc-700">' +
+              '<th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Mode</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">nDCG@10</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">P@10</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Recall@10</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">MRR</th>' +
+              '<th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Queries</th>' +
+              '<th class="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Latency</th>' +
               '</tr></thead><tbody>';
 
             for (var ri = 0; ri < runs.length; ri++) {
               var run = runs[ri];
               var m = run.metrics;
-              var mc = run.mode === 'fts5' ? 'indigo' : run.mode === 'ai' ? 'cyan' : run.mode === 'hybrid' ? 'purple' : 'zinc';
+              var isLast = ri === runs.length - 1;
+              var rowBorder = isLast ? '' : ' border-b border-zinc-100 dark:border-zinc-800';
 
-              html += '<tr class="border-b border-zinc-100 dark:border-zinc-800">' +
-                '<td class="py-2.5 font-semibold text-' + mc + '-600 dark:text-' + mc + '-400">' + (modeLabels[run.mode] || run.mode.toUpperCase()) + '</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.ndcg_at_k * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.precision_at_k * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.recall_at_k * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right font-mono font-bold text-base text-' + mc + '-600 dark:text-' + mc + '-300">' + (m.mrr * 100).toFixed(1) + '%</td>' +
-                '<td class="py-2.5 text-right text-zinc-500 dark:text-zinc-400">' + run.queries_evaluated + '</td>' +
-                '<td class="py-2.5 text-right text-zinc-500 dark:text-zinc-400">' + run.avg_query_time_ms + 'ms</td>' +
+              // Highlight best values
+              var ndcgBest = m.ndcg_at_k === bests.ndcg && runs.length > 1;
+              var precBest = m.precision_at_k === bests.precision && runs.length > 1;
+              var recBest = m.recall_at_k === bests.recall && runs.length > 1;
+              var mrrBest = m.mrr === bests.mrr && runs.length > 1;
+
+              function metricCell(val, isBest) {
+                var pct = (val * 100).toFixed(1) + '%';
+                if (isBest) {
+                  return '<span class="font-semibold text-zinc-950 dark:text-white">' + pct + '</span>';
+                }
+                return '<span class="text-zinc-600 dark:text-zinc-400">' + pct + '</span>';
+              }
+
+              html += '<tr class="' + rowBorder + ' hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">' +
+                '<td class="px-5 py-3"><span class="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ' + (modeBgClasses[run.mode] || modeBgClasses.keyword) + '">' + (modeLabels[run.mode] || run.mode) + '</span></td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.ndcg_at_k, ndcgBest) + '</td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.precision_at_k, precBest) + '</td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.recall_at_k, recBest) + '</td>' +
+                '<td class="px-4 py-3 text-right font-mono text-sm">' + metricCell(m.mrr, mrrBest) + '</td>' +
+                '<td class="px-4 py-3 text-right text-xs text-zinc-500 dark:text-zinc-400">' + run.queries_evaluated + '</td>' +
+                '<td class="px-5 py-3 text-right text-xs text-zinc-500 dark:text-zinc-400">' + run.avg_query_time_ms + 'ms</td>' +
               '</tr>';
             }
 
-            html += '</tbody></table></div>';
+            html += '</tbody></table></div></div>';
           }
         }
 
         // Summary + clear button
-        html += '<div class="col-span-2 md:col-span-4 mt-4 flex items-center justify-between">' +
-          '<span class="text-xs text-zinc-400">' + benchmarkRuns.length + ' total runs across ' + Object.keys(byDataset).length + ' datasets</span>' +
-          '<button onclick="clearBenchmarkHistory()" class="text-xs text-zinc-400 hover:text-red-500 underline">Clear all results</button>' +
+        html += '<div class="flex items-center justify-between pt-2">' +
+          '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + benchmarkRuns.length + ' runs across ' + Object.keys(byDataset).length + ' dataset' + (Object.keys(byDataset).length !== 1 ? 's' : '') + '</span>' +
+          '<button onclick="clearBenchmarkHistory()" class="text-xs text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">Clear all results</button>' +
           '</div>';
 
         metricsDiv.innerHTML = html;
@@ -35003,10 +35110,26 @@ function renderStatCard(label, value, color, icon, colorOverride) {
     </div>
   `;
 }
+function renderFeatureToggle(name, isOn) {
+  const dotClass = isOn ? "bg-lime-500" : "bg-zinc-300 dark:bg-zinc-600";
+  const labelClass = isOn ? "text-lime-700 dark:text-lime-400" : "text-zinc-500 dark:text-zinc-400";
+  return `
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-zinc-700 dark:text-zinc-300">${name}</span>
+      <span class="inline-flex items-center gap-1.5 ${labelClass}">
+        <span class="h-2 w-2 rounded-full ${dotClass}"></span>
+        ${isOn ? "On" : "Off"}
+      </span>
+    </div>
+  `;
+}
+function escapeHtml6(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 // src/routes/admin-search.ts
 var adminSearchRoutes = new hono.Hono();
-adminSearchRoutes.use("*", chunkYZRINJP5_cjs.requireAuth());
+adminSearchRoutes.use("*", chunkHTUZE2B6_cjs.requireAuth());
 adminSearchRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -35018,12 +35141,19 @@ adminSearchRoutes.get("/", async (c) => {
     const fts5Service = new FTS5Service(db);
     const kv = c.env.CACHE_KV;
     const benchmarkService = new BenchmarkService(db, kv);
-    const [settings, collections, newCollections, indexStatus, analytics] = await Promise.all([
+    const now = Date.now();
+    const midnightToday = /* @__PURE__ */ new Date();
+    midnightToday.setHours(0, 0, 0, 0);
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1e3;
+    const [settings, collections, newCollections, indexStatus, analytics, queriesTodayRow, totalClicks30dRow, zeroResults30dRow] = await Promise.all([
       service.getSettings(),
       service.getAllCollections(),
       service.detectNewCollections(),
       indexer.getAllIndexStatus(),
-      service.getSearchAnalytics()
+      service.getSearchAnalytics(),
+      db.prepare("SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?").bind(midnightToday.getTime()).first().catch(() => null),
+      db.prepare("SELECT COUNT(*) as count FROM ai_search_clicks WHERE created_at > datetime('now', '-30 days')").first().catch(() => null),
+      db.prepare("SELECT COUNT(*) as count FROM ai_search_history WHERE results_count = 0 AND created_at >= ?").bind(thirtyDaysAgo).first().catch(() => null)
     ]);
     let fts5Status = null;
     try {
@@ -35059,6 +35189,9 @@ adminSearchRoutes.get("/", async (c) => {
         analytics,
         fts5Status,
         benchmarkStatus,
+        queriesToday: queriesTodayRow?.count ?? 0,
+        totalClicks30d: totalClicks30dRow?.count ?? 0,
+        zeroResults30d: zeroResults30dRow?.count ?? 0,
         user: user ? { name: user.email, email: user.email, role: user.role } : void 0,
         version: chunkUOEIMC67_cjs.getCoreVersion()
       })
@@ -35137,5 +35270,5 @@ exports.router = router;
 exports.router2 = router2;
 exports.test_cleanup_default = test_cleanup_default;
 exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-RCLFF5NO.cjs.map
-//# sourceMappingURL=chunk-RCLFF5NO.cjs.map
+//# sourceMappingURL=chunk-DPQE5JKI.cjs.map
+//# sourceMappingURL=chunk-DPQE5JKI.cjs.map

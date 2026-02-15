@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-NP5OR52I.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-NP5OR52I.js';
+import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-2PD2F73U.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-2PD2F73U.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-SK76ZIN5.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-SK76ZIN5.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-XVGBF3QP.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-XVGBF3QP.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-7GFUTCRS.js';
+export { MigrationService } from './chunk-S2IFP6EO.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -4089,7 +4089,8 @@ apiRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const kv = c.env.CACHE_KV;
+    const service = new AISearchService(db, ai, vectorize, kv);
     const body = await c.req.json();
     const query = {
       query: body.query || "",
@@ -4097,7 +4098,8 @@ apiRoutes.post("/", async (c) => {
       filters: body.filters || {},
       limit: body.limit ? Number(body.limit) : void 0,
       offset: body.offset ? Number(body.offset) : void 0,
-      facets: body.facets === true
+      facets: body.facets === true,
+      cache: body.cache !== false
     };
     if (query.filters?.dateRange) {
       if (typeof query.filters.dateRange.start === "string") {
@@ -4472,7 +4474,8 @@ instantSearchRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const searchService = new AISearchService(db, ai, vectorize);
+    const kv = c.env.CACHE_KV;
+    const searchService = new AISearchService(db, ai, vectorize, kv);
     const adapter = new InstantSearchAdapter(db);
     const body = await c.req.json();
     if (!body.requests || !Array.isArray(body.requests)) {

@@ -1,5 +1,3 @@
-'use strict';
-
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -1777,6 +1775,13 @@ CREATE TABLE IF NOT EXISTS ai_search_query_rules (
 CREATE INDEX IF NOT EXISTS idx_query_rules_enabled ON ai_search_query_rules(enabled);
 CREATE INDEX IF NOT EXISTS idx_query_rules_priority ON ai_search_query_rules(priority DESC);
 `
+  },
+  {
+    id: "040",
+    name: "Search Cache Tracking",
+    filename: "040_search_cache_tracking.sql",
+    description: "Migration 040: Search Cache Tracking",
+    sql: "-- Track whether a search result was served from cache\nALTER TABLE ai_search_history ADD COLUMN cached INTEGER DEFAULT 0;\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2184,6 +2189,6 @@ var MigrationService = class {
   }
 };
 
-exports.MigrationService = MigrationService;
-//# sourceMappingURL=chunk-SFFEB2B7.cjs.map
-//# sourceMappingURL=chunk-SFFEB2B7.cjs.map
+export { MigrationService };
+//# sourceMappingURL=chunk-S2IFP6EO.js.map
+//# sourceMappingURL=chunk-S2IFP6EO.js.map

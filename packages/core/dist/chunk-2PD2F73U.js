@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-SK76ZIN5.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-XVGBF3QP.js';
 import { PluginService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-7GFUTCRS.js';
+import { MigrationService } from './chunk-S2IFP6EO.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-AAU4BTDE.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-7DXWBEQP.js';
@@ -1089,6 +1089,123 @@ var FTS5Service = class {
   }
 };
 
+// src/plugins/core-plugins/ai-search-plugin/services/search-cache.service.ts
+var SearchCacheService = class _SearchCacheService {
+  constructor(kv) {
+    this.kv = kv;
+  }
+  static PREFIX = "search-cache:v1:";
+  // KVNamespace
+  /**
+   * Build a deterministic cache key from post-rule query params.
+   * Returns null if caching should be skipped.
+   */
+  async buildKey(query) {
+    if (query.cache === false || !query.query?.trim()) {
+      return null;
+    }
+    const canonical = JSON.stringify({
+      q: query.query.toLowerCase().trim(),
+      m: query.mode,
+      l: query.limit ?? null,
+      o: query.offset ?? null,
+      f: this.normalizeFilters(query.filters),
+      fct: query.facets ?? false
+    });
+    const hash = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(canonical)
+    );
+    const hex = Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    return `${_SearchCacheService.PREFIX}${hex.slice(0, 16)}`;
+  }
+  /**
+   * Get cached search response. Returns null on miss or error.
+   */
+  async get(key) {
+    try {
+      return await this.kv.get(key, "json");
+    } catch (error) {
+      console.warn("[SearchCache] Get error:", error);
+      return null;
+    }
+  }
+  /**
+   * Store search response in cache. Fire-and-forget — never blocks the response.
+   * Strips search_id before caching (must be fresh per search for click tracking).
+   */
+  async put(key, response, ttlSeconds) {
+    try {
+      const toCache = { ...response };
+      delete toCache.search_id;
+      delete toCache.cached;
+      const ttl = Math.max(60, ttlSeconds);
+      await this.kv.put(key, JSON.stringify(toCache), { expirationTtl: ttl });
+    } catch (error) {
+      console.warn("[SearchCache] Put error:", error);
+    }
+  }
+  /**
+   * Invalidate all cached search results by listing and deleting keys with our prefix.
+   * Returns the number of keys deleted.
+   */
+  async invalidateAll() {
+    let deleted = 0;
+    let cursor;
+    try {
+      do {
+        const listOptions = { prefix: _SearchCacheService.PREFIX, limit: 1e3 };
+        if (cursor) listOptions.cursor = cursor;
+        const list = await this.kv.list(listOptions);
+        const keys = list.keys || [];
+        for (const key of keys) {
+          await this.kv.delete(key.name);
+          deleted++;
+        }
+        cursor = list.list_complete ? void 0 : list.cursor;
+      } while (cursor);
+    } catch (error) {
+      console.warn("[SearchCache] Invalidation error:", error);
+    }
+    if (deleted > 0) {
+      console.log(`[SearchCache] Invalidated ${deleted} cached entries`);
+    }
+    return deleted;
+  }
+  /**
+   * Normalize filters for deterministic hashing.
+   * Sorts collections, status, and custom keys/values.
+   */
+  normalizeFilters(filters) {
+    if (!filters) return null;
+    const normalized = {};
+    if (filters.collections?.length) {
+      normalized.collections = [...filters.collections].sort();
+    }
+    if (filters.status?.length) {
+      normalized.status = [...filters.status].sort();
+    }
+    if (filters.tags?.length) {
+      normalized.tags = [...filters.tags].sort();
+    }
+    if (filters.author) {
+      normalized.author = filters.author;
+    }
+    if (filters.dateRange) {
+      normalized.dateRange = filters.dateRange;
+    }
+    if (filters.custom && Object.keys(filters.custom).length > 0) {
+      const sortedCustom = {};
+      for (const key of Object.keys(filters.custom).sort()) {
+        const val = filters.custom[key];
+        sortedCustom[key] = Array.isArray(val) ? [...val].sort() : val;
+      }
+      normalized.custom = sortedCustom;
+    }
+    return Object.keys(normalized).length > 0 ? normalized : null;
+  }
+};
+
 // src/routes/api-content-crud.ts
 var apiContentCrudRoutes = new Hono();
 apiContentCrudRoutes.get("/check-slug", async (c) => {
@@ -1200,6 +1317,10 @@ apiContentCrudRoutes.post("/", requireAuth(), async (c) => {
         (err) => console.error("[API Content] FTS5 indexing failed:", err)
       )
     );
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV);
+      c.executionCtx.waitUntil(searchCache.invalidateAll());
+    }
     const getStmt = db.prepare("SELECT * FROM content WHERE id = ?");
     const createdContent = await getStmt.bind(contentId).first();
     return c.json({
@@ -1270,6 +1391,10 @@ apiContentCrudRoutes.put("/:id", requireAuth(), async (c) => {
         (err) => console.error("[API Content] FTS5 reindexing failed:", err)
       )
     );
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV);
+      c.executionCtx.waitUntil(searchCache.invalidateAll());
+    }
     const getStmt = db.prepare("SELECT * FROM content WHERE id = ?");
     const updatedContent = await getStmt.bind(id).first();
     return c.json({
@@ -1313,6 +1438,10 @@ apiContentCrudRoutes.delete("/:id", requireAuth(), async (c) => {
         (err) => console.error("[API Content] FTS5 removal failed:", err)
       )
     );
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV);
+      c.executionCtx.waitUntil(searchCache.invalidateAll());
+    }
     return c.json({ success: true });
   } catch (error) {
     console.error("Error deleting content:", error);
@@ -3325,7 +3454,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-WDYNGIOQ.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-IECFNOKJ.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -3350,7 +3479,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-WDYNGIOQ.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-IECFNOKJ.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -3369,7 +3498,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-WDYNGIOQ.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-IECFNOKJ.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -9761,6 +9890,10 @@ adminContentRoutes.post("/", async (c) => {
         (err) => console.error("[Content] FTS5 indexing failed:", err)
       )
     );
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV);
+      c.executionCtx.waitUntil(searchCache.invalidateAll());
+    }
     const referrerParams = formData.get("referrer_params");
     const redirectUrl = action === "save_and_continue" ? `/admin/content/${contentId}/edit?success=Content saved successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ""}` : referrerParams ? `/admin/content?${referrerParams}&success=Content created successfully!` : `/admin/content?collection=${collectionId}&success=Content created successfully!`;
     const isHTMX = c.req.header("HX-Request") === "true";
@@ -9895,6 +10028,10 @@ adminContentRoutes.put("/:id", async (c) => {
         (err) => console.error("[Content] FTS5 reindexing failed:", err)
       )
     );
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV);
+      c.executionCtx.waitUntil(searchCache.invalidateAll());
+    }
     const referrerParams = formData.get("referrer_params");
     const redirectUrl = action === "save_and_continue" ? `/admin/content/${id}/edit?success=Content updated successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ""}` : referrerParams ? `/admin/content?${referrerParams}&success=Content updated successfully!` : `/admin/content?collection=${existingContent.collection_id}&success=Content updated successfully!`;
     const isHTMX = c.req.header("HX-Request") === "true";
@@ -10166,6 +10303,10 @@ adminContentRoutes.delete("/:id", async (c) => {
         (err) => console.error("[Content] FTS5 removal failed:", err)
       )
     );
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV);
+      c.executionCtx.waitUntil(searchCache.invalidateAll());
+    }
     const cache = getCacheService(CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate("content:list:*");
@@ -30067,10 +30208,11 @@ var RerankerService = class {
 
 // src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts
 var AISearchService = class {
-  constructor(db, ai, vectorize) {
+  constructor(db, ai, vectorize, kv) {
     this.db = db;
     this.ai = ai;
     this.vectorize = vectorize;
+    this.kv = kv;
     if (this.ai && this.vectorize) {
       this.customRAG = new CustomRAGService(db, ai, vectorize);
       console.log("[AISearchService] Custom RAG initialized");
@@ -30092,6 +30234,9 @@ var AISearchService = class {
     }
     this.queryRulesService = new QueryRulesService(db);
     this.rankingPipeline = new RankingPipelineService(db);
+    if (this.kv) {
+      this.searchCache = new SearchCacheService(this.kv);
+    }
   }
   customRAG;
   fts5Service;
@@ -30101,6 +30246,7 @@ var AISearchService = class {
   rankingPipeline;
   synonymService;
   queryRulesService;
+  searchCache;
   /**
    * Get plugin settings
    */
@@ -30284,6 +30430,7 @@ var AISearchService = class {
    * Supports three modes: 'ai' (semantic), 'fts5' (full-text), 'keyword' (basic)
    */
   async search(query) {
+    const startTime = Date.now();
     const settings = await this.getSettings();
     if (!settings?.enabled) {
       return {
@@ -30300,6 +30447,24 @@ var AISearchService = class {
       originalQuery = ruleResult.originalQuery;
       appliedRuleId = ruleResult.ruleId;
       query = { ...query, query: ruleResult.query };
+    }
+    if (this.searchCache) {
+      const cacheKey = await this.searchCache.buildKey(query);
+      if (cacheKey) {
+        const cached = await this.searchCache.get(cacheKey);
+        if (cached) {
+          const elapsed = Date.now() - startTime;
+          const searchId = await this.logSearch(query.query, query.mode, cached.results.length, elapsed, true);
+          return {
+            ...cached,
+            query_time_ms: elapsed,
+            search_id: searchId,
+            cached: true,
+            // Re-attach rule metadata (not cached)
+            ...originalQuery ? { original_query: originalQuery, applied_rule_id: appliedRuleId } : {}
+          };
+        }
+      }
     }
     const shouldComputeFacets = query.facets && settings.facets_enabled;
     if (shouldComputeFacets && (!settings.facet_config || settings.facet_config.length === 0)) {
@@ -30357,13 +30522,25 @@ var AISearchService = class {
       result.original_query = originalQuery;
       result.applied_rule_id = appliedRuleId;
     }
+    let finalResult;
     try {
-      const ranked = await this.rankingPipeline.apply(result, query.query);
-      return ranked;
+      finalResult = await this.rankingPipeline.apply(result, query.query);
     } catch (error) {
       console.warn("[AISearchService] Ranking pipeline error (preserving original order):", error);
-      return result;
+      finalResult = result;
     }
+    if (this.searchCache && settings.cache_duration > 0) {
+      const cacheKey = await this.searchCache.buildKey(query);
+      if (cacheKey) {
+        const ttlSeconds = settings.cache_duration * 3600;
+        try {
+          await this.searchCache.put(cacheKey, finalResult, ttlSeconds);
+        } catch (err) {
+          console.warn("[AISearchService] Cache write failed:", err);
+        }
+      }
+    }
+    return finalResult;
   }
   /**
    * Compute facets for the current search query.
@@ -30788,12 +30965,12 @@ var AISearchService = class {
   /**
    * Log search query to history, returns the generated search_id
    */
-  async logSearch(query, mode, resultsCount, responseTimeMs) {
+  async logSearch(query, mode, resultsCount, responseTimeMs, cached) {
     try {
       const result = await this.db.prepare(`
-        INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(query, mode, resultsCount, responseTimeMs ?? null, Date.now()).run();
+        INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, cached, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(query, mode, resultsCount, responseTimeMs ?? null, cached ? 1 : 0, Date.now()).run();
       const rowId = result?.meta?.last_row_id;
       return rowId ? String(rowId) : void 0;
     } catch (error) {
@@ -31110,6 +31287,12 @@ var AISearchService = class {
    */
   getQueryRulesService() {
     return this.queryRulesService;
+  }
+  /**
+   * Get search cache service instance (for cache invalidation from content CRUD hooks)
+   */
+  getSearchCache() {
+    return this.searchCache;
   }
 };
 
@@ -35805,10 +35988,10 @@ adminSearchRoutes.get("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const kv = c.env.CACHE_KV;
+    const service = new AISearchService(db, ai, vectorize, kv);
     const indexer = new IndexManager(db, ai, vectorize);
     const fts5Service = new FTS5Service(db);
-    const kv = c.env.CACHE_KV;
     const benchmarkService = new BenchmarkService(db, kv);
     const now = Date.now();
     const midnightToday = /* @__PURE__ */ new Date();
@@ -35904,5 +36087,5 @@ var ROUTES_INFO = {
 };
 
 export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, FacetService, IndexManager, QueryRulesService, ROUTES_INFO, RankingPipelineService, SynonymService, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-NP5OR52I.js.map
-//# sourceMappingURL=chunk-NP5OR52I.js.map
+//# sourceMappingURL=chunk-2PD2F73U.js.map
+//# sourceMappingURL=chunk-2PD2F73U.js.map

@@ -337,35 +337,35 @@ export class CustomRAGService {
         }
       }
 
-      // Sort by score descending and apply intelligent filtering:
-      // 1. Absolute minimum threshold (0.6)
-      // 2. Score gap detection: cut off when score drops >5% from previous result
-      const MIN_RELEVANCE_SCORE = 0.6
-      const SCORE_GAP_THRESHOLD = 0.05
+      // Sort by score descending and apply score filtering.
+      // Skip filtering in hybrid mode — RRF handles ranking and needs the full candidate set.
       const sortedEntries = [...bestByContent.entries()]
         .sort((a, b) => b[1].score - a[1].score)
 
-      const filteredEntries: [string, any][] = []
-      for (let i = 0; i < sortedEntries.length; i++) {
-        const entry = sortedEntries[i]!
-        const score = entry[1].score
-        if (score < MIN_RELEVANCE_SCORE) break  // Below absolute minimum
+      if (query.mode !== 'hybrid') {
+        const MIN_RELEVANCE_SCORE = 0.45
+        const SCORE_GAP_THRESHOLD = 0.15
+        const filteredEntries: [string, any][] = []
+        for (let i = 0; i < sortedEntries.length; i++) {
+          const entry = sortedEntries[i]!
+          const score = entry[1].score
+          if (score < MIN_RELEVANCE_SCORE) break
 
-        if (i > 0) {
-          const prevScore = sortedEntries[i - 1]![1].score
-          const gap = prevScore - score
-          if (gap > SCORE_GAP_THRESHOLD) {
-            break
+          if (i > 0) {
+            const prevScore = sortedEntries[i - 1]![1].score
+            const gap = prevScore - score
+            if (gap > SCORE_GAP_THRESHOLD) {
+              break
+            }
           }
+
+          filteredEntries.push(entry)
         }
 
-        filteredEntries.push(entry)
-      }
-
-      // Replace bestByContent with filtered entries
-      bestByContent.clear()
-      for (const [key, value] of filteredEntries) {
-        bestByContent.set(key, value)
+        bestByContent.clear()
+        for (const [key, value] of filteredEntries) {
+          bestByContent.set(key, value)
+        }
       }
 
       const searchResults: SearchResult[] = []

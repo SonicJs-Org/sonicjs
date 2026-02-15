@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-N5YXQ2Q2.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-N5YXQ2Q2.js';
+import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-NP5OR52I.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-NP5OR52I.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-GKY7WVJS.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-GKY7WVJS.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-SK76ZIN5.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-SK76ZIN5.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-V5662WE5.js';
+export { MigrationService } from './chunk-7GFUTCRS.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -3411,6 +3411,71 @@ adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
   } catch (error) {
     console.error("Error deleting synonym group:", error);
     return c.json({ error: "Failed to delete synonym group" }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/rules", async (c) => {
+  try {
+    const rulesService = new QueryRulesService(c.env.DB);
+    const rules = await rulesService.getAll();
+    return c.json({ success: true, data: rules });
+  } catch (error) {
+    console.error("Error fetching query rules:", error);
+    return c.json({ error: "Failed to fetch query rules" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/rules", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body.match_pattern || !body.substitute_query) {
+      return c.json({ error: "match_pattern and substitute_query are required" }, 400);
+    }
+    const rulesService = new QueryRulesService(c.env.DB);
+    const rule = await rulesService.create({
+      match_pattern: body.match_pattern,
+      match_type: body.match_type,
+      substitute_query: body.substitute_query,
+      enabled: body.enabled,
+      priority: body.priority
+    });
+    return c.json({ success: true, data: rule });
+  } catch (error) {
+    console.error("Error creating query rule:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to create query rule" }, 500);
+  }
+});
+adminRoutes.put("/api/relevance/rules/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const rulesService = new QueryRulesService(c.env.DB);
+    const rule = await rulesService.update(id, {
+      match_pattern: body.match_pattern,
+      match_type: body.match_type,
+      substitute_query: body.substitute_query,
+      enabled: body.enabled,
+      priority: body.priority
+    });
+    if (!rule) {
+      return c.json({ error: "Query rule not found" }, 404);
+    }
+    return c.json({ success: true, data: rule });
+  } catch (error) {
+    console.error("Error updating query rule:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to update query rule" }, 500);
+  }
+});
+adminRoutes.delete("/api/relevance/rules/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const rulesService = new QueryRulesService(c.env.DB);
+    const deleted = await rulesService.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Query rule not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting query rule:", error);
+    return c.json({ error: "Failed to delete query rule" }, 500);
   }
 });
 adminRoutes.get("/api/facets/discover", async (c) => {

@@ -1751,6 +1751,30 @@ CREATE TABLE IF NOT EXISTS ai_search_facet_clicks (
 -- Index for agent weekly analysis (field usage over time)
 CREATE INDEX IF NOT EXISTS idx_facet_clicks_field ON ai_search_facet_clicks(facet_field, created_at);
 `
+  },
+  {
+    id: "039",
+    name: "Query Substitution Rules",
+    filename: "039_query_substitution_rules.sql",
+    description: "Migration 039: Query Substitution Rules",
+    sql: `-- Query Substitution Rules
+-- Deterministic pre-dispatch query replacement: "if user searches X, replace with Y"
+-- Runs before all search modes (FTS5, AI, keyword, hybrid)
+
+CREATE TABLE IF NOT EXISTS ai_search_query_rules (
+  id TEXT PRIMARY KEY,
+  match_pattern TEXT NOT NULL,
+  match_type TEXT NOT NULL DEFAULT 'exact' CHECK (match_type IN ('exact', 'prefix')),
+  substitute_query TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  priority INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_query_rules_enabled ON ai_search_query_rules(enabled);
+CREATE INDEX IF NOT EXISTS idx_query_rules_priority ON ai_search_query_rules(priority DESC);
+`
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2159,5 +2183,5 @@ var MigrationService = class {
 };
 
 export { MigrationService };
-//# sourceMappingURL=chunk-V5662WE5.js.map
-//# sourceMappingURL=chunk-V5662WE5.js.map
+//# sourceMappingURL=chunk-7GFUTCRS.js.map
+//# sourceMappingURL=chunk-7GFUTCRS.js.map

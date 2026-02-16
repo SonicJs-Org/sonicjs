@@ -18,6 +18,8 @@ import { RankingPipelineService } from './ranking-pipeline.service'
 import { SynonymService } from './synonym.service'
 import { RerankerService } from './reranker.service'
 import { SearchCacheService } from './search-cache.service'
+import { TrendingSearchService } from './trending-search.service'
+import { RelatedSearchService } from './related-search.service'
 
 /**
  * AI Search Service
@@ -355,14 +357,22 @@ export class AISearchService {
       if (cacheKey) {
         const cached = await this.searchCache.get(cacheKey)
         if (cached) {
-          // Cache hit — log search (cached=true), return with fresh search_id
+          // Cache hit — log search + related searches in parallel
           const elapsed = Date.now() - startTime
-          const searchId = await this.logSearch(query.query, query.mode, cached.results.length, elapsed, true)
+          const [searchId, relatedSearches] = await Promise.all([
+            this.logSearch(query.query, query.mode, cached.results.length, elapsed, true),
+            (settings.related_searches_enabled !== false)
+              ? new RelatedSearchService(this.db, this.kv)
+                  .getRelatedSearches(query.query, 5)
+                  .catch(() => undefined)
+              : Promise.resolve(undefined),
+          ])
           return {
             ...cached,
             query_time_ms: elapsed,
             search_id: searchId,
             cached: true,
+            ...(relatedSearches ? { related_searches: relatedSearches } : {}),
             // Re-attach rule metadata (not cached)
             ...(originalQuery ? { original_query: originalQuery, applied_rule_id: appliedRuleId } : {}),
           }
@@ -463,20 +473,90 @@ export class AISearchService {
       finalResult = result
     }
 
-    // Cache write (awaited — KV put is ~5ms, and fire-and-forget won't complete on Workers)
-    if (this.searchCache && settings.cache_duration > 0) {
-      const cacheKey = await this.searchCache.buildKey(query)
-      if (cacheKey) {
-        const ttlSeconds = settings.cache_duration * 3600 // cache_duration is in hours
-        try {
-          await this.searchCache.put(cacheKey, finalResult, ttlSeconds)
-        } catch (err) {
-          console.warn('[AISearchService] Cache write failed:', err)
-        }
-      }
+    // Cache write + related searches in parallel
+    // Related searches are NOT cached in the search cache — they have their own KV TTL
+    const cachePromise = (this.searchCache && settings.cache_duration > 0)
+      ? this.searchCache.buildKey(query).then(async (cacheKey) => {
+          if (cacheKey) {
+            const ttlSeconds = settings.cache_duration * 3600
+            await this.searchCache!.put(cacheKey, finalResult, ttlSeconds).catch(err => {
+              console.warn('[AISearchService] Cache write failed:', err)
+            })
+          }
+        })
+      : Promise.resolve()
+
+    const relatedPromise = (settings.related_searches_enabled !== false)
+      ? new RelatedSearchService(this.db, this.kv)
+          .getRelatedSearches(query.query, 5)
+          .catch(() => undefined)
+      : Promise.resolve(undefined)
+
+    const [, relatedSearches] = await Promise.all([cachePromise, relatedPromise])
+
+    if (relatedSearches) {
+      finalResult.related_searches = relatedSearches
     }
 
     return finalResult
+  }
+
+  /**
+   * Execute search with experiment variant overrides applied.
+   * Phase 1: flat AISearchSettings merge only (no pipeline weight overrides).
+   * Used by A/B testing to run control/treatment searches with different configs.
+   */
+  async searchWithOverrides(query: SearchQuery, overrides: Partial<AISearchSettings>): Promise<SearchResponse> {
+    const startTime = Date.now()
+    const baseSettings = await this.getSettings()
+    if (!baseSettings?.enabled) {
+      return { results: [], total: 0, query_time_ms: 0, mode: query.mode }
+    }
+
+    // Shallow merge: overrides win for flat fields
+    const settings: AISearchSettings = { ...baseSettings, ...overrides }
+
+    // Skip cache for experiment searches (each variant needs fresh results)
+    // Skip related searches (not relevant for experiment comparison)
+
+    // Apply query substitution rules
+    let originalQuery: string | undefined
+    let appliedRuleId: string | undefined
+    const ruleResult = await this.queryRulesService.applyRules(query.query)
+    if (ruleResult.originalQuery) {
+      originalQuery = ruleResult.originalQuery
+      appliedRuleId = ruleResult.ruleId
+      query = { ...query, query: ruleResult.query }
+    }
+
+    // Route to mode-specific search
+    let searchPromise: Promise<SearchResponse>
+    if (query.mode === 'hybrid') {
+      searchPromise = this.searchHybrid(query, settings)
+    } else if (query.mode === 'fts5') {
+      searchPromise = this.searchFTS5(query, settings)
+    } else if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+      searchPromise = this.searchAI(query, settings)
+    } else {
+      searchPromise = this.searchKeyword(query, settings)
+    }
+
+    const result = await searchPromise
+
+    if (originalQuery) {
+      result.original_query = originalQuery
+      result.applied_rule_id = appliedRuleId
+    }
+
+    // Apply ranking pipeline (uses default weights — pipeline overrides are Phase 2)
+    try {
+      const ranked = await this.rankingPipeline.apply(result, query.query)
+      ranked.query_time_ms = Date.now() - startTime
+      return ranked
+    } catch {
+      result.query_time_ms = Date.now() - startTime
+      return result
+    }
   }
 
   /**
@@ -926,23 +1006,14 @@ export class AISearchService {
   }
 
   /**
-   * Get trending queries from last 7 days, ranked by frequency.
-   * Excludes zero-result queries (AVG results_count < 0.5).
+   * Get trending queries using TrendingSearchService (time-decay scoring + KV cache).
+   * Delegates to the dedicated service for consistent behavior across suggest and trending endpoints.
    */
   private async getTrendingQueries(): Promise<string[]> {
     try {
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-      const stmt = this.db.prepare(`
-        SELECT query, COUNT(*) as cnt, AVG(results_count) as avg_res
-        FROM ai_search_history
-        WHERE created_at >= ?
-        GROUP BY LOWER(query)
-        HAVING avg_res >= 0.5
-        ORDER BY cnt DESC
-        LIMIT 10
-      `)
-      const { results } = await stmt.bind(sevenDaysAgo).all<{ query: string; cnt: number; avg_res: number }>()
-      return (results || []).map((r) => r.query).filter(Boolean)
+      const service = new TrendingSearchService(this.db, this.kv)
+      const result = await service.getTrending(10, 7)
+      return result.items.map((r) => r.query)
     } catch (error) {
       console.log('[AISearchService] Trending queries unavailable:', error)
       return []

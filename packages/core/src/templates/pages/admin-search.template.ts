@@ -13,6 +13,7 @@ import { renderBenchmarkTab, renderBenchmarkScript } from './admin-search-benchm
 import { renderRelevanceTab, renderRelevanceScript } from './admin-search-relevance.template'
 import { renderAnalyticsTab, renderAnalyticsScript } from './admin-search-analytics.template'
 import { renderAgentTab, renderAgentScript } from './admin-search-agent.template'
+import { renderExperimentsTab, renderExperimentsScript } from './admin-search-experiments.template'
 
 export interface SearchDashboardData {
   settings: {
@@ -222,6 +223,10 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
             class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
             Agent
           </button>
+          <button id="tab-btn-experiments" onclick="switchTab('experiments')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Experiments
+          </button>
         </nav>
       </div>
 
@@ -231,6 +236,7 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
       ${renderRelevanceTab(props)}
       ${renderAnalyticsTab()}
       ${renderAgentTab()}
+      ${renderExperimentsTab()}
 
       <!-- Success Message -->
       <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
@@ -268,6 +274,20 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
       ${renderRelevanceScript()}
       ${renderAnalyticsScript()}
       ${renderAgentScript()}
+      ${renderExperimentsScript()}
+
+      // Hook experiments lazy-load into tab switch
+      var origSwitchTab = switchTab;
+      switchTab = function(tabId) {
+        origSwitchTab(tabId);
+        if (tabId === 'experiments' && typeof loadExperimentsOnTabSwitch === 'function') {
+          loadExperimentsOnTabSwitch();
+        }
+      };
+      // Re-init for hash
+      if (initTab === 'experiments' && typeof loadExperimentsOnTabSwitch === 'function') {
+        loadExperimentsOnTabSwitch();
+      }
     </script>
   `
 

@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono'
-import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import { createSonicJSApp, registerCollections, ExperimentService } from '@sonicjs-cms/core'
 import type { SonicJSConfig } from '@sonicjs-cms/core'
 
 // Import custom collections
@@ -53,4 +53,16 @@ if (contactFormPlugin.routes) {
 // Mount core app last (catch-all)
 app.route('/', coreApp)
 
-export default app
+export default {
+  fetch: app.fetch,
+  async scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
+    const expService = new ExperimentService(env.DB, env.CACHE_KV, env.SEARCH_EXPERIMENTS)
+    const active = await expService.getActiveExperiment()
+    if (active) {
+      const result = await expService.evaluateExperiment(active.id)
+      if (result?.auto_completed) {
+        console.log('[Cron] Experiment ' + active.id + ' auto-completed: winner=' + result.winner)
+      }
+    }
+  }
+}

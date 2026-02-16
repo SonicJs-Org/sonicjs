@@ -29,6 +29,8 @@ export interface AISearchSettings {
   facets_enabled?: boolean             // Master toggle (default: false)
   facet_config?: FacetDefinition[]     // Ordered list of configured facets
   facet_max_values?: number            // Global max values per facet (default: 20)
+  // Related Searches
+  related_searches_enabled?: boolean   // Master toggle (default: true)
 }
 
 export interface IndexStatus {
@@ -100,6 +102,7 @@ export interface SearchResponse {
   original_query?: string // Set when a query substitution rule was applied
   applied_rule_id?: string // ID of the substitution rule that matched
   cached?: boolean // True when result was served from KV cache
+  related_searches?: RelatedSearchResult[] // Related search suggestions
 }
 
 export interface SearchHistory {
@@ -266,7 +269,7 @@ export interface InstantSearchMultiResponse {
 // AI Search Quality Agent Types
 // ==========================================
 
-export type RecommendationCategory = 'synonym' | 'query_rule' | 'low_ctr' | 'unused_facet' | 'content_gap'
+export type RecommendationCategory = 'synonym' | 'query_rule' | 'low_ctr' | 'unused_facet' | 'content_gap' | 'related_search'
 export type RecommendationStatus = 'pending' | 'applied' | 'dismissed'
 
 export interface Recommendation {
@@ -292,4 +295,95 @@ export interface AgentRun {
   error_message: string | null
   created_at: number
   completed_at: number | null
+}
+
+// ==========================================
+// Trending Searches Types
+// ==========================================
+
+export interface TrendingSearch {
+  query: string
+  trend_score: number
+  search_count: number
+}
+
+export interface TrendingSearchResult {
+  items: TrendingSearch[]
+  cached: boolean
+}
+
+// ==========================================
+// Related Searches Types
+// ==========================================
+
+export interface RelatedSearch {
+  id: string
+  source_query: string
+  related_query: string
+  source: 'manual' | 'agent'
+  position: number
+  bidirectional: boolean
+  enabled: boolean
+  created_at: number
+  updated_at: number
+}
+
+export interface RelatedSearchResult {
+  query: string
+  source: 'manual' | 'agent' | 'auto'
+}
+
+// ==========================================
+// A/B Testing / Experiments Types
+// ==========================================
+
+export type ExperimentStatus = 'draft' | 'running' | 'paused' | 'completed' | 'archived'
+export type ExperimentMode = 'ab' | 'interleave' | 'bandit'
+
+export interface Experiment {
+  id: string
+  name: string
+  description: string | null
+  status: ExperimentStatus
+  mode: ExperimentMode
+  traffic_pct: number
+  split_ratio: number
+  variants: {
+    control: Partial<AISearchSettings>
+    treatment: Partial<AISearchSettings>
+  }
+  metrics: ExperimentMetrics | null
+  winner: string | null
+  confidence: number | null
+  min_searches: number
+  started_at: number | null
+  ended_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+export interface ExperimentMetrics {
+  control: VariantMetrics
+  treatment: VariantMetrics
+  confidence: number
+  significant: boolean
+}
+
+export interface VariantMetrics {
+  searches: number
+  clicks: number
+  ctr: number
+  zero_result_rate: number
+  avg_click_position: number
+  avg_response_time_ms: number
+}
+
+export interface InterleavedResult {
+  contentId: string
+  origin: 'control' | 'treatment'
+}
+
+export interface InterleaveOutput {
+  results: SearchResult[]
+  origins: Record<string, 'control' | 'treatment'>
 }

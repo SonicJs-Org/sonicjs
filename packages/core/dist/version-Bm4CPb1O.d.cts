@@ -192,4 +192,4 @@ declare const SONICJS_VERSION: string;
  */
 declare function getCoreVersion(): string;
 
-export { type FilterOperator as F, QueryFilterBuilder as Q, SONICJS_VERSION as S, TemplateRenderer as T, sanitizeObject as a, buildQuery as b, type FilterCondition as c, type FilterGroup as d, escapeHtml as e, type QueryFilter as f, getCoreVersion as g, type QueryResult as h, metricsTracker as m, renderTemplate as r, sanitizeInput as s, templateRenderer as t };
+export { type FilterOperator as F, QueryFilterBuilder as Q, SONICJS_VERSION as S, TemplateRenderer as T, sanitizeObject as a, buildQuery as b, type FilterCondition as c, type FilterGroup as d, escapeHtml as e, type QueryFilter as f, type QueryResult as g, getCoreVersion as h, metricsTracker as m, renderTemplate as r, sanitizeInput as s, templateRenderer as t };

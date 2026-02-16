@@ -1,9 +1,9 @@
 'use strict';
 
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkWXAFCBSP_cjs = require('./chunk-WXAFCBSP.cjs');
+var chunkMD7YM7UZ_cjs = require('./chunk-MD7YM7UZ.cjs');
 var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkO7D26FVW_cjs = require('./chunk-O7D26FVW.cjs');
+var chunkELVG5YJC_cjs = require('./chunk-ELVG5YJC.cjs');
 var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
 var chunkUOEIMC67_cjs = require('./chunk-UOEIMC67.cjs');
@@ -1269,7 +1269,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", chunkMD7YM7UZ_cjs.requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -1345,7 +1345,7 @@ apiContentCrudRoutes.post("/", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkMD7YM7UZ_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1419,7 +1419,7 @@ apiContentCrudRoutes.put("/:id", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkMD7YM7UZ_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1465,7 +1465,7 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunkWXAFCBSP_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkMD7YM7UZ_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
@@ -2201,7 +2201,7 @@ var fileValidationSchema = zod.z.object({
   // 50MB max
 });
 var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+apiMediaRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -2945,8 +2945,8 @@ apiSystemRoutes.get("/env", (c) => {
 });
 var api_system_default = apiSystemRoutes;
 var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
-adminApiRoutes.use("*", chunkWXAFCBSP_cjs.requireRole(["admin", "editor"]));
+adminApiRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
+adminApiRoutes.use("*", chunkMD7YM7UZ_cjs.requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -3456,7 +3456,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-NQY6BHJZ.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-GUAZMZJL.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -3481,7 +3481,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-NQY6BHJZ.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-GUAZMZJL.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -3500,7 +3500,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-NQY6BHJZ.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-GUAZMZJL.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -3982,7 +3982,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunkWXAFCBSP_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -4002,7 +4002,7 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkWXAFCBSP_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      const token = await chunkMD7YM7UZ_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -4047,11 +4047,11 @@ authRoutes.post("/login", async (c) => {
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await chunkWXAFCBSP_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkMD7YM7UZ_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await chunkWXAFCBSP_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkMD7YM7UZ_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -4098,7 +4098,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", chunkMD7YM7UZ_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -4115,13 +4115,13 @@ authRoutes.get("/me", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunkWXAFCBSP_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", chunkMD7YM7UZ_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunkWXAFCBSP_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
+    const token = await chunkMD7YM7UZ_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -4181,7 +4181,7 @@ authRoutes.post("/register/form", async (c) => {
         </div>
       `);
     }
-    const passwordHash = await chunkWXAFCBSP_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -4201,7 +4201,7 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await chunkWXAFCBSP_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
+    const token = await chunkMD7YM7UZ_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -4253,7 +4253,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const isValidPassword = await chunkWXAFCBSP_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkMD7YM7UZ_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -4261,7 +4261,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const token = await chunkWXAFCBSP_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkMD7YM7UZ_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -4320,7 +4320,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await chunkWXAFCBSP_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -4332,7 +4332,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await chunkWXAFCBSP_cjs.AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -4552,7 +4552,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunkWXAFCBSP_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -4571,7 +4571,7 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunkWXAFCBSP_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    const authToken = await chunkMD7YM7UZ_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
     cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
@@ -4801,7 +4801,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunkWXAFCBSP_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -9340,7 +9340,7 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminContentRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
   const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
@@ -12400,7 +12400,7 @@ function renderUsersListPage(data) {
 
 // src/routes/admin-users.ts
 var userRoutes = new hono.Hono();
-userRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+userRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -12555,7 +12555,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -12618,7 +12618,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -12689,7 +12689,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunkWXAFCBSP_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkMD7YM7UZ_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -12697,7 +12697,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunkWXAFCBSP_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -12713,7 +12713,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -12780,7 +12780,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -12934,7 +12934,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunkWXAFCBSP_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkMD7YM7UZ_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12957,7 +12957,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -12995,7 +12995,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -13244,7 +13244,7 @@ userRoutes.put("/users/:id", async (c) => {
         console.error("Failed to save user profile data:", profileError);
       }
     }
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -13289,7 +13289,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -13330,7 +13330,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunkWXAFCBSP_cjs.logActivity(
+      await chunkMD7YM7UZ_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -13349,7 +13349,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunkWXAFCBSP_cjs.logActivity(
+      await chunkMD7YM7UZ_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -13415,7 +13415,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -13472,7 +13472,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -13508,7 +13508,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -13591,7 +13591,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -13698,7 +13698,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunkWXAFCBSP_cjs.logActivity(
+    await chunkMD7YM7UZ_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -15037,7 +15037,7 @@ var fileValidationSchema2 = zod.z.object({
   // 50MB max
 });
 var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminMediaRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -15623,7 +15623,7 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunkWXAFCBSP_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkMD7YM7UZ_cjs.requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -17830,7 +17830,7 @@ function renderEmailSettingsContent(plugin, settings) {
 
 // src/routes/admin-plugins.ts
 var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminPluginRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -19235,7 +19235,7 @@ function renderLogConfigPage(data) {
 
 // src/routes/admin-logs.ts
 var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminLogsRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -21565,7 +21565,7 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 // src/routes/admin-dashboard.ts
 var VERSION = chunkUOEIMC67_cjs.getCoreVersion();
 var router = new hono.Hono();
-router.use("*", chunkWXAFCBSP_cjs.requireAuth());
+router.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -23345,7 +23345,7 @@ function renderCollectionFormPage(data) {
 
 // src/routes/admin-collections.ts
 var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminCollectionsRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -25542,7 +25542,7 @@ function renderDatabaseToolsSettings(settings) {
 
 // src/routes/admin-settings.ts
 var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminSettingsRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -25710,7 +25710,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkO7D26FVW_cjs.MigrationService(db);
+    const migrationService = new chunkELVG5YJC_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -25734,7 +25734,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkO7D26FVW_cjs.MigrationService(db);
+    const migrationService = new chunkELVG5YJC_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -25752,7 +25752,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkO7D26FVW_cjs.MigrationService(db);
+    const migrationService = new chunkELVG5YJC_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -27630,7 +27630,7 @@ function renderFormCreatePage(data) {
 
 // src/routes/admin-forms.ts
 var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminFormsRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -28762,7 +28762,7 @@ function renderAPIReferencePage(data) {
 // src/routes/admin-api-reference.ts
 var VERSION2 = chunkUOEIMC67_cjs.getCoreVersion();
 var router2 = new hono.Hono();
-router2.use("*", chunkWXAFCBSP_cjs.requireAuth());
+router2.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -30210,6 +30210,394 @@ var RerankerService = class {
   }
 };
 
+// src/plugins/core-plugins/ai-search-plugin/services/trending-search.service.ts
+var TrendingSearchService = class {
+  constructor(db, kv) {
+    this.db = db;
+    this.kv = kv;
+  }
+  /**
+   * Get trending searches — returns from KV cache if available, otherwise computes.
+   */
+  async getTrending(limit = 10, periodDays = 7) {
+    const cacheKey = `trending:${periodDays}d:${limit}`;
+    if (this.kv) {
+      try {
+        const cached = await this.kv.get(cacheKey, "json");
+        if (cached) {
+          return { items: cached, cached: true };
+        }
+      } catch {
+      }
+    }
+    const items = await this.computeTrending(limit, periodDays);
+    if (this.kv) {
+      try {
+        await this.kv.put(cacheKey, JSON.stringify(items), { expirationTtl: 900 });
+      } catch {
+      }
+    }
+    return { items, cached: false };
+  }
+  /**
+   * Compute trending searches using time-decay bucket scoring.
+   * Precomputes all thresholds in TypeScript for clean parameter binding.
+   */
+  async computeTrending(limit, periodDays) {
+    const now = Date.now();
+    const t1h = now - 36e5;
+    const t6h = now - 216e5;
+    const t24h = now - 864e5;
+    const t7d = now - 6048e5;
+    const lookback = now - periodDays * 864e5;
+    try {
+      const sql = `
+        SELECT
+          LOWER(query) as q,
+          SUM(
+            CASE
+              WHEN created_at > ?1 THEN 4.0
+              WHEN created_at > ?2 THEN 2.0
+              WHEN created_at > ?3 THEN 1.0
+              WHEN created_at > ?4 THEN 0.5
+              ELSE 0.25
+            END
+          ) as trend_score,
+          COUNT(*) as raw_count
+        FROM ai_search_history
+        WHERE created_at > ?5
+          AND results_count > 0
+          AND query IS NOT NULL
+          AND LENGTH(TRIM(query)) >= 2
+        GROUP BY LOWER(query)
+        HAVING COUNT(*) >= 3
+        ORDER BY trend_score DESC
+        LIMIT ?6
+      `;
+      const fetchLimit = Math.min(limit * 2, 40);
+      const { results } = await this.db.prepare(sql).bind(t1h, t6h, t24h, t7d, lookback, fetchLimit).all();
+      if (!results || results.length === 0) return [];
+      return results.filter((r) => this.isValidQuery(r.q)).slice(0, limit).map((r) => ({
+        query: r.q,
+        trend_score: Math.round(r.trend_score * 100) / 100,
+        search_count: r.raw_count
+      }));
+    } catch (error) {
+      console.log("[TrendingSearchService] Query failed:", error);
+      return [];
+    }
+  }
+  /**
+   * Post-filter: reject garbage queries that slip through SQL filters.
+   */
+  isValidQuery(q) {
+    if (q.length < 3) return false;
+    if (q.length > 100) return false;
+    if (/^\d+$/.test(q)) return false;
+    if (/^[0-9a-f-]{8,}$/i.test(q)) return false;
+    return true;
+  }
+  /**
+   * Invalidate all trending KV cache keys.
+   */
+  async invalidateCache() {
+    if (!this.kv) return;
+    const periods = [1, 7, 14, 30];
+    const limits = [5, 10, 15, 20];
+    const deletes = periods.flatMap(
+      (p) => limits.map((l) => this.kv.delete(`trending:${p}d:${l}`))
+    );
+    await Promise.allSettled(deletes);
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/services/related-search.service.ts
+var RelatedSearchService = class {
+  constructor(db, kv) {
+    this.db = db;
+    this.kv = kv;
+  }
+  // =============================================
+  // Main Entry Point
+  // =============================================
+  /**
+   * Get related searches for a query — merges manual + agent (D1) + auto (KV/compute).
+   * Returns deduplicated results with manual first, then agent, then auto, up to limit.
+   */
+  async getRelatedSearches(query, limit = 5) {
+    const normalized = this.normalize(query);
+    if (!normalized) return [];
+    const stored = await this.getStoredRelated(normalized);
+    const results = stored.map((r) => ({
+      query: r.related_query,
+      source: r.source
+    }));
+    if (results.length >= limit) {
+      return results.slice(0, limit);
+    }
+    const remaining = limit - results.length;
+    const autoResults = await this.getAutoRelated(normalized, remaining, results);
+    results.push(...autoResults);
+    return results.slice(0, limit);
+  }
+  // =============================================
+  // Stored Entries (Manual + Agent)
+  // =============================================
+  async getStoredRelated(normalizedQuery) {
+    try {
+      const { results } = await this.db.prepare(`
+          SELECT * FROM ai_search_related
+          WHERE source_query = ? AND enabled = 1
+          ORDER BY
+            CASE source WHEN 'manual' THEN 0 WHEN 'agent' THEN 1 END,
+            position ASC
+        `).bind(normalizedQuery).all();
+      return (results || []).map((row) => this.mapRow(row));
+    } catch {
+      return [];
+    }
+  }
+  // =============================================
+  // Auto-Generated (Click Overlap + Session Co-occurrence)
+  // =============================================
+  async getAutoRelated(normalizedQuery, limit, existingResults) {
+    if (!this.kv || limit <= 0) return [];
+    const cacheKey = `related:auto:${normalizedQuery}`;
+    try {
+      const cached = await this.kv.get(cacheKey, "json");
+      if (cached) {
+        const existingQueries2 = new Set(existingResults.map((r) => r.query.toLowerCase()));
+        return cached.filter((r) => !existingQueries2.has(r.query.toLowerCase())).slice(0, limit);
+      }
+    } catch {
+    }
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1e3;
+    try {
+      const countRow = await this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_history WHERE created_at >= ?").bind(thirtyDaysAgo).first();
+      if (!countRow || countRow.cnt < 100) return [];
+    } catch {
+      return [];
+    }
+    const existingQueries = new Set(existingResults.map((r) => r.query.toLowerCase()));
+    const scoreMap = /* @__PURE__ */ new Map();
+    try {
+      const { results: clickRows } = await this.db.prepare(`
+          WITH target_clicks AS (
+            SELECT DISTINCT c.clicked_content_id
+            FROM ai_search_clicks c
+            JOIN ai_search_history h ON c.search_id = CAST(h.id AS TEXT)
+            WHERE LOWER(h.query) = ?
+              AND h.created_at >= ?
+          ),
+          related AS (
+            SELECT LOWER(h.query) as related_query,
+                   COUNT(DISTINCT c.clicked_content_id) as shared_clicks
+            FROM ai_search_clicks c
+            JOIN ai_search_history h ON c.search_id = CAST(h.id AS TEXT)
+            JOIN target_clicks t ON c.clicked_content_id = t.clicked_content_id
+            WHERE LOWER(h.query) != ?
+              AND LENGTH(TRIM(h.query)) >= 2
+              AND h.results_count > 0
+            GROUP BY LOWER(h.query)
+            HAVING shared_clicks >= 2
+          )
+          SELECT related_query, shared_clicks
+          FROM related
+          ORDER BY shared_clicks DESC
+          LIMIT 20
+        `).bind(normalizedQuery, thirtyDaysAgo, normalizedQuery).all();
+      for (const row of clickRows || []) {
+        if (!existingQueries.has(row.related_query)) {
+          scoreMap.set(row.related_query, (scoreMap.get(row.related_query) || 0) + row.shared_clicks);
+        }
+      }
+    } catch (error) {
+      console.warn("[RelatedSearchService] Click overlap query failed:", error);
+    }
+    try {
+      const { results: sessionRows } = await this.db.prepare(`
+          WITH target_searches AS (
+            SELECT user_id, created_at
+            FROM ai_search_history
+            WHERE LOWER(query) = ?
+              AND created_at >= ?
+              AND results_count > 0
+              AND user_id IS NOT NULL
+          ),
+          co_occurring AS (
+            SELECT LOWER(h.query) as related_query, COUNT(*) as co_count
+            FROM ai_search_history h
+            JOIN target_searches t ON h.user_id = t.user_id
+              AND ABS(h.created_at - t.created_at) <= 1800000
+            WHERE LOWER(h.query) != ?
+              AND h.results_count > 0
+              AND h.user_id IS NOT NULL
+              AND LENGTH(TRIM(h.query)) >= 2
+            GROUP BY LOWER(h.query)
+            HAVING co_count >= 2
+          )
+          SELECT related_query, co_count
+          FROM co_occurring
+          ORDER BY co_count DESC
+          LIMIT 20
+        `).bind(normalizedQuery, thirtyDaysAgo, normalizedQuery).all();
+      for (const row of sessionRows || []) {
+        if (!existingQueries.has(row.related_query)) {
+          scoreMap.set(row.related_query, (scoreMap.get(row.related_query) || 0) + row.co_count);
+        }
+      }
+    } catch (error) {
+      console.warn("[RelatedSearchService] Session co-occurrence query failed:", error);
+    }
+    const autoResults = Array.from(scoreMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit + 5).map(([query]) => ({ query, source: "auto" }));
+    try {
+      await this.kv.put(cacheKey, JSON.stringify(autoResults), { expirationTtl: 3600 });
+    } catch {
+    }
+    return autoResults.slice(0, limit);
+  }
+  // =============================================
+  // CRUD
+  // =============================================
+  async create(sourceQuery, relatedQuery, opts) {
+    const source = opts?.source || "manual";
+    const position = opts?.position ?? 0;
+    const bidirectional = opts?.bidirectional ? 1 : 0;
+    const normalizedSource = this.normalize(sourceQuery);
+    const normalizedRelated = this.normalize(relatedQuery);
+    const id = crypto.randomUUID().replace(/-/g, "");
+    await this.db.prepare(`
+        INSERT INTO ai_search_related (id, source_query, related_query, source, position, bidirectional, enabled)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
+      `).bind(id, normalizedSource, normalizedRelated, source, position, bidirectional).run();
+    if (opts?.bidirectional) {
+      const reverseId = crypto.randomUUID().replace(/-/g, "");
+      try {
+        await this.db.prepare(`
+            INSERT INTO ai_search_related (id, source_query, related_query, source, position, bidirectional, enabled)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+          `).bind(reverseId, normalizedRelated, normalizedSource, source, position, bidirectional).run();
+      } catch {
+      }
+    }
+    return {
+      id,
+      source_query: normalizedSource,
+      related_query: normalizedRelated,
+      source,
+      position,
+      bidirectional: !!opts?.bidirectional,
+      enabled: true,
+      created_at: Math.floor(Date.now() / 1e3),
+      updated_at: Math.floor(Date.now() / 1e3)
+    };
+  }
+  async update(id, fields) {
+    const setClauses = ["updated_at = unixepoch()"];
+    const params = [];
+    if (fields.related_query !== void 0) {
+      setClauses.push("related_query = ?");
+      params.push(this.normalize(fields.related_query));
+    }
+    if (fields.position !== void 0) {
+      setClauses.push("position = ?");
+      params.push(fields.position);
+    }
+    if (fields.enabled !== void 0) {
+      setClauses.push("enabled = ?");
+      params.push(fields.enabled ? 1 : 0);
+    }
+    params.push(id);
+    await this.db.prepare(`UPDATE ai_search_related SET ${setClauses.join(", ")} WHERE id = ?`).bind(...params).run();
+    return this.getById(id);
+  }
+  async delete(id) {
+    const result = await this.db.prepare("DELETE FROM ai_search_related WHERE id = ?").bind(id).run();
+    return (result?.meta?.changes ?? 0) > 0;
+  }
+  async getById(id) {
+    try {
+      const row = await this.db.prepare("SELECT * FROM ai_search_related WHERE id = ?").bind(id).first();
+      return row ? this.mapRow(row) : null;
+    } catch {
+      return null;
+    }
+  }
+  async getAll(opts) {
+    const conditions = [];
+    const params = [];
+    if (opts?.source_query) {
+      conditions.push("source_query = ?");
+      params.push(this.normalize(opts.source_query));
+    }
+    if (opts?.source) {
+      conditions.push("source = ?");
+      params.push(opts.source);
+    }
+    if (opts?.enabled !== void 0) {
+      conditions.push("enabled = ?");
+      params.push(opts.enabled ? 1 : 0);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = opts?.limit || 100;
+    const offset = opts?.offset || 0;
+    try {
+      const { results } = await this.db.prepare(`SELECT * FROM ai_search_related ${where} ORDER BY source_query ASC, position ASC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all();
+      return (results || []).map((row) => this.mapRow(row));
+    } catch {
+      return [];
+    }
+  }
+  async bulkCreate(entries) {
+    let count = 0;
+    for (const entry of entries) {
+      try {
+        await this.create(entry.source_query, entry.related_query, {
+          source: entry.source,
+          position: entry.position,
+          bidirectional: entry.bidirectional
+        });
+        count++;
+      } catch {
+      }
+    }
+    return count;
+  }
+  async invalidateCache(query) {
+    if (!this.kv) return;
+    if (query) {
+      await this.kv.delete(`related:auto:${this.normalize(query)}`);
+    } else {
+      try {
+        const list = await this.kv.list({ prefix: "related:auto:" });
+        for (const key of list.keys) {
+          await this.kv.delete(key.name);
+        }
+      } catch {
+      }
+    }
+  }
+  // =============================================
+  // Helpers
+  // =============================================
+  normalize(query) {
+    return query.toLowerCase().trim();
+  }
+  mapRow(row) {
+    return {
+      id: row.id,
+      source_query: row.source_query,
+      related_query: row.related_query,
+      source: row.source,
+      position: row.position,
+      bidirectional: row.bidirectional === 1,
+      enabled: row.enabled === 1,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    };
+  }
+};
+
 // src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts
 var AISearchService = class {
   constructor(db, ai, vectorize, kv) {
@@ -30458,12 +30846,16 @@ var AISearchService = class {
         const cached = await this.searchCache.get(cacheKey);
         if (cached) {
           const elapsed = Date.now() - startTime;
-          const searchId = await this.logSearch(query.query, query.mode, cached.results.length, elapsed, true);
+          const [searchId, relatedSearches2] = await Promise.all([
+            this.logSearch(query.query, query.mode, cached.results.length, elapsed, true),
+            settings.related_searches_enabled !== false ? new RelatedSearchService(this.db, this.kv).getRelatedSearches(query.query, 5).catch(() => void 0) : Promise.resolve(void 0)
+          ]);
           return {
             ...cached,
             query_time_ms: elapsed,
             search_id: searchId,
             cached: true,
+            ...relatedSearches2 ? { related_searches: relatedSearches2 } : {},
             // Re-attach rule metadata (not cached)
             ...originalQuery ? { original_query: originalQuery, applied_rule_id: appliedRuleId } : {}
           };
@@ -30533,18 +30925,64 @@ var AISearchService = class {
       console.warn("[AISearchService] Ranking pipeline error (preserving original order):", error);
       finalResult = result;
     }
-    if (this.searchCache && settings.cache_duration > 0) {
-      const cacheKey = await this.searchCache.buildKey(query);
+    const cachePromise = this.searchCache && settings.cache_duration > 0 ? this.searchCache.buildKey(query).then(async (cacheKey) => {
       if (cacheKey) {
         const ttlSeconds = settings.cache_duration * 3600;
-        try {
-          await this.searchCache.put(cacheKey, finalResult, ttlSeconds);
-        } catch (err) {
+        await this.searchCache.put(cacheKey, finalResult, ttlSeconds).catch((err) => {
           console.warn("[AISearchService] Cache write failed:", err);
-        }
+        });
       }
+    }) : Promise.resolve();
+    const relatedPromise = settings.related_searches_enabled !== false ? new RelatedSearchService(this.db, this.kv).getRelatedSearches(query.query, 5).catch(() => void 0) : Promise.resolve(void 0);
+    const [, relatedSearches] = await Promise.all([cachePromise, relatedPromise]);
+    if (relatedSearches) {
+      finalResult.related_searches = relatedSearches;
     }
     return finalResult;
+  }
+  /**
+   * Execute search with experiment variant overrides applied.
+   * Phase 1: flat AISearchSettings merge only (no pipeline weight overrides).
+   * Used by A/B testing to run control/treatment searches with different configs.
+   */
+  async searchWithOverrides(query, overrides) {
+    const startTime = Date.now();
+    const baseSettings = await this.getSettings();
+    if (!baseSettings?.enabled) {
+      return { results: [], total: 0, query_time_ms: 0, mode: query.mode };
+    }
+    const settings = { ...baseSettings, ...overrides };
+    let originalQuery;
+    let appliedRuleId;
+    const ruleResult = await this.queryRulesService.applyRules(query.query);
+    if (ruleResult.originalQuery) {
+      originalQuery = ruleResult.originalQuery;
+      appliedRuleId = ruleResult.ruleId;
+      query = { ...query, query: ruleResult.query };
+    }
+    let searchPromise;
+    if (query.mode === "hybrid") {
+      searchPromise = this.searchHybrid(query, settings);
+    } else if (query.mode === "fts5") {
+      searchPromise = this.searchFTS5(query, settings);
+    } else if (query.mode === "ai" && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+      searchPromise = this.searchAI(query, settings);
+    } else {
+      searchPromise = this.searchKeyword(query, settings);
+    }
+    const result = await searchPromise;
+    if (originalQuery) {
+      result.original_query = originalQuery;
+      result.applied_rule_id = appliedRuleId;
+    }
+    try {
+      const ranked = await this.rankingPipeline.apply(result, query.query);
+      ranked.query_time_ms = Date.now() - startTime;
+      return ranked;
+    } catch {
+      result.query_time_ms = Date.now() - startTime;
+      return result;
+    }
   }
   /**
    * Compute facets for the current search query.
@@ -30870,23 +31308,14 @@ var AISearchService = class {
     }
   }
   /**
-   * Get trending queries from last 7 days, ranked by frequency.
-   * Excludes zero-result queries (AVG results_count < 0.5).
+   * Get trending queries using TrendingSearchService (time-decay scoring + KV cache).
+   * Delegates to the dedicated service for consistent behavior across suggest and trending endpoints.
    */
   async getTrendingQueries() {
     try {
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1e3;
-      const stmt = this.db.prepare(`
-        SELECT query, COUNT(*) as cnt, AVG(results_count) as avg_res
-        FROM ai_search_history
-        WHERE created_at >= ?
-        GROUP BY LOWER(query)
-        HAVING avg_res >= 0.5
-        ORDER BY cnt DESC
-        LIMIT 10
-      `);
-      const { results } = await stmt.bind(sevenDaysAgo).all();
-      return (results || []).map((r) => r.query).filter(Boolean);
+      const service = new TrendingSearchService(this.db, this.kv);
+      const result = await service.getTrending(10, 7);
+      return result.items.map((r) => r.query);
     } catch (error) {
       console.log("[AISearchService] Trending queries unavailable:", error);
       return [];
@@ -35748,6 +36177,917 @@ function renderAnalyticsScript() {
   `;
 }
 
+// src/templates/pages/admin-search-agent.template.ts
+function renderAgentTab() {
+  return `
+      <div id="tab-agent" class="tab-panel hidden">
+        <div class="space-y-6">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Search Quality Agent</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">Automated analysis of search analytics to surface actionable improvements</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <span id="agent-run-badge" class="hidden inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"></span>
+              <button onclick="runAgentAnalysis()" id="agent-run-btn" type="button"
+                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Run Analysis
+              </button>
+            </div>
+          </div>
+
+          <!-- Stat Cards -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Pending</p>
+                <p class="mt-1 text-2xl font-semibold text-amber-600 dark:text-amber-400" id="agent-stat-pending">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Applied</p>
+                <p class="mt-1 text-2xl font-semibold text-lime-600 dark:text-lime-400" id="agent-stat-applied">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Dismissed</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-500 dark:text-zinc-400" id="agent-stat-dismissed">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Last Run</p>
+                <p class="mt-1 text-lg font-semibold text-zinc-950 dark:text-white" id="agent-stat-lastrun">&mdash;</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Bar -->
+          <div class="flex items-center gap-3 flex-wrap">
+            <select id="agent-filter-category" onchange="loadRecommendations()"
+              class="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 px-3 py-2">
+              <option value="">All Categories</option>
+              <option value="synonym">Synonym</option>
+              <option value="query_rule">Query Rule</option>
+              <option value="low_ctr">Low CTR</option>
+              <option value="unused_facet">Unused Facet</option>
+              <option value="content_gap">Content Gap</option>
+            </select>
+            <select id="agent-filter-status" onchange="loadRecommendations()"
+              class="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 px-3 py-2">
+              <option value="pending">Pending</option>
+              <option value="">All Statuses</option>
+              <option value="applied">Applied</option>
+              <option value="dismissed">Dismissed</option>
+            </select>
+            <button onclick="dismissAllPending()" type="button"
+              class="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+              Dismiss All
+            </button>
+          </div>
+
+          <!-- Recommendations List -->
+          <div id="agent-recommendations-list" class="space-y-4">
+            <div class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">Run analysis to generate recommendations</div>
+          </div>
+
+          <!-- Run History (Collapsible) -->
+          <details class="rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <summary class="px-6 py-4 cursor-pointer text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white">
+              Run History
+            </summary>
+            <div class="px-6 pb-4">
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+                  <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+                    <tr>
+                      <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase">Status</th>
+                      <th class="px-4 py-2 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase">Recommendations</th>
+                      <th class="px-4 py-2 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase">Duration</th>
+                      <th class="px-4 py-2 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase">When</th>
+                    </tr>
+                  </thead>
+                  <tbody id="agent-run-history-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+                    <tr><td colspan="4" class="px-4 py-3 text-sm text-zinc-400 dark:text-zinc-500 text-center">No runs yet</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+
+        </div>
+      </div>
+  `;
+}
+function renderAgentScript() {
+  return `
+      // =============================================
+      // Agent Tab
+      // =============================================
+      var agentLoaded = false;
+      var agentPollTimer = null;
+
+      // Hook into switchTab for lazy loading
+      var _agentOrigSwitchTab = switchTab;
+      switchTab = function(tabId) {
+        _agentOrigSwitchTab(tabId);
+        if (tabId === 'agent' && !agentLoaded) {
+          agentLoaded = true;
+          loadAgentStatus();
+          loadRecommendations();
+          loadRunHistory();
+        }
+      };
+
+      function agentBasePath() {
+        return '/admin/plugins/ai-search/api/agent';
+      }
+
+      async function loadAgentStatus() {
+        try {
+          var res = await fetch(agentBasePath() + '/status');
+          if (!res.ok) throw new Error('Failed');
+          var json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Unknown');
+          var d = json.data;
+
+          document.getElementById('agent-stat-pending').textContent = d.stats.pending;
+          document.getElementById('agent-stat-applied').textContent = d.stats.applied;
+          document.getElementById('agent-stat-dismissed').textContent = d.stats.dismissed;
+
+          if (d.latest_run) {
+            var badge = document.getElementById('agent-run-badge');
+            var statusColors = {
+              running: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+              completed: 'bg-lime-100 dark:bg-lime-900/30 text-lime-700 dark:text-lime-300',
+              failed: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+            };
+            badge.className = 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ' + (statusColors[d.latest_run.status] || '');
+            badge.textContent = d.latest_run.status;
+            badge.classList.remove('hidden');
+
+            var lastRunEl = document.getElementById('agent-stat-lastrun');
+            if (d.latest_run.duration_ms) {
+              lastRunEl.textContent = (d.latest_run.duration_ms / 1000).toFixed(1) + 's';
+            } else if (d.latest_run.status === 'running') {
+              lastRunEl.textContent = 'Running...';
+            } else {
+              lastRunEl.textContent = 'N/A';
+            }
+
+            // Enable/disable run button
+            var btn = document.getElementById('agent-run-btn');
+            btn.disabled = d.latest_run.status === 'running';
+          }
+        } catch (e) {
+          console.error('Agent status error:', e);
+        }
+      }
+
+      async function loadRecommendations() {
+        var category = document.getElementById('agent-filter-category').value;
+        var status = document.getElementById('agent-filter-status').value;
+        var params = new URLSearchParams();
+        if (category) params.set('category', category);
+        if (status) params.set('status', status);
+
+        var container = document.getElementById('agent-recommendations-list');
+        try {
+          var res = await fetch(agentBasePath() + '/recommendations?' + params.toString());
+          if (!res.ok) throw new Error('Failed');
+          var json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Unknown');
+
+          var recs = json.data;
+          if (!recs || recs.length === 0) {
+            container.innerHTML = '<div class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">No recommendations found</div>';
+            return;
+          }
+
+          var categoryColors = {
+            synonym: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+            query_rule: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+            low_ctr: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+            unused_facet: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+            content_gap: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300'
+          };
+          var categoryLabels = {
+            synonym: 'Synonym',
+            query_rule: 'Query Rule',
+            low_ctr: 'Low CTR',
+            unused_facet: 'Unused Facet',
+            content_gap: 'Content Gap'
+          };
+
+          var html = '';
+          for (var i = 0; i < recs.length; i++) {
+            var r = recs[i];
+            var catColor = categoryColors[r.category] || '';
+            var catLabel = categoryLabels[r.category] || r.category;
+            var canApply = (r.status === 'pending');
+            var isActionable = (r.category === 'synonym' || r.category === 'query_rule');
+
+            html += '<div class="rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-5">';
+            html += '<div class="flex items-start justify-between gap-4">';
+            html += '<div class="flex-1 min-w-0">';
+
+            // Category badge + status
+            html += '<div class="flex items-center gap-2 mb-2">';
+            html += '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ' + catColor + '">' + escapeAgentHtml(catLabel) + '</span>';
+            if (r.status !== 'pending') {
+              var statusColor = r.status === 'applied' ? 'text-lime-600 dark:text-lime-400' : 'text-zinc-400 dark:text-zinc-500';
+              html += '<span class="text-xs ' + statusColor + '">' + r.status + '</span>';
+            }
+            html += '</div>';
+
+            // Title + description
+            html += '<h3 class="text-sm font-medium text-zinc-950 dark:text-white truncate">' + escapeAgentHtml(r.title) + '</h3>';
+            html += '<p class="text-sm text-zinc-600 dark:text-zinc-400 mt-1">' + escapeAgentHtml(r.description) + '</p>';
+
+            // Supporting data badges
+            var sd = r.supporting_data || {};
+            var sdKeys = Object.keys(sd);
+            if (sdKeys.length > 0) {
+              html += '<div class="flex flex-wrap gap-1.5 mt-2">';
+              for (var k = 0; k < sdKeys.length; k++) {
+                var key = sdKeys[k];
+                var val = sd[key];
+                html += '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">' + escapeAgentHtml(key.replace(/_/g, ' ')) + ': ' + escapeAgentHtml(String(val)) + '</span>';
+              }
+              html += '</div>';
+            }
+
+            html += '</div>'; // end flex-1
+
+            // Action buttons
+            if (canApply) {
+              html += '<div class="flex items-center gap-2 flex-shrink-0">';
+              if (isActionable) {
+                html += '<button onclick="applyRecommendation(' + "'" + r.id + "'" + ')" class="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-lime-600 hover:bg-lime-700">Apply</button>';
+              } else {
+                html += '<button onclick="applyRecommendation(' + "'" + r.id + "'" + ')" class="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-lime-600 hover:bg-lime-700">Acknowledge</button>';
+              }
+              html += '<button onclick="dismissRecommendation(' + "'" + r.id + "'" + ')" class="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700">Dismiss</button>';
+              html += '</div>';
+            }
+
+            html += '</div>'; // end flex
+            html += '</div>'; // end card
+          }
+          container.innerHTML = html;
+        } catch (e) {
+          console.error('Load recommendations error:', e);
+          container.innerHTML = '<div class="text-sm text-red-500 text-center py-8">Failed to load recommendations</div>';
+        }
+      }
+
+      async function runAgentAnalysis() {
+        var btn = document.getElementById('agent-run-btn');
+        btn.disabled = true;
+        btn.textContent = 'Running...';
+
+        try {
+          var res = await fetch(agentBasePath() + '/run', { method: 'POST' });
+          if (!res.ok) throw new Error('Failed to start analysis');
+          var json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Unknown');
+
+          // Poll until complete
+          agentPollTimer = setInterval(async function() {
+            try {
+              var statusRes = await fetch(agentBasePath() + '/status');
+              var statusJson = await statusRes.json();
+              if (statusJson.success && statusJson.data.latest_run) {
+                var run = statusJson.data.latest_run;
+                if (run.status !== 'running') {
+                  clearInterval(agentPollTimer);
+                  agentPollTimer = null;
+                  btn.disabled = false;
+                  btn.innerHTML = '<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Run Analysis';
+
+                  if (run.status === 'completed') {
+                    showAgentToast('Analysis complete: ' + run.recommendations_count + ' recommendations');
+                  } else {
+                    showAgentToast('Analysis failed: ' + (run.error_message || 'Unknown error'), true);
+                  }
+
+                  loadAgentStatus();
+                  loadRecommendations();
+                  loadRunHistory();
+                }
+              }
+            } catch (e) {
+              console.error('Poll error:', e);
+            }
+          }, 2000);
+        } catch (e) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Run Analysis';
+          showAgentToast('Failed to start analysis', true);
+        }
+      }
+
+      async function applyRecommendation(id) {
+        try {
+          var res = await fetch(agentBasePath() + '/recommendations/' + id + '/apply', { method: 'POST' });
+          var json = await res.json();
+          if (json.success) {
+            showAgentToast(json.message || 'Applied');
+          } else {
+            showAgentToast(json.error || 'Failed', true);
+          }
+          loadAgentStatus();
+          loadRecommendations();
+        } catch (e) {
+          showAgentToast('Failed to apply', true);
+        }
+      }
+
+      async function dismissRecommendation(id) {
+        try {
+          await fetch(agentBasePath() + '/recommendations/' + id + '/dismiss', { method: 'POST' });
+          loadAgentStatus();
+          loadRecommendations();
+        } catch (e) {
+          showAgentToast('Failed to dismiss', true);
+        }
+      }
+
+      async function dismissAllPending() {
+        try {
+          var res = await fetch(agentBasePath() + '/recommendations/dismiss-all', { method: 'POST' });
+          var json = await res.json();
+          if (json.success) {
+            showAgentToast('Dismissed ' + (json.data?.dismissed || 'all') + ' recommendations');
+          }
+          loadAgentStatus();
+          loadRecommendations();
+        } catch (e) {
+          showAgentToast('Failed to dismiss all', true);
+        }
+      }
+
+      async function loadRunHistory() {
+        try {
+          var res = await fetch(agentBasePath() + '/runs');
+          if (!res.ok) return;
+          var json = await res.json();
+          if (!json.success || !json.data || json.data.length === 0) return;
+
+          var tbody = document.getElementById('agent-run-history-tbody');
+          var html = '';
+          var now = Date.now();
+          for (var i = 0; i < json.data.length; i++) {
+            var run = json.data[i];
+            var statusClass = run.status === 'completed' ? 'text-lime-600 dark:text-lime-400'
+              : run.status === 'failed' ? 'text-red-600 dark:text-red-400'
+              : 'text-blue-600 dark:text-blue-400';
+            var duration = run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + 's' : '\u2014';
+            var ago = formatAgentTimeAgo(now - (run.created_at * 1000));
+
+            html += '<tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">';
+            html += '<td class="px-4 py-2 text-sm ' + statusClass + ' font-medium">' + run.status + '</td>';
+            html += '<td class="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + run.recommendations_count + '</td>';
+            html += '<td class="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 text-right font-mono">' + duration + '</td>';
+            html += '<td class="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400 text-right whitespace-nowrap">' + ago + '</td>';
+            html += '</tr>';
+          }
+          tbody.innerHTML = html;
+        } catch (e) {
+          console.error('Load run history error:', e);
+        }
+      }
+
+      function showAgentToast(message, isError) {
+        var el = document.getElementById('msg');
+        if (!el) return;
+        el.querySelector('.font-semibold').textContent = message;
+        if (isError) {
+          el.className = 'fixed bottom-4 right-4 p-4 rounded-lg bg-red-50 text-red-900 border border-red-200 dark:bg-red-900/20 dark:text-red-100 dark:border-red-800 shadow-lg z-50';
+        } else {
+          el.className = 'fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50';
+        }
+        el.classList.remove('hidden');
+        setTimeout(function() { el.classList.add('hidden'); }, 3000);
+      }
+
+      function escapeAgentHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function formatAgentTimeAgo(ms) {
+        var sec = Math.floor(ms / 1000);
+        if (sec < 60) return 'just now';
+        var min = Math.floor(sec / 60);
+        if (min < 60) return min + 'm ago';
+        var hr = Math.floor(min / 60);
+        if (hr < 24) return hr + 'h ago';
+        var days = Math.floor(hr / 24);
+        return days + 'd ago';
+      }
+
+      // Auto-load if we navigated directly to #agent
+      if (initTab === 'agent') {
+        agentLoaded = true;
+        loadAgentStatus();
+        loadRecommendations();
+        loadRunHistory();
+      }
+  `;
+}
+
+// src/templates/pages/admin-search-experiments.template.ts
+function renderExperimentsTab() {
+  return `
+      <div id="tab-experiments" class="tab-panel hidden">
+        <div class="space-y-6">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Search Experiments</h2>
+              <p class="text-sm text-zinc-600 dark:text-zinc-400">A/B test and interleave search configurations to measure what works best</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <button onclick="openCreateExperiment()" type="button"
+                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New Experiment
+              </button>
+            </div>
+          </div>
+
+          <!-- Active Experiment Banner -->
+          <div id="exp-active-banner" class="hidden rounded-xl bg-indigo-50 dark:bg-indigo-950/30 ring-1 ring-indigo-200 dark:ring-indigo-800 p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="relative flex h-2.5 w-2.5">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+                  </span>
+                  <span class="text-sm font-semibold text-indigo-700 dark:text-indigo-300" id="exp-active-name">\u2014</span>
+                  <span id="exp-active-mode-badge" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">A/B</span>
+                </div>
+                <p class="mt-1 text-xs text-indigo-600 dark:text-indigo-400" id="exp-active-desc">\u2014</p>
+              </div>
+              <div class="flex items-center gap-6">
+                <!-- Live metrics summary -->
+                <div class="text-right">
+                  <div class="flex items-center gap-4 text-xs">
+                    <div>
+                      <span class="text-zinc-500 dark:text-zinc-400">Searches</span>
+                      <span class="ml-1 font-semibold text-zinc-900 dark:text-white" id="exp-active-searches">0</span>
+                    </div>
+                    <div>
+                      <span class="text-zinc-500 dark:text-zinc-400">Confidence</span>
+                      <span class="ml-1 font-semibold text-zinc-900 dark:text-white" id="exp-active-confidence">0%</span>
+                    </div>
+                  </div>
+                  <!-- Confidence progress bar -->
+                  <div class="mt-1 h-1.5 w-40 rounded-full bg-zinc-200 dark:bg-zinc-700">
+                    <div id="exp-active-confidence-bar" class="h-1.5 rounded-full bg-indigo-500 transition-all" style="width: 0%"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="pauseExperiment()" type="button"
+                    class="rounded-lg px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 dark:text-amber-300 dark:bg-amber-900/30 dark:hover:bg-amber-900/50">
+                    Pause
+                  </button>
+                  <button onclick="completeExperiment()" type="button"
+                    class="rounded-lg px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:text-red-300 dark:bg-red-900/30 dark:hover:bg-red-900/50">
+                    Stop
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Variant comparison -->
+            <div id="exp-active-metrics" class="hidden mt-4 grid grid-cols-2 gap-4">
+              <div class="rounded-lg bg-white dark:bg-zinc-900 p-3 ring-1 ring-zinc-200 dark:ring-zinc-700">
+                <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Control</p>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p class="text-lg font-semibold text-zinc-900 dark:text-white" id="exp-ctrl-ctr">\u2014</p>
+                    <p class="text-[10px] text-zinc-500">CTR</p>
+                  </div>
+                  <div>
+                    <p class="text-lg font-semibold text-zinc-900 dark:text-white" id="exp-ctrl-zero">\u2014</p>
+                    <p class="text-[10px] text-zinc-500">Zero-Result</p>
+                  </div>
+                  <div>
+                    <p class="text-lg font-semibold text-zinc-900 dark:text-white" id="exp-ctrl-pos">\u2014</p>
+                    <p class="text-[10px] text-zinc-500">Avg Position</p>
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-lg bg-white dark:bg-zinc-900 p-3 ring-1 ring-zinc-200 dark:ring-zinc-700">
+                <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Treatment</p>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p class="text-lg font-semibold text-zinc-900 dark:text-white" id="exp-treat-ctr">\u2014</p>
+                    <p class="text-[10px] text-zinc-500">CTR</p>
+                  </div>
+                  <div>
+                    <p class="text-lg font-semibold text-zinc-900 dark:text-white" id="exp-treat-zero">\u2014</p>
+                    <p class="text-[10px] text-zinc-500">Zero-Result</p>
+                  </div>
+                  <div>
+                    <p class="text-lg font-semibold text-zinc-900 dark:text-white" id="exp-treat-pos">\u2014</p>
+                    <p class="text-[10px] text-zinc-500">Avg Position</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stat Cards -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Total Experiments</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white" id="exp-stat-total">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Running</p>
+                <p class="mt-1 text-2xl font-semibold text-indigo-600 dark:text-indigo-400" id="exp-stat-running">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Completed</p>
+                <p class="mt-1 text-2xl font-semibold text-lime-600 dark:text-lime-400" id="exp-stat-completed">&mdash;</p>
+              </div>
+            </div>
+            <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+              <div class="p-5">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Draft</p>
+                <p class="mt-1 text-2xl font-semibold text-zinc-500 dark:text-zinc-400" id="exp-stat-draft">&mdash;</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Experiment List -->
+          <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+            <div class="px-5 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
+              <h3 class="text-sm font-medium text-zinc-700 dark:text-zinc-300">All Experiments</h3>
+              <select id="exp-filter-status" onchange="loadExperiments()" class="text-xs rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-1">
+                <option value="">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="running">Running</option>
+                <option value="paused">Paused</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div id="exp-list" class="divide-y divide-zinc-200 dark:divide-zinc-700">
+              <div class="px-5 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">Loading experiments...</div>
+            </div>
+          </div>
+
+          <!-- Create Experiment Modal -->
+          <div id="exp-create-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
+              <div class="fixed inset-0 bg-zinc-900/50 dark:bg-black/50" onclick="closeCreateExperiment()"></div>
+              <div class="relative w-full max-w-lg rounded-2xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 shadow-xl p-6">
+                <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">New Experiment</h3>
+
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Name</label>
+                    <input id="exp-name" type="text" placeholder="e.g. Title Boost Test"
+                      class="w-full rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm px-3 py-2" />
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Description</label>
+                    <textarea id="exp-desc" rows="2" placeholder="What are you testing and why?"
+                      class="w-full rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm px-3 py-2"></textarea>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Mode</label>
+                      <select id="exp-mode"
+                        class="w-full rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm px-3 py-2">
+                        <option value="ab">A/B Split</option>
+                        <option value="interleave">Interleaving</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Traffic %</label>
+                      <input id="exp-traffic" type="number" value="100" min="1" max="100"
+                        class="w-full rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm px-3 py-2" />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Split Ratio (treatment %)</label>
+                      <input id="exp-split" type="number" value="50" min="10" max="90" step="5"
+                        class="w-full rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm px-3 py-2" />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Min Searches</label>
+                      <input id="exp-min-searches" type="number" value="100" min="10"
+                        class="w-full rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm px-3 py-2" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                      Treatment Overrides <span class="text-zinc-400 font-normal">(JSON \u2014 settings that differ from control)</span>
+                    </label>
+                    <textarea id="exp-overrides" rows="4" placeholder='{ "fts5_title_boost": 8, "query_rewriting_enabled": true }'
+                      class="w-full rounded-lg border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm font-mono px-3 py-2"></textarea>
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      Testable: fts5_title_boost, fts5_slug_boost, fts5_body_boost, query_rewriting_enabled,
+                      reranking_enabled, query_synonyms_enabled, results_limit, cache_duration, facets_enabled
+                    </p>
+                  </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-3">
+                  <button onclick="closeCreateExperiment()" type="button"
+                    class="rounded-lg px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                    Cancel
+                  </button>
+                  <button onclick="createExperiment()" type="button"
+                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                    Create Draft
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+  `;
+}
+function renderExperimentsScript() {
+  return `
+      // \u2500\u2500 Experiments Tab State \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+      let experimentsLoaded = false
+      let activeExperimentId = null
+
+      function loadExperimentsOnTabSwitch() {
+        if (!experimentsLoaded) {
+          experimentsLoaded = true
+          loadExperiments()
+        }
+      }
+
+      // \u2500\u2500 Load Experiments \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+      async function loadExperiments() {
+        try {
+          const status = document.getElementById('exp-filter-status')?.value || ''
+          const params = status ? '?status=' + status : ''
+          const resp = await fetch('/admin/plugins/ai-search/api/experiments' + params)
+          const json = await resp.json()
+          if (!json.success) throw new Error(json.error)
+
+          const experiments = json.data || []
+
+          // Update stat cards
+          const total = experiments.length
+          const running = experiments.filter(e => e.status === 'running').length
+          const completed = experiments.filter(e => e.status === 'completed').length
+          const draft = experiments.filter(e => e.status === 'draft').length
+
+          document.getElementById('exp-stat-total').textContent = total
+          document.getElementById('exp-stat-running').textContent = running
+          document.getElementById('exp-stat-completed').textContent = completed
+          document.getElementById('exp-stat-draft').textContent = draft
+
+          // Active experiment banner
+          const activeExp = experiments.find(e => e.status === 'running')
+          const banner = document.getElementById('exp-active-banner')
+          if (activeExp) {
+            activeExperimentId = activeExp.id
+            banner.classList.remove('hidden')
+            document.getElementById('exp-active-name').textContent = activeExp.name
+            document.getElementById('exp-active-desc').textContent = activeExp.description || 'No description'
+            document.getElementById('exp-active-mode-badge').textContent = activeExp.mode === 'interleave' ? 'Interleaving' : 'A/B Split'
+
+            if (activeExp.metrics) {
+              const m = activeExp.metrics
+              document.getElementById('exp-active-metrics').classList.remove('hidden')
+              document.getElementById('exp-active-searches').textContent = (m.control.searches + m.treatment.searches).toLocaleString()
+              document.getElementById('exp-active-confidence').textContent = (m.confidence * 100).toFixed(1) + '%'
+              document.getElementById('exp-active-confidence-bar').style.width = (m.confidence * 100) + '%'
+
+              document.getElementById('exp-ctrl-ctr').textContent = (m.control.ctr * 100).toFixed(1) + '%'
+              document.getElementById('exp-ctrl-zero').textContent = (m.control.zero_result_rate * 100).toFixed(1) + '%'
+              document.getElementById('exp-ctrl-pos').textContent = m.control.avg_click_position ? m.control.avg_click_position.toFixed(1) : '\u2014'
+
+              document.getElementById('exp-treat-ctr').textContent = (m.treatment.ctr * 100).toFixed(1) + '%'
+              document.getElementById('exp-treat-zero').textContent = (m.treatment.zero_result_rate * 100).toFixed(1) + '%'
+              document.getElementById('exp-treat-pos').textContent = m.treatment.avg_click_position ? m.treatment.avg_click_position.toFixed(1) : '\u2014'
+            } else {
+              document.getElementById('exp-active-metrics').classList.add('hidden')
+              document.getElementById('exp-active-searches').textContent = '0'
+              document.getElementById('exp-active-confidence').textContent = '0%'
+              document.getElementById('exp-active-confidence-bar').style.width = '0%'
+            }
+          } else {
+            activeExperimentId = null
+            banner.classList.add('hidden')
+          }
+
+          // Render experiment list
+          const listEl = document.getElementById('exp-list')
+          if (experiments.length === 0) {
+            listEl.innerHTML = '<div class="px-5 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No experiments yet. Click "New Experiment" to get started.</div>'
+            return
+          }
+
+          listEl.innerHTML = experiments.map(exp => {
+            const statusColors = {
+              draft: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+              running: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+              paused: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+              completed: 'bg-lime-100 text-lime-700 dark:bg-lime-900 dark:text-lime-300',
+              archived: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500',
+            }
+            const modeLabel = exp.mode === 'interleave' ? 'Interleave' : 'A/B'
+            const date = new Date(exp.created_at).toLocaleDateString()
+            const winnerBadge = exp.winner
+              ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-lime-100 text-lime-700 dark:bg-lime-900 dark:text-lime-300">Winner: ' + exp.winner + '</span>'
+              : ''
+
+            let actions = ''
+            if (exp.status === 'draft') {
+              actions = '<button onclick="startExperimentById(\\'' + exp.id + '\\')" class="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-medium">Start</button>'
+                + ' <button onclick="deleteExperimentById(\\'' + exp.id + '\\')" class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 font-medium ml-2">Delete</button>'
+            } else if (exp.status === 'completed') {
+              actions = '<button onclick="archiveExperimentById(\\'' + exp.id + '\\')" class="text-xs text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 font-medium">Archive</button>'
+            }
+
+            return '<div class="px-5 py-3 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50">'
+              + '<div class="flex items-center gap-3 min-w-0">'
+              + '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ' + (statusColors[exp.status] || '') + '">' + exp.status + '</span>'
+              + '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">' + modeLabel + '</span>'
+              + '<span class="text-sm font-medium text-zinc-900 dark:text-white truncate">' + exp.name + '</span>'
+              + winnerBadge
+              + '</div>'
+              + '<div class="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 flex-shrink-0">'
+              + '<span>' + date + '</span>'
+              + actions
+              + '</div>'
+              + '</div>'
+          }).join('')
+
+        } catch (error) {
+          console.error('Failed to load experiments:', error)
+          document.getElementById('exp-list').innerHTML = '<div class="px-5 py-8 text-center text-sm text-red-500">Failed to load experiments</div>'
+        }
+      }
+
+      // \u2500\u2500 CRUD Operations \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+      function openCreateExperiment() {
+        document.getElementById('exp-create-modal').classList.remove('hidden')
+      }
+
+      function closeCreateExperiment() {
+        document.getElementById('exp-create-modal').classList.add('hidden')
+      }
+
+      async function createExperiment() {
+        try {
+          const name = document.getElementById('exp-name').value.trim()
+          if (!name) { alert('Name is required'); return }
+
+          let overrides = {}
+          const overridesText = document.getElementById('exp-overrides').value.trim()
+          if (overridesText) {
+            try { overrides = JSON.parse(overridesText) }
+            catch { alert('Invalid JSON in treatment overrides'); return }
+          }
+
+          const resp = await fetch('/admin/plugins/ai-search/api/experiments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              description: document.getElementById('exp-desc').value.trim() || null,
+              mode: document.getElementById('exp-mode').value,
+              traffic_pct: Number(document.getElementById('exp-traffic').value),
+              split_ratio: Number(document.getElementById('exp-split').value) / 100,
+              min_searches: Number(document.getElementById('exp-min-searches').value),
+              variants: { control: {}, treatment: overrides },
+            }),
+          })
+          const json = await resp.json()
+          if (!json.success) throw new Error(json.error)
+
+          closeCreateExperiment()
+          showMsg('Experiment created: ' + json.data.name)
+          loadExperiments()
+
+          // Clear form
+          document.getElementById('exp-name').value = ''
+          document.getElementById('exp-desc').value = ''
+          document.getElementById('exp-overrides').value = ''
+        } catch (error) {
+          alert('Error: ' + error.message)
+        }
+      }
+
+      async function startExperimentById(id) {
+        if (!confirm('Start this experiment? It will affect live search traffic.')) return
+        try {
+          const resp = await fetch('/admin/plugins/ai-search/api/experiments/' + id + '/start', { method: 'POST' })
+          const json = await resp.json()
+          if (!json.success) throw new Error(json.error)
+          showMsg('Experiment started')
+          loadExperiments()
+        } catch (error) {
+          alert('Error: ' + error.message)
+        }
+      }
+
+      async function pauseExperiment() {
+        if (!activeExperimentId) return
+        try {
+          const resp = await fetch('/admin/plugins/ai-search/api/experiments/' + activeExperimentId + '/pause', { method: 'POST' })
+          const json = await resp.json()
+          if (!json.success) throw new Error(json.error)
+          showMsg('Experiment paused')
+          loadExperiments()
+        } catch (error) {
+          alert('Error: ' + error.message)
+        }
+      }
+
+      async function completeExperiment() {
+        if (!activeExperimentId) return
+        if (!confirm('Stop this experiment? This will complete it and stop collecting data.')) return
+        try {
+          const resp = await fetch('/admin/plugins/ai-search/api/experiments/' + activeExperimentId + '/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          })
+          const json = await resp.json()
+          if (!json.success) throw new Error(json.error)
+          showMsg('Experiment completed' + (json.data.winner ? ' \u2014 Winner: ' + json.data.winner : ''))
+          loadExperiments()
+        } catch (error) {
+          alert('Error: ' + error.message)
+        }
+      }
+
+      async function deleteExperimentById(id) {
+        if (!confirm('Delete this experiment? This cannot be undone.')) return
+        try {
+          const resp = await fetch('/admin/plugins/ai-search/api/experiments/' + id, { method: 'DELETE' })
+          const json = await resp.json()
+          if (!json.success) throw new Error(json.error)
+          showMsg('Experiment deleted')
+          loadExperiments()
+        } catch (error) {
+          alert('Error: ' + error.message)
+        }
+      }
+
+      async function archiveExperimentById(id) {
+        try {
+          const resp = await fetch('/admin/plugins/ai-search/api/experiments/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'archived' }),
+          })
+          // Archive uses the lifecycle method, not PUT
+          // Actually archive needs a dedicated endpoint \u2014 for now use direct status update
+          // This will need the service's archive method
+        } catch (error) {
+          alert('Error: ' + error.message)
+        }
+      }
+
+      function showMsg(text) {
+        const el = document.getElementById('msg')
+        if (el) {
+          el.textContent = text
+          el.classList.remove('hidden')
+          setTimeout(() => el.classList.add('hidden'), 3000)
+        }
+      }
+  `;
+}
+
 // src/templates/pages/admin-search.template.ts
 function renderSearchDashboard(data) {
   const settings = data.settings || {
@@ -35882,6 +37222,14 @@ function renderSearchDashboard(data) {
             class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
             Analytics
           </button>
+          <button id="tab-btn-agent" onclick="switchTab('agent')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Agent
+          </button>
+          <button id="tab-btn-experiments" onclick="switchTab('experiments')" type="button"
+            class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
+            Experiments
+          </button>
         </nav>
       </div>
 
@@ -35890,6 +37238,8 @@ function renderSearchDashboard(data) {
       ${renderBenchmarkTab()}
       ${renderRelevanceTab(props)}
       ${renderAnalyticsTab()}
+      ${renderAgentTab()}
+      ${renderExperimentsTab()}
 
       <!-- Success Message -->
       <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
@@ -35926,6 +37276,21 @@ function renderSearchDashboard(data) {
       ${renderBenchmarkScript()}
       ${renderRelevanceScript()}
       ${renderAnalyticsScript()}
+      ${renderAgentScript()}
+      ${renderExperimentsScript()}
+
+      // Hook experiments lazy-load into tab switch
+      var origSwitchTab = switchTab;
+      switchTab = function(tabId) {
+        origSwitchTab(tabId);
+        if (tabId === 'experiments' && typeof loadExperimentsOnTabSwitch === 'function') {
+          loadExperimentsOnTabSwitch();
+        }
+      };
+      // Re-init for hash
+      if (initTab === 'experiments' && typeof loadExperimentsOnTabSwitch === 'function') {
+        loadExperimentsOnTabSwitch();
+      }
     </script>
   `;
   const layoutData = {
@@ -35985,7 +37350,7 @@ function escapeHtml6(str) {
 
 // src/routes/admin-search.ts
 var adminSearchRoutes = new hono.Hono();
-adminSearchRoutes.use("*", chunkWXAFCBSP_cjs.requireAuth());
+adminSearchRoutes.use("*", chunkMD7YM7UZ_cjs.requireAuth());
 adminSearchRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -36101,6 +37466,7 @@ exports.IndexManager = IndexManager;
 exports.QueryRulesService = QueryRulesService;
 exports.ROUTES_INFO = ROUTES_INFO;
 exports.RankingPipelineService = RankingPipelineService;
+exports.RelatedSearchService = RelatedSearchService;
 exports.SynonymService = SynonymService;
 exports.adminCheckboxRoutes = adminCheckboxRoutes;
 exports.adminCollectionsRoutes = adminCollectionsRoutes;
@@ -36127,5 +37493,5 @@ exports.router = router;
 exports.router2 = router2;
 exports.test_cleanup_default = test_cleanup_default;
 exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-3CBKEVOK.cjs.map
-//# sourceMappingURL=chunk-3CBKEVOK.cjs.map
+//# sourceMappingURL=chunk-TITCBEKE.cjs.map
+//# sourceMappingURL=chunk-TITCBEKE.cjs.map

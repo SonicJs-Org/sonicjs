@@ -48,6 +48,15 @@ ENVIRONMENT = "development"
 [limits]
 cpu_ms = 300000
 
+# Analytics Engine (for A/B experiment event tracking)
+[[analytics_engine_datasets]]
+binding = "SEARCH_EXPERIMENTS"
+dataset = "sonicjs_search_experiments"
+
+# Cron triggers (experiment auto-evaluation every 6 hours)
+[triggers]
+crons = ["0 */6 * * *"]
+
 # Observability
 [observability]
 enabled = true

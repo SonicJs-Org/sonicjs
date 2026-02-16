@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
+import { getCookie, setCookie } from 'hono/cookie'
 import type { Bindings } from '../../../../app'
 import { AISearchService } from '../services/ai-search'
+import { ExperimentService } from '../services/experiment.service'
+import { teamDraftInterleave } from '../services/interleave.service'
 import type { SearchQuery } from '../types'
 
 type Variables = {
@@ -47,6 +50,105 @@ apiRoutes.post('/', async (c) => {
       }
     }
 
+    // ── Experiment awareness ──
+    let experimentMeta: Record<string, any> | undefined
+    try {
+      const analytics = (c.env as any).SEARCH_EXPERIMENTS as any
+      const expService = new ExperimentService(db, kv, analytics)
+      const activeExp = await expService.getActiveExperiment()
+
+      if (activeExp && query.query) {
+        const userId = getCookie(c, 'sonicjs_uid')
+          || c.req.header('x-forwarded-for')
+          || c.req.header('user-agent')
+          || 'anon'
+
+        if (!getCookie(c, 'sonicjs_uid')) {
+          const uid = crypto.randomUUID()
+          setCookie(c, 'sonicjs_uid', uid, { path: '/', maxAge: 365 * 86400, sameSite: 'Lax' })
+        }
+
+        if (expService.shouldEnroll(activeExp.id, userId, activeExp.traffic_pct)) {
+          const variant = expService.assignVariant(activeExp.id, userId, activeExp.split_ratio)
+          const startTime = Date.now()
+
+          if (activeExp.mode === 'interleave') {
+            const [controlResults, treatmentResults] = await Promise.all([
+              service.searchWithOverrides({ ...query, cache: false }, activeExp.variants.control),
+              service.searchWithOverrides({ ...query, cache: false }, activeExp.variants.treatment),
+            ])
+
+            const interleaved = teamDraftInterleave(
+              controlResults.results,
+              treatmentResults.results,
+              query.limit || 20
+            )
+
+            const elapsed = Date.now() - startTime
+            experimentMeta = {
+              experiment_id: activeExp.id,
+              experiment_mode: activeExp.mode,
+              experiment_variant: variant,
+              result_origins: interleaved.origins,
+            }
+
+            expService.trackSearchEvent({
+              experimentId: activeExp.id,
+              variantId: variant,
+              query: query.query,
+              searchMode: query.mode,
+              userId,
+              searchId: '',
+              resultsCount: interleaved.results.length,
+              responseTimeMs: elapsed,
+            })
+
+            return c.json({
+              success: true,
+              data: {
+                results: interleaved.results,
+                total: interleaved.results.length,
+                query_time_ms: elapsed,
+                mode: query.mode,
+              },
+              experiment: experimentMeta,
+            })
+          } else {
+            const overrides = variant === 'treatment' ? activeExp.variants.treatment : activeExp.variants.control
+            const results = Object.keys(overrides).length > 0
+              ? await service.searchWithOverrides({ ...query, cache: false }, overrides)
+              : await service.search(query)
+
+            experimentMeta = {
+              experiment_id: activeExp.id,
+              experiment_mode: activeExp.mode,
+              experiment_variant: variant,
+            }
+
+            expService.trackSearchEvent({
+              experimentId: activeExp.id,
+              variantId: variant,
+              query: query.query,
+              searchMode: query.mode,
+              userId,
+              searchId: results.search_id || '',
+              resultsCount: results.results.length,
+              responseTimeMs: results.query_time_ms,
+            })
+
+            return c.json({
+              success: true,
+              data: results,
+              experiment: experimentMeta,
+            })
+          }
+        }
+      }
+    } catch (expError) {
+      console.warn('[Search API] Experiment error (falling through):', expError)
+    }
+
+    // Standard search (no experiment)
     const results = await service.search(query)
 
     return c.json({
@@ -152,6 +254,24 @@ apiRoutes.post('/click', async (c) => {
         clickPosition
       )
       .run()
+
+    // Experiment click attribution
+    if (body.experiment_id && body.experiment_variant) {
+      try {
+        const kv = c.env.CACHE_KV
+        const analytics = (c.env as any).SEARCH_EXPERIMENTS as any
+        const expService = new ExperimentService(db, kv, analytics)
+        expService.trackClickEvent({
+          experimentId: body.experiment_id,
+          variantId: body.experiment_variant,
+          searchId: searchId || '',
+          contentId,
+          clickPosition,
+        })
+      } catch {
+        // Best-effort
+      }
+    }
 
     return c.json({ success: true })
   } catch (error) {

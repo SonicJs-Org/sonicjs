@@ -1,3 +1,5 @@
+'use strict';
+
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -1782,6 +1784,27 @@ CREATE INDEX IF NOT EXISTS idx_query_rules_priority ON ai_search_query_rules(pri
     filename: "040_search_cache_tracking.sql",
     description: "Migration 040: Search Cache Tracking",
     sql: "-- Track whether a search result was served from cache\nALTER TABLE ai_search_history ADD COLUMN cached INTEGER DEFAULT 0;\n"
+  },
+  {
+    id: "041",
+    name: "Ai Recommendations",
+    filename: "041_ai_recommendations.sql",
+    description: "Migration 041: Ai Recommendations",
+    sql: "CREATE TABLE IF NOT EXISTS ai_search_recommendations (\n  id TEXT PRIMARY KEY,\n  category TEXT NOT NULL CHECK (category IN ('synonym', 'query_rule', 'low_ctr', 'unused_facet', 'content_gap', 'related_search')),\n  title TEXT NOT NULL,\n  description TEXT NOT NULL,\n  supporting_data TEXT NOT NULL,\n  action_payload TEXT,\n  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'dismissed')),\n  fingerprint TEXT NOT NULL,\n  run_id TEXT NOT NULL,\n  applied_at INTEGER,\n  created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nCREATE INDEX IF NOT EXISTS idx_recommendations_status ON ai_search_recommendations(status);\nCREATE INDEX IF NOT EXISTS idx_recommendations_category ON ai_search_recommendations(category);\nCREATE INDEX IF NOT EXISTS idx_recommendations_fingerprint ON ai_search_recommendations(fingerprint);\nCREATE INDEX IF NOT EXISTS idx_recommendations_created ON ai_search_recommendations(created_at DESC);\n\nCREATE TABLE IF NOT EXISTS ai_search_agent_runs (\n  id TEXT PRIMARY KEY,\n  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed')),\n  recommendations_count INTEGER DEFAULT 0,\n  duration_ms INTEGER,\n  error_message TEXT,\n  created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  completed_at INTEGER\n);\n"
+  },
+  {
+    id: "042",
+    name: "Related Searches",
+    filename: "042_related_searches.sql",
+    description: "Migration 042: Related Searches",
+    sql: "-- Related Searches\n-- Admin-curated and agent-approved related search pairs.\n\nCREATE TABLE IF NOT EXISTS ai_search_related (\n  id TEXT PRIMARY KEY,\n  source_query TEXT NOT NULL,\n  related_query TEXT NOT NULL,\n  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'agent')),\n  position INTEGER NOT NULL DEFAULT 0,\n  bidirectional INTEGER NOT NULL DEFAULT 0,\n  enabled INTEGER NOT NULL DEFAULT 1,\n  created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nCREATE INDEX IF NOT EXISTS idx_related_source_query ON ai_search_related(source_query, enabled, position);\nCREATE INDEX IF NOT EXISTS idx_related_source ON ai_search_related(source);\nCREATE UNIQUE INDEX IF NOT EXISTS idx_related_unique_pair ON ai_search_related(source_query, related_query);\n"
+  },
+  {
+    id: "043",
+    name: "Search Experiments",
+    filename: "043_search_experiments.sql",
+    description: "Migration 043: Search Experiments",
+    sql: "-- Search A/B Testing: experiments table + D1 fallback events table\n-- Timestamps set in TypeScript as Date.now() (milliseconds) \u2014 no DEFAULT functions\n\nCREATE TABLE IF NOT EXISTS ai_search_experiments (\n  id TEXT PRIMARY KEY,\n  name TEXT NOT NULL,\n  description TEXT,\n  status TEXT NOT NULL DEFAULT 'draft'\n    CHECK (status IN ('draft', 'running', 'paused', 'completed', 'archived')),\n  mode TEXT NOT NULL DEFAULT 'ab'\n    CHECK (mode IN ('ab', 'interleave', 'bandit')),\n  traffic_pct REAL NOT NULL DEFAULT 100,\n  split_ratio REAL NOT NULL DEFAULT 0.5,\n  variants TEXT NOT NULL,\n  metrics TEXT,\n  winner TEXT,\n  confidence REAL,\n  min_searches INTEGER NOT NULL DEFAULT 100,\n  started_at INTEGER,\n  ended_at INTEGER,\n  created_at INTEGER NOT NULL,\n  updated_at INTEGER NOT NULL\n);\n\nCREATE INDEX IF NOT EXISTS idx_experiments_status ON ai_search_experiments(status);\nCREATE INDEX IF NOT EXISTS idx_experiments_created ON ai_search_experiments(created_at DESC);\n\n-- D1 fallback table for experiment events (used when Analytics Engine binding is unavailable, e.g. local dev)\n-- Schema mirrors Analytics Engine blobs/doubles but with typed columns\nCREATE TABLE IF NOT EXISTS ai_search_experiment_events (\n  id TEXT PRIMARY KEY,\n  experiment_id TEXT NOT NULL,\n  event_type TEXT NOT NULL CHECK (event_type IN ('search', 'click')),\n  variant_id TEXT NOT NULL,\n  query TEXT,\n  search_mode TEXT,\n  user_id TEXT,\n  search_id TEXT,\n  content_id TEXT,\n  results_count INTEGER,\n  response_time_ms REAL,\n  click_position INTEGER,\n  created_at INTEGER NOT NULL\n);\n\nCREATE INDEX IF NOT EXISTS idx_exp_events_experiment ON ai_search_experiment_events(experiment_id, event_type);\nCREATE INDEX IF NOT EXISTS idx_exp_events_created ON ai_search_experiment_events(created_at DESC);\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2189,6 +2212,6 @@ var MigrationService = class {
   }
 };
 
-export { MigrationService };
-//# sourceMappingURL=chunk-WMPVTSIZ.js.map
-//# sourceMappingURL=chunk-WMPVTSIZ.js.map
+exports.MigrationService = MigrationService;
+//# sourceMappingURL=chunk-ELVG5YJC.cjs.map
+//# sourceMappingURL=chunk-ELVG5YJC.cjs.map

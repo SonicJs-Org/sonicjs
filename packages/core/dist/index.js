@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-GE5ELJWE.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-GE5ELJWE.js';
+import { AISearchService, IndexManager, FTS5Service, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, RelatedSearchService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-YDT4CD2S.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-YDT4CD2S.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-RRF6H4CJ.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-RRF6H4CJ.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-VTWAL2UC.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-VTWAL2UC.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-WMPVTSIZ.js';
+export { MigrationService } from './chunk-7WGJYP6G.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -19,7 +19,7 @@ export { metricsTracker } from './chunk-FICTAGD4.js';
 export { HOOKS } from './chunk-LOUJRBXV.js';
 import './chunk-V4OQ3NZ2.js';
 import { Hono } from 'hono';
-import { setCookie } from 'hono/cookie';
+import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { raw, html } from 'hono/html';
 import { drizzle } from 'drizzle-orm/d1';
@@ -2930,6 +2930,951 @@ var manifest_default = {
   description: "Advanced search with Cloudflare AI Search. Full-text search, semantic search, and advanced filtering across all content collections.",
   version: "1.0.0",
   author: "SonicJS"};
+
+// src/plugins/core-plugins/ai-search-plugin/services/recommendation.service.ts
+var RecommendationService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  // =============================================
+  // CRUD
+  // =============================================
+  async getAll(options) {
+    const conditions = [];
+    const params = [];
+    if (options?.status) {
+      conditions.push("status = ?");
+      params.push(options.status);
+    }
+    if (options?.category) {
+      conditions.push("category = ?");
+      params.push(options.category);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = options?.limit || 100;
+    const offset = options?.offset || 0;
+    const { results } = await this.db.prepare(`SELECT * FROM ai_search_recommendations ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all();
+    return (results || []).map((row) => this.mapRow(row));
+  }
+  async getById(id) {
+    const row = await this.db.prepare("SELECT * FROM ai_search_recommendations WHERE id = ?").bind(id).first();
+    return row ? this.mapRow(row) : null;
+  }
+  async updateStatus(id, status) {
+    const appliedAt = status === "applied" ? Math.floor(Date.now() / 1e3) : null;
+    await this.db.prepare("UPDATE ai_search_recommendations SET status = ?, applied_at = COALESCE(?, applied_at), updated_at = unixepoch() WHERE id = ?").bind(status, appliedAt, id).run();
+    return this.getById(id);
+  }
+  async dismissAll() {
+    const result = await this.db.prepare("UPDATE ai_search_recommendations SET status = 'dismissed', updated_at = unixepoch() WHERE status = 'pending'").run();
+    return result.meta?.changes ?? 0;
+  }
+  async getStats() {
+    const [totalRow, pendingRow, appliedRow, dismissedRow] = await Promise.all([
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations").first(),
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'pending'").first(),
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'applied'").first(),
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'dismissed'").first()
+    ]);
+    const { results: catRows } = await this.db.prepare("SELECT category, COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'pending' GROUP BY category").all();
+    const byCategory = {};
+    for (const row of catRows || []) {
+      byCategory[row.category] = row.cnt;
+    }
+    return {
+      total: totalRow?.cnt ?? 0,
+      pending: pendingRow?.cnt ?? 0,
+      applied: appliedRow?.cnt ?? 0,
+      dismissed: dismissedRow?.cnt ?? 0,
+      byCategory
+    };
+  }
+  // =============================================
+  // Run Tracking
+  // =============================================
+  async createRun() {
+    const id = crypto.randomUUID().replace(/-/g, "");
+    await this.db.prepare("INSERT INTO ai_search_agent_runs (id, status) VALUES (?, ?)").bind(id, "running").run();
+    return id;
+  }
+  async completeRun(runId, count, durationMs) {
+    await this.db.prepare("UPDATE ai_search_agent_runs SET status = 'completed', recommendations_count = ?, duration_ms = ?, completed_at = unixepoch() WHERE id = ?").bind(count, durationMs, runId).run();
+  }
+  async failRun(runId, error) {
+    await this.db.prepare("UPDATE ai_search_agent_runs SET status = 'failed', error_message = ?, completed_at = unixepoch() WHERE id = ?").bind(error, runId).run();
+  }
+  async getLatestRun() {
+    const row = await this.db.prepare("SELECT * FROM ai_search_agent_runs ORDER BY created_at DESC LIMIT 1").first();
+    return row ? this.mapRunRow(row) : null;
+  }
+  async getRunHistory(limit = 10) {
+    const { results } = await this.db.prepare("SELECT * FROM ai_search_agent_runs ORDER BY created_at DESC LIMIT ?").bind(limit).all();
+    return (results || []).map((row) => this.mapRunRow(row));
+  }
+  // =============================================
+  // Analysis Engine
+  // =============================================
+  async runAnalysis() {
+    const runId = await this.createRun();
+    const startTime = Date.now();
+    try {
+      const counts = await Promise.all([
+        this.analyzeSynonymOpportunities(runId),
+        this.analyzeQueryRuleOpportunities(runId),
+        this.analyzeLowCtrQueries(runId),
+        this.analyzeUnusedFacets(runId),
+        this.analyzeContentGaps(runId)
+      ]);
+      const totalCount = counts.reduce((a, b) => a + b, 0);
+      const durationMs = Date.now() - startTime;
+      await this.completeRun(runId, totalCount, durationMs);
+    } catch (error) {
+      await this.failRun(runId, error instanceof Error ? error.message : String(error));
+    }
+    return runId;
+  }
+  /**
+   * Find zero-result queries similar to successful queries.
+   * Both Levenshtein distance (<=2) AND token overlap (>=50%) must be satisfied
+   * to reduce false positives. Stopwords and very short queries are excluded.
+   */
+  async analyzeSynonymOpportunities(runId) {
+    let count = 0;
+    try {
+      const thirtyDaysAgo = Math.floor(Date.now() / 1e3) - 30 * 24 * 60 * 60;
+      const { results: zeroResults } = await this.db.prepare(`
+          SELECT LOWER(query) as query, COUNT(*) as cnt
+          FROM ai_search_history
+          WHERE results_count = 0 AND created_at >= ?
+          GROUP BY LOWER(query) HAVING COUNT(*) >= 3
+          ORDER BY cnt DESC LIMIT 50
+        `).bind(thirtyDaysAgo).all();
+      if (!zeroResults || zeroResults.length === 0) return 0;
+      const { results: successResults } = await this.db.prepare(`
+          SELECT LOWER(query) as query, COUNT(*) as cnt, AVG(results_count) as avg_results
+          FROM ai_search_history
+          WHERE results_count > 0 AND created_at >= ?
+          GROUP BY LOWER(query)
+          ORDER BY cnt DESC LIMIT 200
+        `).bind(thirtyDaysAgo).all();
+      if (!successResults || successResults.length === 0) return 0;
+      for (const zr of zeroResults) {
+        if (zr.query.length < 3 || STOPWORDS.has(zr.query)) continue;
+        for (const sr of successResults) {
+          if (sr.query.length < 3 || STOPWORDS.has(sr.query)) continue;
+          if (zr.query === sr.query) continue;
+          const distance = levenshteinDistance(zr.query, sr.query);
+          const tokenOverlap = getTokenOverlap(zr.query, sr.query);
+          if (distance <= 2 && tokenOverlap >= 0.5) {
+            const fingerprint = fnv1aHash(`synonym:${[zr.query, sr.query].sort().join("|")}`);
+            const exists = await this.checkFingerprint(fingerprint);
+            if (exists) continue;
+            await this.insertRecommendation({
+              id: crypto.randomUUID().replace(/-/g, ""),
+              category: "synonym",
+              title: `Synonym: "${zr.query}" \u2192 "${sr.query}"`,
+              description: `"${zr.query}" returned 0 results ${zr.cnt} times, but "${sr.query}" returns ~${Math.round(sr.avg_results)} results. Adding a synonym group could help users find content.`,
+              supporting_data: {
+                failed_query: zr.query,
+                failed_count: zr.cnt,
+                success_query: sr.query,
+                success_count: sr.cnt,
+                avg_results: Math.round(sr.avg_results),
+                levenshtein: distance,
+                token_overlap: Math.round(tokenOverlap * 100)
+              },
+              action_payload: { terms: [zr.query, sr.query] },
+              fingerprint,
+              run_id: runId
+            });
+            count++;
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[Agent] Synonym analysis error:", error);
+    }
+    return count;
+  }
+  /**
+   * Find zero-result queries where removing common prefixes produces a successful query.
+   */
+  async analyzeQueryRuleOpportunities(runId) {
+    let count = 0;
+    const prefixes = ["how to ", "what is ", "where is ", "how do i ", "can i ", "why does ", "what are "];
+    try {
+      const thirtyDaysAgo = Math.floor(Date.now() / 1e3) - 30 * 24 * 60 * 60;
+      const { results: zeroResults } = await this.db.prepare(`
+          SELECT LOWER(query) as query, COUNT(*) as cnt
+          FROM ai_search_history
+          WHERE results_count = 0 AND created_at >= ?
+          GROUP BY LOWER(query) HAVING COUNT(*) >= 2
+          ORDER BY cnt DESC LIMIT 50
+        `).bind(thirtyDaysAgo).all();
+      if (!zeroResults || zeroResults.length === 0) return 0;
+      for (const zr of zeroResults) {
+        for (const prefix of prefixes) {
+          if (!zr.query.startsWith(prefix)) continue;
+          const stripped = zr.query.slice(prefix.length).trim();
+          if (stripped.length < 2) continue;
+          const successRow = await this.db.prepare(`
+              SELECT COUNT(*) as cnt, AVG(results_count) as avg_results
+              FROM ai_search_history
+              WHERE LOWER(query) = ? AND results_count > 0 AND created_at >= ?
+            `).bind(stripped, thirtyDaysAgo).first();
+          if (!successRow || successRow.cnt === 0) continue;
+          const fingerprint = fnv1aHash(`query_rule:${zr.query}|${stripped}`);
+          const exists = await this.checkFingerprint(fingerprint);
+          if (exists) continue;
+          await this.insertRecommendation({
+            id: crypto.randomUUID().replace(/-/g, ""),
+            category: "query_rule",
+            title: `Rule: "${zr.query}" \u2192 "${stripped}"`,
+            description: `"${zr.query}" returns 0 results, but removing "${prefix.trim()}" yields "${stripped}" which returns ~${Math.round(successRow.avg_results)} results.`,
+            supporting_data: {
+              original_query: zr.query,
+              stripped_query: stripped,
+              prefix_removed: prefix.trim(),
+              zero_result_count: zr.cnt,
+              success_count: successRow.cnt,
+              avg_results: Math.round(successRow.avg_results)
+            },
+            action_payload: {
+              match_pattern: zr.query,
+              match_type: "exact",
+              substitute_query: stripped
+            },
+            fingerprint,
+            run_id: runId
+          });
+          count++;
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("[Agent] Query rule analysis error:", error);
+    }
+    return count;
+  }
+  /**
+   * Find queries with >= 5 searches but < 10% CTR in 30 days.
+   */
+  async analyzeLowCtrQueries(runId) {
+    let count = 0;
+    try {
+      const thirtyDaysAgo = Math.floor(Date.now() / 1e3) - 30 * 24 * 60 * 60;
+      const { results: rows } = await this.db.prepare(`
+          SELECT
+            LOWER(h.query) as query,
+            COUNT(DISTINCT h.id) as search_count,
+            COUNT(DISTINCT c.id) as click_count,
+            AVG(h.results_count) as avg_results
+          FROM ai_search_history h
+          LEFT JOIN ai_search_clicks c ON c.search_id = CAST(h.id AS TEXT) AND c.created_at >= datetime(?, 'unixepoch')
+          WHERE h.created_at >= ? AND h.results_count > 0
+          GROUP BY LOWER(h.query)
+          HAVING COUNT(DISTINCT h.id) >= 5
+            AND (CAST(COUNT(DISTINCT c.id) AS REAL) / COUNT(DISTINCT h.id)) < 0.1
+          ORDER BY COUNT(DISTINCT h.id) DESC
+          LIMIT 20
+        `).bind(thirtyDaysAgo, thirtyDaysAgo).all();
+      if (!rows || rows.length === 0) return 0;
+      for (const row of rows) {
+        const ctr = row.search_count > 0 ? row.click_count / row.search_count * 100 : 0;
+        const fingerprint = fnv1aHash(`low_ctr:${row.query}`);
+        const exists = await this.checkFingerprint(fingerprint);
+        if (exists) continue;
+        await this.insertRecommendation({
+          id: crypto.randomUUID().replace(/-/g, ""),
+          category: "low_ctr",
+          title: `Low CTR: "${row.query}"`,
+          description: `"${row.query}" has been searched ${row.search_count} times with ${row.click_count} clicks (${ctr.toFixed(1)}% CTR). Results may not match user intent.`,
+          supporting_data: {
+            query: row.query,
+            search_count: row.search_count,
+            click_count: row.click_count,
+            ctr: Math.round(ctr * 10) / 10,
+            avg_results: Math.round(row.avg_results)
+          },
+          action_payload: null,
+          fingerprint,
+          run_id: runId
+        });
+        count++;
+      }
+    } catch (error) {
+      console.error("[Agent] Low CTR analysis error:", error);
+    }
+    return count;
+  }
+  /**
+   * Find enabled facets with 0 clicks in 30 days.
+   */
+  async analyzeUnusedFacets(runId) {
+    let count = 0;
+    try {
+      const settingsRow = await this.db.prepare("SELECT value FROM ai_search_settings WHERE key = 'settings' LIMIT 1").first();
+      if (!settingsRow) return 0;
+      const settings = JSON.parse(settingsRow.value);
+      const facetConfig = settings.facet_config || [];
+      const enabledFacets = facetConfig.filter((f) => f.enabled);
+      if (enabledFacets.length === 0) return 0;
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+      const { results: clickedFacets } = await this.db.prepare(`
+          SELECT DISTINCT facet_field
+          FROM ai_search_facet_clicks
+          WHERE created_at >= ?
+        `).bind(thirtyDaysAgo).all();
+      const clickedSet = new Set((clickedFacets || []).map((r) => r.facet_field));
+      for (const facet of enabledFacets) {
+        if (clickedSet.has(facet.field)) continue;
+        const fingerprint = fnv1aHash(`unused_facet:${facet.field}`);
+        const exists = await this.checkFingerprint(fingerprint);
+        if (exists) continue;
+        await this.insertRecommendation({
+          id: crypto.randomUUID().replace(/-/g, ""),
+          category: "unused_facet",
+          title: `Unused facet: "${facet.name}"`,
+          description: `The "${facet.name}" facet (${facet.field}) is enabled but has received 0 clicks in the last 30 days. Consider disabling it to simplify the UI.`,
+          supporting_data: {
+            facet_field: facet.field,
+            facet_name: facet.name,
+            days_checked: 30
+          },
+          action_payload: null,
+          fingerprint,
+          run_id: runId
+        });
+        count++;
+      }
+    } catch (error) {
+      console.error("[Agent] Unused facets analysis error:", error);
+    }
+    return count;
+  }
+  /**
+   * Find content clicked from position >= 4 with >= 3 clicks — suggests a ranking boost.
+   */
+  async analyzeContentGaps(runId) {
+    let count = 0;
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+      const { results: rows } = await this.db.prepare(`
+          SELECT
+            clicked_content_id,
+            clicked_content_title,
+            COUNT(*) as click_count,
+            AVG(click_position) as avg_position
+          FROM ai_search_clicks
+          WHERE click_position >= 4 AND created_at >= ?
+          GROUP BY clicked_content_id
+          HAVING COUNT(*) >= 3
+          ORDER BY click_count DESC
+          LIMIT 20
+        `).bind(thirtyDaysAgo).all();
+      if (!rows || rows.length === 0) return 0;
+      for (const row of rows) {
+        const fingerprint = fnv1aHash(`content_gap:${row.clicked_content_id}`);
+        const exists = await this.checkFingerprint(fingerprint);
+        if (exists) continue;
+        const title = row.clicked_content_title || row.clicked_content_id;
+        await this.insertRecommendation({
+          id: crypto.randomUUID().replace(/-/g, ""),
+          category: "content_gap",
+          title: `Ranking gap: "${title}"`,
+          description: `"${title}" was clicked ${row.click_count} times from avg position ${row.avg_position.toFixed(1)}. Users are scrolling past other results to find this content \u2014 it may deserve a ranking boost.`,
+          supporting_data: {
+            content_id: row.clicked_content_id,
+            content_title: title,
+            click_count: row.click_count,
+            avg_position: Math.round(row.avg_position * 10) / 10
+          },
+          action_payload: null,
+          fingerprint,
+          run_id: runId
+        });
+        count++;
+      }
+    } catch (error) {
+      console.error("[Agent] Content gaps analysis error:", error);
+    }
+    return count;
+  }
+  // =============================================
+  // Apply Logic
+  // =============================================
+  async applyRecommendation(id) {
+    const rec = await this.getById(id);
+    if (!rec) return { success: false, message: "Recommendation not found" };
+    if (rec.status !== "pending") return { success: false, message: `Cannot apply recommendation with status "${rec.status}"` };
+    try {
+      switch (rec.category) {
+        case "synonym": {
+          if (!rec.action_payload?.terms || rec.action_payload.terms.length < 2) {
+            return { success: false, message: "Invalid synonym payload" };
+          }
+          const synonymService = new SynonymService(this.db);
+          await synonymService.create(rec.action_payload.terms);
+          await this.updateStatus(id, "applied");
+          return { success: true, message: `Created synonym group: ${rec.action_payload.terms.join(", ")}` };
+        }
+        case "query_rule": {
+          if (!rec.action_payload?.match_pattern || !rec.action_payload?.substitute_query) {
+            return { success: false, message: "Invalid query rule payload" };
+          }
+          const rulesService = new QueryRulesService(this.db);
+          await rulesService.create({
+            match_pattern: rec.action_payload.match_pattern,
+            match_type: rec.action_payload.match_type || "exact",
+            substitute_query: rec.action_payload.substitute_query
+          });
+          await this.updateStatus(id, "applied");
+          return { success: true, message: `Created query rule: "${rec.action_payload.match_pattern}" \u2192 "${rec.action_payload.substitute_query}"` };
+        }
+        case "low_ctr":
+        case "unused_facet":
+        case "content_gap": {
+          await this.updateStatus(id, "applied");
+          return { success: true, message: "Recommendation acknowledged" };
+        }
+        default:
+          return { success: false, message: `Unknown category: ${rec.category}` };
+      }
+    } catch (error) {
+      return { success: false, message: `Apply failed: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+  // =============================================
+  // Helpers
+  // =============================================
+  async checkFingerprint(fingerprint) {
+    const row = await this.db.prepare("SELECT id FROM ai_search_recommendations WHERE fingerprint = ? AND status IN ('pending', 'applied') LIMIT 1").bind(fingerprint).first();
+    return row !== null;
+  }
+  async insertRecommendation(rec) {
+    await this.db.prepare(`
+        INSERT INTO ai_search_recommendations (id, category, title, description, supporting_data, action_payload, fingerprint, run_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+      rec.id,
+      rec.category,
+      rec.title,
+      rec.description,
+      JSON.stringify(rec.supporting_data),
+      rec.action_payload ? JSON.stringify(rec.action_payload) : null,
+      rec.fingerprint,
+      rec.run_id
+    ).run();
+  }
+  mapRow(row) {
+    return {
+      id: row.id,
+      category: row.category,
+      title: row.title,
+      description: row.description,
+      supporting_data: typeof row.supporting_data === "string" ? JSON.parse(row.supporting_data) : row.supporting_data,
+      action_payload: row.action_payload ? typeof row.action_payload === "string" ? JSON.parse(row.action_payload) : row.action_payload : null,
+      status: row.status,
+      fingerprint: row.fingerprint,
+      run_id: row.run_id,
+      applied_at: row.applied_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    };
+  }
+  mapRunRow(row) {
+    return {
+      id: row.id,
+      status: row.status,
+      recommendations_count: row.recommendations_count ?? 0,
+      duration_ms: row.duration_ms,
+      error_message: row.error_message,
+      created_at: row.created_at,
+      completed_at: row.completed_at
+    };
+  }
+};
+var STOPWORDS = /* @__PURE__ */ new Set([
+  "a",
+  "an",
+  "the",
+  "is",
+  "it",
+  "in",
+  "on",
+  "at",
+  "to",
+  "of",
+  "and",
+  "or",
+  "for",
+  "by",
+  "as",
+  "be",
+  "do",
+  "he",
+  "she",
+  "we",
+  "my",
+  "me",
+  "no",
+  "so",
+  "up",
+  "if",
+  "am",
+  "us",
+  "i",
+  "not",
+  "but",
+  "are",
+  "was",
+  "has",
+  "had",
+  "all",
+  "can",
+  "her",
+  "his",
+  "its",
+  "may",
+  "our",
+  "own",
+  "too",
+  "who",
+  "did",
+  "get",
+  "got",
+  "him",
+  "how",
+  "let",
+  "new",
+  "now",
+  "old",
+  "out",
+  "say",
+  "she",
+  "use",
+  "way",
+  "why",
+  "yes",
+  "yet",
+  "you"
+]);
+function fnv1aHash(input) {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let curr = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        prev[j] + 1,
+        // deletion
+        curr[j - 1] + 1,
+        // insertion
+        prev[j - 1] + cost
+        // substitution
+      );
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length];
+}
+function getTokenOverlap(a, b) {
+  const tokensA = new Set(a.split(/\s+/).filter(Boolean));
+  const tokensB = new Set(b.split(/\s+/).filter(Boolean));
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+  let intersection = 0;
+  for (const t of tokensA) {
+    if (tokensB.has(t)) intersection++;
+  }
+  const union = (/* @__PURE__ */ new Set([...tokensA, ...tokensB])).size;
+  return union > 0 ? intersection / union : 0;
+}
+
+// src/plugins/core-plugins/ai-search-plugin/services/experiment.service.ts
+function rowToExperiment(row) {
+  return {
+    ...row,
+    status: row.status,
+    mode: row.mode,
+    variants: JSON.parse(row.variants),
+    metrics: row.metrics ? JSON.parse(row.metrics) : null
+  };
+}
+var ExperimentService = class {
+  constructor(db, kv, analytics) {
+    this.db = db;
+    this.kv = kv;
+    this.analytics = analytics;
+  }
+  // =============================================
+  // CRUD
+  // =============================================
+  async getAll(options) {
+    const conditions = [];
+    const params = [];
+    if (options?.status) {
+      conditions.push("status = ?");
+      params.push(options.status);
+    }
+    if (options?.mode) {
+      conditions.push("mode = ?");
+      params.push(options.mode);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    const rows = await this.db.prepare(`SELECT * FROM ai_search_experiments ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all();
+    return (rows.results || []).map(rowToExperiment);
+  }
+  async getById(id) {
+    const row = await this.db.prepare("SELECT * FROM ai_search_experiments WHERE id = ?").bind(id).first();
+    return row ? rowToExperiment(row) : null;
+  }
+  async create(data) {
+    const id = `exp-${crypto.randomUUID().slice(0, 8)}`;
+    const now = Date.now();
+    await this.db.prepare(`
+        INSERT INTO ai_search_experiments (id, name, description, mode, traffic_pct, split_ratio, variants, min_searches, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+      id,
+      data.name,
+      data.description || null,
+      data.mode || "ab",
+      data.traffic_pct ?? 100,
+      data.split_ratio ?? 0.5,
+      JSON.stringify(data.variants),
+      data.min_searches ?? 100,
+      now,
+      now
+    ).run();
+    return await this.getById(id);
+  }
+  async update(id, data) {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    if (existing.status !== "draft") {
+      throw new Error("Can only update experiments in draft status");
+    }
+    const sets = [];
+    const params = [];
+    if (data.name !== void 0) {
+      sets.push("name = ?");
+      params.push(data.name);
+    }
+    if (data.description !== void 0) {
+      sets.push("description = ?");
+      params.push(data.description);
+    }
+    if (data.mode !== void 0) {
+      sets.push("mode = ?");
+      params.push(data.mode);
+    }
+    if (data.traffic_pct !== void 0) {
+      sets.push("traffic_pct = ?");
+      params.push(data.traffic_pct);
+    }
+    if (data.split_ratio !== void 0) {
+      sets.push("split_ratio = ?");
+      params.push(data.split_ratio);
+    }
+    if (data.variants !== void 0) {
+      sets.push("variants = ?");
+      params.push(JSON.stringify(data.variants));
+    }
+    if (data.min_searches !== void 0) {
+      sets.push("min_searches = ?");
+      params.push(data.min_searches);
+    }
+    if (sets.length === 0) return existing;
+    sets.push("updated_at = ?");
+    params.push(Date.now());
+    params.push(id);
+    await this.db.prepare(`UPDATE ai_search_experiments SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
+    return this.getById(id);
+  }
+  async delete(id) {
+    const existing = await this.getById(id);
+    if (!existing) return false;
+    if (existing.status !== "draft" && existing.status !== "archived") {
+      throw new Error("Can only delete experiments in draft or archived status");
+    }
+    await this.db.prepare("DELETE FROM ai_search_experiments WHERE id = ?").bind(id).run();
+    return true;
+  }
+  // =============================================
+  // Lifecycle
+  // =============================================
+  async start(id) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "draft" && existing.status !== "paused") {
+      throw new Error(`Cannot start experiment in ${existing.status} status`);
+    }
+    const running = await this.getAll({ status: "running" });
+    const conflict = running[0];
+    if (conflict) {
+      throw new Error(`Another experiment is already running: ${conflict.name} (${conflict.id})`);
+    }
+    const now = Date.now();
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, started_at = COALESCE(started_at, ?), updated_at = ? WHERE id = ?").bind("running", now, now, id).run();
+    if (this.kv) {
+      const experiment = await this.getById(id);
+      await this.kv.put("experiment:active", JSON.stringify(experiment), { expirationTtl: 86400 });
+    }
+    return await this.getById(id);
+  }
+  async pause(id) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "running") {
+      throw new Error("Can only pause running experiments");
+    }
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, updated_at = ? WHERE id = ?").bind("paused", Date.now(), id).run();
+    if (this.kv) await this.kv.delete("experiment:active");
+    return await this.getById(id);
+  }
+  async complete(id, winner) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "running" && existing.status !== "paused") {
+      throw new Error(`Cannot complete experiment in ${existing.status} status`);
+    }
+    const now = Date.now();
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, winner = ?, ended_at = ?, updated_at = ? WHERE id = ?").bind("completed", winner || existing.winner, now, now, id).run();
+    if (this.kv) await this.kv.delete("experiment:active");
+    return await this.getById(id);
+  }
+  async archive(id) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "completed") {
+      throw new Error("Can only archive completed experiments");
+    }
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, updated_at = ? WHERE id = ?").bind("archived", Date.now(), id).run();
+    return await this.getById(id);
+  }
+  // =============================================
+  // Active Experiment Lookup (called on every search)
+  // =============================================
+  async getActiveExperiment() {
+    if (this.kv) {
+      try {
+        const cached = await this.kv.get("experiment:active", "json");
+        if (cached) return cached;
+      } catch {
+      }
+    }
+    const row = await this.db.prepare("SELECT * FROM ai_search_experiments WHERE status = 'running' LIMIT 1").first();
+    if (!row) return null;
+    const experiment = rowToExperiment(row);
+    if (this.kv) {
+      try {
+        await this.kv.put("experiment:active", JSON.stringify(experiment), { expirationTtl: 86400 });
+      } catch {
+      }
+    }
+    return experiment;
+  }
+  // =============================================
+  // Variant Assignment
+  // =============================================
+  /**
+   * Deterministic variant assignment via FNV-1a hash.
+   * Same user + experiment always gets the same variant.
+   */
+  assignVariant(experimentId, userId, splitRatio = 0.5) {
+    const hash = fnv1a(`${userId}:${experimentId}`);
+    return hash % 100 < splitRatio * 100 ? "treatment" : "control";
+  }
+  /**
+   * Check if a user should be enrolled in the experiment based on traffic_pct.
+   */
+  shouldEnroll(experimentId, userId, trafficPct) {
+    const hash = fnv1a(`enroll:${userId}:${experimentId}`);
+    return hash % 100 < trafficPct;
+  }
+  // =============================================
+  // Event Tracking
+  // =============================================
+  trackSearchEvent(data) {
+    if (this.analytics) {
+      this.analytics.writeDataPoint({
+        indexes: [data.experimentId],
+        blobs: [data.variantId, data.query, data.searchMode, data.userId, data.searchId],
+        doubles: [data.resultsCount, data.responseTimeMs, 0, 0]
+      });
+    } else {
+      this.db.prepare(`
+          INSERT INTO ai_search_experiment_events (id, experiment_id, event_type, variant_id, query, search_mode, user_id, search_id, results_count, response_time_ms, created_at)
+          VALUES (?, ?, 'search', ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+        crypto.randomUUID(),
+        data.experimentId,
+        data.variantId,
+        data.query,
+        data.searchMode,
+        data.userId,
+        data.searchId,
+        data.resultsCount,
+        data.responseTimeMs,
+        Date.now()
+      ).run().catch((e) => console.error("[ExperimentService] D1 search event tracking failed:", e));
+    }
+  }
+  trackClickEvent(data) {
+    if (this.analytics) {
+      this.analytics.writeDataPoint({
+        indexes: [data.experimentId],
+        blobs: [data.variantId, data.searchId, data.contentId],
+        doubles: [1, data.clickPosition]
+      });
+    } else {
+      this.db.prepare(`
+          INSERT INTO ai_search_experiment_events (id, experiment_id, event_type, variant_id, search_id, content_id, click_position, created_at)
+          VALUES (?, ?, 'click', ?, ?, ?, ?, ?)
+        `).bind(
+        crypto.randomUUID(),
+        data.experimentId,
+        data.variantId,
+        data.searchId,
+        data.contentId,
+        data.clickPosition,
+        Date.now()
+      ).run().catch((e) => console.error("[ExperimentService] D1 click event tracking failed:", e));
+    }
+  }
+  // =============================================
+  // Experiment Evaluation (called by cron)
+  // =============================================
+  async evaluateExperiment(id) {
+    const experiment = await this.getById(id);
+    if (!experiment || experiment.status !== "running") return null;
+    let metrics;
+    if (this.analytics) {
+      metrics = await this.evaluateFromAnalyticsEngine(id);
+    } else {
+      metrics = await this.evaluateFromD1(id);
+    }
+    const now = Date.now();
+    await this.db.prepare("UPDATE ai_search_experiments SET metrics = ?, confidence = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(metrics), metrics.confidence, now, id).run();
+    const totalSearches = metrics.control.searches + metrics.treatment.searches;
+    if (metrics.significant && totalSearches >= experiment.min_searches) {
+      const winner = metrics.control.ctr >= metrics.treatment.ctr ? "control" : "treatment";
+      await this.complete(id, winner);
+    }
+    if (this.kv) {
+      const updated = await this.getById(id);
+      if (updated && updated.status === "running") {
+        await this.kv.put("experiment:active", JSON.stringify(updated), { expirationTtl: 86400 });
+      }
+    }
+    return metrics;
+  }
+  async evaluateFromD1(experimentId) {
+    const searchRows = await this.db.prepare(`
+        SELECT variant_id,
+               COUNT(*) as searches,
+               SUM(CASE WHEN results_count = 0 THEN 1 ELSE 0 END) as zero_results,
+               AVG(response_time_ms) as avg_response_time
+        FROM ai_search_experiment_events
+        WHERE experiment_id = ? AND event_type = 'search'
+        GROUP BY variant_id
+      `).bind(experimentId).all();
+    const clickRows = await this.db.prepare(`
+        SELECT variant_id,
+               COUNT(*) as clicks,
+               AVG(click_position) as avg_position
+        FROM ai_search_experiment_events
+        WHERE experiment_id = ? AND event_type = 'click'
+        GROUP BY variant_id
+      `).bind(experimentId).all();
+    return this.buildMetrics(searchRows.results || [], clickRows.results || []);
+  }
+  async evaluateFromAnalyticsEngine(_experimentId) {
+    return this.evaluateFromD1(_experimentId);
+  }
+  buildMetrics(searchRows, clickRows) {
+    const getVariant = (rows, variant) => rows.find((r) => r.variant_id === variant);
+    const controlSearches = getVariant(searchRows, "control");
+    const treatmentSearches = getVariant(searchRows, "treatment");
+    const controlClicks = getVariant(clickRows, "control");
+    const treatmentClicks = getVariant(clickRows, "treatment");
+    const cSearches = controlSearches?.searches || 0;
+    const tSearches = treatmentSearches?.searches || 0;
+    const cClicks = controlClicks?.clicks || 0;
+    const tClicks = treatmentClicks?.clicks || 0;
+    const control = {
+      searches: cSearches,
+      clicks: cClicks,
+      ctr: cSearches > 0 ? cClicks / cSearches : 0,
+      zero_result_rate: cSearches > 0 ? (controlSearches?.zero_results || 0) / cSearches : 0,
+      avg_click_position: controlClicks?.avg_position || 0,
+      avg_response_time_ms: controlSearches?.avg_response_time || 0
+    };
+    const treatment = {
+      searches: tSearches,
+      clicks: tClicks,
+      ctr: tSearches > 0 ? tClicks / tSearches : 0,
+      zero_result_rate: tSearches > 0 ? (treatmentSearches?.zero_results || 0) / tSearches : 0,
+      avg_click_position: treatmentClicks?.avg_position || 0,
+      avg_response_time_ms: treatmentSearches?.avg_response_time || 0
+    };
+    const chi2 = chiSquared(cClicks, cSearches, tClicks, tSearches);
+    const confidence = chi2ToConfidence(chi2);
+    return {
+      control,
+      treatment,
+      confidence,
+      significant: confidence >= 0.95
+    };
+  }
+};
+function chiSquared(controlClicks, controlImpressions, treatmentClicks, treatmentImpressions) {
+  if (controlImpressions === 0 || treatmentImpressions === 0) return 0;
+  const controlNoClick = controlImpressions - controlClicks;
+  const treatmentNoClick = treatmentImpressions - treatmentClicks;
+  const total = controlImpressions + treatmentImpressions;
+  const totalClicks = controlClicks + treatmentClicks;
+  const totalNoClicks = controlNoClick + treatmentNoClick;
+  if (totalClicks === 0 || totalNoClicks === 0) return 0;
+  const eCC = controlImpressions * totalClicks / total;
+  const eCN = controlImpressions * totalNoClicks / total;
+  const eTC = treatmentImpressions * totalClicks / total;
+  const eTN = treatmentImpressions * totalNoClicks / total;
+  return (controlClicks - eCC) ** 2 / eCC + (controlNoClick - eCN) ** 2 / eCN + (treatmentClicks - eTC) ** 2 / eTC + (treatmentNoClick - eTN) ** 2 / eTN;
+}
+function chi2ToConfidence(chi2) {
+  if (chi2 >= 10.83) return 0.999;
+  if (chi2 >= 6.63) return 0.99;
+  if (chi2 >= 3.84) return 0.95;
+  if (chi2 >= 2.71) return 0.9;
+  if (chi2 >= 1.32) return 0.75;
+  return chi2 / 3.84 * 0.95;
+}
+function fnv1a(str) {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+// src/plugins/core-plugins/ai-search-plugin/routes/admin.ts
 var clampWeight = (val, fallback) => {
   const n = Number(val);
   return isNaN(n) || !isFinite(n) ? fallback : Math.round(Math.min(10, Math.max(0, n)) * 10) / 10;
@@ -3476,6 +4421,107 @@ adminRoutes.delete("/api/relevance/rules/:id", async (c) => {
   } catch (error) {
     console.error("Error deleting query rule:", error);
     return c.json({ error: "Failed to delete query rule" }, 500);
+  }
+});
+adminRoutes.get("/api/related-searches", async (c) => {
+  try {
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const sourceQuery = c.req.query("source_query");
+    const source = c.req.query("source");
+    const enabled = c.req.query("enabled");
+    const results = await service.getAll({
+      source_query: sourceQuery,
+      source,
+      enabled: enabled !== void 0 ? enabled === "true" : void 0
+    });
+    return c.json({ success: true, data: results });
+  } catch (error) {
+    console.error("Error listing related searches:", error);
+    return c.json({ error: "Failed to list related searches" }, 500);
+  }
+});
+adminRoutes.post("/api/related-searches", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { source_query: sourceQuery, related_query: relatedQuery, position, bidirectional } = body;
+    if (!sourceQuery || typeof sourceQuery !== "string" || !sourceQuery.trim()) {
+      return c.json({ success: false, error: "source_query is required" }, 400);
+    }
+    if (!relatedQuery || typeof relatedQuery !== "string" || !relatedQuery.trim()) {
+      return c.json({ success: false, error: "related_query is required" }, 400);
+    }
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const result = await service.create(sourceQuery, relatedQuery, {
+      source: "manual",
+      position: typeof position === "number" ? position : 0,
+      bidirectional: bidirectional === true
+    });
+    return c.json({ success: true, data: result });
+  } catch (error) {
+    if (error?.message?.includes?.("UNIQUE constraint")) {
+      return c.json({ success: false, error: "This related search pair already exists" }, 409);
+    }
+    console.error("Error creating related search:", error);
+    return c.json({ error: "Failed to create related search" }, 500);
+  }
+});
+adminRoutes.put("/api/related-searches/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const updated = await service.update(id, {
+      related_query: body.related_query,
+      position: body.position,
+      enabled: body.enabled
+    });
+    if (!updated) {
+      return c.json({ error: "Related search not found" }, 404);
+    }
+    return c.json({ success: true, data: updated });
+  } catch (error) {
+    console.error("Error updating related search:", error);
+    return c.json({ error: "Failed to update related search" }, 500);
+  }
+});
+adminRoutes.delete("/api/related-searches/cache", async (c) => {
+  try {
+    const query = c.req.query("query");
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    await service.invalidateCache(query || void 0);
+    return c.json({ success: true, message: query ? `Cache cleared for "${query}"` : "All auto-generation cache cleared" });
+  } catch (error) {
+    console.error("Error clearing related search cache:", error);
+    return c.json({ error: "Failed to clear cache" }, 500);
+  }
+});
+adminRoutes.delete("/api/related-searches/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const deleted = await service.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Related search not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting related search:", error);
+    return c.json({ error: "Failed to delete related search" }, 500);
+  }
+});
+adminRoutes.post("/api/related-searches/bulk", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { entries } = body;
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return c.json({ success: false, error: "entries array is required and must not be empty" }, 400);
+    }
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const count = await service.bulkCreate(entries);
+    return c.json({ success: true, data: { created: count, total: entries.length } });
+  } catch (error) {
+    console.error("Error bulk creating related searches:", error);
+    return c.json({ error: "Failed to bulk create related searches" }, 500);
   }
 });
 adminRoutes.get("/api/facets/discover", async (c) => {
@@ -4082,7 +5128,302 @@ adminRoutes.post("/api/benchmark/evaluate-batch", async (c) => {
     return c.json({ error: String(error) }, 500);
   }
 });
+adminRoutes.post("/api/agent/run", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const latest = await recService.getLatestRun();
+    if (latest && latest.status === "running") {
+      return c.json({ error: "Analysis already running" }, 409);
+    }
+    const runIdPromise = recService.runAnalysis();
+    c.executionCtx.waitUntil(runIdPromise.then((runId) => {
+      console.log(`[Agent] Analysis run ${runId} completed`);
+    }).catch((error) => {
+      console.error("[Agent] Analysis failed:", error);
+    }));
+    return c.json({ success: true, message: "Analysis started" });
+  } catch (error) {
+    console.error("Error starting agent analysis:", error);
+    return c.json({ error: "Failed to start analysis" }, 500);
+  }
+});
+adminRoutes.get("/api/agent/status", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const [latestRun, stats] = await Promise.all([
+      recService.getLatestRun(),
+      recService.getStats()
+    ]);
+    return c.json({
+      success: true,
+      data: {
+        latest_run: latestRun,
+        stats
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching agent status:", error);
+    return c.json({ error: "Failed to fetch agent status" }, 500);
+  }
+});
+adminRoutes.get("/api/agent/recommendations", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const status = c.req.query("status") || void 0;
+    const category = c.req.query("category") || void 0;
+    const limit = parseInt(c.req.query("limit") || "100", 10);
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+    const recs = await recService.getAll({
+      status,
+      category,
+      limit,
+      offset
+    });
+    return c.json({ success: true, data: recs });
+  } catch (error) {
+    console.error("Error fetching recommendations:", error);
+    return c.json({ error: "Failed to fetch recommendations" }, 500);
+  }
+});
+adminRoutes.post("/api/agent/recommendations/:id/apply", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const id = c.req.param("id");
+    const result = await recService.applyRecommendation(id);
+    if (!result.success) {
+      return c.json({ success: false, error: result.message }, 400);
+    }
+    return c.json({ success: true, message: result.message });
+  } catch (error) {
+    console.error("Error applying recommendation:", error);
+    return c.json({ error: "Failed to apply recommendation" }, 500);
+  }
+});
+adminRoutes.post("/api/agent/recommendations/:id/dismiss", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const id = c.req.param("id");
+    const updated = await recService.updateStatus(id, "dismissed");
+    if (!updated) {
+      return c.json({ error: "Recommendation not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error dismissing recommendation:", error);
+    return c.json({ error: "Failed to dismiss recommendation" }, 500);
+  }
+});
+adminRoutes.post("/api/agent/recommendations/dismiss-all", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const dismissed = await recService.dismissAll();
+    return c.json({ success: true, data: { dismissed } });
+  } catch (error) {
+    console.error("Error dismissing all recommendations:", error);
+    return c.json({ error: "Failed to dismiss recommendations" }, 500);
+  }
+});
+adminRoutes.get("/api/agent/runs", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const limit = parseInt(c.req.query("limit") || "20", 10);
+    const runs = await recService.getRunHistory(limit);
+    return c.json({ success: true, data: runs });
+  } catch (error) {
+    console.error("Error fetching run history:", error);
+    return c.json({ error: "Failed to fetch run history" }, 500);
+  }
+});
+adminRoutes.get("/api/experiments", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const analytics = c.env.SEARCH_EXPERIMENTS;
+    const expService = new ExperimentService(db, kv, analytics);
+    const status = c.req.query("status");
+    const mode = c.req.query("mode");
+    const limit = parseInt(c.req.query("limit") || "50", 10);
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+    const experiments = await expService.getAll({ status, mode, limit, offset });
+    return c.json({ success: true, data: experiments });
+  } catch (error) {
+    console.error("Error listing experiments:", error);
+    return c.json({ error: "Failed to list experiments" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments", async (c) => {
+  try {
+    const db = c.env.DB;
+    const expService = new ExperimentService(db);
+    const body = await c.req.json();
+    if (!body.name || !body.variants) {
+      return c.json({ error: "name and variants are required" }, 400);
+    }
+    const experiment = await expService.create({
+      name: body.name,
+      description: body.description,
+      mode: body.mode,
+      traffic_pct: body.traffic_pct,
+      split_ratio: body.split_ratio,
+      variants: body.variants,
+      min_searches: body.min_searches
+    });
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error creating experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to create experiment" }, 500);
+  }
+});
+adminRoutes.get("/api/experiments/:id", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const analytics = c.env.SEARCH_EXPERIMENTS;
+    const expService = new ExperimentService(db, kv, analytics);
+    const id = c.req.param("id");
+    const experiment = await expService.getById(id);
+    if (!experiment) {
+      return c.json({ error: "Experiment not found" }, 404);
+    }
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error fetching experiment:", error);
+    return c.json({ error: "Failed to fetch experiment" }, 500);
+  }
+});
+adminRoutes.put("/api/experiments/:id", async (c) => {
+  try {
+    const db = c.env.DB;
+    const expService = new ExperimentService(db);
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const experiment = await expService.update(id, body);
+    if (!experiment) {
+      return c.json({ error: "Experiment not found" }, 404);
+    }
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error updating experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to update experiment" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments/:id/start", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const expService = new ExperimentService(db, kv);
+    const id = c.req.param("id");
+    const experiment = await expService.start(id);
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error starting experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to start experiment" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments/:id/pause", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const expService = new ExperimentService(db, kv);
+    const id = c.req.param("id");
+    const experiment = await expService.pause(id);
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error pausing experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to pause experiment" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments/:id/complete", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const expService = new ExperimentService(db, kv);
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const experiment = await expService.complete(id, body.winner);
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error completing experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to complete experiment" }, 500);
+  }
+});
+adminRoutes.delete("/api/experiments/:id", async (c) => {
+  try {
+    const db = c.env.DB;
+    const expService = new ExperimentService(db);
+    const id = c.req.param("id");
+    const deleted = await expService.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Experiment not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to delete experiment" }, 500);
+  }
+});
+adminRoutes.get("/api/experiments/:id/metrics", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const analytics = c.env.SEARCH_EXPERIMENTS;
+    const expService = new ExperimentService(db, kv, analytics);
+    const id = c.req.param("id");
+    const metrics = await expService.evaluateExperiment(id);
+    if (!metrics) {
+      return c.json({ error: "Experiment not found or not running" }, 404);
+    }
+    return c.json({ success: true, data: metrics });
+  } catch (error) {
+    console.error("Error fetching experiment metrics:", error);
+    return c.json({ error: "Failed to fetch metrics" }, 500);
+  }
+});
 var admin_default = adminRoutes;
+
+// src/plugins/core-plugins/ai-search-plugin/services/interleave.service.ts
+function teamDraftInterleave(controlResults, treatmentResults, limit) {
+  const results = [];
+  const origins = {};
+  const seen = /* @__PURE__ */ new Set();
+  let ci = 0;
+  let ti = 0;
+  while (results.length < limit && (ci < controlResults.length || ti < treatmentResults.length)) {
+    const controlFirst = Math.random() < 0.5;
+    const order = [
+      { list: controlResults, ptr: () => ci, advance: () => {
+        ci++;
+      }, origin: "control" },
+      { list: treatmentResults, ptr: () => ti, advance: () => {
+        ti++;
+      }, origin: "treatment" }
+    ];
+    if (!controlFirst) order.reverse();
+    for (const { list, ptr, advance, origin } of order) {
+      if (results.length >= limit) break;
+      while (ptr() < list.length) {
+        const item = list[ptr()];
+        advance();
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          results.push(item);
+          origins[item.id] = origin;
+          break;
+        }
+      }
+    }
+  }
+  return { results, origins };
+}
+
+// src/plugins/core-plugins/ai-search-plugin/routes/api.ts
 var apiRoutes = new Hono();
 apiRoutes.post("/", async (c) => {
   try {
@@ -4108,6 +5449,86 @@ apiRoutes.post("/", async (c) => {
       if (typeof query.filters.dateRange.end === "string") {
         query.filters.dateRange.end = new Date(query.filters.dateRange.end);
       }
+    }
+    let experimentMeta;
+    try {
+      const analytics = c.env.SEARCH_EXPERIMENTS;
+      const expService = new ExperimentService(db, kv, analytics);
+      const activeExp = await expService.getActiveExperiment();
+      if (activeExp && query.query) {
+        const userId = getCookie(c, "sonicjs_uid") || c.req.header("x-forwarded-for") || c.req.header("user-agent") || "anon";
+        if (!getCookie(c, "sonicjs_uid")) {
+          const uid = crypto.randomUUID();
+          setCookie(c, "sonicjs_uid", uid, { path: "/", maxAge: 365 * 86400, sameSite: "Lax" });
+        }
+        if (expService.shouldEnroll(activeExp.id, userId, activeExp.traffic_pct)) {
+          const variant = expService.assignVariant(activeExp.id, userId, activeExp.split_ratio);
+          const startTime = Date.now();
+          if (activeExp.mode === "interleave") {
+            const [controlResults, treatmentResults] = await Promise.all([
+              service.searchWithOverrides({ ...query, cache: false }, activeExp.variants.control),
+              service.searchWithOverrides({ ...query, cache: false }, activeExp.variants.treatment)
+            ]);
+            const interleaved = teamDraftInterleave(
+              controlResults.results,
+              treatmentResults.results,
+              query.limit || 20
+            );
+            const elapsed = Date.now() - startTime;
+            experimentMeta = {
+              experiment_id: activeExp.id,
+              experiment_mode: activeExp.mode,
+              experiment_variant: variant,
+              result_origins: interleaved.origins
+            };
+            expService.trackSearchEvent({
+              experimentId: activeExp.id,
+              variantId: variant,
+              query: query.query,
+              searchMode: query.mode,
+              userId,
+              searchId: "",
+              resultsCount: interleaved.results.length,
+              responseTimeMs: elapsed
+            });
+            return c.json({
+              success: true,
+              data: {
+                results: interleaved.results,
+                total: interleaved.results.length,
+                query_time_ms: elapsed,
+                mode: query.mode
+              },
+              experiment: experimentMeta
+            });
+          } else {
+            const overrides = variant === "treatment" ? activeExp.variants.treatment : activeExp.variants.control;
+            const results2 = Object.keys(overrides).length > 0 ? await service.searchWithOverrides({ ...query, cache: false }, overrides) : await service.search(query);
+            experimentMeta = {
+              experiment_id: activeExp.id,
+              experiment_mode: activeExp.mode,
+              experiment_variant: variant
+            };
+            expService.trackSearchEvent({
+              experimentId: activeExp.id,
+              variantId: variant,
+              query: query.query,
+              searchMode: query.mode,
+              userId,
+              searchId: results2.search_id || "",
+              resultsCount: results2.results.length,
+              responseTimeMs: results2.query_time_ms
+            });
+            return c.json({
+              success: true,
+              data: results2,
+              experiment: experimentMeta
+            });
+          }
+        }
+      }
+    } catch (expError) {
+      console.warn("[Search API] Experiment error (falling through):", expError);
     }
     const results = await service.search(query);
     return c.json({
@@ -4187,6 +5608,21 @@ apiRoutes.post("/click", async (c) => {
       body.content_title || null,
       clickPosition
     ).run();
+    if (body.experiment_id && body.experiment_variant) {
+      try {
+        const kv = c.env.CACHE_KV;
+        const analytics = c.env.SEARCH_EXPERIMENTS;
+        const expService = new ExperimentService(db, kv, analytics);
+        expService.trackClickEvent({
+          experimentId: body.experiment_id,
+          variantId: body.experiment_variant,
+          searchId: searchId || "",
+          contentId,
+          clickPosition
+        });
+      } catch {
+      }
+    }
     return c.json({ success: true });
   } catch (error) {
     console.error("Click tracking error:", error);
@@ -8774,6 +10210,6 @@ function createDb(d1) {
 // src/index.ts
 var VERSION = package_default.version;
 
-export { VERSION, createDb, createSonicJSApp, setupCoreMiddleware, setupCoreRoutes };
+export { ExperimentService, VERSION, createDb, createSonicJSApp, setupCoreMiddleware, setupCoreRoutes };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

@@ -13,7 +13,9 @@ import { QueryRulesService } from '../services/query-rules.service'
 import { EmbeddingService } from '../services/embedding.service'
 import { ChunkingService } from '../services/chunking.service'
 import { RecommendationService } from '../services/recommendation.service'
-import type { AISearchSettings, FacetDefinition, SearchQuery } from '../types'
+import { RelatedSearchService } from '../services/related-search.service'
+import { ExperimentService } from '../services/experiment.service'
+import type { AISearchSettings, ExperimentMode, FacetDefinition, SearchQuery } from '../types'
 
 type Variables = {
   user: {
@@ -748,6 +750,156 @@ adminRoutes.delete('/api/relevance/rules/:id', async (c) => {
   } catch (error) {
     console.error('Error deleting query rule:', error)
     return c.json({ error: 'Failed to delete query rule' }, 500)
+  }
+})
+
+// ==========================================
+// Related Searches Routes
+// ==========================================
+
+/**
+ * GET /admin/api/ai-search/related-searches
+ * List related search pairs (filterable by source_query, source, enabled)
+ */
+adminRoutes.get('/api/related-searches', async (c) => {
+  try {
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV)
+    const sourceQuery = c.req.query('source_query')
+    const source = c.req.query('source') as 'manual' | 'agent' | undefined
+    const enabled = c.req.query('enabled')
+
+    const results = await service.getAll({
+      source_query: sourceQuery,
+      source,
+      enabled: enabled !== undefined ? enabled === 'true' : undefined,
+    })
+
+    return c.json({ success: true, data: results })
+  } catch (error) {
+    console.error('Error listing related searches:', error)
+    return c.json({ error: 'Failed to list related searches' }, 500)
+  }
+})
+
+/**
+ * POST /admin/api/ai-search/related-searches
+ * Create a manual related search pair
+ */
+adminRoutes.post('/api/related-searches', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { source_query: sourceQuery, related_query: relatedQuery, position, bidirectional } = body
+
+    if (!sourceQuery || typeof sourceQuery !== 'string' || !sourceQuery.trim()) {
+      return c.json({ success: false, error: 'source_query is required' }, 400)
+    }
+    if (!relatedQuery || typeof relatedQuery !== 'string' || !relatedQuery.trim()) {
+      return c.json({ success: false, error: 'related_query is required' }, 400)
+    }
+
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV)
+    const result = await service.create(sourceQuery, relatedQuery, {
+      source: 'manual',
+      position: typeof position === 'number' ? position : 0,
+      bidirectional: bidirectional === true,
+    })
+
+    return c.json({ success: true, data: result })
+  } catch (error: any) {
+    if (error?.message?.includes?.('UNIQUE constraint')) {
+      return c.json({ success: false, error: 'This related search pair already exists' }, 409)
+    }
+    console.error('Error creating related search:', error)
+    return c.json({ error: 'Failed to create related search' }, 500)
+  }
+})
+
+/**
+ * PUT /admin/api/ai-search/related-searches/:id
+ * Update a related search entry
+ */
+adminRoutes.put('/api/related-searches/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const body = await c.req.json()
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV)
+
+    const updated = await service.update(id, {
+      related_query: body.related_query,
+      position: body.position,
+      enabled: body.enabled,
+    })
+
+    if (!updated) {
+      return c.json({ error: 'Related search not found' }, 404)
+    }
+
+    return c.json({ success: true, data: updated })
+  } catch (error) {
+    console.error('Error updating related search:', error)
+    return c.json({ error: 'Failed to update related search' }, 500)
+  }
+})
+
+/**
+ * DELETE /admin/api/ai-search/related-searches/cache
+ * Invalidate auto-generation KV cache
+ * NOTE: Must be defined BEFORE the /:id route to avoid "cache" matching as an ID
+ */
+adminRoutes.delete('/api/related-searches/cache', async (c) => {
+  try {
+    const query = c.req.query('query')
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV)
+    await service.invalidateCache(query || undefined)
+
+    return c.json({ success: true, message: query ? `Cache cleared for "${query}"` : 'All auto-generation cache cleared' })
+  } catch (error) {
+    console.error('Error clearing related search cache:', error)
+    return c.json({ error: 'Failed to clear cache' }, 500)
+  }
+})
+
+/**
+ * DELETE /admin/api/ai-search/related-searches/:id
+ * Delete a related search entry
+ */
+adminRoutes.delete('/api/related-searches/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV)
+    const deleted = await service.delete(id)
+
+    if (!deleted) {
+      return c.json({ error: 'Related search not found' }, 404)
+    }
+
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting related search:', error)
+    return c.json({ error: 'Failed to delete related search' }, 500)
+  }
+})
+
+/**
+ * POST /admin/api/ai-search/related-searches/bulk
+ * Bulk create related search pairs
+ */
+adminRoutes.post('/api/related-searches/bulk', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { entries } = body
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return c.json({ success: false, error: 'entries array is required and must not be empty' }, 400)
+    }
+
+    const service = new RelatedSearchService(c.env.DB, c.env.CACHE_KV)
+    const count = await service.bulkCreate(entries)
+
+    return c.json({ success: true, data: { created: count, total: entries.length } })
+  } catch (error) {
+    console.error('Error bulk creating related searches:', error)
+    return c.json({ error: 'Failed to bulk create related searches' }, 500)
   }
 })
 
@@ -1758,6 +1910,189 @@ adminRoutes.get('/api/agent/runs', async (c) => {
   } catch (error) {
     console.error('Error fetching run history:', error)
     return c.json({ error: 'Failed to fetch run history' }, 500)
+  }
+})
+
+// =============================================
+// Experiment Routes
+// =============================================
+
+/** GET /api/experiments — List experiments */
+adminRoutes.get('/api/experiments', async (c) => {
+  try {
+    const db = c.env.DB
+    const kv = c.env.CACHE_KV
+    const analytics = (c.env as any).SEARCH_EXPERIMENTS
+    const expService = new ExperimentService(db, kv, analytics)
+
+    const status = c.req.query('status') as any
+    const mode = c.req.query('mode') as ExperimentMode | undefined
+    const limit = parseInt(c.req.query('limit') || '50', 10)
+    const offset = parseInt(c.req.query('offset') || '0', 10)
+
+    const experiments = await expService.getAll({ status, mode, limit, offset })
+    return c.json({ success: true, data: experiments })
+  } catch (error) {
+    console.error('Error listing experiments:', error)
+    return c.json({ error: 'Failed to list experiments' }, 500)
+  }
+})
+
+/** POST /api/experiments — Create experiment */
+adminRoutes.post('/api/experiments', async (c) => {
+  try {
+    const db = c.env.DB
+    const expService = new ExperimentService(db)
+    const body = await c.req.json()
+
+    if (!body.name || !body.variants) {
+      return c.json({ error: 'name and variants are required' }, 400)
+    }
+
+    const experiment = await expService.create({
+      name: body.name,
+      description: body.description,
+      mode: body.mode,
+      traffic_pct: body.traffic_pct,
+      split_ratio: body.split_ratio,
+      variants: body.variants,
+      min_searches: body.min_searches,
+    })
+
+    return c.json({ success: true, data: experiment })
+  } catch (error) {
+    console.error('Error creating experiment:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to create experiment' }, 500)
+  }
+})
+
+/** GET /api/experiments/:id — Get experiment */
+adminRoutes.get('/api/experiments/:id', async (c) => {
+  try {
+    const db = c.env.DB
+    const kv = c.env.CACHE_KV
+    const analytics = (c.env as any).SEARCH_EXPERIMENTS
+    const expService = new ExperimentService(db, kv, analytics)
+    const id = c.req.param('id')
+
+    const experiment = await expService.getById(id)
+    if (!experiment) {
+      return c.json({ error: 'Experiment not found' }, 404)
+    }
+
+    return c.json({ success: true, data: experiment })
+  } catch (error) {
+    console.error('Error fetching experiment:', error)
+    return c.json({ error: 'Failed to fetch experiment' }, 500)
+  }
+})
+
+/** PUT /api/experiments/:id — Update experiment */
+adminRoutes.put('/api/experiments/:id', async (c) => {
+  try {
+    const db = c.env.DB
+    const expService = new ExperimentService(db)
+    const id = c.req.param('id')
+    const body = await c.req.json()
+
+    const experiment = await expService.update(id, body)
+    if (!experiment) {
+      return c.json({ error: 'Experiment not found' }, 404)
+    }
+
+    return c.json({ success: true, data: experiment })
+  } catch (error) {
+    console.error('Error updating experiment:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to update experiment' }, 500)
+  }
+})
+
+/** POST /api/experiments/:id/start — Start experiment */
+adminRoutes.post('/api/experiments/:id/start', async (c) => {
+  try {
+    const db = c.env.DB
+    const kv = c.env.CACHE_KV
+    const expService = new ExperimentService(db, kv)
+    const id = c.req.param('id')
+
+    const experiment = await expService.start(id)
+    return c.json({ success: true, data: experiment })
+  } catch (error) {
+    console.error('Error starting experiment:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to start experiment' }, 500)
+  }
+})
+
+/** POST /api/experiments/:id/pause — Pause experiment */
+adminRoutes.post('/api/experiments/:id/pause', async (c) => {
+  try {
+    const db = c.env.DB
+    const kv = c.env.CACHE_KV
+    const expService = new ExperimentService(db, kv)
+    const id = c.req.param('id')
+
+    const experiment = await expService.pause(id)
+    return c.json({ success: true, data: experiment })
+  } catch (error) {
+    console.error('Error pausing experiment:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to pause experiment' }, 500)
+  }
+})
+
+/** POST /api/experiments/:id/complete — Complete experiment */
+adminRoutes.post('/api/experiments/:id/complete', async (c) => {
+  try {
+    const db = c.env.DB
+    const kv = c.env.CACHE_KV
+    const expService = new ExperimentService(db, kv)
+    const id = c.req.param('id')
+    const body = await c.req.json().catch(() => ({}))
+
+    const experiment = await expService.complete(id, body.winner)
+    return c.json({ success: true, data: experiment })
+  } catch (error) {
+    console.error('Error completing experiment:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to complete experiment' }, 500)
+  }
+})
+
+/** DELETE /api/experiments/:id — Delete experiment */
+adminRoutes.delete('/api/experiments/:id', async (c) => {
+  try {
+    const db = c.env.DB
+    const expService = new ExperimentService(db)
+    const id = c.req.param('id')
+
+    const deleted = await expService.delete(id)
+    if (!deleted) {
+      return c.json({ error: 'Experiment not found' }, 404)
+    }
+
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting experiment:', error)
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to delete experiment' }, 500)
+  }
+})
+
+/** GET /api/experiments/:id/metrics — Live metrics */
+adminRoutes.get('/api/experiments/:id/metrics', async (c) => {
+  try {
+    const db = c.env.DB
+    const kv = c.env.CACHE_KV
+    const analytics = (c.env as any).SEARCH_EXPERIMENTS
+    const expService = new ExperimentService(db, kv, analytics)
+    const id = c.req.param('id')
+
+    const metrics = await expService.evaluateExperiment(id)
+    if (!metrics) {
+      return c.json({ error: 'Experiment not found or not running' }, 404)
+    }
+
+    return c.json({ success: true, data: metrics })
+  } catch (error) {
+    console.error('Error fetching experiment metrics:', error)
+    return c.json({ error: 'Failed to fetch metrics' }, 500)
   }
 })
 

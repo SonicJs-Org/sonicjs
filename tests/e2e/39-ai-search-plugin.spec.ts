@@ -24,24 +24,30 @@ test.describe('AI Search Plugin', () => {
   })
 
   test('should access AI Search settings page', async ({ page }) => {
-    await page.goto('/admin/plugins/ai-search')
-    
+    await page.goto('/admin/search')
+
     // Check page loaded - use h1 only to avoid strict mode violation
     await expect(page.locator('h1')).toContainText(/AI Search/i, { timeout: 10000 })
-    
-    // Should see collections available for indexing
+
+    // Should see collections on Configuration tab
+    await page.click('#tab-btn-configuration')
+    await page.waitForTimeout(1000)
     const pageContent = await page.content()
     expect(pageContent).toContain('collection')
   })
 
   test('should show available collections for indexing', async ({ page }) => {
-    await page.goto('/admin/plugins/ai-search')
+    await page.goto('/admin/search')
     await page.waitForTimeout(2000)
-    
+
+    // Switch to Configuration tab where collections live
+    await page.click('#tab-btn-configuration')
+    await page.waitForTimeout(1000)
+
     // Look for collection checkboxes or list
     const collections = page.locator('[type="checkbox"]').or(page.locator('text=/blog|page|news/i'))
     const collectionCount = await collections.count()
-    
+
     // Should have at least one collection available
     expect(collectionCount).toBeGreaterThan(0)
   })

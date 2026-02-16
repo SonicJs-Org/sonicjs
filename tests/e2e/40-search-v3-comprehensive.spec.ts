@@ -491,16 +491,18 @@ test.describe('Search v3 - Comprehensive', () => {
 
   test.describe('Settings Page UI', () => {
     test('loads with expected sections', async ({ page }) => {
-      await page.goto('/admin/plugins/ai-search')
+      await page.goto('/admin/search')
       await expect(page.locator('h1')).toContainText(/AI Search/i, { timeout: 10000 })
 
-      // Should contain key sections
+      // Should contain key sections on Configuration tab
+      await page.click('#tab-btn-configuration')
+      await page.waitForTimeout(1000)
       const content = await page.content()
       expect(content).toContain('collection')
     })
 
     test('has links to test page and integration guide', async ({ page }) => {
-      await page.goto('/admin/plugins/ai-search')
+      await page.goto('/admin/search')
       await page.waitForTimeout(2000)
 
       const testLink = page.locator('a[href="/admin/plugins/ai-search/test"]')
@@ -511,8 +513,12 @@ test.describe('Search v3 - Comprehensive', () => {
     })
 
     test('shows FTS5 status section', async ({ page }) => {
-      await page.goto('/admin/plugins/ai-search')
+      await page.goto('/admin/search')
       await page.waitForTimeout(2000)
+
+      // Switch to Configuration tab where FTS5 settings live
+      await page.click('#tab-btn-configuration')
+      await page.waitForTimeout(1000)
 
       await expect(page.locator('text=FTS5 Full-Text Search')).toBeVisible({ timeout: 10000 })
       await expect(page.locator('#fts5-status-text')).toBeVisible()

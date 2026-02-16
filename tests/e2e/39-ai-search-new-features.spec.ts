@@ -74,16 +74,16 @@ test.describe('AI Search - New Features', () => {
       await page.goto('/admin/plugins/ai-search/integration')
       await page.waitForTimeout(1000)
 
-      // Should have back link
-      const backLink = page.locator('a[href="/admin/plugins/ai-search"]')
-      await expect(backLink).toBeVisible()
+      // Should have back link (points to old URL which redirects to /admin/search)
+      const backLink = page.locator('a[href="/admin/plugins/ai-search"]').or(page.locator('a[href="/admin/search"]'))
+      await expect(backLink.first()).toBeVisible()
 
       // Click back link
-      await backLink.click()
-      await page.waitForTimeout(1000)
+      await backLink.first().click()
+      await page.waitForTimeout(2000)
 
-      // Should navigate to settings
-      await expect(page).toHaveURL(/\/admin\/plugins\/ai-search$/)
+      // Should navigate to search dashboard (may redirect from /admin/plugins/ai-search)
+      await expect(page).toHaveURL(/\/admin\/(search|plugins\/ai-search)/)
     })
   })
 
@@ -344,30 +344,29 @@ test.describe('AI Search - New Features', () => {
 
   test.describe('Settings Page Integration', () => {
     test('should have buttons for new pages', async ({ page }) => {
-      await page.goto('/admin/plugins/ai-search')
+      await page.goto('/admin/search')
       await page.waitForTimeout(2000)
 
-      // Should have Test Search button
+      // Links are on the Overview tab (default)
       const testButton = page.locator('a[href="/admin/plugins/ai-search/test"]')
       await expect(testButton).toBeVisible()
       expect(await testButton.textContent()).toContain('Test Search')
 
-      // Should have Headless Guide button
       const guideButton = page.locator('a[href="/admin/plugins/ai-search/integration"]')
       await expect(guideButton).toBeVisible()
-      expect(await guideButton.textContent()).toContain('Headless Guide')
+      const guideText = await guideButton.textContent()
+      expect(guideText).toMatch(/Integration Guide|Headless Guide/)
     })
 
     test('should open pages in new tabs', async ({ page }) => {
-      await page.goto('/admin/plugins/ai-search')
+      await page.goto('/admin/search')
       await page.waitForTimeout(2000)
 
-      // Check Test Search button has target="_blank"
+      // Links are on the Overview tab (default)
       const testButton = page.locator('a[href="/admin/plugins/ai-search/test"]')
       const testTarget = await testButton.getAttribute('target')
       expect(testTarget).toBe('_blank')
 
-      // Check Integration Guide button has target="_blank"
       const guideButton = page.locator('a[href="/admin/plugins/ai-search/integration"]')
       const guideTarget = await guideButton.getAttribute('target')
       expect(guideTarget).toBe('_blank')

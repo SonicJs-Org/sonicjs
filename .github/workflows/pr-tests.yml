@@ -24,16 +24,18 @@ jobs:
           echo "PR Head Repo: ${{ github.event.pull_request.head.repo.full_name || 'N/A' }}"
           echo "Is Fork: ${{ github.event.pull_request.head.repo.full_name != github.repository }}"
 
-  test:
+  # Build, unit test, and deploy preview
+  build-and-deploy:
     needs: authorize
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+    outputs:
+      preview_url: ${{ steps.deploy.outputs.preview_url }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For pull_request_target, we need to checkout the PR head
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js
@@ -69,7 +71,6 @@ jobs:
       - name: Build core package
         run: npm run build:core
 
-      # Skip Cloudflare deployment and E2E tests for Dependabot PRs (no access to secrets)
       - name: Configure wrangler for CI account
         if: github.actor != 'dependabot[bot]'
         run: |
@@ -160,15 +161,9 @@ jobs:
         id: deploy
         run: |
           cd my-sonicjs-app
-          # Deploy to preview with unique name based on PR/branch
-          # Cloudflare Workers has a 54 character limit for script names with previews
-          # Prefix "sonicjs-pr-" is 11 chars, so max branch name is 43 chars
           BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          # Limit to 43 chars to allow for "sonicjs-pr-" prefix (11 chars) = 54 total
-          # Remove trailing hyphens to avoid invalid worker names
           SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9-]/-/g' | cut -c1-43 | sed 's/-*$//')
 
-          # Deploy and capture the URL (don't exit on error)
           set +e
           echo "Deploying to preview environment: sonicjs-pr-${SAFE_BRANCH}"
           DEPLOY_OUTPUT=$(npx wrangler deploy --name "sonicjs-pr-${SAFE_BRANCH}" 2>&1)
@@ -184,7 +179,6 @@ jobs:
             exit 1
           fi
 
-          # Extract the URL from wrangler output
           PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -oP 'https://[^\s]+\.workers\.dev' | head -1)
 
           if [ -z "$PREVIEW_URL" ]; then
@@ -213,30 +207,57 @@ jobs:
           echo "Preview failed to become ready"
           exit 1
 
+  # E2E tests — split into 3 parallel shards for faster execution
+  e2e:
+    needs: build-and-deploy
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build:core
+
       - name: Install Playwright browsers
-        if: github.actor != 'dependabot[bot]'
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests against preview
-        if: github.actor != 'dependabot[bot]'
-        run: npm run e2e
+      - name: Run E2E tests (shard ${{ matrix.shard }}/3)
+        run: npm run e2e -- --shard=${{ matrix.shard }}/3
         env:
           CI: true
-          BASE_URL: ${{ steps.deploy.outputs.preview_url }}
+          BASE_URL: ${{ needs.build-and-deploy.outputs.preview_url }}
 
       - name: Upload test results
-        if: always() && github.actor != 'dependabot[bot]'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
 
       - name: Upload test videos
-        if: always() && github.actor != 'dependabot[bot]'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-videos
+          name: test-videos-shard-${{ matrix.shard }}
           path: |
             test-results/**/*.webm
             playwright-report/**/*.webm

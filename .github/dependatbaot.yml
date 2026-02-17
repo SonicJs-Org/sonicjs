@@ -1,0 +1,40 @@
+# Dependabot — Automated dependency update PRs
+# https://docs.github.com/en/code-security/dependabot
+#
+# GitHub reads this file automatically — no workflow, no secrets needed.
+# Dependabot will open PRs for:
+#   1. npm packages with known vulnerabilities (security updates — always immediate)
+#   2. npm packages with new versions (version updates — weekly batched)
+#   3. GitHub Actions with new versions (keeps CI workflows current)
+
+version: 2
+
+updates:
+  # npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Group minor + patch updates into a single PR to reduce noise
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+    # Limit open PRs to avoid overwhelming the PR list
+    open-pull-requests-limit: 10
+    # Security updates are always immediate regardless of schedule
+
+  # GitHub Actions versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+    open-pull-requests-limit: 5

@@ -25,7 +25,8 @@ import {
   adminFormsRoutes,
   publicFormsRoutes,
   adminApiReferenceRoutes,
-  adminSearchRoutes
+  adminSearchRoutes,
+  adminApiKeyRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
@@ -57,6 +58,7 @@ export interface Bindings {
   ENVIRONMENT?: string
   BUCKET_NAME?: string
   GOOGLE_MAPS_API_KEY?: string
+  REQUIRE_API_KEY?: string
 }
 
 export interface Variables {
@@ -70,6 +72,7 @@ export interface Variables {
   requestId?: string
   startTime?: number
   appVersion?: string
+  apiKey?: { id: string; name: string; scopes: string[]; userId: string }
 }
 
 export interface SonicJSConfig {
@@ -198,7 +201,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/admin/media', adminMediaRoutes)
   // Admin Search page (top-level admin page at /admin/search)
   app.route('/admin/search', adminSearchRoutes)
-
+  app.route('/admin/api-keys', adminApiKeyRoutes)
   // Plugin routes - AI Search (MUST be registered BEFORE admin/plugins to avoid route conflict)
   // Register AI Search routes first so they take precedence over the generic /:id handler
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {

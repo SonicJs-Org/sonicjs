@@ -35,6 +35,7 @@ export { adminFormsRoutes } from './admin-forms'
 export { default as publicFormsRoutes } from './public-forms'
 export { adminApiReferenceRoutes } from './admin-api-reference'
 export { adminSearchRoutes } from './admin-search'
+export { adminApiKeyRoutes } from './admin-api-keys'
 
 export const ROUTES_INFO = {
   message: 'Core routes available',
@@ -61,7 +62,8 @@ export const ROUTES_INFO = {
     'adminFormsRoutes',
     'publicFormsRoutes',
     'adminApiReferenceRoutes',
-    'adminSearchRoutes'
+    'adminSearchRoutes',
+    'adminApiKeyRoutes'
   ],
   status: 'Core package routes ready',
   reference: 'https://github.com/sonicjs/sonicjs'

@@ -13,6 +13,9 @@ export { bootstrapMiddleware } from './bootstrap'
 // Auth middleware
 export { AuthManager, requireAuth, requireRole, optionalAuth } from './auth'
 
+// API key middleware
+export { requireApiKey, optionalApiKey } from './api-key'
+
 // Metrics middleware
 export { metricsMiddleware } from './metrics'
 

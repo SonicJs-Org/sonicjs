@@ -835,6 +835,62 @@ export default function SearchPage() {
               </div>
             </div>
 
+            <!-- Authentication Section -->
+            <div class="section">
+              <h2>🔑 Authentication (API Keys)</h2>
+              <p>API keys provide scoped, revocable access to the search API without requiring a user session.</p>
+
+              <h3>Generate a Key</h3>
+              <p>Create a key in the admin panel or via the admin API:</p>
+              <pre><code>// POST /admin/api-keys  (requires admin session)
+{
+  "name": "My Frontend App",
+  "scopes": ["search:read"]
+}
+// Response includes a token shown ONCE:
+// { "data": { "token": "sk_live_a1b2c3..." } }</code></pre>
+
+              <h3>Use the Key</h3>
+              <p>Pass it in the <code>X-API-Key</code> header on every request:</p>
+              <pre><code>fetch('/api/search', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': 'sk_live_a1b2c3...'
+  },
+  body: JSON.stringify({ query: 'hello', mode: 'keyword' })
+});</code></pre>
+
+              <h3>Scopes</h3>
+              <div class="grid">
+                <div class="card">
+                  <h4>search:read</h4>
+                  <p><code>/api/search</code>, <code>/api/search/suggest</code></p>
+                  <p>Query and autocomplete</p>
+                </div>
+                <div class="card">
+                  <h4>search:write</h4>
+                  <p><code>/api/search/click</code>, <code>/api/search/facet-click</code></p>
+                  <p>Click and interaction tracking</p>
+                </div>
+                <div class="card">
+                  <h4>search:analytics</h4>
+                  <p><code>/api/search/analytics</code></p>
+                  <p>Programmatic analytics access</p>
+                </div>
+              </div>
+
+              <div class="info-box">
+                <strong>Security notes:</strong>
+                <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                  <li>Keys are stored as SHA-256 hashes &mdash; the plaintext is only shown once at creation.</li>
+                  <li>Keep keys server-side. Never embed them in client-side JavaScript.</li>
+                  <li>Revoked keys may still work for up to 5 minutes due to KV caching.</li>
+                  <li>By default, API keys are <strong>optional</strong>. Set <code>REQUIRE_API_KEY=true</code> to enforce.</li>
+                </ul>
+              </div>
+            </div>
+
             <!-- API Reference Section -->
             <div class="section">
               <h2>📡 API Reference</h2>
@@ -1054,6 +1110,7 @@ app.use('/api/*', cors({
             <div class="section">
               <h2>✅ Integration Checklist</h2>
               <ul class="checklist">
+                <li>Generated API key (if using auth)</li>
                 <li>Updated API_URL in code</li>
                 <li>Configured CORS if needed</li>
                 <li>Indexed collections in admin</li>

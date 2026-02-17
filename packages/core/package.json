@@ -61,6 +61,8 @@
   ],
   "scripts": {
     "generate:migrations": "npx tsx scripts/generate-migrations.ts",
+    "generate:benchmark": "npx tsx scripts/generate-benchmark-data.ts",
+    "generate:benchmark:subset": "npx tsx scripts/generate-benchmark-data.ts --subset",
     "prebuild": "npm run generate:migrations",
     "build": "tsup",
     "dev": "tsup --watch",

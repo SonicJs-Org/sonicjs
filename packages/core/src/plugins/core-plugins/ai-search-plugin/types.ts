@@ -19,6 +19,18 @@ export interface AISearchSettings {
   // Phase 2: Hybrid search settings
   query_rewriting_enabled?: boolean // Off by default, adds ~100-300ms latency
   reranking_enabled?: boolean // On by default, adds ~50-150ms latency
+  // Phase 2: FTS5 field weight tuning (BM25 boosting)
+  fts5_title_boost?: number // Default: 5.0
+  fts5_slug_boost?: number  // Default: 2.0
+  fts5_body_boost?: number  // Default: 1.0
+  // Phase 2C: Query Synonyms
+  query_synonyms_enabled?: boolean // Default: true
+  // Faceted Search
+  facets_enabled?: boolean             // Master toggle (default: false)
+  facet_config?: FacetDefinition[]     // Ordered list of configured facets
+  facet_max_values?: number            // Global max values per facet (default: 20)
+  // Related Searches
+  related_searches_enabled?: boolean   // Master toggle (default: true)
 }
 
 export interface IndexStatus {
@@ -37,6 +49,8 @@ export interface SearchQuery {
   filters?: SearchFilters
   limit?: number
   offset?: number
+  facets?: boolean // Request facet computation alongside results
+  cache?: boolean  // Set to false to bypass KV result cache (default: true)
 }
 
 export interface SearchFilters {
@@ -74,6 +88,7 @@ export interface SearchResult {
   // Phase 2: Hybrid search fields
   rrf_score?: number // Reciprocal Rank Fusion score (internal sorting)
   rerank_score?: number // Cross-encoder reranking score
+  pipeline_score?: number // Composite ranking pipeline score [0, 1]
 }
 
 export interface SearchResponse {
@@ -81,7 +96,13 @@ export interface SearchResponse {
   total: number
   query_time_ms: number
   mode: 'ai' | 'keyword' | 'fts5' | 'hybrid'
+  search_id?: string // ID linking to ai_search_history row for click tracking
   suggestions?: string[] // Autocomplete suggestions
+  facets?: FacetResult[] // Facet counts from full result set
+  original_query?: string // Set when a query substitution rule was applied
+  applied_rule_id?: string // ID of the substitution rule that matched
+  cached?: boolean // True when result was served from KV cache
+  related_searches?: RelatedSearchResult[] // Related search suggestions
 }
 
 export interface SearchHistory {
@@ -107,4 +128,262 @@ export interface CollectionInfo {
 export interface NewCollectionNotification {
   collection: CollectionInfo
   message: string
+}
+
+/** Configuration for a single ranking pipeline stage */
+export interface RankingStage {
+  type: 'exactMatch' | 'bm25' | 'semantic' | 'recency' | 'popularity' | 'custom'
+  weight: number      // 0-10, step 0.1
+  enabled: boolean
+  config?: Record<string, any>  // Stage-specific (e.g. recency half_life_days)
+}
+
+/** A bidirectional synonym group — searching any term expands to all terms */
+export interface SynonymGroup {
+  id: string
+  terms: string[]
+  enabled: boolean
+  created_at: number
+  updated_at: number
+}
+
+/** A deterministic query substitution rule — "if user searches X, replace with Y" */
+export interface QueryRule {
+  id: string
+  match_pattern: string
+  match_type: 'exact' | 'prefix'
+  substitute_query: string
+  enabled: boolean
+  priority: number
+  created_at: number
+  updated_at: number
+}
+
+/** Default pipeline — used when no config exists in DB */
+export const DEFAULT_RANKING_PIPELINE: RankingStage[] = [
+  { type: 'exactMatch', weight: 10, enabled: true },
+  { type: 'bm25',       weight: 5,  enabled: true },
+  { type: 'semantic',    weight: 3,  enabled: true },
+  { type: 'recency',     weight: 1,  enabled: true,  config: { half_life_days: 30 } },
+  { type: 'popularity',  weight: 0,  enabled: false },
+  { type: 'custom',      weight: 0,  enabled: false },
+]
+
+// ==========================================
+// Faceted Search Types
+// ==========================================
+
+/** Persisted facet configuration — stored in AISearchSettings.facet_config */
+export interface FacetDefinition {
+  name: string               // Display name ("Tags", "Category", "Status")
+  field: string              // "collection_name" | "status" | "author" | "$.tags" | "$.category"
+  type: 'builtin' | 'json_scalar' | 'json_array'
+  collections?: string[]     // Collection IDs that have this field (empty = all)
+  maxValues?: number         // Per-facet limit override (default: 20)
+  sortBy?: 'count' | 'alpha' // Default: 'count'
+  enabled: boolean
+  source: 'auto' | 'manual' | 'agent' // Who created this config entry
+  position: number           // Display order (Phase 6 agent can optimize)
+}
+
+/** Facet counts returned in search response */
+export interface FacetResult {
+  name: string               // Display name
+  field: string              // Field identifier
+  values: FacetValue[]
+}
+
+export interface FacetValue {
+  value: string
+  count: number
+}
+
+/** Field discovered from collection schemas — returned by discover endpoint */
+export interface DiscoveredField {
+  field: string              // JSON path or built-in name ("$.tags", "collection_name")
+  title: string              // Human label from schema or built-in
+  type: 'builtin' | 'json_scalar' | 'json_array'
+  recommended: boolean       // true for enum, array, boolean fields
+  collections: Array<{ id: string; name: string }> // Which collections have this field
+  enumValues?: string[]      // Known values for enum-type fields
+}
+
+// ==========================================
+// InstantSearch.js Protocol Types (Algolia-compatible)
+// ==========================================
+
+export interface InstantSearchRequest {
+  indexName: string
+  params?: InstantSearchParams
+}
+
+export interface InstantSearchParams {
+  query?: string
+  page?: number
+  hitsPerPage?: number
+  facets?: string[]
+  facetFilters?: string[] | string[][] // Algolia facet filter format
+  filters?: string
+  highlightPreTag?: string
+  highlightPostTag?: string
+  attributesToRetrieve?: string[]
+  attributesToHighlight?: string[]
+  attributesToSnippet?: string[]
+}
+
+export interface InstantSearchHit {
+  objectID: string
+  [key: string]: any
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Algolia protocol field name
+  _highlightResult?: Record<string, {
+    value: string
+    matchLevel: 'none' | 'partial' | 'full'
+    matchedWords?: string[]
+  }>
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Algolia protocol field name
+  _snippetResult?: Record<string, {
+    value: string
+    matchLevel: 'none' | 'partial' | 'full'
+  }>
+}
+
+export interface InstantSearchResult {
+  hits: InstantSearchHit[]
+  nbHits: number
+  page: number
+  nbPages: number
+  hitsPerPage: number
+  processingTimeMS: number
+  query: string
+  params: string
+  exhaustiveNbHits?: boolean
+  facets?: Record<string, Record<string, number>>
+  index?: string
+}
+
+export interface InstantSearchMultiResponse {
+  results: InstantSearchResult[]
+}
+
+// ==========================================
+// AI Search Quality Agent Types
+// ==========================================
+
+export type RecommendationCategory = 'synonym' | 'query_rule' | 'low_ctr' | 'unused_facet' | 'content_gap' | 'related_search'
+export type RecommendationStatus = 'pending' | 'applied' | 'dismissed'
+
+export interface Recommendation {
+  id: string
+  category: RecommendationCategory
+  title: string
+  description: string
+  supporting_data: Record<string, any>
+  action_payload: Record<string, any> | null
+  status: RecommendationStatus
+  fingerprint: string
+  run_id: string
+  applied_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+export interface AgentRun {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  recommendations_count: number
+  duration_ms: number | null
+  error_message: string | null
+  created_at: number
+  completed_at: number | null
+}
+
+// ==========================================
+// Trending Searches Types
+// ==========================================
+
+export interface TrendingSearch {
+  query: string
+  trend_score: number
+  search_count: number
+}
+
+export interface TrendingSearchResult {
+  items: TrendingSearch[]
+  cached: boolean
+}
+
+// ==========================================
+// Related Searches Types
+// ==========================================
+
+export interface RelatedSearch {
+  id: string
+  source_query: string
+  related_query: string
+  source: 'manual' | 'agent'
+  position: number
+  bidirectional: boolean
+  enabled: boolean
+  created_at: number
+  updated_at: number
+}
+
+export interface RelatedSearchResult {
+  query: string
+  source: 'manual' | 'agent' | 'auto'
+}
+
+// ==========================================
+// A/B Testing / Experiments Types
+// ==========================================
+
+export type ExperimentStatus = 'draft' | 'running' | 'paused' | 'completed' | 'archived'
+export type ExperimentMode = 'ab' | 'interleave' | 'bandit'
+
+export interface Experiment {
+  id: string
+  name: string
+  description: string | null
+  status: ExperimentStatus
+  mode: ExperimentMode
+  traffic_pct: number
+  split_ratio: number
+  variants: {
+    control: Partial<AISearchSettings>
+    treatment: Partial<AISearchSettings>
+  }
+  metrics: ExperimentMetrics | null
+  winner: string | null
+  confidence: number | null
+  min_searches: number
+  started_at: number | null
+  ended_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+export interface ExperimentMetrics {
+  control: VariantMetrics
+  treatment: VariantMetrics
+  confidence: number
+  significant: boolean
+}
+
+export interface VariantMetrics {
+  searches: number
+  clicks: number
+  ctr: number
+  zero_result_rate: number
+  avg_click_position: number
+  avg_response_time_ms: number
+}
+
+export interface InterleavedResult {
+  contentId: string
+  origin: 'control' | 'treatment'
+}
+
+export interface InterleaveOutput {
+  results: SearchResult[]
+  origins: Record<string, 'control' | 'treatment'>
 }

@@ -299,6 +299,9 @@ export type {
 // Plugin SDK (Beta)
 export { PluginBuilder, PluginHelpers } from './plugins/sdk'
 
+// AI Search Plugin — exported for scheduled handler / external usage
+export { ExperimentService } from './plugins/core-plugins/ai-search-plugin/services/experiment.service'
+
 // ============================================================================
 // Version
 // ============================================================================

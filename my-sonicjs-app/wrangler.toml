@@ -4,32 +4,58 @@ compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat"]
 
 # Cloudflare account
-account_id = "f9d6328dc3115e621758a741dda3d5c4"
+account_id = "f61c658f1de7911b0a529f38308adb21"
 
 # Cloudflare Workers settings
 workers_dev = true
 
-# D1 Database
-# Note: database_name and database_id are automatically updated by GitHub Actions
+# D1 Database — persistent preview (not used by CI)
 [[d1_databases]]
 binding = "DB"
-database_name = "sonicjs-worktree-lane711-otp-email-branding"
-database_id = "68223153-215a-4c8f-a9bf-797f11236758"
+database_name = "sonicjs-preview-db"
+database_id = "0526b411-83d4-4e59-b23a-4e9f81011319"
 migrations_dir = "./migrations"
 
-# R2 Bucket for media storage (using CI bucket)
+# R2 Bucket for media storage
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
-bucket_name = "sonicjs-ci-media"
+bucket_name = "sonicjs-preview-media"
 
-# KV Cache (using CI namespace)
+# KV Cache
 [[kv_namespaces]]
 binding = "CACHE_KV"
-id = "a16f8246fc294d809c90b0fb2df6d363"
+id = "6cd51bcf46d246798e54af26929134f9"
+
+# Workers AI (for embeddings)
+[ai]
+binding = "AI"
+
+# Vectorize index (for semantic/hybrid search)
+[[vectorize]]
+binding = "VECTORIZE_INDEX"
+index_name = "sonicjs-ai-search"
+
+# Vectorize index (for benchmark evaluation — isolated from production data)
+[[vectorize]]
+binding = "VECTORIZE_BENCHMARK_INDEX"
+index_name = "sonicjs-benchmark"
 
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
+
+# Extended CPU time for benchmark seeding (57K+ docs) and large evaluations
+[limits]
+cpu_ms = 300000
+
+# Analytics Engine (for A/B experiment event tracking)
+[[analytics_engine_datasets]]
+binding = "SEARCH_EXPERIMENTS"
+dataset = "sonicjs_search_experiments"
+
+# Cron triggers (experiment auto-evaluation every 6 hours)
+[triggers]
+crons = ["0 */6 * * *"]
 
 # Observability
 [observability]

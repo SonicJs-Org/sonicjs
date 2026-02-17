@@ -24,7 +24,8 @@ import {
   adminSettingsRoutes,
   adminFormsRoutes,
   publicFormsRoutes,
-  adminApiReferenceRoutes
+  adminApiReferenceRoutes,
+  adminSearchRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
@@ -195,6 +196,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/admin/seed-data', createSeedDataAdminRoutes())
   app.route('/admin/content', adminContentRoutes)
   app.route('/admin/media', adminMediaRoutes)
+  // Admin Search page (top-level admin page at /admin/search)
+  app.route('/admin/search', adminSearchRoutes)
+
   // Plugin routes - AI Search (MUST be registered BEFORE admin/plugins to avoid route conflict)
   // Register AI Search routes first so they take precedence over the generic /:id handler
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {

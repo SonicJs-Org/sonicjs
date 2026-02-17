@@ -1,0 +1,58 @@
+# GitHub CodeQL — Static Application Security Testing (SAST)
+# https://github.com/github/codeql-action
+#
+# Analyzes JavaScript/TypeScript for:
+#   - SQL injection patterns
+#   - Prototype pollution
+#   - Path traversal
+#   - Cross-site scripting (XSS)
+#   - Insecure cryptography
+#   - Regular expression denial of service (ReDoS)
+#   - Missing authentication / authorization
+#   - Hardcoded credentials
+#   - And 100+ more security rules
+#
+# Results appear in GitHub Security tab → Code Scanning Alerts.
+# Free for public repositories.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Weekly on Wednesdays at 04:15 UTC (catches new CVE patterns in query packs)
+    - cron: '15 4 * * 3'
+
+jobs:
+  analyze:
+    name: Analyze JavaScript/TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      security-events: write    # Upload SARIF results to Code Scanning
+      actions: read              # Read workflow details
+      contents: read             # Read repo contents
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+
+          # security-and-quality includes all security queries PLUS code quality
+          # checks (dead code, unused variables, etc). Use 'security-extended'
+          # if you only want security findings without quality noise.
+          queries: security-and-quality
+
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"

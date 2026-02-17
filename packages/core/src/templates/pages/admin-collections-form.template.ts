@@ -549,8 +549,8 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
                 <option value="">Select field type...</option>
                 <option value="text">Text</option>
                 <option value="slug">URL Slug</option>
-                ${data.editorPlugins?.tinymce ? '<option value="richtext">Rich Text (TinyMCE)</option>' : ''}
                 ${data.editorPlugins?.quill ? '<option value="quill">Rich Text (Quill)</option>' : ''}
+                ${data.editorPlugins?.tinymce ? '<option value="richtext">Rich Text (TinyMCE)</option>' : ''}
                 ${data.editorPlugins?.easyMdx ? '<option value="mdxeditor">EasyMDX</option>' : ''}
                 <option value="number">Number</option>
                 <option value="boolean">Boolean</option>

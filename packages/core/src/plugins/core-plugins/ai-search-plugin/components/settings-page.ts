@@ -1,3 +1,9 @@
+/**
+ * @deprecated Superseded by /admin/search (Phase 1).
+ * See: src/routes/admin-search.ts + src/templates/pages/admin-search.template.ts
+ * The plugin GET / route now redirects to /admin/search.
+ * Kept for one release cycle — remove after v2.9.
+ */
 import { renderAdminLayout } from '../../../../templates/layouts/admin-layout-v2.template'
 import type {
   AISearchSettings,
@@ -177,27 +183,8 @@ export function renderSettingsPage(data: SettingsPageData): string {
                         </label>
                         <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                           ${collection.description || collection.name || 'No description'} • ${collection.item_count || 0} items
-                          ${status ? ` • ${status.indexed_items}/${status.total_items} indexed` : ''}
                         </p>
-                        ${status && status.status === 'indexing'
-            ? `<div class="mt-2 w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                              <div class="bg-blue-600 h-2 rounded-full" style="width: ${(status.indexed_items / status.total_items) * 100}%"></div>
-                            </div>`
-            : ''}
                       </div>
-                      ${isChecked ? `
-                        <button
-                          type="button"
-                          onclick="reindexCollection('${collectionId}')"
-                          class="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap"
-                          ${status && status.status === 'indexing' ? 'disabled' : ''}
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          Re-index
-                        </button>
-                      ` : ''}
                     </div>`
       }).join('')}
             </div>
@@ -353,6 +340,92 @@ export function renderSettingsPage(data: SettingsPageData): string {
       : '<p class="text-sm text-zinc-500 dark:text-zinc-400">No search history yet.</p>'}
       </div>
 
+          <!-- Search Benchmark (BEIR SciFact) -->
+          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+            <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Search Benchmark</h2>
+            <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+              BEIR SciFact dataset — scientific abstracts with 300+ test queries and ground-truth relevance judgments.
+              Seed the data, index it, then evaluate search quality with standard IR metrics (nDCG@10, Precision, Recall, MRR).
+            </p>
+            <div id="benchmark-status" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Checking benchmark status...</div>
+
+            <!-- Corpus Size + Seed Row -->
+            <div class="flex flex-wrap items-center gap-3 mb-4">
+              <div class="flex items-center gap-2">
+                <label for="bench-corpus-size" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Corpus:</label>
+                <select id="bench-corpus-size"
+                  class="rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                  <option value="subset">Subset (~483 docs)</option>
+                  <option value="full">Full corpus (~5K docs)</option>
+                </select>
+              </div>
+              <button onclick="seedBenchmark()" id="bench-seed-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                Seed Data
+              </button>
+              <button onclick="indexBenchmark()" id="bench-index-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Index (FTS5)
+              </button>
+              <button onclick="indexBenchmarkVectorize()" id="bench-vectorize-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Index (Vectorize)
+              </button>
+              <button onclick="purgeBenchmark()" id="bench-purge-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Purge Data
+              </button>
+            </div>
+
+            <!-- Evaluate Buttons Row -->
+            <div class="flex flex-wrap items-center gap-3 mb-4">
+              <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Evaluate:</span>
+              <div class="flex items-center gap-2">
+                <label for="bench-query-count" class="text-sm text-zinc-600 dark:text-zinc-400">Queries:</label>
+                <select id="bench-query-count"
+                  class="rounded-lg bg-white dark:bg-zinc-800 px-2 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 focus:ring-2 focus:ring-indigo-500">
+                  <option value="15">15</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="0" selected>All (~301)</option>
+                </select>
+              </div>
+              <button onclick="runBenchmark('fts5')" id="bench-fts5-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                FTS5
+              </button>
+              <button onclick="runBenchmark('keyword')" id="bench-keyword-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-zinc-600 hover:bg-zinc-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Keyword
+              </button>
+              <button onclick="runBenchmark('hybrid')" id="bench-hybrid-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                Hybrid
+              </button>
+              <button onclick="runBenchmark('ai')" id="bench-ai-btn"
+                class="px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                AI (Vectorize)
+              </button>
+            </div>
+            <p class="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
+              Hybrid and AI modes require Vectorize index binding. If unavailable, they will return an error.
+            </p>
+
+            <div id="benchmark-progress" class="hidden mb-4">
+              <div class="text-sm text-zinc-600 dark:text-zinc-400 mb-1" id="benchmark-progress-text">Running...</div>
+              <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2">
+                <div id="benchmark-progress-bar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+            <div id="benchmark-results" class="hidden">
+              <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
+                <h3 class="text-sm font-semibold text-zinc-950 dark:text-white mb-3" id="benchmark-results-title">Results</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" id="benchmark-metrics"></div>
+                <div class="text-xs text-zinc-500 dark:text-zinc-400" id="benchmark-details"></div>
+              </div>
+            </div>
+          </div>
+
           <!-- Success Message -->
           <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
             <div class="flex items-center gap-2">
@@ -444,35 +517,6 @@ export function renderSettingsPage(data: SettingsPageData): string {
         }
       }
 
-      // Re-index collection
-      async function reindexCollection(collectionId) {
-        const res = await fetch('/admin/plugins/ai-search/api/reindex', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ collection_id: collectionId })
-        });
-        if (res.ok) {
-          alert('Re-indexing started. Page will refresh in a moment.');
-          setTimeout(() => location.reload(), 2000);
-        } else {
-          alert('Failed to start re-indexing. Please try again.');
-        }
-      }
-
-      // Poll for index status updates
-      setInterval(async () => {
-        const res = await fetch('/admin/plugins/ai-search/api/status');
-        if (res.ok) {
-          const { data } = await res.json();
-          // Update status indicators if needed
-          // For now, just reload every 30 seconds if indexing is in progress
-          const hasIndexing = Object.values(data).some((s) => s.status === 'indexing');
-          if (hasIndexing) {
-            location.reload();
-          }
-        }
-      }, 30000);
-
       // FTS5 status check on load
       (async function checkFTS5Status() {
         try {
@@ -495,6 +539,440 @@ export function renderSettingsPage(data: SettingsPageData): string {
           console.error('FTS5 status check failed:', e);
         }
       })();
+
+      // --- Benchmark Functions ---
+
+      // Check benchmark status on page load
+      (async function checkBenchmarkStatus() {
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/benchmark/status');
+          if (res.ok) {
+            var body = await res.json();
+            var d = body.data;
+            var statusEl = document.getElementById('benchmark-status');
+            var corpusSelect = document.getElementById('bench-corpus-size');
+
+            // Update corpus size options with actual counts
+            if (d.subset_size && d.corpus_size) {
+              corpusSelect.options[0].textContent = 'Subset (~' + d.subset_size + ' docs)';
+              corpusSelect.options[1].textContent = 'Full corpus (' + d.corpus_size + ' docs)';
+            }
+
+            if (d.seeded) {
+              statusEl.textContent = 'Benchmark data seeded: ' + d.seeded_count + ' documents (queries: ' + d.query_count + ', qrels: ' + d.qrel_count + ')';
+              document.getElementById('bench-seed-btn').textContent = 'Re-seed Data';
+              document.getElementById('bench-index-btn').disabled = false;
+              document.getElementById('bench-vectorize-btn').disabled = false;
+              document.getElementById('bench-fts5-btn').disabled = false;
+              document.getElementById('bench-keyword-btn').disabled = false;
+              document.getElementById('bench-hybrid-btn').disabled = false;
+              document.getElementById('bench-ai-btn').disabled = false;
+              document.getElementById('bench-purge-btn').disabled = false;
+            } else {
+              statusEl.textContent = 'Dataset: ' + d.dataset + ' (' + d.corpus_size + ' docs, ' + d.query_count + ' queries, ' + d.qrel_count + ' qrels) — Not yet seeded';
+            }
+          }
+        } catch (e) {
+          document.getElementById('benchmark-status').textContent = 'Could not check benchmark status';
+        }
+      })();
+
+      async function seedBenchmark() {
+        var btn = document.getElementById('bench-seed-btn');
+        var corpusSize = document.getElementById('bench-corpus-size').value;
+        btn.textContent = 'Seeding (' + corpusSize + ')...';
+        btn.disabled = true;
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/benchmark/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ corpus_size: corpusSize })
+          });
+          var data = await res.json();
+          if (data.success) {
+            document.getElementById('benchmark-status').textContent = data.message;
+            btn.textContent = 'Re-seed Data';
+            document.getElementById('bench-index-btn').disabled = false;
+            document.getElementById('bench-vectorize-btn').disabled = false;
+            document.getElementById('bench-fts5-btn').disabled = false;
+            document.getElementById('bench-keyword-btn').disabled = false;
+            document.getElementById('bench-hybrid-btn').disabled = false;
+            document.getElementById('bench-ai-btn').disabled = false;
+            document.getElementById('bench-purge-btn').disabled = false;
+          } else {
+            alert('Seed failed: ' + (data.error || 'Unknown error'));
+            btn.textContent = 'Seed Data';
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+          btn.textContent = 'Seed Data';
+        }
+        btn.disabled = false;
+      }
+
+      async function indexBenchmark() {
+        var btn = document.getElementById('bench-index-btn');
+        btn.disabled = true;
+        var statusEl = document.getElementById('benchmark-status');
+
+        // Use batch endpoint — loop until all indexed
+        var totalIndexed = 0;
+        var remaining = 1; // start loop
+        var batchNum = 0;
+
+        while (remaining > 0) {
+          batchNum++;
+          btn.textContent = 'Indexing batch ' + batchNum + '...';
+          try {
+            var res = await fetch('/admin/plugins/ai-search/api/benchmark/index-fts5-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ batch_size: 200 })
+            });
+            var data = await res.json();
+            if (!data.success) {
+              alert('FTS5 indexing failed: ' + (data.error || 'Unknown error'));
+              break;
+            }
+            totalIndexed += data.indexed;
+            remaining = data.remaining;
+            var done = data.total - remaining;
+            statusEl.textContent = 'FTS5 indexing: ' + done + '/' + data.total + ' docs indexed...';
+            btn.textContent = 'Indexing... (' + done + '/' + data.total + ')';
+          } catch (e) {
+            alert('FTS5 indexing error: ' + e.message);
+            break;
+          }
+        }
+
+        statusEl.textContent = 'FTS5 indexing complete: ' + totalIndexed + ' docs indexed in ' + batchNum + ' batches.';
+        btn.textContent = 'Index (FTS5)';
+        btn.disabled = false;
+      }
+
+      async function indexBenchmarkVectorize() {
+        var btn = document.getElementById('bench-vectorize-btn');
+        btn.disabled = true;
+        var statusEl = document.getElementById('benchmark-status');
+
+        // Reset index meta first
+        try {
+          await fetch('/admin/plugins/ai-search/api/benchmark/index-vectorize', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (e) { /* continue anyway */ }
+
+        // Client-driven batch loop — processes 25 docs per request
+        var offset = 0;
+        var remaining = 1;
+        var batchNum = 0;
+        var totalChunks = 0;
+
+        while (remaining > 0) {
+          batchNum++;
+          btn.textContent = 'Embedding batch ' + batchNum + '...';
+          try {
+            var res = await fetch('/admin/plugins/ai-search/api/benchmark/index-vectorize-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ batch_size: 25, offset: offset })
+            });
+            var data = await res.json();
+            if (!data.success) {
+              alert('Vectorize indexing failed: ' + (data.error || 'Unknown error'));
+              break;
+            }
+            totalChunks += data.indexed;
+            offset = data.offset;
+            remaining = data.remaining;
+            var done = data.total - remaining;
+            statusEl.textContent = 'Vectorize: ' + done + '/' + data.total + ' docs embedded (' + totalChunks + ' chunks)...';
+            btn.textContent = 'Embedding... (' + done + '/' + data.total + ')';
+          } catch (e) {
+            alert('Vectorize indexing error: ' + e.message);
+            break;
+          }
+        }
+
+        statusEl.textContent = 'Vectorize indexing complete: ' + totalChunks + ' chunks indexed in ' + batchNum + ' batches.';
+        btn.textContent = 'Index (Vectorize)';
+        btn.disabled = false;
+      }
+
+      async function runBenchmark(mode) {
+        var btn = document.getElementById('bench-' + mode + '-btn');
+        var origText = btn.textContent;
+        btn.textContent = 'Running...';
+        btn.disabled = true;
+
+        var progressDiv = document.getElementById('benchmark-progress');
+        var progressText = document.getElementById('benchmark-progress-text');
+        var progressBar = document.getElementById('benchmark-progress-bar');
+        progressDiv.classList.remove('hidden');
+        progressBar.style.width = '2%';
+
+        var maxQueries = parseInt(document.getElementById('bench-query-count').value, 10);
+        var BATCH_SIZE = 15;
+        var startTime = Date.now();
+
+        try {
+          // Step 1: Get evaluable query IDs
+          progressText.textContent = 'Fetching query list...';
+          var idsRes = await fetch('/admin/plugins/ai-search/api/benchmark/query-ids?max_queries=' + maxQueries);
+          var idsData = await idsRes.json();
+          if (!idsData.success) {
+            alert('Failed to get query IDs: ' + (idsData.error || 'Unknown error'));
+            progressDiv.classList.add('hidden');
+            btn.textContent = origText;
+            btn.disabled = false;
+            return;
+          }
+
+          var allQueryIds = idsData.query_ids;
+          var totalQueries = allQueryIds.length;
+          progressText.textContent = 'Evaluating ' + mode + ' mode: 0/' + totalQueries + ' queries...';
+
+          // Step 2: Process in batches
+          var allPerQuery = [];
+          for (var i = 0; i < totalQueries; i += BATCH_SIZE) {
+            var batchIds = allQueryIds.slice(i, i + BATCH_SIZE);
+            var batchRes = await fetch('/admin/plugins/ai-search/api/benchmark/evaluate-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mode: mode, limit: 10, query_ids: batchIds })
+            });
+            var batchData = await batchRes.json();
+
+            if (!batchData.success) {
+              alert('Batch evaluation failed: ' + (batchData.error || 'Unknown error'));
+              break;
+            }
+
+            allPerQuery = allPerQuery.concat(batchData.per_query);
+            var done = Math.min(i + BATCH_SIZE, totalQueries);
+            var pct = Math.round((done / totalQueries) * 100);
+            progressBar.style.width = pct + '%';
+            progressText.textContent = 'Evaluating ' + mode + ' mode: ' + done + '/' + totalQueries + ' queries...';
+          }
+
+          // Step 3: Compute aggregate metrics client-side
+          var totalTime = Date.now() - startTime;
+          var n = allPerQuery.length;
+          if (n > 0) {
+            var sumNDCG = 0, sumPrec = 0, sumRecall = 0, sumMRR = 0;
+            for (var j = 0; j < n; j++) {
+              sumNDCG += allPerQuery[j].ndcg;
+              sumPrec += allPerQuery[j].precision;
+              sumRecall += allPerQuery[j].recall;
+              sumMRR += allPerQuery[j].mrr;
+            }
+            var data = {
+              success: true,
+              mode: mode,
+              limit: 10,
+              queries_evaluated: n,
+              total_time_ms: totalTime,
+              avg_query_time_ms: Math.round(totalTime / n),
+              metrics: {
+                ndcg_at_k: sumNDCG / n,
+                precision_at_k: sumPrec / n,
+                recall_at_k: sumRecall / n,
+                mrr: sumMRR / n
+              },
+              per_query: allPerQuery
+            };
+            progressBar.style.width = '100%';
+            showBenchmarkResults(data, mode);
+          } else {
+            alert('No queries were evaluated.');
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+
+        progressDiv.classList.add('hidden');
+        btn.textContent = origText;
+        btn.disabled = false;
+      }
+
+      // Persist benchmark results in localStorage across page refreshes
+      var BENCH_STORAGE_KEY = 'sonicjs_benchmark_runs';
+
+      function loadBenchmarkRuns() {
+        try {
+          var stored = localStorage.getItem(BENCH_STORAGE_KEY);
+          return stored ? JSON.parse(stored) : [];
+        } catch (e) { return []; }
+      }
+
+      function saveBenchmarkRuns(runs) {
+        try { localStorage.setItem(BENCH_STORAGE_KEY, JSON.stringify(runs)); } catch (e) { /* ignore */ }
+      }
+
+      var benchmarkRuns = loadBenchmarkRuns();
+      var benchmarkHistory = [];
+
+      // Restore and render saved results on page load
+      if (benchmarkRuns.length > 0) {
+        renderAllBenchmarkRuns();
+      }
+
+      function showBenchmarkResults(data, mode) {
+        var resultsDiv = document.getElementById('benchmark-results');
+
+        // Store in current session history
+        benchmarkHistory = benchmarkHistory.filter(function(h) { return h.mode !== mode; });
+        benchmarkHistory.push({ mode: mode, data: data });
+
+        // Also persist to localStorage with corpus label
+        var corpusLabel = document.getElementById('bench-corpus-size').value;
+        var runKey = corpusLabel + '_' + mode;
+        var runEntry = {
+          key: runKey,
+          mode: mode,
+          corpus: corpusLabel,
+          corpus_size: data.corpus_size,
+          metrics: data.metrics,
+          limit: data.limit,
+          queries_evaluated: data.queries_evaluated,
+          total_time_ms: data.total_time_ms,
+          avg_query_time_ms: data.avg_query_time_ms,
+          timestamp: new Date().toISOString()
+        };
+        benchmarkRuns = benchmarkRuns.filter(function(r) { return r.key !== runKey; });
+        benchmarkRuns.push(runEntry);
+        saveBenchmarkRuns(benchmarkRuns);
+
+        renderAllBenchmarkRuns();
+        resultsDiv.classList.remove('hidden');
+      }
+
+      function renderAllBenchmarkRuns() {
+        var resultsDiv = document.getElementById('benchmark-results');
+        var titleEl = document.getElementById('benchmark-results-title');
+        var metricsDiv = document.getElementById('benchmark-metrics');
+        var detailsDiv = document.getElementById('benchmark-details');
+
+        if (benchmarkRuns.length === 0) {
+          resultsDiv.classList.add('hidden');
+          return;
+        }
+
+        titleEl.textContent = 'Benchmark Results (k=10)';
+
+        var modeColors = { fts5: 'indigo', keyword: 'zinc', hybrid: 'purple', ai: 'cyan' };
+        var modeNotes = {
+          keyword: 'LIKE substring',
+          hybrid: 'FTS5 + AI/RRF',
+          ai: 'Semantic/Vectorize'
+        };
+
+        // Group runs by corpus size
+        var byCorpus = {};
+        for (var i = 0; i < benchmarkRuns.length; i++) {
+          var r = benchmarkRuns[i];
+          if (!byCorpus[r.corpus]) byCorpus[r.corpus] = [];
+          byCorpus[r.corpus].push(r);
+        }
+
+        var html = '';
+        var corpusKeys = Object.keys(byCorpus).sort();
+        for (var ci = 0; ci < corpusKeys.length; ci++) {
+          var corpusKey = corpusKeys[ci];
+          var runs = byCorpus[corpusKey];
+          var sizeLabel = runs[0].corpus_size ? runs[0].corpus_size + ' docs' : corpusKey;
+
+          html += '<div class="col-span-2 md:col-span-4 mt-' + (ci > 0 ? '4' : '0') + ' mb-1">' +
+            '<span class="text-sm font-bold text-zinc-800 dark:text-zinc-200">' + corpusKey.toUpperCase() + ' (' + sizeLabel + ')</span>' +
+            '</div>';
+
+          // Sort by mode order: fts5, hybrid, ai, keyword
+          var modeOrder = ['fts5', 'hybrid', 'ai', 'keyword'];
+          runs.sort(function(a, b) { return modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode); });
+
+          for (var ri = 0; ri < runs.length; ri++) {
+            var run = runs[ri];
+            var m = run.metrics;
+            var color = modeColors[run.mode] || 'indigo';
+            var note = modeNotes[run.mode] || '';
+
+            html += '<div class="col-span-2 md:col-span-4 text-xs font-semibold text-' + color + '-600 mt-1">' +
+              run.mode.toUpperCase() + (note ? ' <span class="font-normal text-zinc-400">(' + note + ')</span>' : '') +
+              '</div>';
+
+            html +=
+              '<div class="p-3 rounded bg-white dark:bg-zinc-900 text-center">' +
+                '<div class="text-lg font-bold text-' + color + '-600">' + (m.ndcg_at_k * 100).toFixed(1) + '%</div>' +
+                '<div class="text-xs text-zinc-500">nDCG@10</div>' +
+              '</div>' +
+              '<div class="p-3 rounded bg-white dark:bg-zinc-900 text-center">' +
+                '<div class="text-lg font-bold text-' + color + '-600">' + (m.precision_at_k * 100).toFixed(1) + '%</div>' +
+                '<div class="text-xs text-zinc-500">Precision@10</div>' +
+              '</div>' +
+              '<div class="p-3 rounded bg-white dark:bg-zinc-900 text-center">' +
+                '<div class="text-lg font-bold text-' + color + '-600">' + (m.recall_at_k * 100).toFixed(1) + '%</div>' +
+                '<div class="text-xs text-zinc-500">Recall@10</div>' +
+              '</div>' +
+              '<div class="p-3 rounded bg-white dark:bg-zinc-900 text-center">' +
+                '<div class="text-lg font-bold text-' + color + '-600">' + (m.mrr * 100).toFixed(1) + '%</div>' +
+                '<div class="text-xs text-zinc-500">MRR</div>' +
+              '</div>';
+          }
+        }
+
+        // Clear saved results button
+        html += '<div class="col-span-2 md:col-span-4 mt-3 text-right">' +
+          '<button onclick="clearBenchmarkHistory()" class="text-xs text-zinc-400 hover:text-red-500 underline">Clear saved results</button>' +
+          '</div>';
+
+        metricsDiv.innerHTML = html;
+
+        // Show latest run details
+        var latest = benchmarkRuns[benchmarkRuns.length - 1];
+        detailsDiv.textContent = latest.queries_evaluated + ' queries evaluated in ' +
+          (latest.total_time_ms / 1000).toFixed(1) + 's (avg ' + latest.avg_query_time_ms + 'ms/query) — ' +
+          benchmarkRuns.length + ' total runs saved';
+
+        resultsDiv.classList.remove('hidden');
+      }
+
+      function clearBenchmarkHistory() {
+        if (!confirm('Clear all saved benchmark results?')) return;
+        benchmarkRuns = [];
+        benchmarkHistory = [];
+        saveBenchmarkRuns([]);
+        document.getElementById('benchmark-results').classList.add('hidden');
+      }
+
+      async function purgeBenchmark() {
+        if (!confirm('Remove all benchmark data? This will delete benchmark documents and index entries.')) return;
+        var btn = document.getElementById('bench-purge-btn');
+        btn.textContent = 'Purging...';
+        btn.disabled = true;
+        try {
+          var res = await fetch('/admin/plugins/ai-search/api/benchmark/purge', { method: 'POST' });
+          var data = await res.json();
+          if (data.success) {
+            document.getElementById('benchmark-status').textContent = data.message + '. Benchmark data removed.';
+            document.getElementById('benchmark-results').classList.add('hidden');
+            benchmarkHistory = [];
+            document.getElementById('bench-seed-btn').textContent = 'Seed Data';
+            document.getElementById('bench-index-btn').disabled = true;
+            document.getElementById('bench-vectorize-btn').disabled = true;
+            document.getElementById('bench-fts5-btn').disabled = true;
+            document.getElementById('bench-keyword-btn').disabled = true;
+            document.getElementById('bench-hybrid-btn').disabled = true;
+            document.getElementById('bench-ai-btn').disabled = true;
+            document.getElementById('bench-purge-btn').disabled = true;
+          } else {
+            alert('Purge failed: ' + (data.error || 'Unknown error'));
+          }
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+        btn.textContent = 'Purge Data';
+        btn.disabled = false;
+      }
 
       // Reindex all collections for FTS5
       async function reindexFTS5All() {

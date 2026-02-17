@@ -24,16 +24,21 @@ export class CustomRAGService {
   }
 
   /**
-   * Index all content from a collection
+   * Index all content from a collection.
+   * onProgress reports (phase, processedItems, totalItems) so callers can update UI.
+   * Phases: 'chunking' → 'embedding' → 'storing'
    */
-  async indexCollection(collectionId: string): Promise<{
+  async indexCollection(
+    collectionId: string,
+    onProgress?: (phase: string, processed: number, total: number) => Promise<void>
+  ): Promise<{
     total_items: number
     total_chunks: number
     indexed_chunks: number
     errors: number
   }> {
     console.log(`[CustomRAG] Starting indexing for collection: ${collectionId}`)
-    
+
     try {
       // Get all published content from collection
       const { results: contentItems } = await this.db
@@ -60,13 +65,15 @@ export class CustomRAGService {
         }>()
 
       const totalItems = contentItems?.length || 0
-      
+
       if (totalItems === 0) {
         console.log(`[CustomRAG] No content found in collection ${collectionId}`)
         return { total_items: 0, total_chunks: 0, indexed_chunks: 0, errors: 0 }
       }
 
       // Chunk all content
+      if (onProgress) await onProgress('chunking', 0, totalItems)
+
       const items = (contentItems || []).map(item => ({
         id: item.id,
         collection_id: item.collection_id,
@@ -87,14 +94,21 @@ export class CustomRAGService {
 
       console.log(`[CustomRAG] Generated ${totalChunks} chunks from ${totalItems} items`)
 
-      // Generate embeddings in batches
+      // Generate embeddings with progress callback
+      if (onProgress) await onProgress('embedding', 0, totalChunks)
+
       const embeddings = await this.embeddingService.generateBatch(
-        chunks.map(c => `${c.title}\n\n${c.text}`)
+        chunks.map(c => `${c.title}\n\n${c.text}`),
+        onProgress ? async (completed, total) => {
+          await onProgress('embedding', completed, total)
+        } : undefined
       )
 
       console.log(`[CustomRAG] Generated ${embeddings.length} embeddings`)
 
       // Store in Vectorize
+      if (onProgress) await onProgress('storing', 0, totalChunks)
+
       let indexedChunks = 0
       let errors = 0
       const batchSize = 100
@@ -112,7 +126,7 @@ export class CustomRAGService {
                 content_id: chunk.content_id,
                 collection_id: chunk.collection_id,
                 title: chunk.title,
-                text: chunk.text.substring(0, 500), // Store snippet for display
+                text: chunk.text.substring(0, 500),
                 chunk_index: chunk.chunk_index,
                 ...chunk.metadata
               }
@@ -120,7 +134,7 @@ export class CustomRAGService {
           )
 
           indexedChunks += chunkBatch.length
-          console.log(`[CustomRAG] Indexed batch ${i / batchSize + 1}: ${chunkBatch.length} chunks`)
+          if (onProgress) await onProgress('storing', indexedChunks, totalChunks)
         } catch (error) {
           console.error(`[CustomRAG] Error indexing batch ${i / batchSize + 1}:`, error)
           errors += chunkBatch.length
@@ -323,35 +337,35 @@ export class CustomRAGService {
         }
       }
 
-      // Sort by score descending and apply intelligent filtering:
-      // 1. Absolute minimum threshold (0.6)
-      // 2. Score gap detection: cut off when score drops >5% from previous result
-      const MIN_RELEVANCE_SCORE = 0.6
-      const SCORE_GAP_THRESHOLD = 0.05
+      // Sort by score descending and apply score filtering.
+      // Skip filtering in hybrid mode — RRF handles ranking and needs the full candidate set.
       const sortedEntries = [...bestByContent.entries()]
         .sort((a, b) => b[1].score - a[1].score)
 
-      const filteredEntries: [string, any][] = []
-      for (let i = 0; i < sortedEntries.length; i++) {
-        const entry = sortedEntries[i]!
-        const score = entry[1].score
-        if (score < MIN_RELEVANCE_SCORE) break  // Below absolute minimum
+      if (query.mode !== 'hybrid') {
+        const MIN_RELEVANCE_SCORE = 0.45
+        const SCORE_GAP_THRESHOLD = 0.15
+        const filteredEntries: [string, any][] = []
+        for (let i = 0; i < sortedEntries.length; i++) {
+          const entry = sortedEntries[i]!
+          const score = entry[1].score
+          if (score < MIN_RELEVANCE_SCORE) break
 
-        if (i > 0) {
-          const prevScore = sortedEntries[i - 1]![1].score
-          const gap = prevScore - score
-          if (gap > SCORE_GAP_THRESHOLD) {
-            break
+          if (i > 0) {
+            const prevScore = sortedEntries[i - 1]![1].score
+            const gap = prevScore - score
+            if (gap > SCORE_GAP_THRESHOLD) {
+              break
+            }
           }
+
+          filteredEntries.push(entry)
         }
 
-        filteredEntries.push(entry)
-      }
-
-      // Replace bestByContent with filtered entries
-      bestByContent.clear()
-      for (const [key, value] of filteredEntries) {
-        bestByContent.set(key, value)
+        bestByContent.clear()
+        for (const [key, value] of filteredEntries) {
+          bestByContent.set(key, value)
+        }
       }
 
       const searchResults: SearchResult[] = []

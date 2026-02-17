@@ -404,8 +404,11 @@ adminCollectionsRoutes.get('/:id', async (c) => {
           let fieldOrder = 0
           fields = Object.entries(schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
             // Normalize schema formats to UI field types
+            // Check explicit editor types first (quill, mdxeditor) before format-based detection
             let fieldType = fieldConfig.type || 'string'
-            if (fieldConfig.enum) {
+            if (fieldConfig.type === 'quill' || fieldConfig.type === 'mdxeditor') {
+              fieldType = fieldConfig.type
+            } else if (fieldConfig.enum) {
               fieldType = 'select'
             } else if (fieldConfig.format === 'richtext') {
               fieldType = 'richtext'
@@ -839,6 +842,16 @@ adminCollectionsRoutes.put('/:collectionId/fields/:fieldId', async (c) => {
           type: fieldType,
           title: fieldLabel,
           searchable: isSearchable
+        }
+
+        // Clean up format when switching editor types
+        // e.g., switching from TinyMCE (format: 'richtext') to Quill (type: 'quill')
+        if (fieldType === 'quill' || fieldType === 'mdxeditor') {
+          delete updatedFieldConfig.format
+        } else if (fieldType === 'richtext') {
+          // TinyMCE uses type: 'string' + format: 'richtext'
+          updatedFieldConfig.type = 'string'
+          updatedFieldConfig.format = 'richtext'
         }
 
         // Also set/remove the individual required property on the field

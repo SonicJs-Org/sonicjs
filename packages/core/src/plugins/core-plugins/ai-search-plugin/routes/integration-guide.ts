@@ -216,6 +216,7 @@ integrationGuideRoutes.get('/integration', async (c) => {
                 <button class="tab" onclick="showTab('react')">React</button>
                 <button class="tab" onclick="showTab('vue')">Vue</button>
                 <button class="tab" onclick="showTab('astro')">Astro</button>
+                <button class="tab" onclick="showTab('instantsearch')">InstantSearch.js</button>
               </div>
 
               <!-- Vanilla JS Tab -->
@@ -255,27 +256,32 @@ integrationGuideRoutes.get('/integration', async (c) => {
     const resultsDiv = document.getElementById('results');
     let timeout;
 
-    // Autocomplete
-    searchInput.addEventListener('input', async (e) =&gt; {
-      const query = e.target.value.trim();
+    // Autocomplete — trending on focus, prefix suggestions on input
+    function fetchSuggestions(query) {
       clearTimeout(timeout);
-      
-      if (query.length &lt; 2) {
-        suggestionsDiv.style.display = 'none';
-        return;
-      }
-
       timeout = setTimeout(async () =&gt; {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:8px 10px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${header}\${
             data.data.map(s =&gt; \`&lt;div class="suggestion" onclick="search('\${s}')"&gt;\${s}&lt;/div&gt;\`).join('')
           }&lt;/div&gt;\`;
           suggestionsDiv.style.display = 'block';
+        } else {
+          suggestionsDiv.style.display = 'none';
         }
-      }, 300);
+      }, query.length &lt; 2 ? 100 : 300);
+    }
+
+    searchInput.addEventListener('focus', () =&gt; {
+      if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+    });
+
+    searchInput.addEventListener('input', (e) =&gt; {
+      fetchSuggestions(e.target.value.trim());
     });
 
     // Search
@@ -334,21 +340,16 @@ export function AISearch() {
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
-  // Autocomplete
+  // Autocomplete — returns trending for empty/short input, prefix suggestions for 2+ chars
   useEffect(() =&gt; {
-    if (query.length &lt; 2) {
-      setSuggestions([]);
-      return;
-    }
-    
     const timeout = setTimeout(async () =&gt; {
       const res = await fetch(
         \`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`
       );
       const data = await res.json();
       if (data.success) setSuggestions(data.data);
-    }, 300);
-    
+    }, query.length &lt; 2 ? 100 : 300);
+
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
@@ -509,24 +510,18 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
   let searchTimeout;
   let suggestTimeout;
 
-  // Autocomplete
-  searchInput.addEventListener('input', async (e) =&gt; {
-    const query = e.target.value.trim();
-    
+  // Autocomplete — trending on focus, prefix on input
+  function fetchSuggestions(query) {
     clearTimeout(suggestTimeout);
-    
-    if (query.length &lt; 2) {
-      suggestionsDiv.classList.remove('show');
-      return;
-    }
-
     suggestTimeout = setTimeout(async () =&gt; {
       try {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = data.data
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = header + data.data
             .map(s =&gt; \`&lt;div class="suggestion" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')"&gt;\${s}&lt;/div&gt;\`)
             .join('');
           suggestionsDiv.classList.add('show');
@@ -536,7 +531,15 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
       } catch (error) {
         console.error('Autocomplete error:', error);
       }
-    }, 300);
+    }, query.length &lt; 2 ? 100 : 300);
+  }
+
+  searchInput.addEventListener('focus', () =&gt; {
+    if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+  });
+
+  searchInput.addEventListener('input', (e) =&gt; {
+    fetchSuggestions(e.target.value.trim());
   });
 
   // Search with debounce
@@ -677,19 +680,17 @@ let searchTimeout;
 let suggestTimeout;
 
 watch(query, (newQuery) =&gt; {
-  if (newQuery.length &lt; 2) {
+  // Search (only for 2+ chars)
+  if (newQuery.length &gt;= 2) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
+  } else {
     results.value = [];
-    suggestions.value = [];
-    return;
   }
-  
-  // Search
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
-  
-  // Autocomplete
+
+  // Autocomplete — trending for empty/short, prefix for 2+ chars
   clearTimeout(suggestTimeout);
-  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), 300);
+  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), newQuery.length &lt; 2 ? 100 : 300);
 });
 
 async function performSearch(q) {
@@ -728,6 +729,110 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
 .result { padding: 1rem; background: #f8f9fa; border-left: 4px solid #667eea; margin: 1rem 0; border-radius: 8px; }
 &lt;/style&gt;</code></pre>
               </div>
+
+              <!-- InstantSearch.js Tab -->
+              <div id="instantsearch" class="tab-content">
+                <h3>InstantSearch.js &mdash; Drop-in Algolia Replacement</h3>
+                <p>Use the official <a href="https://www.algolia.com/doc/guides/building-search-ui/what-is-instantsearch/js/" target="_blank">InstantSearch.js</a> library (React, Vue, or vanilla JS) with SonicJS as the backend. Zero UI changes needed if you&rsquo;re migrating from Algolia.</p>
+
+                <div class="info-box">
+                  <strong>How it works:</strong> SonicJS exposes a <code>POST /api/instantsearch</code> endpoint that speaks the Algolia multi-search protocol. You connect it with a 5-line <code>searchClient</code> shim &mdash; no npm adapter package required.
+                </div>
+
+                <h3>1. Install InstantSearch.js</h3>
+                <pre><code>npm install instantsearch.js
+# Or for React:
+npm install react-instantsearch
+# Or for Vue:
+npm install vue-instantsearch</code></pre>
+
+                <h3>2. Create the Search Client (5 lines)</h3>
+                <button class="copy-btn" onclick="copyCode('is-client')">Copy Code</button>
+                <pre id="is-client"><code>// searchClient.js
+const API_URL = 'https://your-sonicjs-site.com'; // Update this!
+
+export const searchClient = {
+  search(requests) {
+    return fetch(\`\${API_URL}/api/instantsearch\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests }),
+    }).then(res =&gt; res.json());
+  },
+};</code></pre>
+
+                <h3>3a. Vanilla InstantSearch.js</h3>
+                <button class="copy-btn" onclick="copyCode('is-vanilla')">Copy Code</button>
+                <pre id="is-vanilla"><code>import instantsearch from 'instantsearch.js';
+import { searchBox, hits, pagination } from 'instantsearch.js/es/widgets';
+import { searchClient } from './searchClient';
+
+const search = instantsearch({
+  indexName: 'posts',   // Your collection name, or "*" for all
+  searchClient,
+});
+
+search.addWidgets([
+  searchBox({ container: '#searchbox' }),
+  hits({
+    container: '#hits',
+    templates: {
+      item(hit, { html, components }) {
+        return html\`
+          &lt;div&gt;
+            &lt;h3&gt;\${components.Highlight({ hit, attribute: 'title' })}&lt;/h3&gt;
+            &lt;p&gt;\${components.Snippet({ hit, attribute: 'body' })}&lt;/p&gt;
+          &lt;/div&gt;
+        \`;
+      },
+    },
+  }),
+  pagination({ container: '#pagination' }),
+]);
+
+search.start();</code></pre>
+
+                <h3>3b. React InstantSearch</h3>
+                <button class="copy-btn" onclick="copyCode('is-react')">Copy Code</button>
+                <pre id="is-react"><code>import {
+  InstantSearch, SearchBox, Hits, Pagination, Highlight, Snippet,
+} from 'react-instantsearch';
+import { searchClient } from './searchClient';
+
+function Hit({ hit }) {
+  return (
+    &lt;div&gt;
+      &lt;h3&gt;&lt;Highlight attribute="title" hit={hit} /&gt;&lt;/h3&gt;
+      &lt;p&gt;&lt;Snippet attribute="body" hit={hit} /&gt;&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+
+export default function SearchPage() {
+  return (
+    &lt;InstantSearch searchClient={searchClient} indexName="posts"&gt;
+      &lt;SearchBox /&gt;
+      &lt;Hits hitComponent={Hit} /&gt;
+      &lt;Pagination /&gt;
+    &lt;/InstantSearch&gt;
+  );
+}</code></pre>
+
+                <h3>Index Name Mapping</h3>
+                <div class="info-box">
+                  <strong>Collection names:</strong> Use your SonicJS collection name as the <code>indexName</code> (e.g. <code>"posts"</code>, <code>"products"</code>).<br>
+                  <strong>Search all:</strong> Use <code>indexName: "*"</code> or <code>"all"</code> to search across every indexed collection.
+                </div>
+
+                <h3>Supported Features</h3>
+                <ul>
+                  <li><strong>Search:</strong> Full-text (FTS5), semantic (AI), and hybrid search</li>
+                  <li><strong>Highlighting:</strong> Automatic highlight &amp; snippet results</li>
+                  <li><strong>Pagination:</strong> Page-based navigation via <code>page</code> / <code>hitsPerPage</code></li>
+                  <li><strong>Facets (MVP):</strong> <code>collection_name</code> and <code>status</code> facets</li>
+                  <li><strong>Custom highlight tags:</strong> Configurable via <code>highlightPreTag</code> / <code>highlightPostTag</code></li>
+                </ul>
+              </div>
             </div>
 
             <!-- API Reference Section -->
@@ -743,8 +848,33 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
                 <div class="card">
                   <h4>Autocomplete</h4>
                   <p><strong>GET</strong> <code>/api/search/suggest?q=query</code></p>
-                  <p>Get instant suggestions (&lt;50ms)</p>
+                  <p>Trending queries on empty input, data-driven prefix suggestions on 2+ chars (&lt;50ms)</p>
                 </div>
+                <div class="card">
+                  <h4>InstantSearch API</h4>
+                  <p><strong>POST</strong> <code>/api/instantsearch</code></p>
+                  <p>Algolia-compatible multi-search endpoint</p>
+                </div>
+                <div class="card">
+                  <h4>Click Tracking</h4>
+                  <p><strong>POST</strong> <code>/api/search/click</code></p>
+                  <p>Record result clicks for CTR analytics</p>
+                </div>
+              </div>
+
+              <h3>Autocomplete / Suggest</h3>
+              <p>The suggest endpoint provides <strong>data-driven suggestions</strong> powered by real search analytics:</p>
+              <pre><code>GET /api/search/suggest?q=         // Empty → trending queries (top 10, last 7 days)
+GET /api/search/suggest?q=cl       // Short → trending queries
+GET /api/search/suggest?q=cloud    // 2+ chars → popular query prefixes + content titles</code></pre>
+              <div class="info-box">
+                <strong>Key features:</strong>
+                <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                  <li>Suggestions ranked by real search frequency (not just recency)</li>
+                  <li>Zero-result queries are automatically filtered out</li>
+                  <li>Content title prefix matching via FTS5 fills gaps when query history is sparse</li>
+                  <li>Focus the search box to show trending searches before the user types</li>
+                </ul>
               </div>
 
               <h3>Search Request</h3>
@@ -763,6 +893,7 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <pre><code>{
   "success": true,
   "data": {
+    "search_id": "a1b2c3d4-...",  // Use for click tracking
     "results": [{
       "id": "123",
       "title": "Getting Started",
@@ -780,6 +911,96 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
     "mode": "ai"
   }
 }</code></pre>
+
+              <h3>Click Tracking</h3>
+              <p>Record when users click search results. This powers CTR analytics in the admin dashboard.</p>
+              <pre><code>// Fire-and-forget when user clicks a result
+navigator.sendBeacon('/api/search/click', JSON.stringify({
+  search_id: searchResponse.data.search_id,  // from search response
+  content_id: result.id,                      // clicked result ID
+  content_title: result.title,                // for analytics display
+  click_position: index + 1                   // 1-based position in results
+}));</code></pre>
+              <p><small>Click tracking is optional but recommended. Uses <code>sendBeacon</code> for reliability during navigation.</small></p>
+
+              <h3>Faceted Search</h3>
+              <p>Request facet counts alongside search results by passing <code>facets: true</code>. Facets reflect the full matching result set, not just the current page.</p>
+              <pre><code>// Request with facets
+const response = await fetch('/api/search', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: 'tutorial',
+    mode: 'fts5',
+    facets: true
+  })
+});
+
+// Response includes facets array
+{
+  "success": true,
+  "data": {
+    "results": [...],
+    "total": 42,
+    "facets": [
+      { "name": "Collection", "field": "collection_name", "values": [
+        { "value": "Blog Posts", "count": 28 },
+        { "value": "Docs", "count": 14 }
+      ]},
+      { "name": "Status", "field": "status", "values": [
+        { "value": "published", "count": 40 },
+        { "value": "draft", "count": 2 }
+      ]},
+      { "name": "Tags", "field": "$.tags", "values": [
+        { "value": "javascript", "count": 15 },
+        { "value": "react", "count": 12 }
+      ]}
+    ]
+  }
+}</code></pre>
+
+              <h4>Frontend Facet Sidebar Example</h4>
+              <pre><code>// Render facet checkboxes
+function renderFacets(facets) {
+  return facets.map(facet =&gt; \`
+    &lt;div class="facet-group"&gt;
+      &lt;h4&gt;\${facet.name}&lt;/h4&gt;
+      \${facet.values.map(v =&gt; \`
+        &lt;label&gt;
+          &lt;input type="checkbox" value="\${v.value}"
+            onchange="filterByFacet('\${facet.field}', '\${v.value}')"&gt;
+          \${v.value} (\${v.count})
+        &lt;/label&gt;
+      \`).join('')}
+    &lt;/div&gt;
+  \`).join('');
+}
+
+// Track facet interactions (optional, powers admin analytics)
+function filterByFacet(field, value) {
+  navigator.sendBeacon('/api/search/facet-click', JSON.stringify({
+    facet_field: field,
+    facet_value: value,
+    search_id: currentSearchId
+  }));
+  // Re-run search with the filter applied
+}</code></pre>
+
+              <h4>InstantSearch.js RefinementList</h4>
+              <p>If you use InstantSearch.js, facets work automatically with the <code>RefinementList</code> widget:</p>
+              <pre><code>import { refinementList } from 'instantsearch.js/es/widgets';
+
+search.addWidgets([
+  refinementList({
+    container: '#status-filter',
+    attribute: 'status',
+  }),
+  refinementList({
+    container: '#collection-filter',
+    attribute: 'collection_name',
+  })
+]);</code></pre>
+              <p><small>Enable faceted search in the admin dashboard (Configuration tab) to auto-discover facets from your collection schemas.</small></p>
             </div>
 
             <!-- Performance Tips Section -->
@@ -841,6 +1062,7 @@ app.use('/api/*', cors({
                 <li>Added loading states</li>
                 <li>Styled to match your design</li>
                 <li>Added error handling</li>
+                <li>Added click tracking (optional)</li>
                 <li>Tested on mobile</li>
               </ul>
             </div>

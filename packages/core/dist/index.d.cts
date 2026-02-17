@@ -8,11 +8,11 @@ export { A as AlertData, C as ConfirmationDialogOptions, k as Filter, j as Filte
 export { c as CollectionConfig, d as CollectionConfigModule, C as CollectionSchema, e as CollectionSyncResult, a as FieldConfig, F as FieldType } from './collection-config-BF95LgQb.cjs';
 export { A as AuthService, C as ContentService, v as HOOKS, k as HookContext, H as HookHandler, u as HookName, l as HookSystem, p as MediaService, P as Plugin, g as PluginAdminPage, r as PluginBuilderOptions, h as PluginComponent, b as PluginConfig, a as PluginContext, j as PluginHook, q as PluginLogger, n as PluginManager, i as PluginMenuItem, d as PluginMiddleware, e as PluginModel, m as PluginRegistry, c as PluginRoutes, f as PluginService, o as PluginStatus, t as PluginValidationResult, s as PluginValidator, S as ScopedHookSystem } from './plugin-zvZpaiP5.cjs';
 export { P as PluginManifest } from './plugin-manifest-Dpy8wxIB.cjs';
-export { c as FilterCondition, d as FilterGroup, F as FilterOperator, f as QueryFilter, Q as QueryFilterBuilder, h as QueryResult, S as SONICJS_VERSION, T as TemplateRenderer, b as buildQuery, e as escapeHtml, g as getCoreVersion, m as metricsTracker, r as renderTemplate, s as sanitizeInput, a as sanitizeObject, t as templateRenderer } from './version-vktVAxhe.cjs';
+export { c as FilterCondition, d as FilterGroup, F as FilterOperator, f as QueryFilter, Q as QueryFilterBuilder, g as QueryResult, S as SONICJS_VERSION, T as TemplateRenderer, b as buildQuery, e as escapeHtml, h as getCoreVersion, m as metricsTracker, r as renderTemplate, s as sanitizeInput, a as sanitizeObject, t as templateRenderer } from './version-Bm4CPb1O.cjs';
 import * as drizzle_orm_d1 from 'drizzle-orm/d1';
 import { Hono, MiddlewareHandler, Context } from 'hono';
 import { z } from 'zod';
-import { D1Database as D1Database$1, KVNamespace, R2Bucket } from '@cloudflare/workers-types';
+import { D1Database as D1Database$1, KVNamespace as KVNamespace$1, R2Bucket } from '@cloudflare/workers-types';
 import 'drizzle-zod';
 import 'drizzle-orm/sqlite-core';
 import 'hono/types';
@@ -60,7 +60,7 @@ interface PluginContext {
     /** Database instance */
     db: D1Database$1;
     /** Key-value storage */
-    kv: KVNamespace;
+    kv: KVNamespace$1;
     /** R2 storage bucket */
     r2?: R2Bucket;
     /** Plugin configuration */
@@ -517,6 +517,178 @@ declare class PluginHelpers {
 }
 
 /**
+ * AI Search Plugin Types
+ */
+interface AISearchSettings {
+    id?: number;
+    enabled: boolean;
+    ai_mode_enabled: boolean;
+    selected_collections: string[];
+    dismissed_collections: string[];
+    autocomplete_enabled: boolean;
+    cache_duration: number;
+    results_limit: number;
+    index_media: boolean;
+    index_status?: Record<string, IndexStatus>;
+    last_indexed_at?: number;
+    created_at?: number;
+    updated_at?: number;
+    query_rewriting_enabled?: boolean;
+    reranking_enabled?: boolean;
+    fts5_title_boost?: number;
+    fts5_slug_boost?: number;
+    fts5_body_boost?: number;
+    query_synonyms_enabled?: boolean;
+    facets_enabled?: boolean;
+    facet_config?: FacetDefinition[];
+    facet_max_values?: number;
+    related_searches_enabled?: boolean;
+}
+interface IndexStatus {
+    collection_id: string;
+    collection_name: string;
+    total_items: number;
+    indexed_items: number;
+    last_sync_at?: number;
+    status: 'pending' | 'indexing' | 'completed' | 'error';
+    error_message?: string;
+}
+/** Persisted facet configuration — stored in AISearchSettings.facet_config */
+interface FacetDefinition {
+    name: string;
+    field: string;
+    type: 'builtin' | 'json_scalar' | 'json_array';
+    collections?: string[];
+    maxValues?: number;
+    sortBy?: 'count' | 'alpha';
+    enabled: boolean;
+    source: 'auto' | 'manual' | 'agent';
+    position: number;
+}
+type ExperimentStatus = 'draft' | 'running' | 'paused' | 'completed' | 'archived';
+type ExperimentMode = 'ab' | 'interleave' | 'bandit';
+interface Experiment {
+    id: string;
+    name: string;
+    description: string | null;
+    status: ExperimentStatus;
+    mode: ExperimentMode;
+    traffic_pct: number;
+    split_ratio: number;
+    variants: {
+        control: Partial<AISearchSettings>;
+        treatment: Partial<AISearchSettings>;
+    };
+    metrics: ExperimentMetrics | null;
+    winner: string | null;
+    confidence: number | null;
+    min_searches: number;
+    started_at: number | null;
+    ended_at: number | null;
+    created_at: number;
+    updated_at: number;
+}
+interface ExperimentMetrics {
+    control: VariantMetrics;
+    treatment: VariantMetrics;
+    confidence: number;
+    significant: boolean;
+}
+interface VariantMetrics {
+    searches: number;
+    clicks: number;
+    ctr: number;
+    zero_result_rate: number;
+    avg_click_position: number;
+    avg_response_time_ms: number;
+}
+
+/**
+ * Analytics Engine dataset binding type (minimal — Cloudflare Workers types).
+ * writeDataPoint() is fire-and-forget (non-blocking, returns void).
+ */
+interface AnalyticsEngineDataset {
+    writeDataPoint(data: {
+        indexes?: string[];
+        blobs?: (string | null)[];
+        doubles?: number[];
+    }): void;
+}
+declare class ExperimentService {
+    private db;
+    private kv?;
+    private analytics?;
+    constructor(db: D1Database, kv?: KVNamespace | undefined, analytics?: AnalyticsEngineDataset | undefined);
+    getAll(options?: {
+        status?: ExperimentStatus;
+        mode?: ExperimentMode;
+        limit?: number;
+        offset?: number;
+    }): Promise<Experiment[]>;
+    getById(id: string): Promise<Experiment | null>;
+    create(data: {
+        name: string;
+        description?: string;
+        mode?: ExperimentMode;
+        traffic_pct?: number;
+        split_ratio?: number;
+        variants: {
+            control: Partial<AISearchSettings>;
+            treatment: Partial<AISearchSettings>;
+        };
+        min_searches?: number;
+    }): Promise<Experiment>;
+    update(id: string, data: {
+        name?: string;
+        description?: string;
+        mode?: ExperimentMode;
+        traffic_pct?: number;
+        split_ratio?: number;
+        variants?: {
+            control: Partial<AISearchSettings>;
+            treatment: Partial<AISearchSettings>;
+        };
+        min_searches?: number;
+    }): Promise<Experiment | null>;
+    delete(id: string): Promise<boolean>;
+    start(id: string): Promise<Experiment>;
+    pause(id: string): Promise<Experiment>;
+    complete(id: string, winner?: string): Promise<Experiment>;
+    archive(id: string): Promise<Experiment>;
+    getActiveExperiment(): Promise<Experiment | null>;
+    /**
+     * Deterministic variant assignment via FNV-1a hash.
+     * Same user + experiment always gets the same variant.
+     */
+    assignVariant(experimentId: string, userId: string, splitRatio?: number): 'control' | 'treatment';
+    /**
+     * Check if a user should be enrolled in the experiment based on traffic_pct.
+     */
+    shouldEnroll(experimentId: string, userId: string, trafficPct: number): boolean;
+    trackSearchEvent(data: {
+        experimentId: string;
+        variantId: string;
+        query: string;
+        searchMode: string;
+        userId: string;
+        searchId: string;
+        resultsCount: number;
+        responseTimeMs: number;
+    }): void;
+    trackClickEvent(data: {
+        experimentId: string;
+        variantId: string;
+        searchId: string;
+        contentId: string;
+        clickPosition: number;
+    }): void;
+    evaluateExperiment(id: string): Promise<ExperimentMetrics | null>;
+    private evaluateFromD1;
+    private evaluateFromAnalyticsEngine;
+    private buildMetrics;
+}
+
+/**
  * @sonicjs/core - Main Entry Point
  *
  * Core framework for SonicJS headless CMS
@@ -536,4 +708,4 @@ declare class PluginHelpers {
 
 declare const VERSION: string;
 
-export { PluginBuilder, PluginHelpers, VERSION, createDb };
+export { ExperimentService, PluginBuilder, PluginHelpers, VERSION, createDb };

@@ -1,15 +1,15 @@
 'use strict';
 
-var chunkQVIYLOFA_cjs = require('./chunk-QVIYLOFA.cjs');
+var chunkKAEZ35ZT_cjs = require('./chunk-KAEZ35ZT.cjs');
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkZS5MYHCW_cjs = require('./chunk-ZS5MYHCW.cjs');
+var chunkJRX4WLFV_cjs = require('./chunk-JRX4WLFV.cjs');
 var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkRZWYEWXM_cjs = require('./chunk-RZWYEWXM.cjs');
-var chunkS6K2H2TS_cjs = require('./chunk-S6K2H2TS.cjs');
-var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
+var chunkHGZ2ZNYT_cjs = require('./chunk-HGZ2ZNYT.cjs');
+var chunk6WA4KFYZ_cjs = require('./chunk-6WA4KFYZ.cjs');
+var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
 var chunkMNFY6DWY_cjs = require('./chunk-MNFY6DWY.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
-var chunk5HMR2SJW_cjs = require('./chunk-5HMR2SJW.cjs');
+var chunkUOEIMC67_cjs = require('./chunk-UOEIMC67.cjs');
 require('./chunk-P3XDZL6Q.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var chunkKYGRJCZM_cjs = require('./chunk-KYGRJCZM.cjs');
@@ -235,7 +235,7 @@ var DatabaseToolsService = class {
 };
 
 // src/templates/pages/admin-database-table.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderDatabaseTablePage(data) {
   const totalPages = Math.ceil(data.totalRows / data.pageSize);
   const startRow = (data.currentPage - 1) * data.pageSize + 1;
@@ -484,7 +484,7 @@ function renderDatabaseTablePage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function generatePageNumbers(currentPage, totalPages) {
   const pages = [];
@@ -559,7 +559,7 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkZS5MYHCW_cjs.requireAuth());
+  router3.use("*", chunkJRX4WLFV_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
@@ -1319,20 +1319,20 @@ var SeedDataService = class {
     for (let i = 0; i < paragraphCount && i < shuffled.length; i++) {
       selected.push(shuffled[i]);
     }
-    let html3 = `<h1>${title}</h1>
+    let html4 = `<h1>${title}</h1>
 `;
     const subheadings = ["Key Concepts", "Practical Considerations", "Best Practices", "Looking Ahead", "Implementation Details", "Common Pitfalls"];
     let subheadingIndex = 0;
     for (let i = 0; i < selected.length; i++) {
       if (i > 0 && i % 2 === 0 && subheadingIndex < subheadings.length) {
-        html3 += `<h2>${subheadings[subheadingIndex]}</h2>
+        html4 += `<h2>${subheadings[subheadingIndex]}</h2>
 `;
         subheadingIndex++;
       }
-      html3 += `<p>${selected[i]}</p>
+      html4 += `<p>${selected[i]}</p>
 `;
     }
-    return html3;
+    return html4;
   }
   // ============================================================================
   // Content Generation (Rich)
@@ -1663,15 +1663,20 @@ var DEFAULTS = {
   submissionsPerForm: 15,
   richness: "full"
 };
+function parseNumberOrDefault(value, defaultVal) {
+  if (value === void 0 || value === null || value === "") return defaultVal;
+  const num = Number(value);
+  return isNaN(num) ? defaultVal : num;
+}
 async function loadSettings(db) {
   try {
     const row = await db.prepare("SELECT settings FROM plugins WHERE id = ?").bind("seed-data").first();
     const saved = row?.settings ? JSON.parse(row.settings) : {};
     return {
-      userCount: saved.userCount || DEFAULTS.userCount,
-      contentCount: saved.contentCount || DEFAULTS.contentCount,
-      formCount: saved.formCount || DEFAULTS.formCount,
-      submissionsPerForm: saved.submissionsPerForm || DEFAULTS.submissionsPerForm,
+      userCount: parseNumberOrDefault(saved.userCount, DEFAULTS.userCount),
+      contentCount: parseNumberOrDefault(saved.contentCount, DEFAULTS.contentCount),
+      formCount: parseNumberOrDefault(saved.formCount, DEFAULTS.formCount),
+      submissionsPerForm: parseNumberOrDefault(saved.submissionsPerForm, DEFAULTS.submissionsPerForm),
       richness: saved.richness || DEFAULTS.richness
     };
   } catch {
@@ -1726,21 +1731,21 @@ function createSeedDataAdminRoutes() {
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label for="userCount" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Users to Create</label>
-              <input type="number" id="userCount" name="userCount" value="${s.userCount}" min="1" max="100"
+              <input type="number" id="userCount" name="userCount" value="${s.userCount}" min="0" max="100"
                 class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-              <p class="mt-1 text-xs text-zinc-500">With names, emails, roles (1-100)</p>
+              <p class="mt-1 text-xs text-zinc-500">With names, emails, roles (0-100)</p>
             </div>
             <div>
               <label for="contentCount" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Content Items</label>
-              <input type="number" id="contentCount" name="contentCount" value="${s.contentCount}" min="10" max="1000"
+              <input type="number" id="contentCount" name="contentCount" value="${s.contentCount}" min="0" max="1000"
                 class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-              <p class="mt-1 text-xs text-zinc-500">Blog posts, pages, products (10-1000)</p>
+              <p class="mt-1 text-xs text-zinc-500">Distributed across existing collections (0-1000)</p>
             </div>
             <div>
               <label for="formCount" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Forms to Create</label>
-              <input type="number" id="formCount" name="formCount" value="${s.formCount}" min="1" max="20"
+              <input type="number" id="formCount" name="formCount" value="${s.formCount}" min="0" max="20"
                 class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-              <p class="mt-1 text-xs text-zinc-500">Contact, feedback, registration, etc. (1-20)</p>
+              <p class="mt-1 text-xs text-zinc-500">Contact, feedback, registration, etc. (0-20)</p>
             </div>
             <div>
               <label for="submissionsPerForm" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Submissions per Form</label>
@@ -1774,32 +1779,40 @@ function createSeedDataAdminRoutes() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div class="space-y-2 text-zinc-600 dark:text-zinc-400">
             <p><strong class="text-zinc-900 dark:text-white">Users:</strong> Realistic names, emails, roles (admin/editor/author/viewer), activity dates</p>
-            <p><strong class="text-zinc-900 dark:text-white">Blog Posts:</strong> Multi-paragraph HTML bodies, excerpts, tags, difficulty levels, reading time</p>
-            <p><strong class="text-zinc-900 dark:text-white">Pages:</strong> About, FAQ, Privacy Policy, etc. with SEO metadata</p>
+            <p><strong class="text-zinc-900 dark:text-white">Content:</strong> Distributed across all existing collections \u2014 blog posts get multi-paragraph HTML bodies with excerpts and tags, pages get SEO metadata, other collections get contextual data</p>
           </div>
           <div class="space-y-2 text-zinc-600 dark:text-zinc-400">
-            <p><strong class="text-zinc-900 dark:text-white">Products:</strong> Detailed descriptions, specs, ratings, reviews, pricing, SKUs</p>
             <p><strong class="text-zinc-900 dark:text-white">Forms:</strong> Contact, feedback, survey, registration, newsletter, support, job application, product review \u2014 with full Form.io schemas</p>
             <p><strong class="text-zinc-900 dark:text-white">Submissions:</strong> Schema-aware field data, IP addresses, user agents, UTM tracking, status workflow</p>
           </div>
         </div>
       </div>
 
+      <!-- Progress Bar (hidden by default) -->
+      <div id="progressContainer" class="hidden rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-semibold text-zinc-950 dark:text-white" id="progressLabel">Generating...</h2>
+          <span class="text-sm text-zinc-500 dark:text-zinc-400" id="progressPercent">0%</span>
+        </div>
+        <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-3 overflow-hidden">
+          <div id="progressBar" class="bg-indigo-600 h-3 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+        </div>
+        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400" id="progressDetail"></p>
+      </div>
+
       <!-- Generate & Clear Actions -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-          <h2 class="text-lg font-semibold text-zinc-950 dark:text-white mb-2">Generate Seed Data</h2>
           <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Creates users, content, forms, and submissions using the configuration above.</p>
           <button id="generateBtn" onclick="generateSeedData()" class="inline-flex items-center rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
             </svg>
-            <span id="generateText">Generate Data</span>
+            <span id="generateText">Generate Seed Data</span>
           </button>
         </div>
 
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-          <h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Clear All Data</h2>
           <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Removes all content, forms, submissions, and non-admin users. Cannot be undone.</p>
           <button id="clearBtn" onclick="clearSeedData()" class="inline-flex items-center rounded-lg bg-red-600 hover:bg-red-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1823,8 +1836,8 @@ function createSeedDataAdminRoutes() {
       }
 
       function showMessage(type, text) {
-        const successEl = document.getElementById('successMessage');
-        const errorEl = document.getElementById('errorMessage');
+        var successEl = document.getElementById('successMessage');
+        var errorEl = document.getElementById('errorMessage');
         successEl.classList.add('hidden');
         errorEl.classList.add('hidden');
 
@@ -1837,17 +1850,35 @@ function createSeedDataAdminRoutes() {
         }
       }
 
+      function updateProgress(percent, label, detail) {
+        var container = document.getElementById('progressContainer');
+        var bar = document.getElementById('progressBar');
+        var percentEl = document.getElementById('progressPercent');
+        var labelEl = document.getElementById('progressLabel');
+        var detailEl = document.getElementById('progressDetail');
+
+        container.classList.remove('hidden');
+        bar.style.width = percent + '%';
+        percentEl.textContent = percent + '%';
+        labelEl.textContent = label;
+        detailEl.textContent = detail || '';
+      }
+
+      function hideProgress() {
+        document.getElementById('progressContainer').classList.add('hidden');
+      }
+
       async function saveDefaults() {
         try {
-          const res = await fetch('/admin/seed-data/settings', {
+          var res = await fetch('/admin/seed-data/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(getFormValues())
           });
           if (res.ok) {
-            const indicator = document.getElementById('savedIndicator');
+            var indicator = document.getElementById('savedIndicator');
             indicator.classList.remove('hidden');
-            setTimeout(() => indicator.classList.add('hidden'), 2000);
+            setTimeout(function() { indicator.classList.add('hidden'); }, 2000);
           } else {
             showMessage('error', 'Failed to save defaults');
           }
@@ -1857,48 +1888,81 @@ function createSeedDataAdminRoutes() {
       }
 
       async function generateSeedData() {
-        const btn = document.getElementById('generateBtn');
-        const text = document.getElementById('generateText');
+        var btn = document.getElementById('generateBtn');
+        var text = document.getElementById('generateText');
+        var clearBtn = document.getElementById('clearBtn');
         btn.disabled = true;
+        clearBtn.disabled = true;
         text.textContent = 'Generating...';
 
+        var vals = getFormValues();
+        var totals = { users: 0, content: 0, forms: 0, submissions: 0 };
+        var steps = [];
+
+        if (vals.userCount > 0) steps.push({ endpoint: 'users', label: 'Creating users...', key: 'users', body: { userCount: vals.userCount } });
+        if (vals.contentCount > 0) steps.push({ endpoint: 'content', label: 'Creating content...', key: 'content', body: { contentCount: vals.contentCount, richness: vals.richness } });
+        if (vals.formCount > 0) steps.push({ endpoint: 'forms', label: 'Creating forms...', key: 'forms', body: { formCount: vals.formCount } });
+        if (vals.formCount > 0 && vals.submissionsPerForm > 0) steps.push({ endpoint: 'submissions', label: 'Creating submissions...', key: 'submissions', body: { submissionsPerForm: vals.submissionsPerForm } });
+
+        if (steps.length === 0) {
+          showMessage('error', 'All counts are set to 0. Nothing to generate.');
+          btn.disabled = false;
+          clearBtn.disabled = false;
+          text.textContent = 'Generate Seed Data';
+          return;
+        }
+
         try {
-          const res = await fetch('/admin/seed-data/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(getFormValues())
-          });
-          const data = await res.json();
-          if (res.ok && data.success) {
-            showMessage('success',
-              'Created ' + data.users + ' users, ' + data.content + ' content items, ' +
-              data.forms + ' forms, and ' + data.submissions + ' submissions!'
-            );
-          } else {
-            throw new Error(data.error || 'Generation failed');
+          for (var i = 0; i < steps.length; i++) {
+            var step = steps[i];
+            var pct = Math.round(((i) / steps.length) * 100);
+            updateProgress(pct, step.label, 'Step ' + (i + 1) + ' of ' + steps.length);
+
+            var res = await fetch('/admin/seed-data/generate/' + step.endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(step.body)
+            });
+            var data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || 'Failed at step: ' + step.label);
+            }
+            totals[step.key] = data.count || 0;
           }
+
+          updateProgress(100, 'Complete!', '');
+          setTimeout(hideProgress, 2000);
+
+          var parts = [];
+          if (totals.users > 0) parts.push(totals.users + ' users');
+          if (totals.content > 0) parts.push(totals.content + ' content items');
+          if (totals.forms > 0) parts.push(totals.forms + ' forms');
+          if (totals.submissions > 0) parts.push(totals.submissions + ' submissions');
+          showMessage('success', 'Created ' + parts.join(', ') + '!');
         } catch (e) {
+          hideProgress();
           showMessage('error', 'Error: ' + e.message);
         } finally {
           btn.disabled = false;
-          text.textContent = 'Generate Data';
+          clearBtn.disabled = false;
+          text.textContent = 'Generate Seed Data';
         }
       }
 
       async function clearSeedData() {
         if (!confirm('Are you sure you want to clear ALL data? This removes all content, forms, submissions, and non-admin users. This cannot be undone!')) return;
 
-        const btn = document.getElementById('clearBtn');
-        const text = document.getElementById('clearText');
+        var btn = document.getElementById('clearBtn');
+        var text = document.getElementById('clearText');
         btn.disabled = true;
         text.textContent = 'Clearing...';
 
         try {
-          const res = await fetch('/admin/seed-data/clear', {
+          var res = await fetch('/admin/seed-data/clear', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
-          const data = await res.json();
+          var data = await res.json();
           if (res.ok && data.success) {
             showMessage('success', 'All seed data cleared successfully!');
           } else {
@@ -1913,7 +1977,7 @@ function createSeedDataAdminRoutes() {
       }
     </script>
     `;
-    return c.html(chunkSHCYIZAN_cjs.renderAdminLayout({
+    return c.html(chunkGMUS5V42_cjs.renderAdminLayout({
       title: "Seed Data Generator",
       pageTitle: "Seed Data Generator",
       currentPath: "/admin/seed-data",
@@ -1925,10 +1989,10 @@ function createSeedDataAdminRoutes() {
       const db = c.env.DB;
       const body = await c.req.json();
       const settings = {
-        userCount: Math.min(Math.max(Number(body.userCount) || DEFAULTS.userCount, 1), 100),
-        contentCount: Math.min(Math.max(Number(body.contentCount) || DEFAULTS.contentCount, 10), 1e3),
-        formCount: Math.min(Math.max(Number(body.formCount) || DEFAULTS.formCount, 1), 20),
-        submissionsPerForm: Math.min(Math.max(Number(body.submissionsPerForm) || 0, 0), 100),
+        userCount: Math.min(Math.max(parseNumberOrDefault(body.userCount, DEFAULTS.userCount), 0), 100),
+        contentCount: Math.min(Math.max(parseNumberOrDefault(body.contentCount, DEFAULTS.contentCount), 0), 1e3),
+        formCount: Math.min(Math.max(parseNumberOrDefault(body.formCount, DEFAULTS.formCount), 0), 20),
+        submissionsPerForm: Math.min(Math.max(parseNumberOrDefault(body.submissionsPerForm, DEFAULTS.submissionsPerForm), 0), 100),
         richness: body.richness === "minimal" ? "minimal" : "full"
       };
       await db.prepare(
@@ -1939,15 +2003,82 @@ function createSeedDataAdminRoutes() {
       return c.json({ success: false, error: error.message }, 500);
     }
   });
+  routes.post("/generate/users", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const userCount = Math.min(Math.max(parseNumberOrDefault(body.userCount, 0), 0), 100);
+      if (userCount === 0) return c.json({ success: true, count: 0 });
+      const seedService = new SeedDataService(db);
+      const count = await seedService.createUsers(userCount);
+      return c.json({ success: true, count });
+    } catch (error) {
+      console.error("[Seed Data] Users error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
+  routes.post("/generate/content", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const contentCount = Math.min(Math.max(parseNumberOrDefault(body.contentCount, 0), 0), 1e3);
+      const richness = body.richness === "minimal" ? "minimal" : "full";
+      if (contentCount === 0) return c.json({ success: true, count: 0 });
+      const seedService = new SeedDataService(db);
+      const count = await seedService.createContent(contentCount, richness);
+      return c.json({ success: true, count });
+    } catch (error) {
+      console.error("[Seed Data] Content error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
+  routes.post("/generate/forms", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const formCount = Math.min(Math.max(parseNumberOrDefault(body.formCount, 0), 0), 20);
+      if (formCount === 0) return c.json({ success: true, count: 0 });
+      const { results: admins } = await db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").all();
+      const creatorId = admins?.[0]?.id || "system";
+      const seedService = new SeedDataService(db);
+      const { forms } = await seedService.createForms(formCount, creatorId);
+      return c.json({ success: true, count: forms });
+    } catch (error) {
+      console.error("[Seed Data] Forms error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
+  routes.post("/generate/submissions", async (c) => {
+    try {
+      const db = c.env.DB;
+      const body = await c.req.json();
+      const submissionsPerForm = Math.min(Math.max(parseNumberOrDefault(body.submissionsPerForm, 0), 0), 100);
+      if (submissionsPerForm === 0) return c.json({ success: true, count: 0 });
+      const { results: forms } = await db.prepare("SELECT id, formio_schema FROM forms").all();
+      if (!forms || forms.length === 0) return c.json({ success: true, count: 0 });
+      const { results: allUsers } = await db.prepare("SELECT id, email FROM users").all();
+      const seedService = new SeedDataService(db);
+      let totalSubmissions = 0;
+      for (const form of forms) {
+        const schema = JSON.parse(form.formio_schema);
+        const created = await seedService.createSubmissions(form.id, schema, submissionsPerForm, allUsers || []);
+        totalSubmissions += created;
+      }
+      return c.json({ success: true, count: totalSubmissions });
+    } catch (error) {
+      console.error("[Seed Data] Submissions error:", error);
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
   routes.post("/generate", async (c) => {
     try {
       const db = c.env.DB;
       const body = await c.req.json();
       const options = {
-        userCount: Math.min(Math.max(Number(body.userCount) || DEFAULTS.userCount, 1), 100),
-        contentCount: Math.min(Math.max(Number(body.contentCount) || DEFAULTS.contentCount, 10), 1e3),
-        formCount: Math.min(Math.max(Number(body.formCount) || DEFAULTS.formCount, 1), 20),
-        submissionsPerForm: Math.min(Math.max(Number(body.submissionsPerForm) || 0, 0), 100),
+        userCount: Math.min(Math.max(parseNumberOrDefault(body.userCount, DEFAULTS.userCount), 0), 100),
+        contentCount: Math.min(Math.max(parseNumberOrDefault(body.contentCount, DEFAULTS.contentCount), 0), 1e3),
+        formCount: Math.min(Math.max(parseNumberOrDefault(body.formCount, DEFAULTS.formCount), 0), 20),
+        submissionsPerForm: Math.min(Math.max(parseNumberOrDefault(body.submissionsPerForm, DEFAULTS.submissionsPerForm), 0), 100),
         richness: body.richness === "minimal" ? "minimal" : "full"
       };
       const seedService = new SeedDataService(db);
@@ -2590,7 +2721,7 @@ function createOTPLoginPlugin() {
           error: "Account is deactivated"
         }, 403);
       }
-      const token = await chunkZS5MYHCW_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+      const token = await chunkJRX4WLFV_cjs.AuthManager.generateToken(user.id, user.email, user.role);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2669,2146 +2800,1012 @@ var manifest_default = {
   version: "1.0.0",
   author: "SonicJS"};
 
-// src/plugins/core-plugins/ai-search-plugin/services/embedding.service.ts
-var EmbeddingService = class {
-  constructor(ai) {
-    this.ai = ai;
-  }
-  /**
-   * Generate embedding for a single text
-   * 
-   * ⭐ Enhanced with Cloudflare Similarity-Based Caching
-   * - Automatically caches embeddings for 30 days
-   * - Similar queries share the same cache (semantic matching)
-   * - 90%+ speedup for repeated/similar queries (200ms → 5ms)
-   * - Zero infrastructure cost (included with Workers AI)
-   * 
-   * Example: "cloudflare workers" and "cloudflare worker" share cache
-   */
-  async generateEmbedding(text) {
-    try {
-      const response = await this.ai.run("@cf/baai/bge-base-en-v1.5", {
-        text: this.preprocessText(text)
-      }, {
-        // ⭐ Enable Cloudflare's Similarity-Based Caching
-        // This provides semantic cache matching across similar queries
-        cf: {
-          cacheTtl: 2592e3,
-          // 30 days (maximum allowed)
-          cacheEverything: true
-          // Cache all AI responses
-        }
-      });
-      if (response.data && response.data.length > 0) {
-        return response.data[0];
-      }
-      throw new Error("No embedding data returned");
-    } catch (error) {
-      console.error("[EmbeddingService] Error generating embedding:", error);
-      throw error;
-    }
-  }
-  /**
-   * Generate embeddings for multiple texts (batch processing)
-   */
-  async generateBatch(texts) {
-    try {
-      const batchSize = 10;
-      const batches = [];
-      for (let i = 0; i < texts.length; i += batchSize) {
-        batches.push(texts.slice(i, i + batchSize));
-      }
-      const allEmbeddings = [];
-      for (const batch of batches) {
-        const batchEmbeddings = await Promise.all(
-          batch.map((text) => this.generateEmbedding(text))
-        );
-        allEmbeddings.push(...batchEmbeddings);
-      }
-      return allEmbeddings;
-    } catch (error) {
-      console.error("[EmbeddingService] Error generating batch embeddings:", error);
-      throw error;
-    }
-  }
-  /**
-   * Preprocess text before generating embedding
-   * - Trim whitespace
-   * - Limit length to avoid token limits
-   * - Remove special characters that might cause issues
-   */
-  preprocessText(text) {
-    if (!text) return "";
-    let processed = text.trim().replace(/\s+/g, " ");
-    if (processed.length > 8e3) {
-      processed = processed.substring(0, 8e3);
-    }
-    return processed;
-  }
-  /**
-   * Calculate cosine similarity between two embeddings
-   */
-  cosineSimilarity(a, b) {
-    if (a.length !== b.length) {
-      throw new Error("Embeddings must have same dimensions");
-    }
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-    for (let i = 0; i < a.length; i++) {
-      const aVal = a[i] ?? 0;
-      const bVal = b[i] ?? 0;
-      dotProduct += aVal * bVal;
-      normA += aVal * aVal;
-      normB += bVal * bVal;
-    }
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/chunking.service.ts
-var ChunkingService = class {
-  // Default chunk size (in approximate tokens)
-  CHUNK_SIZE = 500;
-  CHUNK_OVERLAP = 50;
-  /**
-   * Chunk a single content item
-   */
-  chunkContent(contentId, collectionId, title, data, metadata = {}) {
-    const text = this.extractText(data);
-    if (!text || text.trim().length === 0) {
-      console.warn(`[ChunkingService] No text found for content ${contentId}`);
-      return [];
-    }
-    const textChunks = this.splitIntoChunks(text);
-    return textChunks.map((chunkText, index) => ({
-      id: `${contentId}_chunk_${index}`,
-      content_id: contentId,
-      collection_id: collectionId,
-      title,
-      text: chunkText,
-      chunk_index: index,
-      metadata: {
-        ...metadata,
-        total_chunks: textChunks.length
-      }
-    }));
-  }
-  /**
-   * Chunk multiple content items
-   */
-  chunkContentBatch(items) {
-    const allChunks = [];
-    for (const item of items) {
-      const chunks = this.chunkContent(
-        item.id,
-        item.collection_id,
-        item.title,
-        item.data,
-        item.metadata
-      );
-      allChunks.push(...chunks);
-    }
-    return allChunks;
-  }
-  /**
-   * Extract all text from content data
-   */
-  extractText(data) {
-    const parts = [];
-    if (data.title) parts.push(String(data.title));
-    if (data.name) parts.push(String(data.name));
-    if (data.description) parts.push(String(data.description));
-    if (data.content) parts.push(String(data.content));
-    if (data.body) parts.push(String(data.body));
-    if (data.text) parts.push(String(data.text));
-    if (data.summary) parts.push(String(data.summary));
-    const extractRecursive = (obj) => {
-      if (typeof obj === "string") {
-        if (obj.length > 10 && !obj.startsWith("http")) {
-          parts.push(obj);
-        }
-      } else if (Array.isArray(obj)) {
-        obj.forEach(extractRecursive);
-      } else if (obj && typeof obj === "object") {
-        const skipKeys = ["id", "slug", "url", "image", "thumbnail", "metadata"];
-        Object.entries(obj).forEach(([key, value]) => {
-          if (!skipKeys.includes(key.toLowerCase())) {
-            extractRecursive(value);
-          }
-        });
-      }
-    };
-    extractRecursive(data);
-    return parts.join("\n\n").trim();
-  }
-  /**
-   * Split text into overlapping chunks
-   */
-  splitIntoChunks(text) {
-    const words = text.split(/\s+/);
-    if (words.length <= this.CHUNK_SIZE) {
-      return [text];
-    }
-    const chunks = [];
-    let startIndex = 0;
-    while (startIndex < words.length) {
-      const endIndex = Math.min(startIndex + this.CHUNK_SIZE, words.length);
-      const chunk = words.slice(startIndex, endIndex).join(" ");
-      chunks.push(chunk);
-      startIndex += this.CHUNK_SIZE - this.CHUNK_OVERLAP;
-      if (startIndex >= words.length - this.CHUNK_OVERLAP) {
-        break;
-      }
-    }
-    return chunks;
-  }
-  /**
-   * Get optimal chunk size based on content type
-   */
-  getOptimalChunkSize(contentType) {
-    switch (contentType) {
-      case "blog_posts":
-      case "articles":
-        return 600;
-      // Larger chunks for long-form content
-      case "products":
-      case "pages":
-        return 400;
-      // Medium chunks for structured content
-      case "messages":
-      case "comments":
-        return 200;
-      // Small chunks for short content
-      default:
-        return this.CHUNK_SIZE;
-    }
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/custom-rag.service.ts
-var CustomRAGService = class {
-  constructor(db, ai, vectorize) {
+// src/plugins/core-plugins/ai-search-plugin/services/recommendation.service.ts
+var RecommendationService = class {
+  constructor(db) {
     this.db = db;
-    this.ai = ai;
-    this.vectorize = vectorize;
-    this.embeddingService = new EmbeddingService(ai);
-    this.chunkingService = new ChunkingService();
   }
-  embeddingService;
-  chunkingService;
-  /**
-   * Index all content from a collection
-   */
-  async indexCollection(collectionId) {
-    console.log(`[CustomRAG] Starting indexing for collection: ${collectionId}`);
-    try {
-      const { results: contentItems } = await this.db.prepare(`
-          SELECT c.id, c.title, c.data, c.collection_id, c.status,
-                 c.created_at, c.updated_at, c.author_id,
-                 col.name as collection_name, col.display_name as collection_display_name
-          FROM content c
-          JOIN collections col ON c.collection_id = col.id
-          WHERE c.collection_id = ? AND c.status != 'deleted'
-        `).bind(collectionId).all();
-      const totalItems = contentItems?.length || 0;
-      if (totalItems === 0) {
-        console.log(`[CustomRAG] No content found in collection ${collectionId}`);
-        return { total_items: 0, total_chunks: 0, indexed_chunks: 0, errors: 0 };
-      }
-      const items = (contentItems || []).map((item) => ({
-        id: item.id,
-        collection_id: item.collection_id,
-        title: item.title || "Untitled",
-        data: typeof item.data === "string" ? JSON.parse(item.data) : item.data,
-        metadata: {
-          status: item.status,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          author_id: item.author_id,
-          collection_name: item.collection_name,
-          collection_display_name: item.collection_display_name
-        }
-      }));
-      const chunks = this.chunkingService.chunkContentBatch(items);
-      const totalChunks = chunks.length;
-      console.log(`[CustomRAG] Generated ${totalChunks} chunks from ${totalItems} items`);
-      const embeddings = await this.embeddingService.generateBatch(
-        chunks.map((c) => `${c.title}
-
-${c.text}`)
-      );
-      console.log(`[CustomRAG] Generated ${embeddings.length} embeddings`);
-      let indexedChunks = 0;
-      let errors = 0;
-      const batchSize = 100;
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const chunkBatch = chunks.slice(i, i + batchSize);
-        const embeddingBatch = embeddings.slice(i, i + batchSize);
-        try {
-          await this.vectorize.upsert(
-            chunkBatch.map((chunk, idx) => ({
-              id: chunk.id,
-              values: embeddingBatch[idx],
-              metadata: {
-                content_id: chunk.content_id,
-                collection_id: chunk.collection_id,
-                title: chunk.title,
-                text: chunk.text.substring(0, 500),
-                // Store snippet for display
-                chunk_index: chunk.chunk_index,
-                ...chunk.metadata
-              }
-            }))
-          );
-          indexedChunks += chunkBatch.length;
-          console.log(`[CustomRAG] Indexed batch ${i / batchSize + 1}: ${chunkBatch.length} chunks`);
-        } catch (error) {
-          console.error(`[CustomRAG] Error indexing batch ${i / batchSize + 1}:`, error);
-          errors += chunkBatch.length;
-        }
-      }
-      console.log(`[CustomRAG] Indexing complete: ${indexedChunks}/${totalChunks} chunks indexed`);
-      return {
-        total_items: totalItems,
-        total_chunks: totalChunks,
-        indexed_chunks: indexedChunks,
-        errors
-      };
-    } catch (error) {
-      console.error(`[CustomRAG] Error indexing collection ${collectionId}:`, error);
-      throw error;
+  // =============================================
+  // CRUD
+  // =============================================
+  async getAll(options) {
+    const conditions = [];
+    const params = [];
+    if (options?.status) {
+      conditions.push("status = ?");
+      params.push(options.status);
     }
-  }
-  /**
-   * Auto-index content in selected collections that hasn't been indexed into Vectorize yet.
-   * Mirrors FTS5's ensureCollectionsIndexed() self-healing pattern.
-   */
-  async ensureCollectionsIndexed(collections2) {
-    if (collections2.length === 0) return;
-    try {
-      const placeholders = collections2.map(() => "?").join(", ");
-      const { results: indexedCollections } = await this.db.prepare(`
-          SELECT collection_id, status, indexed_items FROM ai_search_index_meta
-          WHERE collection_id IN (${placeholders}) AND status = 'completed' AND indexed_items > 0
-        `).bind(...collections2).all();
-      const completedIds = new Set((indexedCollections || []).map((r) => r.collection_id));
-      const unindexedCollections = collections2.filter((id) => !completedIds.has(id));
-      if (unindexedCollections.length === 0) return;
-      console.log(`[CustomRAG] Auto-indexing ${unindexedCollections.length} collection(s) into Vectorize...`);
-      for (const collectionId of unindexedCollections) {
-        try {
-          await this.db.prepare(`
-              INSERT OR REPLACE INTO ai_search_index_meta(collection_id, collection_name, status, total_items, indexed_items)
-              VALUES (?, ?, 'indexing', 0, 0)
-            `).bind(collectionId, collectionId).run();
-          const result = await this.indexCollection(collectionId);
-          await this.db.prepare(`
-              UPDATE ai_search_index_meta
-              SET status = 'completed', total_items = ?, indexed_items = ?, last_sync_at = ?
-              WHERE collection_id = ?
-            `).bind(result.total_items, result.indexed_chunks, Date.now(), collectionId).run();
-          console.log(`[CustomRAG] Auto-indexed collection ${collectionId}: ${result.indexed_chunks} chunks from ${result.total_items} items`);
-        } catch (error) {
-          console.error(`[CustomRAG] Error auto-indexing collection ${collectionId}:`, error);
-          await this.db.prepare(`
-              UPDATE ai_search_index_meta SET status = 'error', error_message = ?
-              WHERE collection_id = ?
-            `).bind(String(error), collectionId).run().catch(() => {
-          });
-        }
-      }
-    } catch (error) {
-      console.error("[CustomRAG] Error during auto-indexing check:", error);
+    if (options?.category) {
+      conditions.push("category = ?");
+      params.push(options.category);
     }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = options?.limit || 100;
+    const offset = options?.offset || 0;
+    const { results } = await this.db.prepare(`SELECT * FROM ai_search_recommendations ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all();
+    return (results || []).map((row) => this.mapRow(row));
   }
-  /**
-   * Search using RAG (semantic search with Vectorize)
-   */
-  async search(query, settings) {
+  async getById(id) {
+    const row = await this.db.prepare("SELECT * FROM ai_search_recommendations WHERE id = ?").bind(id).first();
+    return row ? this.mapRow(row) : null;
+  }
+  async updateStatus(id, status) {
+    const appliedAt = status === "applied" ? Math.floor(Date.now() / 1e3) : null;
+    await this.db.prepare("UPDATE ai_search_recommendations SET status = ?, applied_at = COALESCE(?, applied_at), updated_at = unixepoch() WHERE id = ?").bind(status, appliedAt, id).run();
+    return this.getById(id);
+  }
+  async dismissAll() {
+    const result = await this.db.prepare("UPDATE ai_search_recommendations SET status = 'dismissed', updated_at = unixepoch() WHERE status = 'pending'").run();
+    return result.meta?.changes ?? 0;
+  }
+  async getStats() {
+    const [totalRow, pendingRow, appliedRow, dismissedRow] = await Promise.all([
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations").first(),
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'pending'").first(),
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'applied'").first(),
+      this.db.prepare("SELECT COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'dismissed'").first()
+    ]);
+    const { results: catRows } = await this.db.prepare("SELECT category, COUNT(*) as cnt FROM ai_search_recommendations WHERE status = 'pending' GROUP BY category").all();
+    const byCategory = {};
+    for (const row of catRows || []) {
+      byCategory[row.category] = row.cnt;
+    }
+    return {
+      total: totalRow?.cnt ?? 0,
+      pending: pendingRow?.cnt ?? 0,
+      applied: appliedRow?.cnt ?? 0,
+      dismissed: dismissedRow?.cnt ?? 0,
+      byCategory
+    };
+  }
+  // =============================================
+  // Run Tracking
+  // =============================================
+  async createRun() {
+    const id = crypto.randomUUID().replace(/-/g, "");
+    await this.db.prepare("INSERT INTO ai_search_agent_runs (id, status) VALUES (?, ?)").bind(id, "running").run();
+    return id;
+  }
+  async completeRun(runId, count, durationMs) {
+    await this.db.prepare("UPDATE ai_search_agent_runs SET status = 'completed', recommendations_count = ?, duration_ms = ?, completed_at = unixepoch() WHERE id = ?").bind(count, durationMs, runId).run();
+  }
+  async failRun(runId, error) {
+    await this.db.prepare("UPDATE ai_search_agent_runs SET status = 'failed', error_message = ?, completed_at = unixepoch() WHERE id = ?").bind(error, runId).run();
+  }
+  async getLatestRun() {
+    const row = await this.db.prepare("SELECT * FROM ai_search_agent_runs ORDER BY created_at DESC LIMIT 1").first();
+    return row ? this.mapRunRow(row) : null;
+  }
+  async getRunHistory(limit = 10) {
+    const { results } = await this.db.prepare("SELECT * FROM ai_search_agent_runs ORDER BY created_at DESC LIMIT ?").bind(limit).all();
+    return (results || []).map((row) => this.mapRunRow(row));
+  }
+  // =============================================
+  // Analysis Engine
+  // =============================================
+  async runAnalysis() {
+    const runId = await this.createRun();
     const startTime = Date.now();
     try {
-      const collections2 = query.filters?.collections?.length ? query.filters.collections : settings.selected_collections;
-      await this.ensureCollectionsIndexed(collections2);
-      const queryEmbedding = await this.embeddingService.generateEmbedding(query.query);
-      const filter = {};
-      if (query.filters?.collections && query.filters.collections.length > 0) {
-        filter.collection_id = { $in: query.filters.collections };
-      } else if (settings.selected_collections.length > 0) {
-        filter.collection_id = { $in: settings.selected_collections };
-      }
-      if (query.filters?.status && query.filters.status.length > 0) {
-        filter.status = { $in: query.filters.status };
-      }
-      const vectorResults = await this.vectorize.query(queryEmbedding, {
-        topK: 50,
-        // Max allowed with returnMetadata: true
-        returnMetadata: "all"
-      });
-      let filteredMatches = vectorResults.matches || [];
-      if (filter.collection_id?.$in && Array.isArray(filter.collection_id.$in)) {
-        const allowedCollections = filter.collection_id.$in;
-        const beforeCount = filteredMatches.length;
-        filteredMatches = filteredMatches.filter(
-          (match) => allowedCollections.includes(match.metadata?.collection_id)
-        );
-      }
-      if (filter.status?.$in && Array.isArray(filter.status.$in)) {
-        const allowedStatuses = filter.status.$in;
-        filteredMatches = filteredMatches.filter(
-          (match) => allowedStatuses.includes(match.metadata?.status)
-        );
-      }
-      const topK = query.limit || settings.results_limit || 20;
-      filteredMatches = filteredMatches.slice(0, topK);
-      vectorResults.matches = filteredMatches;
-      if (!vectorResults.matches || vectorResults.matches.length === 0) {
-        return {
-          results: [],
-          total: 0,
-          query_time_ms: Date.now() - startTime,
-          mode: "ai"
-        };
-      }
-      const contentIds = [...new Set(
-        vectorResults.matches.map((m) => m.metadata.content_id)
-      )];
-      const placeholders = contentIds.map(() => "?").join(",");
-      const { results: contentItems } = await this.db.prepare(`
-          SELECT c.id, c.title, c.slug, c.collection_id, c.status,
-                 c.created_at, c.updated_at, c.author_id,
-                 col.display_name as collection_name
-          FROM content c
-          JOIN collections col ON c.collection_id = col.id
-          WHERE c.id IN (${placeholders})
-        `).bind(...contentIds).all();
-      const d1Map = new Map((contentItems || []).map((item) => [item.id, item]));
-      const bestByContent = /* @__PURE__ */ new Map();
-      for (const match of vectorResults.matches) {
-        const cid = match.metadata?.content_id;
-        if (!cid || !d1Map.has(cid)) continue;
-        const existing = bestByContent.get(cid);
-        if (!existing || match.score > existing.score) {
-          bestByContent.set(cid, match);
-        }
-      }
-      const MIN_RELEVANCE_SCORE = 0.6;
-      const SCORE_GAP_THRESHOLD = 0.05;
-      const sortedEntries = [...bestByContent.entries()].sort((a, b) => b[1].score - a[1].score);
-      const filteredEntries = [];
-      for (let i = 0; i < sortedEntries.length; i++) {
-        const entry = sortedEntries[i];
-        const score = entry[1].score;
-        if (score < MIN_RELEVANCE_SCORE) break;
-        if (i > 0) {
-          const prevScore = sortedEntries[i - 1][1].score;
-          const gap = prevScore - score;
-          if (gap > SCORE_GAP_THRESHOLD) {
+      const counts = await Promise.all([
+        this.analyzeSynonymOpportunities(runId),
+        this.analyzeQueryRuleOpportunities(runId),
+        this.analyzeLowCtrQueries(runId),
+        this.analyzeUnusedFacets(runId),
+        this.analyzeContentGaps(runId)
+      ]);
+      const totalCount = counts.reduce((a, b) => a + b, 0);
+      const durationMs = Date.now() - startTime;
+      await this.completeRun(runId, totalCount, durationMs);
+    } catch (error) {
+      await this.failRun(runId, error instanceof Error ? error.message : String(error));
+    }
+    return runId;
+  }
+  /**
+   * Find zero-result queries similar to successful queries.
+   * Both Levenshtein distance (<=2) AND token overlap (>=50%) must be satisfied
+   * to reduce false positives. Stopwords and very short queries are excluded.
+   */
+  async analyzeSynonymOpportunities(runId) {
+    let count = 0;
+    try {
+      const thirtyDaysAgo = Math.floor(Date.now() / 1e3) - 30 * 24 * 60 * 60;
+      const { results: zeroResults } = await this.db.prepare(`
+          SELECT LOWER(query) as query, COUNT(*) as cnt
+          FROM ai_search_history
+          WHERE results_count = 0 AND created_at >= ?
+          GROUP BY LOWER(query) HAVING COUNT(*) >= 3
+          ORDER BY cnt DESC LIMIT 50
+        `).bind(thirtyDaysAgo).all();
+      if (!zeroResults || zeroResults.length === 0) return 0;
+      const { results: successResults } = await this.db.prepare(`
+          SELECT LOWER(query) as query, COUNT(*) as cnt, AVG(results_count) as avg_results
+          FROM ai_search_history
+          WHERE results_count > 0 AND created_at >= ?
+          GROUP BY LOWER(query)
+          ORDER BY cnt DESC LIMIT 200
+        `).bind(thirtyDaysAgo).all();
+      if (!successResults || successResults.length === 0) return 0;
+      for (const zr of zeroResults) {
+        if (zr.query.length < 3 || STOPWORDS.has(zr.query)) continue;
+        for (const sr of successResults) {
+          if (sr.query.length < 3 || STOPWORDS.has(sr.query)) continue;
+          if (zr.query === sr.query) continue;
+          const distance = levenshteinDistance(zr.query, sr.query);
+          const tokenOverlap = getTokenOverlap(zr.query, sr.query);
+          if (distance <= 2 && tokenOverlap >= 0.5) {
+            const fingerprint = fnv1aHash(`synonym:${[zr.query, sr.query].sort().join("|")}`);
+            const exists = await this.checkFingerprint(fingerprint);
+            if (exists) continue;
+            await this.insertRecommendation({
+              id: crypto.randomUUID().replace(/-/g, ""),
+              category: "synonym",
+              title: `Synonym: "${zr.query}" \u2192 "${sr.query}"`,
+              description: `"${zr.query}" returned 0 results ${zr.cnt} times, but "${sr.query}" returns ~${Math.round(sr.avg_results)} results. Adding a synonym group could help users find content.`,
+              supporting_data: {
+                failed_query: zr.query,
+                failed_count: zr.cnt,
+                success_query: sr.query,
+                success_count: sr.cnt,
+                avg_results: Math.round(sr.avg_results),
+                levenshtein: distance,
+                token_overlap: Math.round(tokenOverlap * 100)
+              },
+              action_payload: { terms: [zr.query, sr.query] },
+              fingerprint,
+              run_id: runId
+            });
+            count++;
             break;
           }
         }
-        filteredEntries.push(entry);
       }
-      bestByContent.clear();
-      for (const [key, value] of filteredEntries) {
-        bestByContent.set(key, value);
-      }
-      const searchResults = [];
-      for (const [contentId, bestMatch] of bestByContent) {
-        const d1Item = d1Map.get(contentId);
-        searchResults.push({
-          id: d1Item.id,
-          title: d1Item.title || "Untitled",
-          slug: d1Item.slug || "",
-          collection_id: d1Item.collection_id,
-          collection_name: d1Item.collection_name,
-          snippet: bestMatch.metadata?.text || "",
-          relevance_score: bestMatch.score || 0,
-          status: d1Item.status,
-          created_at: d1Item.created_at,
-          updated_at: d1Item.updated_at
-        });
-      }
-      searchResults.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
-      const queryTime = Date.now() - startTime;
-      console.log(`[CustomRAG] Search completed in ${queryTime}ms, ${searchResults.length} results`);
-      return {
-        results: searchResults,
-        total: searchResults.length,
-        query_time_ms: queryTime,
-        mode: "ai"
-      };
     } catch (error) {
-      console.error("[CustomRAG] Search error:", error);
-      throw error;
+      console.error("[Agent] Synonym analysis error:", error);
     }
+    return count;
   }
   /**
-   * Update index for a single content item
+   * Find zero-result queries where removing common prefixes produces a successful query.
    */
-  async updateContentIndex(contentId) {
+  async analyzeQueryRuleOpportunities(runId) {
+    let count = 0;
+    const prefixes = ["how to ", "what is ", "where is ", "how do i ", "can i ", "why does ", "what are "];
     try {
-      const content2 = await this.db.prepare(`
-          SELECT c.id, c.title, c.data, c.collection_id, c.status,
-                 c.created_at, c.updated_at, c.author_id,
-                 col.name as collection_name, col.display_name as collection_display_name
-          FROM content c
-          JOIN collections col ON c.collection_id = col.id
-          WHERE c.id = ?
-        `).bind(contentId).first();
-      if (!content2) {
-        console.warn(`[CustomRAG] Content ${contentId} not found`);
-        return;
-      }
-      if (content2.status !== "published") {
-        await this.removeContentFromIndex(contentId);
-        return;
-      }
-      const chunks = this.chunkingService.chunkContent(
-        content2.id,
-        content2.collection_id,
-        content2.title || "Untitled",
-        typeof content2.data === "string" ? JSON.parse(content2.data) : content2.data,
-        {
-          status: content2.status,
-          created_at: content2.created_at,
-          updated_at: content2.updated_at,
-          author_id: content2.author_id,
-          collection_name: content2.collection_name,
-          collection_display_name: content2.collection_display_name
-        }
-      );
-      const embeddings = await this.embeddingService.generateBatch(
-        chunks.map((c) => `${c.title}
-
-${c.text}`)
-      );
-      await this.vectorize.upsert(
-        chunks.map((chunk, idx) => ({
-          id: chunk.id,
-          values: embeddings[idx],
-          metadata: {
-            content_id: chunk.content_id,
-            collection_id: chunk.collection_id,
-            title: chunk.title,
-            text: chunk.text.substring(0, 500),
-            chunk_index: chunk.chunk_index,
-            ...chunk.metadata
-          }
-        }))
-      );
-      console.log(`[CustomRAG] Updated index for content ${contentId}: ${chunks.length} chunks`);
-    } catch (error) {
-      console.error(`[CustomRAG] Error updating index for ${contentId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Remove content from index
-   */
-  async removeContentFromIndex(contentId) {
-    try {
-      console.log(`[CustomRAG] Removing content ${contentId} from index`);
-    } catch (error) {
-      console.error(`[CustomRAG] Error removing content ${contentId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Get search suggestions based on query
-   */
-  async getSuggestions(partialQuery, limit = 5) {
-    try {
-      const queryEmbedding = await this.embeddingService.generateEmbedding(partialQuery);
-      const results = await this.vectorize.query(queryEmbedding, {
-        topK: limit * 2,
-        // Get more to filter
-        returnMetadata: true
-      });
-      const suggestions = [...new Set(
-        results.matches?.map((m) => m.metadata.title).filter(Boolean) || []
-      )].slice(0, limit);
-      return suggestions;
-    } catch (error) {
-      console.error("[CustomRAG] Error getting suggestions:", error);
-      return [];
-    }
-  }
-  /**
-   * Check if Vectorize is available and configured
-   */
-  isAvailable() {
-    return !!this.vectorize && !!this.ai;
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/hybrid-search.service.ts
-var HybridSearchService = class {
-  constructor(fts5Service, customRAG) {
-    this.fts5Service = fts5Service;
-    this.customRAG = customRAG;
-  }
-  /**
-   * Run FTS5 + AI searches in parallel, merge with RRF
-   * Uses Promise.allSettled for partial failure tolerance
-   */
-  async search(query, settings) {
-    const startTime = Date.now();
-    const searches = [
-      this.fts5Service.search(query, settings)
-    ];
-    if (this.customRAG?.isAvailable()) {
-      searches.push(this.customRAG.search(query, settings));
-    }
-    const settled = await Promise.allSettled(searches);
-    const fulfilled = [];
-    for (const result of settled) {
-      if (result.status === "fulfilled") {
-        fulfilled.push(result.value);
-      } else {
-        console.error("[HybridSearch] One search leg failed:", result.reason);
-      }
-    }
-    if (fulfilled.length === 0) {
-      return {
-        results: [],
-        total: 0,
-        query_time_ms: Date.now() - startTime,
-        mode: "hybrid"
-      };
-    }
-    return this.mergeWithRRF(fulfilled, query, settings, startTime);
-  }
-  /**
-   * Reciprocal Rank Fusion (Cormack et al. 2009)
-   * score(d) = Σ 1/(k + rank(d))  where k=60
-   */
-  mergeWithRRF(responses, query, settings, startTime) {
-    const K = 60;
-    const scoreMap = /* @__PURE__ */ new Map();
-    for (const response of responses) {
-      response.results.forEach((result, rank) => {
-        const id = result.id;
-        const rrfContribution = 1 / (K + rank + 1);
-        if (scoreMap.has(id)) {
-          const existing = scoreMap.get(id);
-          existing.rrfScore += rrfContribution;
-          if (result.highlights) existing.result.highlights = result.highlights;
-          if (result.bm25_score) existing.result.bm25_score = result.bm25_score;
-          if (result.relevance_score) existing.result.relevance_score = result.relevance_score;
-        } else {
-          scoreMap.set(id, {
-            result: { ...result },
-            rrfScore: rrfContribution
+      const thirtyDaysAgo = Math.floor(Date.now() / 1e3) - 30 * 24 * 60 * 60;
+      const { results: zeroResults } = await this.db.prepare(`
+          SELECT LOWER(query) as query, COUNT(*) as cnt
+          FROM ai_search_history
+          WHERE results_count = 0 AND created_at >= ?
+          GROUP BY LOWER(query) HAVING COUNT(*) >= 2
+          ORDER BY cnt DESC LIMIT 50
+        `).bind(thirtyDaysAgo).all();
+      if (!zeroResults || zeroResults.length === 0) return 0;
+      for (const zr of zeroResults) {
+        for (const prefix of prefixes) {
+          if (!zr.query.startsWith(prefix)) continue;
+          const stripped = zr.query.slice(prefix.length).trim();
+          if (stripped.length < 2) continue;
+          const successRow = await this.db.prepare(`
+              SELECT COUNT(*) as cnt, AVG(results_count) as avg_results
+              FROM ai_search_history
+              WHERE LOWER(query) = ? AND results_count > 0 AND created_at >= ?
+            `).bind(stripped, thirtyDaysAgo).first();
+          if (!successRow || successRow.cnt === 0) continue;
+          const fingerprint = fnv1aHash(`query_rule:${zr.query}|${stripped}`);
+          const exists = await this.checkFingerprint(fingerprint);
+          if (exists) continue;
+          await this.insertRecommendation({
+            id: crypto.randomUUID().replace(/-/g, ""),
+            category: "query_rule",
+            title: `Rule: "${zr.query}" \u2192 "${stripped}"`,
+            description: `"${zr.query}" returns 0 results, but removing "${prefix.trim()}" yields "${stripped}" which returns ~${Math.round(successRow.avg_results)} results.`,
+            supporting_data: {
+              original_query: zr.query,
+              stripped_query: stripped,
+              prefix_removed: prefix.trim(),
+              zero_result_count: zr.cnt,
+              success_count: successRow.cnt,
+              avg_results: Math.round(successRow.avg_results)
+            },
+            action_payload: {
+              match_pattern: zr.query,
+              match_type: "exact",
+              substitute_query: stripped
+            },
+            fingerprint,
+            run_id: runId
           });
+          count++;
+          break;
         }
-      });
-    }
-    const limit = query.limit || settings.results_limit || 20;
-    const merged = Array.from(scoreMap.values()).sort((a, b) => b.rrfScore - a.rrfScore).slice(0, limit).map(({ result, rrfScore }) => ({
-      ...result,
-      rrf_score: rrfScore
-    }));
-    return {
-      mode: "hybrid",
-      results: merged,
-      total: scoreMap.size,
-      query_time_ms: Date.now() - startTime
-    };
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/query-rewriter.service.ts
-var REWRITE_SYSTEM_PROMPT = `You are a search query optimizer. Given a user's search query, rewrite it to improve search results by:
-- Adding relevant synonyms or related terms
-- Expanding abbreviations
-- Keeping the core intent intact
-
-Rules:
-- Return ONLY the rewritten query, nothing else
-- Keep it concise (under 100 characters)
-- Do not add explanations or formatting
-- Do not wrap in quotes
-- If the query is already precise, return it unchanged`;
-var QueryRewriterService = class {
-  constructor(ai) {
-    this.ai = ai;
-  }
-  /**
-   * Rewrite a query using LLM expansion
-   * Returns original query on any failure
-   */
-  async rewrite(originalQuery) {
-    try {
-      const response = await this.ai.run(
-        "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
-        {
-          messages: [
-            { role: "system", content: REWRITE_SYSTEM_PROMPT },
-            { role: "user", content: originalQuery }
-          ],
-          max_tokens: 100
-        }
-      );
-      const rewritten = response.response?.trim();
-      if (!rewritten) return originalQuery;
-      if (rewritten.length > originalQuery.length * 3) return originalQuery;
-      if (rewritten.length > 200) return originalQuery;
-      if (rewritten.includes("\n")) return originalQuery;
-      return rewritten;
-    } catch (error) {
-      console.error("[QueryRewriter] LLM call failed, using original query:", error);
-      return originalQuery;
-    }
-  }
-  /**
-   * Check if a query should be rewritten
-   * Short/precise queries don't benefit from rewriting
-   */
-  static shouldRewrite(query) {
-    return query.length >= 15;
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/reranker.service.ts
-var RerankerService = class {
-  constructor(ai) {
-    this.ai = ai;
-  }
-  /**
-   * Rerank results using cross-encoder scoring
-   * Returns results sorted by reranker score with rerank_score field added
-   */
-  async rerank(query, results, topK) {
-    if (results.length <= 1) return results;
-    const limit = topK || results.length;
-    try {
-      const contexts = results.map((r) => ({
-        text: `${r.title}. ${r.snippet || ""}`
-      }));
-      const response = await this.ai.run("@cf/baai/bge-reranker-base", {
-        query,
-        contexts,
-        top_k: limit
-      });
-      const scores = Array.isArray(response) ? response : response.response;
-      if (!Array.isArray(scores) || scores.length === 0) {
-        console.warn("[Reranker] Unexpected response format, returning original order");
-        return results.slice(0, limit);
       }
-      const reranked = scores.filter((s) => s.id >= 0 && s.id < results.length).map((s) => {
-        const result = results[s.id];
-        return { ...result, rerank_score: s.score };
-      });
-      return reranked.slice(0, limit);
     } catch (error) {
-      console.error("[Reranker] Cross-encoder failed, returning original order:", error);
-      return results.slice(0, limit);
+      console.error("[Agent] Query rule analysis error:", error);
     }
+    return count;
   }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/ai-search.ts
-var AISearchService = class {
-  constructor(db, ai, vectorize) {
-    this.db = db;
-    this.ai = ai;
-    this.vectorize = vectorize;
-    if (this.ai && this.vectorize) {
-      this.customRAG = new CustomRAGService(db, ai, vectorize);
-      console.log("[AISearchService] Custom RAG initialized");
-    } else {
-      console.log("[AISearchService] Custom RAG not available, using keyword search only");
-    }
-    this.fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
-    console.log("[AISearchService] FTS5 service initialized");
-    this.hybridService = new HybridSearchService(this.fts5Service, this.customRAG);
-    console.log("[AISearchService] Hybrid search service initialized");
-    if (this.ai) {
-      this.queryRewriter = new QueryRewriterService(this.ai);
-      this.reranker = new RerankerService(this.ai);
-      console.log("[AISearchService] Query rewriter and reranker initialized");
-    }
-  }
-  customRAG;
-  fts5Service;
-  hybridService;
-  queryRewriter;
-  reranker;
   /**
-   * Get plugin settings
+   * Find queries with >= 5 searches but < 10% CTR in 30 days.
    */
-  async getSettings() {
+  async analyzeLowCtrQueries(runId) {
+    let count = 0;
     try {
-      const plugin2 = await this.db.prepare(`SELECT settings FROM plugins WHERE id = ? LIMIT 1`).bind("ai-search").first();
-      if (!plugin2 || !plugin2.settings) {
-        return this.getDefaultSettings();
-      }
-      return JSON.parse(plugin2.settings);
-    } catch (error) {
-      console.error("Error fetching AI Search settings:", error);
-      return this.getDefaultSettings();
-    }
-  }
-  /**
-   * Get default settings
-   */
-  getDefaultSettings() {
-    return {
-      enabled: true,
-      ai_mode_enabled: true,
-      selected_collections: [],
-      dismissed_collections: [],
-      autocomplete_enabled: true,
-      cache_duration: 1,
-      results_limit: 20,
-      index_media: false,
-      query_rewriting_enabled: false,
-      reranking_enabled: true
-    };
-  }
-  /**
-   * Update plugin settings
-   */
-  async updateSettings(settings) {
-    const existing = await this.getSettings();
-    const updated = {
-      ...existing,
-      ...settings
-    };
-    try {
-      await this.db.prepare(`
-          UPDATE plugins
-          SET settings = ?,
-              updated_at = unixepoch()
-          WHERE id = 'ai-search'
-        `).bind(JSON.stringify(updated)).run();
-      return updated;
-    } catch (error) {
-      console.error("Error updating AI Search settings:", error);
-      throw error;
-    }
-  }
-  /**
-   * Detect new collections that aren't indexed or dismissed
-   */
-  async detectNewCollections() {
-    try {
-      const collectionsStmt = this.db.prepare(
-        "SELECT id, name, display_name, description FROM collections WHERE is_active = 1"
-      );
-      const { results: allCollections } = await collectionsStmt.all();
-      const collections2 = (allCollections || []).filter(
-        (col) => {
-          if (!col.name) return false;
-          const name = col.name.toLowerCase();
-          return !name.startsWith("test_") && !name.endsWith("_test") && name !== "test_collection" && !name.includes("_test_") && name !== "large_payload_test" && name !== "concurrent_test";
-        }
-      );
-      const settings = await this.getSettings();
-      const selected = settings?.selected_collections || [];
-      const dismissed = settings?.dismissed_collections || [];
-      const notifications = [];
-      for (const collection of collections2 || []) {
-        const collectionId = String(collection.id);
-        if (selected.includes(collectionId) || dismissed.includes(collectionId)) {
-          continue;
-        }
-        const countStmt = this.db.prepare(
-          "SELECT COUNT(*) as count FROM content WHERE collection_id = ?"
-        );
-        const countResult = await countStmt.bind(collectionId).first();
-        const itemCount = countResult?.count || 0;
-        notifications.push({
-          collection: {
-            id: collectionId,
-            name: collection.name,
-            display_name: collection.display_name,
-            description: collection.description,
-            item_count: itemCount,
-            is_indexed: false,
-            is_dismissed: false,
-            is_new: true
+      const thirtyDaysAgo = Math.floor(Date.now() / 1e3) - 30 * 24 * 60 * 60;
+      const { results: rows } = await this.db.prepare(`
+          SELECT
+            LOWER(h.query) as query,
+            COUNT(DISTINCT h.id) as search_count,
+            COUNT(DISTINCT c.id) as click_count,
+            AVG(h.results_count) as avg_results
+          FROM ai_search_history h
+          LEFT JOIN ai_search_clicks c ON c.search_id = CAST(h.id AS TEXT) AND c.created_at >= datetime(?, 'unixepoch')
+          WHERE h.created_at >= ? AND h.results_count > 0
+          GROUP BY LOWER(h.query)
+          HAVING COUNT(DISTINCT h.id) >= 5
+            AND (CAST(COUNT(DISTINCT c.id) AS REAL) / COUNT(DISTINCT h.id)) < 0.1
+          ORDER BY COUNT(DISTINCT h.id) DESC
+          LIMIT 20
+        `).bind(thirtyDaysAgo, thirtyDaysAgo).all();
+      if (!rows || rows.length === 0) return 0;
+      for (const row of rows) {
+        const ctr = row.search_count > 0 ? row.click_count / row.search_count * 100 : 0;
+        const fingerprint = fnv1aHash(`low_ctr:${row.query}`);
+        const exists = await this.checkFingerprint(fingerprint);
+        if (exists) continue;
+        await this.insertRecommendation({
+          id: crypto.randomUUID().replace(/-/g, ""),
+          category: "low_ctr",
+          title: `Low CTR: "${row.query}"`,
+          description: `"${row.query}" has been searched ${row.search_count} times with ${row.click_count} clicks (${ctr.toFixed(1)}% CTR). Results may not match user intent.`,
+          supporting_data: {
+            query: row.query,
+            search_count: row.search_count,
+            click_count: row.click_count,
+            ctr: Math.round(ctr * 10) / 10,
+            avg_results: Math.round(row.avg_results)
           },
-          message: `New collection "${collection.display_name}" with ${itemCount} items available for indexing`
+          action_payload: null,
+          fingerprint,
+          run_id: runId
         });
+        count++;
       }
-      return notifications;
     } catch (error) {
-      console.error("Error detecting new collections:", error);
-      return [];
+      console.error("[Agent] Low CTR analysis error:", error);
     }
+    return count;
   }
   /**
-   * Get all collections with indexing status
+   * Find enabled facets with 0 clicks in 30 days.
    */
-  async getAllCollections() {
+  async analyzeUnusedFacets(runId) {
+    let count = 0;
     try {
-      const collectionsStmt = this.db.prepare(
-        "SELECT id, name, display_name, description FROM collections WHERE is_active = 1 ORDER BY display_name"
-      );
-      const { results: allCollections } = await collectionsStmt.all();
-      console.log("[AISearchService.getAllCollections] Raw collections from DB:", allCollections?.length || 0);
-      const firstCollection = allCollections?.[0];
-      if (firstCollection) {
-        console.log("[AISearchService.getAllCollections] Sample collection:", {
-          id: firstCollection.id,
-          name: firstCollection.name,
-          display_name: firstCollection.display_name
+      const settingsRow = await this.db.prepare("SELECT value FROM ai_search_settings WHERE key = 'settings' LIMIT 1").first();
+      if (!settingsRow) return 0;
+      const settings = JSON.parse(settingsRow.value);
+      const facetConfig = settings.facet_config || [];
+      const enabledFacets = facetConfig.filter((f) => f.enabled);
+      if (enabledFacets.length === 0) return 0;
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+      const { results: clickedFacets } = await this.db.prepare(`
+          SELECT DISTINCT facet_field
+          FROM ai_search_facet_clicks
+          WHERE created_at >= ?
+        `).bind(thirtyDaysAgo).all();
+      const clickedSet = new Set((clickedFacets || []).map((r) => r.facet_field));
+      for (const facet of enabledFacets) {
+        if (clickedSet.has(facet.field)) continue;
+        const fingerprint = fnv1aHash(`unused_facet:${facet.field}`);
+        const exists = await this.checkFingerprint(fingerprint);
+        if (exists) continue;
+        await this.insertRecommendation({
+          id: crypto.randomUUID().replace(/-/g, ""),
+          category: "unused_facet",
+          title: `Unused facet: "${facet.name}"`,
+          description: `The "${facet.name}" facet (${facet.field}) is enabled but has received 0 clicks in the last 30 days. Consider disabling it to simplify the UI.`,
+          supporting_data: {
+            facet_field: facet.field,
+            facet_name: facet.name,
+            days_checked: 30
+          },
+          action_payload: null,
+          fingerprint,
+          run_id: runId
         });
+        count++;
       }
-      const collections2 = (allCollections || []).filter(
-        (col) => col.id && col.name
-      );
-      console.log("[AISearchService.getAllCollections] After filtering test collections:", collections2.length);
-      console.log("[AISearchService.getAllCollections] Remaining collections:", collections2.map((c) => c.name).join(", "));
-      const settings = await this.getSettings();
-      const selected = settings?.selected_collections || [];
-      const dismissed = settings?.dismissed_collections || [];
-      console.log("[AISearchService.getAllCollections] Settings:", {
-        selected_count: selected.length,
-        dismissed_count: dismissed.length,
-        selected
-      });
-      const collectionInfos = [];
-      for (const collection of collections2) {
-        if (!collection.id || !collection.name) continue;
-        const collectionId = String(collection.id);
-        if (!collectionId) {
-          console.warn("[AISearchService] Skipping invalid collection:", collection);
-          continue;
-        }
-        const countStmt = this.db.prepare(
-          "SELECT COUNT(*) as count FROM content WHERE collection_id = ?"
-        );
-        const countResult = await countStmt.bind(collectionId).first();
-        const itemCount = countResult?.count || 0;
-        collectionInfos.push({
-          id: collectionId,
-          name: collection.name,
-          display_name: collection.display_name || collection.name,
-          description: collection.description,
-          item_count: itemCount,
-          is_indexed: selected.includes(collectionId),
-          is_dismissed: dismissed.includes(collectionId),
-          is_new: !selected.includes(collectionId) && !dismissed.includes(collectionId)
+    } catch (error) {
+      console.error("[Agent] Unused facets analysis error:", error);
+    }
+    return count;
+  }
+  /**
+   * Find content clicked from position >= 4 with >= 3 clicks — suggests a ranking boost.
+   */
+  async analyzeContentGaps(runId) {
+    let count = 0;
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+      const { results: rows } = await this.db.prepare(`
+          SELECT
+            clicked_content_id,
+            clicked_content_title,
+            COUNT(*) as click_count,
+            AVG(click_position) as avg_position
+          FROM ai_search_clicks
+          WHERE click_position >= 4 AND created_at >= ?
+          GROUP BY clicked_content_id
+          HAVING COUNT(*) >= 3
+          ORDER BY click_count DESC
+          LIMIT 20
+        `).bind(thirtyDaysAgo).all();
+      if (!rows || rows.length === 0) return 0;
+      for (const row of rows) {
+        const fingerprint = fnv1aHash(`content_gap:${row.clicked_content_id}`);
+        const exists = await this.checkFingerprint(fingerprint);
+        if (exists) continue;
+        const title = row.clicked_content_title || row.clicked_content_id;
+        await this.insertRecommendation({
+          id: crypto.randomUUID().replace(/-/g, ""),
+          category: "content_gap",
+          title: `Ranking gap: "${title}"`,
+          description: `"${title}" was clicked ${row.click_count} times from avg position ${row.avg_position.toFixed(1)}. Users are scrolling past other results to find this content \u2014 it may deserve a ranking boost.`,
+          supporting_data: {
+            content_id: row.clicked_content_id,
+            content_title: title,
+            click_count: row.click_count,
+            avg_position: Math.round(row.avg_position * 10) / 10
+          },
+          action_payload: null,
+          fingerprint,
+          run_id: runId
         });
+        count++;
       }
-      console.log("[AISearchService.getAllCollections] Returning collectionInfos:", collectionInfos.length);
-      const firstInfo = collectionInfos[0];
-      if (collectionInfos.length > 0 && firstInfo) {
-        console.log("[AISearchService.getAllCollections] First collectionInfo:", {
-          id: firstInfo.id,
-          name: firstInfo.name,
-          display_name: firstInfo.display_name,
-          item_count: firstInfo.item_count
-        });
-      }
-      return collectionInfos;
     } catch (error) {
-      console.error("[AISearchService] Error fetching collections:", error);
-      return [];
+      console.error("[Agent] Content gaps analysis error:", error);
     }
+    return count;
   }
-  /**
-   * Execute search query
-   * Supports three modes: 'ai' (semantic), 'fts5' (full-text), 'keyword' (basic)
-   */
-  async search(query) {
-    const settings = await this.getSettings();
-    if (!settings?.enabled) {
-      return {
-        results: [],
-        total: 0,
-        query_time_ms: 0,
-        mode: query.mode
-      };
-    }
-    if (query.mode === "hybrid") {
-      return this.searchHybrid(query, settings);
-    }
-    if (query.mode === "fts5") {
-      return this.searchFTS5(query, settings);
-    }
-    if (query.mode === "ai" && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
-      return this.searchAI(query, settings);
-    }
-    return this.searchKeyword(query, settings);
-  }
-  /**
-   * FTS5 full-text search with BM25 ranking, stemming, and highlighting
-   */
-  async searchFTS5(query, settings) {
+  // =============================================
+  // Apply Logic
+  // =============================================
+  async applyRecommendation(id) {
+    const rec = await this.getById(id);
+    if (!rec) return { success: false, message: "Recommendation not found" };
+    if (rec.status !== "pending") return { success: false, message: `Cannot apply recommendation with status "${rec.status}"` };
     try {
-      if (!this.fts5Service) {
-        console.warn("[AISearchService] FTS5 service not initialized, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      if (!await this.fts5Service.isAvailable()) {
-        console.warn("[AISearchService] FTS5 table not available, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      const result = await this.fts5Service.search(query, settings);
-      await this.logSearch(query.query, "fts5", result.results.length);
-      return result;
-    } catch (error) {
-      console.error("[AISearchService] FTS5 search error, falling back to keyword:", error);
-      return this.searchKeyword(query, settings);
-    }
-  }
-  /**
-   * Hybrid search: FTS5 + AI combined with RRF, optional query rewriting + reranking
-   */
-  async searchHybrid(query, settings) {
-    const startTime = Date.now();
-    try {
-      if (!this.hybridService || !this.fts5Service) {
-        console.warn("[AISearchService] Hybrid service not available, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      if (!await this.fts5Service.isAvailable()) {
-        console.warn("[AISearchService] FTS5 not available for hybrid, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      let searchQuery = query;
-      const rewritingEnabled = settings.query_rewriting_enabled ?? false;
-      if (rewritingEnabled && this.queryRewriter && QueryRewriterService.shouldRewrite(query.query)) {
-        const rewritten = await this.queryRewriter.rewrite(query.query);
-        if (rewritten !== query.query) {
-          console.log(`[AISearchService] Query rewritten: "${query.query}" \u2192 "${rewritten}"`);
-          searchQuery = { ...query, query: rewritten };
-        }
-      }
-      let result = await this.hybridService.search(searchQuery, settings);
-      const rerankingEnabled = settings.reranking_enabled ?? true;
-      if (rerankingEnabled && this.reranker && result.results.length > 1) {
-        const limit = query.limit || settings.results_limit || 20;
-        result = {
-          ...result,
-          results: await this.reranker.rerank(query.query, result.results, limit),
-          query_time_ms: Date.now() - startTime
-        };
-      }
-      await this.logSearch(query.query, "hybrid", result.results.length);
-      return result;
-    } catch (error) {
-      console.error("[AISearchService] Hybrid search error, falling back to keyword:", error);
-      return this.searchKeyword(query, settings);
-    }
-  }
-  /**
-   * AI-powered semantic search using Custom RAG
-   */
-  async searchAI(query, settings) {
-    try {
-      if (!this.customRAG) {
-        console.warn("[AISearchService] CustomRAG not available, falling back to keyword search");
-        return this.searchKeyword(query, settings);
-      }
-      const result = await this.customRAG.search(query, settings);
-      return result;
-    } catch (error) {
-      console.error("[AISearchService] AI search error, falling back to keyword:", error);
-      return this.searchKeyword(query, settings);
-    }
-  }
-  /**
-   * Traditional keyword search
-   */
-  async searchKeyword(query, settings) {
-    const startTime = Date.now();
-    try {
-      const conditions = [];
-      const params = [];
-      if (query.query) {
-        conditions.push("(c.title LIKE ? OR c.slug LIKE ? OR c.data LIKE ?)");
-        const searchTerm = `%${query.query}%`;
-        params.push(searchTerm, searchTerm, searchTerm);
-      }
-      if (query.filters?.collections && query.filters.collections.length > 0) {
-        const placeholders = query.filters.collections.map(() => "?").join(",");
-        conditions.push(`c.collection_id IN (${placeholders})`);
-        params.push(...query.filters.collections);
-      } else if (settings.selected_collections.length > 0) {
-        const placeholders = settings.selected_collections.map(() => "?").join(",");
-        conditions.push(`c.collection_id IN (${placeholders})`);
-        params.push(...settings.selected_collections);
-      }
-      if (query.filters?.status && query.filters.status.length > 0) {
-        const placeholders = query.filters.status.map(() => "?").join(",");
-        conditions.push(`c.status IN (${placeholders})`);
-        params.push(...query.filters.status);
-      } else {
-        conditions.push("c.status != 'deleted'");
-      }
-      if (query.filters?.dateRange) {
-        const field = query.filters.dateRange.field || "created_at";
-        if (query.filters.dateRange.start) {
-          conditions.push(`c.${field} >= ?`);
-          params.push(query.filters.dateRange.start.getTime());
-        }
-        if (query.filters.dateRange.end) {
-          conditions.push(`c.${field} <= ?`);
-          params.push(query.filters.dateRange.end.getTime());
-        }
-      }
-      if (query.filters?.author) {
-        conditions.push("c.author_id = ?");
-        params.push(query.filters.author);
-      }
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const countStmt = this.db.prepare(`
-        SELECT COUNT(*) as count 
-        FROM content c
-        ${whereClause}
-      `);
-      const countResult = await countStmt.bind(...params).first();
-      const total = countResult?.count || 0;
-      const limit = query.limit || settings.results_limit;
-      const offset = query.offset || 0;
-      const resultsStmt = this.db.prepare(`
-        SELECT 
-          c.id, c.title, c.slug, c.collection_id, c.status,
-          c.created_at, c.updated_at, c.author_id, c.data,
-          col.name as collection_name, col.display_name as collection_display_name,
-          u.email as author_email
-        FROM content c
-        JOIN collections col ON c.collection_id = col.id
-        LEFT JOIN users u ON c.author_id = u.id
-        ${whereClause}
-        ORDER BY c.updated_at DESC
-        LIMIT ? OFFSET ?
-      `);
-      const { results } = await resultsStmt.bind(...params, limit, offset).all();
-      const searchResults = (results || []).map((row) => ({
-        id: String(row.id),
-        title: row.title || "Untitled",
-        slug: row.slug || "",
-        collection_id: String(row.collection_id),
-        collection_name: row.collection_display_name || row.collection_name,
-        snippet: this.extractSnippet(row.data, query.query),
-        status: row.status,
-        created_at: Number(row.created_at),
-        updated_at: Number(row.updated_at),
-        author_name: row.author_email
-      }));
-      const queryTime = Date.now() - startTime;
-      await this.logSearch(query.query, query.mode, searchResults.length);
-      return {
-        results: searchResults,
-        total,
-        query_time_ms: queryTime,
-        mode: query.mode
-      };
-    } catch (error) {
-      console.error("Keyword search error:", error);
-      return {
-        results: [],
-        total: 0,
-        query_time_ms: Date.now() - startTime,
-        mode: query.mode
-      };
-    }
-  }
-  /**
-   * Extract snippet from content data
-   * Pulls human-readable text from JSON data fields instead of raw JSON
-   */
-  extractSnippet(data, query) {
-    try {
-      const parsed = typeof data === "string" ? JSON.parse(data) : data;
-      const textParts = [];
-      const textFields = ["description", "content", "body", "text", "summary", "excerpt"];
-      for (const field of textFields) {
-        if (parsed[field] && typeof parsed[field] === "string") {
-          textParts.push(parsed[field]);
-        }
-      }
-      if (textParts.length === 0) {
-        for (const value of Object.values(parsed)) {
-          if (typeof value === "string" && value.length > 20) {
-            textParts.push(value);
+      switch (rec.category) {
+        case "synonym": {
+          if (!rec.action_payload?.terms || rec.action_payload.terms.length < 2) {
+            return { success: false, message: "Invalid synonym payload" };
           }
+          const synonymService = new chunkKAEZ35ZT_cjs.SynonymService(this.db);
+          await synonymService.create(rec.action_payload.terms);
+          await this.updateStatus(id, "applied");
+          return { success: true, message: `Created synonym group: ${rec.action_payload.terms.join(", ")}` };
         }
-      }
-      const text = textParts.join(" ").replace(/\s+/g, " ").trim();
-      if (!text) {
-        return "No preview available";
-      }
-      const queryLower = query.toLowerCase();
-      const textLower = text.toLowerCase();
-      const index = textLower.indexOf(queryLower);
-      if (index === -1) {
-        return text.substring(0, 200) + (text.length > 200 ? "..." : "");
-      }
-      const start = Math.max(0, index - 80);
-      const end = Math.min(text.length, index + query.length + 120);
-      const prefix = start > 0 ? "..." : "";
-      const suffix = end < text.length ? "..." : "";
-      return prefix + text.substring(start, end) + suffix;
-    } catch {
-      return data.substring(0, 200) + "...";
-    }
-  }
-  /**
-   * Get search suggestions (autocomplete)
-   * Uses fast keyword prefix matching for instant results (<50ms)
-   */
-  async getSearchSuggestions(partial) {
-    try {
-      const settings = await this.getSettings();
-      if (!settings?.autocomplete_enabled) {
-        return [];
-      }
-      try {
-        const stmt = this.db.prepare(`
-          SELECT DISTINCT title 
-          FROM ai_search_index 
-          WHERE title LIKE ? 
-          ORDER BY title 
-          LIMIT 10
-        `);
-        const { results } = await stmt.bind(`%${partial}%`).all();
-        const suggestions = (results || []).map((r) => r.title).filter(Boolean);
-        if (suggestions.length > 0) {
-          return suggestions;
+        case "query_rule": {
+          if (!rec.action_payload?.match_pattern || !rec.action_payload?.substitute_query) {
+            return { success: false, message: "Invalid query rule payload" };
+          }
+          const rulesService = new chunkKAEZ35ZT_cjs.QueryRulesService(this.db);
+          await rulesService.create({
+            match_pattern: rec.action_payload.match_pattern,
+            match_type: rec.action_payload.match_type || "exact",
+            substitute_query: rec.action_payload.substitute_query
+          });
+          await this.updateStatus(id, "applied");
+          return { success: true, message: `Created query rule: "${rec.action_payload.match_pattern}" \u2192 "${rec.action_payload.substitute_query}"` };
         }
-      } catch (indexError) {
-        console.log("[AISearchService] Index table not available yet, using search history");
-      }
-      try {
-        const historyStmt = this.db.prepare(`
-          SELECT DISTINCT query 
-          FROM ai_search_history 
-          WHERE query LIKE ? 
-          ORDER BY created_at DESC 
-          LIMIT 10
-        `);
-        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all();
-        return (historyResults || []).map((r) => r.query);
-      } catch (historyError) {
-        console.log("[AISearchService] No suggestions available (tables not initialized)");
-        return [];
-      }
-    } catch (error) {
-      console.error("Error getting suggestions:", error);
-      return [];
-    }
-  }
-  /**
-   * Log search query to history
-   */
-  async logSearch(query, mode, resultsCount) {
-    try {
-      const stmt = this.db.prepare(`
-        INSERT INTO ai_search_history (query, mode, results_count, created_at)
-        VALUES (?, ?, ?, ?)
-      `);
-      await stmt.bind(query, mode, resultsCount, Date.now()).run();
-    } catch (error) {
-      console.error("Error logging search:", error);
-    }
-  }
-  /**
-   * Get search analytics
-   */
-  async getSearchAnalytics() {
-    try {
-      const totalStmt = this.db.prepare(`
-        SELECT COUNT(*) as count
-        FROM ai_search_history
-        WHERE created_at >= ?
-      `);
-      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1e3;
-      const totalResult = await totalStmt.bind(thirtyDaysAgo).first();
-      const modeStmt = this.db.prepare(`
-        SELECT mode, COUNT(*) as count
-        FROM ai_search_history
-        WHERE created_at >= ?
-        GROUP BY mode
-      `);
-      const { results: modeResults } = await modeStmt.bind(thirtyDaysAgo).all();
-      const aiCount = modeResults?.find((r) => r.mode === "ai")?.count || 0;
-      const keywordCount = modeResults?.find((r) => r.mode === "keyword")?.count || 0;
-      const fts5Count = modeResults?.find((r) => r.mode === "fts5")?.count || 0;
-      const hybridCount = modeResults?.find((r) => r.mode === "hybrid")?.count || 0;
-      const popularStmt = this.db.prepare(`
-        SELECT query, COUNT(*) as count
-        FROM ai_search_history
-        WHERE created_at >= ?
-        GROUP BY query
-        ORDER BY count DESC
-        LIMIT 10
-      `);
-      const { results: popularResults } = await popularStmt.bind(thirtyDaysAgo).all();
-      return {
-        total_queries: totalResult?.count || 0,
-        ai_queries: aiCount,
-        keyword_queries: keywordCount,
-        fts5_queries: fts5Count,
-        hybrid_queries: hybridCount,
-        popular_queries: (popularResults || []).map((r) => ({
-          query: r.query,
-          count: r.count
-        })),
-        average_query_time: 0
-        // TODO: Track query times
-      };
-    } catch (error) {
-      console.error("Error getting analytics:", error);
-      return {
-        total_queries: 0,
-        ai_queries: 0,
-        keyword_queries: 0,
-        fts5_queries: 0,
-        hybrid_queries: 0,
-        popular_queries: [],
-        average_query_time: 0
-      };
-    }
-  }
-  /**
-   * Verify Custom RAG is available
-   */
-  verifyBinding() {
-    return this.customRAG?.isAvailable() ?? false;
-  }
-  /**
-   * Get Custom RAG service instance (for indexer)
-   */
-  getCustomRAG() {
-    return this.customRAG;
-  }
-  /**
-   * Get FTS5 service instance (for content sync and admin operations)
-   */
-  getFTS5Service() {
-    return this.fts5Service;
-  }
-};
-
-// src/plugins/core-plugins/ai-search-plugin/services/indexer.ts
-var IndexManager = class {
-  constructor(db, ai, vectorize) {
-    this.db = db;
-    this.ai = ai;
-    this.vectorize = vectorize;
-    if (this.ai && this.vectorize) {
-      this.customRAG = new CustomRAGService(db, ai, vectorize);
-      console.log("[IndexManager] Custom RAG initialized");
-    }
-  }
-  customRAG;
-  /**
-   * Index all content items within a collection using Custom RAG
-   */
-  async indexCollection(collectionId) {
-    try {
-      const collectionStmt = this.db.prepare(
-        "SELECT id, name, display_name FROM collections WHERE id = ?"
-      );
-      const collection = await collectionStmt.bind(collectionId).first();
-      if (!collection) {
-        throw new Error(`Collection ${collectionId} not found`);
-      }
-      await this.updateIndexStatus(collectionId, {
-        collection_id: collectionId,
-        collection_name: collection.display_name,
-        total_items: 0,
-        indexed_items: 0,
-        status: "indexing"
-      });
-      if (this.customRAG?.isAvailable()) {
-        console.log(`[IndexManager] Using Custom RAG to index collection ${collectionId}`);
-        const result = await this.customRAG.indexCollection(collectionId);
-        const finalStatus = {
-          collection_id: collectionId,
-          collection_name: collection.display_name,
-          total_items: result.total_items,
-          indexed_items: result.indexed_chunks,
-          last_sync_at: Date.now(),
-          status: result.errors > 0 ? "error" : "completed",
-          error_message: result.errors > 0 ? `${result.errors} errors during indexing` : void 0
-        };
-        await this.updateIndexStatus(collectionId, finalStatus);
-        return finalStatus;
-      }
-      console.warn(`[IndexManager] Custom RAG not available, skipping vector indexing for ${collectionId}`);
-      const countResult = await this.db.prepare(
-        "SELECT COUNT(*) as cnt FROM content WHERE collection_id = ?"
-      ).bind(collectionId).first();
-      const totalItems = countResult?.cnt || 0;
-      let fts5Indexed = 0;
-      try {
-        const fts5Count = await this.db.prepare(
-          "SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?"
-        ).bind(collectionId).first();
-        fts5Indexed = fts5Count?.cnt || 0;
-      } catch {
-      }
-      const fallbackStatus = {
-        collection_id: collectionId,
-        collection_name: collection.display_name,
-        total_items: totalItems,
-        indexed_items: fts5Indexed,
-        last_sync_at: Date.now(),
-        status: "completed",
-        error_message: fts5Indexed > 0 ? void 0 : "Using FTS5/keyword search (Vectorize not available)"
-      };
-      await this.updateIndexStatus(collectionId, fallbackStatus);
-      return fallbackStatus;
-    } catch (error) {
-      console.error(`[IndexManager] Error indexing collection ${collectionId}:`, error);
-      const errorStatus = {
-        collection_id: collectionId,
-        collection_name: "Unknown",
-        total_items: 0,
-        indexed_items: 0,
-        status: "error",
-        error_message: error instanceof Error ? error.message : String(error)
-      };
-      await this.updateIndexStatus(collectionId, errorStatus);
-      return errorStatus;
-    }
-  }
-  /**
-   * Index a single content item
-   */
-  async indexContentItem(item, collectionId) {
-    try {
-      let parsedData = {};
-      try {
-        parsedData = typeof item.data === "string" ? JSON.parse(item.data) : item.data;
-      } catch {
-        parsedData = {};
-      }
-      const document = {
-        id: `content_${item.id}`,
-        title: item.title || "Untitled",
-        slug: item.slug || "",
-        content: this.extractSearchableText(parsedData),
-        metadata: {
-          collection_id: collectionId,
-          collection_name: item.collection_name,
-          collection_display_name: item.collection_display_name,
-          status: item.status,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          author_id: item.author_id
+        case "low_ctr":
+        case "unused_facet":
+        case "content_gap": {
+          await this.updateStatus(id, "applied");
+          return { success: true, message: "Recommendation acknowledged" };
         }
-      };
-      console.log(`Indexed content item: ${item.id}`);
+        default:
+          return { success: false, message: `Unknown category: ${rec.category}` };
+      }
     } catch (error) {
-      console.error(`Error indexing content item ${item.id}:`, error);
-      throw error;
+      return { success: false, message: `Apply failed: ${error instanceof Error ? error.message : String(error)}` };
     }
   }
-  /**
-   * Extract searchable text from content data
-   */
-  extractSearchableText(data) {
-    const parts = [];
-    if (data.title) parts.push(String(data.title));
-    if (data.name) parts.push(String(data.name));
-    if (data.description) parts.push(String(data.description));
-    if (data.content) parts.push(String(data.content));
-    if (data.body) parts.push(String(data.body));
-    if (data.text) parts.push(String(data.text));
-    const extractStrings = (obj) => {
-      if (typeof obj === "string") {
-        parts.push(obj);
-      } else if (Array.isArray(obj)) {
-        obj.forEach(extractStrings);
-      } else if (obj && typeof obj === "object") {
-        Object.values(obj).forEach(extractStrings);
-      }
+  // =============================================
+  // Helpers
+  // =============================================
+  async checkFingerprint(fingerprint) {
+    const row = await this.db.prepare("SELECT id FROM ai_search_recommendations WHERE fingerprint = ? AND status IN ('pending', 'applied') LIMIT 1").bind(fingerprint).first();
+    return row !== null;
+  }
+  async insertRecommendation(rec) {
+    await this.db.prepare(`
+        INSERT INTO ai_search_recommendations (id, category, title, description, supporting_data, action_payload, fingerprint, run_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+      rec.id,
+      rec.category,
+      rec.title,
+      rec.description,
+      JSON.stringify(rec.supporting_data),
+      rec.action_payload ? JSON.stringify(rec.action_payload) : null,
+      rec.fingerprint,
+      rec.run_id
+    ).run();
+  }
+  mapRow(row) {
+    return {
+      id: row.id,
+      category: row.category,
+      title: row.title,
+      description: row.description,
+      supporting_data: typeof row.supporting_data === "string" ? JSON.parse(row.supporting_data) : row.supporting_data,
+      action_payload: row.action_payload ? typeof row.action_payload === "string" ? JSON.parse(row.action_payload) : row.action_payload : null,
+      status: row.status,
+      fingerprint: row.fingerprint,
+      run_id: row.run_id,
+      applied_at: row.applied_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at
     };
-    extractStrings(data);
-    return parts.join(" ");
   }
-  /**
-   * Update a single content item in the index
-   */
-  async updateIndex(collectionId, contentId) {
-    try {
-      const stmt = this.db.prepare(`
-            SELECT 
-              c.id, c.title, c.slug, c.data, c.status,
-              c.created_at, c.updated_at, c.author_id,
-              col.name as collection_name, col.display_name as collection_display_name
-            FROM content c
-            JOIN collections col ON c.collection_id = col.id
-            WHERE c.id = ? AND c.collection_id = ?
-          `);
-      const item = await stmt.bind(contentId, collectionId).first();
-      if (!item) {
-        throw new Error(`Content item ${contentId} not found`);
-      }
-      await this.indexContentItem(item, String(collectionId));
-      const status = await this.getIndexStatus(String(collectionId));
-      if (status) {
-        await this.updateIndexStatus(String(collectionId), {
-          ...status,
-          last_sync_at: Date.now()
-        });
-      }
-    } catch (error) {
-      console.error(`Error updating index for content ${contentId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Remove a content item from the index using Custom RAG
-   */
-  async removeFromIndex(collectionId, contentId) {
-    try {
-      if (this.customRAG?.isAvailable()) {
-        console.log(`[IndexManager] Removing content ${contentId} from index`);
-        await this.customRAG.removeContentFromIndex(contentId);
-      } else {
-        console.warn(`[IndexManager] Custom RAG not available, skipping removal for ${contentId}`);
-      }
-    } catch (error) {
-      console.error(`[IndexManager] Error removing content ${contentId} from index:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Get indexing status for a collection
-   */
-  async getIndexStatus(collectionId) {
-    try {
-      const stmt = this.db.prepare(
-        "SELECT * FROM ai_search_index_meta WHERE collection_id = ?"
-      );
-      const result = await stmt.bind(collectionId).first();
-      if (!result) {
-        return null;
-      }
-      return {
-        collection_id: String(result.collection_id),
-        collection_name: result.collection_name,
-        total_items: result.total_items,
-        indexed_items: result.indexed_items,
-        last_sync_at: result.last_sync_at,
-        status: result.status,
-        error_message: result.error_message
-      };
-    } catch (error) {
-      console.error(`Error getting index status for collection ${collectionId}:`, error);
-      return null;
-    }
-  }
-  /**
-   * Get indexing status for all collections
-   */
-  async getAllIndexStatus() {
-    try {
-      const stmt = this.db.prepare("SELECT * FROM ai_search_index_meta");
-      const { results } = await stmt.all();
-      const statusMap = {};
-      for (const row of results || []) {
-        const collectionId = String(row.collection_id);
-        statusMap[collectionId] = {
-          collection_id: collectionId,
-          collection_name: row.collection_name,
-          total_items: row.total_items,
-          indexed_items: row.indexed_items,
-          last_sync_at: row.last_sync_at,
-          status: row.status,
-          error_message: row.error_message
-        };
-      }
-      return statusMap;
-    } catch (error) {
-      console.error("Error getting all index status:", error);
-      return {};
-    }
-  }
-  /**
-   * Update index status in database
-   */
-  async updateIndexStatus(collectionId, status) {
-    try {
-      const checkStmt = this.db.prepare(
-        "SELECT id FROM ai_search_index_meta WHERE collection_id = ?"
-      );
-      const existing = await checkStmt.bind(collectionId).first();
-      if (existing) {
-        const stmt = this.db.prepare(`
-              UPDATE ai_search_index_meta 
-              SET collection_name = ?,
-                  total_items = ?,
-                  indexed_items = ?,
-                  last_sync_at = ?,
-                  status = ?,
-                  error_message = ?
-              WHERE collection_id = ?
-            `);
-        await stmt.bind(
-          status.collection_name,
-          status.total_items,
-          status.indexed_items,
-          status.last_sync_at || null,
-          status.status,
-          status.error_message || null,
-          String(collectionId)
-        ).run();
-      } else {
-        const stmt = this.db.prepare(`
-              INSERT INTO ai_search_index_meta (
-                collection_id, collection_name, total_items, indexed_items,
-                last_sync_at, status, error_message
-              ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            `);
-        await stmt.bind(
-          String(status.collection_id),
-          status.collection_name,
-          status.total_items,
-          status.indexed_items,
-          status.last_sync_at || null,
-          status.status,
-          status.error_message || null
-        ).run();
-      }
-    } catch (error) {
-      console.error(`Error updating index status for collection ${collectionId}:`, error);
-      throw error;
-    }
-  }
-  /**
-   * Sync all selected collections
-   */
-  async syncAll(selectedCollections) {
-    for (const collectionId of selectedCollections) {
-      try {
-        await this.indexCollection(collectionId);
-      } catch (error) {
-        console.error(`Error syncing collection ${collectionId}:`, error);
-      }
-    }
+  mapRunRow(row) {
+    return {
+      id: row.id,
+      status: row.status,
+      recommendations_count: row.recommendations_count ?? 0,
+      duration_ms: row.duration_ms,
+      error_message: row.error_message,
+      created_at: row.created_at,
+      completed_at: row.completed_at
+    };
   }
 };
-
-// src/plugins/core-plugins/ai-search-plugin/components/settings-page.ts
-function renderSettingsPage(data) {
-  const settings = data.settings || {
-    enabled: false,
-    ai_mode_enabled: true,
-    selected_collections: [],
-    dismissed_collections: [],
-    autocomplete_enabled: true,
-    cache_duration: 1,
-    results_limit: 20,
-    index_media: false
-  };
-  const selectedCollections = Array.isArray(settings.selected_collections) ? settings.selected_collections : [];
-  const dismissedCollections = Array.isArray(settings.dismissed_collections) ? settings.dismissed_collections : [];
-  const enabled = settings.enabled === true;
-  const aiModeEnabled = settings.ai_mode_enabled !== false;
-  const autocompleteEnabled = settings.autocomplete_enabled !== false;
-  const indexMedia = settings.index_media === true;
-  const selectedCollectionIds = new Set(selectedCollections.map((id) => String(id)));
-  const dismissedCollectionIds = new Set(dismissedCollections.map((id) => String(id)));
-  const collections2 = Array.isArray(data.collections) ? data.collections : [];
-  console.log("[SettingsPage Template] Collections received:", collections2.length);
-  if (collections2.length > 0) {
-    console.log("[SettingsPage Template] First collection:", collections2[0]);
+var STOPWORDS = /* @__PURE__ */ new Set([
+  "a",
+  "an",
+  "the",
+  "is",
+  "it",
+  "in",
+  "on",
+  "at",
+  "to",
+  "of",
+  "and",
+  "or",
+  "for",
+  "by",
+  "as",
+  "be",
+  "do",
+  "he",
+  "she",
+  "we",
+  "my",
+  "me",
+  "no",
+  "so",
+  "up",
+  "if",
+  "am",
+  "us",
+  "i",
+  "not",
+  "but",
+  "are",
+  "was",
+  "has",
+  "had",
+  "all",
+  "can",
+  "her",
+  "his",
+  "its",
+  "may",
+  "our",
+  "own",
+  "too",
+  "who",
+  "did",
+  "get",
+  "got",
+  "him",
+  "how",
+  "let",
+  "new",
+  "now",
+  "old",
+  "out",
+  "say",
+  "she",
+  "use",
+  "way",
+  "why",
+  "yes",
+  "yet",
+  "you"
+]);
+function fnv1aHash(input) {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
   }
-  const content2 = `
-    <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
-      <!-- Header with Back Button -->
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">\u{1F50D} AI Search Settings</h1>
-          <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">
-            Configure advanced search with Cloudflare AI Search. Select collections to index and manage search preferences.
-          </p>
-        </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-3">
-          <a href="/admin/plugins/ai-search/integration" target="_blank" class="inline-flex items-center justify-center rounded-lg bg-green-600 hover:bg-green-700 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
-            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-            </svg>
-            Headless Guide
-          </a>
-          <a href="/admin/plugins/ai-search/test" target="_blank" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm">
-            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-            </svg>
-            Test Search
-          </a>
-          <a href="/admin/plugins" class="inline-flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
-            <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-            </svg>
-            Back to Plugins
-          </a>
-        </div>
-      </div>
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let curr = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        prev[j] + 1,
+        // deletion
+        curr[j - 1] + 1,
+        // insertion
+        prev[j - 1] + cost
+        // substitution
+      );
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length];
+}
+function getTokenOverlap(a, b) {
+  const tokensA = new Set(a.split(/\s+/).filter(Boolean));
+  const tokensB = new Set(b.split(/\s+/).filter(Boolean));
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+  let intersection = 0;
+  for (const t of tokensA) {
+    if (tokensB.has(t)) intersection++;
+  }
+  const union = (/* @__PURE__ */ new Set([...tokensA, ...tokensB])).size;
+  return union > 0 ? intersection / union : 0;
+}
 
-
-          <!-- Main Settings Card -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 mb-6">
-            <form id="settingsForm" class="space-y-6">
-              <!-- Enable Search Section -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">\u{1F50D} Search Settings</h2>
-                <div class="space-y-3">
-                  <div class="flex items-center gap-3 p-4 border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-                    <input type="checkbox" id="enabled" name="enabled" ${enabled ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">Enable AI Search</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Turn on advanced search capabilities across your content</p>
-                    </div>
-                  </div>
-
-                  <div class="flex items-center gap-3 p-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <input type="checkbox" id="ai_mode_enabled" name="ai_mode_enabled" ${aiModeEnabled ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="ai_mode_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">\u{1F916} AI/Semantic Search</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                        Enable natural language queries (requires Cloudflare Workers AI binding)
-                        <a href="https://developers.cloudflare.com/workers-ai/" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline ml-1">\u2192 Setup Guide</a>
-                      </p>
-                      <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                        \u26A0\uFE0F If AI binding unavailable, will fallback to keyword search
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- Collections Section -->
-              <div>
-                <div class="flex items-start justify-between mb-4">
-                  <div>
-                    <h2 class="text-xl font-semibold text-zinc-950 dark:text-white">\u{1F4DA} Collections to Index</h2>
-                    <p class="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-                      Select which content collections should be indexed and searchable. Only checked collections will be included in search results.
-                    </p>
-                  </div>
-                </div>
-            <div class="space-y-3 max-h-96 overflow-y-auto border-2 border-zinc-300 dark:border-zinc-700 rounded-lg p-4 bg-white dark:bg-zinc-800" id="collections-list">
-              ${collections2.length === 0 ? '<p class="text-sm text-zinc-500 dark:text-zinc-400 p-4">No collections available. Create collections first.</p>' : collections2.map((collection) => {
-    const collectionId = String(collection.id);
-    const isChecked = selectedCollectionIds.has(collectionId);
-    const isDismissed = dismissedCollectionIds.has(collectionId);
-    const indexStatusMap = data.indexStatus || {};
-    const status = indexStatusMap[collectionId];
-    const isNew = collection.is_new === true && !isDismissed && !status;
-    const statusBadge = status && isChecked ? `<span class="ml-2 px-2 py-1 text-xs rounded-full ${status.status === "completed" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" : status.status === "indexing" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" : status.status === "error" ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"}">${status.status}</span>` : "";
-    return `<div class="flex items-start gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 ${isNew ? "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"}">
-                      <input
-                        type="checkbox"
-                        id="collection_${collectionId}"
-                        name="selected_collections"
-                        value="${collectionId}"
-                        ${isChecked ? "checked" : ""}
-                        class="mt-1 w-5 h-5 text-indigo-600 bg-white border-gray-300 rounded focus:ring-indigo-500 focus:ring-2 cursor-pointer"
-                        style="cursor: pointer; flex-shrink: 0;"
-                      />
-                      <div class="flex-1 min-w-0">
-                        <label for="collection_${collectionId}" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer flex items-center">
-                          ${collection.display_name || collection.name || "Unnamed Collection"}
-                          ${isNew ? '<span class="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">NEW</span>' : ""}
-                          ${statusBadge}
-                        </label>
-                        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          ${collection.description || collection.name || "No description"} \u2022 ${collection.item_count || 0} items
-                          ${status ? ` \u2022 ${status.indexed_items}/${status.total_items} indexed` : ""}
-                        </p>
-                        ${status && status.status === "indexing" ? `<div class="mt-2 w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                              <div class="bg-blue-600 h-2 rounded-full" style="width: ${status.indexed_items / status.total_items * 100}%"></div>
-                            </div>` : ""}
-                      </div>
-                      ${isChecked ? `
-                        <button
-                          type="button"
-                          onclick="reindexCollection('${collectionId}')"
-                          class="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap"
-                          ${status && status.status === "indexing" ? "disabled" : ""}
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          Re-index
-                        </button>
-                      ` : ""}
-                    </div>`;
-  }).join("")}
-            </div>
-          </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- Advanced Options -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">\u2699\uFE0F Advanced Options</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="flex items-start gap-3 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <input type="checkbox" id="autocomplete_enabled" name="autocomplete_enabled" ${autocompleteEnabled ? "checked" : ""} class="mt-0.5 w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                    <div>
-                      <label for="autocomplete_enabled" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer block">Autocomplete Suggestions</label>
-                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Show search suggestions as users type</p>
-                    </div>
-                  </div>
-
-                  <div class="flex items-start gap-3 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <input type="checkbox" id="index_media" name="index_media" ${indexMedia ? "checked" : ""} class="mt-0.5 w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                    <div>
-                      <label for="index_media" class="text-sm font-medium text-zinc-950 dark:text-white select-none cursor-pointer block">Index Media Metadata</label>
-                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Include media files in search results</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Cache Duration (hours)</label>
-                    <input type="number" id="cache_duration" name="cache_duration" value="${settings.cache_duration || 1}" min="0" max="24" class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Results Per Page</label>
-                    <input type="number" id="results_limit" name="results_limit" value="${settings.results_limit || 20}" min="10" max="100" class="w-full rounded-lg bg-white dark:bg-white/5 px-3 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500">
-                  </div>
-                </div>
-          </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- Hybrid Search Settings -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">Hybrid Search</h2>
-                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-                  Hybrid mode combines FTS5 + AI search with Reciprocal Rank Fusion for best-quality results. Use <code>mode: "hybrid"</code> in your API requests.
-                </p>
-                <div class="space-y-3">
-                  <div class="flex items-center gap-3 p-4 border border-purple-200 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <input type="checkbox" id="reranking_enabled" name="reranking_enabled" ${settings.reranking_enabled !== false ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="reranking_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">AI Reranking</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                        Cross-encoder reranks results for better relevance. Adds ~50-150ms. Cost: ~$0.003/M tokens.
-                      </p>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-3 p-4 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                    <input type="checkbox" id="query_rewriting_enabled" name="query_rewriting_enabled" ${settings.query_rewriting_enabled ? "checked" : ""} class="w-5 h-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer">
-                    <div class="flex-1">
-                      <label for="query_rewriting_enabled" class="text-base font-semibold text-zinc-900 dark:text-white select-none cursor-pointer block">Query Rewriting (LLM)</label>
-                      <p class="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                        Expands vague queries using an LLM for better recall. Adds ~100-300ms. Best for large content libraries.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <hr class="border-zinc-200 dark:border-zinc-800">
-
-              <!-- FTS5 Full-Text Search Section -->
-              <div>
-                <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-2">FTS5 Full-Text Search</h2>
-                <p class="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-                  SQLite FTS5 provides fast full-text search with BM25 ranking, stemming, and highlighting. No AI binding required.
-                </p>
-                <div id="fts5-status" class="p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 mb-4">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300" id="fts5-status-text">Checking FTS5 status...</span>
-                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1" id="fts5-stats-text"></p>
-                    </div>
-                    <button
-                      type="button"
-                      id="fts5-reindex-btn"
-                      onclick="reindexFTS5All()"
-                      class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reindex All (FTS5)
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Save Button -->
-              <div class="flex items-center justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <p class="text-xs text-zinc-500 dark:text-zinc-400">
-                  \u{1F4A1} Collections marked as <span class="px-1.5 py-0.5 text-xs font-medium rounded-full bg-blue-500 text-white">NEW</span> haven't been indexed yet
-                </p>
-                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm transition-colors">
-                  \u{1F4BE} Save Settings
-                </button>
-              </div>
-        </form>
-      </div>
-
-
-          <!-- Search Analytics -->
-          <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
-            <h2 class="text-xl font-semibold text-zinc-950 dark:text-white mb-4">\u{1F4CA} Search Analytics</h2>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">Total Queries</div>
-            <div class="text-2xl font-bold text-zinc-950 dark:text-white mt-1">${data.analytics.total_queries}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">AI Queries</div>
-            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">${data.analytics.ai_queries}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">Keyword Queries</div>
-            <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">${data.analytics.keyword_queries}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">FTS5 Queries</div>
-            <div class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">${data.analytics.fts5_queries || 0}</div>
-          </div>
-          <div class="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">Hybrid Queries</div>
-            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">${data.analytics.hybrid_queries || 0}</div>
-          </div>
-        </div>
-        ${data.analytics.popular_queries.length > 0 ? `
-              <div>
-                <h3 class="text-sm font-semibold text-zinc-950 dark:text-white mb-2">Popular Searches</h3>
-                <div class="space-y-1">
-                  ${data.analytics.popular_queries.map(
-    (item) => `
-                      <div class="flex items-center justify-between text-sm">
-                        <span class="text-zinc-700 dark:text-zinc-300">"${item.query}"</span>
-                        <span class="text-zinc-500 dark:text-zinc-400">${item.count} times</span>
-                      </div>
-                    `
-  ).join("")}
-                </div>
-              </div>
-            ` : '<p class="text-sm text-zinc-500 dark:text-zinc-400">No search history yet.</p>'}
-      </div>
-
-          <!-- Success Message -->
-          <div id="msg" class="hidden fixed bottom-4 right-4 p-4 rounded-lg bg-green-50 text-green-900 border border-green-200 dark:bg-green-900/20 dark:text-green-100 dark:border-green-800 shadow-lg z-50">
-            <div class="flex items-center gap-2">
-              <span class="text-xl">\u2705</span>
-              <span class="font-semibold">Settings Saved Successfully!</span>
-            </div>
-          </div>
-    </div>
-    <script>
-      // Form submission with error handling
-      document.getElementById('settingsForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        console.log('[AI Search Client] Form submitted');
-        
-        try {
-          const btn = e.submitter;
-          btn.innerText = 'Saving...'; 
-          btn.disabled = true;
-          
-          const formData = new FormData(e.target);
-          const selectedCollections = Array.from(formData.getAll('selected_collections')).map(String);
-          
-          const data = {
-            enabled: document.getElementById('enabled').checked,
-            ai_mode_enabled: document.getElementById('ai_mode_enabled').checked,
-            selected_collections: selectedCollections,
-            autocomplete_enabled: document.getElementById('autocomplete_enabled').checked,
-            cache_duration: Number(formData.get('cache_duration')),
-            results_limit: Number(formData.get('results_limit')),
-            index_media: document.getElementById('index_media').checked,
-            reranking_enabled: document.getElementById('reranking_enabled').checked,
-            query_rewriting_enabled: document.getElementById('query_rewriting_enabled').checked,
-          };
-          
-          console.log('[AI Search Client] Sending data:', data);
-          console.log('[AI Search Client] Selected collections:', selectedCollections);
-          
-          const res = await fetch('/admin/plugins/ai-search', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify(data) 
-          });
-          
-          console.log('[AI Search Client] Response status:', res.status);
-          
-          if (res.ok) {
-            const result = await res.json();
-            console.log('[AI Search Client] Save successful:', result);
-            document.getElementById('msg').classList.remove('hidden'); 
-            setTimeout(() => {
-              document.getElementById('msg').classList.add('hidden');
-              location.reload();
-            }, 2000); 
-          } else {
-            const error = await res.text();
-            console.error('[AI Search Client] Save failed:', error);
-            alert('Failed to save settings: ' + error);
-          }
-          
-          btn.innerText = 'Save Settings'; 
-          btn.disabled = false;
-        } catch (error) {
-          console.error('[AI Search Client] Error:', error);
-          alert('Error saving settings: ' + error.message);
-        }
+// src/plugins/core-plugins/ai-search-plugin/services/experiment.service.ts
+function rowToExperiment(row) {
+  return {
+    ...row,
+    status: row.status,
+    mode: row.mode,
+    variants: JSON.parse(row.variants),
+    metrics: row.metrics ? JSON.parse(row.metrics) : null
+  };
+}
+var ExperimentService = class {
+  constructor(db, kv, analytics) {
+    this.db = db;
+    this.kv = kv;
+    this.analytics = analytics;
+  }
+  // =============================================
+  // CRUD
+  // =============================================
+  async getAll(options) {
+    const conditions = [];
+    const params = [];
+    if (options?.status) {
+      conditions.push("status = ?");
+      params.push(options.status);
+    }
+    if (options?.mode) {
+      conditions.push("mode = ?");
+      params.push(options.mode);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    const rows = await this.db.prepare(`SELECT * FROM ai_search_experiments ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all();
+    return (rows.results || []).map(rowToExperiment);
+  }
+  async getById(id) {
+    const row = await this.db.prepare("SELECT * FROM ai_search_experiments WHERE id = ?").bind(id).first();
+    return row ? rowToExperiment(row) : null;
+  }
+  async create(data) {
+    const id = `exp-${crypto.randomUUID().slice(0, 8)}`;
+    const now = Date.now();
+    await this.db.prepare(`
+        INSERT INTO ai_search_experiments (id, name, description, mode, traffic_pct, split_ratio, variants, min_searches, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+      id,
+      data.name,
+      data.description || null,
+      data.mode || "ab",
+      data.traffic_pct ?? 100,
+      data.split_ratio ?? 0.5,
+      JSON.stringify(data.variants),
+      data.min_searches ?? 100,
+      now,
+      now
+    ).run();
+    return await this.getById(id);
+  }
+  async update(id, data) {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    if (existing.status !== "draft") {
+      throw new Error("Can only update experiments in draft status");
+    }
+    const sets = [];
+    const params = [];
+    if (data.name !== void 0) {
+      sets.push("name = ?");
+      params.push(data.name);
+    }
+    if (data.description !== void 0) {
+      sets.push("description = ?");
+      params.push(data.description);
+    }
+    if (data.mode !== void 0) {
+      sets.push("mode = ?");
+      params.push(data.mode);
+    }
+    if (data.traffic_pct !== void 0) {
+      sets.push("traffic_pct = ?");
+      params.push(data.traffic_pct);
+    }
+    if (data.split_ratio !== void 0) {
+      sets.push("split_ratio = ?");
+      params.push(data.split_ratio);
+    }
+    if (data.variants !== void 0) {
+      sets.push("variants = ?");
+      params.push(JSON.stringify(data.variants));
+    }
+    if (data.min_searches !== void 0) {
+      sets.push("min_searches = ?");
+      params.push(data.min_searches);
+    }
+    if (sets.length === 0) return existing;
+    sets.push("updated_at = ?");
+    params.push(Date.now());
+    params.push(id);
+    await this.db.prepare(`UPDATE ai_search_experiments SET ${sets.join(", ")} WHERE id = ?`).bind(...params).run();
+    return this.getById(id);
+  }
+  async delete(id) {
+    const existing = await this.getById(id);
+    if (!existing) return false;
+    if (existing.status !== "draft" && existing.status !== "archived") {
+      throw new Error("Can only delete experiments in draft or archived status");
+    }
+    await this.db.prepare("DELETE FROM ai_search_experiments WHERE id = ?").bind(id).run();
+    return true;
+  }
+  // =============================================
+  // Lifecycle
+  // =============================================
+  async start(id) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "draft" && existing.status !== "paused") {
+      throw new Error(`Cannot start experiment in ${existing.status} status`);
+    }
+    const running = await this.getAll({ status: "running" });
+    const conflict = running[0];
+    if (conflict) {
+      throw new Error(`Another experiment is already running: ${conflict.name} (${conflict.id})`);
+    }
+    const now = Date.now();
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, started_at = COALESCE(started_at, ?), updated_at = ? WHERE id = ?").bind("running", now, now, id).run();
+    if (this.kv) {
+      const experiment = await this.getById(id);
+      await this.kv.put("experiment:active", JSON.stringify(experiment), { expirationTtl: 86400 });
+    }
+    return await this.getById(id);
+  }
+  async pause(id) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "running") {
+      throw new Error("Can only pause running experiments");
+    }
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, updated_at = ? WHERE id = ?").bind("paused", Date.now(), id).run();
+    if (this.kv) await this.kv.delete("experiment:active");
+    return await this.getById(id);
+  }
+  async complete(id, winner) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "running" && existing.status !== "paused") {
+      throw new Error(`Cannot complete experiment in ${existing.status} status`);
+    }
+    const now = Date.now();
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, winner = ?, ended_at = ?, updated_at = ? WHERE id = ?").bind("completed", winner || existing.winner, now, now, id).run();
+    if (this.kv) await this.kv.delete("experiment:active");
+    return await this.getById(id);
+  }
+  async archive(id) {
+    const existing = await this.getById(id);
+    if (!existing) throw new Error("Experiment not found");
+    if (existing.status !== "completed") {
+      throw new Error("Can only archive completed experiments");
+    }
+    await this.db.prepare("UPDATE ai_search_experiments SET status = ?, updated_at = ? WHERE id = ?").bind("archived", Date.now(), id).run();
+    return await this.getById(id);
+  }
+  // =============================================
+  // Active Experiment Lookup (called on every search)
+  // =============================================
+  async getActiveExperiment() {
+    if (this.kv) {
+      try {
+        const cached = await this.kv.get("experiment:active", "json");
+        if (cached) return cached;
+      } catch {
+      }
+    }
+    const row = await this.db.prepare("SELECT * FROM ai_search_experiments WHERE status = 'running' LIMIT 1").first();
+    if (!row) return null;
+    const experiment = rowToExperiment(row);
+    if (this.kv) {
+      try {
+        await this.kv.put("experiment:active", JSON.stringify(experiment), { expirationTtl: 86400 });
+      } catch {
+      }
+    }
+    return experiment;
+  }
+  // =============================================
+  // Variant Assignment
+  // =============================================
+  /**
+   * Deterministic variant assignment via FNV-1a hash.
+   * Same user + experiment always gets the same variant.
+   */
+  assignVariant(experimentId, userId, splitRatio = 0.5) {
+    const hash = fnv1a(`${userId}:${experimentId}`);
+    return hash % 100 < splitRatio * 100 ? "treatment" : "control";
+  }
+  /**
+   * Check if a user should be enrolled in the experiment based on traffic_pct.
+   */
+  shouldEnroll(experimentId, userId, trafficPct) {
+    const hash = fnv1a(`enroll:${userId}:${experimentId}`);
+    return hash % 100 < trafficPct;
+  }
+  // =============================================
+  // Event Tracking
+  // =============================================
+  trackSearchEvent(data) {
+    if (this.analytics) {
+      this.analytics.writeDataPoint({
+        indexes: [data.experimentId],
+        blobs: [data.variantId, data.query, data.searchMode, data.userId, data.searchId],
+        doubles: [data.resultsCount, data.responseTimeMs, 0, 0]
       });
-
-      // Add collection to index
-      async function addCollectionToIndex(collectionId) {
-        const form = document.getElementById('settingsForm');
-        const checkbox = document.getElementById('collection_' + collectionId);
-        if (checkbox) {
-          checkbox.checked = true;
-          form.dispatchEvent(new Event('submit'));
-        }
+    } else {
+      this.db.prepare(`
+          INSERT INTO ai_search_experiment_events (id, experiment_id, event_type, variant_id, query, search_mode, user_id, search_id, results_count, response_time_ms, created_at)
+          VALUES (?, ?, 'search', ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+        crypto.randomUUID(),
+        data.experimentId,
+        data.variantId,
+        data.query,
+        data.searchMode,
+        data.userId,
+        data.searchId,
+        data.resultsCount,
+        data.responseTimeMs,
+        Date.now()
+      ).run().catch((e) => console.error("[ExperimentService] D1 search event tracking failed:", e));
+    }
+  }
+  trackClickEvent(data) {
+    if (this.analytics) {
+      this.analytics.writeDataPoint({
+        indexes: [data.experimentId],
+        blobs: [data.variantId, data.searchId, data.contentId],
+        doubles: [1, data.clickPosition]
+      });
+    } else {
+      this.db.prepare(`
+          INSERT INTO ai_search_experiment_events (id, experiment_id, event_type, variant_id, search_id, content_id, click_position, created_at)
+          VALUES (?, ?, 'click', ?, ?, ?, ?, ?)
+        `).bind(
+        crypto.randomUUID(),
+        data.experimentId,
+        data.variantId,
+        data.searchId,
+        data.contentId,
+        data.clickPosition,
+        Date.now()
+      ).run().catch((e) => console.error("[ExperimentService] D1 click event tracking failed:", e));
+    }
+  }
+  // =============================================
+  // Experiment Evaluation (called by cron)
+  // =============================================
+  async evaluateExperiment(id) {
+    const experiment = await this.getById(id);
+    if (!experiment || experiment.status !== "running") return null;
+    let metrics;
+    if (this.analytics) {
+      metrics = await this.evaluateFromAnalyticsEngine(id);
+    } else {
+      metrics = await this.evaluateFromD1(id);
+    }
+    const now = Date.now();
+    await this.db.prepare("UPDATE ai_search_experiments SET metrics = ?, confidence = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(metrics), metrics.confidence, now, id).run();
+    const totalSearches = metrics.control.searches + metrics.treatment.searches;
+    if (metrics.significant && totalSearches >= experiment.min_searches) {
+      const winner = metrics.control.ctr >= metrics.treatment.ctr ? "control" : "treatment";
+      await this.complete(id, winner);
+    }
+    if (this.kv) {
+      const updated = await this.getById(id);
+      if (updated && updated.status === "running") {
+        await this.kv.put("experiment:active", JSON.stringify(updated), { expirationTtl: 86400 });
       }
-
-      // Dismiss collection
-      async function dismissCollection(collectionId) {
-        const res = await fetch('/admin/plugins/ai-search', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            dismissed_collections: [collectionId]
-          })
-        });
-        if (res.ok) {
-          location.reload();
-        }
-      }
-
-      // Re-index collection
-      async function reindexCollection(collectionId) {
-        const res = await fetch('/admin/plugins/ai-search/api/reindex', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ collection_id: collectionId })
-        });
-        if (res.ok) {
-          alert('Re-indexing started. Page will refresh in a moment.');
-          setTimeout(() => location.reload(), 2000);
-        } else {
-          alert('Failed to start re-indexing. Please try again.');
-        }
-      }
-
-      // Poll for index status updates
-      setInterval(async () => {
-        const res = await fetch('/admin/plugins/ai-search/api/status');
-        if (res.ok) {
-          const { data } = await res.json();
-          // Update status indicators if needed
-          // For now, just reload every 30 seconds if indexing is in progress
-          const hasIndexing = Object.values(data).some((s) => s.status === 'indexing');
-          if (hasIndexing) {
-            location.reload();
-          }
-        }
-      }, 30000);
-
-      // FTS5 status check on load
-      (async function checkFTS5Status() {
-        try {
-          const res = await fetch('/admin/plugins/ai-search/api/fts5/status');
-          if (res.ok) {
-            const { data } = await res.json();
-            const statusText = document.getElementById('fts5-status-text');
-            const statsText = document.getElementById('fts5-stats-text');
-            const reindexBtn = document.getElementById('fts5-reindex-btn');
-            if (data.available) {
-              statusText.textContent = 'FTS5 is available';
-              statsText.textContent = data.total_indexed + ' items indexed across ' + Object.keys(data.by_collection || {}).length + ' collections';
-              reindexBtn.disabled = false;
-            } else {
-              statusText.textContent = 'FTS5 tables not created yet';
-              statsText.textContent = 'Run migrations to enable FTS5 full-text search.';
-            }
-          }
-        } catch (e) {
-          console.error('FTS5 status check failed:', e);
-        }
-      })();
-
-      // Reindex all collections for FTS5
-      async function reindexFTS5All() {
-        const btn = document.getElementById('fts5-reindex-btn');
-        btn.disabled = true;
-        btn.textContent = 'Reindexing...';
-        try {
-          const res = await fetch('/admin/plugins/ai-search/api/fts5/reindex-all', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-          if (res.ok) {
-            const result = await res.json();
-            alert('FTS5 reindex started for ' + (result.collections?.length || 0) + ' collections');
-            setTimeout(() => location.reload(), 3000);
-          } else {
-            alert('Failed to start FTS5 reindex');
-            btn.disabled = false;
-            btn.textContent = 'Reindex All (FTS5)';
-          }
-        } catch (e) {
-          alert('Error: ' + e.message);
-          btn.disabled = false;
-          btn.textContent = 'Reindex All (FTS5)';
-        }
-      }
-    </script>
-  `;
-  return chunkSHCYIZAN_cjs.renderAdminLayout({
-    title: "AI Search Settings",
-    pageTitle: "AI Search Settings",
-    currentPath: "/admin/plugins/ai-search/settings",
-    user: data.user,
-    content: content2
-  });
+    }
+    return metrics;
+  }
+  async evaluateFromD1(experimentId) {
+    const searchRows = await this.db.prepare(`
+        SELECT variant_id,
+               COUNT(*) as searches,
+               SUM(CASE WHEN results_count = 0 THEN 1 ELSE 0 END) as zero_results,
+               AVG(response_time_ms) as avg_response_time
+        FROM ai_search_experiment_events
+        WHERE experiment_id = ? AND event_type = 'search'
+        GROUP BY variant_id
+      `).bind(experimentId).all();
+    const clickRows = await this.db.prepare(`
+        SELECT variant_id,
+               COUNT(*) as clicks,
+               AVG(click_position) as avg_position
+        FROM ai_search_experiment_events
+        WHERE experiment_id = ? AND event_type = 'click'
+        GROUP BY variant_id
+      `).bind(experimentId).all();
+    return this.buildMetrics(searchRows.results || [], clickRows.results || []);
+  }
+  async evaluateFromAnalyticsEngine(_experimentId) {
+    return this.evaluateFromD1(_experimentId);
+  }
+  buildMetrics(searchRows, clickRows) {
+    const getVariant = (rows, variant) => rows.find((r) => r.variant_id === variant);
+    const controlSearches = getVariant(searchRows, "control");
+    const treatmentSearches = getVariant(searchRows, "treatment");
+    const controlClicks = getVariant(clickRows, "control");
+    const treatmentClicks = getVariant(clickRows, "treatment");
+    const cSearches = controlSearches?.searches || 0;
+    const tSearches = treatmentSearches?.searches || 0;
+    const cClicks = controlClicks?.clicks || 0;
+    const tClicks = treatmentClicks?.clicks || 0;
+    const control = {
+      searches: cSearches,
+      clicks: cClicks,
+      ctr: cSearches > 0 ? cClicks / cSearches : 0,
+      zero_result_rate: cSearches > 0 ? (controlSearches?.zero_results || 0) / cSearches : 0,
+      avg_click_position: controlClicks?.avg_position || 0,
+      avg_response_time_ms: controlSearches?.avg_response_time || 0
+    };
+    const treatment = {
+      searches: tSearches,
+      clicks: tClicks,
+      ctr: tSearches > 0 ? tClicks / tSearches : 0,
+      zero_result_rate: tSearches > 0 ? (treatmentSearches?.zero_results || 0) / tSearches : 0,
+      avg_click_position: treatmentClicks?.avg_position || 0,
+      avg_response_time_ms: treatmentSearches?.avg_response_time || 0
+    };
+    const chi2 = chiSquared(cClicks, cSearches, tClicks, tSearches);
+    const confidence = chi2ToConfidence(chi2);
+    return {
+      control,
+      treatment,
+      confidence,
+      significant: confidence >= 0.95
+    };
+  }
+};
+function chiSquared(controlClicks, controlImpressions, treatmentClicks, treatmentImpressions) {
+  if (controlImpressions === 0 || treatmentImpressions === 0) return 0;
+  const controlNoClick = controlImpressions - controlClicks;
+  const treatmentNoClick = treatmentImpressions - treatmentClicks;
+  const total = controlImpressions + treatmentImpressions;
+  const totalClicks = controlClicks + treatmentClicks;
+  const totalNoClicks = controlNoClick + treatmentNoClick;
+  if (totalClicks === 0 || totalNoClicks === 0) return 0;
+  const eCC = controlImpressions * totalClicks / total;
+  const eCN = controlImpressions * totalNoClicks / total;
+  const eTC = treatmentImpressions * totalClicks / total;
+  const eTN = treatmentImpressions * totalNoClicks / total;
+  return (controlClicks - eCC) ** 2 / eCC + (controlNoClick - eCN) ** 2 / eCN + (treatmentClicks - eTC) ** 2 / eTC + (treatmentNoClick - eTN) ** 2 / eTN;
+}
+function chi2ToConfidence(chi2) {
+  if (chi2 >= 10.83) return 0.999;
+  if (chi2 >= 6.63) return 0.99;
+  if (chi2 >= 3.84) return 0.95;
+  if (chi2 >= 2.71) return 0.9;
+  if (chi2 >= 1.32) return 0.75;
+  return chi2 / 3.84 * 0.95;
+}
+function fnv1a(str) {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 // src/plugins/core-plugins/ai-search-plugin/routes/admin.ts
+var clampWeight = (val, fallback) => {
+  const n = Number(val);
+  return isNaN(n) || !isFinite(n) ? fallback : Math.round(Math.min(10, Math.max(0, n)) * 10) / 10;
+};
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkZS5MYHCW_cjs.requireAuth());
+adminRoutes.use("*", chunkJRX4WLFV_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
-    const indexer = new IndexManager(db, ai, vectorize);
-    const settings = await service.getSettings();
-    console.log("[AI Search Settings Route] Settings loaded:", !!settings);
-    const collections2 = await service.getAllCollections();
-    console.log("[AI Search Settings Route] Collections returned:", collections2.length);
-    if (collections2.length === 0) {
-      const directQuery = await db.prepare("SELECT id, name, display_name FROM collections WHERE is_active = 1").all();
-      console.log("[AI Search Settings Route] Direct DB query found:", directQuery.results?.length || 0, "collections");
-      if (directQuery.results && directQuery.results.length > 0) {
-        console.log("[AI Search Settings Route] Sample from DB:", directQuery.results[0]);
-      }
-    } else if (collections2.length > 0 && collections2[0]) {
-      console.log("[AI Search Settings Route] First collection:", {
-        id: collections2[0].id,
-        name: collections2[0].name,
-        display_name: collections2[0].display_name
-      });
+    const kv = c.env.CACHE_KV;
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize, kv);
+    const indexer = new chunkKAEZ35ZT_cjs.IndexManager(db, ai, vectorize);
+    const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
+    let settings = null;
+    try {
+      settings = await service.getSettings();
+    } catch {
     }
-    const newCollections = await service.detectNewCollections();
-    console.log("AI Search: New collections:", newCollections.length);
-    const indexStatus = await indexer.getAllIndexStatus();
-    console.log("AI Search: Index status:", Object.keys(indexStatus).length);
-    const analytics = await service.getSearchAnalytics();
+    let collections2 = [];
+    try {
+      collections2 = await service.getAllCollections() || [];
+    } catch {
+    }
+    let newCollections = [];
+    try {
+      const detected = await service.detectNewCollections();
+      newCollections = (detected || []).map((n) => ({ id: String(n.collection.id), name: n.collection.name }));
+    } catch {
+    }
+    let indexStatus = {};
+    try {
+      indexStatus = await indexer.getAllIndexStatus() || {};
+    } catch {
+    }
+    let analytics = null;
+    try {
+      analytics = await service.getSearchAnalytics();
+    } catch {
+    }
+    let fts5Status = null;
+    try {
+      const available = await fts5Service.isAvailable();
+      if (available) {
+        const stats = await fts5Service.getStats();
+        fts5Status = { available: true, total_indexed: stats.total_indexed, by_collection: stats.by_collection };
+      } else {
+        fts5Status = { available: false, total_indexed: 0, by_collection: {} };
+      }
+    } catch {
+    }
     return c.html(
-      renderSettingsPage({
+      chunkKAEZ35ZT_cjs.renderSearchDashboard({
         settings,
         collections: collections2 || [],
-        newCollections: newCollections || [],
+        newCollections,
         indexStatus: indexStatus || {},
         analytics,
+        fts5Status,
+        benchmarkStatus: null,
         user: {
           name: user.email,
           email: user.email,
@@ -4817,8 +3814,8 @@ adminRoutes.get("/", async (c) => {
       })
     );
   } catch (error) {
-    console.error("Error rendering AI Search settings:", error);
-    return c.html(`<p>Error loading settings: ${error instanceof Error ? error.message : String(error)}</p>`, 500);
+    console.error("Error rendering search dashboard:", error);
+    return c.html(`<p>Error loading dashboard: ${error instanceof Error ? error.message : String(error)}</p>`, 500);
   }
 });
 adminRoutes.post("/", async (c) => {
@@ -4826,8 +3823,8 @@ adminRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
-    const indexer = new IndexManager(db, ai, vectorize);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
+    const indexer = new chunkKAEZ35ZT_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     console.log("[AI Search POST] Received body:", JSON.stringify(body, null, 2));
     const currentSettings = await service.getSettings();
@@ -4842,7 +3839,14 @@ adminRoutes.post("/", async (c) => {
       results_limit: body.results_limit ? Number(body.results_limit) : currentSettings?.results_limit,
       index_media: body.index_media !== void 0 ? Boolean(body.index_media) : currentSettings?.index_media,
       reranking_enabled: body.reranking_enabled !== void 0 ? Boolean(body.reranking_enabled) : currentSettings?.reranking_enabled,
-      query_rewriting_enabled: body.query_rewriting_enabled !== void 0 ? Boolean(body.query_rewriting_enabled) : currentSettings?.query_rewriting_enabled
+      query_rewriting_enabled: body.query_rewriting_enabled !== void 0 ? Boolean(body.query_rewriting_enabled) : currentSettings?.query_rewriting_enabled,
+      fts5_title_boost: body.fts5_title_boost !== void 0 ? clampWeight(body.fts5_title_boost, currentSettings?.fts5_title_boost ?? 5) : currentSettings?.fts5_title_boost,
+      fts5_slug_boost: body.fts5_slug_boost !== void 0 ? clampWeight(body.fts5_slug_boost, currentSettings?.fts5_slug_boost ?? 2) : currentSettings?.fts5_slug_boost,
+      fts5_body_boost: body.fts5_body_boost !== void 0 ? clampWeight(body.fts5_body_boost, currentSettings?.fts5_body_boost ?? 1) : currentSettings?.fts5_body_boost,
+      query_synonyms_enabled: body.query_synonyms_enabled !== void 0 ? Boolean(body.query_synonyms_enabled) : currentSettings?.query_synonyms_enabled,
+      facets_enabled: body.facets_enabled !== void 0 ? Boolean(body.facets_enabled) : currentSettings?.facets_enabled,
+      facet_config: Array.isArray(body.facet_config) ? body.facet_config : currentSettings?.facet_config,
+      facet_max_values: body.facet_max_values !== void 0 ? Number(body.facet_max_values) : currentSettings?.facet_max_values
     };
     console.log("[AI Search POST] Updated settings selected_collections:", updatedSettings.selected_collections);
     const collectionsChanged = JSON.stringify(updatedSettings.selected_collections) !== JSON.stringify(currentSettings?.selected_collections || []);
@@ -4865,7 +3869,7 @@ adminRoutes.get("/api/settings", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
     const settings = await service.getSettings();
     return c.json({ success: true, data: settings });
   } catch (error) {
@@ -4878,7 +3882,7 @@ adminRoutes.get("/api/new-collections", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
     const notifications = await service.detectNewCollections();
     return c.json({ success: true, data: notifications });
   } catch (error) {
@@ -4891,7 +3895,7 @@ adminRoutes.get("/api/status", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new IndexManager(db, ai, vectorize);
+    const indexer = new chunkKAEZ35ZT_cjs.IndexManager(db, ai, vectorize);
     const status = await indexer.getAllIndexStatus();
     return c.json({ success: true, data: status });
   } catch (error) {
@@ -4904,7 +3908,7 @@ adminRoutes.post("/api/reindex", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const indexer = new IndexManager(db, ai, vectorize);
+    const indexer = new chunkKAEZ35ZT_cjs.IndexManager(db, ai, vectorize);
     const body = await c.req.json();
     const collectionIdRaw = body.collection_id;
     const collectionId = collectionIdRaw ? String(collectionIdRaw) : "";
@@ -4923,7 +3927,7 @@ adminRoutes.post("/api/reindex", async (c) => {
 adminRoutes.get("/api/fts5/status", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
+    const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -4951,7 +3955,7 @@ adminRoutes.get("/api/fts5/status", async (c) => {
 adminRoutes.post("/api/fts5/index-collection", async (c) => {
   try {
     const db = c.env.DB;
-    const fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
+    const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -4985,8 +3989,8 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
-    const fts5Service = new chunkQVIYLOFA_cjs.FTS5Service(db);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
+    const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
     const isAvailable = await fts5Service.isAvailable();
     if (!isAvailable) {
       return c.json({
@@ -5000,6 +4004,16 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
         success: true,
         message: "No collections selected for indexing"
       });
+    }
+    try {
+      const placeholders = collections2.map(() => "?").join(",");
+      await db.batch([
+        db.prepare(`DELETE FROM content_fts WHERE collection_id NOT IN (${placeholders})`).bind(...collections2),
+        db.prepare(`DELETE FROM content_fts_sync WHERE collection_id NOT IN (${placeholders})`).bind(...collections2)
+      ]);
+      console.log(`[FTS5 Admin] Cleaned up FTS5 entries for unselected collections`);
+    } catch (e) {
+      console.warn("[FTS5 Admin] Cleanup of unselected collections failed (non-fatal):", e);
     }
     c.executionCtx.waitUntil(
       (async () => {
@@ -5028,21 +4042,1339 @@ adminRoutes.post("/api/fts5/reindex-all", async (c) => {
     return c.json({ error: "Failed to start FTS5 reindex" }, 500);
   }
 });
+adminRoutes.post("/api/vectorize/reindex-all", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    if (!ai || !vectorize) {
+      return c.json({ error: "Vectorize reindexing requires AI and VECTORIZE_INDEX bindings." }, 400);
+    }
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
+    const settings = await service.getSettings();
+    const collections2 = settings?.selected_collections || [];
+    if (collections2.length === 0) {
+      return c.json({ error: "No collections selected. Configure collections in the Configuration tab first." }, 400);
+    }
+    for (const collectionId of collections2) {
+      try {
+        await db.prepare(
+          "DELETE FROM ai_search_index_meta WHERE collection_id = ?"
+        ).bind(collectionId).run();
+        const countResult = await db.prepare(
+          "SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'"
+        ).bind(collectionId).first();
+        const colInfo = await db.prepare(
+          "SELECT display_name FROM collections WHERE id = ?"
+        ).bind(collectionId).first();
+        await db.prepare(`
+          INSERT INTO ai_search_index_meta (collection_id, collection_name, total_items, indexed_items, status, last_sync_at)
+          VALUES (?, ?, ?, 0, 'indexing', ?)
+        `).bind(
+          collectionId,
+          colInfo?.display_name || collectionId,
+          countResult?.cnt || 0,
+          Date.now()
+        ).run();
+      } catch (e) {
+      }
+    }
+    try {
+      const benchmarkIds = [];
+      for (const dsId of chunkKAEZ35ZT_cjs.BENCHMARK_DATASETS.map((d) => d.id)) {
+        for (let i = 0; i < 6e3; i++) {
+          for (let chunk = 0; chunk < 3; chunk++) {
+            benchmarkIds.push(`beir-${dsId}-${i}-chunk-${chunk}`);
+          }
+        }
+      }
+      for (let i = 0; i < benchmarkIds.length; i += 1e3) {
+        await vectorize.deleteByIds(benchmarkIds.slice(i, i + 1e3));
+      }
+      console.log("[Vectorize Reindex] Cleaned orphaned benchmark vectors from main index");
+    } catch (e) {
+      console.warn("[Vectorize Reindex] Orphan cleanup failed (non-fatal):", e);
+    }
+    const indexer = new chunkKAEZ35ZT_cjs.IndexManager(db, ai, vectorize);
+    c.executionCtx.waitUntil(
+      indexer.syncAll(collections2).then(() => console.log("[Vectorize Reindex] All collections reindexed")).catch((error) => console.error("[Vectorize Reindex] Error:", error))
+    );
+    return c.json({
+      success: true,
+      message: `Vectorize reindexing started for ${collections2.length} collection(s)`,
+      collections: collections2
+    });
+  } catch (error) {
+    console.error("Error starting Vectorize reindex-all:", error);
+    return c.json({ error: "Failed to start Vectorize reindexing" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/preview", async (c) => {
+  try {
+    const db = c.env.DB;
+    const body = await c.req.json();
+    const query = body.query?.trim();
+    if (!query) return c.json({ error: "query is required" }, 400);
+    const limit = Math.min(body.limit || 10, 20);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db);
+    const settings = await service.getSettings();
+    const titleWeight = clampWeight(body.title_weight, settings?.fts5_title_boost ?? 5);
+    const slugWeight = clampWeight(body.slug_weight, settings?.fts5_slug_boost ?? 2);
+    const bodyWeight = clampWeight(body.body_weight, settings?.fts5_body_boost ?? 1);
+    const previewSettings = {
+      ...settings,
+      fts5_title_boost: titleWeight,
+      fts5_slug_boost: slugWeight,
+      fts5_body_boost: bodyWeight
+    };
+    const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
+    let result = await fts5Service.search(
+      { query, mode: "fts5", limit, offset: 0 },
+      previewSettings,
+      { titleBoost: titleWeight, slugBoost: slugWeight, bodyBoost: bodyWeight }
+    );
+    const pipelineService = new chunkKAEZ35ZT_cjs.RankingPipelineService(db);
+    let pipelineApplied = false;
+    try {
+      const config = await pipelineService.getConfig();
+      const activeStages = config.filter((s) => s.enabled && s.weight > 0);
+      if (activeStages.length > 0) {
+        result = await pipelineService.apply(result, query);
+        pipelineApplied = true;
+      }
+    } catch (err) {
+      console.warn("[Relevance Preview] Pipeline application failed:", err);
+    }
+    return c.json({
+      success: true,
+      data: {
+        results: result.results,
+        total: result.total,
+        query_time_ms: result.query_time_ms,
+        weights: { title: titleWeight, slug: slugWeight, body: bodyWeight },
+        pipeline_applied: pipelineApplied
+      }
+    });
+  } catch (error) {
+    console.error("Error in relevance preview:", error);
+    return c.json({ error: "Preview search failed: " + (error instanceof Error ? error.message : String(error)) }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/pipeline", async (c) => {
+  try {
+    const pipelineService = new chunkKAEZ35ZT_cjs.RankingPipelineService(c.env.DB);
+    const config = await pipelineService.getConfig();
+    return c.json({ success: true, data: config });
+  } catch (error) {
+    console.error("Error fetching pipeline config:", error);
+    return c.json({ error: "Failed to fetch pipeline config" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/pipeline", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.stages)) {
+      return c.json({ error: "stages must be an array" }, 400);
+    }
+    const pipelineService = new chunkKAEZ35ZT_cjs.RankingPipelineService(c.env.DB);
+    await pipelineService.saveConfig(body.stages);
+    const saved = await pipelineService.getConfig();
+    return c.json({ success: true, data: saved });
+  } catch (error) {
+    console.error("Error saving pipeline config:", error);
+    return c.json({ error: "Failed to save pipeline config" }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/content-scores", async (c) => {
+  try {
+    const contentId = c.req.query("content_id");
+    const scoreType = c.req.query("score_type") || "popularity";
+    if (!contentId) {
+      return c.json({ error: "content_id query parameter is required" }, 400);
+    }
+    const pipelineService = new chunkKAEZ35ZT_cjs.RankingPipelineService(c.env.DB);
+    const scores = await pipelineService.getContentScores([contentId], scoreType);
+    return c.json({
+      success: true,
+      data: { content_id: contentId, score_type: scoreType, score: scores.get(contentId) ?? null }
+    });
+  } catch (error) {
+    console.error("Error fetching content scores:", error);
+    return c.json({ error: "Failed to fetch content scores" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/content-scores", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { content_id: contentId, score_type: scoreType, score } = body;
+    if (!contentId || !scoreType || score == null) {
+      return c.json({ error: "content_id, score_type, and score are required" }, 400);
+    }
+    if (!["popularity", "custom"].includes(scoreType)) {
+      return c.json({ error: 'score_type must be "popularity" or "custom"' }, 400);
+    }
+    const pipelineService = new chunkKAEZ35ZT_cjs.RankingPipelineService(c.env.DB);
+    await pipelineService.setContentScore(String(contentId), scoreType, Number(score));
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error setting content score:", error);
+    return c.json({ error: "Failed to set content score" }, 500);
+  }
+});
+adminRoutes.delete("/api/relevance/content-scores", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { content_id: contentId, score_type: scoreType } = body;
+    if (!contentId || !scoreType) {
+      return c.json({ error: "content_id and score_type are required" }, 400);
+    }
+    const pipelineService = new chunkKAEZ35ZT_cjs.RankingPipelineService(c.env.DB);
+    await pipelineService.deleteContentScore(String(contentId), scoreType);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting content score:", error);
+    return c.json({ error: "Failed to delete content score" }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/synonyms", async (c) => {
+  try {
+    const synonymService = new chunkKAEZ35ZT_cjs.SynonymService(c.env.DB);
+    const groups = await synonymService.getAll();
+    return c.json({ success: true, data: groups });
+  } catch (error) {
+    console.error("Error fetching synonym groups:", error);
+    return c.json({ error: "Failed to fetch synonym groups" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/synonyms", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.terms) || body.terms.length < 2) {
+      return c.json({ error: "terms must be an array with at least 2 items" }, 400);
+    }
+    const synonymService = new chunkKAEZ35ZT_cjs.SynonymService(c.env.DB);
+    const group = await synonymService.create(body.terms, body.enabled !== false);
+    return c.json({ success: true, data: group });
+  } catch (error) {
+    console.error("Error creating synonym group:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to create synonym group" }, 500);
+  }
+});
+adminRoutes.put("/api/relevance/synonyms/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const synonymService = new chunkKAEZ35ZT_cjs.SynonymService(c.env.DB);
+    const group = await synonymService.update(id, {
+      terms: body.terms,
+      enabled: body.enabled
+    });
+    if (!group) {
+      return c.json({ error: "Synonym group not found" }, 404);
+    }
+    return c.json({ success: true, data: group });
+  } catch (error) {
+    console.error("Error updating synonym group:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to update synonym group" }, 500);
+  }
+});
+adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const synonymService = new chunkKAEZ35ZT_cjs.SynonymService(c.env.DB);
+    const deleted = await synonymService.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Synonym group not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting synonym group:", error);
+    return c.json({ error: "Failed to delete synonym group" }, 500);
+  }
+});
+adminRoutes.get("/api/relevance/rules", async (c) => {
+  try {
+    const rulesService = new chunkKAEZ35ZT_cjs.QueryRulesService(c.env.DB);
+    const rules = await rulesService.getAll();
+    return c.json({ success: true, data: rules });
+  } catch (error) {
+    console.error("Error fetching query rules:", error);
+    return c.json({ error: "Failed to fetch query rules" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/rules", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body.match_pattern || !body.substitute_query) {
+      return c.json({ error: "match_pattern and substitute_query are required" }, 400);
+    }
+    const rulesService = new chunkKAEZ35ZT_cjs.QueryRulesService(c.env.DB);
+    const rule = await rulesService.create({
+      match_pattern: body.match_pattern,
+      match_type: body.match_type,
+      substitute_query: body.substitute_query,
+      enabled: body.enabled,
+      priority: body.priority
+    });
+    return c.json({ success: true, data: rule });
+  } catch (error) {
+    console.error("Error creating query rule:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to create query rule" }, 500);
+  }
+});
+adminRoutes.put("/api/relevance/rules/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const rulesService = new chunkKAEZ35ZT_cjs.QueryRulesService(c.env.DB);
+    const rule = await rulesService.update(id, {
+      match_pattern: body.match_pattern,
+      match_type: body.match_type,
+      substitute_query: body.substitute_query,
+      enabled: body.enabled,
+      priority: body.priority
+    });
+    if (!rule) {
+      return c.json({ error: "Query rule not found" }, 404);
+    }
+    return c.json({ success: true, data: rule });
+  } catch (error) {
+    console.error("Error updating query rule:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to update query rule" }, 500);
+  }
+});
+adminRoutes.delete("/api/relevance/rules/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const rulesService = new chunkKAEZ35ZT_cjs.QueryRulesService(c.env.DB);
+    const deleted = await rulesService.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Query rule not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting query rule:", error);
+    return c.json({ error: "Failed to delete query rule" }, 500);
+  }
+});
+adminRoutes.get("/api/related-searches", async (c) => {
+  try {
+    const service = new chunkKAEZ35ZT_cjs.RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const sourceQuery = c.req.query("source_query");
+    const source = c.req.query("source");
+    const enabled = c.req.query("enabled");
+    const results = await service.getAll({
+      source_query: sourceQuery,
+      source,
+      enabled: enabled !== void 0 ? enabled === "true" : void 0
+    });
+    return c.json({ success: true, data: results });
+  } catch (error) {
+    console.error("Error listing related searches:", error);
+    return c.json({ error: "Failed to list related searches" }, 500);
+  }
+});
+adminRoutes.post("/api/related-searches", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { source_query: sourceQuery, related_query: relatedQuery, position, bidirectional } = body;
+    if (!sourceQuery || typeof sourceQuery !== "string" || !sourceQuery.trim()) {
+      return c.json({ success: false, error: "source_query is required" }, 400);
+    }
+    if (!relatedQuery || typeof relatedQuery !== "string" || !relatedQuery.trim()) {
+      return c.json({ success: false, error: "related_query is required" }, 400);
+    }
+    const service = new chunkKAEZ35ZT_cjs.RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const result = await service.create(sourceQuery, relatedQuery, {
+      source: "manual",
+      position: typeof position === "number" ? position : 0,
+      bidirectional: bidirectional === true
+    });
+    return c.json({ success: true, data: result });
+  } catch (error) {
+    if (error?.message?.includes?.("UNIQUE constraint")) {
+      return c.json({ success: false, error: "This related search pair already exists" }, 409);
+    }
+    console.error("Error creating related search:", error);
+    return c.json({ error: "Failed to create related search" }, 500);
+  }
+});
+adminRoutes.put("/api/related-searches/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const service = new chunkKAEZ35ZT_cjs.RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const updated = await service.update(id, {
+      related_query: body.related_query,
+      position: body.position,
+      enabled: body.enabled
+    });
+    if (!updated) {
+      return c.json({ error: "Related search not found" }, 404);
+    }
+    return c.json({ success: true, data: updated });
+  } catch (error) {
+    console.error("Error updating related search:", error);
+    return c.json({ error: "Failed to update related search" }, 500);
+  }
+});
+adminRoutes.delete("/api/related-searches/cache", async (c) => {
+  try {
+    const query = c.req.query("query");
+    const service = new chunkKAEZ35ZT_cjs.RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    await service.invalidateCache(query || void 0);
+    return c.json({ success: true, message: query ? `Cache cleared for "${query}"` : "All auto-generation cache cleared" });
+  } catch (error) {
+    console.error("Error clearing related search cache:", error);
+    return c.json({ error: "Failed to clear cache" }, 500);
+  }
+});
+adminRoutes.delete("/api/related-searches/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const service = new chunkKAEZ35ZT_cjs.RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const deleted = await service.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Related search not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting related search:", error);
+    return c.json({ error: "Failed to delete related search" }, 500);
+  }
+});
+adminRoutes.post("/api/related-searches/bulk", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { entries } = body;
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return c.json({ success: false, error: "entries array is required and must not be empty" }, 400);
+    }
+    const service = new chunkKAEZ35ZT_cjs.RelatedSearchService(c.env.DB, c.env.CACHE_KV);
+    const count = await service.bulkCreate(entries);
+    return c.json({ success: true, data: { created: count, total: entries.length } });
+  } catch (error) {
+    console.error("Error bulk creating related searches:", error);
+    return c.json({ error: "Failed to bulk create related searches" }, 500);
+  }
+});
+adminRoutes.get("/api/facets/discover", async (c) => {
+  try {
+    const facetService = new chunkKAEZ35ZT_cjs.FacetService(c.env.DB);
+    const discovered = await facetService.discoverFields();
+    return c.json({ success: true, data: discovered });
+  } catch (error) {
+    console.error("Error discovering facet fields:", error);
+    return c.json({ error: "Failed to discover facet fields" }, 500);
+  }
+});
+var BUILTIN_SHADOW_FIELDS = /* @__PURE__ */ new Set(["$.author", "$.status"]);
+function stripShadowFacets(config) {
+  return config.filter((f) => !BUILTIN_SHADOW_FIELDS.has(f.field));
+}
+adminRoutes.get("/api/facets/config", async (c) => {
+  try {
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(c.env.DB);
+    const settings = await service.getSettings();
+    const config = stripShadowFacets(settings?.facet_config ?? []);
+    return c.json({
+      success: true,
+      data: {
+        enabled: settings?.facets_enabled ?? false,
+        config,
+        max_values: settings?.facet_max_values ?? 20
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching facet config:", error);
+    return c.json({ error: "Failed to fetch facet config" }, 500);
+  }
+});
+adminRoutes.post("/api/facets/config", async (c) => {
+  try {
+    const body = await c.req.json();
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(c.env.DB);
+    const updates = {};
+    if (body.enabled !== void 0) updates.facets_enabled = Boolean(body.enabled);
+    if (Array.isArray(body.config)) updates.facet_config = stripShadowFacets(body.config);
+    if (body.max_values !== void 0) updates.facet_max_values = Number(body.max_values);
+    const saved = await service.updateSettings(updates);
+    return c.json({
+      success: true,
+      data: {
+        enabled: saved.facets_enabled ?? false,
+        config: saved.facet_config ?? [],
+        max_values: saved.facet_max_values ?? 20
+      }
+    });
+  } catch (error) {
+    console.error("Error saving facet config:", error);
+    return c.json({ error: "Failed to save facet config" }, 500);
+  }
+});
+adminRoutes.post("/api/facets/auto-generate", async (c) => {
+  try {
+    const facetService = new chunkKAEZ35ZT_cjs.FacetService(c.env.DB);
+    const discovered = await facetService.discoverFields();
+    const config = facetService.autoGenerateConfig(discovered);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(c.env.DB);
+    const saved = await service.updateSettings({
+      facets_enabled: true,
+      facet_config: config
+    });
+    return c.json({
+      success: true,
+      data: {
+        enabled: true,
+        config: saved.facet_config ?? config,
+        discovered_count: discovered.length,
+        auto_enabled_count: config.length
+      }
+    });
+  } catch (error) {
+    console.error("Error auto-generating facet config:", error);
+    return c.json({ error: "Failed to auto-generate facet config" }, 500);
+  }
+});
+adminRoutes.post("/api/seed/clicks", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.searches) || body.searches.length === 0) {
+      return c.json({ error: "searches array is required" }, 400);
+    }
+    const db = c.env.DB;
+    const days = body.days || 30;
+    const now = Date.now();
+    const msPerDay = 24 * 60 * 60 * 1e3;
+    let searchCount = 0;
+    let clickCount = 0;
+    for (const [i, s] of body.searches.entries()) {
+      const daysAgo = i / body.searches.length * days;
+      const jitter = (Math.random() - 0.5) * msPerDay;
+      const searchTimestamp = now - daysAgo * msPerDay + jitter;
+      const historyResult = await db.prepare(
+        `INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(s.query, s.mode, s.results_count, s.response_time_ms, Math.floor(searchTimestamp)).run();
+      const searchId = historyResult.meta?.last_row_id?.toString();
+      searchCount++;
+      if (s.clicks && searchId) {
+        for (const click of s.clicks) {
+          const clickId = crypto.randomUUID();
+          const clickOffset = Math.floor(Math.random() * 60) * 1e3;
+          const clickDatetime = new Date(searchTimestamp + clickOffset).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+          await db.prepare(
+            `INSERT INTO ai_search_clicks (id, search_id, query, mode, clicked_content_id, clicked_content_title, click_position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(clickId, searchId, s.query, s.mode, click.content_id, click.content_title, click.position, clickDatetime).run();
+          clickCount++;
+        }
+      }
+    }
+    return c.json({
+      success: true,
+      data: { searches_inserted: searchCount, clicks_inserted: clickCount }
+    });
+  } catch (error) {
+    console.error("Error seeding click data:", error);
+    return c.json({ error: `Seed failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/seed/facet-clicks", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!Array.isArray(body.clicks) || body.clicks.length === 0) {
+      return c.json({ error: "clicks array is required" }, 400);
+    }
+    const db = c.env.DB;
+    const days = body.days || 30;
+    const now = Date.now();
+    const msPerDay = 24 * 60 * 60 * 1e3;
+    let insertCount = 0;
+    for (const [i, fc] of body.clicks.entries()) {
+      const id = crypto.randomUUID();
+      const daysAgo = i / body.clicks.length * days;
+      const jitter = (Math.random() - 0.5) * msPerDay;
+      const timestamp = now - daysAgo * msPerDay + jitter;
+      const datetime = new Date(timestamp).toISOString().replace("T", " ").replace("Z", "").slice(0, 19);
+      await db.prepare(
+        `INSERT INTO ai_search_facet_clicks (id, search_id, facet_field, facet_value, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).bind(id, fc.search_id || null, fc.facet_field, fc.facet_value, datetime).run();
+      insertCount++;
+    }
+    return c.json({
+      success: true,
+      data: { facet_clicks_inserted: insertCount }
+    });
+  } catch (error) {
+    console.error("Error seeding facet click data:", error);
+    return c.json({ error: `Seed failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.delete("/api/seed/clicks", async (c) => {
+  try {
+    const db = c.env.DB;
+    await db.prepare("DELETE FROM ai_search_clicks").run();
+    await db.prepare("DELETE FROM ai_search_history").run();
+    return c.json({ success: true, message: "Cleared click tracking and search history data" });
+  } catch (error) {
+    return c.json({ error: `Clear failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.delete("/api/seed/facet-clicks", async (c) => {
+  try {
+    const db = c.env.DB;
+    await db.prepare("DELETE FROM ai_search_facet_clicks").run();
+    return c.json({ success: true, message: "Cleared facet click data" });
+  } catch (error) {
+    return c.json({ error: `Clear failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.get("/api/analytics/extended", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
+    const data = await service.getAnalyticsExtended();
+    return c.json({ success: true, data });
+  } catch (error) {
+    console.error("Error fetching extended analytics:", error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : String(error) }, 500);
+  }
+});
+adminRoutes.get("/api/benchmark/datasets", async (c) => {
+  return c.json({ success: true, datasets: chunkKAEZ35ZT_cjs.BENCHMARK_DATASETS });
+});
+adminRoutes.get("/api/benchmark/status", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const dataset = c.req.query("dataset") || "scifact";
+    const benchmarkService = new chunkKAEZ35ZT_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const { seeded, count } = await benchmarkService.isSeeded();
+    const meta = benchmarkService.getMeta();
+    const dataAvailable = await benchmarkService.isDataAvailable();
+    let subsetSize = 0;
+    let evaluableQueries = 0;
+    if (dataAvailable) {
+      try {
+        const [ss, eqIds] = await Promise.all([
+          benchmarkService.getSubsetSize(),
+          benchmarkService.getEvaluableQueryIds(0)
+        ]);
+        subsetSize = ss;
+        evaluableQueries = eqIds.length;
+      } catch (e) {
+      }
+    }
+    return c.json({
+      success: true,
+      data: {
+        seeded,
+        seeded_count: count,
+        corpus_size: meta.corpus_size,
+        subset_size: subsetSize,
+        query_count: meta.query_count,
+        evaluable_queries: evaluableQueries,
+        dataset: meta.name,
+        dataset_id: dataset,
+        license: meta.license,
+        data_available: dataAvailable
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching benchmark status:", error);
+    return c.json({ error: `Failed to fetch benchmark status: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/seed", async (c) => {
+  try {
+    const user = c.get("user");
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const useSubset = body.corpus_size !== "full";
+    const benchmarkService = new chunkKAEZ35ZT_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const collectionId = benchmarkService.getCollectionId();
+    const userId = user.userId || user.id;
+    const result = await benchmarkService.seed(String(userId), useSubset);
+    if (useSubset) {
+      const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
+      c.executionCtx.waitUntil(
+        fts5Service.indexCollection(collectionId).then((r) => console.log(`[Benchmark:${dataset}] FTS5 indexed ${r.indexed_items}/${r.total_items} docs`)).catch((e) => console.error(`[Benchmark:${dataset}] FTS5 indexing error:`, e))
+      );
+    }
+    const meta = benchmarkService.getMeta();
+    const indexNote = useSubset ? "FTS5 indexing started in background." : "Use the Index buttons to index before evaluating.";
+    if (result.skipped) {
+      return c.json({
+        success: true,
+        message: `Benchmark data already exists (${result.seeded} documents). ${indexNote}`,
+        seeded: result.seeded,
+        skipped: true
+      });
+    }
+    return c.json({
+      success: true,
+      message: `Seeded ${result.seeded} ${meta.name} documents. ${indexNote}`,
+      seeded: result.seeded,
+      skipped: false
+    });
+  } catch (error) {
+    console.error("Error seeding benchmark data:", error);
+    return c.json(
+      { error: `Failed to seed benchmark data: ${error instanceof Error ? error.message : String(error)}` },
+      500
+    );
+  }
+});
+adminRoutes.post("/api/benchmark/purge", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const benchmarkService = new chunkKAEZ35ZT_cjs.BenchmarkService(db, kv, vectorize, dataset);
+    const deleted = await benchmarkService.purge();
+    return c.json({
+      success: true,
+      message: `Removed ${deleted} benchmark documents`,
+      deleted
+    });
+  } catch (error) {
+    console.error("Error purging benchmark data:", error);
+    return c.json({ error: "Failed to purge benchmark data" }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/index-fts5-batch", async (c) => {
+  try {
+    const db = c.env.DB;
+    const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
+    if (!await fts5Service.isAvailable()) {
+      return c.json({ error: "FTS5 tables not available." }, 400);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const batchSize = body.batch_size || 200;
+    const collectionId = `benchmark-${dataset}-collection`;
+    const result = await fts5Service.indexCollectionBatch(
+      collectionId,
+      batchSize
+    );
+    return c.json({
+      success: true,
+      indexed: result.indexed,
+      remaining: result.remaining,
+      total: result.total
+    });
+  } catch (error) {
+    console.error("Error in FTS5 batch indexing:", error);
+    return c.json({ error: `FTS5 batch indexing failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/index-vectorize-batch", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    if (!ai || !vectorize) {
+      return c.json({ error: "Vectorize indexing requires AI and VECTORIZE_BENCHMARK_INDEX bindings." }, 400);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const batchSize = body.batch_size || 25;
+    const offset = body.offset || 0;
+    const benchmarkCollectionId = `benchmark-${dataset}-collection`;
+    const datasetInfo = chunkKAEZ35ZT_cjs.BENCHMARK_DATASETS.find((d) => d.id === dataset);
+    const displayName = datasetInfo ? `${datasetInfo.name} Benchmark` : `BEIR ${dataset} Benchmark`;
+    const embeddingService = new chunkKAEZ35ZT_cjs.EmbeddingService(ai);
+    const chunkingService = new chunkKAEZ35ZT_cjs.ChunkingService();
+    const totalResult = await db.prepare("SELECT COUNT(*) as cnt FROM content WHERE collection_id = ? AND status != 'deleted'").bind(benchmarkCollectionId).first();
+    const total = totalResult?.cnt || 0;
+    if (offset >= total) {
+      try {
+        await db.prepare(`
+          INSERT OR REPLACE INTO ai_search_index_meta
+          (collection_id, collection_name, total_items, indexed_items, last_sync_at, status)
+          VALUES (?, ?, ?, ?, ?, 'completed')
+        `).bind(benchmarkCollectionId, displayName, total, total, Date.now()).run();
+      } catch (e) {
+      }
+      return c.json({ success: true, indexed: 0, offset, total, remaining: 0 });
+    }
+    const { results: contentItems } = await db.prepare(`
+        SELECT c.id, c.title, c.data, c.collection_id, c.status,
+               c.created_at, c.author_id
+        FROM content c
+        WHERE c.collection_id = ? AND c.status != 'deleted'
+        ORDER BY c.id
+        LIMIT ? OFFSET ?
+      `).bind(benchmarkCollectionId, batchSize, offset).all();
+    const items = (contentItems || []).map((item) => ({
+      id: item.id,
+      collection_id: item.collection_id,
+      title: item.title || "Untitled",
+      data: typeof item.data === "string" ? JSON.parse(item.data) : item.data,
+      metadata: {
+        status: item.status,
+        created_at: item.created_at,
+        author_id: item.author_id,
+        collection_name: `benchmark_${dataset}`,
+        collection_display_name: displayName
+      }
+    }));
+    const chunks = chunkingService.chunkContentBatch(items);
+    const embeddings = await embeddingService.generateBatch(
+      chunks.map((ch) => `${ch.title}
+
+${ch.text}`)
+    );
+    let indexedChunks = 0;
+    const upsertBatchSize = 100;
+    for (let i = 0; i < chunks.length; i += upsertBatchSize) {
+      const chunkBatch = chunks.slice(i, i + upsertBatchSize);
+      const embBatch = embeddings.slice(i, i + upsertBatchSize);
+      try {
+        await vectorize.upsert(
+          chunkBatch.map((chunk, idx) => ({
+            id: chunk.id,
+            values: embBatch[idx],
+            metadata: {
+              content_id: chunk.content_id,
+              collection_id: chunk.collection_id,
+              title: chunk.title,
+              text: chunk.text.substring(0, 500),
+              chunk_index: chunk.chunk_index,
+              ...chunk.metadata
+            }
+          }))
+        );
+        indexedChunks += chunkBatch.length;
+      } catch (error) {
+        console.error(`[Benchmark:${dataset} Vectorize] Upsert error at batch offset ${i}:`, error);
+      }
+    }
+    const newOffset = offset + (contentItems?.length || 0);
+    const remaining = Math.max(0, total - newOffset);
+    try {
+      await db.prepare(`
+        INSERT OR REPLACE INTO ai_search_index_meta
+        (collection_id, collection_name, total_items, indexed_items, last_sync_at, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        benchmarkCollectionId,
+        displayName,
+        total,
+        newOffset,
+        Date.now(),
+        remaining > 0 ? "indexing" : "completed"
+      ).run();
+    } catch (e) {
+    }
+    return c.json({
+      success: true,
+      indexed: indexedChunks,
+      items_processed: contentItems?.length || 0,
+      offset: newOffset,
+      total,
+      remaining
+    });
+  } catch (error) {
+    console.error("Error in Vectorize batch indexing:", error);
+    return c.json({ error: `Vectorize batch indexing failed: ${error instanceof Error ? error.message : String(error)}` }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/index-vectorize", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    if (!ai || !vectorize) {
+      return c.json(
+        { error: "Vectorize indexing requires AI and VECTORIZE_BENCHMARK_INDEX bindings. Configure them in wrangler.toml." },
+        400
+      );
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const dataset = body.dataset || "scifact";
+    const benchmarkService = new chunkKAEZ35ZT_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const { seeded } = await benchmarkService.isSeeded();
+    if (!seeded) {
+      return c.json({ error: "Benchmark data not seeded. Seed first." }, 400);
+    }
+    const collectionId = benchmarkService.getCollectionId();
+    const meta = benchmarkService.getMeta();
+    const displayName = `${meta.name} Benchmark`;
+    try {
+      await db.prepare(`
+        INSERT OR REPLACE INTO ai_search_index_meta
+        (collection_id, collection_name, total_items, indexed_items, last_sync_at, status)
+        VALUES (?, ?, 0, 0, ?, 'indexing')
+      `).bind(collectionId, displayName, Date.now()).run();
+    } catch (e) {
+    }
+    return c.json({
+      success: true,
+      message: "Vectorize index reset. Use batch indexing to process documents."
+    });
+  } catch (error) {
+    console.error("Error starting Vectorize indexing:", error);
+    return c.json({ error: "Failed to start Vectorize indexing" }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/evaluate", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    const body = await c.req.json();
+    const mode = body.mode || "fts5";
+    const limit = body.limit || 10;
+    const maxQueries = body.max_queries || 0;
+    const dataset = body.dataset || "scifact";
+    const benchmarkService = new chunkKAEZ35ZT_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const collectionId = benchmarkService.getCollectionId();
+    const { seeded } = await benchmarkService.isSeeded();
+    if (!seeded) {
+      return c.json(
+        { error: "Benchmark data not seeded. Call /api/benchmark/seed first." },
+        400
+      );
+    }
+    if (mode === "fts5" || mode === "hybrid") {
+      const fts5Service = new chunkKAEZ35ZT_cjs.FTS5Service(db);
+      if (await fts5Service.isAvailable()) {
+        const ftsCount = await db.prepare("SELECT COUNT(*) as cnt FROM content_fts WHERE collection_id = ?").bind(collectionId).first();
+        if (!ftsCount || ftsCount.cnt === 0) {
+          return c.json(
+            { error: 'Benchmark data not yet FTS5-indexed. Click "Seed Data" again or wait for background indexing to complete, then retry.' },
+            400
+          );
+        }
+      }
+    }
+    if ((mode === "ai" || mode === "hybrid") && !vectorize) {
+      return c.json(
+        { error: `${mode.toUpperCase()} mode requires a Vectorize index binding. Configure it in wrangler.toml.` },
+        400
+      );
+    }
+    if (mode === "ai" || mode === "hybrid") {
+      try {
+        const indexMeta = await db.prepare("SELECT status, indexed_items FROM ai_search_index_meta WHERE collection_id = ?").bind(collectionId).first();
+        if (!indexMeta || indexMeta.indexed_items === 0) {
+          return c.json(
+            { error: 'Benchmark data not yet Vectorize-indexed. Click "Index (Vectorize)" first and wait for it to complete.' },
+            400
+          );
+        }
+        if (indexMeta.status === "indexing") {
+          return c.json(
+            { error: "Vectorize indexing is still in progress. Wait for it to complete, then retry." },
+            400
+          );
+        }
+      } catch (e) {
+        return c.json(
+          { error: 'Benchmark data not yet Vectorize-indexed. Click "Index (Vectorize)" first.' },
+          400
+        );
+      }
+    }
+    const aiSearchService = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
+    const searchFn = async (query, searchMode, searchLimit) => {
+      const response = await aiSearchService.search({
+        query,
+        mode: searchMode,
+        limit: searchLimit,
+        filters: { collections: [collectionId] }
+      });
+      return { results: response.results.map((r) => ({ id: r.id })) };
+    };
+    const results = await benchmarkService.evaluate(
+      searchFn,
+      mode,
+      limit,
+      maxQueries
+    );
+    return c.json({ success: true, ...results });
+  } catch (error) {
+    console.error("Error running benchmark evaluation:", error);
+    return c.json(
+      { error: `Benchmark evaluation failed: ${error instanceof Error ? error.message : String(error)}` },
+      500
+    );
+  }
+});
+adminRoutes.get("/api/benchmark/query-ids", async (c) => {
+  try {
+    const maxQueries = parseInt(c.req.query("max_queries") || "0", 10);
+    const dataset = c.req.query("dataset") || "scifact";
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const benchmarkService = new chunkKAEZ35ZT_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const ids = await benchmarkService.getEvaluableQueryIds(maxQueries);
+    return c.json({ success: true, query_ids: ids, total: ids.length });
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+adminRoutes.post("/api/benchmark/evaluate-batch", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_BENCHMARK_INDEX || c.env.VECTORIZE_INDEX;
+    const body = await c.req.json();
+    const mode = body.mode || "fts5";
+    const limit = body.limit || 10;
+    const queryIds = body.query_ids || [];
+    const dataset = body.dataset || "scifact";
+    if (queryIds.length === 0) {
+      return c.json({ error: "No query_ids provided" }, 400);
+    }
+    if ((mode === "ai" || mode === "hybrid") && !vectorize) {
+      return c.json({ error: `${mode.toUpperCase()} mode requires Vectorize binding.` }, 400);
+    }
+    const benchmarkService = new chunkKAEZ35ZT_cjs.BenchmarkService(db, kv, void 0, dataset);
+    const collectionId = benchmarkService.getCollectionId();
+    const aiSearchService = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
+    const searchFn = async (query, searchMode, searchLimit) => {
+      const response = await aiSearchService.search({
+        query,
+        mode: searchMode,
+        limit: searchLimit,
+        filters: { collections: [collectionId] }
+      });
+      return { results: response.results.map((r) => ({ id: r.id })) };
+    };
+    const perQuery = await benchmarkService.evaluateBatch(searchFn, mode, limit, queryIds);
+    return c.json({
+      success: true,
+      per_query: perQuery,
+      evaluated: perQuery.length
+    });
+  } catch (error) {
+    console.error("Error in batch evaluation:", error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+adminRoutes.post("/api/agent/run", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const latest = await recService.getLatestRun();
+    if (latest && latest.status === "running") {
+      return c.json({ error: "Analysis already running" }, 409);
+    }
+    const runIdPromise = recService.runAnalysis();
+    c.executionCtx.waitUntil(runIdPromise.then((runId) => {
+      console.log(`[Agent] Analysis run ${runId} completed`);
+    }).catch((error) => {
+      console.error("[Agent] Analysis failed:", error);
+    }));
+    return c.json({ success: true, message: "Analysis started" });
+  } catch (error) {
+    console.error("Error starting agent analysis:", error);
+    return c.json({ error: "Failed to start analysis" }, 500);
+  }
+});
+adminRoutes.get("/api/agent/status", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const [latestRun, stats] = await Promise.all([
+      recService.getLatestRun(),
+      recService.getStats()
+    ]);
+    return c.json({
+      success: true,
+      data: {
+        latest_run: latestRun,
+        stats
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching agent status:", error);
+    return c.json({ error: "Failed to fetch agent status" }, 500);
+  }
+});
+adminRoutes.get("/api/agent/recommendations", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const status = c.req.query("status") || void 0;
+    const category = c.req.query("category") || void 0;
+    const limit = parseInt(c.req.query("limit") || "100", 10);
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+    const recs = await recService.getAll({
+      status,
+      category,
+      limit,
+      offset
+    });
+    return c.json({ success: true, data: recs });
+  } catch (error) {
+    console.error("Error fetching recommendations:", error);
+    return c.json({ error: "Failed to fetch recommendations" }, 500);
+  }
+});
+adminRoutes.post("/api/agent/recommendations/:id/apply", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const id = c.req.param("id");
+    const result = await recService.applyRecommendation(id);
+    if (!result.success) {
+      return c.json({ success: false, error: result.message }, 400);
+    }
+    return c.json({ success: true, message: result.message });
+  } catch (error) {
+    console.error("Error applying recommendation:", error);
+    return c.json({ error: "Failed to apply recommendation" }, 500);
+  }
+});
+adminRoutes.post("/api/agent/recommendations/:id/dismiss", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const id = c.req.param("id");
+    const updated = await recService.updateStatus(id, "dismissed");
+    if (!updated) {
+      return c.json({ error: "Recommendation not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error dismissing recommendation:", error);
+    return c.json({ error: "Failed to dismiss recommendation" }, 500);
+  }
+});
+adminRoutes.post("/api/agent/recommendations/dismiss-all", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const dismissed = await recService.dismissAll();
+    return c.json({ success: true, data: { dismissed } });
+  } catch (error) {
+    console.error("Error dismissing all recommendations:", error);
+    return c.json({ error: "Failed to dismiss recommendations" }, 500);
+  }
+});
+adminRoutes.get("/api/agent/runs", async (c) => {
+  try {
+    const db = c.env.DB;
+    const recService = new RecommendationService(db);
+    const limit = parseInt(c.req.query("limit") || "20", 10);
+    const runs = await recService.getRunHistory(limit);
+    return c.json({ success: true, data: runs });
+  } catch (error) {
+    console.error("Error fetching run history:", error);
+    return c.json({ error: "Failed to fetch run history" }, 500);
+  }
+});
+adminRoutes.get("/api/experiments", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const analytics = c.env.SEARCH_EXPERIMENTS;
+    const expService = new ExperimentService(db, kv, analytics);
+    const status = c.req.query("status");
+    const mode = c.req.query("mode");
+    const limit = parseInt(c.req.query("limit") || "50", 10);
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+    const experiments = await expService.getAll({ status, mode, limit, offset });
+    return c.json({ success: true, data: experiments });
+  } catch (error) {
+    console.error("Error listing experiments:", error);
+    return c.json({ error: "Failed to list experiments" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments", async (c) => {
+  try {
+    const db = c.env.DB;
+    const expService = new ExperimentService(db);
+    const body = await c.req.json();
+    if (!body.name || !body.variants) {
+      return c.json({ error: "name and variants are required" }, 400);
+    }
+    const experiment = await expService.create({
+      name: body.name,
+      description: body.description,
+      mode: body.mode,
+      traffic_pct: body.traffic_pct,
+      split_ratio: body.split_ratio,
+      variants: body.variants,
+      min_searches: body.min_searches
+    });
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error creating experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to create experiment" }, 500);
+  }
+});
+adminRoutes.get("/api/experiments/:id", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const analytics = c.env.SEARCH_EXPERIMENTS;
+    const expService = new ExperimentService(db, kv, analytics);
+    const id = c.req.param("id");
+    const experiment = await expService.getById(id);
+    if (!experiment) {
+      return c.json({ error: "Experiment not found" }, 404);
+    }
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error fetching experiment:", error);
+    return c.json({ error: "Failed to fetch experiment" }, 500);
+  }
+});
+adminRoutes.put("/api/experiments/:id", async (c) => {
+  try {
+    const db = c.env.DB;
+    const expService = new ExperimentService(db);
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const experiment = await expService.update(id, body);
+    if (!experiment) {
+      return c.json({ error: "Experiment not found" }, 404);
+    }
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error updating experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to update experiment" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments/:id/start", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const expService = new ExperimentService(db, kv);
+    const id = c.req.param("id");
+    const experiment = await expService.start(id);
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error starting experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to start experiment" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments/:id/pause", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const expService = new ExperimentService(db, kv);
+    const id = c.req.param("id");
+    const experiment = await expService.pause(id);
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error pausing experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to pause experiment" }, 500);
+  }
+});
+adminRoutes.post("/api/experiments/:id/complete", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const expService = new ExperimentService(db, kv);
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const experiment = await expService.complete(id, body.winner);
+    return c.json({ success: true, data: experiment });
+  } catch (error) {
+    console.error("Error completing experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to complete experiment" }, 500);
+  }
+});
+adminRoutes.delete("/api/experiments/:id", async (c) => {
+  try {
+    const db = c.env.DB;
+    const expService = new ExperimentService(db);
+    const id = c.req.param("id");
+    const deleted = await expService.delete(id);
+    if (!deleted) {
+      return c.json({ error: "Experiment not found" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting experiment:", error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to delete experiment" }, 500);
+  }
+});
+adminRoutes.get("/api/experiments/:id/metrics", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const analytics = c.env.SEARCH_EXPERIMENTS;
+    const expService = new ExperimentService(db, kv, analytics);
+    const id = c.req.param("id");
+    const metrics = await expService.evaluateExperiment(id);
+    if (!metrics) {
+      return c.json({ error: "Experiment not found or not running" }, 404);
+    }
+    return c.json({ success: true, data: metrics });
+  } catch (error) {
+    console.error("Error fetching experiment metrics:", error);
+    return c.json({ error: "Failed to fetch metrics" }, 500);
+  }
+});
 var admin_default = adminRoutes;
+
+// src/plugins/core-plugins/ai-search-plugin/services/interleave.service.ts
+function teamDraftInterleave(controlResults, treatmentResults, limit) {
+  const results = [];
+  const origins = {};
+  const seen = /* @__PURE__ */ new Set();
+  let ci = 0;
+  let ti = 0;
+  while (results.length < limit && (ci < controlResults.length || ti < treatmentResults.length)) {
+    const controlFirst = Math.random() < 0.5;
+    const order = [
+      { list: controlResults, ptr: () => ci, advance: () => {
+        ci++;
+      }, origin: "control" },
+      { list: treatmentResults, ptr: () => ti, advance: () => {
+        ti++;
+      }, origin: "treatment" }
+    ];
+    if (!controlFirst) order.reverse();
+    for (const { list, ptr, advance, origin } of order) {
+      if (results.length >= limit) break;
+      while (ptr() < list.length) {
+        const item = list[ptr()];
+        advance();
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          results.push(item);
+          origins[item.id] = origin;
+          break;
+        }
+      }
+    }
+  }
+  return { results, origins };
+}
+
+// src/plugins/core-plugins/ai-search-plugin/routes/api.ts
 var apiRoutes = new hono.Hono();
 apiRoutes.post("/", async (c) => {
   try {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const kv = c.env.CACHE_KV;
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize, kv);
     const body = await c.req.json();
     const query = {
       query: body.query || "",
       mode: body.mode || "keyword",
       filters: body.filters || {},
       limit: body.limit ? Number(body.limit) : void 0,
-      offset: body.offset ? Number(body.offset) : void 0
+      offset: body.offset ? Number(body.offset) : void 0,
+      facets: body.facets === true,
+      cache: body.cache !== false
     };
     if (query.filters?.dateRange) {
       if (typeof query.filters.dateRange.start === "string") {
@@ -5051,6 +5383,86 @@ apiRoutes.post("/", async (c) => {
       if (typeof query.filters.dateRange.end === "string") {
         query.filters.dateRange.end = new Date(query.filters.dateRange.end);
       }
+    }
+    let experimentMeta;
+    try {
+      const analytics = c.env.SEARCH_EXPERIMENTS;
+      const expService = new ExperimentService(db, kv, analytics);
+      const activeExp = await expService.getActiveExperiment();
+      if (activeExp && query.query) {
+        const userId = cookie.getCookie(c, "sonicjs_uid") || c.req.header("x-forwarded-for") || c.req.header("user-agent") || "anon";
+        if (!cookie.getCookie(c, "sonicjs_uid")) {
+          const uid = crypto.randomUUID();
+          cookie.setCookie(c, "sonicjs_uid", uid, { path: "/", maxAge: 365 * 86400, sameSite: "Lax" });
+        }
+        if (expService.shouldEnroll(activeExp.id, userId, activeExp.traffic_pct)) {
+          const variant = expService.assignVariant(activeExp.id, userId, activeExp.split_ratio);
+          const startTime = Date.now();
+          if (activeExp.mode === "interleave") {
+            const [controlResults, treatmentResults] = await Promise.all([
+              service.searchWithOverrides({ ...query, cache: false }, activeExp.variants.control),
+              service.searchWithOverrides({ ...query, cache: false }, activeExp.variants.treatment)
+            ]);
+            const interleaved = teamDraftInterleave(
+              controlResults.results,
+              treatmentResults.results,
+              query.limit || 20
+            );
+            const elapsed = Date.now() - startTime;
+            experimentMeta = {
+              experiment_id: activeExp.id,
+              experiment_mode: activeExp.mode,
+              experiment_variant: variant,
+              result_origins: interleaved.origins
+            };
+            expService.trackSearchEvent({
+              experimentId: activeExp.id,
+              variantId: variant,
+              query: query.query,
+              searchMode: query.mode,
+              userId,
+              searchId: "",
+              resultsCount: interleaved.results.length,
+              responseTimeMs: elapsed
+            });
+            return c.json({
+              success: true,
+              data: {
+                results: interleaved.results,
+                total: interleaved.results.length,
+                query_time_ms: elapsed,
+                mode: query.mode
+              },
+              experiment: experimentMeta
+            });
+          } else {
+            const overrides = variant === "treatment" ? activeExp.variants.treatment : activeExp.variants.control;
+            const results2 = Object.keys(overrides).length > 0 ? await service.searchWithOverrides({ ...query, cache: false }, overrides) : await service.search(query);
+            experimentMeta = {
+              experiment_id: activeExp.id,
+              experiment_mode: activeExp.mode,
+              experiment_variant: variant
+            };
+            expService.trackSearchEvent({
+              experimentId: activeExp.id,
+              variantId: variant,
+              query: query.query,
+              searchMode: query.mode,
+              userId,
+              searchId: results2.search_id || "",
+              resultsCount: results2.results.length,
+              responseTimeMs: results2.query_time_ms
+            });
+            return c.json({
+              success: true,
+              data: results2,
+              experiment: experimentMeta
+            });
+          }
+        }
+      }
+    } catch (expError) {
+      console.warn("[Search API] Experiment error (falling through):", expError);
     }
     const results = await service.search(query);
     return c.json({
@@ -5074,11 +5486,8 @@ apiRoutes.get("/suggest", async (c) => {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
     const query = c.req.query("q") || "";
-    if (!query || query.length < 2) {
-      return c.json({ success: true, data: [] });
-    }
     const suggestions = await service.getSearchSuggestions(query);
     return c.json({
       success: true,
@@ -5095,12 +5504,95 @@ apiRoutes.get("/suggest", async (c) => {
     );
   }
 });
+apiRoutes.post("/click", async (c) => {
+  try {
+    const db = c.env.DB;
+    const body = await c.req.json();
+    const searchId = body.search_id;
+    const contentId = body.content_id;
+    const clickPosition = body.click_position;
+    if (!contentId || typeof contentId !== "string") {
+      return c.json({ success: false, error: "content_id is required" }, 400);
+    }
+    if (!clickPosition || typeof clickPosition !== "number" || clickPosition < 1 || !Number.isInteger(clickPosition)) {
+      return c.json({ success: false, error: "click_position must be a positive integer" }, 400);
+    }
+    let query = null;
+    let mode = null;
+    if (searchId) {
+      try {
+        const historyRow = await db.prepare("SELECT query, mode FROM ai_search_history WHERE id = ? LIMIT 1").bind(Number(searchId)).first();
+        if (historyRow) {
+          query = historyRow.query;
+          mode = historyRow.mode;
+        }
+      } catch {
+      }
+    }
+    const clickId = crypto.randomUUID();
+    await db.prepare(`
+        INSERT INTO ai_search_clicks (id, search_id, query, mode, clicked_content_id, clicked_content_title, click_position, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).bind(
+      clickId,
+      searchId || null,
+      query,
+      mode,
+      contentId,
+      body.content_title || null,
+      clickPosition
+    ).run();
+    if (body.experiment_id && body.experiment_variant) {
+      try {
+        const kv = c.env.CACHE_KV;
+        const analytics = c.env.SEARCH_EXPERIMENTS;
+        const expService = new ExperimentService(db, kv, analytics);
+        expService.trackClickEvent({
+          experimentId: body.experiment_id,
+          variantId: body.experiment_variant,
+          searchId: searchId || "",
+          contentId,
+          clickPosition
+        });
+      } catch {
+      }
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Click tracking error:", error);
+    return c.json({ success: true });
+  }
+});
+apiRoutes.post("/facet-click", async (c) => {
+  try {
+    const db = c.env.DB;
+    const body = await c.req.json();
+    const facetField = body.facet_field;
+    const facetValue = body.facet_value;
+    const searchId = body.search_id;
+    if (!facetField || typeof facetField !== "string") {
+      return c.json({ success: false, error: "facet_field is required" }, 400);
+    }
+    if (!facetValue || typeof facetValue !== "string") {
+      return c.json({ success: false, error: "facet_value is required" }, 400);
+    }
+    const id = crypto.randomUUID();
+    await db.prepare(`
+        INSERT INTO ai_search_facet_clicks (id, search_id, facet_field, facet_value, created_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+      `).bind(id, searchId || null, facetField, facetValue).run();
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Facet click tracking error:", error);
+    return c.json({ success: true });
+  }
+});
 apiRoutes.get("/analytics", async (c) => {
   try {
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
-    const service = new AISearchService(db, ai, vectorize);
+    const service = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize);
     const analytics = await service.getSearchAnalytics();
     return c.json({
       success: true,
@@ -5117,7 +5609,643 @@ apiRoutes.get("/analytics", async (c) => {
     );
   }
 });
+apiRoutes.get("/related", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const q = c.req.query("q") || "";
+    const limit = Math.min(Math.max(Number(c.req.query("limit")) || 5, 1), 20);
+    const service = new chunkKAEZ35ZT_cjs.RelatedSearchService(db, kv);
+    const related = await service.getRelatedSearches(q, limit);
+    return c.json({
+      success: true,
+      data: {
+        query: q,
+        related
+      }
+    });
+  } catch (error) {
+    console.error("Related searches error:", error);
+    return c.json({ success: false, error: "Failed to get related searches" }, 500);
+  }
+});
+apiRoutes.get("/trending", async (c) => {
+  try {
+    const db = c.env.DB;
+    const kv = c.env.CACHE_KV;
+    const limit = Math.min(Math.max(Number(c.req.query("limit")) || 5, 1), 20);
+    const period = Math.min(Math.max(Number(c.req.query("period")) || 7, 1), 30);
+    const service = new chunkKAEZ35ZT_cjs.TrendingSearchService(db, kv);
+    const result = await service.getTrending(limit, period);
+    return c.json({
+      trending: result.items,
+      period_days: period,
+      generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+      cached: result.cached
+    });
+  } catch (error) {
+    console.error("Trending searches error:", error);
+    return c.json({ success: false, error: "Failed to get trending searches" }, 500);
+  }
+});
 var api_default2 = apiRoutes;
+
+// src/plugins/core-plugins/ai-search-plugin/services/instantsearch-adapter.ts
+var InstantSearchAdapter = class {
+  constructor(db) {
+    this.db = db;
+  }
+  collectionCache = /* @__PURE__ */ new Map();
+  /**
+   * Convert an InstantSearch request to a SonicJS SearchQuery
+   */
+  async toSonicQuery(request, settings) {
+    const params = request.params || {};
+    const page = params.page ?? 0;
+    const hitsPerPage = Math.min(params.hitsPerPage ?? 20, 200);
+    const collections2 = await this.resolveCollections(request.indexName);
+    const mode = this.determineSearchMode(settings);
+    const customFilters = this.parseFacetFilters(params.facetFilters);
+    return {
+      query: params.query || "",
+      mode,
+      limit: hitsPerPage,
+      offset: page * hitsPerPage,
+      filters: {
+        collections: collections2.length > 0 ? collections2 : void 0,
+        status: this.parseStatusFilter(params.filters),
+        ...Object.keys(customFilters).length > 0 ? { custom: customFilters } : {}
+      },
+      facets: params.facets && params.facets.length > 0 ? true : void 0
+    };
+  }
+  /**
+   * Convert a SonicJS SearchResponse to an InstantSearch result
+   */
+  toInstantSearchResult(response, request, queryTime) {
+    const params = request.params || {};
+    const page = params.page ?? 0;
+    const hitsPerPage = Math.min(params.hitsPerPage ?? 20, 200);
+    const hits = response.results.map((r) => this.toHit(r, params));
+    const nbPages = hitsPerPage > 0 ? Math.ceil(response.total / hitsPerPage) : 0;
+    const facets = response.facets && response.facets.length > 0 ? this.mapFacetResults(response.facets, params.facets) : this.computeFacets(response.results, params.facets);
+    return {
+      hits,
+      nbHits: response.total,
+      page,
+      nbPages,
+      hitsPerPage,
+      processingTimeMS: queryTime,
+      query: params.query || "",
+      params: this.buildParamsString(params),
+      exhaustiveNbHits: true,
+      ...Object.keys(facets).length > 0 ? { facets } : {},
+      index: request.indexName
+    };
+  }
+  // --------------------------------------------------
+  // Private helpers
+  // --------------------------------------------------
+  toHit(result, params) {
+    const pre = params.highlightPreTag || "<em>";
+    const post = params.highlightPostTag || "</em>";
+    const hit = {
+      objectID: result.id,
+      title: result.title,
+      slug: result.slug,
+      collection_id: result.collection_id,
+      collection_name: result.collection_name,
+      status: result.status,
+      created_at: result.created_at,
+      updated_at: result.updated_at,
+      ...result.author_name ? { author_name: result.author_name } : {},
+      ...result.url ? { url: result.url } : {},
+      ...result.relevance_score != null ? { relevance_score: result.relevance_score } : {}
+    };
+    if (result.highlights) {
+      const hr = {};
+      if (result.highlights.title) {
+        hr.title = {
+          value: this.convertTags(result.highlights.title, pre, post),
+          matchLevel: this.matchLevel(result.highlights.title)
+        };
+      }
+      if (result.highlights.body) {
+        hr.body = {
+          value: this.convertTags(result.highlights.body, pre, post),
+          matchLevel: this.matchLevel(result.highlights.body)
+        };
+      }
+      if (Object.keys(hr).length > 0) {
+        hit._highlightResult = hr;
+      }
+    }
+    if (result.snippet) {
+      hit._snippetResult = {
+        body: {
+          value: this.convertTags(result.snippet, pre, post),
+          matchLevel: this.matchLevel(result.snippet)
+        }
+      };
+    }
+    return hit;
+  }
+  /**
+   * Resolve collection name(s) to IDs.
+   * "*" / "all" / "" → empty array (search all indexed collections).
+   */
+  async resolveCollections(indexName) {
+    if (!indexName || indexName === "*" || indexName === "all") {
+      return [];
+    }
+    const cached = this.collectionCache.get(indexName);
+    if (cached) return cached;
+    try {
+      const row = await this.db.prepare("SELECT id FROM collections WHERE name = ? AND is_active = 1 LIMIT 1").bind(indexName).first();
+      const ids = row?.id ? [String(row.id)] : [];
+      this.collectionCache.set(indexName, ids);
+      return ids;
+    } catch {
+      return [];
+    }
+  }
+  determineSearchMode(settings) {
+    if (settings.ai_mode_enabled) return "hybrid";
+    return "fts5";
+  }
+  /**
+   * Parse Algolia's facetFilters parameter into filters.custom format.
+   * Supports: ["field:value", ...] and [["field:val1", "field:val2"], ...]
+   */
+  parseFacetFilters(facetFilters) {
+    if (!facetFilters || facetFilters.length === 0) return {};
+    const result = {};
+    for (const filter of facetFilters) {
+      if (typeof filter === "string") {
+        const colonIndex = filter.indexOf(":");
+        if (colonIndex > 0) {
+          const field = filter.substring(0, colonIndex);
+          const value = filter.substring(colonIndex + 1);
+          if (!result[field]) result[field] = [];
+          result[field].push(value);
+        }
+      } else if (Array.isArray(filter)) {
+        for (const f of filter) {
+          const colonIndex = f.indexOf(":");
+          if (colonIndex > 0) {
+            const field = f.substring(0, colonIndex);
+            const value = f.substring(colonIndex + 1);
+            if (!result[field]) result[field] = [];
+            result[field].push(value);
+          }
+        }
+      }
+    }
+    return result;
+  }
+  /**
+   * Minimal Algolia filter parser. MVP supports:
+   *   status:published   status:'draft'   status:"archived"
+   */
+  parseStatusFilter(filters) {
+    if (!filters) return void 0;
+    const m = filters.match(/status\s*:\s*['"]?(\w+)['"]?/i);
+    return m?.[1] ? [m[1]] : void 0;
+  }
+  /**
+   * Map FacetResult[] from FacetService to Algolia format.
+   * Filters to only the facets requested by InstantSearch params.
+   */
+  mapFacetResults(facetResults, requested) {
+    if (!requested || requested.length === 0) return {};
+    const facets = {};
+    const requestedSet = new Set(requested);
+    for (const fr of facetResults) {
+      if (requestedSet.has(fr.field) || requestedSet.has(fr.name) || requestedSet.has("*")) {
+        const counts = {};
+        for (const fv of fr.values) {
+          counts[fv.value] = fv.count;
+        }
+        facets[fr.field] = counts;
+      }
+    }
+    return facets;
+  }
+  /**
+   * Compute facet counts from the current result page.
+   * Fallback when FacetService data is not available.
+   */
+  computeFacets(results, requested) {
+    if (!requested || requested.length === 0) return {};
+    const facets = {};
+    for (const name of requested) {
+      if (name === "collection_name") {
+        const counts = {};
+        for (const r of results) {
+          counts[r.collection_name] = (counts[r.collection_name] || 0) + 1;
+        }
+        facets.collection_name = counts;
+      } else if (name === "status") {
+        const counts = {};
+        for (const r of results) {
+          counts[r.status] = (counts[r.status] || 0) + 1;
+        }
+        facets.status = counts;
+      }
+    }
+    return facets;
+  }
+  /** Replace <mark>...</mark> with the requested highlight tags. */
+  convertTags(text, open, close) {
+    return text.replace(/<mark>/g, open).replace(/<\/mark>/g, close);
+  }
+  /** Detect Algolia match level from presence of <mark> tags in the source text. */
+  matchLevel(text) {
+    if (!text.includes("<mark>")) return "none";
+    const plain = text.replace(/<\/?mark>/g, "");
+    const highlighted = (text.match(/<mark>([\s\S]*?)<\/mark>/g) || []).map((m) => m.replace(/<\/?mark>/g, "")).join("");
+    return highlighted.length / Math.max(plain.length, 1) > 0.5 ? "full" : "partial";
+  }
+  buildParamsString(params) {
+    const parts = [];
+    if (params.query != null) parts.push(`query=${encodeURIComponent(params.query)}`);
+    if (params.page != null) parts.push(`page=${params.page}`);
+    if (params.hitsPerPage != null) parts.push(`hitsPerPage=${params.hitsPerPage}`);
+    if (params.facets) parts.push(`facets=${encodeURIComponent(JSON.stringify(params.facets))}`);
+    if (params.filters) parts.push(`filters=${encodeURIComponent(params.filters)}`);
+    return parts.join("&");
+  }
+};
+
+// src/plugins/core-plugins/ai-search-plugin/routes/instantsearch-api.ts
+var instantSearchRoutes = new hono.Hono();
+instantSearchRoutes.post("/", async (c) => {
+  try {
+    const db = c.env.DB;
+    const ai = c.env.AI;
+    const vectorize = c.env.VECTORIZE_INDEX;
+    const kv = c.env.CACHE_KV;
+    const searchService = new chunkKAEZ35ZT_cjs.AISearchService(db, ai, vectorize, kv);
+    const adapter = new InstantSearchAdapter(db);
+    const body = await c.req.json();
+    if (!body.requests || !Array.isArray(body.requests)) {
+      return c.json(
+        { message: "Invalid request format. Expected { requests: [...] }", status: 400 },
+        400
+      );
+    }
+    const settings = await searchService.getSettings();
+    if (!settings?.enabled) {
+      return c.json({
+        results: body.requests.map((req) => emptyResult(req))
+      });
+    }
+    const results = await Promise.all(
+      body.requests.map(async (request) => {
+        const requestStart = Date.now();
+        try {
+          const sonicQuery = await adapter.toSonicQuery(request, settings);
+          const sonicResponse = await searchService.search(sonicQuery);
+          return adapter.toInstantSearchResult(
+            sonicResponse,
+            request,
+            Date.now() - requestStart
+          );
+        } catch (error) {
+          console.error("[InstantSearch] Request error:", error);
+          return emptyResult(request, Date.now() - requestStart);
+        }
+      })
+    );
+    return c.json({ results });
+  } catch (error) {
+    console.error("[InstantSearch] Error:", error);
+    return c.json(
+      { message: "Search request failed", status: 500 },
+      500
+    );
+  }
+});
+function emptyResult(request, processingTimeMS = 0) {
+  const params = request.params || {};
+  return {
+    hits: [],
+    nbHits: 0,
+    page: params.page ?? 0,
+    nbPages: 0,
+    hitsPerPage: params.hitsPerPage ?? 20,
+    processingTimeMS,
+    query: params.query || "",
+    params: "",
+    exhaustiveNbHits: true,
+    index: request.indexName
+  };
+}
+var instantsearch_api_default = instantSearchRoutes;
+var instantSearchTestRoutes = new hono.Hono();
+instantSearchTestRoutes.get("/instantsearch", async (c) => {
+  let collectionOptions = '<option value="*">* (All Collections)</option>';
+  try {
+    const { results } = await c.env.DB.prepare("SELECT name, display_name FROM collections WHERE is_active = 1 ORDER BY display_name").all();
+    for (const col of results || []) {
+      collectionOptions += `<option value="${col.name}">${col.display_name} (${col.name})</option>`;
+    }
+  } catch {
+  }
+  return c.html(html.html`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>InstantSearch.js Test - SonicJS</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/instantsearch.css@8/themes/satellite-min.css">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            min-height: 100vh;
+          }
+          .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+          }
+          h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+          .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+          .subtitle a { color: #6366f1; text-decoration: none; }
+          .subtitle a:hover { text-decoration: underline; }
+
+          /* Config bar */
+          .config-bar {
+            background: white;
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+          }
+          .config-bar .field { display: flex; flex-direction: column; gap: 4px; }
+          .config-bar label { font-size: 0.8rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.025em; }
+          .config-bar select, .config-bar input[type="number"] {
+            padding: 0.4rem 0.6rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: white;
+          }
+          .config-bar button {
+            padding: 0.45rem 1rem;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+          }
+          .config-bar button:hover { background: #4f46e5; }
+
+          /* Hits styling */
+          .ais-SearchBox { margin-bottom: 1rem; }
+          .ais-Hits-item {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid #f1f5f9;
+          }
+          .hit-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.3rem; line-height: 1.3; }
+          .hit-title em, .hit-snippet em {
+            background: #fef08a;
+            font-style: normal;
+            padding: 1px 3px;
+            border-radius: 2px;
+          }
+          .hit-snippet { color: #475569; font-size: 0.88rem; line-height: 1.55; }
+          .hit-meta { margin-top: 0.5rem; font-size: 0.78rem; color: #94a3b8; display: flex; gap: 1rem; flex-wrap: wrap; }
+          .badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 9999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+          }
+          .badge-published { background: #dcfce7; color: #166534; }
+          .badge-draft { background: #fef9c3; color: #854d0e; }
+          .badge-archived { background: #f1f5f9; color: #475569; }
+
+          .ais-Stats { color: #64748b; font-size: 0.85rem; margin-bottom: 1rem; }
+          .ais-Pagination { margin-top: 1.5rem; }
+
+          /* Code snippet */
+          .code-panel {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 1.25rem;
+            margin-top: 2rem;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            overflow-x: auto;
+          }
+          .code-panel summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 0.75rem;
+          }
+          .code-panel code { white-space: pre; }
+          .code-panel .key { color: #7dd3fc; }
+          .code-panel .str { color: #86efac; }
+          .code-panel .cmt { color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>InstantSearch.js Test</h1>
+          <p class="subtitle">
+            Algolia-compatible search powered by SonicJS &mdash;
+            <a href="/admin/plugins/ai-search/integration#instantsearch" target="_blank">Integration Guide</a> |
+            <a href="/admin/search" target="_blank">Admin</a>
+          </p>
+
+          <div class="config-bar">
+            <div class="field">
+              <label for="idx">Index (Collection)</label>
+              <select id="idx">${html.raw(collectionOptions)}</select>
+            </div>
+            <div class="field">
+              <label for="hpp">Hits / Page</label>
+              <select id="hpp">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+              </select>
+            </div>
+            <button onclick="restart()">Apply</button>
+          </div>
+
+          <div id="searchbox"></div>
+          <div id="stats"></div>
+          <div id="hits"></div>
+          <div id="pagination"></div>
+
+          <details class="code-panel">
+            <summary>Show searchClient code (copy this into your project)</summary>
+            <code><span class="cmt">// 1. Create the search client (5 lines)</span>
+<span class="key">const</span> searchClient = {
+  search(requests) {
+    <span class="key">return</span> fetch(<span class="str">'${"{"}window.location.origin${"}"}/api/instantsearch'</span>, {
+      method: <span class="str">'POST'</span>,
+      headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> },
+      body: JSON.stringify({ requests }),
+    }).then(r => r.json());
+  },
+};
+
+<span class="cmt">// 2. Use with InstantSearch.js</span>
+<span class="key">import</span> instantsearch <span class="key">from</span> <span class="str">'instantsearch.js'</span>;
+<span class="key">const</span> search = instantsearch({
+  indexName: <span class="str">'blog_posts'</span>,  <span class="cmt">// your collection name, or "*" for all</span>
+  searchClient,
+});
+search.addWidgets([ <span class="cmt">/* searchBox, hits, pagination ... */</span> ]);
+search.start();</code>
+          </details>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js"></script>
+        <script>
+          var API = window.location.origin;
+          var currentSearch = null;
+
+          function makeClient() {
+            return {
+              search: function(requests) {
+                return fetch(API + '/api/instantsearch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ requests }),
+                }).then(function(r) { return r.json(); });
+              }
+            };
+          }
+
+          function badgeClass(status) {
+            if (status === 'published') return 'badge badge-published';
+            if (status === 'draft') return 'badge badge-draft';
+            return 'badge badge-archived';
+          }
+
+          function esc(s) {
+            if (!s) return '';
+            var d = document.createElement('div');
+            d.appendChild(document.createTextNode(s));
+            return d.innerHTML;
+          }
+
+          function restart() {
+            var idx = document.getElementById('idx').value;
+            var hpp = parseInt(document.getElementById('hpp').value, 10);
+
+            if (currentSearch) {
+              currentSearch.dispose();
+              ['searchbox','stats','hits','pagination'].forEach(function(id) {
+                document.getElementById(id).innerHTML = '';
+              });
+            }
+
+            currentSearch = instantsearch({
+              indexName: idx,
+              searchClient: makeClient(),
+              searchFunction: function(helper) {
+                if (helper.state.query) {
+                  helper.search();
+                } else {
+                  document.getElementById('hits').innerHTML =
+                    '<p style="color:#94a3b8;text-align:center;padding:3rem 1rem;">Type a query above to search your content...</p>';
+                  document.getElementById('stats').innerHTML = '';
+                }
+              },
+            });
+
+            currentSearch.addWidgets([
+              instantsearch.widgets.searchBox({
+                container: '#searchbox',
+                placeholder: 'Search your content...',
+                autofocus: true,
+              }),
+
+              instantsearch.widgets.stats({
+                container: '#stats',
+                templates: {
+                  text: function(data) {
+                    return data.nbHits + ' results in ' + data.processingTimeMS + 'ms';
+                  },
+                },
+              }),
+
+              instantsearch.widgets.hits({
+                container: '#hits',
+                templates: {
+                  item: function(hit) {
+                    var title = (hit._highlightResult && hit._highlightResult.title)
+                      ? hit._highlightResult.title.value
+                      : esc(hit.title);
+                    var body = (hit._snippetResult && hit._snippetResult.body)
+                      ? hit._snippetResult.body.value
+                      : '';
+                    var date = hit.created_at
+                      ? new Date(hit.created_at * 1000).toLocaleDateString()
+                      : '';
+                    var score = hit.relevance_score
+                      ? (hit.relevance_score * 100).toFixed(1) + '%'
+                      : '';
+
+                    return '<div>' +
+                      '<div class="hit-title">' + title + '</div>' +
+                      (body ? '<div class="hit-snippet">' + body + '</div>' : '') +
+                      '<div class="hit-meta">' +
+                        '<span>' + esc(hit.collection_name) + '</span>' +
+                        '<span class="' + badgeClass(hit.status) + '">' + esc(hit.status) + '</span>' +
+                        (date ? '<span>' + date + '</span>' : '') +
+                        (score ? '<span>Score: ' + score + '</span>' : '') +
+                        '<span>ID: ' + esc(hit.objectID).substring(0, 8) + '&hellip;</span>' +
+                      '</div>' +
+                    '</div>';
+                  },
+                  empty: function(data) {
+                    return '<p style="text-align:center;color:#94a3b8;padding:3rem 1rem;">No results for &ldquo;' + esc(data.query) + '&rdquo;</p>';
+                  },
+                },
+              }),
+
+              instantsearch.widgets.pagination({
+                container: '#pagination',
+              }),
+
+              instantsearch.widgets.configure({
+                hitsPerPage: hpp,
+              }),
+            ]);
+
+            currentSearch.start();
+          }
+
+          restart();
+        </script>
+      </body>
+    </html>
+  `);
+});
+var instantsearch_test_page_default = instantSearchTestRoutes;
 var integrationGuideRoutes = new hono.Hono();
 integrationGuideRoutes.get("/integration", async (c) => {
   return c.html(html.html`
@@ -5326,6 +6454,7 @@ integrationGuideRoutes.get("/integration", async (c) => {
                 <button class="tab" onclick="showTab('react')">React</button>
                 <button class="tab" onclick="showTab('vue')">Vue</button>
                 <button class="tab" onclick="showTab('astro')">Astro</button>
+                <button class="tab" onclick="showTab('instantsearch')">InstantSearch.js</button>
               </div>
 
               <!-- Vanilla JS Tab -->
@@ -5365,27 +6494,32 @@ integrationGuideRoutes.get("/integration", async (c) => {
     const resultsDiv = document.getElementById('results');
     let timeout;
 
-    // Autocomplete
-    searchInput.addEventListener('input', async (e) =&gt; {
-      const query = e.target.value.trim();
+    // Autocomplete — trending on focus, prefix suggestions on input
+    function fetchSuggestions(query) {
       clearTimeout(timeout);
-      
-      if (query.length &lt; 2) {
-        suggestionsDiv.style.display = 'none';
-        return;
-      }
-
       timeout = setTimeout(async () =&gt; {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:8px 10px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = \`&lt;div class="suggestions"&gt;\${header}\${
             data.data.map(s =&gt; \`&lt;div class="suggestion" onclick="search('\${s}')"&gt;\${s}&lt;/div&gt;\`).join('')
           }&lt;/div&gt;\`;
           suggestionsDiv.style.display = 'block';
+        } else {
+          suggestionsDiv.style.display = 'none';
         }
-      }, 300);
+      }, query.length &lt; 2 ? 100 : 300);
+    }
+
+    searchInput.addEventListener('focus', () =&gt; {
+      if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+    });
+
+    searchInput.addEventListener('input', (e) =&gt; {
+      fetchSuggestions(e.target.value.trim());
     });
 
     // Search
@@ -5444,21 +6578,16 @@ export function AISearch() {
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
-  // Autocomplete
+  // Autocomplete — returns trending for empty/short input, prefix suggestions for 2+ chars
   useEffect(() =&gt; {
-    if (query.length &lt; 2) {
-      setSuggestions([]);
-      return;
-    }
-    
     const timeout = setTimeout(async () =&gt; {
       const res = await fetch(
         \`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`
       );
       const data = await res.json();
       if (data.success) setSuggestions(data.data);
-    }, 300);
-    
+    }, query.length &lt; 2 ? 100 : 300);
+
     return () =&gt; clearTimeout(timeout);
   }, [query]);
 
@@ -5619,24 +6748,18 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
   let searchTimeout;
   let suggestTimeout;
 
-  // Autocomplete
-  searchInput.addEventListener('input', async (e) =&gt; {
-    const query = e.target.value.trim();
-    
+  // Autocomplete — trending on focus, prefix on input
+  function fetchSuggestions(query) {
     clearTimeout(suggestTimeout);
-    
-    if (query.length &lt; 2) {
-      suggestionsDiv.classList.remove('show');
-      return;
-    }
-
     suggestTimeout = setTimeout(async () =&gt; {
       try {
         const res = await fetch(\`\${API_URL}/api/search/suggest?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
-        
+
         if (data.success &amp;&amp; data.data.length &gt; 0) {
-          suggestionsDiv.innerHTML = data.data
+          const isTrending = query.length &lt; 2;
+          const header = isTrending ? '&lt;div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase"&gt;Trending Searches&lt;/div&gt;' : '';
+          suggestionsDiv.innerHTML = header + data.data
             .map(s =&gt; \`&lt;div class="suggestion" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')"&gt;\${s}&lt;/div&gt;\`)
             .join('');
           suggestionsDiv.classList.add('show');
@@ -5646,7 +6769,15 @@ const API_URL = import.meta.env.PUBLIC_API_URL || 'https://your-backend.com'; //
       } catch (error) {
         console.error('Autocomplete error:', error);
       }
-    }, 300);
+    }, query.length &lt; 2 ? 100 : 300);
+  }
+
+  searchInput.addEventListener('focus', () =&gt; {
+    if (searchInput.value.trim().length &lt; 2) fetchSuggestions('');
+  });
+
+  searchInput.addEventListener('input', (e) =&gt; {
+    fetchSuggestions(e.target.value.trim());
   });
 
   // Search with debounce
@@ -5787,19 +6918,17 @@ let searchTimeout;
 let suggestTimeout;
 
 watch(query, (newQuery) =&gt; {
-  if (newQuery.length &lt; 2) {
+  // Search (only for 2+ chars)
+  if (newQuery.length &gt;= 2) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
+  } else {
     results.value = [];
-    suggestions.value = [];
-    return;
   }
-  
-  // Search
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() =&gt; performSearch(newQuery), 500);
-  
-  // Autocomplete
+
+  // Autocomplete — trending for empty/short, prefix for 2+ chars
   clearTimeout(suggestTimeout);
-  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), 300);
+  suggestTimeout = setTimeout(() =&gt; getSuggestions(newQuery), newQuery.length &lt; 2 ? 100 : 300);
 });
 
 async function performSearch(q) {
@@ -5838,6 +6967,110 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
 .result { padding: 1rem; background: #f8f9fa; border-left: 4px solid #667eea; margin: 1rem 0; border-radius: 8px; }
 &lt;/style&gt;</code></pre>
               </div>
+
+              <!-- InstantSearch.js Tab -->
+              <div id="instantsearch" class="tab-content">
+                <h3>InstantSearch.js &mdash; Drop-in Algolia Replacement</h3>
+                <p>Use the official <a href="https://www.algolia.com/doc/guides/building-search-ui/what-is-instantsearch/js/" target="_blank">InstantSearch.js</a> library (React, Vue, or vanilla JS) with SonicJS as the backend. Zero UI changes needed if you&rsquo;re migrating from Algolia.</p>
+
+                <div class="info-box">
+                  <strong>How it works:</strong> SonicJS exposes a <code>POST /api/instantsearch</code> endpoint that speaks the Algolia multi-search protocol. You connect it with a 5-line <code>searchClient</code> shim &mdash; no npm adapter package required.
+                </div>
+
+                <h3>1. Install InstantSearch.js</h3>
+                <pre><code>npm install instantsearch.js
+# Or for React:
+npm install react-instantsearch
+# Or for Vue:
+npm install vue-instantsearch</code></pre>
+
+                <h3>2. Create the Search Client (5 lines)</h3>
+                <button class="copy-btn" onclick="copyCode('is-client')">Copy Code</button>
+                <pre id="is-client"><code>// searchClient.js
+const API_URL = 'https://your-sonicjs-site.com'; // Update this!
+
+export const searchClient = {
+  search(requests) {
+    return fetch(\`\${API_URL}/api/instantsearch\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests }),
+    }).then(res =&gt; res.json());
+  },
+};</code></pre>
+
+                <h3>3a. Vanilla InstantSearch.js</h3>
+                <button class="copy-btn" onclick="copyCode('is-vanilla')">Copy Code</button>
+                <pre id="is-vanilla"><code>import instantsearch from 'instantsearch.js';
+import { searchBox, hits, pagination } from 'instantsearch.js/es/widgets';
+import { searchClient } from './searchClient';
+
+const search = instantsearch({
+  indexName: 'posts',   // Your collection name, or "*" for all
+  searchClient,
+});
+
+search.addWidgets([
+  searchBox({ container: '#searchbox' }),
+  hits({
+    container: '#hits',
+    templates: {
+      item(hit, { html, components }) {
+        return html\`
+          &lt;div&gt;
+            &lt;h3&gt;\${components.Highlight({ hit, attribute: 'title' })}&lt;/h3&gt;
+            &lt;p&gt;\${components.Snippet({ hit, attribute: 'body' })}&lt;/p&gt;
+          &lt;/div&gt;
+        \`;
+      },
+    },
+  }),
+  pagination({ container: '#pagination' }),
+]);
+
+search.start();</code></pre>
+
+                <h3>3b. React InstantSearch</h3>
+                <button class="copy-btn" onclick="copyCode('is-react')">Copy Code</button>
+                <pre id="is-react"><code>import {
+  InstantSearch, SearchBox, Hits, Pagination, Highlight, Snippet,
+} from 'react-instantsearch';
+import { searchClient } from './searchClient';
+
+function Hit({ hit }) {
+  return (
+    &lt;div&gt;
+      &lt;h3&gt;&lt;Highlight attribute="title" hit={hit} /&gt;&lt;/h3&gt;
+      &lt;p&gt;&lt;Snippet attribute="body" hit={hit} /&gt;&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+
+export default function SearchPage() {
+  return (
+    &lt;InstantSearch searchClient={searchClient} indexName="posts"&gt;
+      &lt;SearchBox /&gt;
+      &lt;Hits hitComponent={Hit} /&gt;
+      &lt;Pagination /&gt;
+    &lt;/InstantSearch&gt;
+  );
+}</code></pre>
+
+                <h3>Index Name Mapping</h3>
+                <div class="info-box">
+                  <strong>Collection names:</strong> Use your SonicJS collection name as the <code>indexName</code> (e.g. <code>"posts"</code>, <code>"products"</code>).<br>
+                  <strong>Search all:</strong> Use <code>indexName: "*"</code> or <code>"all"</code> to search across every indexed collection.
+                </div>
+
+                <h3>Supported Features</h3>
+                <ul>
+                  <li><strong>Search:</strong> Full-text (FTS5), semantic (AI), and hybrid search</li>
+                  <li><strong>Highlighting:</strong> Automatic highlight &amp; snippet results</li>
+                  <li><strong>Pagination:</strong> Page-based navigation via <code>page</code> / <code>hitsPerPage</code></li>
+                  <li><strong>Facets (MVP):</strong> <code>collection_name</code> and <code>status</code> facets</li>
+                  <li><strong>Custom highlight tags:</strong> Configurable via <code>highlightPreTag</code> / <code>highlightPostTag</code></li>
+                </ul>
+              </div>
             </div>
 
             <!-- API Reference Section -->
@@ -5853,8 +7086,33 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
                 <div class="card">
                   <h4>Autocomplete</h4>
                   <p><strong>GET</strong> <code>/api/search/suggest?q=query</code></p>
-                  <p>Get instant suggestions (&lt;50ms)</p>
+                  <p>Trending queries on empty input, data-driven prefix suggestions on 2+ chars (&lt;50ms)</p>
                 </div>
+                <div class="card">
+                  <h4>InstantSearch API</h4>
+                  <p><strong>POST</strong> <code>/api/instantsearch</code></p>
+                  <p>Algolia-compatible multi-search endpoint</p>
+                </div>
+                <div class="card">
+                  <h4>Click Tracking</h4>
+                  <p><strong>POST</strong> <code>/api/search/click</code></p>
+                  <p>Record result clicks for CTR analytics</p>
+                </div>
+              </div>
+
+              <h3>Autocomplete / Suggest</h3>
+              <p>The suggest endpoint provides <strong>data-driven suggestions</strong> powered by real search analytics:</p>
+              <pre><code>GET /api/search/suggest?q=         // Empty → trending queries (top 10, last 7 days)
+GET /api/search/suggest?q=cl       // Short → trending queries
+GET /api/search/suggest?q=cloud    // 2+ chars → popular query prefixes + content titles</code></pre>
+              <div class="info-box">
+                <strong>Key features:</strong>
+                <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                  <li>Suggestions ranked by real search frequency (not just recency)</li>
+                  <li>Zero-result queries are automatically filtered out</li>
+                  <li>Content title prefix matching via FTS5 fills gaps when query history is sparse</li>
+                  <li>Focus the search box to show trending searches before the user types</li>
+                </ul>
               </div>
 
               <h3>Search Request</h3>
@@ -5873,6 +7131,7 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
               <pre><code>{
   "success": true,
   "data": {
+    "search_id": "a1b2c3d4-...",  // Use for click tracking
     "results": [{
       "id": "123",
       "title": "Getting Started",
@@ -5890,6 +7149,96 @@ input { width: 100%; padding: 1rem; font-size: 1rem; border: 2px solid #ddd; bor
     "mode": "ai"
   }
 }</code></pre>
+
+              <h3>Click Tracking</h3>
+              <p>Record when users click search results. This powers CTR analytics in the admin dashboard.</p>
+              <pre><code>// Fire-and-forget when user clicks a result
+navigator.sendBeacon('/api/search/click', JSON.stringify({
+  search_id: searchResponse.data.search_id,  // from search response
+  content_id: result.id,                      // clicked result ID
+  content_title: result.title,                // for analytics display
+  click_position: index + 1                   // 1-based position in results
+}));</code></pre>
+              <p><small>Click tracking is optional but recommended. Uses <code>sendBeacon</code> for reliability during navigation.</small></p>
+
+              <h3>Faceted Search</h3>
+              <p>Request facet counts alongside search results by passing <code>facets: true</code>. Facets reflect the full matching result set, not just the current page.</p>
+              <pre><code>// Request with facets
+const response = await fetch('/api/search', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: 'tutorial',
+    mode: 'fts5',
+    facets: true
+  })
+});
+
+// Response includes facets array
+{
+  "success": true,
+  "data": {
+    "results": [...],
+    "total": 42,
+    "facets": [
+      { "name": "Collection", "field": "collection_name", "values": [
+        { "value": "Blog Posts", "count": 28 },
+        { "value": "Docs", "count": 14 }
+      ]},
+      { "name": "Status", "field": "status", "values": [
+        { "value": "published", "count": 40 },
+        { "value": "draft", "count": 2 }
+      ]},
+      { "name": "Tags", "field": "$.tags", "values": [
+        { "value": "javascript", "count": 15 },
+        { "value": "react", "count": 12 }
+      ]}
+    ]
+  }
+}</code></pre>
+
+              <h4>Frontend Facet Sidebar Example</h4>
+              <pre><code>// Render facet checkboxes
+function renderFacets(facets) {
+  return facets.map(facet =&gt; \`
+    &lt;div class="facet-group"&gt;
+      &lt;h4&gt;\${facet.name}&lt;/h4&gt;
+      \${facet.values.map(v =&gt; \`
+        &lt;label&gt;
+          &lt;input type="checkbox" value="\${v.value}"
+            onchange="filterByFacet('\${facet.field}', '\${v.value}')"&gt;
+          \${v.value} (\${v.count})
+        &lt;/label&gt;
+      \`).join('')}
+    &lt;/div&gt;
+  \`).join('');
+}
+
+// Track facet interactions (optional, powers admin analytics)
+function filterByFacet(field, value) {
+  navigator.sendBeacon('/api/search/facet-click', JSON.stringify({
+    facet_field: field,
+    facet_value: value,
+    search_id: currentSearchId
+  }));
+  // Re-run search with the filter applied
+}</code></pre>
+
+              <h4>InstantSearch.js RefinementList</h4>
+              <p>If you use InstantSearch.js, facets work automatically with the <code>RefinementList</code> widget:</p>
+              <pre><code>import { refinementList } from 'instantsearch.js/es/widgets';
+
+search.addWidgets([
+  refinementList({
+    container: '#status-filter',
+    attribute: 'status',
+  }),
+  refinementList({
+    container: '#collection-filter',
+    attribute: 'collection_name',
+  })
+]);</code></pre>
+              <p><small>Enable faceted search in the admin dashboard (Configuration tab) to auto-discover facets from your collection schemas.</small></p>
             </div>
 
             <!-- Performance Tips Section -->
@@ -5951,6 +7300,7 @@ app.use('/api/*', cors({
                 <li>Added loading states</li>
                 <li>Styled to match your design</li>
                 <li>Added error handling</li>
+                <li>Added click tracking (optional)</li>
                 <li>Tested on mobile</li>
               </ul>
             </div>
@@ -6218,7 +7568,7 @@ testPageRoutes.get("/test", async (c) => {
             <strong>Performance Testing:</strong> Watch how similarity caching speeds up repeated queries.
             First query to a term may take 500-800ms, but similar queries should be much faster!
             <br><br>
-            <strong>Autocomplete:</strong> Type 2+ characters to see instant suggestions (<50ms).
+            <strong>Autocomplete:</strong> Focus the search box to see trending searches, or type to get data-driven suggestions (<50ms).
             <br><br>
             <strong>For Developers:</strong> Want to add AI search to your own frontend? 
             <a href="/admin/plugins/ai-search/integration"
@@ -6293,16 +7643,9 @@ testPageRoutes.get("/test", async (c) => {
 
           let suggestionTimeout;
 
-          // Autocomplete
-          searchInput.addEventListener('input', async (e) => {
-            const query = e.target.value.trim();
-            
+          function fetchTestSuggestions(query) {
             clearTimeout(suggestionTimeout);
-            
-            if (query.length < 2) {
-              suggestionsDiv.classList.remove('show');
-              return;
-            }
+            const debounceMs = query.length < 2 ? 100 : 200;
 
             suggestionTimeout = setTimeout(async () => {
               const startTime = performance.now();
@@ -6311,22 +7654,40 @@ testPageRoutes.get("/test", async (c) => {
                 const data = await response.json();
                 const endTime = performance.now();
                 const duration = Math.round(endTime - startTime);
-                
+
                 if (data.success && data.data.length > 0) {
-                  suggestionsDiv.innerHTML = data.data.map(s => 
+                  const isTrending = query.length < 2;
+                  const header = isTrending
+                    ? '<div style="padding:6px 12px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.05em;">Trending Searches</div>'
+                    : '';
+                  suggestionsDiv.innerHTML = header + data.data.map(s =>
                     \`<div class="suggestion-item" onclick="selectSuggestion('\${s.replace(/'/g, "\\'")}')">
                       <strong>\${s}</strong>
                     </div>\`
                   ).join('');
                   suggestionsDiv.classList.add('show');
-                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\`);
+                  console.log(\`Autocomplete: \${duration}ms for \${data.data.length} suggestions\${isTrending ? ' (trending)' : ''}\`);
                 } else {
                   suggestionsDiv.classList.remove('show');
                 }
               } catch (error) {
                 console.error('Autocomplete error:', error);
               }
-            }, 200); // Fast debounce for instant feel
+            }, debounceMs);
+          }
+
+          // Trending on focus
+          searchInput.addEventListener('focus', (e) => {
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+              fetchTestSuggestions('');
+            }
+          });
+
+          // Prefix suggestions on input
+          searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            fetchTestSuggestions(query);
           });
 
           // Hide suggestions on click outside
@@ -6398,11 +7759,22 @@ testPageRoutes.get("/test", async (c) => {
             return div.innerHTML;
           }
 
-          function stripHtml(str) {
+          function sanitizeHighlight(str) {
             if (!str) return '';
+            // Preserve <mark> and </mark> tags, strip all other HTML, escape text
+            // 1. Replace <mark> with placeholder
+            var s = str.replace(/<mark>/gi, '\\x01MARK_OPEN\\x01').replace(/<\\/mark>/gi, '\\x01MARK_CLOSE\\x01');
+            // 2. Strip all remaining HTML tags
             var tmp = document.createElement('div');
-            tmp.innerHTML = str;
-            return tmp.textContent || tmp.innerText || '';
+            tmp.innerHTML = s;
+            var text = tmp.textContent || tmp.innerText || '';
+            // 3. Escape the text
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            var escaped = div.innerHTML;
+            // 4. Restore <mark> tags
+            escaped = escaped.replace(/\\x01MARK_OPEN\\x01/g, '<mark>').replace(/\\x01MARK_CLOSE\\x01/g, '</mark>');
+            return escaped;
           }
 
           function renderResultItem(result) {
@@ -6413,9 +7785,9 @@ testPageRoutes.get("/test", async (c) => {
             var scoreStr = score ? score.toFixed(3) : 'N/A';
             var scoreLabel = result.rerank_score ? 'Rerank' : result.rrf_score ? 'RRF' : result.bm25_score ? 'BM25' : 'Score';
 
-            // Strip HTML tags then escape to prevent XSS
-            var safeTitle = escapeHtml(stripHtml(rawTitle));
-            var safeSnippet = escapeHtml(stripHtml(rawSnippet));
+            // Sanitize: allow <mark> highlighting, strip all other HTML
+            var safeTitle = sanitizeHighlight(rawTitle);
+            var safeSnippet = sanitizeHighlight(rawSnippet);
 
             var titleHtml = safeTitle;
             if (result.id) {
@@ -6480,7 +7852,7 @@ var aiSearchPlugin = new chunk6FHNRRJ3_cjs.PluginBuilder({
 }).metadata({
   description: manifest_default.description,
   author: { name: manifest_default.author }
-}).addService("aiSearch", AISearchService).addService("indexManager", IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
+}).addService("aiSearch", chunkKAEZ35ZT_cjs.AISearchService).addService("indexManager", chunkKAEZ35ZT_cjs.IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).addRoute("/api/instantsearch", instantsearch_api_default).addRoute("/admin/plugins/ai-search", test_page_default).addRoute("/admin/plugins/ai-search", instantsearch_test_page_default).addRoute("/admin/plugins/ai-search", integration_guide_default).build();
 var magicLinkRequestSchema = zod.z.object({
   email: zod.z.string().email("Valid email is required")
 });
@@ -6627,12 +7999,12 @@ function createMagicLinkAuthPlugin() {
         SET used = 1, used_at = ?
         WHERE id = ?
       `).bind(Date.now(), magicLink.id).run();
-      const jwtToken = await chunkZS5MYHCW_cjs.AuthManager.generateToken(
+      const jwtToken = await chunkJRX4WLFV_cjs.AuthManager.generateToken(
         user.id,
         user.email,
         user.role
       );
-      chunkZS5MYHCW_cjs.AuthManager.setAuthCookie(c, jwtToken);
+      chunkJRX4WLFV_cjs.AuthManager.setAuthCookie(c, jwtToken);
       await db.prepare(`
         UPDATE users SET last_login_at = ? WHERE id = ?
       `).bind(Date.now(), user.id).run();
@@ -7739,7 +9111,7 @@ async function warmNamespace(namespace, entries) {
 }
 
 // src/templates/pages/admin-cache.template.ts
-chunkSHCYIZAN_cjs.init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderCacheDashboard(data) {
   const pageContent = `
     <div class="space-y-6">
@@ -7918,7 +9290,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunkQVIYLOFA_cjs.renderConfirmationDialog({
+    ${chunkKAEZ35ZT_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -7929,7 +9301,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunkQVIYLOFA_cjs.renderConfirmationDialog({
+    ${chunkKAEZ35ZT_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -7940,7 +9312,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunkQVIYLOFA_cjs.getConfirmationDialogScript()}
+    ${chunkKAEZ35ZT_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -7950,7 +9322,7 @@ function renderCacheDashboard(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkSHCYIZAN_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function renderStatCard(label, value, color, icon, colorOverride) {
   const finalColor = colorOverride || color;
@@ -8662,14 +10034,14 @@ var seedDataPlugin = createSeedDataPlugin();
 // src/app.ts
 function createSonicJSApp(config = {}) {
   const app2 = new hono.Hono();
-  const appVersion = config.version || chunk5HMR2SJW_cjs.getCoreVersion();
+  const appVersion = config.version || chunkUOEIMC67_cjs.getCoreVersion();
   const appName = config.name || "SonicJS AI";
   app2.use("*", async (c, next) => {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkZS5MYHCW_cjs.metricsMiddleware());
-  app2.use("*", chunkZS5MYHCW_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkJRX4WLFV_cjs.metricsMiddleware());
+  app2.use("*", chunkJRX4WLFV_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -8686,21 +10058,22 @@ function createSonicJSApp(config = {}) {
       app2.use("*", middleware);
     }
   }
-  app2.route("/api", chunkQVIYLOFA_cjs.api_default);
-  app2.route("/api/media", chunkQVIYLOFA_cjs.api_media_default);
-  app2.route("/api/system", chunkQVIYLOFA_cjs.api_system_default);
-  app2.route("/admin/api", chunkQVIYLOFA_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunkQVIYLOFA_cjs.router);
-  app2.route("/admin/collections", chunkQVIYLOFA_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunkQVIYLOFA_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunkQVIYLOFA_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunkQVIYLOFA_cjs.public_forms_default);
-  app2.route("/api/forms", chunkQVIYLOFA_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunkQVIYLOFA_cjs.router2);
+  app2.route("/api", chunkKAEZ35ZT_cjs.api_default);
+  app2.route("/api/media", chunkKAEZ35ZT_cjs.api_media_default);
+  app2.route("/api/system", chunkKAEZ35ZT_cjs.api_system_default);
+  app2.route("/admin/api", chunkKAEZ35ZT_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunkKAEZ35ZT_cjs.router);
+  app2.route("/admin/collections", chunkKAEZ35ZT_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunkKAEZ35ZT_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunkKAEZ35ZT_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunkKAEZ35ZT_cjs.public_forms_default);
+  app2.route("/api/forms", chunkKAEZ35ZT_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunkKAEZ35ZT_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunkQVIYLOFA_cjs.admin_content_default);
-  app2.route("/admin/media", chunkQVIYLOFA_cjs.adminMediaRoutes);
+  app2.route("/admin/content", chunkKAEZ35ZT_cjs.admin_content_default);
+  app2.route("/admin/media", chunkKAEZ35ZT_cjs.adminMediaRoutes);
+  app2.route("/admin/search", chunkKAEZ35ZT_cjs.adminSearchRoutes);
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
     for (const route of aiSearchPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8712,11 +10085,11 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunkQVIYLOFA_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunkQVIYLOFA_cjs.adminLogsRoutes);
-  app2.route("/admin", chunkQVIYLOFA_cjs.userRoutes);
-  app2.route("/auth", chunkQVIYLOFA_cjs.auth_default);
-  app2.route("/", chunkQVIYLOFA_cjs.test_cleanup_default);
+  app2.route("/admin/plugins", chunkKAEZ35ZT_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunkKAEZ35ZT_cjs.adminLogsRoutes);
+  app2.route("/admin", chunkKAEZ35ZT_cjs.userRoutes);
+  app2.route("/auth", chunkKAEZ35ZT_cjs.auth_default);
+  app2.route("/", chunkKAEZ35ZT_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -8804,83 +10177,83 @@ function createDb(d1$1) {
 }
 
 // src/index.ts
-var VERSION = chunk5HMR2SJW_cjs.package_default.version;
+var VERSION = chunkUOEIMC67_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.ROUTES_INFO; }
+  get: function () { return chunkKAEZ35ZT_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_api_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminCheckboxRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_code_examples_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminCollectionsRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_content_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.router; }
+  get: function () { return chunkKAEZ35ZT_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminDesignRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminLogsRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminMediaRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminPluginRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.adminSettingsRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.admin_testimonials_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.userRoutes; }
+  get: function () { return chunkKAEZ35ZT_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_content_crud_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_media_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.api_system_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkQVIYLOFA_cjs.auth_default; }
+  get: function () { return chunkKAEZ35ZT_cjs.auth_default; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
@@ -9048,83 +10421,83 @@ Object.defineProperty(exports, "workflowHistory", {
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.AuthManager; }
+  get: function () { return chunkJRX4WLFV_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.PermissionManager; }
+  get: function () { return chunkJRX4WLFV_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.bootstrapMiddleware; }
+  get: function () { return chunkJRX4WLFV_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.cacheHeaders; }
+  get: function () { return chunkJRX4WLFV_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.compressionMiddleware; }
+  get: function () { return chunkJRX4WLFV_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkJRX4WLFV_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.getActivePlugins; }
+  get: function () { return chunkJRX4WLFV_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.isPluginActive; }
+  get: function () { return chunkJRX4WLFV_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.logActivity; }
+  get: function () { return chunkJRX4WLFV_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.loggingMiddleware; }
+  get: function () { return chunkJRX4WLFV_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.optionalAuth; }
+  get: function () { return chunkJRX4WLFV_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkJRX4WLFV_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireActivePlugin; }
+  get: function () { return chunkJRX4WLFV_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireActivePlugins; }
+  get: function () { return chunkJRX4WLFV_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireAnyPermission; }
+  get: function () { return chunkJRX4WLFV_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireAuth; }
+  get: function () { return chunkJRX4WLFV_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requirePermission; }
+  get: function () { return chunkJRX4WLFV_cjs.requirePermission; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.requireRole; }
+  get: function () { return chunkJRX4WLFV_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.securityHeaders; }
+  get: function () { return chunkJRX4WLFV_cjs.securityHeaders; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkZS5MYHCW_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkJRX4WLFV_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
@@ -9180,39 +10553,39 @@ Object.defineProperty(exports, "validateCollectionConfig", {
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunkRZWYEWXM_cjs.MigrationService; }
+  get: function () { return chunkHGZ2ZNYT_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,
-  get: function () { return chunkS6K2H2TS_cjs.renderFilterBar; }
+  get: function () { return chunk6WA4KFYZ_cjs.renderFilterBar; }
 });
 Object.defineProperty(exports, "getConfirmationDialogScript", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.getConfirmationDialogScript; }
+  get: function () { return chunkGMUS5V42_cjs.getConfirmationDialogScript; }
 });
 Object.defineProperty(exports, "renderAlert", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderAlert; }
+  get: function () { return chunkGMUS5V42_cjs.renderAlert; }
 });
 Object.defineProperty(exports, "renderConfirmationDialog", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderConfirmationDialog; }
+  get: function () { return chunkGMUS5V42_cjs.renderConfirmationDialog; }
 });
 Object.defineProperty(exports, "renderForm", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderForm; }
+  get: function () { return chunkGMUS5V42_cjs.renderForm; }
 });
 Object.defineProperty(exports, "renderFormField", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderFormField; }
+  get: function () { return chunkGMUS5V42_cjs.renderFormField; }
 });
 Object.defineProperty(exports, "renderPagination", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderPagination; }
+  get: function () { return chunkGMUS5V42_cjs.renderPagination; }
 });
 Object.defineProperty(exports, "renderTable", {
   enumerable: true,
-  get: function () { return chunkSHCYIZAN_cjs.renderTable; }
+  get: function () { return chunkGMUS5V42_cjs.renderTable; }
 });
 Object.defineProperty(exports, "HookSystemImpl", {
   enumerable: true,
@@ -9248,43 +10621,43 @@ Object.defineProperty(exports, "PluginHelpers", {
 });
 Object.defineProperty(exports, "QueryFilterBuilder", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.QueryFilterBuilder; }
+  get: function () { return chunkUOEIMC67_cjs.QueryFilterBuilder; }
 });
 Object.defineProperty(exports, "SONICJS_VERSION", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.SONICJS_VERSION; }
+  get: function () { return chunkUOEIMC67_cjs.SONICJS_VERSION; }
 });
 Object.defineProperty(exports, "TemplateRenderer", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.TemplateRenderer; }
+  get: function () { return chunkUOEIMC67_cjs.TemplateRenderer; }
 });
 Object.defineProperty(exports, "buildQuery", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.buildQuery; }
+  get: function () { return chunkUOEIMC67_cjs.buildQuery; }
 });
 Object.defineProperty(exports, "escapeHtml", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.escapeHtml; }
+  get: function () { return chunkUOEIMC67_cjs.escapeHtml; }
 });
 Object.defineProperty(exports, "getCoreVersion", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.getCoreVersion; }
+  get: function () { return chunkUOEIMC67_cjs.getCoreVersion; }
 });
 Object.defineProperty(exports, "renderTemplate", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.renderTemplate; }
+  get: function () { return chunkUOEIMC67_cjs.renderTemplate; }
 });
 Object.defineProperty(exports, "sanitizeInput", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.sanitizeInput; }
+  get: function () { return chunkUOEIMC67_cjs.sanitizeInput; }
 });
 Object.defineProperty(exports, "sanitizeObject", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.sanitizeObject; }
+  get: function () { return chunkUOEIMC67_cjs.sanitizeObject; }
 });
 Object.defineProperty(exports, "templateRenderer", {
   enumerable: true,
-  get: function () { return chunk5HMR2SJW_cjs.templateRenderer; }
+  get: function () { return chunkUOEIMC67_cjs.templateRenderer; }
 });
 Object.defineProperty(exports, "metricsTracker", {
   enumerable: true,
@@ -9294,6 +10667,7 @@ Object.defineProperty(exports, "HOOKS", {
   enumerable: true,
   get: function () { return chunkKYGRJCZM_cjs.HOOKS; }
 });
+exports.ExperimentService = ExperimentService;
 exports.VERSION = VERSION;
 exports.createDb = createDb;
 exports.createSonicJSApp = createSonicJSApp;

@@ -10,6 +10,7 @@ node_modules/
 # Development
 .wrangler/
 .dev.vars
+.benchmark-temp/
 
 # Environment variables
 .env

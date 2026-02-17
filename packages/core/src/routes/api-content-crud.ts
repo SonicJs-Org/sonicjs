@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import type { Bindings, Variables } from '../app'
 import { FTS5Service } from '../plugins/core-plugins/ai-search-plugin/services/fts5.service'
+import { SearchCacheService } from '../plugins/core-plugins/ai-search-plugin/services/search-cache.service'
 
 const apiContentCrudRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -155,6 +156,12 @@ apiContentCrudRoutes.post('/', requireAuth(), async (c) => {
       )
     )
 
+    // Invalidate search result cache (non-blocking)
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV)
+      c.executionCtx.waitUntil(searchCache.invalidateAll())
+    }
+
     // Get the created content
     const getStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const createdContent = await getStmt.bind(contentId).first() as any
@@ -254,6 +261,12 @@ apiContentCrudRoutes.put('/:id', requireAuth(), async (c) => {
       )
     )
 
+    // Invalidate search result cache (non-blocking)
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV)
+      c.executionCtx.waitUntil(searchCache.invalidateAll())
+    }
+
     // Get updated content
     const getStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const updatedContent = await getStmt.bind(id).first() as any
@@ -310,6 +323,12 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), async (c) => {
         console.error('[API Content] FTS5 removal failed:', err)
       )
     )
+
+    // Invalidate search result cache (non-blocking)
+    if (c.env.CACHE_KV) {
+      const searchCache = new SearchCacheService(c.env.CACHE_KV)
+      c.executionCtx.waitUntil(searchCache.invalidateAll())
+    }
 
     return c.json({ success: true })
   } catch (error) {

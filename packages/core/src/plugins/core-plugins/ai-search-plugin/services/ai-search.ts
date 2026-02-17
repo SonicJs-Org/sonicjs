@@ -2,16 +2,24 @@ import type { D1Database } from '@cloudflare/workers-types'
 import type {
   AISearchSettings,
   CollectionInfo,
+  FacetResult,
   NewCollectionNotification,
   SearchQuery,
   SearchResponse,
   SearchResult,
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { FacetService } from './facet.service'
 import { FTS5Service } from './fts5.service'
 import { HybridSearchService } from './hybrid-search.service'
 import { QueryRewriterService } from './query-rewriter.service'
+import { QueryRulesService } from './query-rules.service'
+import { RankingPipelineService } from './ranking-pipeline.service'
+import { SynonymService } from './synonym.service'
 import { RerankerService } from './reranker.service'
+import { SearchCacheService } from './search-cache.service'
+import { TrendingSearchService } from './trending-search.service'
+import { RelatedSearchService } from './related-search.service'
 
 /**
  * AI Search Service
@@ -24,11 +32,16 @@ export class AISearchService {
   private hybridService?: HybridSearchService
   private queryRewriter?: QueryRewriterService
   private reranker?: RerankerService
+  private rankingPipeline: RankingPipelineService
+  private synonymService: SynonymService
+  private queryRulesService: QueryRulesService
+  private searchCache?: SearchCacheService
 
   constructor(
     private db: D1Database,
     private ai?: any, // Workers AI for embeddings
-    private vectorize?: any // Vectorize for vector search
+    private vectorize?: any, // Vectorize for vector search
+    private kv?: any // KVNamespace for search result caching
   ) {
     // Initialize Custom RAG if bindings are available
     if (this.ai && this.vectorize) {
@@ -51,6 +64,23 @@ export class AISearchService {
       this.queryRewriter = new QueryRewriterService(this.ai)
       this.reranker = new RerankerService(this.ai)
       console.log('[AISearchService] Query rewriter and reranker initialized')
+    }
+
+    // Synonym service (always available, degrades gracefully if table doesn't exist)
+    this.synonymService = new SynonymService(db)
+    if (this.fts5Service) {
+      this.fts5Service.setSynonymService(this.synonymService)
+    }
+
+    // Query substitution rules (always available, degrades gracefully if table doesn't exist)
+    this.queryRulesService = new QueryRulesService(db)
+
+    // Ranking pipeline (always available, zero cost when no stages active)
+    this.rankingPipeline = new RankingPipelineService(db)
+
+    // Search result cache (available when KV binding is present)
+    if (this.kv) {
+      this.searchCache = new SearchCacheService(this.kv)
     }
   }
 
@@ -90,6 +120,9 @@ export class AISearchService {
       index_media: false,
       query_rewriting_enabled: false,
       reranking_enabled: true,
+      fts5_title_boost: 5.0,
+      fts5_slug_boost: 2.0,
+      fts5_body_boost: 1.0,
     }
   }
 
@@ -308,23 +341,263 @@ export class AISearchService {
       }
     }
 
+    // Apply query substitution rules (pre-dispatch, affects all modes)
+    let originalQuery: string | undefined
+    let appliedRuleId: string | undefined
+    const ruleResult = await this.queryRulesService.applyRules(query.query)
+    if (ruleResult.originalQuery) {
+      originalQuery = ruleResult.originalQuery
+      appliedRuleId = ruleResult.ruleId
+      query = { ...query, query: ruleResult.query }
+    }
+
+    // Cache check: after rule expansion so the key reflects the actual query
+    if (this.searchCache) {
+      const cacheKey = await this.searchCache.buildKey(query)
+      if (cacheKey) {
+        const cached = await this.searchCache.get(cacheKey)
+        if (cached) {
+          // Cache hit — log search + related searches in parallel
+          const elapsed = Date.now() - startTime
+          const [searchId, relatedSearches] = await Promise.all([
+            this.logSearch(query.query, query.mode, cached.results.length, elapsed, true),
+            (settings.related_searches_enabled !== false)
+              ? new RelatedSearchService(this.db, this.kv)
+                  .getRelatedSearches(query.query, 5)
+                  .catch(() => undefined)
+              : Promise.resolve(undefined),
+          ])
+          return {
+            ...cached,
+            query_time_ms: elapsed,
+            search_id: searchId,
+            cached: true,
+            ...(relatedSearches ? { related_searches: relatedSearches } : {}),
+            // Re-attach rule metadata (not cached)
+            ...(originalQuery ? { original_query: originalQuery, applied_rule_id: appliedRuleId } : {}),
+          }
+        }
+      }
+    }
+
+    // Determine if facets should be computed
+    const shouldComputeFacets = query.facets && settings.facets_enabled
+
+    // Auto-generate facet config on first enable (if none exists)
+    if (shouldComputeFacets && (!settings.facet_config || settings.facet_config.length === 0)) {
+      try {
+        const facetService = new FacetService(this.db)
+        const discovered = await facetService.discoverFields()
+        const config = facetService.autoGenerateConfig(discovered)
+        if (config.length > 0) {
+          await this.updateSettings({ facet_config: config })
+          settings.facet_config = config
+        }
+      } catch (error) {
+        console.warn('[AISearchService] Auto-generate facet config failed:', error)
+      }
+    }
+
+    // Build the search promise
+    let searchPromise: Promise<SearchResponse>
+
     // Hybrid mode - FTS5 + AI combined with RRF, optional rewriting + reranking
     if (query.mode === 'hybrid') {
-      return this.searchHybrid(query, settings)
+      searchPromise = this.searchHybrid(query, settings)
     }
-
     // FTS5 mode - full-text search with BM25 ranking and highlighting
-    if (query.mode === 'fts5') {
-      return this.searchFTS5(query, settings)
+    else if (query.mode === 'fts5') {
+      searchPromise = this.searchFTS5(query, settings)
     }
-
     // AI mode - semantic search using Custom RAG with Vectorize
-    if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
-      return this.searchAI(query, settings)
+    else if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+      searchPromise = this.searchAI(query, settings)
+    }
+    // Fallback to keyword search
+    else {
+      searchPromise = this.searchKeyword(query, settings)
     }
 
-    // Fallback to keyword search
-    return this.searchKeyword(query, settings)
+    // Build the facet promise (runs in parallel with search)
+    let facetPromise: Promise<FacetResult[]> | null = null
+    if (shouldComputeFacets && settings.facet_config && settings.facet_config.length > 0) {
+      facetPromise = this.computeFacets(query, settings)
+    }
+
+    // Execute search + facets in parallel
+    const [result, facets] = await Promise.all([
+      searchPromise,
+      facetPromise || Promise.resolve(null),
+    ])
+
+    // In-memory facet filtering for AI/hybrid modes (SQL-based modes filter at query level)
+    if (query.filters?.custom && Object.keys(query.filters.custom).length > 0
+        && (query.mode === 'ai' || query.mode === 'hybrid')) {
+      result.results = this.filterResultsByFacets(result.results, query.filters.custom)
+      result.total = result.results.length
+    }
+
+    // Attach facets to response
+    if (facets && facets.length > 0) {
+      result.facets = facets
+    }
+
+    // For AI mode, compute facets from result IDs (can't run in parallel)
+    if (shouldComputeFacets && query.mode === 'ai' && result.results.length > 0 && settings.facet_config?.length) {
+      try {
+        const facetService = new FacetService(this.db)
+        const contentIds = result.results.map(r => r.id).slice(0, 50)
+        result.facets = await facetService.computeFacetsFromIds(
+          settings.facet_config,
+          contentIds,
+          settings.facet_max_values || 20
+        )
+      } catch (error) {
+        console.warn('[AISearchService] AI mode facet computation failed:', error)
+      }
+    }
+
+    // Attach query substitution metadata
+    if (originalQuery) {
+      result.original_query = originalQuery
+      result.applied_rule_id = appliedRuleId
+    }
+
+    // Apply ranking pipeline (post-processing: re-scores and re-sorts)
+    // Zero-cost when no stages are enabled
+    let finalResult: SearchResponse
+    try {
+      finalResult = await this.rankingPipeline.apply(result, query.query)
+    } catch (error) {
+      console.warn('[AISearchService] Ranking pipeline error (preserving original order):', error)
+      finalResult = result
+    }
+
+    // Cache write + related searches in parallel
+    // Related searches are NOT cached in the search cache — they have their own KV TTL
+    const cachePromise = (this.searchCache && settings.cache_duration > 0)
+      ? this.searchCache.buildKey(query).then(async (cacheKey) => {
+          if (cacheKey) {
+            const ttlSeconds = settings.cache_duration * 3600
+            await this.searchCache!.put(cacheKey, finalResult, ttlSeconds).catch(err => {
+              console.warn('[AISearchService] Cache write failed:', err)
+            })
+          }
+        })
+      : Promise.resolve()
+
+    const relatedPromise = (settings.related_searches_enabled !== false)
+      ? new RelatedSearchService(this.db, this.kv)
+          .getRelatedSearches(query.query, 5)
+          .catch(() => undefined)
+      : Promise.resolve(undefined)
+
+    const [, relatedSearches] = await Promise.all([cachePromise, relatedPromise])
+
+    if (relatedSearches) {
+      finalResult.related_searches = relatedSearches
+    }
+
+    return finalResult
+  }
+
+  /**
+   * Execute search with experiment variant overrides applied.
+   * Phase 1: flat AISearchSettings merge only (no pipeline weight overrides).
+   * Used by A/B testing to run control/treatment searches with different configs.
+   */
+  async searchWithOverrides(query: SearchQuery, overrides: Partial<AISearchSettings>): Promise<SearchResponse> {
+    const startTime = Date.now()
+    const baseSettings = await this.getSettings()
+    if (!baseSettings?.enabled) {
+      return { results: [], total: 0, query_time_ms: 0, mode: query.mode }
+    }
+
+    // Shallow merge: overrides win for flat fields
+    const settings: AISearchSettings = { ...baseSettings, ...overrides }
+
+    // Skip cache for experiment searches (each variant needs fresh results)
+    // Skip related searches (not relevant for experiment comparison)
+
+    // Apply query substitution rules
+    let originalQuery: string | undefined
+    let appliedRuleId: string | undefined
+    const ruleResult = await this.queryRulesService.applyRules(query.query)
+    if (ruleResult.originalQuery) {
+      originalQuery = ruleResult.originalQuery
+      appliedRuleId = ruleResult.ruleId
+      query = { ...query, query: ruleResult.query }
+    }
+
+    // Route to mode-specific search
+    let searchPromise: Promise<SearchResponse>
+    if (query.mode === 'hybrid') {
+      searchPromise = this.searchHybrid(query, settings)
+    } else if (query.mode === 'fts5') {
+      searchPromise = this.searchFTS5(query, settings)
+    } else if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+      searchPromise = this.searchAI(query, settings)
+    } else {
+      searchPromise = this.searchKeyword(query, settings)
+    }
+
+    const result = await searchPromise
+
+    if (originalQuery) {
+      result.original_query = originalQuery
+      result.applied_rule_id = appliedRuleId
+    }
+
+    // Apply ranking pipeline (uses default weights — pipeline overrides are Phase 2)
+    try {
+      const ranked = await this.rankingPipeline.apply(result, query.query)
+      ranked.query_time_ms = Date.now() - startTime
+      return ranked
+    } catch {
+      result.query_time_ms = Date.now() - startTime
+      return result
+    }
+  }
+
+  /**
+   * Compute facets for the current search query.
+   * Delegates to FacetService with mode-appropriate strategy.
+   */
+  private async computeFacets(
+    query: SearchQuery,
+    settings: AISearchSettings
+  ): Promise<FacetResult[]> {
+    const facetService = new FacetService(this.db)
+    const config = settings.facet_config!
+    const maxValues = settings.facet_max_values || 20
+
+    // Determine collection IDs for facet queries
+    const collectionIds = query.filters?.collections?.length
+      ? query.filters.collections
+      : settings.selected_collections
+
+    const activeFilters = query.filters?.custom
+
+    try {
+      // FTS5 and hybrid: SQL GROUP BY with FTS5 MATCH
+      if (query.mode === 'fts5' || query.mode === 'hybrid') {
+        const matchQuery = FacetService.sanitizeFTS5Query(query.query)
+        return await facetService.computeFacetsFts(config, matchQuery, collectionIds, maxValues, activeFilters)
+      }
+
+      // Keyword: SQL GROUP BY with LIKE
+      if (query.mode === 'keyword') {
+        return await facetService.computeFacetsKeyword(config, query.query, collectionIds, maxValues, activeFilters)
+      }
+
+      // AI mode: compute from result IDs (limited to top 50)
+      // For AI mode, we can't run SQL facets in parallel because we need
+      // the result IDs first. Return empty and let the caller post-fill.
+      return []
+    } catch (error) {
+      console.warn('[AISearchService] Facet computation failed:', error)
+      return []
+    }
   }
 
   /**
@@ -345,10 +618,16 @@ export class AISearchService {
         return this.searchKeyword(query, settings)
       }
 
-      const result = await this.fts5Service.search(query, settings)
+      const result = await this.fts5Service.search(query, settings, {
+        titleBoost: settings.fts5_title_boost,
+        slugBoost: settings.fts5_slug_boost,
+        bodyBoost: settings.fts5_body_boost,
+      })
 
       // Log search to history
-      await this.logSearch(query.query, 'fts5', result.results.length)
+      const elapsed = Date.now() - startTime
+      const searchId = await this.logSearch(query.query, 'fts5', result.results.length, elapsed)
+      result.search_id = searchId
 
       return result
     } catch (error) {
@@ -391,26 +670,18 @@ export class AISearchService {
         }
       }
 
-      // Step 2: Hybrid Search via RRF (FTS5 + AI in parallel)
+      // Step 2: Hybrid Search (FTS5 + AI in parallel, semantic-first ranking)
       let result = await this.hybridService.search(searchQuery, settings)
 
-      // Step 3: AI Reranking (if enabled + AI available + results > 1)
-      const rerankingEnabled = settings.reranking_enabled ?? true
-      if (
-        rerankingEnabled &&
-        this.reranker &&
-        result.results.length > 1
-      ) {
-        const limit = query.limit || settings.results_limit || 20
-        result = {
-          ...result,
-          results: await this.reranker.rerank(query.query, result.results, limit),
-          query_time_ms: Date.now() - startTime
-        }
-      }
+      // Note: AI reranking is intentionally SKIPPED for hybrid mode.
+      // Hybrid already ranks by Vectorize semantic scores (bi-encoder cosine similarity),
+      // which outperforms the bge-reranker-base cross-encoder. Applying the reranker
+      // here degrades nDCG and MRR (confirmed via BEIR benchmark evaluation).
 
       // Log search to history
-      await this.logSearch(query.query, 'hybrid', result.results.length)
+      const elapsed = Date.now() - startTime
+      const searchId = await this.logSearch(query.query, 'hybrid', result.results.length, elapsed)
+      result.search_id = searchId
 
       return result
     } catch (error) {
@@ -433,6 +704,11 @@ export class AISearchService {
 
       // Use Custom RAG for semantic search - pass the full query object and settings
       const result = await this.customRAG.search(query, settings)
+
+      // Log search to history
+      const elapsed = Date.now() - startTime
+      const searchId = await this.logSearch(query.query, 'ai', result.results.length, elapsed)
+      result.search_id = searchId
 
       return result
     } catch (error) {
@@ -503,6 +779,16 @@ export class AISearchService {
         params.push(query.filters.author)
       }
 
+      // Facet filter conditions (from active facet selections)
+      if (query.filters?.custom && settings.facet_config?.length) {
+        const { conditions: filterConditions, params: filterParams } = FacetService.buildFacetFilterSQL(
+          query.filters.custom,
+          settings.facet_config
+        )
+        conditions.push(...filterConditions)
+        params.push(...filterParams)
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
       // Get total count
@@ -547,29 +833,38 @@ export class AISearchService {
         data: string
       }>()
 
-      const searchResults: SearchResult[] = (results || []).map((row) => ({
-        id: String(row.id),
-        title: row.title || 'Untitled',
-        slug: row.slug || '',
-        collection_id: String(row.collection_id),
-        collection_name: row.collection_display_name || row.collection_name,
-        snippet: this.extractSnippet(row.data, query.query),
-        status: row.status,
-        created_at: Number(row.created_at),
-        updated_at: Number(row.updated_at),
-        author_name: row.author_email,
-      }))
+      const searchResults: SearchResult[] = (results || []).map((row) => {
+        const snippet = this.extractSnippet(row.data, query.query)
+        const titleHighlight = this.highlightText(row.title || 'Untitled', query.query)
+        return {
+          id: String(row.id),
+          title: row.title || 'Untitled',
+          slug: row.slug || '',
+          collection_id: String(row.collection_id),
+          collection_name: row.collection_display_name || row.collection_name,
+          snippet,
+          highlights: {
+            title: titleHighlight,
+            body: snippet
+          },
+          status: row.status,
+          created_at: Number(row.created_at),
+          updated_at: Number(row.updated_at),
+          author_name: row.author_email,
+        }
+      })
 
       const queryTime = Date.now() - startTime
 
       // Log search history
-      await this.logSearch(query.query, query.mode, searchResults.length)
+      const searchId = await this.logSearch(query.query, query.mode, searchResults.length, queryTime)
 
       return {
         results: searchResults,
         total,
         query_time_ms: queryTime,
         mode: query.mode,
+        search_id: searchId,
       }
     } catch (error) {
       console.error('Keyword search error:', error)
@@ -614,7 +909,7 @@ export class AISearchService {
         return 'No preview available'
       }
 
-      // Try to find query match and show context around it
+      // Try to find query match and show context around it with highlighting
       const queryLower = query.toLowerCase()
       const textLower = text.toLowerCase()
       const index = textLower.indexOf(queryLower)
@@ -627,15 +922,70 @@ export class AISearchService {
       const end = Math.min(text.length, index + query.length + 120)
       const prefix = start > 0 ? '...' : ''
       const suffix = end < text.length ? '...' : ''
-      return prefix + text.substring(start, end) + suffix
+      const excerpt = text.substring(start, end)
+
+      // Add <mark> highlighting around all query matches in the excerpt
+      return prefix + this.highlightText(excerpt, query) + suffix
     } catch {
       return data.substring(0, 200) + '...'
     }
   }
 
   /**
+   * Highlight query terms in text with <mark> tags
+   * Case-insensitive, highlights all occurrences
+   */
+  private highlightText(text: string, query: string): string {
+    if (!text || !query) return text
+    try {
+      // Split query into words and escape for regex
+      const words = query.trim().split(/\s+/).filter(w => w.length > 1)
+      if (words.length === 0) return text
+
+      const escaped = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      const pattern = new RegExp(`(${escaped.join('|')})`, 'gi')
+      return text.replace(pattern, '<mark>$1</mark>')
+    } catch {
+      return text
+    }
+  }
+
+  /**
+   * Filter search results in-memory by active facet selections.
+   * Used for AI/hybrid modes where SQL-level filtering isn't possible.
+   */
+  private filterResultsByFacets(
+    results: SearchResult[],
+    customFilters: Record<string, any>
+  ): SearchResult[] {
+    if (!customFilters || Object.keys(customFilters).length === 0) return results
+
+    return results.filter(result => {
+      for (const [field, values] of Object.entries(customFilters)) {
+        if (!values || (Array.isArray(values) && values.length === 0)) continue
+        const valueArr = Array.isArray(values) ? values : [values]
+        if (valueArr.length === 0) continue
+
+        switch (field) {
+          case 'collection_name':
+            if (!valueArr.includes(result.collection_name)) return false
+            break
+          case 'status':
+            if (!valueArr.includes(result.status)) return false
+            break
+          case 'author':
+            if (!result.author_name || !valueArr.includes(result.author_name)) return false
+            break
+          // JSON fields not available on SearchResult — filtered at SQL level for FTS5/keyword
+        }
+      }
+      return true
+    })
+  }
+
+  /**
    * Get search suggestions (autocomplete)
-   * Uses fast keyword prefix matching for instant results (<50ms)
+   * Routes to trending queries (empty/short input) or prefix suggestions (2+ chars)
    */
   async getSearchSuggestions(partial: string): Promise<string[]> {
     try {
@@ -644,45 +994,11 @@ export class AISearchService {
         return []
       }
 
-      // Fast keyword prefix matching from indexed content
-      // This provides instant autocomplete (<50ms) without AI overhead
-      try {
-        const stmt = this.db.prepare(`
-          SELECT DISTINCT title 
-          FROM ai_search_index 
-          WHERE title LIKE ? 
-          ORDER BY title 
-          LIMIT 10
-        `)
-        const { results } = await stmt.bind(`%${partial}%`).all<{ title: string }>()
-
-        const suggestions = (results || []).map((r) => r.title).filter(Boolean)
-
-        if (suggestions.length > 0) {
-          return suggestions
-        }
-      } catch (indexError) {
-        // Table doesn't exist yet or is empty - that's okay, fall back to history
-        console.log('[AISearchService] Index table not available yet, using search history')
+      const trimmed = partial.trim()
+      if (trimmed.length < 2) {
+        return this.getTrendingQueries()
       }
-
-      // Fallback to search history if no indexed titles match
-      try {
-        const historyStmt = this.db.prepare(`
-          SELECT DISTINCT query 
-          FROM ai_search_history 
-          WHERE query LIKE ? 
-          ORDER BY created_at DESC 
-          LIMIT 10
-        `)
-        const { results: historyResults } = await historyStmt.bind(`%${partial}%`).all<{ query: string }>()
-
-        return (historyResults || []).map((r) => r.query)
-      } catch (historyError) {
-        // History table might not exist either - return empty
-        console.log('[AISearchService] No suggestions available (tables not initialized)')
-        return []
-      }
+      return this.getPrefixSuggestions(trimmed)
     } catch (error) {
       console.error('Error getting suggestions:', error)
       return []
@@ -690,17 +1006,122 @@ export class AISearchService {
   }
 
   /**
-   * Log search query to history
+   * Get trending queries using TrendingSearchService (time-decay scoring + KV cache).
+   * Delegates to the dedicated service for consistent behavior across suggest and trending endpoints.
    */
-  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number): Promise<void> {
+  private async getTrendingQueries(): Promise<string[]> {
+    try {
+      const service = new TrendingSearchService(this.db, this.kv)
+      const result = await service.getTrending(10, 7)
+      return result.items.map((r) => r.query)
+    } catch (error) {
+      console.log('[AISearchService] Trending queries unavailable:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get prefix suggestions by blending popular query prefixes (30d) + FTS5 content title prefixes.
+   * Popular queries appear first (real user intent), content titles fill remaining slots.
+   */
+  private async getPrefixSuggestions(prefix: string): Promise<string[]> {
+    const [popularQueries, contentTitles] = await Promise.all([
+      this.getPopularQueryPrefixes(prefix, 5),
+      this.getContentTitlePrefixes(prefix, 5),
+    ])
+
+    // Dedup: popular queries first, then content titles that aren't already included
+    const seen = new Set(popularQueries.map((q) => q.toLowerCase()))
+    const merged = [...popularQueries]
+    for (const title of contentTitles) {
+      if (!seen.has(title.toLowerCase())) {
+        merged.push(title)
+        seen.add(title.toLowerCase())
+      }
+      if (merged.length >= 10) break
+    }
+    return merged
+  }
+
+  /**
+   * Popular query prefixes from search history (last 30 days).
+   * Ranked by frequency, excludes zero-result queries.
+   */
+  private async getPopularQueryPrefixes(prefix: string, limit: number): Promise<string[]> {
+    try {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const stmt = this.db.prepare(`
+        SELECT query, COUNT(*) as cnt, AVG(results_count) as avg_res
+        FROM ai_search_history
+        WHERE created_at >= ? AND LOWER(query) LIKE ?
+        GROUP BY LOWER(query)
+        HAVING avg_res >= 0.5
+        ORDER BY cnt DESC
+        LIMIT ?
+      `)
+      const { results } = await stmt
+        .bind(thirtyDaysAgo, `${prefix.toLowerCase()}%`, limit)
+        .all<{ query: string; cnt: number; avg_res: number }>()
+      return (results || []).map((r) => r.query).filter(Boolean)
+    } catch (error) {
+      console.log('[AISearchService] Popular query prefixes unavailable:', error)
+      return []
+    }
+  }
+
+  /**
+   * Content title prefixes via FTS5 prefix matching.
+   * Falls back to ai_search_index LIKE if FTS5 is unavailable.
+   */
+  private async getContentTitlePrefixes(prefix: string, limit: number): Promise<string[]> {
+    // Try FTS5 prefix match first (fast + ranked by BM25)
+    try {
+      // Sanitize prefix for FTS5: remove special chars, keep alphanumeric + spaces
+      const sanitized = prefix.replace(/[^\w\s]/g, '').trim()
+      if (!sanitized) return []
+
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT title FROM content_fts
+        WHERE content_fts MATCH ?
+        ORDER BY bm25(content_fts, 5.0, 2.0, 1.0)
+        LIMIT ?
+      `)
+      const { results } = await stmt.bind(`${sanitized}*`, limit).all<{ title: string }>()
+      return (results || []).map((r) => r.title).filter(Boolean)
+    } catch {
+      // FTS5 table may not exist — fall back to ai_search_index
+    }
+
+    // Fallback: simple LIKE prefix on ai_search_index
     try {
       const stmt = this.db.prepare(`
-        INSERT INTO ai_search_history (query, mode, results_count, created_at)
-        VALUES (?, ?, ?, ?)
+        SELECT DISTINCT title FROM ai_search_index
+        WHERE LOWER(title) LIKE ?
+        ORDER BY title
+        LIMIT ?
       `)
-      await stmt.bind(query, mode, resultsCount, Date.now()).run()
+      const { results } = await stmt.bind(`${prefix.toLowerCase()}%`, limit).all<{ title: string }>()
+      return (results || []).map((r) => r.title).filter(Boolean)
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Log search query to history, returns the generated search_id
+   */
+  private async logSearch(query: string, mode: 'ai' | 'keyword' | 'fts5' | 'hybrid', resultsCount: number, responseTimeMs?: number, cached?: boolean): Promise<string | undefined> {
+    try {
+      const result = await this.db.prepare(`
+        INSERT INTO ai_search_history (query, mode, results_count, response_time_ms, cached, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(query, mode, resultsCount, responseTimeMs ?? null, cached ? 1 : 0, Date.now()).run()
+      // D1 returns the auto-incremented rowid via meta.last_row_id
+      const rowId = result?.meta?.last_row_id
+      return rowId ? String(rowId) : undefined
     } catch (error) {
       console.error('Error logging search:', error)
+      return undefined
     }
   }
 
@@ -784,6 +1205,285 @@ export class AISearchService {
   }
 
   /**
+   * Get extended analytics for the Analytics tab
+   */
+  async getAnalyticsExtended(): Promise<{
+    total_queries: number
+    queries_today: number
+    ai_queries: number
+    keyword_queries: number
+    fts5_queries: number
+    hybrid_queries: number
+    avg_results_per_query: number
+    zero_result_rate: number
+    avg_response_time_ms: number
+    popular_queries: Array<{ query: string; count: number }>
+    zero_result_queries: Array<{ query: string; count: number }>
+    recent_queries: Array<{ query: string; mode: string; results_count: number; response_time_ms: number | null; created_at: number }>
+    daily_counts: Array<{ date: string; count: number }>
+    // Click analytics
+    total_clicks_30d: number
+    ctr_30d: number
+    avg_click_position_30d: number
+    ctr_over_time: Array<{ date: string; searches: number; clicks: number; ctr: number }>
+    most_clicked_content: Array<{ content_id: string; content_title: string; click_count: number }>
+    no_click_searches: Array<{ query: string; search_count: number; results_count_avg: number }>
+    // Facet analytics
+    total_facet_clicks_30d: number
+    top_facet_fields: Array<{ facet_field: string; click_count: number }>
+    top_facet_values: Array<{ facet_field: string; facet_value: string; click_count: number }>
+    facet_clicks_over_time: Array<{ date: string; count: number }>
+  }> {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayStartMs = todayStart.getTime()
+
+    try {
+      // Run all queries in parallel
+      const [
+        totalResult,
+        todayResult,
+        modeResults,
+        avgResults,
+        zeroCountResult,
+        avgTimeResult,
+        popularResults,
+        zeroResultResults,
+        recentResults,
+        dailyResults,
+        // Click analytics
+        clickCountResult,
+        avgClickPosResult,
+        ctrOverTimeResults,
+        mostClickedResults,
+        noClickResults,
+        // Facet analytics
+        facetClickCountResult,
+        topFacetFieldsResult,
+        topFacetValuesResult,
+        facetClicksOverTimeResult,
+      ] = await Promise.all([
+        // Total queries (30 days)
+        this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?')
+          .bind(thirtyDaysAgo).first<{ count: number }>(),
+
+        // Queries today
+        this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ?')
+          .bind(todayStartMs).first<{ count: number }>(),
+
+        // Mode breakdown
+        this.db.prepare('SELECT mode, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? GROUP BY mode')
+          .bind(thirtyDaysAgo).all<{ mode: string; count: number }>(),
+
+        // Average results per query
+        this.db.prepare('SELECT AVG(results_count) as avg_results FROM ai_search_history WHERE created_at >= ?')
+          .bind(thirtyDaysAgo).first<{ avg_results: number | null }>(),
+
+        // Zero result count
+        this.db.prepare('SELECT COUNT(*) as count FROM ai_search_history WHERE created_at >= ? AND results_count = 0')
+          .bind(thirtyDaysAgo).first<{ count: number }>(),
+
+        // Average response time
+        this.db.prepare('SELECT AVG(response_time_ms) as avg_time FROM ai_search_history WHERE created_at >= ? AND response_time_ms IS NOT NULL')
+          .bind(thirtyDaysAgo).first<{ avg_time: number | null }>(),
+
+        // Popular queries (top 15)
+        this.db.prepare('SELECT query, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? GROUP BY query ORDER BY count DESC LIMIT 15')
+          .bind(thirtyDaysAgo).all<{ query: string; count: number }>(),
+
+        // Zero-result queries (top 20)
+        this.db.prepare('SELECT query, COUNT(*) as count FROM ai_search_history WHERE created_at >= ? AND results_count = 0 GROUP BY query ORDER BY count DESC LIMIT 20')
+          .bind(thirtyDaysAgo).all<{ query: string; count: number }>(),
+
+        // Recent queries (last 25)
+        this.db.prepare('SELECT query, mode, results_count, response_time_ms, created_at FROM ai_search_history ORDER BY created_at DESC LIMIT 25')
+          .all<{ query: string; mode: string; results_count: number; response_time_ms: number | null; created_at: number }>(),
+
+        // Daily counts for last 30 days
+        this.db.prepare(`
+          SELECT date(created_at / 1000, 'unixepoch') as date, COUNT(*) as count
+          FROM ai_search_history
+          WHERE created_at >= ?
+          GROUP BY date(created_at / 1000, 'unixepoch')
+          ORDER BY date ASC
+        `).bind(thirtyDaysAgo).all<{ date: string; count: number }>(),
+
+        // Click analytics: total clicks (30 days)
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_clicks WHERE created_at > datetime('now', '-30 days')")
+          .first<{ count: number }>().catch(() => ({ count: 0 })),
+
+        // Click analytics: average click position (30 days)
+        this.db.prepare("SELECT AVG(click_position) as avg_pos FROM ai_search_clicks WHERE created_at > datetime('now', '-30 days')")
+          .first<{ avg_pos: number | null }>().catch(() => ({ avg_pos: null })),
+
+        // Click analytics: CTR over time (daily, 30 days)
+        this.db.prepare(`
+          SELECT
+            date(h.created_at / 1000, 'unixepoch') as date,
+            COUNT(DISTINCT h.id) as searches,
+            COUNT(c.id) as clicks
+          FROM ai_search_history h
+          LEFT JOIN ai_search_clicks c ON c.search_id = h.id
+          WHERE h.created_at >= ?
+          GROUP BY date(h.created_at / 1000, 'unixepoch')
+          ORDER BY date ASC
+        `).bind(thirtyDaysAgo).all<{ date: string; searches: number; clicks: number }>().catch(() => ({ results: [] })),
+
+        // Click analytics: most clicked content (top 20)
+        this.db.prepare(`
+          SELECT clicked_content_id as content_id, clicked_content_title as content_title, COUNT(*) as click_count
+          FROM ai_search_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY clicked_content_id
+          ORDER BY click_count DESC
+          LIMIT 20
+        `).all<{ content_id: string; content_title: string; click_count: number }>().catch(() => ({ results: [] })),
+
+        // Click analytics: searches with no clicks (top 20)
+        this.db.prepare(`
+          SELECT h.query, COUNT(DISTINCT h.id) as search_count, CAST(AVG(h.results_count) AS INTEGER) as results_count_avg
+          FROM ai_search_history h
+          LEFT JOIN ai_search_clicks c ON c.search_id = h.id
+          WHERE h.created_at >= ?
+            AND h.results_count > 0
+            AND c.id IS NULL
+          GROUP BY h.query
+          ORDER BY search_count DESC
+          LIMIT 20
+        `).bind(thirtyDaysAgo).all<{ query: string; search_count: number; results_count_avg: number }>().catch(() => ({ results: [] })),
+
+        // Facet analytics: total facet clicks (30 days)
+        this.db.prepare("SELECT COUNT(*) as count FROM ai_search_facet_clicks WHERE created_at > datetime('now', '-30 days')")
+          .first<{ count: number }>().catch(() => ({ count: 0 })),
+
+        // Facet analytics: top facet fields by click count (30 days)
+        this.db.prepare(`
+          SELECT facet_field, COUNT(*) as click_count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY facet_field
+          ORDER BY click_count DESC
+          LIMIT 10
+        `).all<{ facet_field: string; click_count: number }>().catch(() => ({ results: [] })),
+
+        // Facet analytics: top facet values by click count (30 days)
+        this.db.prepare(`
+          SELECT facet_field, facet_value, COUNT(*) as click_count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY facet_field, facet_value
+          ORDER BY click_count DESC
+          LIMIT 15
+        `).all<{ facet_field: string; facet_value: string; click_count: number }>().catch(() => ({ results: [] })),
+
+        // Facet analytics: facet clicks over time (daily, 30 days)
+        this.db.prepare(`
+          SELECT date(created_at) as date, COUNT(*) as count
+          FROM ai_search_facet_clicks
+          WHERE created_at > datetime('now', '-30 days')
+          GROUP BY date(created_at)
+          ORDER BY date ASC
+        `).all<{ date: string; count: number }>().catch(() => ({ results: [] })),
+      ])
+
+      const totalQueries = totalResult?.count || 0
+      const zeroCount = zeroCountResult?.count || 0
+      const modes = modeResults?.results || []
+
+      // Compute click analytics
+      const totalClicks = (clickCountResult as any)?.count || 0
+      const avgClickPos = (avgClickPosResult as any)?.avg_pos
+      const ctrRaw = (ctrOverTimeResults as any)?.results || []
+      const ctrOverTime = ctrRaw.map((r: any) => ({
+        date: r.date,
+        searches: r.searches,
+        clicks: r.clicks,
+        ctr: r.searches > 0 ? Math.round((r.clicks / r.searches) * 1000) / 10 : 0,
+      }))
+
+      return {
+        total_queries: totalQueries,
+        queries_today: todayResult?.count || 0,
+        ai_queries: modes.find(r => r.mode === 'ai')?.count || 0,
+        keyword_queries: modes.find(r => r.mode === 'keyword')?.count || 0,
+        fts5_queries: modes.find(r => r.mode === 'fts5')?.count || 0,
+        hybrid_queries: modes.find(r => r.mode === 'hybrid')?.count || 0,
+        avg_results_per_query: Math.round((avgResults?.avg_results ?? 0) * 10) / 10,
+        zero_result_rate: totalQueries > 0 ? Math.round((zeroCount / totalQueries) * 1000) / 10 : 0,
+        avg_response_time_ms: Math.round(avgTimeResult?.avg_time ?? 0),
+        popular_queries: (popularResults?.results || []).map(r => ({ query: r.query, count: r.count })),
+        zero_result_queries: (zeroResultResults?.results || []).map(r => ({ query: r.query, count: r.count })),
+        recent_queries: (recentResults?.results || []).map(r => ({
+          query: r.query,
+          mode: r.mode,
+          results_count: r.results_count,
+          response_time_ms: r.response_time_ms,
+          created_at: r.created_at,
+        })),
+        daily_counts: (dailyResults?.results || []).map(r => ({ date: r.date, count: r.count })),
+        // Click analytics
+        total_clicks_30d: totalClicks,
+        ctr_30d: totalQueries > 0 ? Math.round((totalClicks / totalQueries) * 1000) / 10 : 0,
+        avg_click_position_30d: avgClickPos != null ? Math.round(avgClickPos * 10) / 10 : 0,
+        ctr_over_time: ctrOverTime,
+        most_clicked_content: ((mostClickedResults as any)?.results || []).map((r: any) => ({
+          content_id: r.content_id,
+          content_title: r.content_title || 'Untitled',
+          click_count: r.click_count,
+        })),
+        no_click_searches: ((noClickResults as any)?.results || []).map((r: any) => ({
+          query: r.query,
+          search_count: r.search_count,
+          results_count_avg: r.results_count_avg,
+        })),
+        // Facet analytics
+        total_facet_clicks_30d: (facetClickCountResult as any)?.count || 0,
+        top_facet_fields: ((topFacetFieldsResult as any)?.results || []).map((r: any) => ({
+          facet_field: r.facet_field,
+          click_count: r.click_count,
+        })),
+        top_facet_values: ((topFacetValuesResult as any)?.results || []).map((r: any) => ({
+          facet_field: r.facet_field,
+          facet_value: r.facet_value,
+          click_count: r.click_count,
+        })),
+        facet_clicks_over_time: ((facetClicksOverTimeResult as any)?.results || []).map((r: any) => ({
+          date: r.date,
+          count: r.count,
+        })),
+      }
+    } catch (error) {
+      console.error('Error getting extended analytics:', error)
+      return {
+        total_queries: 0,
+        queries_today: 0,
+        ai_queries: 0,
+        keyword_queries: 0,
+        fts5_queries: 0,
+        hybrid_queries: 0,
+        avg_results_per_query: 0,
+        zero_result_rate: 0,
+        avg_response_time_ms: 0,
+        popular_queries: [],
+        zero_result_queries: [],
+        recent_queries: [],
+        daily_counts: [],
+        total_clicks_30d: 0,
+        ctr_30d: 0,
+        avg_click_position_30d: 0,
+        ctr_over_time: [],
+        most_clicked_content: [],
+        no_click_searches: [],
+        total_facet_clicks_30d: 0,
+        top_facet_fields: [],
+        top_facet_values: [],
+        facet_clicks_over_time: [],
+      }
+    }
+  }
+
+  /**
    * Verify Custom RAG is available
    */
   verifyBinding(): boolean {
@@ -802,5 +1502,33 @@ export class AISearchService {
    */
   getFTS5Service(): FTS5Service | undefined {
     return this.fts5Service
+  }
+
+  /**
+   * Get ranking pipeline service instance (for admin routes)
+   */
+  getRankingPipeline(): RankingPipelineService {
+    return this.rankingPipeline
+  }
+
+  /**
+   * Get synonym service instance (for admin routes)
+   */
+  getSynonymService(): SynonymService {
+    return this.synonymService
+  }
+
+  /**
+   * Get query rules service instance (for admin routes)
+   */
+  getQueryRulesService(): QueryRulesService {
+    return this.queryRulesService
+  }
+
+  /**
+   * Get search cache service instance (for cache invalidation from content CRUD hooks)
+   */
+  getSearchCache(): SearchCacheService | undefined {
+    return this.searchCache
   }
 }

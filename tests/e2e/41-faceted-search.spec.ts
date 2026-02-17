@@ -434,7 +434,7 @@ test.describe('Faceted Search', () => {
         await page.waitForTimeout(1000)
       }
 
-      const rediscoverBtn = page.locator('text=Re-discover Fields')
+      const rediscoverBtn = page.locator('text=Re-discover Fields').first()
       await expect(rediscoverBtn).toBeVisible({ timeout: 5000 })
     })
   })

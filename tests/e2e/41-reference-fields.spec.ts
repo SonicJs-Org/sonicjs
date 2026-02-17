@@ -21,7 +21,7 @@ test.describe('Reference Fields', () => {
 
     await expect(page.locator('h1')).toContainText('Edit Collection')
 
-    // Open add field modal
+    // Open add field modal — force:true as button may be hidden in CI viewport
     const addFieldBtn = page.locator('button:has-text("Add Field")').first()
     await addFieldBtn.click({ force: true })
     await page.waitForSelector('#field-modal:not(.hidden)')

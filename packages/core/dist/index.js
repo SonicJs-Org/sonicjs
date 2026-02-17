@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, renderSearchDashboard, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, RelatedSearchService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, TrendingSearchService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-Y43CMI4H.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-Y43CMI4H.js';
+import { AISearchService, IndexManager, FTS5Service, renderSearchDashboard, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, RelatedSearchService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, TrendingSearchService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminApiKeyRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-VD5ARVQC.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-VD5ARVQC.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-WE3D7G6E.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-WE3D7G6E.js';
+import { requireAuth, optionalAuth, optionalApiKey, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-CV62IHQH.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-CV62IHQH.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-F5UCLVDY.js';
+export { MigrationService } from './chunk-5LGFBBMO.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -5363,8 +5363,14 @@ function teamDraftInterleave(controlResults, treatmentResults, limit) {
 
 // src/plugins/core-plugins/ai-search-plugin/routes/api.ts
 var apiRoutes = new Hono();
+apiRoutes.use("*", optionalAuth());
+apiRoutes.use("*", optionalApiKey());
 apiRoutes.post("/", async (c) => {
   try {
+    const apiKey = c.get("apiKey");
+    if (apiKey && !apiKey.scopes.includes("search:read")) {
+      return c.json({ error: "Insufficient scope. Required: search:read" }, 403);
+    }
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
@@ -5593,6 +5599,11 @@ apiRoutes.post("/facet-click", async (c) => {
 });
 apiRoutes.get("/analytics", async (c) => {
   try {
+    const user = c.get("user");
+    const apiKeyCtx = c.get("apiKey");
+    if (!user && (!apiKeyCtx || !apiKeyCtx.scopes.includes("search:analytics"))) {
+      return c.json({ error: "Insufficient scope. Required: search:analytics" }, 403);
+    }
     const db = c.env.DB;
     const ai = c.env.AI;
     const vectorize = c.env.VECTORIZE_INDEX;
@@ -7077,6 +7088,62 @@ export default function SearchPage() {
               </div>
             </div>
 
+            <!-- Authentication Section -->
+            <div class="section">
+              <h2>🔑 Authentication (API Keys)</h2>
+              <p>API keys provide scoped, revocable access to the search API without requiring a user session.</p>
+
+              <h3>Generate a Key</h3>
+              <p>Create a key in the admin panel or via the admin API:</p>
+              <pre><code>// POST /admin/api-keys  (requires admin session)
+{
+  "name": "My Frontend App",
+  "scopes": ["search:read"]
+}
+// Response includes a token shown ONCE:
+// { "data": { "token": "sk_live_a1b2c3..." } }</code></pre>
+
+              <h3>Use the Key</h3>
+              <p>Pass it in the <code>X-API-Key</code> header on every request:</p>
+              <pre><code>fetch('/api/search', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': 'sk_live_a1b2c3...'
+  },
+  body: JSON.stringify({ query: 'hello', mode: 'keyword' })
+});</code></pre>
+
+              <h3>Scopes</h3>
+              <div class="grid">
+                <div class="card">
+                  <h4>search:read</h4>
+                  <p><code>/api/search</code>, <code>/api/search/suggest</code></p>
+                  <p>Query and autocomplete</p>
+                </div>
+                <div class="card">
+                  <h4>search:write</h4>
+                  <p><code>/api/search/click</code>, <code>/api/search/facet-click</code></p>
+                  <p>Click and interaction tracking</p>
+                </div>
+                <div class="card">
+                  <h4>search:analytics</h4>
+                  <p><code>/api/search/analytics</code></p>
+                  <p>Programmatic analytics access</p>
+                </div>
+              </div>
+
+              <div class="info-box">
+                <strong>Security notes:</strong>
+                <ul style="margin-top:0.5rem;padding-left:1.5rem;">
+                  <li>Keys are stored as SHA-256 hashes &mdash; the plaintext is only shown once at creation.</li>
+                  <li>Keep keys server-side. Never embed them in client-side JavaScript.</li>
+                  <li>Revoked keys may still work for up to 5 minutes due to KV caching.</li>
+                  <li>By default, API keys are <strong>optional</strong>. Set <code>REQUIRE_API_KEY=true</code> to enforce.</li>
+                </ul>
+              </div>
+            </div>
+
             <!-- API Reference Section -->
             <div class="section">
               <h2>📡 API Reference</h2>
@@ -7296,6 +7363,7 @@ app.use('/api/*', cors({
             <div class="section">
               <h2>✅ Integration Checklist</h2>
               <ul class="checklist">
+                <li>Generated API key (if using auth)</li>
                 <li>Updated API_URL in code</li>
                 <li>Configured CORS if needed</li>
                 <li>Indexed collections in admin</li>
@@ -10078,6 +10146,7 @@ function createSonicJSApp(config = {}) {
   app2.route("/admin/content", admin_content_default);
   app2.route("/admin/media", adminMediaRoutes);
   app2.route("/admin/search", adminSearchRoutes);
+  app2.route("/admin/api-keys", adminApiKeyRoutes);
   if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
     for (const route of aiSearchPlugin.routes) {
       app2.route(route.path, route.handler);

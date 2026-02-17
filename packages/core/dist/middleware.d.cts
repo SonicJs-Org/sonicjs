@@ -1,6 +1,6 @@
 import * as hono from 'hono';
 import { Context, Next, MiddlewareHandler } from 'hono';
-import { S as SonicJSConfig } from './app-CYEm1ytG.cjs';
+import { S as SonicJSConfig } from './app-3Zr8JaYf.cjs';
 import '@cloudflare/workers-types';
 
 type Bindings = {
@@ -51,6 +51,23 @@ declare const requireRole: (requiredRole: string | string[]) => (c: Context, nex
 declare const optionalAuth: () => (c: Context, next: Next) => Promise<void>;
 
 /**
+ * Require a valid API key with a specific scope.
+ *
+ * When `REQUIRE_API_KEY` env var is NOT set, falls back to
+ * optionalApiKey() behavior (allow through, validate if present).
+ */
+declare const requireApiKey: (scope: string) => (c: Context, next: Next) => Promise<void | (Response & hono.TypedResponse<{
+    error: string;
+}, 403, "json">) | (Response & hono.TypedResponse<{
+    error: string;
+}, 401, "json">)>;
+/**
+ * Optionally validate an API key if the X-API-Key header is present.
+ * Does NOT block if no key is provided.
+ */
+declare const optionalApiKey: () => (c: Context, next: Next) => Promise<void>;
+
+/**
  * Middleware to track all HTTP requests for real-time analytics
  * Excludes the metrics endpoint itself to avoid inflating the count
  */
@@ -86,4 +103,4 @@ declare const requireActivePlugins: any;
 declare const getActivePlugins: any;
 declare const isPluginActive: any;
 
-export { AuthManager, type Permission, PermissionManager, type UserPermissions, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware };
+export { AuthManager, type Permission, PermissionManager, type UserPermissions, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalApiKey, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireApiKey, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware };

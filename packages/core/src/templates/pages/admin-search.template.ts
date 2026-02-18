@@ -225,7 +225,7 @@ export function renderSearchDashboard(data: SearchDashboardData): string {
           </button>
           <button id="tab-btn-experiments" onclick="switchTab('experiments')" type="button"
             class="tab-btn whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium border-transparent text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-300">
-            Experiments
+            A/B Tests
           </button>
         </nav>
       </div>

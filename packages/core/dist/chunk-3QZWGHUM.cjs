@@ -1,8 +1,10 @@
-import { syncCollections, PluginBootstrapService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-F5UCLVDY.js';
-import { metricsTracker } from './chunk-FICTAGD4.js';
-import { sign, verify } from 'hono/jwt';
-import { setCookie, getCookie } from 'hono/cookie';
+'use strict';
+
+var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
+var chunk63CJSSOX_cjs = require('./chunk-63CJSSOX.cjs');
+var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
+var jwt = require('hono/jwt');
+var cookie = require('hono/cookie');
 
 // src/middleware/bootstrap.ts
 var bootstrapComplete = false;
@@ -18,17 +20,17 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new MigrationService(c.env.DB);
+      const migrationService = new chunk63CJSSOX_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await syncCollections(c.env.DB);
+        await chunkMPT5PA6U_cjs.syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new PluginBootstrapService(c.env.DB);
+        const bootstrapService = new chunkMPT5PA6U_cjs.PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -55,11 +57,11 @@ var AuthManager = class {
       // 24 hours
       iat: Math.floor(Date.now() / 1e3)
     };
-    return await sign(payload, JWT_SECRET, "HS256");
+    return await jwt.sign(payload, JWT_SECRET, "HS256");
   }
   static async verifyToken(token) {
     try {
-      const payload = await verify(token, JWT_SECRET, "HS256");
+      const payload = await jwt.verify(token, JWT_SECRET, "HS256");
       if (payload.exp < Math.floor(Date.now() / 1e3)) {
         return null;
       }
@@ -87,7 +89,7 @@ var AuthManager = class {
    * @param options - Optional cookie configuration
    */
   static setAuthCookie(c, token, options) {
-    setCookie(c, "auth_token", token, {
+    cookie.setCookie(c, "auth_token", token, {
       httpOnly: options?.httpOnly ?? true,
       secure: options?.secure ?? true,
       sameSite: options?.sameSite ?? "Strict",
@@ -101,7 +103,7 @@ var requireAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = getCookie(c, "auth_token");
+        token = cookie.getCookie(c, "auth_token");
       }
       if (!token) {
         const acceptHeader = c.req.header("Accept") || "";
@@ -171,7 +173,7 @@ var optionalAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = getCookie(c, "auth_token");
+        token = cookie.getCookie(c, "auth_token");
       }
       if (token) {
         const payload = await AuthManager.verifyToken(token);
@@ -187,12 +189,106 @@ var optionalAuth = () => {
   };
 };
 
+// src/middleware/api-key.ts
+var VALID_SCOPES = ["search:read", "search:write", "search:analytics"];
+async function hashApiKey(token) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function resolveApiKey(c) {
+  const header = c.req.header("X-API-Key");
+  if (!header) return null;
+  const hash = await hashApiKey(header);
+  const kv = c.env.CACHE_KV;
+  if (kv) {
+    try {
+      const cached = await kv.get(`apikey:${hash}`, "json");
+      if (cached) return cached;
+    } catch {
+    }
+  }
+  const db = c.env.DB;
+  if (!db) return null;
+  let row = null;
+  try {
+    row = await db.prepare("SELECT id, name, user_id, permissions, expires_at, last_used_at FROM api_tokens WHERE token = ? LIMIT 1").bind(hash).first();
+  } catch {
+    return null;
+  }
+  if (!row) return null;
+  if (row.expires_at) {
+    const expiresMs = typeof row.expires_at === "string" ? new Date(row.expires_at).getTime() : Number(row.expires_at);
+    if (expiresMs < Date.now()) return null;
+  }
+  let scopes = [];
+  try {
+    scopes = JSON.parse(row.permissions);
+    if (!Array.isArray(scopes)) scopes = [];
+  } catch {
+    scopes = [];
+  }
+  const apiKey = {
+    id: row.id,
+    name: row.name,
+    scopes,
+    userId: row.user_id
+  };
+  if (kv) {
+    try {
+      await kv.put(`apikey:${hash}`, JSON.stringify(apiKey), { expirationTtl: 300 });
+    } catch {
+    }
+  }
+  try {
+    const ctx = c.executionCtx;
+    if (ctx?.waitUntil) {
+      ctx.waitUntil(
+        db.prepare("UPDATE api_tokens SET last_used_at = ? WHERE id = ?").bind(Date.now(), row.id).run()
+      );
+    }
+  } catch {
+  }
+  return apiKey;
+}
+var requireApiKey = (scope) => {
+  return async (c, next) => {
+    const enforce = c.env.REQUIRE_API_KEY === "true";
+    const apiKey = await resolveApiKey(c);
+    if (apiKey) {
+      c.set("apiKey", apiKey);
+      if (!apiKey.scopes.includes(scope)) {
+        return c.json({ error: `Insufficient scope. Required: ${scope}` }, 403);
+      }
+      return next();
+    }
+    if (enforce) {
+      return c.json({ error: "API key required. Pass X-API-Key header." }, 401);
+    }
+    return next();
+  };
+};
+var optionalApiKey = () => {
+  return async (c, next) => {
+    try {
+      const apiKey = await resolveApiKey(c);
+      if (apiKey) {
+        c.set("apiKey", apiKey);
+      }
+    } catch {
+    }
+    return next();
+  };
+};
+
 // src/middleware/metrics.ts
 var metricsMiddleware = () => {
   return async (c, next) => {
     const path = new URL(c.req.url).pathname;
     if (path !== "/admin/dashboard/api/metrics") {
-      metricsTracker.recordRequest();
+      chunkRCQ2HIQD_cjs.metricsTracker.recordRequest();
     }
     await next();
   };
@@ -216,6 +312,30 @@ var requireActivePlugins = () => async (_c, next) => await next();
 var getActivePlugins = () => [];
 var isPluginActive = () => false;
 
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware };
-//# sourceMappingURL=chunk-WE3D7G6E.js.map
-//# sourceMappingURL=chunk-WE3D7G6E.js.map
+exports.AuthManager = AuthManager;
+exports.PermissionManager = PermissionManager;
+exports.VALID_SCOPES = VALID_SCOPES;
+exports.bootstrapMiddleware = bootstrapMiddleware;
+exports.cacheHeaders = cacheHeaders;
+exports.compressionMiddleware = compressionMiddleware;
+exports.detailedLoggingMiddleware = detailedLoggingMiddleware;
+exports.getActivePlugins = getActivePlugins;
+exports.hashApiKey = hashApiKey;
+exports.isPluginActive = isPluginActive;
+exports.logActivity = logActivity;
+exports.loggingMiddleware = loggingMiddleware;
+exports.metricsMiddleware = metricsMiddleware;
+exports.optionalApiKey = optionalApiKey;
+exports.optionalAuth = optionalAuth;
+exports.performanceLoggingMiddleware = performanceLoggingMiddleware;
+exports.requireActivePlugin = requireActivePlugin;
+exports.requireActivePlugins = requireActivePlugins;
+exports.requireAnyPermission = requireAnyPermission;
+exports.requireApiKey = requireApiKey;
+exports.requireAuth = requireAuth;
+exports.requirePermission = requirePermission;
+exports.requireRole = requireRole;
+exports.securityHeaders = securityHeaders;
+exports.securityLoggingMiddleware = securityLoggingMiddleware;
+//# sourceMappingURL=chunk-3QZWGHUM.cjs.map
+//# sourceMappingURL=chunk-3QZWGHUM.cjs.map

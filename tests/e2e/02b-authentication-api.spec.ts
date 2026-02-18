@@ -10,12 +10,30 @@ test.describe('Authentication API', () => {
     lastName: 'User'
   };
 
-  // Seed admin user before all tests
+  // Seed admin user and ensure registration is enabled before all tests
   test.beforeAll(async ({ request }) => {
     try {
       await request.post('/auth/seed-admin');
     } catch (error) {
       // Admin might already exist, ignore errors
+    }
+
+    // Ensure registration is enabled (may have been disabled by 37-disable-registration tests)
+    try {
+      const loginRes = await request.post('/auth/login', {
+        data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password }
+      });
+      if (loginRes.ok()) {
+        const { token } = await loginRes.json();
+        await request.post('/admin/plugins/core-auth/settings', {
+          headers: { Authorization: `Bearer ${token}` },
+          data: {
+            registration: { enabled: true, requireEmailVerification: false, defaultRole: 'viewer' }
+          }
+        });
+      }
+    } catch (error) {
+      // Best effort — tests will fail with clear 403 if this didn't work
     }
   });
 

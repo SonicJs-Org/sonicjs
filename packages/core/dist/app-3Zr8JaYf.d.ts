@@ -20,6 +20,7 @@ interface Bindings {
     ENVIRONMENT?: string;
     BUCKET_NAME?: string;
     GOOGLE_MAPS_API_KEY?: string;
+    REQUIRE_API_KEY?: string;
 }
 interface Variables {
     user?: {
@@ -32,6 +33,12 @@ interface Variables {
     requestId?: string;
     startTime?: number;
     appVersion?: string;
+    apiKey?: {
+        id: string;
+        name: string;
+        scopes: string[];
+        userId: string;
+    };
 }
 interface SonicJSConfig {
     collections?: {

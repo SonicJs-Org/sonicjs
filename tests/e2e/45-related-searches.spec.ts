@@ -436,9 +436,8 @@ test.describe('Related Searches', () => {
   // Relevance Tab UI
   // =============================================
 
-  // Skipped: Related Searches UI section not yet built (UI-1)
   test.describe('Relevance Tab UI', () => {
-    test.skip('Relevance tab has Related Searches section', async ({ page }) => {
+    test('Relevance tab has Related Searches section', async ({ page }) => {
       await page.goto('/admin/plugins/ai-search#relevance')
       await page.waitForLoadState('networkidle')
 
@@ -450,7 +449,7 @@ test.describe('Related Searches', () => {
       await expect(heading).toBeVisible()
     })
 
-    test.skip('Related Searches section has Add button', async ({ page }) => {
+    test('Related Searches section has Add button', async ({ page }) => {
       await page.goto('/admin/plugins/ai-search#relevance')
       await page.waitForLoadState('networkidle')
       await page.click('#tab-btn-relevance')
@@ -461,9 +460,8 @@ test.describe('Related Searches', () => {
     })
   })
 
-  // Skipped: Agent tab category filter not yet implemented
   test.describe('Agent Tab Integration', () => {
-    test.skip('Agent tab category filter includes related_search', async ({ page }) => {
+    test('Agent tab category filter includes related_search', async ({ page }) => {
       await page.goto('/admin/plugins/ai-search')
       await page.waitForLoadState('networkidle')
 

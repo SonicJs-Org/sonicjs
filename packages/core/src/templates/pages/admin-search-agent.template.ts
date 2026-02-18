@@ -66,6 +66,7 @@ export function renderAgentTab(): string {
               <option value="low_ctr">Low CTR</option>
               <option value="unused_facet">Unused Facet</option>
               <option value="content_gap">Content Gap</option>
+              <option value="related_search">Related Search</option>
             </select>
             <select id="agent-filter-status" onchange="loadRecommendations()"
               class="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 px-3 py-2">
@@ -204,14 +205,16 @@ export function renderAgentScript(): string {
             query_rule: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
             low_ctr: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
             unused_facet: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
-            content_gap: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300'
+            content_gap: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300',
+            related_search: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300'
           };
           var categoryLabels = {
             synonym: 'Synonym',
             query_rule: 'Query Rule',
             low_ctr: 'Low CTR',
             unused_facet: 'Unused Facet',
-            content_gap: 'Content Gap'
+            content_gap: 'Content Gap',
+            related_search: 'Related Search'
           };
 
           var html = '';

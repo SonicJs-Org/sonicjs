@@ -2,6 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 import type { Recommendation, RecommendationCategory, RecommendationStatus, AgentRun } from '../types'
 import { SynonymService } from './synonym.service'
 import { QueryRulesService } from './query-rules.service'
+import { RelatedSearchService } from './related-search.service'
 
 /**
  * Recommendation Service
@@ -166,6 +167,7 @@ export class RecommendationService {
         this.analyzeLowCtrQueries(runId),
         this.analyzeUnusedFacets(runId),
         this.analyzeContentGaps(runId),
+        this.analyzeRelatedSearchOpportunities(runId),
       ])
 
       const totalCount = counts.reduce((a, b) => a + b, 0)
@@ -510,6 +512,166 @@ export class RecommendationService {
     return count
   }
 
+  /**
+   * Find related search opportunities by mining click overlap and session co-occurrence.
+   * Produces recommendations to create related search pairs via the approval queue.
+   */
+  private async analyzeRelatedSearchOpportunities(runId: string): Promise<number> {
+    const MAX_QUERIES = 10
+    const MAX_PER_SIGNAL = 3
+    let count = 0
+
+    try {
+      const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60)
+
+      // Step 1: Get top searched queries (≥3 searches, with results)
+      const { results: topQueries } = await this.db
+        .prepare(`
+          SELECT LOWER(query) as query, COUNT(*) as cnt
+          FROM ai_search_history
+          WHERE results_count > 0 AND created_at >= ?
+          GROUP BY LOWER(query) HAVING COUNT(*) >= 3
+          ORDER BY cnt DESC LIMIT ?
+        `)
+        .bind(thirtyDaysAgo, MAX_QUERIES)
+        .all<{ query: string; cnt: number }>()
+
+      if (!topQueries || topQueries.length === 0) return 0
+
+      // Step 2: Load existing pairs into a Set using sorted key format
+      const { results: existingPairs } = await this.db
+        .prepare('SELECT source_query, related_query FROM ai_search_related')
+        .all<{ source_query: string; related_query: string }>()
+
+      const existingPairSet = new Set<string>()
+      for (const row of existingPairs || []) {
+        existingPairSet.add([row.source_query, row.related_query].sort().join('|'))
+      }
+
+      // Step 3: For each top query, run two signals
+      for (const tq of topQueries) {
+        const sourceQuery = tq.query
+
+        // Signal A — Click Overlap: queries sharing ≥2 clicked content items
+        try {
+          const { results: clickOverlap } = await this.db
+            .prepare(`
+              WITH target_clicks AS (
+                SELECT DISTINCT c.clicked_content_id
+                FROM ai_search_clicks c
+                JOIN ai_search_history h ON c.search_id = CAST(h.id AS TEXT)
+                WHERE LOWER(h.query) = ? AND h.created_at >= ?
+              ),
+              related AS (
+                SELECT LOWER(h2.query) as related_query,
+                       COUNT(DISTINCT c2.clicked_content_id) as shared_clicks
+                FROM ai_search_clicks c2
+                JOIN ai_search_history h2 ON c2.search_id = CAST(h2.id AS TEXT)
+                JOIN target_clicks tc ON c2.clicked_content_id = tc.clicked_content_id
+                WHERE LOWER(h2.query) != ? AND LENGTH(TRIM(h2.query)) >= 2 AND h2.results_count > 0
+                GROUP BY LOWER(h2.query) HAVING shared_clicks >= 2
+              )
+              SELECT related_query, shared_clicks FROM related ORDER BY shared_clicks DESC LIMIT ?
+            `)
+            .bind(sourceQuery, sourceQuery, MAX_PER_SIGNAL)
+            .all<{ related_query: string; shared_clicks: number }>()
+
+          for (const row of clickOverlap || []) {
+            const sortedKey = [sourceQuery, row.related_query].sort().join('|')
+            if (existingPairSet.has(sortedKey)) continue
+
+            const fingerprint = fnv1aHash('related_search:' + sortedKey)
+            const exists = await this.checkFingerprint(fingerprint)
+            if (exists) continue
+
+            await this.insertRecommendation({
+              id: crypto.randomUUID().replace(/-/g, ''),
+              category: 'related_search',
+              title: `Related: "${sourceQuery}" -- "${row.related_query}"`,
+              description: `Users searching "${sourceQuery}" and "${row.related_query}" click ${row.shared_clicks} of the same content items. Adding a related search pair could help users discover relevant queries.`,
+              supporting_data: {
+                source_query: sourceQuery,
+                related_query: row.related_query,
+                signal: 'click_overlap',
+                shared_clicks: row.shared_clicks,
+                source_search_count: tq.cnt,
+              },
+              action_payload: {
+                source_query: sourceQuery,
+                related_query: row.related_query,
+                bidirectional: true,
+              },
+              fingerprint,
+              run_id: runId,
+            })
+            existingPairSet.add(sortedKey)
+            count++
+          }
+        } catch (error) {
+          console.error('[Agent] Related search click overlap error:', error)
+        }
+
+        // Signal B — Session Co-occurrence: queries by same user within ±30 min
+        try {
+          const { results: coOccurring } = await this.db
+            .prepare(`
+              WITH target_searches AS (
+                SELECT user_id, created_at FROM ai_search_history
+                WHERE LOWER(query) = ? AND created_at >= ? AND results_count > 0 AND user_id IS NOT NULL
+              ),
+              co_occurring AS (
+                SELECT LOWER(h.query) as related_query, COUNT(*) as co_count
+                FROM ai_search_history h
+                JOIN target_searches t ON h.user_id = t.user_id AND ABS(h.created_at - t.created_at) <= 1800000
+                WHERE LOWER(h.query) != ? AND h.results_count > 0 AND h.user_id IS NOT NULL AND LENGTH(TRIM(h.query)) >= 2
+                GROUP BY LOWER(h.query) HAVING co_count >= 2
+              )
+              SELECT related_query, co_count FROM co_occurring ORDER BY co_count DESC LIMIT ?
+            `)
+            .bind(sourceQuery, thirtyDaysAgo, sourceQuery, MAX_PER_SIGNAL)
+            .all<{ related_query: string; co_count: number }>()
+
+          for (const row of coOccurring || []) {
+            const sortedKey = [sourceQuery, row.related_query].sort().join('|')
+            if (existingPairSet.has(sortedKey)) continue
+
+            const fingerprint = fnv1aHash('related_search:' + sortedKey)
+            const exists = await this.checkFingerprint(fingerprint)
+            if (exists) continue
+
+            await this.insertRecommendation({
+              id: crypto.randomUUID().replace(/-/g, ''),
+              category: 'related_search',
+              title: `Related: "${sourceQuery}" -- "${row.related_query}"`,
+              description: `Users searching "${sourceQuery}" also search "${row.related_query}" within the same session (${row.co_count} co-occurrences). Adding a related search pair could help users discover relevant queries.`,
+              supporting_data: {
+                source_query: sourceQuery,
+                related_query: row.related_query,
+                signal: 'session_co_occurrence',
+                co_occurrence_count: row.co_count,
+                source_search_count: tq.cnt,
+              },
+              action_payload: {
+                source_query: sourceQuery,
+                related_query: row.related_query,
+                bidirectional: true,
+              },
+              fingerprint,
+              run_id: runId,
+            })
+            existingPairSet.add(sortedKey)
+            count++
+          }
+        } catch (error) {
+          console.error('[Agent] Related search session co-occurrence error:', error)
+        }
+      }
+    } catch (error) {
+      console.error('[Agent] Related search analysis error:', error)
+    }
+    return count
+  }
+
   // =============================================
   // Apply Logic
   // =============================================
@@ -546,6 +708,20 @@ export class RecommendationService {
           })
           await this.updateStatus(id, 'applied')
           return { success: true, message: `Created query rule: "${rec.action_payload.match_pattern}" \u2192 "${rec.action_payload.substitute_query}"` }
+        }
+
+        case 'related_search': {
+          if (!rec.action_payload?.source_query || !rec.action_payload?.related_query) {
+            return { success: false, message: 'Invalid related search payload' }
+          }
+          const relatedService = new RelatedSearchService(this.db)
+          await relatedService.create(
+            rec.action_payload.source_query,
+            rec.action_payload.related_query,
+            { source: 'agent', bidirectional: rec.action_payload.bidirectional ?? true }
+          )
+          await this.updateStatus(id, 'applied')
+          return { success: true, message: `Created related search: "${rec.action_payload.source_query}" -- "${rec.action_payload.related_query}"` }
         }
 
         case 'low_ctr':

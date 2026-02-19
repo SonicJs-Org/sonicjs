@@ -1,3 +1,5 @@
+'use strict';
+
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -1806,10 +1808,24 @@ CREATE INDEX IF NOT EXISTS idx_query_rules_priority ON ai_search_query_rules(pri
   },
   {
     id: "044",
+    name: "Related Search Auto Source",
+    filename: "044_related_search_auto_source.sql",
+    description: "Migration 044: Related Search Auto Source",
+    sql: "-- Add 'auto' source to ai_search_related\n-- SQLite doesn't support ALTER CHECK, so recreate the table.\n\nCREATE TABLE IF NOT EXISTS ai_search_related_new (\n  id TEXT PRIMARY KEY,\n  source_query TEXT NOT NULL,\n  related_query TEXT NOT NULL,\n  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'agent', 'auto')),\n  position INTEGER NOT NULL DEFAULT 0,\n  bidirectional INTEGER NOT NULL DEFAULT 0,\n  enabled INTEGER NOT NULL DEFAULT 1,\n  created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nINSERT OR IGNORE INTO ai_search_related_new SELECT * FROM ai_search_related;\n\nDROP TABLE IF EXISTS ai_search_related;\n\nALTER TABLE ai_search_related_new RENAME TO ai_search_related;\n\nCREATE INDEX IF NOT EXISTS idx_related_source_query ON ai_search_related(source_query, enabled, position);\nCREATE INDEX IF NOT EXISTS idx_related_source ON ai_search_related(source);\nCREATE UNIQUE INDEX IF NOT EXISTS idx_related_unique_pair ON ai_search_related(source_query, related_query);\n"
+  },
+  {
+    id: "044",
     name: "Synonym One Way",
     filename: "044_synonym_one_way.sql",
     description: "Migration 044: Synonym One Way",
     sql: "-- Add one-way synonym support\n-- synonym_type: 'bidirectional' (default, existing behavior) or 'one_way'\n-- source_term: for one_way, the trigger term that activates expansion (NULL for bidirectional)\nALTER TABLE ai_search_synonyms ADD COLUMN synonym_type TEXT NOT NULL DEFAULT 'bidirectional';\nALTER TABLE ai_search_synonyms ADD COLUMN source_term TEXT;\n"
+  },
+  {
+    id: "045",
+    name: "Recommendations Related Search Category",
+    filename: "045_recommendations_related_search_category.sql",
+    description: "Migration 045: Recommendations Related Search Category",
+    sql: "-- Add 'related_search' to the category CHECK constraint on ai_search_recommendations.\n-- SQLite doesn't support ALTER COLUMN, so we recreate the table.\n\nCREATE TABLE ai_search_recommendations_new (\n  id TEXT PRIMARY KEY,\n  category TEXT NOT NULL CHECK (category IN ('synonym', 'query_rule', 'low_ctr', 'unused_facet', 'content_gap', 'related_search')),\n  title TEXT NOT NULL,\n  description TEXT NOT NULL,\n  supporting_data TEXT NOT NULL,\n  action_payload TEXT,\n  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'applied', 'dismissed')),\n  fingerprint TEXT NOT NULL,\n  run_id TEXT NOT NULL,\n  applied_at INTEGER,\n  created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nINSERT INTO ai_search_recommendations_new\n  SELECT * FROM ai_search_recommendations;\n\nDROP TABLE ai_search_recommendations;\n\nALTER TABLE ai_search_recommendations_new RENAME TO ai_search_recommendations;\n\n-- Recreate indexes\nCREATE INDEX IF NOT EXISTS idx_recommendations_category ON ai_search_recommendations(category);\nCREATE INDEX IF NOT EXISTS idx_recommendations_status ON ai_search_recommendations(status);\nCREATE UNIQUE INDEX IF NOT EXISTS idx_recommendations_fingerprint ON ai_search_recommendations(fingerprint);\nCREATE INDEX IF NOT EXISTS idx_recommendations_run_id ON ai_search_recommendations(run_id);\n"
   },
   {
     id: "045",
@@ -2224,6 +2240,6 @@ var MigrationService = class {
   }
 };
 
-export { MigrationService };
-//# sourceMappingURL=chunk-D2IAQPZ7.js.map
-//# sourceMappingURL=chunk-D2IAQPZ7.js.map
+exports.MigrationService = MigrationService;
+//# sourceMappingURL=chunk-X2WLCJD3.cjs.map
+//# sourceMappingURL=chunk-X2WLCJD3.cjs.map

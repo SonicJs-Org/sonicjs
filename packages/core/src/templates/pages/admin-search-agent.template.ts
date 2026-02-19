@@ -223,7 +223,7 @@ export function renderAgentScript(): string {
             var catColor = categoryColors[r.category] || '';
             var catLabel = categoryLabels[r.category] || r.category;
             var canApply = (r.status === 'pending');
-            var isActionable = (r.category === 'synonym' || r.category === 'query_rule');
+            var isActionable = (r.category === 'synonym' || r.category === 'query_rule' || r.category === 'related_search');
 
             html += '<div class="rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-5">';
             html += '<div class="flex items-start justify-between gap-4">';

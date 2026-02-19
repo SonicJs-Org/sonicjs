@@ -184,8 +184,8 @@ test.describe('AI Search Quality Agent', () => {
         expect(rec).toHaveProperty('created_at')
         expect(rec).toHaveProperty('updated_at')
 
-        // Category must be one of the 5 valid categories
-        expect(['synonym', 'query_rule', 'low_ctr', 'unused_facet', 'content_gap']).toContain(rec.category)
+        // Category must be one of the 6 valid categories
+        expect(['synonym', 'query_rule', 'low_ctr', 'unused_facet', 'content_gap', 'related_search']).toContain(rec.category)
         // Status must be one of the 3 valid statuses
         expect(['pending', 'applied', 'dismissed']).toContain(rec.status)
       }
@@ -422,6 +422,84 @@ test.describe('AI Search Quality Agent', () => {
         const afterJson = await afterStatus.json()
         // Dismissed recs should have resurfaced as pending
         expect(afterJson.data.stats.pending).toBe(pendingBefore)
+      }
+    })
+  })
+
+  // =============================================
+  // Related Search Analyzer
+  // =============================================
+
+  test.describe('Related Search Analyzer', () => {
+    test('filter by category=related_search returns only related_search recs', async ({ page }) => {
+      const response = await page.request.get(`${AGENT_API}/recommendations?category=related_search`)
+      expect(response.status()).toBe(200)
+
+      const json = await response.json()
+      expect(json.success).toBe(true)
+      expect(Array.isArray(json.data)).toBe(true)
+      for (const rec of json.data) {
+        expect(rec.category).toBe('related_search')
+      }
+    })
+
+    test('related_search recs have expected supporting_data fields', async ({ page }) => {
+      // Run analysis to potentially generate related_search recs
+      await page.request.post(`${AGENT_API}/run`)
+      let attempts = 0
+      while (attempts < 20) {
+        await page.waitForTimeout(500)
+        const s = await page.request.get(`${AGENT_API}/status`)
+        const sj = await s.json()
+        if (sj.data?.latest_run?.status === 'completed') break
+        attempts++
+      }
+
+      const response = await page.request.get(`${AGENT_API}/recommendations?category=related_search`)
+      const json = await response.json()
+
+      if (json.data.length > 0) {
+        const rec = json.data[0]
+        expect(rec.supporting_data).toHaveProperty('source_query')
+        expect(rec.supporting_data).toHaveProperty('related_query')
+        expect(rec.supporting_data).toHaveProperty('signal')
+        expect(['click_overlap', 'session_co_occurrence']).toContain(rec.supporting_data.signal)
+        expect(rec.supporting_data).toHaveProperty('source_search_count')
+      }
+    })
+
+    test('applying related_search rec creates DB entry', async ({ page }) => {
+      // Run analysis
+      await page.request.post(`${AGENT_API}/run`)
+      let attempts = 0
+      while (attempts < 20) {
+        await page.waitForTimeout(500)
+        const s = await page.request.get(`${AGENT_API}/status`)
+        const sj = await s.json()
+        if (sj.data?.latest_run?.status === 'completed') break
+        attempts++
+      }
+
+      // Get a pending related_search rec
+      const listResponse = await page.request.get(`${AGENT_API}/recommendations?category=related_search&status=pending`)
+      const listJson = await listResponse.json()
+
+      if (listJson.data.length > 0) {
+        const rec = listJson.data[0]
+
+        // Apply it
+        const applyResponse = await page.request.post(`${AGENT_API}/recommendations/${rec.id}/apply`)
+        expect(applyResponse.status()).toBe(200)
+        const applyJson = await applyResponse.json()
+        expect(applyJson.success).toBe(true)
+        expect(applyJson.message).toContain('Created related search')
+
+        // Verify the rec is now applied
+        const verifyResponse = await page.request.get(`${AGENT_API}/recommendations?status=applied&category=related_search`)
+        const verifyJson = await verifyResponse.json()
+        const applied = verifyJson.data.find((r: any) => r.id === rec.id)
+        expect(applied).toBeDefined()
+        expect(applied.status).toBe('applied')
       }
     })
   })

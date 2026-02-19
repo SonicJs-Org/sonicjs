@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, renderSearchDashboard, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, RelatedSearchService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, TrendingSearchService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminApiKeyRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-3TMCOE5J.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-3TMCOE5J.js';
+import { AISearchService, IndexManager, FTS5Service, renderSearchDashboard, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, RelatedSearchService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, TrendingSearchService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminApiKeyRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-YEQ3T5NH.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-YEQ3T5NH.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, optionalAuth, optionalApiKey, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-7I5MEIXX.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-7I5MEIXX.js';
+import { requireAuth, optionalAuth, optionalApiKey, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-3AJCVMJO.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-3AJCVMJO.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-LOUDW6VZ.js';
+export { MigrationService } from './chunk-UKJVVR55.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -4257,7 +4257,10 @@ adminRoutes.post("/api/relevance/synonyms", async (c) => {
       return c.json({ error: "terms must be an array with at least 2 items" }, 400);
     }
     const synonymService = new SynonymService(c.env.DB);
-    const group = await synonymService.create(body.terms, body.enabled !== false);
+    const group = await synonymService.create(body.terms, body.enabled !== false, {
+      synonym_type: body.synonym_type,
+      source_term: body.source_term
+    });
     return c.json({ success: true, data: group });
   } catch (error) {
     console.error("Error creating synonym group:", error);
@@ -4271,7 +4274,9 @@ adminRoutes.put("/api/relevance/synonyms/:id", async (c) => {
     const synonymService = new SynonymService(c.env.DB);
     const group = await synonymService.update(id, {
       terms: body.terms,
-      enabled: body.enabled
+      enabled: body.enabled,
+      synonym_type: body.synonym_type,
+      source_term: body.source_term
     });
     if (!group) {
       return c.json({ error: "Synonym group not found" }, 404);

@@ -1,16 +1,18 @@
-import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity, VALID_SCOPES, hashApiKey } from './chunk-7I5MEIXX.js';
-import { PluginService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-LOUDW6VZ.js';
-import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-AAU4BTDE.js';
-import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
-import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-7DXWBEQP.js';
-import { metricsTracker } from './chunk-FICTAGD4.js';
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import { z } from 'zod';
-import { setCookie } from 'hono/cookie';
-import { html, raw } from 'hono/html';
+'use strict';
+
+var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
+var chunkKKOBMGNI_cjs = require('./chunk-KKOBMGNI.cjs');
+var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
+var chunkFEIK7JC2_cjs = require('./chunk-FEIK7JC2.cjs');
+var chunkGMUS5V42_cjs = require('./chunk-GMUS5V42.cjs');
+var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
+var chunkUOEIMC67_cjs = require('./chunk-UOEIMC67.cjs');
+var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
+var hono = require('hono');
+var cors = require('hono/cors');
+var zod = require('zod');
+var cookie = require('hono/cookie');
+var html = require('hono/html');
 
 // src/schemas/index.ts
 var schemaDefinitions = [];
@@ -1207,7 +1209,7 @@ var SearchCacheService = class _SearchCacheService {
 };
 
 // src/routes/api-content-crud.ts
-var apiContentCrudRoutes = new Hono();
+var apiContentCrudRoutes = new hono.Hono();
 apiContentCrudRoutes.get("/check-slug", async (c) => {
   try {
     const db = c.env.DB;
@@ -1267,7 +1269,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", chunkKKOBMGNI_cjs.requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -1308,7 +1310,7 @@ apiContentCrudRoutes.post("/", requireAuth(), async (c) => {
       now,
       now
     ).run();
-    const cache = getCacheService(CACHE_CONFIGS.api);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
     await cache.invalidate(`content:list:${collectionId}:*`);
     await cache.invalidate("content-filtered:*");
     const fts5Service = new FTS5Service(db);
@@ -1343,7 +1345,7 @@ apiContentCrudRoutes.post("/", requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkKKOBMGNI_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1381,7 +1383,7 @@ apiContentCrudRoutes.put("/:id", requireAuth(), async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(...params).run();
-    const cache = getCacheService(CACHE_CONFIGS.api);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
@@ -1417,7 +1419,7 @@ apiContentCrudRoutes.put("/:id", requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkKKOBMGNI_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -1428,7 +1430,7 @@ apiContentCrudRoutes.delete("/:id", requireAuth(), async (c) => {
     }
     const deleteStmt = db.prepare("DELETE FROM content WHERE id = ?");
     await deleteStmt.bind(id).run();
-    const cache = getCacheService(CACHE_CONFIGS.api);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existing.collection_id}:*`);
     await cache.invalidate("content-filtered:*");
@@ -1454,7 +1456,7 @@ apiContentCrudRoutes.delete("/:id", requireAuth(), async (c) => {
 var api_content_crud_default = apiContentCrudRoutes;
 
 // src/routes/api.ts
-var apiRoutes = new Hono();
+var apiRoutes = new hono.Hono();
 apiRoutes.use("*", async (c, next) => {
   const startTime = Date.now();
   c.set("startTime", startTime);
@@ -1463,11 +1465,11 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkKKOBMGNI_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
-apiRoutes.use("*", cors({
+apiRoutes.use("*", cors.cors({
   origin: "*",
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"]
@@ -1889,7 +1891,7 @@ apiRoutes.get("/collections", async (c) => {
   try {
     const db = c.env.DB;
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = getCacheService(CACHE_CONFIGS.api);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("collections", "all");
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -1966,12 +1968,12 @@ apiRoutes.get("/content", async (c) => {
         });
       }
     }
-    const filter = QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = chunkUOEIMC67_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
     if (!filter.limit) {
       filter.limit = 50;
     }
     filter.limit = Math.min(filter.limit, 1e3);
-    const builder3 = new QueryFilterBuilder();
+    const builder3 = new chunkUOEIMC67_cjs.QueryFilterBuilder();
     const queryResult = builder3.build("content", filter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -1980,7 +1982,7 @@ apiRoutes.get("/content", async (c) => {
       }, 400);
     }
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = getCacheService(CACHE_CONFIGS.api);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("content-filtered", JSON.stringify({ filter, query: queryResult.sql }));
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -2058,7 +2060,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
     if (!collectionResult) {
       return c.json({ error: "Collection not found" }, 404);
     }
-    const filter = QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = chunkUOEIMC67_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
     if (!filter.where) {
       filter.where = { and: [] };
     }
@@ -2074,7 +2076,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
       filter.limit = 50;
     }
     filter.limit = Math.min(filter.limit, 1e3);
-    const builder3 = new QueryFilterBuilder();
+    const builder3 = new chunkUOEIMC67_cjs.QueryFilterBuilder();
     const queryResult = builder3.build("content", filter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -2083,7 +2085,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
       }, 400);
     }
     const cacheEnabled = c.get("cacheEnabled");
-    const cache = getCacheService(CACHE_CONFIGS.api);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.api);
     const cacheKey = cache.generateKey("collection-content-filtered", `${collection}:${JSON.stringify({ filter, query: queryResult.sql })}`);
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
@@ -2162,9 +2164,9 @@ function generateId() {
 async function emitEvent(eventName, data) {
   console.log(`[Event] ${eventName}:`, data);
 }
-var fileValidationSchema = z.object({
-  name: z.string().min(1).max(255),
-  type: z.string().refine(
+var fileValidationSchema = zod.z.object({
+  name: zod.z.string().min(1).max(255),
+  type: zod.z.string().refine(
     (type) => {
       const allowedTypes = [
         // Images
@@ -2195,11 +2197,11 @@ var fileValidationSchema = z.object({
     },
     { message: "Unsupported file type" }
   ),
-  size: z.number().min(1).max(50 * 1024 * 1024)
+  size: zod.z.number().min(1).max(50 * 1024 * 1024)
   // 50MB max
 });
-var apiMediaRoutes = new Hono();
-apiMediaRoutes.use("*", requireAuth());
+var apiMediaRoutes = new hono.Hono();
+apiMediaRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -2781,7 +2783,7 @@ function getPNGDimensions(uint8Array) {
   };
 }
 var api_media_default = apiMediaRoutes;
-var apiSystemRoutes = new Hono();
+var apiSystemRoutes = new hono.Hono();
 apiSystemRoutes.get("/health", async (c) => {
   try {
     const startTime = Date.now();
@@ -2942,9 +2944,9 @@ apiSystemRoutes.get("/env", (c) => {
   });
 });
 var api_system_default = apiSystemRoutes;
-var adminApiRoutes = new Hono();
-adminApiRoutes.use("*", requireAuth());
-adminApiRoutes.use("*", requireRole(["admin", "editor"]));
+var adminApiRoutes = new hono.Hono();
+adminApiRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
+adminApiRoutes.use("*", chunkKKOBMGNI_cjs.requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -3074,19 +3076,19 @@ adminApiRoutes.get("/activity", async (c) => {
     return c.json({ error: "Failed to fetch recent activity" }, 500);
   }
 });
-var createCollectionSchema = z.object({
-  name: z.string().min(1).max(255).regex(/^[a-z0-9_]+$/, "Must contain only lowercase letters, numbers, and underscores"),
-  displayName: z.string().min(1).max(255).optional(),
-  display_name: z.string().min(1).max(255).optional(),
-  description: z.string().optional()
+var createCollectionSchema = zod.z.object({
+  name: zod.z.string().min(1).max(255).regex(/^[a-z0-9_]+$/, "Must contain only lowercase letters, numbers, and underscores"),
+  displayName: zod.z.string().min(1).max(255).optional(),
+  display_name: zod.z.string().min(1).max(255).optional(),
+  description: zod.z.string().optional()
 }).refine((data) => data.displayName || data.display_name, {
   message: "Either displayName or display_name is required",
   path: ["displayName"]
 });
-var updateCollectionSchema = z.object({
-  display_name: z.string().min(1).max(255).optional(),
-  description: z.string().optional(),
-  is_active: z.boolean().optional()
+var updateCollectionSchema = zod.z.object({
+  display_name: zod.z.string().min(1).max(255).optional(),
+  description: zod.z.string().optional(),
+  is_active: zod.z.boolean().optional()
 });
 adminApiRoutes.get("/collections", async (c) => {
   try {
@@ -3454,7 +3456,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-JDDP45OR.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-SBZWXE4B.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -3479,7 +3481,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-JDDP45OR.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-SBZWXE4B.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -3498,7 +3500,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-JDDP45OR.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-SBZWXE4B.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -3573,8 +3575,8 @@ function renderLoginPage(data, demoLoginActive = false) {
         <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div class="bg-zinc-900 shadow-sm ring-1 ring-white/10 rounded-xl px-6 py-8 sm:px-10">
             <!-- Alerts -->
-            ${data.error ? `<div class="mb-6">${renderAlert({ type: "error", message: data.error })}</div>` : ""}
-            ${data.message ? `<div class="mb-6">${renderAlert({ type: "success", message: data.message })}</div>` : ""}
+            ${data.error ? `<div class="mb-6">${chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error })}</div>` : ""}
+            ${data.message ? `<div class="mb-6">${chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.message })}</div>` : ""}
 
             <!-- Form Response (HTMX target) -->
             <div id="form-response" class="mb-6"></div>
@@ -3738,7 +3740,7 @@ function renderRegisterPage(data) {
         <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div class="bg-zinc-900 shadow-sm ring-1 ring-white/10 rounded-xl px-6 py-8 sm:px-10">
             <!-- Alerts -->
-            ${data.error ? `<div class="mb-6">${renderAlert({ type: "error", message: data.error })}</div>` : ""}
+            ${data.error ? `<div class="mb-6">${chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error })}</div>` : ""}
 
             <!-- Form -->
             <form
@@ -3872,12 +3874,12 @@ async function isFirstUserRegistration(db) {
     return false;
   }
 }
-var baseRegistrationSchema = z.object({
-  email: z.string().email("Valid email is required"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  username: z.string().min(3, "Username must be at least 3 characters").optional(),
-  firstName: z.string().min(1, "First name is required").optional(),
-  lastName: z.string().min(1, "Last name is required").optional()
+var baseRegistrationSchema = zod.z.object({
+  email: zod.z.string().email("Valid email is required"),
+  password: zod.z.string().min(8, "Password must be at least 8 characters"),
+  username: zod.z.string().min(3, "Username must be at least 3 characters").optional(),
+  firstName: zod.z.string().min(1, "First name is required").optional(),
+  lastName: zod.z.string().min(1, "Last name is required").optional()
 });
 var authValidationService = {
   /**
@@ -3905,7 +3907,7 @@ var authValidationService = {
 };
 
 // src/routes/auth.ts
-var authRoutes = new Hono();
+var authRoutes = new hono.Hono();
 authRoutes.get("/login", async (c) => {
   const error = c.req.query("error");
   const message = c.req.query("message");
@@ -3938,9 +3940,9 @@ authRoutes.get("/register", async (c) => {
   };
   return c.html(renderRegisterPage(pageData));
 });
-var loginSchema = z.object({
-  email: z.string().email("Valid email is required"),
-  password: z.string().min(1, "Password is required")
+var loginSchema = zod.z.object({
+  email: zod.z.string().email("Valid email is required"),
+  password: zod.z.string().min(1, "Password is required")
 });
 authRoutes.post(
   "/register",
@@ -3980,7 +3982,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await AuthManager.hashPassword(password);
+      const passwordHash = await chunkKKOBMGNI_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -4000,8 +4002,8 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await AuthManager.generateToken(userId, normalizedEmail, "viewer");
-      setCookie(c, "auth_token", token, {
+      const token = await chunkKKOBMGNI_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
         sameSite: "Strict",
@@ -4041,7 +4043,7 @@ authRoutes.post("/login", async (c) => {
     const { email, password } = validation.data;
     const db = c.env.DB;
     const normalizedEmail = email.toLowerCase();
-    const cache = getCacheService(CACHE_CONFIGS.user);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.user);
     let user = await cache.get(cache.generateKey("user", `email:${normalizedEmail}`));
     if (!user) {
       user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
@@ -4053,12 +4055,12 @@ authRoutes.post("/login", async (c) => {
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkKKOBMGNI_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await AuthManager.generateToken(user.id, user.email, user.role);
-    setCookie(c, "auth_token", token, {
+    const token = await chunkKKOBMGNI_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -4085,7 +4087,7 @@ authRoutes.post("/login", async (c) => {
   }
 });
 authRoutes.post("/logout", (c) => {
-  setCookie(c, "auth_token", "", {
+  cookie.setCookie(c, "auth_token", "", {
     httpOnly: true,
     secure: false,
     // Set to true in production with HTTPS
@@ -4096,7 +4098,7 @@ authRoutes.post("/logout", (c) => {
   return c.json({ message: "Logged out successfully" });
 });
 authRoutes.get("/logout", (c) => {
-  setCookie(c, "auth_token", "", {
+  cookie.setCookie(c, "auth_token", "", {
     httpOnly: true,
     secure: false,
     // Set to true in production with HTTPS
@@ -4106,7 +4108,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", requireAuth(), async (c) => {
+authRoutes.get("/me", chunkKKOBMGNI_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -4123,14 +4125,14 @@ authRoutes.get("/me", requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", requireAuth(), async (c) => {
+authRoutes.post("/refresh", chunkKKOBMGNI_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await AuthManager.generateToken(user.userId, user.email, user.role);
-    setCookie(c, "auth_token", token, {
+    const token = await chunkKKOBMGNI_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
+    cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -4150,7 +4152,7 @@ authRoutes.post("/register/form", async (c) => {
     if (!isFirstUser) {
       const registrationEnabled = await isRegistrationEnabled(db);
       if (!registrationEnabled) {
-        return c.html(html`
+        return c.html(html.html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             Registration is currently disabled. Please contact an administrator.
           </div>
@@ -4170,7 +4172,7 @@ authRoutes.post("/register/form", async (c) => {
     const validationSchema = await authValidationService.buildRegistrationSchema(db);
     const validation = await validationSchema.safeParseAsync(requestData);
     if (!validation.success) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           ${validation.error.issues.map((err) => err.message).join(", ")}
         </div>
@@ -4183,13 +4185,13 @@ authRoutes.post("/register/form", async (c) => {
     const lastName = validatedData.lastName || authValidationService.generateDefaultValue("lastName", validatedData);
     const existingUser = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind(normalizedEmail, username).first();
     if (existingUser) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           User with this email or username already exists
         </div>
       `);
     }
-    const passwordHash = await AuthManager.hashPassword(password);
+    const passwordHash = await chunkKKOBMGNI_cjs.AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -4209,8 +4211,8 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await AuthManager.generateToken(userId, normalizedEmail, role);
-    setCookie(c, "auth_token", token, {
+    const token = await chunkKKOBMGNI_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
+    cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
       // Set to true in production with HTTPS
@@ -4219,7 +4221,7 @@ authRoutes.post("/register/form", async (c) => {
       // 24 hours
     });
     const redirectUrl = role === "admin" ? "/admin/dashboard" : "/admin/dashboard";
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Account created successfully! Redirecting...
         <script>
@@ -4231,7 +4233,7 @@ authRoutes.post("/register/form", async (c) => {
     `);
   } catch (error) {
     console.error("Registration error:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Registration failed. Please try again.
       </div>
@@ -4246,7 +4248,7 @@ authRoutes.post("/login/form", async (c) => {
     const normalizedEmail = email.toLowerCase();
     const validation = loginSchema.safeParse({ email: normalizedEmail, password });
     if (!validation.success) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           ${validation.error.issues.map((err) => err.message).join(", ")}
         </div>
@@ -4255,22 +4257,22 @@ authRoutes.post("/login/form", async (c) => {
     const db = c.env.DB;
     const user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
     if (!user) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `);
     }
-    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkKKOBMGNI_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `);
     }
-    const token = await AuthManager.generateToken(user.id, user.email, user.role);
-    setCookie(c, "auth_token", token, {
+    const token = await chunkKKOBMGNI_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
       // Set to true in production with HTTPS
@@ -4279,7 +4281,7 @@ authRoutes.post("/login/form", async (c) => {
       // 24 hours
     });
     await db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").bind((/* @__PURE__ */ new Date()).getTime(), user.id).run();
-    return c.html(html`
+    return c.html(html.html`
       <div id="form-response">
         <div class="rounded-lg bg-green-100 dark:bg-lime-500/10 p-4 ring-1 ring-green-400 dark:ring-lime-500/20">
           <div class="flex items-start gap-x-3">
@@ -4300,7 +4302,7 @@ authRoutes.post("/login/form", async (c) => {
     `);
   } catch (error) {
     console.error("Login error:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Login failed. Please try again.
       </div>
@@ -4328,7 +4330,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await chunkKKOBMGNI_cjs.AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -4340,7 +4342,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await chunkKKOBMGNI_cjs.AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -4560,7 +4562,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await AuthManager.hashPassword(password);
+    const passwordHash = await chunkKKOBMGNI_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -4579,8 +4581,8 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
-    setCookie(c, "auth_token", authToken, {
+    const authToken = await chunkKKOBMGNI_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
@@ -4809,7 +4811,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkKKOBMGNI_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -4844,7 +4846,7 @@ authRoutes.post("/reset-password", async (c) => {
   }
 });
 var auth_default = authRoutes;
-var app = new Hono();
+var app = new hono.Hono();
 app.post("/test-cleanup", async (c) => {
   const db = c.env.DB;
   if (c.env.ENVIRONMENT === "production") {
@@ -5067,7 +5069,7 @@ app.post("/test-cleanup/content", async (c) => {
 var test_cleanup_default = app;
 
 // src/templates/pages/admin-content-form.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 
 // src/templates/components/drag-sortable.template.ts
 function getDragSortableScript() {
@@ -6621,7 +6623,7 @@ function escapeHtml2(text) {
 }
 
 // src/plugins/available/tinymce-plugin/index.ts
-var builder = PluginBuilder.create({
+var builder = chunk6FHNRRJ3_cjs.PluginBuilder.create({
   name: "tinymce-plugin",
   version: "1.0.0",
   description: "Powerful WYSIWYG rich text editor for content creation"
@@ -6904,7 +6906,7 @@ function getQuillCDN(version = "2.0.2") {
   `;
 }
 function createQuillEditorPlugin() {
-  const builder3 = PluginBuilder.create({
+  const builder3 = chunk6FHNRRJ3_cjs.PluginBuilder.create({
     name: "quill-editor",
     version: "1.0.0",
     description: "Quill rich text editor integration for SonicJS"
@@ -6930,7 +6932,7 @@ function createQuillEditorPlugin() {
 createQuillEditorPlugin();
 
 // src/plugins/available/easy-mdx/index.ts
-var builder2 = PluginBuilder.create({
+var builder2 = chunk6FHNRRJ3_cjs.PluginBuilder.create({
   name: "easy-mdx",
   version: "1.0.0",
   description: "Lightweight markdown editor with live preview"
@@ -7221,8 +7223,8 @@ function renderContentFormPage(data) {
         <!-- Form Content -->
         <div class="px-6 py-6">
           <div id="form-messages">
-            ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-            ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+            ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+            ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -7457,7 +7459,7 @@ function renderContentFormPage(data) {
     </div>
 
     <!-- Confirmation Dialogs -->
-    ${renderConfirmationDialog({
+    ${chunkGMUS5V42_cjs.renderConfirmationDialog({
     id: "duplicate-content-confirm",
     title: "Duplicate Content",
     message: "Create a copy of this content?",
@@ -7468,7 +7470,7 @@ function renderContentFormPage(data) {
     onConfirm: "performDuplicateContent()"
   })}
 
-    ${renderConfirmationDialog({
+    ${chunkGMUS5V42_cjs.renderConfirmationDialog({
     id: "delete-content-confirm",
     title: "Delete Content",
     message: "Are you sure you want to delete this content? This action cannot be undone.",
@@ -7479,7 +7481,7 @@ function renderContentFormPage(data) {
     onConfirm: `performDeleteContent('${data.id}')`
   })}
 
-    ${getConfirmationDialogScript()}
+    ${chunkGMUS5V42_cjs.getConfirmationDialogScript()}
 
     ${data.tinymceEnabled ? getTinyMCEScript(data.tinymceSettings?.apiKey) : "<!-- TinyMCE plugin not active -->"}
 
@@ -8110,11 +8112,11 @@ function renderContentFormPage(data) {
     content: pageContent,
     version: data.version
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-content-list.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderContentListPage(data) {
   const urlParams = new URLSearchParams();
   if (data.modelName && data.modelName !== "all") urlParams.set("model", data.modelName);
@@ -8518,8 +8520,8 @@ function renderContentListPage(data) {
       
       <!-- Content List -->
       <div id="content-list">
-        ${renderTable(tableData)}
-        ${renderPagination(paginationData)}
+        ${chunkGMUS5V42_cjs.renderTable(tableData)}
+        ${chunkGMUS5V42_cjs.renderPagination(paginationData)}
       </div>
       
     </div>
@@ -8729,7 +8731,7 @@ function renderContentListPage(data) {
     </script>
 
     <!-- Confirmation Dialog for Bulk Actions -->
-    ${renderConfirmationDialog({
+    ${chunkGMUS5V42_cjs.renderConfirmationDialog({
     id: "bulk-action-confirm",
     title: "Confirm Bulk Action",
     message: "Are you sure you want to perform this action? This operation will affect multiple items.",
@@ -8741,7 +8743,7 @@ function renderContentListPage(data) {
   })}
 
     <!-- Confirmation Dialog Script -->
-    ${getConfirmationDialogScript()}
+    ${chunkGMUS5V42_cjs.getConfirmationDialogScript()}
 
     <!-- Advanced Search Modal -->
     <div id="advancedSearchModal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -9038,7 +9040,7 @@ function renderContentListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/version-history.template.ts
@@ -9231,14 +9233,14 @@ async function isPluginActive2(db, pluginId) {
 }
 
 // src/routes/admin-content.ts
-var adminContentRoutes = new Hono();
+var adminContentRoutes = new hono.Hono();
 function parseFieldValue(field, formData, options = {}) {
   const { skipValidation = false } = options;
   const value = formData.get(field.field_name);
   const errors = [];
-  const blocksConfig = getBlocksFieldConfig(field.field_options);
+  const blocksConfig = chunkUOEIMC67_cjs.getBlocksFieldConfig(field.field_options);
   if (blocksConfig) {
-    const parsed = parseBlocksValue(value, blocksConfig);
+    const parsed = chunkUOEIMC67_cjs.parseBlocksValue(value, blocksConfig);
     if (!skipValidation && field.is_required && parsed.value.length === 0) {
       parsed.errors.push(`${field.field_label} is required`);
     }
@@ -9348,9 +9350,9 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", requireAuth());
+adminContentRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
-  const cache = getCacheService(CACHE_CONFIGS.collection);
+  const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
     cache.generateKey("fields", collectionId),
     async () => {
@@ -9405,7 +9407,7 @@ async function getCollectionFields(db, collectionId) {
   );
 }
 async function getCollection(db, collectionId) {
-  const cache = getCacheService(CACHE_CONFIGS.collection);
+  const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
     cache.generateKey("collection", collectionId),
     async () => {
@@ -9630,21 +9632,21 @@ adminContentRoutes.get("/new", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new PluginService(db);
+      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new PluginService(db);
+      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new PluginService(db);
+      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -9694,7 +9696,7 @@ adminContentRoutes.get("/:id/edit", async (c) => {
     const db = c.env.DB;
     const url = new URL(c.req.url);
     const referrerParams = url.searchParams.get("ref") || "";
-    const cache = getCacheService(CACHE_CONFIGS.content);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
     const content = await cache.getOrSet(
       cache.generateKey("content", id),
       async () => {
@@ -9735,21 +9737,21 @@ adminContentRoutes.get("/:id/edit", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new PluginService(db);
+      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new PluginService(db);
+      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new PluginService(db);
+      const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -9805,7 +9807,7 @@ adminContentRoutes.post("/", async (c) => {
     const collectionId = formData.get("collection_id");
     const action = formData.get("action");
     if (!collectionId) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection ID is required.
         </div>
@@ -9814,7 +9816,7 @@ adminContentRoutes.post("/", async (c) => {
     const db = c.env.DB;
     const collection = await getCollection(db, collectionId);
     if (!collection) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
@@ -9867,7 +9869,7 @@ adminContentRoutes.post("/", async (c) => {
       now,
       now
     ).run();
-    const cache = getCacheService(CACHE_CONFIGS.content);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
     await cache.invalidate(`content:list:${collectionId}:*`);
     const versionStmt = db.prepare(`
       INSERT INTO content_versions (id, content_id, version, data, author_id, created_at)
@@ -9916,7 +9918,7 @@ adminContentRoutes.post("/", async (c) => {
     }
   } catch (error) {
     console.error("Error creating content:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to create content. Please try again.
       </div>
@@ -9933,7 +9935,7 @@ adminContentRoutes.put("/:id", async (c) => {
     const contentStmt = db.prepare("SELECT * FROM content WHERE id = ?");
     const existingContent = await contentStmt.bind(id).first();
     if (!existingContent) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Content not found.
         </div>
@@ -9941,7 +9943,7 @@ adminContentRoutes.put("/:id", async (c) => {
     }
     const collection = await getCollection(db, existingContent.collection_id);
     if (!collection) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
@@ -9996,7 +9998,7 @@ adminContentRoutes.put("/:id", async (c) => {
       now,
       id
     ).run();
-    const cache = getCacheService(CACHE_CONFIGS.content);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate(`content:list:${existingContent.collection_id}:*`);
     const existingData = JSON.parse(existingContent.data || "{}");
@@ -10054,7 +10056,7 @@ adminContentRoutes.put("/:id", async (c) => {
     }
   } catch (error) {
     console.error("Error updating content:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update content. Please try again.
       </div>
@@ -10279,7 +10281,7 @@ adminContentRoutes.post("/bulk-action", async (c) => {
     } else {
       return c.json({ success: false, error: "Invalid action" });
     }
-    const cache = getCacheService(CACHE_CONFIGS.content);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
     for (const contentId of ids) {
       await cache.delete(cache.generateKey("content", contentId));
     }
@@ -10317,7 +10319,7 @@ adminContentRoutes.delete("/:id", async (c) => {
       const searchCache = new SearchCacheService(c.env.CACHE_KV);
       c.executionCtx.waitUntil(searchCache.invalidateAll());
     }
-    const cache = getCacheService(CACHE_CONFIGS.content);
+    const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.content);
     await cache.delete(cache.generateKey("content", id));
     await cache.invalidate("content:list:*");
     return c.html(`
@@ -10509,7 +10511,7 @@ ${JSON.stringify(data, null, 2)}
 var admin_content_default = adminContentRoutes;
 
 // src/templates/pages/admin-profile.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderAvatarImage(avatarUrl, firstName, lastName) {
   return `<div id="avatar-image-container" class="w-24 h-24 rounded-full mx-auto mb-4 overflow-hidden bg-gradient-to-br from-cyan-400 to-purple-400 flex items-center justify-center ring-4 ring-zinc-950/5 dark:ring-white/10">
     ${avatarUrl ? `<img src="${avatarUrl}" alt="Profile picture" class="w-full h-full object-cover">` : `<span class="text-2xl font-bold text-white">${firstName.charAt(0)}${lastName.charAt(0)}</span>`}
@@ -10529,8 +10531,8 @@ function renderProfilePage(data) {
       </div>
 
       <!-- Alert Messages -->
-      ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-      ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+      ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+      ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
 
       <!-- Profile Form -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -10917,7 +10919,7 @@ function renderProfilePage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/alert.template.ts
@@ -11200,7 +11202,7 @@ function renderActivityLogsPage(data) {
     user: data.user,
     content: pageContent
   };
-  return renderAdminLayout(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
 }
 function getActionBadgeClass(action) {
   if (action.includes("login") || action.includes("logout")) {
@@ -11220,7 +11222,7 @@ function formatAction(action) {
 }
 
 // src/templates/pages/admin-user-edit.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 
 // src/templates/components/confirmation-dialog.template.ts
 function renderConfirmationDialog2(options) {
@@ -11341,8 +11343,8 @@ function renderUserEditPage(data) {
 
       <!-- Alert Messages -->
       <div id="form-messages">
-        ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-        ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+        ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+        ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
       </div>
 
       <!-- User Edit Form -->
@@ -11361,7 +11363,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="first_name"
-                      value="${escapeHtml(data.userToEdit.firstName || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.firstName || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11372,7 +11374,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="last_name"
-                      value="${escapeHtml(data.userToEdit.lastName || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.lastName || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11383,7 +11385,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="username"
-                      value="${escapeHtml(data.userToEdit.username || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.username || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11394,7 +11396,7 @@ function renderUserEditPage(data) {
                     <input
                       type="email"
                       name="email"
-                      value="${escapeHtml(data.userToEdit.email || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.email || "")}"
                       required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11405,7 +11407,7 @@ function renderUserEditPage(data) {
                     <input
                       type="tel"
                       name="phone"
-                      value="${escapeHtml(data.userToEdit.phone || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.phone || "")}"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
                   </div>
@@ -11419,7 +11421,7 @@ function renderUserEditPage(data) {
                         class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white/5 dark:bg-white/5 py-1.5 pl-3 pr-8 text-base text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-500/30 dark:outline-zinc-400/30 *:bg-white dark:*:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-zinc-500 dark:focus-visible:outline-zinc-400 sm:text-sm/6"
                       >
                         ${data.roles.map((role) => `
-                          <option value="${escapeHtml(role.value)}" ${data.userToEdit.role === role.value ? "selected" : ""}>${escapeHtml(role.label)}</option>
+                          <option value="${chunkUOEIMC67_cjs.escapeHtml(role.value)}" ${data.userToEdit.role === role.value ? "selected" : ""}>${chunkUOEIMC67_cjs.escapeHtml(role.label)}</option>
                         `).join("")}
                       </select>
                       <svg viewBox="0 0 16 16" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-zinc-600 dark:text-zinc-400 sm:size-4">
@@ -11440,7 +11442,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_display_name"
-                      value="${escapeHtml(data.userToEdit.profile?.displayName || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.displayName || "")}"
                       placeholder="Public display name"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11451,7 +11453,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_company"
-                      value="${escapeHtml(data.userToEdit.profile?.company || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.company || "")}"
                       placeholder="Company or organization"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11462,7 +11464,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_job_title"
-                      value="${escapeHtml(data.userToEdit.profile?.jobTitle || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.jobTitle || "")}"
                       placeholder="Job title or role"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11473,7 +11475,7 @@ function renderUserEditPage(data) {
                     <input
                       type="url"
                       name="profile_website"
-                      value="${escapeHtml(data.userToEdit.profile?.website || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.website || "")}"
                       placeholder="https://example.com"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11484,7 +11486,7 @@ function renderUserEditPage(data) {
                     <input
                       type="text"
                       name="profile_location"
-                      value="${escapeHtml(data.userToEdit.profile?.location || "")}"
+                      value="${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.location || "")}"
                       placeholder="City, Country"
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
@@ -11508,7 +11510,7 @@ function renderUserEditPage(data) {
                     rows="3"
                     placeholder="Short bio or description"
                     class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                  >${escapeHtml(data.userToEdit.profile?.bio || "")}</textarea>
+                  >${chunkUOEIMC67_cjs.escapeHtml(data.userToEdit.profile?.bio || "")}</textarea>
                 </div>
               </div>
 
@@ -11708,11 +11710,11 @@ function renderUserEditPage(data) {
     user: data.user,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-user-new.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderUserNewPage(data) {
   const pageContent = `
     <div>
@@ -11751,8 +11753,8 @@ function renderUserNewPage(data) {
 
       <!-- Alert Messages -->
       <div id="form-messages">
-        ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-        ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+        ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+        ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
       </div>
 
       <!-- User New Form -->
@@ -11996,11 +11998,11 @@ function renderUserNewPage(data) {
     user: data.user,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-users-list.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderUsersListPage(data) {
   const columns = [
     {
@@ -12151,8 +12153,8 @@ function renderUsersListPage(data) {
       </div>
 
       <!-- Alert Messages -->
-      ${data.error ? renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
-      ${data.success ? renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
+      ${data.error ? chunkGMUS5V42_cjs.renderAlert({ type: "error", message: data.error, dismissible: true }) : ""}
+      ${data.success ? chunkGMUS5V42_cjs.renderAlert({ type: "success", message: data.success, dismissible: true }) : ""}
 
       <!-- Stats -->
       <div class="mb-6">
@@ -12329,10 +12331,10 @@ function renderUsersListPage(data) {
       </div>
 
       <!-- Users Table -->
-      ${renderTable(tableData)}
+      ${chunkGMUS5V42_cjs.renderTable(tableData)}
 
       <!-- Pagination -->
-      ${data.pagination ? renderPagination(data.pagination) : ""}
+      ${data.pagination ? chunkGMUS5V42_cjs.renderPagination(data.pagination) : ""}
     </div>
 
     <script>
@@ -12403,12 +12405,12 @@ function renderUsersListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-users.ts
-var userRoutes = new Hono();
-userRoutes.use("*", requireAuth());
+var userRoutes = new hono.Hono();
+userRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -12507,12 +12509,12 @@ userRoutes.put("/profile", async (c) => {
   const db = c.env.DB;
   try {
     const formData = await c.req.formData();
-    const firstName = sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = sanitizeInput(formData.get("last_name")?.toString());
-    const username = sanitizeInput(formData.get("username")?.toString());
+    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
+    const username = chunkUOEIMC67_cjs.sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
-    const bio = sanitizeInput(formData.get("bio")?.toString()) || null;
+    const phone = chunkUOEIMC67_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
+    const bio = chunkUOEIMC67_cjs.sanitizeInput(formData.get("bio")?.toString()) || null;
     const timezone = formData.get("timezone")?.toString() || "UTC";
     const language = formData.get("language")?.toString() || "en";
     const emailNotifications = formData.get("email_notifications") === "1";
@@ -12563,7 +12565,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -12626,7 +12628,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -12697,7 +12699,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkKKOBMGNI_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -12705,7 +12707,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkKKOBMGNI_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -12721,7 +12723,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -12788,7 +12790,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -12890,12 +12892,12 @@ userRoutes.post("/users/new", async (c) => {
   const user = c.get("user");
   try {
     const formData = await c.req.formData();
-    const firstName = sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = sanitizeInput(formData.get("last_name")?.toString());
-    const username = sanitizeInput(formData.get("username")?.toString());
+    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
+    const username = chunkUOEIMC67_cjs.sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
-    const bio = sanitizeInput(formData.get("bio")?.toString()) || null;
+    const phone = chunkUOEIMC67_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
+    const bio = chunkUOEIMC67_cjs.sanitizeInput(formData.get("bio")?.toString()) || null;
     const role = formData.get("role")?.toString() || "viewer";
     const password = formData.get("password")?.toString() || "";
     const confirmPassword = formData.get("confirm_password")?.toString() || "";
@@ -12942,7 +12944,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await AuthManager.hashPassword(password);
+    const passwordHash = await chunkKKOBMGNI_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12965,7 +12967,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -13003,7 +13005,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -13111,20 +13113,20 @@ userRoutes.put("/users/:id", async (c) => {
   const userId = c.req.param("id");
   try {
     const formData = await c.req.formData();
-    const firstName = sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = sanitizeInput(formData.get("last_name")?.toString());
-    const username = sanitizeInput(formData.get("username")?.toString());
+    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
+    const username = chunkUOEIMC67_cjs.sanitizeInput(formData.get("username")?.toString());
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
-    const phone = sanitizeInput(formData.get("phone")?.toString()) || null;
+    const phone = chunkUOEIMC67_cjs.sanitizeInput(formData.get("phone")?.toString()) || null;
     const role = formData.get("role")?.toString() || "viewer";
     const isActive = formData.get("is_active") === "1";
     const emailVerified = formData.get("email_verified") === "1";
-    const profileDisplayName = sanitizeInput(formData.get("profile_display_name")?.toString()) || null;
-    const profileBio = sanitizeInput(formData.get("profile_bio")?.toString()) || null;
-    const profileCompany = sanitizeInput(formData.get("profile_company")?.toString()) || null;
-    const profileJobTitle = sanitizeInput(formData.get("profile_job_title")?.toString()) || null;
+    const profileDisplayName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_display_name")?.toString()) || null;
+    const profileBio = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_bio")?.toString()) || null;
+    const profileCompany = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_company")?.toString()) || null;
+    const profileJobTitle = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_job_title")?.toString()) || null;
     const profileWebsite = formData.get("profile_website")?.toString()?.trim() || null;
-    const profileLocation = sanitizeInput(formData.get("profile_location")?.toString()) || null;
+    const profileLocation = chunkUOEIMC67_cjs.sanitizeInput(formData.get("profile_location")?.toString()) || null;
     const profileDateOfBirthStr = formData.get("profile_date_of_birth")?.toString()?.trim() || null;
     const profileDateOfBirth = profileDateOfBirthStr ? new Date(profileDateOfBirthStr).getTime() : null;
     if (!firstName || !lastName || !username || !email) {
@@ -13228,7 +13230,7 @@ userRoutes.put("/users/:id", async (c) => {
         ).run();
       }
     }
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -13273,7 +13275,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -13314,7 +13316,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await logActivity(
+      await chunkKKOBMGNI_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -13333,7 +13335,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await logActivity(
+      await chunkKKOBMGNI_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -13360,8 +13362,8 @@ userRoutes.post("/invite-user", async (c) => {
     const formData = await c.req.formData();
     const email = formData.get("email")?.toString()?.trim().toLowerCase() || "";
     const role = formData.get("role")?.toString()?.trim() || "viewer";
-    const firstName = sanitizeInput(formData.get("first_name")?.toString());
-    const lastName = sanitizeInput(formData.get("last_name")?.toString());
+    const firstName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("first_name")?.toString());
+    const lastName = chunkUOEIMC67_cjs.sanitizeInput(formData.get("last_name")?.toString());
     if (!email || !firstName || !lastName) {
       return c.json({ error: "Email, first name, and last name are required" }, 400);
     }
@@ -13399,7 +13401,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -13456,7 +13458,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -13492,7 +13494,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -13575,7 +13577,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -13682,7 +13684,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await logActivity(
+    await chunkKKOBMGNI_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -13900,7 +13902,7 @@ function getFileIcon(mimeType) {
 }
 
 // src/templates/pages/admin-media-library.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderMediaLibraryPage(data) {
   const pageContent = `
     <div>
@@ -14835,7 +14837,7 @@ function renderMediaLibraryPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/components/media-file-details.template.ts
@@ -14984,9 +14986,9 @@ function renderMediaFileDetails(data) {
 }
 
 // src/routes/admin-media.ts
-var fileValidationSchema2 = z.object({
-  name: z.string().min(1).max(255),
-  type: z.string().refine(
+var fileValidationSchema2 = zod.z.object({
+  name: zod.z.string().min(1).max(255),
+  type: zod.z.string().refine(
     (type) => {
       const allowedTypes = [
         // Images
@@ -15017,11 +15019,11 @@ var fileValidationSchema2 = z.object({
     },
     { message: "Unsupported file type" }
   ),
-  size: z.number().min(1).max(50 * 1024 * 1024)
+  size: zod.z.number().min(1).max(50 * 1024 * 1024)
   // 50MB max
 });
-var adminMediaRoutes = new Hono();
-adminMediaRoutes.use("*", requireAuth());
+var adminMediaRoutes = new hono.Hono();
+adminMediaRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -15130,7 +15132,7 @@ adminMediaRoutes.get("/", async (c) => {
     return c.html(renderMediaLibraryPage(pageData));
   } catch (error) {
     console.error("Error loading media library:", error);
-    return c.html(html`<p>Error loading media library</p>`);
+    return c.html(html.html`<p>Error loading media library</p>`);
   }
 });
 adminMediaRoutes.get("/selector", async (c) => {
@@ -15165,7 +15167,7 @@ adminMediaRoutes.get("/selector", async (c) => {
       isVideo: row.mime_type.startsWith("video/"),
       isDocument: !row.mime_type.startsWith("image/") && !row.mime_type.startsWith("video/")
     }));
-    return c.html(html`
+    return c.html(html.html`
       <div class="mb-4">
         <input
           type="search"
@@ -15180,7 +15182,7 @@ adminMediaRoutes.get("/selector", async (c) => {
       </div>
 
       <div id="media-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-        ${raw(mediaFiles.map((file) => `
+        ${html.raw(mediaFiles.map((file) => `
           <div
             class="relative group cursor-pointer rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800 shadow-sm hover:shadow-md transition-shadow"
             data-media-id="${file.id}"
@@ -15233,7 +15235,7 @@ adminMediaRoutes.get("/selector", async (c) => {
         `).join(""))}
       </div>
 
-      ${mediaFiles.length === 0 ? html`
+      ${mediaFiles.length === 0 ? html.html`
         <div class="text-center py-12 text-zinc-500 dark:text-zinc-400">
           <svg class="mx-auto h-12 w-12 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
@@ -15244,7 +15246,7 @@ adminMediaRoutes.get("/selector", async (c) => {
     `);
   } catch (error) {
     console.error("Error loading media selector:", error);
-    return c.html(html`<div class="text-red-500 dark:text-red-400">Error loading media files</div>`);
+    return c.html(html.html`<div class="text-red-500 dark:text-red-400">Error loading media files</div>`);
   }
 });
 adminMediaRoutes.get("/search", async (c) => {
@@ -15300,7 +15302,7 @@ adminMediaRoutes.get("/search", async (c) => {
       isDocument: !row.mime_type.startsWith("image/") && !row.mime_type.startsWith("video/")
     }));
     const gridHTML = mediaFiles.map((file) => generateMediaItemHTML(file)).join("");
-    return c.html(raw(gridHTML));
+    return c.html(html.raw(gridHTML));
   } catch (error) {
     console.error("Error searching media:", error);
     return c.html('<div class="text-red-500">Error searching files</div>');
@@ -15355,7 +15357,7 @@ adminMediaRoutes.post("/upload", async (c) => {
       }
     }
     if (!files || files.length === 0) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           No files provided
         </div>
@@ -15368,7 +15370,7 @@ adminMediaRoutes.post("/upload", async (c) => {
     console.log("[MEDIA UPLOAD] MEDIA_BUCKET type:", typeof c.env.MEDIA_BUCKET);
     if (!c.env.MEDIA_BUCKET) {
       console.error("[MEDIA UPLOAD] MEDIA_BUCKET is not available! Available env keys:", Object.keys(c.env));
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Media storage (R2) is not configured. Please check your wrangler.toml configuration.
           <br><small>Debug: Available bindings: ${Object.keys(c.env).join(", ")}</small>
@@ -15491,25 +15493,25 @@ adminMediaRoutes.post("/upload", async (c) => {
         console.error("Error fetching updated media list:", error);
       }
     }
-    return c.html(html`
-      ${uploadResults.length > 0 ? html`
+    return c.html(html.html`
+      ${uploadResults.length > 0 ? html.html`
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
           Successfully uploaded ${uploadResults.length} file${uploadResults.length > 1 ? "s" : ""}
         </div>
       ` : ""}
 
-      ${errors.length > 0 ? html`
+      ${errors.length > 0 ? html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p class="font-medium">Upload errors:</p>
           <ul class="list-disc list-inside mt-2">
-            ${errors.map((error) => html`
+            ${errors.map((error) => html.html`
               <li>${error.filename}: ${error.error}</li>
             `)}
           </ul>
         </div>
       ` : ""}
 
-      ${uploadResults.length > 0 ? html`
+      ${uploadResults.length > 0 ? html.html`
         <script>
           // Close modal and refresh page after successful upload with cache busting
           setTimeout(() => {
@@ -15521,7 +15523,7 @@ adminMediaRoutes.post("/upload", async (c) => {
     `);
   } catch (error) {
     console.error("Upload error:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Upload failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -15558,14 +15560,14 @@ adminMediaRoutes.put("/:id", async (c) => {
     const stmt = c.env.DB.prepare("SELECT * FROM media WHERE id = ? AND deleted_at IS NULL");
     const fileRecord = await stmt.bind(fileId).first();
     if (!fileRecord) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
         </div>
       `);
     }
     if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
         </div>
@@ -15587,7 +15589,7 @@ adminMediaRoutes.put("/:id", async (c) => {
       Math.floor(Date.now() / 1e3),
       fileId
     ).run();
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
         File updated successfully
       </div>
@@ -15600,14 +15602,14 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   } catch (error) {
     console.error("Update error:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
         Update failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkKKOBMGNI_cjs.requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -15627,7 +15629,7 @@ adminMediaRoutes.delete("/cleanup", requireRole("admin"), async (c) => {
     const mediaRows = allMedia || [];
     const unusedFiles = mediaRows.filter((file) => !referencedUrls.has(file.r2_key));
     if (unusedFiles.length === 0) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">
           No unused media files found. All files are referenced in content.
         </div>
@@ -15654,19 +15656,19 @@ adminMediaRoutes.delete("/cleanup", requireRole("admin"), async (c) => {
         });
       }
     }
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
         Successfully cleaned up ${deletedCount} unused media file${deletedCount !== 1 ? "s" : ""}.
-        ${errors.length > 0 ? html`
+        ${errors.length > 0 ? html.html`
           <br><span class="text-sm">Failed to delete ${errors.length} file${errors.length !== 1 ? "s" : ""}.</span>
         ` : ""}
       </div>
 
-      ${errors.length > 0 ? html`
+      ${errors.length > 0 ? html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p class="font-medium">Cleanup errors:</p>
           <ul class="list-disc list-inside mt-2 text-sm">
-            ${errors.map((error) => html`
+            ${errors.map((error) => html.html`
               <li>${error.filename}: ${error.error}</li>
             `)}
           </ul>
@@ -15682,7 +15684,7 @@ adminMediaRoutes.delete("/cleanup", requireRole("admin"), async (c) => {
     `);
   } catch (error) {
     console.error("Cleanup error:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Cleanup failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -15696,14 +15698,14 @@ adminMediaRoutes.delete("/:id", async (c) => {
     const stmt = c.env.DB.prepare("SELECT * FROM media WHERE id = ? AND deleted_at IS NULL");
     const fileRecord = await stmt.bind(fileId).first();
     if (!fileRecord) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
         </div>
       `);
     }
     if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
         </div>
@@ -15716,7 +15718,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
     }
     const deleteStmt = c.env.DB.prepare("UPDATE media SET deleted_at = ? WHERE id = ?");
     await deleteStmt.bind(Math.floor(Date.now() / 1e3), fileId).run();
-    return c.html(html`
+    return c.html(html.html`
       <script>
         // Close modal if open
         const modal = document.getElementById('file-modal');
@@ -15729,7 +15731,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
     `);
   } catch (error) {
     console.error("Delete error:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
         Delete failed: ${error instanceof Error ? error.message : "Unknown error"}
       </div>
@@ -15857,7 +15859,7 @@ function formatFileSize(bytes) {
 }
 
 // src/templates/pages/admin-plugins-list.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderPluginsListPage(data) {
   const categories = [
     { value: "content", label: "Content Management" },
@@ -16327,7 +16329,7 @@ function renderPluginsListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function renderPluginCard(plugin) {
   const statusColors = {
@@ -16964,7 +16966,7 @@ function renderPluginSettingsPage(data) {
     user,
     content: pageContent
   };
-  return renderAdminLayout(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
 }
 function renderStatusBadge(status) {
   const statusColors = {
@@ -17813,8 +17815,8 @@ function renderEmailSettingsContent(plugin, settings) {
 }
 
 // src/routes/admin-plugins.ts
-var adminPluginRoutes = new Hono();
-adminPluginRoutes.use("*", requireAuth());
+var adminPluginRoutes = new hono.Hono();
+adminPluginRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -17941,7 +17943,7 @@ adminPluginRoutes.get("/", async (c) => {
     if (user?.role !== "admin") {
       return c.text("Access denied", 403);
     }
-    const pluginService = new PluginService(db);
+    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
     let installedPlugins = [];
     let stats = { total: 0, active: 0, inactive: 0, errors: 0, uninstalled: 0 };
     try {
@@ -18017,7 +18019,7 @@ adminPluginRoutes.get("/:id", async (c) => {
     if (user?.role !== "admin") {
       return c.redirect("/admin/plugins");
     }
-    const pluginService = new PluginService(db);
+    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
     const plugin = await pluginService.getPlugin(pluginId);
     if (!plugin) {
       return c.text("Plugin not found", 404);
@@ -18101,7 +18103,7 @@ adminPluginRoutes.post("/:id/activate", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new PluginService(db);
+    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
     await pluginService.activatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18118,7 +18120,7 @@ adminPluginRoutes.post("/:id/deactivate", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new PluginService(db);
+    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
     await pluginService.deactivatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18135,7 +18137,7 @@ adminPluginRoutes.post("/install", async (c) => {
       return c.json({ error: "Access denied" }, 403);
     }
     const body = await c.req.json();
-    const pluginService = new PluginService(db);
+    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
     if (body.name === "faq-plugin") {
       const faqPlugin = await pluginService.installPlugin({
         id: "third-party-faq",
@@ -18405,7 +18407,7 @@ adminPluginRoutes.post("/:id/uninstall", async (c) => {
     if (user?.role !== "admin") {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new PluginService(db);
+    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
     await pluginService.uninstallPlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18423,7 +18425,7 @@ adminPluginRoutes.post("/:id/settings", async (c) => {
       return c.json({ error: "Access denied" }, 403);
     }
     const settings = await c.req.json();
-    const pluginService = new PluginService(db);
+    const pluginService = new chunkMPT5PA6U_cjs.PluginService(db);
     await pluginService.updatePluginSettings(pluginId, settings);
     return c.json({ success: true });
   } catch (error) {
@@ -18444,7 +18446,7 @@ function formatLastUpdated(timestamp) {
 }
 
 // src/templates/pages/admin-logs-list.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderLogsListPage(data) {
   const { logs, pagination, filters, user } = data;
   const content = `
@@ -18755,11 +18757,11 @@ function renderLogsListPage(data) {
     user,
     content
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function renderLogDetailsPage(data) {
   const { log, user } = data;
-  const content = html`
+  const content = html.html`
     <div class="px-4 sm:px-6 lg:px-8">
       <div class="sm:flex sm:items-center">
         <div class="sm:flex-auto">
@@ -18820,59 +18822,59 @@ function renderLogDetailsPage(data) {
               </dd>
             </div>
             
-            ${log.source ? html`
+            ${log.source ? html.html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Source</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.source}</dd>
               </div>
             ` : ""}
             
-            ${log.userId ? html`
+            ${log.userId ? html.html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">User ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.userId}</dd>
               </div>
             ` : ""}
             
-            ${log.sessionId ? html`
+            ${log.sessionId ? html.html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Session ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.sessionId}</dd>
               </div>
             ` : ""}
             
-            ${log.requestId ? html`
+            ${log.requestId ? html.html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Request ID</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-mono">${log.requestId}</dd>
               </div>
             ` : ""}
             
-            ${log.ipAddress ? html`
+            ${log.ipAddress ? html.html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">IP Address</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.ipAddress}</dd>
               </div>
             ` : ""}
             
-            ${log.method && log.url ? html`
+            ${log.method && log.url ? html.html`
               <div class="sm:col-span-2">
                 <dt class="text-sm font-medium text-gray-500">HTTP Request</dt>
                 <dd class="mt-1 text-sm text-gray-900">
                   <span class="font-medium">${log.method}</span> ${log.url}
-                  ${log.statusCode ? html`<span class="ml-2 text-gray-500">(${log.statusCode})</span>` : ""}
+                  ${log.statusCode ? html.html`<span class="ml-2 text-gray-500">(${log.statusCode})</span>` : ""}
                 </dd>
               </div>
             ` : ""}
             
-            ${log.duration ? html`
+            ${log.duration ? html.html`
               <div>
                 <dt class="text-sm font-medium text-gray-500">Duration</dt>
                 <dd class="mt-1 text-sm text-gray-900">${log.formattedDuration}</dd>
               </div>
             ` : ""}
             
-            ${log.userAgent ? html`
+            ${log.userAgent ? html.html`
               <div class="sm:col-span-2">
                 <dt class="text-sm font-medium text-gray-500">User Agent</dt>
                 <dd class="mt-1 text-sm text-gray-900 break-all">${log.userAgent}</dd>
@@ -18895,14 +18897,14 @@ function renderLogDetailsPage(data) {
       </div>
 
       <!-- Tags -->
-      ${log.tags && log.tags.length > 0 ? html`
+      ${log.tags && log.tags.length > 0 ? html.html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Tags</h3>
           </div>
           <div class="px-6 py-4">
             <div class="flex flex-wrap gap-2">
-              ${log.tags.map((tag) => html`
+              ${log.tags.map((tag) => html.html`
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                   ${tag}
                 </span>
@@ -18913,7 +18915,7 @@ function renderLogDetailsPage(data) {
       ` : ""}
 
       <!-- Additional Data -->
-      ${log.data ? html`
+      ${log.data ? html.html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Additional Data</h3>
@@ -18925,7 +18927,7 @@ function renderLogDetailsPage(data) {
       ` : ""}
 
       <!-- Stack Trace -->
-      ${log.stackTrace ? html`
+      ${log.stackTrace ? html.html`
         <div class="mt-6 bg-white shadow rounded-lg overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Stack Trace</h3>
@@ -18946,7 +18948,7 @@ function renderLogDetailsPage(data) {
         </a>
         
         <div class="flex space-x-3">
-          ${log.level === "error" || log.level === "fatal" ? html`
+          ${log.level === "error" || log.level === "fatal" ? html.html`
             <button
               type="button"
               class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -18967,7 +18969,7 @@ function renderLogDetailsPage(data) {
       </div>
     </div>
   `;
-  return adminLayoutV2({
+  return chunkGMUS5V42_cjs.adminLayoutV2({
     title: `Log Details - ${log.id}`,
     user,
     content
@@ -18975,7 +18977,7 @@ function renderLogDetailsPage(data) {
 }
 function renderLogConfigPage(data) {
   const { configs, user } = data;
-  const content = html`
+  const content = html.html`
     <div class="px-4 sm:px-6 lg:px-8">
       <div class="sm:flex sm:items-center">
         <div class="sm:flex-auto">
@@ -19047,17 +19049,17 @@ function renderLogConfigPage(data) {
 
       <!-- Configuration Cards -->
       <div class="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        ${configs.map((config) => html`
+        ${configs.map((config) => html.html`
           <div class="bg-white shadow rounded-lg overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">
               <div class="flex items-center justify-between">
                 <h3 class="text-lg font-medium text-gray-900 capitalize">${config.category}</h3>
                 <div class="flex items-center">
-                  ${config.enabled ? html`
+                  ${config.enabled ? html.html`
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                       Enabled
                     </span>
-                  ` : html`
+                  ` : html.html`
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                       Disabled
                     </span>
@@ -19210,7 +19212,7 @@ function renderLogConfigPage(data) {
 
     <script src="https://unpkg.com/htmx.org@1.9.6"></script>
   `;
-  return adminLayoutV2({
+  return chunkGMUS5V42_cjs.adminLayoutV2({
     title: "Log Configuration",
     user,
     content
@@ -19218,12 +19220,12 @@ function renderLogConfigPage(data) {
 }
 
 // src/routes/admin-logs.ts
-var adminLogsRoutes = new Hono();
-adminLogsRoutes.use("*", requireAuth());
+var adminLogsRoutes = new hono.Hono();
+adminLogsRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
-    const logger = getLogger(c.env.DB);
+    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
     const query = c.req.query();
     const page = parseInt(query.page || "1");
     const limit = parseInt(query.limit || "50");
@@ -19296,14 +19298,14 @@ adminLogsRoutes.get("/", async (c) => {
     return c.html(renderLogsListPage(pageData));
   } catch (error) {
     console.error("Error fetching logs:", error);
-    return c.html(html`<p>Error loading logs: ${error}</p>`);
+    return c.html(html.html`<p>Error loading logs: ${error}</p>`);
   }
 });
 adminLogsRoutes.get("/:id", async (c) => {
   try {
     const id = c.req.param("id");
     const user = c.get("user");
-    const logger = getLogger(c.env.DB);
+    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
     const { logs } = await logger.getLogs({
       limit: 1,
       offset: 0,
@@ -19312,7 +19314,7 @@ adminLogsRoutes.get("/:id", async (c) => {
     });
     const log = logs.find((l) => l.id === id);
     if (!log) {
-      return c.html(html`<p>Log entry not found</p>`);
+      return c.html(html.html`<p>Log entry not found</p>`);
     }
     const formattedLog = {
       ...log,
@@ -19334,13 +19336,13 @@ adminLogsRoutes.get("/:id", async (c) => {
     return c.html(renderLogDetailsPage(pageData));
   } catch (error) {
     console.error("Error fetching log details:", error);
-    return c.html(html`<p>Error loading log details: ${error}</p>`);
+    return c.html(html.html`<p>Error loading log details: ${error}</p>`);
   }
 });
 adminLogsRoutes.get("/config", async (c) => {
   try {
     const user = c.get("user");
-    const logger = getLogger(c.env.DB);
+    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
     const configs = await logger.getAllConfigs();
     const pageData = {
       configs,
@@ -19353,7 +19355,7 @@ adminLogsRoutes.get("/config", async (c) => {
     return c.html(renderLogConfigPage(pageData));
   } catch (error) {
     console.error("Error fetching log config:", error);
-    return c.html(html`<p>Error loading log configuration: ${error}</p>`);
+    return c.html(html.html`<p>Error loading log configuration: ${error}</p>`);
   }
 });
 adminLogsRoutes.post("/config/:category", async (c) => {
@@ -19364,21 +19366,21 @@ adminLogsRoutes.post("/config/:category", async (c) => {
     const level = formData.get("level");
     const retention = parseInt(formData.get("retention"));
     const maxSize = parseInt(formData.get("max_size"));
-    const logger = getLogger(c.env.DB);
+    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
     await logger.updateConfig(category, {
       enabled,
       level,
       retention,
       maxSize
     });
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Configuration updated successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error updating log config:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update configuration. Please try again.
       </div>
@@ -19393,7 +19395,7 @@ adminLogsRoutes.get("/export", async (c) => {
     const category = query.category;
     const startDate = query.start_date;
     const endDate = query.end_date;
-    const logger = getLogger(c.env.DB);
+    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
     const filter = {
       limit: 1e4,
       // Export up to 10k logs
@@ -19474,16 +19476,16 @@ adminLogsRoutes.post("/cleanup", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const logger = getLogger(c.env.DB);
+    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
     await logger.cleanupByRetention();
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Log cleanup completed successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error cleaning up logs:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to clean up logs. Please try again.
       </div>
@@ -19496,7 +19498,7 @@ adminLogsRoutes.post("/search", async (c) => {
     const search = formData.get("search");
     const level = formData.get("level");
     const category = formData.get("category");
-    const logger = getLogger(c.env.DB);
+    const logger = chunkVNLR35GO_cjs.getLogger(c.env.DB);
     const filter = {
       limit: 20,
       offset: 0,
@@ -19540,7 +19542,7 @@ adminLogsRoutes.post("/search", async (c) => {
     return c.html(rows);
   } catch (error) {
     console.error("Error searching logs:", error);
-    return c.html(html`<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error searching logs</td></tr>`);
+    return c.html(html.html`<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">Error searching logs</td></tr>`);
   }
 });
 function getLevelClass(level) {
@@ -19581,7 +19583,7 @@ function getCategoryClass(category) {
       return "bg-gray-100 text-gray-800";
   }
 }
-var adminDesignRoutes = new Hono();
+var adminDesignRoutes = new hono.Hono();
 adminDesignRoutes.get("/", (c) => {
   const user = c.get("user");
   const pageData = {
@@ -19591,9 +19593,9 @@ adminDesignRoutes.get("/", (c) => {
       role: user.role
     } : void 0
   };
-  return c.html(renderDesignPage(pageData));
+  return c.html(chunkGMUS5V42_cjs.renderDesignPage(pageData));
 });
-var adminCheckboxRoutes = new Hono();
+var adminCheckboxRoutes = new hono.Hono();
 adminCheckboxRoutes.get("/", (c) => {
   const user = c.get("user");
   const pageData = {
@@ -19603,7 +19605,7 @@ adminCheckboxRoutes.get("/", (c) => {
       role: user.role
     } : void 0
   };
-  return c.html(renderCheckboxPage(pageData));
+  return c.html(chunkGMUS5V42_cjs.renderCheckboxPage(pageData));
 });
 
 // src/templates/pages/admin-testimonials-form.template.ts
@@ -19631,7 +19633,7 @@ function renderTestimonialsForm(data) {
         </div>
       </div>
 
-      ${message ? renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
+      ${message ? chunkGMUS5V42_cjs.renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
 
       <!-- Form -->
       <div class="backdrop-blur-xl bg-white/10 rounded-xl border border-white/20 shadow-2xl">
@@ -19860,23 +19862,23 @@ function renderTestimonialsForm(data) {
     user: data.user,
     content: pageContent
   };
-  return renderAdminLayout(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
 }
 function escapeHtml4(unsafe) {
   return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // src/routes/admin-testimonials.ts
-var testimonialSchema = z.object({
-  authorName: z.string().min(1, "Author name is required").max(100, "Author name must be under 100 characters"),
-  authorTitle: z.string().optional(),
-  authorCompany: z.string().optional(),
-  testimonialText: z.string().min(1, "Testimonial is required").max(1e3, "Testimonial must be under 1000 characters"),
-  rating: z.string().transform((val) => val ? parseInt(val, 10) : void 0).pipe(z.number().min(1).max(5).optional()),
-  isPublished: z.string().transform((val) => val === "true"),
-  sortOrder: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0))
+var testimonialSchema = zod.z.object({
+  authorName: zod.z.string().min(1, "Author name is required").max(100, "Author name must be under 100 characters"),
+  authorTitle: zod.z.string().optional(),
+  authorCompany: zod.z.string().optional(),
+  testimonialText: zod.z.string().min(1, "Testimonial is required").max(1e3, "Testimonial must be under 1000 characters"),
+  rating: zod.z.string().transform((val) => val ? parseInt(val, 10) : void 0).pipe(zod.z.number().min(1).max(5).optional()),
+  isPublished: zod.z.string().transform((val) => val === "true"),
+  sortOrder: zod.z.string().transform((val) => parseInt(val, 10)).pipe(zod.z.number().min(0))
 });
-var adminTestimonialsRoutes = new Hono();
+var adminTestimonialsRoutes = new hono.Hono();
 adminTestimonialsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -19886,7 +19888,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
     const offset = (currentPage - 1) * limit;
     const db = c.env?.DB;
     if (!db) {
-      return c.html(renderTestimonialsList({
+      return c.html(chunkGMUS5V42_cjs.renderTestimonialsList({
         testimonials: [],
         totalCount: 0,
         currentPage: 1,
@@ -19926,7 +19928,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
     `;
     const { results: testimonials } = await db.prepare(dataQuery).bind(...params, limit, offset).all();
     const totalPages = Math.ceil(totalCount / limit);
-    return c.html(renderTestimonialsList({
+    return c.html(chunkGMUS5V42_cjs.renderTestimonialsList({
       testimonials: testimonials || [],
       totalCount,
       currentPage,
@@ -19940,7 +19942,7 @@ adminTestimonialsRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching testimonials:", error);
     const user = c.get("user");
-    return c.html(renderTestimonialsList({
+    return c.html(chunkGMUS5V42_cjs.renderTestimonialsList({
       testimonials: [],
       totalCount: 0,
       currentPage: 1,
@@ -20015,7 +20017,7 @@ adminTestimonialsRoutes.post("/", async (c) => {
   } catch (error) {
     console.error("Error creating testimonial:", error);
     const user = c.get("user");
-    if (error instanceof z.ZodError) {
+    if (error instanceof zod.z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20164,7 +20166,7 @@ adminTestimonialsRoutes.put("/:id", async (c) => {
     console.error("Error updating testimonial:", error);
     const user = c.get("user");
     const id = parseInt(c.req.param("id"));
-    if (error instanceof z.ZodError) {
+    if (error instanceof zod.z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20259,7 +20261,7 @@ function renderCodeExamplesForm(data) {
         </div>
       </div>
 
-      ${message ? renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
+      ${message ? chunkGMUS5V42_cjs.renderAlert({ type: messageType || "info", message, dismissible: true }) : ""}
 
       <!-- Form -->
       <div class="backdrop-blur-xl bg-white/10 rounded-xl border border-white/20 shadow-2xl">
@@ -20529,24 +20531,24 @@ function renderCodeExamplesForm(data) {
     user: data.user,
     content: pageContent
   };
-  return renderAdminLayout(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
 }
 function escapeHtml5(unsafe) {
   return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // src/routes/admin-code-examples.ts
-var codeExampleSchema = z.object({
-  title: z.string().min(1, "Title is required").max(200, "Title must be under 200 characters"),
-  description: z.string().max(500, "Description must be under 500 characters").optional(),
-  code: z.string().min(1, "Code is required"),
-  language: z.string().min(1, "Language is required"),
-  category: z.string().max(50, "Category must be under 50 characters").optional(),
-  tags: z.string().max(200, "Tags must be under 200 characters").optional(),
-  isPublished: z.string().transform((val) => val === "true"),
-  sortOrder: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0))
+var codeExampleSchema = zod.z.object({
+  title: zod.z.string().min(1, "Title is required").max(200, "Title must be under 200 characters"),
+  description: zod.z.string().max(500, "Description must be under 500 characters").optional(),
+  code: zod.z.string().min(1, "Code is required"),
+  language: zod.z.string().min(1, "Language is required"),
+  category: zod.z.string().max(50, "Category must be under 50 characters").optional(),
+  tags: zod.z.string().max(200, "Tags must be under 200 characters").optional(),
+  isPublished: zod.z.string().transform((val) => val === "true"),
+  sortOrder: zod.z.string().transform((val) => parseInt(val, 10)).pipe(zod.z.number().min(0))
 });
-var adminCodeExamplesRoutes = new Hono();
+var adminCodeExamplesRoutes = new hono.Hono();
 adminCodeExamplesRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -20556,7 +20558,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
     const offset = (currentPage - 1) * limit;
     const db = c.env?.DB;
     if (!db) {
-      return c.html(renderCodeExamplesList({
+      return c.html(chunkGMUS5V42_cjs.renderCodeExamplesList({
         codeExamples: [],
         totalCount: 0,
         currentPage: 1,
@@ -20596,7 +20598,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
     `;
     const { results: codeExamples } = await db.prepare(dataQuery).bind(...params, limit, offset).all();
     const totalPages = Math.ceil(totalCount / limit);
-    return c.html(renderCodeExamplesList({
+    return c.html(chunkGMUS5V42_cjs.renderCodeExamplesList({
       codeExamples: codeExamples || [],
       totalCount,
       currentPage,
@@ -20610,7 +20612,7 @@ adminCodeExamplesRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching code examples:", error);
     const user = c.get("user");
-    return c.html(renderCodeExamplesList({
+    return c.html(chunkGMUS5V42_cjs.renderCodeExamplesList({
       codeExamples: [],
       totalCount: 0,
       currentPage: 1,
@@ -20686,7 +20688,7 @@ adminCodeExamplesRoutes.post("/", async (c) => {
   } catch (error) {
     console.error("Error creating code example:", error);
     const user = c.get("user");
-    if (error instanceof z.ZodError) {
+    if (error instanceof zod.z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20838,7 +20840,7 @@ adminCodeExamplesRoutes.put("/:id", async (c) => {
     console.error("Error updating code example:", error);
     const user = c.get("user");
     const id = parseInt(c.req.param("id"));
-    if (error instanceof z.ZodError) {
+    if (error instanceof zod.z.ZodError) {
       const errors = {};
       error.issues.forEach((err) => {
         const field = err.path[0];
@@ -20999,7 +21001,7 @@ function renderDashboardPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayout(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayout(layoutData);
 }
 function renderStatsCards(stats) {
   const cards = [
@@ -21547,9 +21549,9 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 }
 
 // src/routes/admin-dashboard.ts
-var VERSION = getCoreVersion();
-var router = new Hono();
-router.use("*", requireAuth());
+var VERSION = chunkUOEIMC67_cjs.getCoreVersion();
+var router = new hono.Hono();
+router.use("*", chunkKKOBMGNI_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -21703,9 +21705,9 @@ router.get("/recent-activity", async (c) => {
 });
 router.get("/api/metrics", async (c) => {
   return c.json({
-    requestsPerSecond: metricsTracker.getRequestsPerSecond(),
-    totalRequests: metricsTracker.getTotalRequests(),
-    averageRPS: Number(metricsTracker.getAverageRPS().toFixed(2)),
+    requestsPerSecond: chunkRCQ2HIQD_cjs.metricsTracker.getRequestsPerSecond(),
+    totalRequests: chunkRCQ2HIQD_cjs.metricsTracker.getTotalRequests(),
+    averageRPS: Number(chunkRCQ2HIQD_cjs.metricsTracker.getAverageRPS().toFixed(2)),
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
@@ -21774,7 +21776,7 @@ router.get("/system-status", async (c) => {
 });
 
 // src/templates/pages/admin-collections-list.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 
 // src/templates/components/table.template.ts
 function renderTable2(data) {
@@ -22248,11 +22250,11 @@ function renderCollectionsListPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-collections-form.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function getFieldTypeBadge(fieldType) {
   const typeLabels = {
     "text": "Text",
@@ -22517,7 +22519,7 @@ function renderCollectionFormPage(data) {
             }
           </style>
           
-          ${renderForm(formData)}
+          ${chunkGMUS5V42_cjs.renderForm(formData)}
 
           ${isEdit && data.managed ? `
             <!-- Read-Only Fields Display for Managed Collections -->
@@ -23324,12 +23326,12 @@ function renderCollectionFormPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-collections.ts
-var adminCollectionsRoutes = new Hono();
-adminCollectionsRoutes.use("*", requireAuth());
+var adminCollectionsRoutes = new hono.Hono();
+adminCollectionsRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -23396,7 +23398,7 @@ adminCollectionsRoutes.get("/", async (c) => {
   } catch (error) {
     console.error("Error fetching collections:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return c.html(html`<p>Error loading collections: ${errorMessage}</p>`);
+    return c.html(html.html`<p>Error loading collections: ${errorMessage}</p>`);
   }
 });
 adminCollectionsRoutes.get("/new", async (c) => {
@@ -23438,7 +23440,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (!name || !displayName) {
       const errorMsg = "Name and display name are required.";
       if (isHtmx) {
-        return c.html(html`
+        return c.html(html.html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -23450,7 +23452,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (!/^[a-z0-9_]+$/.test(name)) {
       const errorMsg = "Collection name must contain only lowercase letters, numbers, and underscores.";
       if (isHtmx) {
-        return c.html(html`
+        return c.html(html.html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -23465,7 +23467,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     if (existing) {
       const errorMsg = "A collection with this name already exists.";
       if (isHtmx) {
-        return c.html(html`
+        return c.html(html.html`
           <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             ${errorMsg}
           </div>
@@ -23522,7 +23524,7 @@ adminCollectionsRoutes.post("/", async (c) => {
       }
     }
     if (isHtmx) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
           Collection created successfully! Redirecting to edit mode...
           <script>
@@ -23539,7 +23541,7 @@ adminCollectionsRoutes.post("/", async (c) => {
     console.error("Error creating collection:", error);
     const isHtmx = c.req.header("HX-Request") === "true";
     if (isHtmx) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Failed to create collection. Please try again.
         </div>
@@ -23709,7 +23711,7 @@ adminCollectionsRoutes.put("/:id", async (c) => {
     const displayName = formData.get("displayName");
     const description = formData.get("description");
     if (!displayName) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Display name is required.
         </div>
@@ -23722,14 +23724,14 @@ adminCollectionsRoutes.put("/:id", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(displayName, description || null, Date.now(), id).run();
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Collection updated successfully!
       </div>
     `);
   } catch (error) {
     console.error("Error updating collection:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to update collection. Please try again.
       </div>
@@ -23743,7 +23745,7 @@ adminCollectionsRoutes.delete("/:id", async (c) => {
     const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content WHERE collection_id = ?");
     const contentResult = await contentStmt.bind(id).first();
     if (contentResult && contentResult.count > 0) {
-      return c.html(html`
+      return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Cannot delete collection: it contains ${contentResult.count} content item(s). Delete all content first.
         </div>
@@ -23753,14 +23755,14 @@ adminCollectionsRoutes.delete("/:id", async (c) => {
     await deleteFieldsStmt.bind(id).run();
     const deleteStmt = db.prepare("DELETE FROM collections WHERE id = ?");
     await deleteStmt.bind(id).run();
-    return c.html(html`
+    return c.html(html.html`
       <script>
         window.location.href = '/admin/collections';
       </script>
     `);
   } catch (error) {
     console.error("Error deleting collection:", error);
-    return c.html(html`
+    return c.html(html.html`
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         Failed to delete collection. Please try again.
       </div>
@@ -24062,7 +24064,7 @@ adminCollectionsRoutes.post("/:collectionId/fields/reorder", async (c) => {
 });
 
 // src/templates/pages/admin-settings.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderSettingsPage(data) {
   const activeTab = data.activeTab || "general";
   const pageContent = `
@@ -24444,7 +24446,7 @@ function renderSettingsPage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function renderTabButton(tabId, label, iconPath, activeTab) {
   const isActive = activeTab === tabId;
@@ -25525,8 +25527,8 @@ function renderDatabaseToolsSettings(settings) {
 }
 
 // src/routes/admin-settings.ts
-var adminSettingsRoutes = new Hono();
-adminSettingsRoutes.use("*", requireAuth());
+var adminSettingsRoutes = new hono.Hono();
+adminSettingsRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -25591,7 +25593,7 @@ adminSettingsRoutes.get("/", (c) => {
 adminSettingsRoutes.get("/general", async (c) => {
   const user = c.get("user");
   const db = c.env.DB;
-  const settingsService = new SettingsService(db);
+  const settingsService = new chunkVNLR35GO_cjs.SettingsService(db);
   const generalSettings = await settingsService.getGeneralSettings(user?.email);
   const mockSettings = getMockSettings(user);
   mockSettings.general = generalSettings;
@@ -25694,7 +25696,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new MigrationService(db);
+    const migrationService = new chunkFEIK7JC2_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -25718,7 +25720,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new MigrationService(db);
+    const migrationService = new chunkFEIK7JC2_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -25736,7 +25738,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new MigrationService(db);
+    const migrationService = new chunkFEIK7JC2_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -25893,7 +25895,7 @@ adminSettingsRoutes.post("/general", async (c) => {
     }
     const formData = await c.req.formData();
     const db = c.env.DB;
-    const settingsService = new SettingsService(db);
+    const settingsService = new chunkVNLR35GO_cjs.SettingsService(db);
     const settings = {
       siteName: formData.get("siteName"),
       siteDescription: formData.get("siteDescription"),
@@ -25933,7 +25935,7 @@ adminSettingsRoutes.post("/", async (c) => {
 });
 
 // src/templates/pages/admin-forms-list.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderFormsListPage(data) {
   const tableData = {
     tableId: "forms-table",
@@ -26195,11 +26197,11 @@ function renderFormsListPage(data) {
     user: data.user,
     version: data.version
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-builder.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function getTurnstileComponentScript() {
   return `
     (function() {
@@ -27412,11 +27414,11 @@ ${getTurnstileComponentScript()}
     user: data.user,
     version: data.version
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-create.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderFormCreatePage(data) {
   const pageContent = `
     <div class="max-w-3xl mx-auto">
@@ -27609,12 +27611,12 @@ function renderFormCreatePage(data) {
     user: data.user,
     version: data.version
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-forms.ts
-var adminFormsRoutes = new Hono();
-adminFormsRoutes.use("*", requireAuth());
+var adminFormsRoutes = new hono.Hono();
+adminFormsRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -27678,7 +27680,7 @@ adminFormsRoutes.get("/new", async (c) => {
 adminFormsRoutes.get("/docs", async (c) => {
   try {
     const user = c.get("user");
-    const { renderFormsDocsPage } = await import('./templates.js');
+    const { renderFormsDocsPage } = await import('./templates.cjs');
     const pageData = {
       user: user ? {
         name: user.email,
@@ -27696,7 +27698,7 @@ adminFormsRoutes.get("/docs", async (c) => {
 adminFormsRoutes.get("/examples", async (c) => {
   try {
     const user = c.get("user");
-    const { renderFormsExamplesPage } = await import('./templates.js');
+    const { renderFormsExamplesPage } = await import('./templates.cjs');
     const pageData = {
       user: user ? {
         name: user.email,
@@ -27778,7 +27780,7 @@ adminFormsRoutes.get("/:id/builder", async (c) => {
     if (!form) {
       return c.html("<p>Form not found</p>", 404);
     }
-    const turnstileService = new TurnstileService(db);
+    const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
     const turnstileSettings = await turnstileService.getSettings();
     const pageData = {
       id: form.id,
@@ -27915,7 +27917,7 @@ adminFormsRoutes.get("/:id/submissions", async (c) => {
     return c.html("<p>Error loading submissions</p>", 500);
   }
 });
-var publicFormsRoutes = new Hono();
+var publicFormsRoutes = new hono.Hono();
 publicFormsRoutes.get("/:identifier/turnstile-config", async (c) => {
   try {
     const db = c.env.DB;
@@ -27926,7 +27928,7 @@ publicFormsRoutes.get("/:identifier/turnstile-config", async (c) => {
     if (!form) {
       return c.json({ error: "Form not found" }, 404);
     }
-    const turnstileService = new TurnstileService(db);
+    const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
     const globalSettings = await turnstileService.getSettings();
     const formSettings = form.turnstile_settings ? JSON.parse(form.turnstile_settings) : { inherit: true };
     const enabled = form.turnstile_enabled === 1 || formSettings.inherit && globalSettings?.enabled;
@@ -28353,7 +28355,7 @@ publicFormsRoutes.post("/:identifier/submit", async (c) => {
     const turnstileEnabled = form.turnstile_enabled === 1;
     const turnstileSettings = form.turnstile_settings ? JSON.parse(form.turnstile_settings) : { inherit: true };
     if (turnstileEnabled || turnstileSettings.inherit) {
-      const turnstileService = new TurnstileService(db);
+      const turnstileService = new chunk6FHNRRJ3_cjs.TurnstileService(db);
       const globalEnabled = await turnstileService.isEnabled();
       if (globalEnabled || turnstileEnabled) {
         const turnstileToken = body.data?.turnstile || body.turnstile;
@@ -28413,7 +28415,7 @@ publicFormsRoutes.post("/:identifier/submit", async (c) => {
 var public_forms_default = publicFormsRoutes;
 
 // src/templates/pages/admin-api-reference.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 function renderAPIReferencePage(data) {
   const endpointsByCategory = data.endpoints.reduce((acc, endpoint) => {
     if (!acc[endpoint.category]) {
@@ -28740,13 +28742,13 @@ function renderAPIReferencePage(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/routes/admin-api-reference.ts
-var VERSION2 = getCoreVersion();
-var router2 = new Hono();
-router2.use("*", requireAuth());
+var VERSION2 = chunkUOEIMC67_cjs.getCoreVersion();
+var router2 = new hono.Hono();
+router2.use("*", chunkKKOBMGNI_cjs.requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -30040,40 +30042,38 @@ var SynonymService = class {
   // === CRUD ===
   async getAll() {
     try {
-      const { results } = await this.db.prepare("SELECT id, terms, enabled, created_at, updated_at FROM ai_search_synonyms ORDER BY created_at DESC").all();
-      return (results || []).map((row) => ({
-        id: row.id,
-        terms: JSON.parse(row.terms),
-        enabled: row.enabled === 1,
-        created_at: row.created_at,
-        updated_at: row.updated_at
-      }));
+      const { results } = await this.db.prepare("SELECT id, terms, synonym_type, source_term, enabled, created_at, updated_at FROM ai_search_synonyms ORDER BY created_at DESC").all();
+      return (results || []).map(this.mapRow);
     } catch {
       return [];
     }
   }
   async getById(id) {
     try {
-      const row = await this.db.prepare("SELECT id, terms, enabled, created_at, updated_at FROM ai_search_synonyms WHERE id = ?").bind(id).first();
+      const row = await this.db.prepare("SELECT id, terms, synonym_type, source_term, enabled, created_at, updated_at FROM ai_search_synonyms WHERE id = ?").bind(id).first();
       if (!row) return null;
-      return {
-        id: row.id,
-        terms: JSON.parse(row.terms),
-        enabled: row.enabled === 1,
-        created_at: row.created_at,
-        updated_at: row.updated_at
-      };
+      return this.mapRow(row);
     } catch {
       return null;
     }
   }
-  async create(terms, enabled = true) {
+  async create(terms, enabled = true, opts) {
     const sanitized = this.sanitizeTerms(terms);
     if (sanitized.length < 2) {
       throw new Error("A synonym group must have at least 2 terms");
     }
+    const synonymType = opts?.synonym_type || "bidirectional";
+    const sourceTerm = opts?.source_term?.trim().toLowerCase() || null;
+    if (synonymType === "one_way") {
+      if (!sourceTerm) {
+        throw new Error("One-way synonyms require a source_term (trigger term)");
+      }
+      if (!sanitized.includes(sourceTerm)) {
+        throw new Error("source_term must be one of the terms in the group");
+      }
+    }
     const id = crypto.randomUUID().replace(/-/g, "");
-    await this.db.prepare("INSERT INTO ai_search_synonyms (id, terms, enabled) VALUES (?, ?, ?)").bind(id, JSON.stringify(sanitized), enabled ? 1 : 0).run();
+    await this.db.prepare("INSERT INTO ai_search_synonyms (id, terms, synonym_type, source_term, enabled) VALUES (?, ?, ?, ?, ?)").bind(id, JSON.stringify(sanitized), synonymType, synonymType === "one_way" ? sourceTerm : null, enabled ? 1 : 0).run();
     const created = await this.getById(id);
     if (!created) throw new Error("Failed to create synonym group");
     return created;
@@ -30086,7 +30086,19 @@ var SynonymService = class {
       throw new Error("A synonym group must have at least 2 terms");
     }
     const enabled = data.enabled !== void 0 ? data.enabled : existing.enabled;
-    await this.db.prepare("UPDATE ai_search_synonyms SET terms = ?, enabled = ?, updated_at = unixepoch() WHERE id = ?").bind(JSON.stringify(terms), enabled ? 1 : 0, id).run();
+    const synonymType = data.synonym_type || existing.synonym_type;
+    let sourceTerm = data.source_term !== void 0 ? data.source_term?.trim().toLowerCase() || null : existing.source_term;
+    if (synonymType === "one_way") {
+      if (!sourceTerm) {
+        throw new Error("One-way synonyms require a source_term (trigger term)");
+      }
+      if (!terms.includes(sourceTerm)) {
+        throw new Error("source_term must be one of the terms in the group");
+      }
+    } else {
+      sourceTerm = null;
+    }
+    await this.db.prepare("UPDATE ai_search_synonyms SET terms = ?, synonym_type = ?, source_term = ?, enabled = ?, updated_at = unixepoch() WHERE id = ?").bind(JSON.stringify(terms), synonymType, sourceTerm, enabled ? 1 : 0, id).run();
     return this.getById(id);
   }
   async delete(id) {
@@ -30096,8 +30108,9 @@ var SynonymService = class {
   // === Query Expansion ===
   /**
    * Expand an array of sanitized search terms using enabled synonym groups.
-   * For each input term, if it appears in a group, all other terms from
-   * that group are added. Returns deduplicated expanded term list.
+   * For bidirectional groups: any term in the group triggers expansion to all terms.
+   * For one-way groups: only the source_term triggers expansion.
+   * Returns deduplicated expanded term list.
    */
   async expandQuery(terms) {
     const groups = await this.getEnabled();
@@ -30105,12 +30118,18 @@ var SynonymService = class {
     const synonymMap = /* @__PURE__ */ new Map();
     for (const group of groups) {
       const lowerTerms = group.terms.map((t) => t.toLowerCase());
-      for (const term of lowerTerms) {
-        if (!synonymMap.has(term)) {
-          synonymMap.set(term, /* @__PURE__ */ new Set());
-        }
+      if (group.synonym_type === "one_way" && group.source_term) {
+        const trigger = group.source_term.toLowerCase();
+        if (!synonymMap.has(trigger)) synonymMap.set(trigger, /* @__PURE__ */ new Set());
         for (const synonym of lowerTerms) {
-          synonymMap.get(term).add(synonym);
+          synonymMap.get(trigger).add(synonym);
+        }
+      } else {
+        for (const term of lowerTerms) {
+          if (!synonymMap.has(term)) synonymMap.set(term, /* @__PURE__ */ new Set());
+          for (const synonym of lowerTerms) {
+            synonymMap.get(term).add(synonym);
+          }
         }
       }
     }
@@ -30129,17 +30148,22 @@ var SynonymService = class {
   // === Helpers ===
   async getEnabled() {
     try {
-      const { results } = await this.db.prepare("SELECT id, terms, enabled, created_at, updated_at FROM ai_search_synonyms WHERE enabled = 1").all();
-      return (results || []).map((row) => ({
-        id: row.id,
-        terms: JSON.parse(row.terms),
-        enabled: row.enabled === 1,
-        created_at: row.created_at,
-        updated_at: row.updated_at
-      }));
+      const { results } = await this.db.prepare("SELECT id, terms, synonym_type, source_term, enabled, created_at, updated_at FROM ai_search_synonyms WHERE enabled = 1").all();
+      return (results || []).map(this.mapRow);
     } catch {
       return [];
     }
+  }
+  mapRow(row) {
+    return {
+      id: row.id,
+      terms: JSON.parse(row.terms),
+      synonym_type: row.synonym_type || "bidirectional",
+      source_term: row.source_term || null,
+      enabled: row.enabled === 1,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    };
   }
   /** Sanitize terms: trim, lowercase, deduplicate, remove empties */
   sanitizeTerms(terms) {
@@ -32594,7 +32618,7 @@ function computeMRR(ranked, qrels) {
 }
 
 // src/templates/pages/admin-search.template.ts
-init_admin_layout_catalyst_template();
+chunkGMUS5V42_cjs.init_admin_layout_catalyst_template();
 
 // src/templates/pages/admin-search-overview.template.ts
 function renderOverviewTab(props) {
@@ -34395,11 +34419,36 @@ function renderRelevanceTab(props) {
 
             <!-- Add new synonym group form (hidden by default) -->
             <div id="synonym-add-form" class="hidden border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-4 mb-4">
+              <div class="flex items-center gap-3 mb-2">
+                <label class="flex items-center gap-1.5 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input type="radio" name="synonym-type" value="bidirectional" checked
+                    onchange="document.getElementById('synonym-source-row').classList.add('hidden')" />
+                  Bidirectional
+                </label>
+                <label class="flex items-center gap-1.5 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input type="radio" name="synonym-type" value="one_way"
+                    onchange="document.getElementById('synonym-source-row').classList.remove('hidden')" />
+                  One-way
+                </label>
+              </div>
+              <div id="synonym-source-row" class="hidden mb-2">
+                <div class="flex items-center gap-2">
+                  <input
+                    type="text"
+                    id="synonym-source-term"
+                    placeholder="Trigger term (e.g., PS5)"
+                    class="rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                  />
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">
+                    Searching this term expands to include all terms below
+                  </span>
+                </div>
+              </div>
               <div class="flex items-center gap-3">
                 <input
                   type="text"
                   id="synonym-new-terms"
-                  placeholder="Enter comma-separated terms (e.g., coffee, espresso, caffeine)"
+                  placeholder="Enter comma-separated terms (e.g., PS5, PlayStation 5)"
                   class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
                   onkeydown="if(event.key==='Enter'){event.preventDefault();saveSynonymGroup()}"
                 />
@@ -34419,7 +34468,8 @@ function renderRelevanceTab(props) {
                 </button>
               </div>
               <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
-                All terms in a group are equivalent. Minimum 2 terms required.
+                <strong>Bidirectional:</strong> All terms are equivalent (couch = sofa).
+                <strong>One-way:</strong> Trigger term expands to include targets, but not vice versa (PS5 &rarr; PlayStation 5).
               </p>
             </div>
 
@@ -35053,8 +35103,13 @@ function renderRelevanceScript() {
         var container = document.getElementById('synonyms-list');
         var summary = document.getElementById('synonyms-summary');
         var enabledCount = synonymGroups.filter(function(g) { return g.enabled; }).length;
-        summary.textContent = synonymGroups.length + ' synonym group' + (synonymGroups.length !== 1 ? 's' : '') +
+        var oneWayCount = synonymGroups.filter(function(g) { return g.synonym_type === 'one_way'; }).length;
+        var summaryText = synonymGroups.length + ' synonym group' + (synonymGroups.length !== 1 ? 's' : '') +
           ' (' + enabledCount + ' enabled)';
+        if (oneWayCount > 0) {
+          summaryText += ' \u2014 ' + oneWayCount + ' one-way, ' + (synonymGroups.length - oneWayCount) + ' bidirectional';
+        }
+        summary.textContent = summaryText;
 
         if (synonymGroups.length === 0) {
           container.innerHTML = '<p class="text-sm text-zinc-500 dark:text-zinc-400 py-4 text-center">No synonym groups defined. Click "Add Synonym Group" to create one.</p>';
@@ -35075,8 +35130,25 @@ function renderRelevanceScript() {
             'class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0" title="Enable/disable this group">';
 
           if (isEditing) {
-            // Editing mode: show input
+            // Editing mode: show type toggle, source term, and terms input
+            html += '<div class="flex-1">';
+            html += '<div class="flex items-center gap-3 mb-2">';
+            html += '<label class="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">';
+            html += '<input type="radio" name="synonym-edit-type" value="bidirectional"' + (g.synonym_type !== 'one_way' ? ' checked' : '') +
+              ' onchange="document.getElementById(\\'synonym-edit-source-row\\').classList.add(\\'hidden\\')">';
+            html += ' Bidirectional</label>';
+            html += '<label class="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">';
+            html += '<input type="radio" name="synonym-edit-type" value="one_way"' + (g.synonym_type === 'one_way' ? ' checked' : '') +
+              ' onchange="document.getElementById(\\'synonym-edit-source-row\\').classList.remove(\\'hidden\\')">';
+            html += ' One-way</label>';
+            html += '</div>';
+            var sourceVal = (g.source_term || '').replace(/"/g, '&quot;');
+            html += '<div id="synonym-edit-source-row" class="' + (g.synonym_type === 'one_way' ? '' : 'hidden ') + 'mb-2">';
+            html += '<input type="text" id="synonym-edit-source" value="' + sourceVal + '" placeholder="Trigger term" ' +
+              'class="rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 w-48">';
+            html += '</div>';
             var termsEscaped = g.terms.join(', ').replace(/"/g, '&quot;');
+            html += '<div class="flex items-center gap-2">';
             html += '<input type="text" id="synonym-edit-input" value="' + termsEscaped + '" ' +
               'class="flex-1 rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500" ' +
               'onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();saveEditSynonym(\\'' + g.id + '\\')}">';
@@ -35084,12 +35156,31 @@ function renderRelevanceScript() {
               'class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 px-2 py-1">Save</button>';
             html += '<button type="button" onclick="cancelEditSynonym()" ' +
               'class="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1">Cancel</button>';
+            html += '</div>';
+            html += '</div>';
           } else {
-            // Display mode: show term chips
-            html += '<div class="flex-1 flex flex-wrap gap-1.5">';
-            for (var j = 0; j < g.terms.length; j++) {
-              html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' +
-                g.terms[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+            // Display mode: show type badge and term chips
+            html += '<div class="flex-1 flex flex-wrap items-center gap-1.5">';
+            if (g.synonym_type === 'one_way' && g.source_term) {
+              // One-way: source \u2192 targets
+              html += '<span class="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-600/20 dark:ring-amber-500/20">one-way</span>';
+              html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20 ring-2 ring-indigo-400 dark:ring-indigo-500">' +
+                g.source_term.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+              html += '<svg class="h-4 w-4 text-zinc-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>';
+              var others = g.terms.filter(function(t) { return t !== g.source_term; });
+              for (var j = 0; j < others.length; j++) {
+                html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' +
+                  others[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+              }
+            } else {
+              // Bidirectional: all terms equal
+              for (var j = 0; j < g.terms.length; j++) {
+                if (j > 0) {
+                  html += '<span class="text-xs text-zinc-400">=</span>';
+                }
+                html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' +
+                  g.terms[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+              }
             }
             html += '</div>';
 
@@ -35116,6 +35207,9 @@ function renderRelevanceScript() {
         document.getElementById('synonym-add-form').classList.add('hidden');
         document.getElementById('synonym-add-btn').classList.remove('hidden');
         document.getElementById('synonym-new-terms').value = '';
+        document.getElementById('synonym-source-term').value = '';
+        document.getElementById('synonym-source-row').classList.add('hidden');
+        document.querySelector('input[name="synonym-type"][value="bidirectional"]').checked = true;
       }
 
       async function saveSynonymGroup() {
@@ -35126,11 +35220,23 @@ function renderRelevanceScript() {
           return;
         }
 
+        var synonymType = document.querySelector('input[name="synonym-type"]:checked').value;
+        var body = { terms: terms };
+        if (synonymType === 'one_way') {
+          var sourceTerm = document.getElementById('synonym-source-term').value.trim();
+          if (!sourceTerm) {
+            alert('One-way synonyms require a trigger term.');
+            return;
+          }
+          body.synonym_type = 'one_way';
+          body.source_term = sourceTerm;
+        }
+
         try {
           var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ terms: terms })
+            body: JSON.stringify(body)
           });
           var data = await res.json();
           if (data.success) {
@@ -35190,11 +35296,24 @@ function renderRelevanceScript() {
           return;
         }
 
+        var editType = document.querySelector('input[name="synonym-edit-type"]:checked');
+        var synonymType = editType ? editType.value : 'bidirectional';
+        var body = { terms: terms, synonym_type: synonymType };
+        if (synonymType === 'one_way') {
+          var sourceInput = document.getElementById('synonym-edit-source');
+          var sourceTerm = sourceInput ? sourceInput.value.trim() : '';
+          if (!sourceTerm) {
+            alert('One-way synonyms require a trigger term.');
+            return;
+          }
+          body.source_term = sourceTerm;
+        }
+
         try {
           var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms/' + id, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ terms: terms })
+            body: JSON.stringify(body)
           });
           var data = await res.json();
           if (data.success) {
@@ -37414,7 +37533,7 @@ function renderExperimentsScript() {
           experimentsLoaded = true
           loadExperiments()
           fetchControlSettings()
-          loadRecommendations()
+          loadExpRecommendations()
         }
       }
 
@@ -37982,7 +38101,7 @@ function renderExperimentsScript() {
       }
 
       // \u2500\u2500 Recommendations \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      async function loadRecommendations() {
+      async function loadExpRecommendations() {
         var container = document.getElementById('exp-recommendations')
         if (!container) return
 
@@ -38394,7 +38513,7 @@ function renderSearchDashboard(data) {
     version: data.version,
     content: pageContent
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkGMUS5V42_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function renderStatCard(label, value, color, icon, colorOverride) {
   const finalColor = color;
@@ -38442,8 +38561,8 @@ function escapeHtml6(str) {
 }
 
 // src/routes/admin-search.ts
-var adminSearchRoutes = new Hono();
-adminSearchRoutes.use("*", requireAuth());
+var adminSearchRoutes = new hono.Hono();
+adminSearchRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 adminSearchRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -38507,7 +38626,7 @@ adminSearchRoutes.get("/", async (c) => {
         totalClicks30d: totalClicks30dRow?.count ?? 0,
         zeroResults30d: zeroResults30dRow?.count ?? 0,
         user: user ? { name: user.email, email: user.email, role: user.role } : void 0,
-        version: getCoreVersion()
+        version: chunkUOEIMC67_cjs.getCoreVersion()
       })
     );
   } catch (error) {
@@ -38515,8 +38634,8 @@ adminSearchRoutes.get("/", async (c) => {
     return c.html(`<p>Error loading search dashboard: ${error instanceof Error ? error.message : String(error)}</p>`, 500);
   }
 });
-var adminApiKeyRoutes = new Hono();
-adminApiKeyRoutes.use("*", requireAuth());
+var adminApiKeyRoutes = new hono.Hono();
+adminApiKeyRoutes.use("*", chunkKKOBMGNI_cjs.requireAuth());
 adminApiKeyRoutes.post("/", async (c) => {
   try {
     const body = await c.req.json();
@@ -38527,7 +38646,7 @@ adminApiKeyRoutes.post("/", async (c) => {
     if (!Array.isArray(scopes) || scopes.length === 0) {
       return c.json({ error: "scopes array is required" }, 400);
     }
-    const invalidScopes = scopes.filter((s) => !VALID_SCOPES.includes(s));
+    const invalidScopes = scopes.filter((s) => !chunkKKOBMGNI_cjs.VALID_SCOPES.includes(s));
     if (invalidScopes.length > 0) {
       return c.json({ error: `Invalid scopes: ${invalidScopes.join(", ")}` }, 400);
     }
@@ -38535,7 +38654,7 @@ adminApiKeyRoutes.post("/", async (c) => {
     crypto.getRandomValues(randomBytes);
     const hex = Array.from(randomBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
     const plainToken = `sk_live_${hex}`;
-    const tokenHash = await hashApiKey(plainToken);
+    const tokenHash = await chunkKKOBMGNI_cjs.hashApiKey(plainToken);
     const id = crypto.randomUUID();
     const user = c.get("user");
     const userId = user?.userId || "system";
@@ -38623,7 +38742,7 @@ adminApiKeyRoutes.patch("/:id", async (c) => {
       if (!Array.isArray(body.scopes)) {
         return c.json({ error: "scopes must be an array" }, 400);
       }
-      const invalid = body.scopes.filter((s) => !VALID_SCOPES.includes(s));
+      const invalid = body.scopes.filter((s) => !chunkKKOBMGNI_cjs.VALID_SCOPES.includes(s));
       if (invalid.length > 0) {
         return c.json({ error: `Invalid scopes: ${invalid.join(", ")}` }, 400);
       }
@@ -38697,6 +38816,46 @@ var ROUTES_INFO = {
   reference: "https://github.com/sonicjs/sonicjs"
 };
 
-export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, FacetService, IndexManager, QueryRulesService, ROUTES_INFO, RankingPipelineService, RelatedSearchService, SynonymService, TrendingSearchService, adminApiKeyRoutes, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, renderSearchDashboard, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-3TMCOE5J.js.map
-//# sourceMappingURL=chunk-3TMCOE5J.js.map
+exports.AISearchService = AISearchService;
+exports.BENCHMARK_DATASETS = BENCHMARK_DATASETS;
+exports.BenchmarkService = BenchmarkService;
+exports.ChunkingService = ChunkingService;
+exports.EmbeddingService = EmbeddingService;
+exports.FTS5Service = FTS5Service;
+exports.FacetService = FacetService;
+exports.IndexManager = IndexManager;
+exports.QueryRulesService = QueryRulesService;
+exports.ROUTES_INFO = ROUTES_INFO;
+exports.RankingPipelineService = RankingPipelineService;
+exports.RelatedSearchService = RelatedSearchService;
+exports.SynonymService = SynonymService;
+exports.TrendingSearchService = TrendingSearchService;
+exports.adminApiKeyRoutes = adminApiKeyRoutes;
+exports.adminCheckboxRoutes = adminCheckboxRoutes;
+exports.adminCollectionsRoutes = adminCollectionsRoutes;
+exports.adminDesignRoutes = adminDesignRoutes;
+exports.adminFormsRoutes = adminFormsRoutes;
+exports.adminLogsRoutes = adminLogsRoutes;
+exports.adminMediaRoutes = adminMediaRoutes;
+exports.adminPluginRoutes = adminPluginRoutes;
+exports.adminSearchRoutes = adminSearchRoutes;
+exports.adminSettingsRoutes = adminSettingsRoutes;
+exports.admin_api_default = admin_api_default;
+exports.admin_code_examples_default = admin_code_examples_default;
+exports.admin_content_default = admin_content_default;
+exports.admin_testimonials_default = admin_testimonials_default;
+exports.api_content_crud_default = api_content_crud_default;
+exports.api_default = api_default;
+exports.api_media_default = api_media_default;
+exports.api_system_default = api_system_default;
+exports.auth_default = auth_default;
+exports.getConfirmationDialogScript = getConfirmationDialogScript2;
+exports.public_forms_default = public_forms_default;
+exports.renderConfirmationDialog = renderConfirmationDialog2;
+exports.renderSearchDashboard = renderSearchDashboard;
+exports.router = router;
+exports.router2 = router2;
+exports.test_cleanup_default = test_cleanup_default;
+exports.userRoutes = userRoutes;
+//# sourceMappingURL=chunk-LRGVLBMZ.cjs.map
+//# sourceMappingURL=chunk-LRGVLBMZ.cjs.map

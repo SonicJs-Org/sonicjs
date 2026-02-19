@@ -326,7 +326,7 @@ export function renderExperimentsScript(): string {
           experimentsLoaded = true
           loadExperiments()
           fetchControlSettings()
-          loadRecommendations()
+          loadExpRecommendations()
         }
       }
 
@@ -894,7 +894,7 @@ export function renderExperimentsScript(): string {
       }
 
       // ── Recommendations ─────────────────────────
-      async function loadRecommendations() {
+      async function loadExpRecommendations() {
         var container = document.getElementById('exp-recommendations')
         if (!container) return
 

@@ -138,10 +138,12 @@ export interface RankingStage {
   config?: Record<string, any>  // Stage-specific (e.g. recency half_life_days)
 }
 
-/** A bidirectional synonym group — searching any term expands to all terms */
+/** A synonym group — bidirectional (all terms equivalent) or one-way (source_term triggers expansion) */
 export interface SynonymGroup {
   id: string
   terms: string[]
+  synonym_type: 'bidirectional' | 'one_way'
+  source_term: string | null
   enabled: boolean
   created_at: number
   updated_at: number

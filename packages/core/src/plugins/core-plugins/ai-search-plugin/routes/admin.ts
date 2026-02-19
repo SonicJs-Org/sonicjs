@@ -693,7 +693,10 @@ adminRoutes.post('/api/relevance/synonyms', async (c) => {
       return c.json({ error: 'terms must be an array with at least 2 items' }, 400)
     }
     const synonymService = new SynonymService(c.env.DB)
-    const group = await synonymService.create(body.terms, body.enabled !== false)
+    const group = await synonymService.create(body.terms, body.enabled !== false, {
+      synonym_type: body.synonym_type,
+      source_term: body.source_term,
+    })
     return c.json({ success: true, data: group })
   } catch (error) {
     console.error('Error creating synonym group:', error)
@@ -710,6 +713,8 @@ adminRoutes.put('/api/relevance/synonyms/:id', async (c) => {
     const group = await synonymService.update(id, {
       terms: body.terms,
       enabled: body.enabled,
+      synonym_type: body.synonym_type,
+      source_term: body.source_term,
     })
     if (!group) {
       return c.json({ error: 'Synonym group not found' }, 404)

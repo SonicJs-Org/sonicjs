@@ -277,11 +277,36 @@ export function renderRelevanceTab(props: TabProps): string {
 
             <!-- Add new synonym group form (hidden by default) -->
             <div id="synonym-add-form" class="hidden border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-4 mb-4">
+              <div class="flex items-center gap-3 mb-2">
+                <label class="flex items-center gap-1.5 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input type="radio" name="synonym-type" value="bidirectional" checked
+                    onchange="document.getElementById('synonym-source-row').classList.add('hidden')" />
+                  Bidirectional
+                </label>
+                <label class="flex items-center gap-1.5 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input type="radio" name="synonym-type" value="one_way"
+                    onchange="document.getElementById('synonym-source-row').classList.remove('hidden')" />
+                  One-way
+                </label>
+              </div>
+              <div id="synonym-source-row" class="hidden mb-2">
+                <div class="flex items-center gap-2">
+                  <input
+                    type="text"
+                    id="synonym-source-term"
+                    placeholder="Trigger term (e.g., PS5)"
+                    class="rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
+                  />
+                  <span class="text-xs text-zinc-500 dark:text-zinc-400">
+                    Searching this term expands to include all terms below
+                  </span>
+                </div>
+              </div>
               <div class="flex items-center gap-3">
                 <input
                   type="text"
                   id="synonym-new-terms"
-                  placeholder="Enter comma-separated terms (e.g., coffee, espresso, caffeine)"
+                  placeholder="Enter comma-separated terms (e.g., PS5, PlayStation 5)"
                   class="flex-1 rounded-lg bg-white dark:bg-white/5 px-4 py-2 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400"
                   onkeydown="if(event.key==='Enter'){event.preventDefault();saveSynonymGroup()}"
                 />
@@ -301,7 +326,8 @@ export function renderRelevanceTab(props: TabProps): string {
                 </button>
               </div>
               <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
-                All terms in a group are equivalent. Minimum 2 terms required.
+                <strong>Bidirectional:</strong> All terms are equivalent (couch = sofa).
+                <strong>One-way:</strong> Trigger term expands to include targets, but not vice versa (PS5 &rarr; PlayStation 5).
               </p>
             </div>
 
@@ -936,8 +962,13 @@ export function renderRelevanceScript(): string {
         var container = document.getElementById('synonyms-list');
         var summary = document.getElementById('synonyms-summary');
         var enabledCount = synonymGroups.filter(function(g) { return g.enabled; }).length;
-        summary.textContent = synonymGroups.length + ' synonym group' + (synonymGroups.length !== 1 ? 's' : '') +
+        var oneWayCount = synonymGroups.filter(function(g) { return g.synonym_type === 'one_way'; }).length;
+        var summaryText = synonymGroups.length + ' synonym group' + (synonymGroups.length !== 1 ? 's' : '') +
           ' (' + enabledCount + ' enabled)';
+        if (oneWayCount > 0) {
+          summaryText += ' — ' + oneWayCount + ' one-way, ' + (synonymGroups.length - oneWayCount) + ' bidirectional';
+        }
+        summary.textContent = summaryText;
 
         if (synonymGroups.length === 0) {
           container.innerHTML = '<p class="text-sm text-zinc-500 dark:text-zinc-400 py-4 text-center">No synonym groups defined. Click "Add Synonym Group" to create one.</p>';
@@ -958,8 +989,25 @@ export function renderRelevanceScript(): string {
             'class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0" title="Enable/disable this group">';
 
           if (isEditing) {
-            // Editing mode: show input
+            // Editing mode: show type toggle, source term, and terms input
+            html += '<div class="flex-1">';
+            html += '<div class="flex items-center gap-3 mb-2">';
+            html += '<label class="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">';
+            html += '<input type="radio" name="synonym-edit-type" value="bidirectional"' + (g.synonym_type !== 'one_way' ? ' checked' : '') +
+              ' onchange="document.getElementById(\\'synonym-edit-source-row\\').classList.add(\\'hidden\\')">';
+            html += ' Bidirectional</label>';
+            html += '<label class="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">';
+            html += '<input type="radio" name="synonym-edit-type" value="one_way"' + (g.synonym_type === 'one_way' ? ' checked' : '') +
+              ' onchange="document.getElementById(\\'synonym-edit-source-row\\').classList.remove(\\'hidden\\')">';
+            html += ' One-way</label>';
+            html += '</div>';
+            var sourceVal = (g.source_term || '').replace(/"/g, '&quot;');
+            html += '<div id="synonym-edit-source-row" class="' + (g.synonym_type === 'one_way' ? '' : 'hidden ') + 'mb-2">';
+            html += '<input type="text" id="synonym-edit-source" value="' + sourceVal + '" placeholder="Trigger term" ' +
+              'class="rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500 w-48">';
+            html += '</div>';
             var termsEscaped = g.terms.join(', ').replace(/"/g, '&quot;');
+            html += '<div class="flex items-center gap-2">';
             html += '<input type="text" id="synonym-edit-input" value="' + termsEscaped + '" ' +
               'class="flex-1 rounded-lg bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-indigo-500" ' +
               'onkeydown="if(event.key===\\'Enter\\'){event.preventDefault();saveEditSynonym(\\'' + g.id + '\\')}">';
@@ -967,12 +1015,31 @@ export function renderRelevanceScript(): string {
               'class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 px-2 py-1">Save</button>';
             html += '<button type="button" onclick="cancelEditSynonym()" ' +
               'class="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-2 py-1">Cancel</button>';
+            html += '</div>';
+            html += '</div>';
           } else {
-            // Display mode: show term chips
-            html += '<div class="flex-1 flex flex-wrap gap-1.5">';
-            for (var j = 0; j < g.terms.length; j++) {
-              html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' +
-                g.terms[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+            // Display mode: show type badge and term chips
+            html += '<div class="flex-1 flex flex-wrap items-center gap-1.5">';
+            if (g.synonym_type === 'one_way' && g.source_term) {
+              // One-way: source → targets
+              html += '<span class="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-600/20 dark:ring-amber-500/20">one-way</span>';
+              html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20 ring-2 ring-indigo-400 dark:ring-indigo-500">' +
+                g.source_term.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+              html += '<svg class="h-4 w-4 text-zinc-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>';
+              var others = g.terms.filter(function(t) { return t !== g.source_term; });
+              for (var j = 0; j < others.length; j++) {
+                html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' +
+                  others[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+              }
+            } else {
+              // Bidirectional: all terms equal
+              for (var j = 0; j < g.terms.length; j++) {
+                if (j > 0) {
+                  html += '<span class="text-xs text-zinc-400">=</span>';
+                }
+                html += '<span class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">' +
+                  g.terms[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+              }
             }
             html += '</div>';
 
@@ -999,6 +1066,9 @@ export function renderRelevanceScript(): string {
         document.getElementById('synonym-add-form').classList.add('hidden');
         document.getElementById('synonym-add-btn').classList.remove('hidden');
         document.getElementById('synonym-new-terms').value = '';
+        document.getElementById('synonym-source-term').value = '';
+        document.getElementById('synonym-source-row').classList.add('hidden');
+        document.querySelector('input[name="synonym-type"][value="bidirectional"]').checked = true;
       }
 
       async function saveSynonymGroup() {
@@ -1009,11 +1079,23 @@ export function renderRelevanceScript(): string {
           return;
         }
 
+        var synonymType = document.querySelector('input[name="synonym-type"]:checked').value;
+        var body = { terms: terms };
+        if (synonymType === 'one_way') {
+          var sourceTerm = document.getElementById('synonym-source-term').value.trim();
+          if (!sourceTerm) {
+            alert('One-way synonyms require a trigger term.');
+            return;
+          }
+          body.synonym_type = 'one_way';
+          body.source_term = sourceTerm;
+        }
+
         try {
           var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ terms: terms })
+            body: JSON.stringify(body)
           });
           var data = await res.json();
           if (data.success) {
@@ -1073,11 +1155,24 @@ export function renderRelevanceScript(): string {
           return;
         }
 
+        var editType = document.querySelector('input[name="synonym-edit-type"]:checked');
+        var synonymType = editType ? editType.value : 'bidirectional';
+        var body = { terms: terms, synonym_type: synonymType };
+        if (synonymType === 'one_way') {
+          var sourceInput = document.getElementById('synonym-edit-source');
+          var sourceTerm = sourceInput ? sourceInput.value.trim() : '';
+          if (!sourceTerm) {
+            alert('One-way synonyms require a trigger term.');
+            return;
+          }
+          body.source_term = sourceTerm;
+        }
+
         try {
           var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms/' + id, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ terms: terms })
+            body: JSON.stringify(body)
           });
           var data = await res.json();
           if (data.success) {

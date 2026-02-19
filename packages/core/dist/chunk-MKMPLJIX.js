@@ -1,10 +1,8 @@
-'use strict';
-
-var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkRMEGO4MC_cjs = require('./chunk-RMEGO4MC.cjs');
-var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
-var jwt = require('hono/jwt');
-var cookie = require('hono/cookie');
+import { syncCollections, PluginBootstrapService } from './chunk-YFJJU26H.js';
+import { MigrationService } from './chunk-ONRG4CFP.js';
+import { metricsTracker } from './chunk-FICTAGD4.js';
+import { sign, verify } from 'hono/jwt';
+import { setCookie, getCookie } from 'hono/cookie';
 
 // src/middleware/bootstrap.ts
 var bootstrapComplete = false;
@@ -20,17 +18,17 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new chunkRMEGO4MC_cjs.MigrationService(c.env.DB);
+      const migrationService = new MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await chunkMPT5PA6U_cjs.syncCollections(c.env.DB);
+        await syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new chunkMPT5PA6U_cjs.PluginBootstrapService(c.env.DB);
+        const bootstrapService = new PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -57,11 +55,11 @@ var AuthManager = class {
       // 24 hours
       iat: Math.floor(Date.now() / 1e3)
     };
-    return await jwt.sign(payload, JWT_SECRET, "HS256");
+    return await sign(payload, JWT_SECRET, "HS256");
   }
   static async verifyToken(token) {
     try {
-      const payload = await jwt.verify(token, JWT_SECRET, "HS256");
+      const payload = await verify(token, JWT_SECRET, "HS256");
       if (payload.exp < Math.floor(Date.now() / 1e3)) {
         return null;
       }
@@ -89,7 +87,7 @@ var AuthManager = class {
    * @param options - Optional cookie configuration
    */
   static setAuthCookie(c, token, options) {
-    cookie.setCookie(c, "auth_token", token, {
+    setCookie(c, "auth_token", token, {
       httpOnly: options?.httpOnly ?? true,
       secure: options?.secure ?? true,
       sameSite: options?.sameSite ?? "Strict",
@@ -103,7 +101,7 @@ var requireAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = cookie.getCookie(c, "auth_token");
+        token = getCookie(c, "auth_token");
       }
       if (!token) {
         const acceptHeader = c.req.header("Accept") || "";
@@ -173,7 +171,7 @@ var optionalAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = cookie.getCookie(c, "auth_token");
+        token = getCookie(c, "auth_token");
       }
       if (token) {
         const payload = await AuthManager.verifyToken(token);
@@ -288,7 +286,7 @@ var metricsMiddleware = () => {
   return async (c, next) => {
     const path = new URL(c.req.url).pathname;
     if (path !== "/admin/dashboard/api/metrics") {
-      chunkRCQ2HIQD_cjs.metricsTracker.recordRequest();
+      metricsTracker.recordRequest();
     }
     await next();
   };
@@ -312,30 +310,6 @@ var requireActivePlugins = () => async (_c, next) => await next();
 var getActivePlugins = () => [];
 var isPluginActive = () => false;
 
-exports.AuthManager = AuthManager;
-exports.PermissionManager = PermissionManager;
-exports.VALID_SCOPES = VALID_SCOPES;
-exports.bootstrapMiddleware = bootstrapMiddleware;
-exports.cacheHeaders = cacheHeaders;
-exports.compressionMiddleware = compressionMiddleware;
-exports.detailedLoggingMiddleware = detailedLoggingMiddleware;
-exports.getActivePlugins = getActivePlugins;
-exports.hashApiKey = hashApiKey;
-exports.isPluginActive = isPluginActive;
-exports.logActivity = logActivity;
-exports.loggingMiddleware = loggingMiddleware;
-exports.metricsMiddleware = metricsMiddleware;
-exports.optionalApiKey = optionalApiKey;
-exports.optionalAuth = optionalAuth;
-exports.performanceLoggingMiddleware = performanceLoggingMiddleware;
-exports.requireActivePlugin = requireActivePlugin;
-exports.requireActivePlugins = requireActivePlugins;
-exports.requireAnyPermission = requireAnyPermission;
-exports.requireApiKey = requireApiKey;
-exports.requireAuth = requireAuth;
-exports.requirePermission = requirePermission;
-exports.requireRole = requireRole;
-exports.securityHeaders = securityHeaders;
-exports.securityLoggingMiddleware = securityLoggingMiddleware;
-//# sourceMappingURL=chunk-BAPDU42Z.cjs.map
-//# sourceMappingURL=chunk-BAPDU42Z.cjs.map
+export { AuthManager, PermissionManager, VALID_SCOPES, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, hashApiKey, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalApiKey, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireApiKey, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware };
+//# sourceMappingURL=chunk-MKMPLJIX.js.map
+//# sourceMappingURL=chunk-MKMPLJIX.js.map

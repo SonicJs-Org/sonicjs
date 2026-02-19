@@ -1,15 +1,15 @@
 # SonicJS
 
-[![GitHub stars](https://img.shields.io/github/stars/lane711/sonicjs?style=social)](https://github.com/lane711/sonicjs)
+[![GitHub stars](https://img.shields.io/github/stars/mmcintosh/sonicjs?style=social)](https://github.com/mmcintosh/sonicjs)
 [![npm downloads](https://img.shields.io/npm/dm/@sonicjs-cms/core.svg)](https://www.npmjs.com/package/@sonicjs-cms/core)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/lane711/sonicjs)](https://github.com/lane711/sonicjs/commits)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/mmcintosh/sonicjs)](https://github.com/mmcintosh/sonicjs/commits)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/8bMy6bv3sZ)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[![PR Tests](https://github.com/lane711/sonicjs/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/lane711/sonicjs/actions/workflows/pr-tests.yml)
-[![codecov](https://codecov.io/gh/SonicJs-Org/sonicjs/branch/main/graph/badge.svg)](https://codecov.io/gh/SonicJs-Org/sonicjs)
-[![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Flane711%2F4fc1969ff683812bc49788d43fb4d7e2%2Fraw%2Ftest-count.json)](https://github.com/lane711/sonicjs)
+[![PR Tests](https://github.com/mmcintosh/sonicjs/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/mmcintosh/sonicjs/actions/workflows/pr-tests.yml)
+[![codecov](https://codecov.io/gh/mmcintosh/sonicjs/branch/main/graph/badge.svg)](https://codecov.io/gh/mmcintosh/sonicjs)
+[![Tests](https://img.shields.io/badge/tests-676%2B-brightgreen?logo=vitest&logoColor=white)](https://github.com/mmcintosh/sonicjs/actions/workflows/pr-tests.yml)
 [![npm version](https://img.shields.io/npm/v/@sonicjs-cms/core.svg)](https://www.npmjs.com/package/@sonicjs-cms/core)
 
 **The edge-native headless CMS for Cloudflare Workers.** Sub-100ms response times globally. Zero cold starts. TypeScript-first.

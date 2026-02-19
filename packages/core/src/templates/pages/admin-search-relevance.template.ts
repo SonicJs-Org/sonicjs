@@ -343,6 +343,73 @@ export function renderRelevanceTab(props: TabProps): string {
               </svg>
               Add Synonym Group
             </button>
+            <button
+              type="button"
+              onclick="showSynonymImportModal()"
+              class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              Import from File
+            </button>
+
+            <!-- Import Modal -->
+            <div id="synonym-import-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+              <div class="flex items-center justify-center min-h-screen p-4">
+                <div class="fixed inset-0 bg-black/50" onclick="closeSynonymImportModal()"></div>
+                <div class="relative bg-white dark:bg-zinc-900 rounded-xl shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 max-w-lg w-full p-6">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-zinc-950 dark:text-white">Import Synonym Dictionary</h3>
+                    <button onclick="closeSynonymImportModal()" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <!-- File Input -->
+                  <div class="space-y-4">
+                    <div>
+                      <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">File (.csv or .txt)</label>
+                      <input type="file" id="synonym-import-file" accept=".csv,.txt"
+                        class="block w-full text-sm text-zinc-600 dark:text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 dark:file:bg-indigo-900/30 file:text-indigo-700 dark:file:text-indigo-300 hover:file:bg-indigo-100 dark:hover:file:bg-indigo-900/50"/>
+                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                        <strong>CSV:</strong> <code>couch, sofa, settee</code> or <code>PS5 -&gt; PlayStation 5</code><br/>
+                        <strong>Elasticsearch .txt:</strong> <code>couch, sofa</code> or <code>PS5 =&gt; PlayStation 5</code>
+                      </p>
+                    </div>
+
+                    <div>
+                      <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Min content occurrences</label>
+                      <input type="number" id="synonym-import-min-occ" value="3" min="1" max="100"
+                        class="w-24 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 px-3 py-2"/>
+                      <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                        Only import terms that appear at least this many times in your content.
+                      </p>
+                    </div>
+
+                    <!-- Preview area -->
+                    <div id="synonym-import-preview" class="hidden rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3 text-sm max-h-40 overflow-y-auto"></div>
+
+                    <!-- Results area -->
+                    <div id="synonym-import-results" class="hidden rounded-lg p-4 text-sm"></div>
+
+                    <!-- Actions -->
+                    <div class="flex items-center justify-between pt-2">
+                      <button onclick="previewSynonymImport()" type="button"
+                        class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-300 dark:ring-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+                        Preview
+                      </button>
+                      <button onclick="runSynonymImport()" id="synonym-import-btn" type="button"
+                        class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Import &amp; Queue for Review
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <!-- Info callout -->
             <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 mt-6">
@@ -1732,6 +1799,127 @@ export function renderRelevanceScript(): string {
         } catch (e) {
           alert('Error clearing cache: ' + e.message);
         }
+      }
+
+      // =============================================
+      // Synonym Import
+      // =============================================
+
+      function showSynonymImportModal() {
+        document.getElementById('synonym-import-modal').classList.remove('hidden');
+        document.getElementById('synonym-import-preview').classList.add('hidden');
+        document.getElementById('synonym-import-results').classList.add('hidden');
+        document.getElementById('synonym-import-file').value = '';
+      }
+
+      function closeSynonymImportModal() {
+        document.getElementById('synonym-import-modal').classList.add('hidden');
+      }
+
+      function previewSynonymImport() {
+        var fileInput = document.getElementById('synonym-import-file');
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) { alert('Please select a file first'); return; }
+
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var content = e.target.result;
+          var lines = content.split('\\n').filter(function(l) {
+            var t = l.trim();
+            return t && !t.startsWith('#');
+          });
+
+          var preview = document.getElementById('synonym-import-preview');
+          var html = '<p class="font-medium text-zinc-700 dark:text-zinc-300 mb-2">' + lines.length + ' entries found in ' + file.name + '</p>';
+          html += '<div class="space-y-1 text-xs text-zinc-600 dark:text-zinc-400 font-mono">';
+          var show = Math.min(lines.length, 10);
+          for (var i = 0; i < show; i++) {
+            var line = lines[i].trim();
+            var isOneWay = line.includes('=>') || line.includes('->') || line.includes('\\u2192');
+            var badge = isOneWay
+              ? '<span class="text-amber-600 dark:text-amber-400">[one-way]</span> '
+              : '<span class="text-indigo-600 dark:text-indigo-400">[bidir]</span> ';
+            html += '<div>' + badge + escapeRelevanceHtml(line.slice(0, 80)) + '</div>';
+          }
+          if (lines.length > 10) {
+            html += '<div class="text-zinc-400">... and ' + (lines.length - 10) + ' more</div>';
+          }
+          html += '</div>';
+          preview.innerHTML = html;
+          preview.classList.remove('hidden');
+        };
+        reader.readAsText(file);
+      }
+
+      async function runSynonymImport() {
+        var fileInput = document.getElementById('synonym-import-file');
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) { alert('Please select a file first'); return; }
+
+        var btn = document.getElementById('synonym-import-btn');
+        btn.disabled = true;
+        btn.textContent = 'Importing...';
+        var resultsEl = document.getElementById('synonym-import-results');
+        resultsEl.classList.add('hidden');
+
+        try {
+          var minOcc = document.getElementById('synonym-import-min-occ').value || '3';
+          var formData = new FormData();
+          formData.append('file', file);
+          formData.append('min_occurrences', minOcc);
+
+          var res = await fetch('/admin/plugins/ai-search/api/relevance/synonyms/import', {
+            method: 'POST',
+            body: formData,
+          });
+          var data = await res.json();
+
+          if (!res.ok || !data.success) {
+            resultsEl.className = 'rounded-lg p-4 text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800';
+            resultsEl.innerHTML = '<p class="text-red-700 dark:text-red-300 font-medium">Import failed</p><p class="text-red-600 dark:text-red-400 mt-1">' + escapeRelevanceHtml(data.error || 'Unknown error') + '</p>';
+            resultsEl.classList.remove('hidden');
+            return;
+          }
+
+          var r = data.data;
+          resultsEl.className = 'rounded-lg p-4 text-sm bg-lime-50 dark:bg-lime-900/20 border border-lime-200 dark:border-lime-800';
+          var html = '<p class="text-lime-700 dark:text-lime-300 font-medium mb-2">Import complete</p>';
+          html += '<div class="grid grid-cols-2 gap-x-4 gap-y-1 text-zinc-700 dark:text-zinc-300">';
+          html += '<div>Parsed:</div><div class="font-mono">' + r.parsed + '</div>';
+          html += '<div>Corpus matched:</div><div class="font-mono">' + r.corpus_matched + '</div>';
+          html += '<div>Queued for review:</div><div class="font-mono font-semibold text-lime-700 dark:text-lime-400">' + r.queued + '</div>';
+          html += '<div>Skipped (existing):</div><div class="font-mono">' + r.skipped_existing + '</div>';
+          html += '<div>Skipped (threshold):</div><div class="font-mono">' + r.skipped_threshold + '</div>';
+          html += '<div>Skipped (format):</div><div class="font-mono">' + r.skipped_format + '</div>';
+          html += '</div>';
+
+          if (r.errors && r.errors.length > 0) {
+            html += '<div class="mt-2 text-xs text-amber-600 dark:text-amber-400">';
+            for (var i = 0; i < r.errors.length; i++) {
+              html += '<div>' + escapeRelevanceHtml(r.errors[i]) + '</div>';
+            }
+            html += '</div>';
+          }
+
+          if (r.queued > 0) {
+            html += '<p class="mt-3 text-sm"><a href="#agent" onclick="closeSynonymImportModal(); switchTab(\\'agent\\')" class="text-indigo-600 dark:text-indigo-400 hover:underline">Review imported candidates in the Agent tab &rarr;</a></p>';
+          }
+
+          resultsEl.innerHTML = html;
+          resultsEl.classList.remove('hidden');
+        } catch (e) {
+          resultsEl.className = 'rounded-lg p-4 text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800';
+          resultsEl.innerHTML = '<p class="text-red-700 dark:text-red-300">Import failed: ' + escapeRelevanceHtml(e.message) + '</p>';
+          resultsEl.classList.remove('hidden');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Import & Queue for Review';
+        }
+      }
+
+      function escapeRelevanceHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
   `
 }

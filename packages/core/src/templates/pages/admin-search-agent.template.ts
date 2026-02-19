@@ -236,6 +236,12 @@ export function renderAgentScript(): string {
               var statusColor = r.status === 'applied' ? 'text-lime-600 dark:text-lime-400' : 'text-zinc-400 dark:text-zinc-500';
               html += '<span class="text-xs ' + statusColor + '">' + r.status + '</span>';
             }
+            if (r.import_source) {
+              html += '<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300">';
+              html += '<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>';
+              html += 'Imported: ' + escapeAgentHtml(r.import_source);
+              html += '</span>';
+            }
             html += '</div>';
 
             // Title + description

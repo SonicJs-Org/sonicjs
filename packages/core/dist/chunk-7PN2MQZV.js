@@ -1824,6 +1824,13 @@ CREATE INDEX IF NOT EXISTS idx_query_rules_priority ON ai_search_query_rules(pri
     filename: "045_recommendations_related_search_category.sql",
     description: "Migration 045: Recommendations Related Search Category",
     sql: "-- Add 'related_search' to the category CHECK constraint on ai_search_recommendations.\n-- SQLite doesn't support ALTER COLUMN, so we recreate the table.\n\nCREATE TABLE ai_search_recommendations_new (\n  id TEXT PRIMARY KEY,\n  category TEXT NOT NULL CHECK (category IN ('synonym', 'query_rule', 'low_ctr', 'unused_facet', 'content_gap', 'related_search')),\n  title TEXT NOT NULL,\n  description TEXT NOT NULL,\n  supporting_data TEXT NOT NULL,\n  action_payload TEXT,\n  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'applied', 'dismissed')),\n  fingerprint TEXT NOT NULL,\n  run_id TEXT NOT NULL,\n  applied_at INTEGER,\n  created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n  updated_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nINSERT INTO ai_search_recommendations_new\n  SELECT * FROM ai_search_recommendations;\n\nDROP TABLE ai_search_recommendations;\n\nALTER TABLE ai_search_recommendations_new RENAME TO ai_search_recommendations;\n\n-- Recreate indexes\nCREATE INDEX IF NOT EXISTS idx_recommendations_category ON ai_search_recommendations(category);\nCREATE INDEX IF NOT EXISTS idx_recommendations_status ON ai_search_recommendations(status);\nCREATE UNIQUE INDEX IF NOT EXISTS idx_recommendations_fingerprint ON ai_search_recommendations(fingerprint);\nCREATE INDEX IF NOT EXISTS idx_recommendations_run_id ON ai_search_recommendations(run_id);\n"
+  },
+  {
+    id: "045",
+    name: "Synonym Import",
+    filename: "045_synonym_import.sql",
+    description: "Migration 045: Synonym Import",
+    sql: "-- Add import_source column to track which recommendations came from file imports\n-- NULL for agent-generated recommendations, filename for imported ones\nALTER TABLE ai_search_recommendations ADD COLUMN import_source TEXT;\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2232,5 +2239,5 @@ var MigrationService = class {
 };
 
 export { MigrationService };
-//# sourceMappingURL=chunk-UKJVVR55.js.map
-//# sourceMappingURL=chunk-UKJVVR55.js.map
+//# sourceMappingURL=chunk-7PN2MQZV.js.map
+//# sourceMappingURL=chunk-7PN2MQZV.js.map

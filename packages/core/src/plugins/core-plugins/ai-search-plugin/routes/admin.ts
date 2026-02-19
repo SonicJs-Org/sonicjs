@@ -14,6 +14,7 @@ import { EmbeddingService } from '../services/embedding.service'
 import { ChunkingService } from '../services/chunking.service'
 import { RecommendationService } from '../services/recommendation.service'
 import { RelatedSearchService } from '../services/related-search.service'
+import { SynonymImportService } from '../services/synonym-import.service'
 import { ExperimentService } from '../services/experiment.service'
 import { renderSearchDashboard } from '../../../../templates/pages/admin-search.template'
 import type { AISearchSettings, ExperimentMode, FacetDefinition, SearchQuery } from '../types'
@@ -739,6 +740,43 @@ adminRoutes.delete('/api/relevance/synonyms/:id', async (c) => {
   } catch (error) {
     console.error('Error deleting synonym group:', error)
     return c.json({ error: 'Failed to delete synonym group' }, 500)
+  }
+})
+
+/** POST /api/relevance/synonyms/import — Import synonym dictionary file */
+adminRoutes.post('/api/relevance/synonyms/import', async (c) => {
+  try {
+    const body = await c.req.parseBody()
+    const file = body['file']
+    if (!(file instanceof File)) {
+      return c.json({ error: 'File upload required' }, 400)
+    }
+
+    const content = await file.text()
+    const nonEmptyLines = content.split('\n').filter(l => {
+      const t = l.trim()
+      return t && !t.startsWith('#')
+    }).length
+    if (nonEmptyLines > 500) {
+      return c.json({ error: `File has ${nonEmptyLines} entries (max 500). Split into smaller files.` }, 400)
+    }
+
+    const minOccurrences = parseInt(String(body['min_occurrences'] || '3'), 10)
+    const options = {
+      min_occurrences: isNaN(minOccurrences) ? 3 : minOccurrences,
+      import_source: (file.name || 'uploaded-file.csv'),
+    }
+
+    const importService = new SynonymImportService(c.env.DB)
+    const format = file.name?.endsWith('.txt') ? 'txt' : 'csv'
+    const result = format === 'txt'
+      ? await importService.importSynonymsTxt(content, options)
+      : await importService.importCsv(content, options)
+
+    return c.json({ success: true, data: result })
+  } catch (error) {
+    console.error('Error importing synonyms:', error)
+    return c.json({ error: 'Import failed: ' + (error instanceof Error ? error.message : String(error)) }, 500)
   }
 })
 

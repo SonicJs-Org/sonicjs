@@ -526,7 +526,10 @@ export class RecommendationService {
             return { success: false, message: 'Invalid synonym payload' }
           }
           const synonymService = new SynonymService(this.db)
-          await synonymService.create(rec.action_payload.terms)
+          await synonymService.create(rec.action_payload.terms, true, {
+            synonym_type: rec.action_payload.synonym_type || 'bidirectional',
+            source_term: rec.action_payload.source_term || undefined,
+          })
           await this.updateStatus(id, 'applied')
           return { success: true, message: `Created synonym group: ${rec.action_payload.terms.join(', ')}` }
         }
@@ -574,7 +577,7 @@ export class RecommendationService {
     return row !== null
   }
 
-  private async insertRecommendation(rec: {
+  async insertRecommendation(rec: {
     id: string
     category: RecommendationCategory
     title: string
@@ -583,11 +586,12 @@ export class RecommendationService {
     action_payload: Record<string, any> | null
     fingerprint: string
     run_id: string
+    import_source?: string | null
   }): Promise<void> {
     await this.db
       .prepare(`
-        INSERT INTO ai_search_recommendations (id, category, title, description, supporting_data, action_payload, fingerprint, run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO ai_search_recommendations (id, category, title, description, supporting_data, action_payload, fingerprint, run_id, import_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         rec.id,
@@ -598,6 +602,7 @@ export class RecommendationService {
         rec.action_payload ? JSON.stringify(rec.action_payload) : null,
         rec.fingerprint,
         rec.run_id,
+        rec.import_source || null,
       )
       .run()
   }
@@ -613,6 +618,7 @@ export class RecommendationService {
       status: row.status as RecommendationStatus,
       fingerprint: row.fingerprint as string,
       run_id: row.run_id as string,
+      import_source: (row.import_source as string) || null,
       applied_at: row.applied_at as number | null,
       created_at: row.created_at as number,
       updated_at: row.updated_at as number,
@@ -647,7 +653,7 @@ const STOPWORDS = new Set([
 ])
 
 /** FNV-1a hash for deterministic fingerprinting */
-function fnv1aHash(input: string): string {
+export function fnv1aHash(input: string): string {
   let hash = 0x811c9dc5
   for (let i = 0; i < input.length; i++) {
     hash ^= input.charCodeAt(i)

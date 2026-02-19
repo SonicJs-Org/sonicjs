@@ -284,6 +284,7 @@ export interface Recommendation {
   status: RecommendationStatus
   fingerprint: string
   run_id: string
+  import_source: string | null
   applied_at: number | null
   created_at: number
   updated_at: number

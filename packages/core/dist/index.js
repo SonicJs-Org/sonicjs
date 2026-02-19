@@ -1,11 +1,11 @@
-import { AISearchService, IndexManager, FTS5Service, renderSearchDashboard, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, RelatedSearchService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, TrendingSearchService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminApiKeyRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-YEQ3T5NH.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-YEQ3T5NH.js';
+import { AISearchService, IndexManager, FTS5Service, renderSearchDashboard, BENCHMARK_DATASETS, RankingPipelineService, SynonymService, QueryRulesService, RelatedSearchService, FacetService, BenchmarkService, EmbeddingService, ChunkingService, TrendingSearchService, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminSearchRoutes, adminApiKeyRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-JFZG7XUR.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-JFZG7XUR.js';
 import { SettingsService, schema_exports } from './chunk-G44QUVNM.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-G44QUVNM.js';
-import { requireAuth, optionalAuth, optionalApiKey, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-3AJCVMJO.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-3AJCVMJO.js';
+import { requireAuth, optionalAuth, optionalApiKey, AuthManager, metricsMiddleware, bootstrapMiddleware } from './chunk-LWALC6OT.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-LWALC6OT.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, cleanupRemovedCollections, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, registerCollections, syncCollection, syncCollections, validateCollectionConfig } from './chunk-YFJJU26H.js';
-export { MigrationService } from './chunk-UKJVVR55.js';
+export { MigrationService } from './chunk-7PN2MQZV.js';
 export { renderFilterBar } from './chunk-M3QJL5ZT.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst, renderAdminLayout } from './chunk-AAU4BTDE.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-AAU4BTDE.js';
@@ -3188,7 +3188,10 @@ var RecommendationService = class {
             return { success: false, message: "Invalid synonym payload" };
           }
           const synonymService = new SynonymService(this.db);
-          await synonymService.create(rec.action_payload.terms);
+          await synonymService.create(rec.action_payload.terms, true, {
+            synonym_type: rec.action_payload.synonym_type || "bidirectional",
+            source_term: rec.action_payload.source_term || void 0
+          });
           await this.updateStatus(id, "applied");
           return { success: true, message: `Created synonym group: ${rec.action_payload.terms.join(", ")}` };
         }
@@ -3227,8 +3230,8 @@ var RecommendationService = class {
   }
   async insertRecommendation(rec) {
     await this.db.prepare(`
-        INSERT INTO ai_search_recommendations (id, category, title, description, supporting_data, action_payload, fingerprint, run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO ai_search_recommendations (id, category, title, description, supporting_data, action_payload, fingerprint, run_id, import_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
       rec.id,
       rec.category,
@@ -3237,7 +3240,8 @@ var RecommendationService = class {
       JSON.stringify(rec.supporting_data),
       rec.action_payload ? JSON.stringify(rec.action_payload) : null,
       rec.fingerprint,
-      rec.run_id
+      rec.run_id,
+      rec.import_source || null
     ).run();
   }
   mapRow(row) {
@@ -3251,6 +3255,7 @@ var RecommendationService = class {
       status: row.status,
       fingerprint: row.fingerprint,
       run_id: row.run_id,
+      import_source: row.import_source || null,
       applied_at: row.applied_at,
       created_at: row.created_at,
       updated_at: row.updated_at
@@ -3375,6 +3380,169 @@ function getTokenOverlap(a, b) {
   const union = (/* @__PURE__ */ new Set([...tokensA, ...tokensB])).size;
   return union > 0 ? intersection / union : 0;
 }
+
+// src/plugins/core-plugins/ai-search-plugin/services/synonym-import.service.ts
+var SynonymImportService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  async importCsv(content2, options) {
+    return this.processImport(content2, "csv", options);
+  }
+  async importSynonymsTxt(content2, options) {
+    return this.processImport(content2, "txt", options);
+  }
+  async processImport(content2, format, options) {
+    const lines = content2.split("\n");
+    const result = {
+      parsed: 0,
+      corpus_matched: 0,
+      queued: 0,
+      skipped_existing: 0,
+      skipped_threshold: 0,
+      skipped_format: 0,
+      errors: []
+    };
+    const recService = new RecommendationService(this.db);
+    const runId = await recService.createRun();
+    const startTime = Date.now();
+    try {
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i] ?? "";
+        const entry = format === "txt" ? this.parseSynonymsTxtLine(line) : this.parseCsvLine(line);
+        if (!entry) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith("#")) {
+            result.skipped_format++;
+            if (result.errors.length < 10) {
+              result.errors.push(`Line ${i + 1}: could not parse "${trimmed.slice(0, 60)}"`);
+            }
+          }
+          continue;
+        }
+        result.parsed++;
+        let maxOccurrences = 0;
+        for (const term of entry.terms) {
+          const count = await this.checkCorpusPresence(term);
+          maxOccurrences = Math.max(maxOccurrences, count);
+        }
+        if (maxOccurrences === 0) continue;
+        result.corpus_matched++;
+        if (maxOccurrences < options.min_occurrences) {
+          result.skipped_threshold++;
+          continue;
+        }
+        const sortedTerms = [...entry.terms].sort().join("|");
+        const fingerprint = fnv1aHash(`synonym:${sortedTerms}`);
+        const queued = await this.queueRecommendation(
+          recService,
+          entry,
+          fingerprint,
+          options.import_source || "uploaded-file",
+          runId
+        );
+        if (queued) result.queued++;
+        else result.skipped_existing++;
+      }
+      await recService.completeRun(runId, result.queued, Date.now() - startTime);
+    } catch (error) {
+      await recService.failRun(runId, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+    return result;
+  }
+  /**
+   * Parse a CSV line.
+   * One-way: "PS5 -> PlayStation 5" or "PS5 → PlayStation 5"
+   * Bidirectional: "couch, sofa, settee"
+   */
+  parseCsvLine(line) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return null;
+    if (trimmed.includes("\u2192") || trimmed.includes("->")) {
+      const [left, right] = trimmed.split(/\u2192|->/).map((s) => s.trim());
+      if (!left || !right) return null;
+      const targets = right.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+      if (targets.length === 0) return null;
+      return {
+        terms: [left.toLowerCase(), ...targets],
+        type: "one_way",
+        source_term: left.toLowerCase()
+      };
+    }
+    const terms = trimmed.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (terms.length < 2) return null;
+    return { terms: [...new Set(terms)], type: "bidirectional" };
+  }
+  /**
+   * Parse an Elasticsearch/Solr synonyms.txt line.
+   * One-way: "PS5 => PlayStation 5, PS 5"
+   * Bidirectional: "couch, sofa, settee"
+   */
+  parseSynonymsTxtLine(line) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return null;
+    if (trimmed.includes("=>")) {
+      const [left, right] = trimmed.split("=>").map((s) => s.trim());
+      if (!left || !right) return null;
+      const targets = right.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+      if (targets.length === 0) return null;
+      return {
+        terms: [left.toLowerCase(), ...targets],
+        type: "one_way",
+        source_term: left.toLowerCase()
+      };
+    }
+    const terms = trimmed.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (terms.length < 2) return null;
+    return { terms: [...new Set(terms)], type: "bidirectional" };
+  }
+  /**
+   * Check how many content items contain a term via FTS5.
+   */
+  async checkCorpusPresence(term) {
+    try {
+      const sanitized = term.replace(/['"(){}[\]*:^~!@#$%&]/g, "").trim();
+      if (!sanitized) return 0;
+      const row = await this.db.prepare("SELECT COUNT(*) as cnt FROM content_fts WHERE content_fts MATCH ?").bind('"' + sanitized + '"').first();
+      return row?.cnt ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+  /**
+   * Queue a parsed synonym entry as a recommendation for admin review.
+   * Returns true if queued, false if fingerprint already exists.
+   */
+  async queueRecommendation(recService, entry, fingerprint, importSource, runId) {
+    const existing = await this.db.prepare("SELECT id FROM ai_search_recommendations WHERE fingerprint = ? AND status IN ('pending', 'applied') LIMIT 1").bind(fingerprint).first();
+    if (existing) return false;
+    const direction = entry.type === "one_way" ? "\u2192" : "=";
+    const title = entry.type === "one_way" ? `Import: "${entry.source_term}" ${direction} "${entry.terms.filter((t) => t !== entry.source_term).join(", ")}"` : `Import: "${entry.terms.join('" = "')}"`;
+    const description = entry.type === "one_way" ? `Imported one-way synonym: searching "${entry.source_term}" will also match "${entry.terms.filter((t) => t !== entry.source_term).join('", "')}".` : `Imported synonym group: ${entry.terms.join(", ")} will be treated as equivalent.`;
+    await recService.insertRecommendation({
+      id: crypto.randomUUID().replace(/-/g, ""),
+      category: "synonym",
+      title,
+      description,
+      supporting_data: {
+        terms: entry.terms,
+        synonym_type: entry.type,
+        source_term: entry.source_term || null,
+        import_source: importSource
+      },
+      action_payload: {
+        terms: entry.terms,
+        synonym_type: entry.type,
+        source_term: entry.source_term || null
+      },
+      fingerprint,
+      run_id: runId,
+      import_source: importSource
+    });
+    return true;
+  }
+};
 
 // src/plugins/core-plugins/ai-search-plugin/services/experiment.service.ts
 function rowToExperiment(row) {
@@ -4299,6 +4467,35 @@ adminRoutes.delete("/api/relevance/synonyms/:id", async (c) => {
   } catch (error) {
     console.error("Error deleting synonym group:", error);
     return c.json({ error: "Failed to delete synonym group" }, 500);
+  }
+});
+adminRoutes.post("/api/relevance/synonyms/import", async (c) => {
+  try {
+    const body = await c.req.parseBody();
+    const file = body["file"];
+    if (!(file instanceof File)) {
+      return c.json({ error: "File upload required" }, 400);
+    }
+    const content2 = await file.text();
+    const nonEmptyLines = content2.split("\n").filter((l) => {
+      const t = l.trim();
+      return t && !t.startsWith("#");
+    }).length;
+    if (nonEmptyLines > 500) {
+      return c.json({ error: `File has ${nonEmptyLines} entries (max 500). Split into smaller files.` }, 400);
+    }
+    const minOccurrences = parseInt(String(body["min_occurrences"] || "3"), 10);
+    const options = {
+      min_occurrences: isNaN(minOccurrences) ? 3 : minOccurrences,
+      import_source: file.name || "uploaded-file.csv"
+    };
+    const importService = new SynonymImportService(c.env.DB);
+    const format = file.name?.endsWith(".txt") ? "txt" : "csv";
+    const result = format === "txt" ? await importService.importSynonymsTxt(content2, options) : await importService.importCsv(content2, options);
+    return c.json({ success: true, data: result });
+  } catch (error) {
+    console.error("Error importing synonyms:", error);
+    return c.json({ error: "Import failed: " + (error instanceof Error ? error.message : String(error)) }, 500);
   }
 });
 adminRoutes.get("/api/relevance/rules", async (c) => {

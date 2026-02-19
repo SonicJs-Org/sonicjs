@@ -4,6 +4,7 @@ import adminRoutes from './routes/admin'
 import apiRoutes from './routes/api'
 import instantSearchRoutes from './routes/instantsearch-api'
 import instantSearchTestRoutes from './routes/instantsearch-test-page'
+import documentationRoutes from './routes/documentation'
 import integrationGuideRoutes from './routes/integration-guide'
 import testPageRoutes from './routes/test-page'
 import { AISearchService } from './services/ai-search'
@@ -53,6 +54,7 @@ export const aiSearchPlugin = new PluginBuilder({
   .addRoute('/admin/plugins/ai-search', testPageRoutes as any)
   .addRoute('/admin/plugins/ai-search', instantSearchTestRoutes as any)
   .addRoute('/admin/plugins/ai-search', integrationGuideRoutes as any)
+  .addRoute('/admin/plugins/ai-search', documentationRoutes as any)
   .build()
 
 // Export services and types for easy import

@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity, VALID_SCOPES, hashApiKey } from './chunk-LWALC6OT.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity, VALID_SCOPES, hashApiKey } from './chunk-T4A25K6D.js';
 import { PluginService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-7PN2MQZV.js';
+import { MigrationService } from './chunk-D2IAQPZ7.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-AAU4BTDE.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-7DXWBEQP.js';
@@ -3454,7 +3454,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-FBEDHFUX.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-WVAMUIAO.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -3479,7 +3479,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-FBEDHFUX.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-WVAMUIAO.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -3498,7 +3498,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-FBEDHFUX.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-WVAMUIAO.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -38583,7 +38583,7 @@ function renderSearchDashboard(data) {
           <a
             href="/admin/plugins/ai-search/instantsearch"
             target="_blank"
-            class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
@@ -38593,12 +38593,22 @@ function renderSearchDashboard(data) {
           <a
             href="/admin/plugins/ai-search/integration"
             target="_blank"
-            class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
             </svg>
             Integration Guide
+          </a>
+          <a
+            href="/admin/plugins/ai-search/docs"
+            target="_blank"
+            class="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+            </svg>
+            Docs
           </a>
         </div>
       </div>
@@ -39009,5 +39019,5 @@ var ROUTES_INFO = {
 };
 
 export { AISearchService, BENCHMARK_DATASETS, BenchmarkService, ChunkingService, EmbeddingService, FTS5Service, FacetService, IndexManager, QueryRulesService, ROUTES_INFO, RankingPipelineService, RelatedSearchService, SynonymService, TrendingSearchService, adminApiKeyRoutes, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSearchRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, renderSearchDashboard, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-JFZG7XUR.js.map
-//# sourceMappingURL=chunk-JFZG7XUR.js.map
+//# sourceMappingURL=chunk-Q533TYKJ.js.map
+//# sourceMappingURL=chunk-Q533TYKJ.js.map

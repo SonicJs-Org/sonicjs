@@ -7,10 +7,70 @@ import type { SonicJSConfig } from "../app";
 type Bindings = {
   DB: D1Database;
   KV: KVNamespace;
+  JWT_SECRET?: string;
+  CORS_ORIGINS?: string;
+  ENVIRONMENT?: string;
 };
 
 // Track if bootstrap has been run in this worker instance
 let bootstrapComplete = false;
+
+/**
+ * Verify security-critical environment configuration at startup.
+ * Logs warnings in development, throws in production to prevent
+ * insecure deployments from silently running.
+ */
+export function verifySecurityConfig(env: Bindings): void {
+  const warnings: string[] = [];
+
+  // Check JWT secret
+  if (!env.JWT_SECRET) {
+    warnings.push(
+      "JWT_SECRET is not set — using hardcoded fallback. Set via `wrangler secret put JWT_SECRET`"
+    );
+  } else if (env.JWT_SECRET.includes("change-in-production")) {
+    warnings.push(
+      "JWT_SECRET contains the default value — tokens are forgeable. Generate a strong random secret"
+    );
+  }
+
+  // Check CORS origins
+  if (!env.CORS_ORIGINS) {
+    warnings.push(
+      "CORS_ORIGINS is not set — all cross-origin API requests will be rejected"
+    );
+  }
+
+  // Check environment designation
+  if (!env.ENVIRONMENT) {
+    warnings.push(
+      "ENVIRONMENT is not set — HSTS header will not be applied. Set to \"production\" or \"development\""
+    );
+  }
+
+  if (warnings.length === 0) {
+    return;
+  }
+
+  const isProduction = env.ENVIRONMENT === "production";
+
+  for (const warning of warnings) {
+    console.warn(`[SonicJS Security] ${warning}`);
+  }
+
+  if (isProduction) {
+    // In production, a missing or default JWT_SECRET is a hard failure —
+    // every token issued would be forgeable by anyone reading the source code.
+    const hasCritical =
+      !env.JWT_SECRET || env.JWT_SECRET.includes("change-in-production");
+    if (hasCritical) {
+      throw new Error(
+        "[SonicJS Security] CRITICAL: Production deployment is missing a secure JWT_SECRET. " +
+          "Set it via `wrangler secret put JWT_SECRET` before deploying."
+      );
+    }
+  }
+}
 
 /**
  * Bootstrap middleware that ensures system initialization
@@ -76,6 +136,10 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
       console.error("[Bootstrap] Error during system initialization:", error);
       // Don't prevent the app from starting, but log the error
     }
+
+    // 4. Verify security configuration (outside try/catch so critical
+    // errors in production propagate and prevent insecure deployments)
+    verifySecurityConfig(c.env as Bindings);
 
     return next();
   };

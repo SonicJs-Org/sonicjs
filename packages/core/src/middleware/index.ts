@@ -8,7 +8,7 @@
  */
 
 // Bootstrap middleware
-export { bootstrapMiddleware } from './bootstrap'
+export { bootstrapMiddleware, verifySecurityConfig } from './bootstrap'
 
 // Auth middleware
 export { AuthManager, requireAuth, requireRole, optionalAuth } from './auth'

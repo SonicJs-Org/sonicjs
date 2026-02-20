@@ -37,6 +37,7 @@ import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
 import { faviconSvg } from './assets/favicon'
+import { setAppInstance } from './services/route-metadata'
 
 // ============================================================================
 // Type Definitions
@@ -307,6 +308,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       timestamp: new Date().toISOString()
     })
   })
+
+  // Store app instance for route introspection (API reference auto-discovery)
+  setAppInstance(app)
 
   // 404 handler
   app.notFound((c) => {

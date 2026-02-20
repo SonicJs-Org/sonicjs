@@ -1,4 +1,4 @@
-export { C as CorePlugin, n as LogCategory, o as LogEntry, p as LogFilter, m as LogLevel, L as Logger, e as Migration, M as MigrationService, h as MigrationStatus, q as PluginBootstrapService, P as PluginService, d as cleanupRemovedCollections, f as fullCollectionSync, g as getAvailableCollectionNames, j as getLogger, c as getManagedCollections, k as initLogger, i as isCollectionManaged, a as loadCollectionConfig, l as loadCollectionConfigs, r as registerCollections, b as syncCollection, s as syncCollections, v as validateCollectionConfig } from './plugin-bootstrap-C7Mj00Ud.js';
+export { C as CorePlugin, p as LogCategory, q as LogEntry, t as LogFilter, o as LogLevel, L as Logger, m as Migration, M as MigrationService, n as MigrationStatus, k as PluginBootstrapService, P as PluginService, e as cleanupRemovedCollections, f as fullCollectionSync, g as getAvailableCollectionNames, h as getLogger, d as getManagedCollections, j as initLogger, i as isCollectionManaged, a as loadCollectionConfig, l as loadCollectionConfigs, r as registerCollections, c as syncCollection, b as syncCollections, v as validateCollectionConfig } from './plugin-bootstrap-D38GiSQ_.js';
 import { b as TelemetryConfig, c as TelemetryIdentity, T as TelemetryEvent, a as TelemetryProperties } from './telemetry-UiD1i9GS.js';
 import './collection-config-BF95LgQb.js';
 import '@cloudflare/workers-types';
@@ -232,4 +232,29 @@ declare function initTelemetry(identity: TelemetryIdentity, config?: Partial<Tel
  */
 declare function createInstallationIdentity(projectName?: string): TelemetryIdentity;
 
-export { CACHE_CONFIGS, type CacheConfig, CacheService, type GeneralSettings, type Setting, SettingsService, TelemetryService, createInstallationIdentity, getCacheService, getTelemetryService, initTelemetry };
+/**
+ * Route Metadata Service
+ *
+ * Auto-discovers API routes using Hono's inspectRoutes() and enriches them
+ * with metadata from a static registry. Routes without metadata still appear
+ * as "auto-discovered" — nothing is ever invisible.
+ */
+interface RouteMetadata {
+    method: string;
+    path: string;
+    description: string;
+    authentication: boolean | 'unknown';
+    category: string;
+    documented: boolean;
+}
+interface CategoryInfo {
+    title: string;
+    description: string;
+    icon: string;
+}
+declare function setAppInstance(app: any): void;
+declare function getAppInstance(): any;
+declare const CATEGORY_INFO: Record<string, CategoryInfo>;
+declare function buildRouteList(app: any): RouteMetadata[];
+
+export { CACHE_CONFIGS, CATEGORY_INFO, type CacheConfig, CacheService, type GeneralSettings, type RouteMetadata, type Setting, SettingsService, TelemetryService, buildRouteList, createInstallationIdentity, getAppInstance, getCacheService, getTelemetryService, initTelemetry, setAppInstance };

@@ -43,7 +43,37 @@ export class AuthManager {
   }
 
   static async hashPassword(password: string): Promise<string> {
-    // In Cloudflare Workers, we'll use Web Crypto API
+    const iterations = 600000
+    const salt = new Uint8Array(16)
+    crypto.getRandomValues(salt)
+
+    const encoder = new TextEncoder()
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(password),
+      'PBKDF2',
+      false,
+      ['deriveBits']
+    )
+
+    const hashBuffer = await crypto.subtle.deriveBits(
+      {
+        name: 'PBKDF2',
+        salt,
+        iterations,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      256
+    )
+
+    const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
+    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+    return `pbkdf2:${iterations}:${saltHex}:${hashHex}`
+  }
+
+  static async hashPasswordLegacy(password: string): Promise<string> {
     const encoder = new TextEncoder()
     const data = encoder.encode(password + 'salt-change-in-production')
     const hashBuffer = await crypto.subtle.digest('SHA-256', data)
@@ -51,9 +81,65 @@ export class AuthManager {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
   }
 
-  static async verifyPassword(password: string, hash: string): Promise<boolean> {
-    const passwordHash = await this.hashPassword(password)
-    return passwordHash === hash
+  static async verifyPassword(password: string, storedHash: string): Promise<boolean> {
+    if (storedHash.startsWith('pbkdf2:')) {
+      // PBKDF2 format: pbkdf2:<iterations>:<salt_hex>:<hash_hex>
+      const parts = storedHash.split(':')
+      if (parts.length !== 4) return false
+
+      const iterationsStr = parts[1]!
+      const saltHex = parts[2]!
+      const expectedHashHex = parts[3]!
+      const iterations = parseInt(iterationsStr, 10)
+
+      const saltBytes = saltHex.match(/.{2}/g)
+      if (!saltBytes) return false
+      const salt = new Uint8Array(saltBytes.map(byte => parseInt(byte, 16)))
+
+      const encoder = new TextEncoder()
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(password),
+        'PBKDF2',
+        false,
+        ['deriveBits']
+      )
+
+      const hashBuffer = await crypto.subtle.deriveBits(
+        {
+          name: 'PBKDF2',
+          salt,
+          iterations,
+          hash: 'SHA-256'
+        },
+        keyMaterial,
+        256
+      )
+
+      const actualHashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+      // Constant-time comparison
+      if (actualHashHex.length !== expectedHashHex.length) return false
+      let result = 0
+      for (let i = 0; i < actualHashHex.length; i++) {
+        result |= actualHashHex.charCodeAt(i) ^ expectedHashHex.charCodeAt(i)
+      }
+      return result === 0
+    }
+
+    // Legacy SHA-256 format (no colons in hash)
+    const legacyHash = await this.hashPasswordLegacy(password)
+    // Constant-time comparison for legacy too
+    if (legacyHash.length !== storedHash.length) return false
+    let result = 0
+    for (let i = 0; i < legacyHash.length; i++) {
+      result |= legacyHash.charCodeAt(i) ^ storedHash.charCodeAt(i)
+    }
+    return result === 0
+  }
+
+  static isLegacyHash(storedHash: string): boolean {
+    return !storedHash.startsWith('pbkdf2:')
   }
 
   /**

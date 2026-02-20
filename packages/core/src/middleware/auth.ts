@@ -10,11 +10,11 @@ type JWTPayload = {
   iat: number
 }
 
-// JWT secret - in production this should come from environment variables
-const JWT_SECRET = 'your-super-secret-jwt-key-change-in-production'
+// Fallback JWT secret for local development only (no wrangler secret set)
+const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
 
 export class AuthManager {
-  static async generateToken(userId: string, email: string, role: string): Promise<string> {
+  static async generateToken(userId: string, email: string, role: string, secret?: string): Promise<string> {
     const payload: JWTPayload = {
       userId,
       email,
@@ -22,13 +22,13 @@ export class AuthManager {
       exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 24 hours
       iat: Math.floor(Date.now() / 1000)
     }
-    
-    return await sign(payload, JWT_SECRET, 'HS256')
+
+    return await sign(payload, secret || JWT_SECRET_FALLBACK, 'HS256')
   }
 
-  static async verifyToken(token: string): Promise<JWTPayload | null> {
+  static async verifyToken(token: string, secret?: string): Promise<JWTPayload | null> {
     try {
-      const payload = await verify(token, JWT_SECRET, 'HS256') as JWTPayload
+      const payload = await verify(token, secret || JWT_SECRET_FALLBACK, 'HS256') as JWTPayload
       
       // Check if token is expired
       if (payload.exp < Math.floor(Date.now() / 1000)) {
@@ -112,7 +112,8 @@ export const requireAuth = () => {
 
       // If not cached, verify token
       if (!payload) {
-        payload = await AuthManager.verifyToken(token)
+        const jwtSecret = (c.env as any)?.JWT_SECRET
+        payload = await AuthManager.verifyToken(token, jwtSecret)
 
         // Cache the verified payload for 5 minutes
         if (payload && kv) {
@@ -186,7 +187,8 @@ export const optionalAuth = () => {
       }
       
       if (token) {
-        const payload = await AuthManager.verifyToken(token)
+        const jwtSecret = (c.env as any)?.JWT_SECRET
+        const payload = await AuthManager.verifyToken(token, jwtSecret)
         if (payload) {
           c.set('user', payload)
         }

@@ -204,7 +204,8 @@ export function createMagicLinkAuthPlugin(): Plugin {
       const jwtToken = await AuthManager.generateToken(
         user.id,
         user.email,
-        user.role
+        user.role,
+        (c.env as any).JWT_SECRET
       )
 
       // Set auth cookie

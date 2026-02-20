@@ -21,6 +21,7 @@ bucket_name = "my-sonicjs-media"
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
+CORS_ORIGINS = "http://localhost:8787"
 
 # Production environment
 [env.production]

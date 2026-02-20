@@ -33,9 +33,14 @@ apiRoutes.use('*', async (c, next) => {
 
 // Add CORS middleware
 apiRoutes.use('*', cors({
-  origin: '*',
+  origin: (origin, c) => {
+    const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
+    if (!allowed) return null // No env var = reject cross-origin (secure default)
+    const list = allowed.split(',').map((s: string) => s.trim())
+    return list.includes(origin) ? origin : null
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization']
+  allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
 }))
 
 // Helper function to add timing metadata

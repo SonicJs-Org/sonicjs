@@ -30,6 +30,7 @@ id = "a16f8246fc294d809c90b0fb2df6d363"
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
+CORS_ORIGINS = "http://localhost:8787"
 
 # Observability
 [observability]

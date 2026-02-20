@@ -6,7 +6,7 @@ import { getPlatformProxy } from 'wrangler'
  * Hash password using PBKDF2 via Web Crypto API (same as SonicJS AuthManager)
  */
 async function hashPassword(password: string): Promise<string> {
-  const iterations = 600000
+  const iterations = 100000
   const salt = new Uint8Array(16)
   crypto.getRandomValues(salt)
 

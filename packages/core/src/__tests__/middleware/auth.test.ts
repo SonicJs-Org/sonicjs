@@ -70,7 +70,7 @@ describe('AuthManager', () => {
       expect(hash).toBeTruthy()
       expect(typeof hash).toBe('string')
       expect(hash).not.toBe(password)
-      expect(hash.startsWith('pbkdf2:600000:')).toBe(true)
+      expect(hash.startsWith('pbkdf2:100000:')).toBe(true)
       const parts = hash.split(':')
       expect(parts).toHaveLength(4)
     })

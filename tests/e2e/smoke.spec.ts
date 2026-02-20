@@ -248,18 +248,18 @@ test.describe('Smoke Tests - Critical Path', () => {
   });
 
   test('CORS headers are present on API endpoints', async ({ request }) => {
+    // Use the origin configured in CORS_ORIGINS (wrangler.toml)
     const response = await request.get('/api', {
       headers: {
-        'Origin': 'http://localhost:3000'
+        'Origin': 'http://localhost:8787'
       }
     });
 
     expect(response.ok()).toBeTruthy();
 
-    // Verify CORS header is present
+    // Verify CORS header echoes back the allowed origin
     const corsHeader = response.headers()['access-control-allow-origin'];
-    expect(corsHeader).toBeDefined();
-    expect(corsHeader).toBeTruthy();
+    expect(corsHeader).toBe('http://localhost:8787');
   });
 
   test('API returns correct content-type headers', async ({ request }) => {

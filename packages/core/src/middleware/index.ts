@@ -16,6 +16,9 @@ export { AuthManager, requireAuth, requireRole, optionalAuth } from './auth'
 // Metrics middleware
 export { metricsMiddleware } from './metrics'
 
+// Rate limiting middleware
+export { rateLimit } from './rate-limit'
+
 // Re-export types and functions that are referenced but implemented in monolith
 // These are placeholder exports to maintain API compatibility
 export type Permission = string

@@ -43,7 +43,7 @@ export class AuthManager {
   }
 
   static async hashPassword(password: string): Promise<string> {
-    const iterations = 600000
+    const iterations = 100000
     const salt = new Uint8Array(16)
     crypto.getRandomValues(salt)
 

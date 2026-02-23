@@ -11,101 +11,121 @@ export interface FormsExamplesPageData {
 
 export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
   const pageContent = `
+    <link rel="stylesheet" href="https://cdn.form.io/formiojs/formio.full.min.css">
     <style>
-      /* Light theme for examples page */
-      .examples-container {
-        display: flex;
-        gap: 0;
-        min-height: calc(100vh - 200px);
+      /* ── Bento Grid ── */
+      .bento-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.25rem;
+        padding: 0.5rem 0;
+      }
+      @media (max-width: 1024px) {
+        .bento-grid { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 640px) {
+        .bento-grid { grid-template-columns: 1fr; }
+        .bento-card.featured { grid-column: span 1; }
+      }
+      .bento-card {
+        position: relative;
         background: #ffffff;
+        border: 1px solid #e5e7eb;
         border-radius: 12px;
+        padding: 1.5rem 1.5rem 1.25rem;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
         overflow: hidden;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       }
-      
-      .examples-sidebar {
-        width: 280px;
-        background: #f8f9fa;
-        border-right: 1px solid #e0e0e0;
-        padding: 1.5rem 0;
-        overflow-y: auto;
+      .bento-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 4px;
+        background: var(--accent);
+        transition: height 0.2s;
       }
-      
-      .examples-sidebar h3 {
-        font-size: 0.75rem;
+      .bento-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+      }
+      .bento-card:hover::before { height: 6px; }
+      .bento-card.featured {
+        grid-column: span 2;
+      }
+      .bento-card .card-badge {
+        display: inline-block;
+        font-size: 0.6875rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #6b7280;
-        padding: 0 1.5rem;
+        letter-spacing: 0.04em;
+        padding: 0.2rem 0.55rem;
+        border-radius: 4px;
         margin-bottom: 0.75rem;
+        background: var(--badge-bg);
+        color: var(--badge-text);
       }
-      
-      .examples-nav {
-        list-style: none;
-        padding: 0;
-        margin: 0 0 2rem 0;
+      .bento-card .card-icon {
+        font-size: 1.75rem;
+        margin-bottom: 0.5rem;
       }
-      
-      .examples-nav li {
-        margin: 0;
-      }
-      
-      .examples-nav a {
-        display: block;
-        padding: 0.75rem 1.5rem;
-        color: #374151;
-        text-decoration: none;
-        font-size: 0.875rem;
-        transition: all 0.2s;
-        border-left: 3px solid transparent;
-      }
-      
-      .examples-nav a:hover {
-        background: #e9ecef;
+      .bento-card .card-title {
+        font-size: 1.125rem;
+        font-weight: 700;
         color: #1f2937;
+        margin-bottom: 0.35rem;
       }
-      
-      .examples-nav a.active {
-        background: #e3f2fd;
-        color: #1976d2;
-        border-left-color: #1976d2;
-        font-weight: 500;
+      .bento-card .card-desc {
+        font-size: 0.8125rem;
+        color: #6b7280;
+        line-height: 1.45;
       }
-      
-      .examples-content {
-        flex: 1;
-        padding: 2rem;
+
+      /* ── Detail View ── */
+      .examples-detail {
         background: #ffffff;
-        overflow-y: auto;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        overflow: hidden;
       }
-      
+      .detail-inner {
+        padding: 2rem;
+      }
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #3b82f6;
+        text-decoration: none;
+        margin-bottom: 1.5rem;
+        cursor: pointer;
+        transition: color 0.15s;
+      }
+      .back-link:hover { color: #2563eb; }
+
       .example-section {
         display: none;
       }
-      
       .example-section.active {
         display: block;
       }
-      
       .example-header {
         margin-bottom: 2rem;
         padding-bottom: 1rem;
         border-bottom: 2px solid #e0e0e0;
       }
-      
       .example-header h2 {
         font-size: 1.875rem;
         font-weight: 700;
         color: #1f2937;
         margin-bottom: 0.5rem;
       }
-      
       .example-header p {
         color: #6b7280;
         font-size: 1rem;
       }
-      
       .example-demo {
         background: #f8f9fa;
         border: 1px solid #e0e0e0;
@@ -113,7 +133,44 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         padding: 2rem;
         margin-bottom: 2rem;
       }
-      
+
+      /* ── Code Accordion ── */
+      .code-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: #374151;
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .code-toggle-btn:hover { background: #e5e7eb; }
+      .code-toggle-btn .chevron {
+        display: inline-block;
+        transition: transform 0.2s;
+        font-size: 0.75rem;
+      }
+      .code-toggle-btn.open .chevron { transform: rotate(90deg); }
+      .code-accordion {
+        margin-bottom: 2rem;
+      }
+      .code-accordion-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+      }
+      .code-accordion-body {
+        display: none;
+        margin-top: 0.75rem;
+      }
+      .code-accordion-body.open { display: block; }
+
       .example-code {
         background: #1e1e1e;
         color: #d4d4d4;
@@ -124,20 +181,6 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         font-size: 0.875rem;
         line-height: 1.6;
       }
-      
-      .code-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-      }
-      
-      .code-header h3 {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #374151;
-      }
-      
       .copy-btn {
         padding: 0.375rem 0.75rem;
         font-size: 0.75rem;
@@ -147,50 +190,203 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         cursor: pointer;
         transition: all 0.2s;
       }
-      
-      .copy-btn:hover {
-        background: #e5e7eb;
+      .copy-btn:hover { background: #e5e7eb; }
+
+      /* ── Wizard Step Navigation (Bootstrap pagination restored) ── */
+      .example-demo .pagination {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        padding-left: 0 !important;
+        list-style: none !important;
+        border-radius: 0.375rem !important;
+        margin-bottom: 1.5rem !important;
+        gap: 0 !important;
       }
-      
-      /* Form.io overrides for lighter theme */
-      .formio-component {
+      .example-demo .page-item {
+        margin: 0 !important;
+      }
+      .example-demo .page-link {
+        position: relative !important;
+        display: block !important;
+        padding: 0.5rem 1rem !important;
+        margin-left: -1px !important;
+        line-height: 1.25 !important;
+        color: #3b82f6 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #d1d5db !important;
+        cursor: pointer !important;
+        font-size: 0.875rem !important;
+        font-weight: 500 !important;
+        text-decoration: none !important;
+        transition: all 0.15s ease-in-out !important;
+      }
+      .example-demo .page-link:hover {
+        color: #2563eb !important;
+        background-color: #eff6ff !important;
+        border-color: #93c5fd !important;
+      }
+      .example-demo .page-item.active .page-link {
+        color: #ffffff !important;
+        background-color: #3b82f6 !important;
+        border-color: #3b82f6 !important;
+      }
+      .example-demo .page-item:first-child .page-link {
+        border-top-left-radius: 0.375rem !important;
+        border-bottom-left-radius: 0.375rem !important;
+      }
+      .example-demo .page-item:last-child .page-link {
+        border-top-right-radius: 0.375rem !important;
+        border-bottom-right-radius: 0.375rem !important;
+      }
+      /* Wizard bottom nav buttons container */
+      .example-demo .formio-wizard-nav-container {
+        display: flex !important;
+        gap: 0.5rem !important;
+        margin-top: 1.5rem !important;
+        padding-top: 1rem !important;
+        border-top: 1px solid #e5e7eb !important;
+      }
+
+      /* ── Bootstrap Grid Restoration (for Form.io columns) ── */
+      .example-demo .row {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        margin-right: -0.75rem !important;
+        margin-left: -0.75rem !important;
+      }
+      .example-demo .col,
+      .example-demo [class*="col-"] {
+        position: relative !important;
+        width: 100% !important;
+        padding-right: 0.75rem !important;
+        padding-left: 0.75rem !important;
+      }
+      .example-demo .col-xs-6, .example-demo .col-sm-6, .example-demo .col-md-6 {
+        flex: 0 0 50% !important;
+        max-width: 50% !important;
+      }
+      .example-demo .col-xs-3, .example-demo .col-sm-3, .example-demo .col-md-3 {
+        flex: 0 0 25% !important;
+        max-width: 25% !important;
+      }
+      .example-demo .col-xs-4, .example-demo .col-sm-4, .example-demo .col-md-4 {
+        flex: 0 0 33.333333% !important;
+        max-width: 33.333333% !important;
+      }
+      .example-demo .col-xs-8, .example-demo .col-sm-8, .example-demo .col-md-8 {
+        flex: 0 0 66.666667% !important;
+        max-width: 66.666667% !important;
+      }
+      .example-demo .col-xs-9, .example-demo .col-sm-9, .example-demo .col-md-9 {
+        flex: 0 0 75% !important;
+        max-width: 75% !important;
+      }
+      .example-demo .col-xs-12, .example-demo .col-sm-12, .example-demo .col-md-12 {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+      }
+      @media (max-width: 640px) {
+        .example-demo [class*="col-"] {
+          flex: 0 0 100% !important;
+          max-width: 100% !important;
+        }
+      }
+
+      /* ── Form.io overrides (matching builder page patterns) ── */
+      .example-demo .formio-form {
+        background: #ffffff !important;
+      }
+      .example-demo .form-group {
+        margin-bottom: 1.5rem;
+      }
+      .example-demo .formio-component {
         margin-bottom: 1.25rem;
       }
-      
-      .formio-component label {
-        color: #374151;
-        font-weight: 500;
-        margin-bottom: 0.5rem;
+      .example-demo label {
+        display: block !important;
+        margin-bottom: 0.5rem !important;
+        font-weight: 500 !important;
+        color: #374151 !important;
+        font-size: 0.875rem !important;
       }
-      
-      .formio-component input,
-      .formio-component textarea,
-      .formio-component select {
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        padding: 0.625rem 0.875rem;
+      .example-demo input[type="text"],
+      .example-demo input[type="number"],
+      .example-demo input[type="email"],
+      .example-demo input[type="tel"],
+      .example-demo input[type="password"],
+      .example-demo input[type="url"],
+      .example-demo select,
+      .example-demo textarea {
+        display: block !important;
+        width: 100% !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 1rem !important;
+        line-height: 1.5 !important;
+        color: #1f2937 !important;
+        background-color: #ffffff !important;
+        background-clip: padding-box !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 0.375rem !important;
+        transition: border-color 0.15s ease-in-out !important;
       }
-      
-      .formio-component input:focus,
-      .formio-component textarea:focus,
-      .formio-component select:focus {
-        outline: none;
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      .example-demo input:focus,
+      .example-demo select:focus,
+      .example-demo textarea:focus {
+        outline: none !important;
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
       }
-      
-      .btn-primary {
-        background: #3b82f6 !important;
+      .example-demo .form-control {
+        display: block !important;
+        width: 100% !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 1rem !important;
+        line-height: 1.5 !important;
+        color: #1f2937 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 0.375rem !important;
+      }
+      .example-demo .btn {
+        display: inline-block !important;
+        padding: 0.5rem 1rem !important;
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
+        text-align: center !important;
+        border-radius: 0.375rem !important;
+        border: 1px solid transparent !important;
+        cursor: pointer !important;
+      }
+      .example-demo .btn-primary {
+        color: #ffffff !important;
+        background-color: #3b82f6 !important;
         border-color: #3b82f6 !important;
         padding: 0.625rem 1.25rem !important;
         border-radius: 6px !important;
       }
-      
-      .btn-primary:hover {
-        background: #2563eb !important;
+      .example-demo .btn-primary:hover {
+        background-color: #2563eb !important;
         border-color: #2563eb !important;
       }
-      
+      /* Wizard-specific: step navigation buttons */
+      .example-demo .btn-wizard-nav-previous,
+      .example-demo .btn-wizard-nav-next,
+      .example-demo .btn-wizard-nav-submit {
+        padding: 0.5rem 1.5rem !important;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+      }
+      .example-demo .btn-wizard-nav-next {
+        background-color: #3b82f6 !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+      }
+      .example-demo .btn-wizard-nav-submit {
+        background-color: #10b981 !important;
+        border-color: #10b981 !important;
+        color: #ffffff !important;
+      }
       .alert-success {
         background: #10b981 !important;
         color: white !important;
@@ -212,240 +408,534 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
       <p class="mt-2 text-zinc-600 dark:text-zinc-400">Interactive examples showcasing Form.io capabilities</p>
     </div>
 
-    <div class="examples-container">
-      <!-- Sidebar Navigation -->
-      <aside class="examples-sidebar">
-        <h3>Getting Started</h3>
-        <ul class="examples-nav">
-          <li><a href="#kitchen-sink" class="example-link active">Kitchen Sink</a></li>
-          <li><a href="#simple-contact" class="example-link">Simple Contact Form</a></li>
-          <li><a href="#thank-you" class="example-link">Thank You Page</a></li>
-        </ul>
-        
-        <h3>Advanced Forms</h3>
-        <ul class="examples-nav">
-          <li><a href="#wizard-form" class="example-link">Multi-Page Wizard</a></li>
-          <li><a href="#conditional-logic" class="example-link">Conditional Logic</a></li>
-          <li><a href="#file-upload" class="example-link">File Upload</a></li>
-        </ul>
-        
-        <h3>Components</h3>
-        <ul class="examples-nav">
-          <li><a href="#address-maps" class="example-link">Address with Maps</a></li>
-          <li><a href="#signature" class="example-link">Signature Pad</a></li>
-          <li><a href="#data-grid" class="example-link">Data Grid</a></li>
-          <li><a href="#turnstile-protection" class="example-link">🛡️ Turnstile Protection</a></li>
-        </ul>
-      </aside>
+    <!-- ── Bento Card Grid ── -->
+    <div id="bento-grid" class="bento-grid">
+      <!-- Getting Started -->
+      <div class="bento-card featured" style="--accent:#3b82f6;--badge-bg:#eff6ff;--badge-text:#1d4ed8" data-target="kitchen-sink">
+        <span class="card-badge">Getting Started</span>
+        <div class="card-icon">&#x1F373;</div>
+        <div class="card-title">Kitchen Sink</div>
+        <div class="card-desc">Every major field type in one comprehensive form — text, date, select, survey, signature, file upload, and more.</div>
+      </div>
 
-      <!-- Main Content Area -->
-      <main class="examples-content">
-        
-        <!-- Kitchen Sink Example -->
-        <section id="kitchen-sink" class="example-section active">
+      <div class="bento-card" style="--accent:#06b6d4;--badge-bg:#ecfeff;--badge-text:#0e7490" data-target="simple-contact">
+        <span class="card-badge">Getting Started</span>
+        <div class="card-icon">&#x1F4E7;</div>
+        <div class="card-title">Simple Contact</div>
+        <div class="card-desc">Minimal contact form with validation.</div>
+      </div>
+
+      <div class="bento-card" style="--accent:#14b8a6;--badge-bg:#f0fdfa;--badge-text:#0f766e" data-target="thank-you">
+        <span class="card-badge">Getting Started</span>
+        <div class="card-icon">&#x1F389;</div>
+        <div class="card-title">Thank You Page</div>
+        <div class="card-desc">Submit handler that shows a thank-you message.</div>
+      </div>
+
+      <!-- Advanced Forms -->
+      <div class="bento-card featured" style="--accent:#8b5cf6;--badge-bg:#f5f3ff;--badge-text:#6d28d9" data-target="wizard-form">
+        <span class="card-badge">Advanced</span>
+        <div class="card-icon">&#x1F3DB;&#xFE0F;</div>
+        <div class="card-title">Venue Booking Wizard</div>
+        <div class="card-desc">Six-step wizard with side-by-side column layouts, radio groups, and conditional fields for event venue booking.</div>
+      </div>
+
+      <div class="bento-card" style="--accent:#7c3aed;--badge-bg:#ede9fe;--badge-text:#5b21b6" data-target="multi-page-wizard">
+        <span class="card-badge">Advanced</span>
+        <div class="card-icon">&#x1F9D9;</div>
+        <div class="card-title">Multi-Page Wizard</div>
+        <div class="card-desc">Classic three-step registration wizard with progress indicator and column layouts.</div>
+      </div>
+
+      <div class="bento-card" style="--accent:#a855f7;--badge-bg:#faf5ff;--badge-text:#7e22ce" data-target="conditional-logic">
+        <span class="card-badge">Advanced</span>
+        <div class="card-icon">&#x1F500;</div>
+        <div class="card-title">Conditional Logic</div>
+        <div class="card-desc">Show/hide fields based on user input.</div>
+      </div>
+
+      <div class="bento-card" style="--accent:#6366f1;--badge-bg:#eef2ff;--badge-text:#4338ca" data-target="file-upload">
+        <span class="card-badge">Advanced</span>
+        <div class="card-icon">&#x1F4C1;</div>
+        <div class="card-title">File Upload</div>
+        <div class="card-desc">Upload files with type and size validation.</div>
+      </div>
+
+      <!-- Components -->
+      <div class="bento-card" style="--accent:#22c55e;--badge-bg:#f0fdf4;--badge-text:#15803d" data-target="address-maps">
+        <span class="card-badge">Components</span>
+        <div class="card-icon">&#x1F4CD;</div>
+        <div class="card-title">Address</div>
+        <div class="card-desc">Street, city, state, and ZIP fields.</div>
+      </div>
+
+      <div class="bento-card" style="--accent:#f59e0b;--badge-bg:#fffbeb;--badge-text:#b45309" data-target="signature">
+        <span class="card-badge">Components</span>
+        <div class="card-icon">&#x270D;&#xFE0F;</div>
+        <div class="card-title">Signature Pad</div>
+        <div class="card-desc">Capture digital signatures on a canvas.</div>
+      </div>
+
+      <div class="bento-card" style="--accent:#10b981;--badge-bg:#ecfdf5;--badge-text:#047857" data-target="data-grid">
+        <span class="card-badge">Components</span>
+        <div class="card-icon">&#x1F4CA;</div>
+        <div class="card-title">Data Grid</div>
+        <div class="card-desc">Repeatable rows with add/remove.</div>
+      </div>
+
+      <div class="bento-card" style="--accent:#ef4444;--badge-bg:#fef2f2;--badge-text:#b91c1c" data-target="turnstile-protection">
+        <span class="card-badge">Components</span>
+        <div class="card-icon">&#x1F6E1;&#xFE0F;</div>
+        <div class="card-title">Turnstile Protection</div>
+        <div class="card-desc">CAPTCHA-free bot protection by Cloudflare.</div>
+      </div>
+    </div>
+
+    <!-- ── Detail View ── -->
+    <div id="examples-detail" class="examples-detail" style="display:none">
+      <div class="detail-inner">
+        <a class="back-link" id="back-to-grid">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          Back to Examples
+        </a>
+
+        <!-- Kitchen Sink -->
+        <section id="kitchen-sink" class="example-section">
           <div class="example-header">
-            <h2>🍳 Kitchen Sink</h2>
+            <h2>Kitchen Sink</h2>
             <p>A comprehensive form showcasing all major field types and configurations.</p>
           </div>
-          
           <div class="example-demo">
             <div id="form-kitchen-sink"></div>
           </div>
-          
-          <div class="code-header">
-            <h3>Form Schema (JSON)</h3>
-            <button class="copy-btn" onclick="copyCode('kitchen-sink-code')">Copy Code</button>
-          </div>
-          <pre class="example-code" id="kitchen-sink-code">{
+          <div class="code-accordion">
+            <div class="code-accordion-header">
+              <button class="code-toggle-btn" onclick="toggleCode(this)"><span class="chevron">&#x25B6;</span> View Schema (JSON)</button>
+              <button class="copy-btn" onclick="copyCode('kitchen-sink-code')">Copy</button>
+            </div>
+            <div class="code-accordion-body">
+              <pre class="example-code" id="kitchen-sink-code">{
   "display": "form",
   "components": [
-    // Basic Text Fields
-    { "type": "textfield", "key": "firstName", "label": "First Name" },
-    { "type": "email", "key": "email", "label": "Email" },
-    { "type": "phoneNumber", "key": "phone", "label": "Phone" },
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "textfield", "key": "firstName", "label": "First Name" }
+      ]},
+      { "width": 6, "components": [
+        { "type": "textfield", "key": "lastName", "label": "Last Name" }
+      ]}
+    ]},
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "email", "key": "email", "label": "Email" }
+      ]},
+      { "width": 6, "components": [
+        { "type": "phoneNumber", "key": "phone", "label": "Phone" }
+      ]}
+    ]},
     { "type": "password", "key": "password", "label": "Password" },
-    { "type": "url", "key": "website", "label": "Website" },
     { "type": "textarea", "key": "bio", "label": "Biography" },
-    
-    // Date & Time
-    { "type": "datetime", "key": "appointmentDateTime", "label": "Appointment" },
-    { "type": "day", "key": "birthDate", "label": "Birth Date" },
-    { "type": "time", "key": "preferredTime", "label": "Time" },
-    
-    // Selections
-    { "type": "select", "key": "country", "label": "Country", 
-      "data": { "values": [{ "label": "USA", "value": "us" }] }},
-    { "type": "selectboxes", "key": "interests", "label": "Interests",
-      "values": [{ "label": "Sports", "value": "sports" }] },
-    { "type": "radio", "key": "gender", "label": "Gender",
-      "values": [{ "label": "Male", "value": "male" }] },
-    { "type": "checkbox", "key": "newsletter", "label": "Newsletter" },
-    
-    // Advanced
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "datetime", "key": "appointmentDateTime", "label": "Appointment" }
+      ]},
+      { "width": 6, "components": [
+        { "type": "day", "key": "birthDate", "label": "Birth Date" }
+      ]}
+    ]},
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "select", "key": "country", "label": "Country",
+          "data": { "values": [{ "label": "USA", "value": "us" }] }}
+      ]},
+      { "width": 6, "components": [
+        { "type": "selectboxes", "key": "interests", "label": "Interests",
+          "values": [{ "label": "Sports", "value": "sports" }] }
+      ]}
+    ]},
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "checkbox", "key": "newsletter", "label": "Newsletter" }
+      ]},
+      { "width": 6, "components": [
+        { "type": "checkbox", "key": "terms", "label": "Terms" }
+      ]}
+    ]},
     { "type": "currency", "key": "salary", "label": "Salary" },
-    { "type": "tags", "key": "skills", "label": "Skills" },
-    { "type": "survey", "key": "satisfaction", "label": "Satisfaction" },
     { "type": "signature", "key": "signature", "label": "Signature" },
     { "type": "file", "key": "resume", "label": "Resume", "storage": "base64" }
   ]
 }</pre>
+            </div>
+          </div>
         </section>
 
-        <!-- Simple Contact Form Example -->
+        <!-- Simple Contact -->
         <section id="simple-contact" class="example-section">
           <div class="example-header">
-            <h2>📧 Simple Contact Form</h2>
+            <h2>Simple Contact Form</h2>
             <p>A minimal contact form with validation.</p>
           </div>
-          
           <div class="example-demo">
             <div id="form-simple-contact"></div>
           </div>
-          
-          <div class="code-header">
-            <h3>Form Schema (JSON)</h3>
-            <button class="copy-btn" onclick="copyCode('contact-code')">Copy Code</button>
-          </div>
-          <pre class="example-code" id="contact-code">{
+          <div class="code-accordion">
+            <div class="code-accordion-header">
+              <button class="code-toggle-btn" onclick="toggleCode(this)"><span class="chevron">&#x25B6;</span> View Schema (JSON)</button>
+              <button class="copy-btn" onclick="copyCode('contact-code')">Copy</button>
+            </div>
+            <div class="code-accordion-body">
+              <pre class="example-code" id="contact-code">{
   "display": "form",
   "components": [
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "textfield", "key": "name", "label": "Full Name",
+          "validate": { "required": true } }
+      ]},
+      { "width": 6, "components": [
+        { "type": "email", "key": "email", "label": "Email Address",
+          "validate": { "required": true } }
+      ]}
+    ]},
     {
-      "type": "textfield",
-      "key": "name",
-      "label": "Full Name",
-      "validate": { "required": true }
-    },
-    {
-      "type": "email",
-      "key": "email",
-      "label": "Email Address",
-      "validate": { "required": true }
-    },
-    {
-      "type": "textarea",
-      "key": "message",
-      "label": "Message",
-      "rows": 5,
-      "validate": { "required": true }
+      "type": "textarea", "key": "message", "label": "Message",
+      "rows": 5, "validate": { "required": true }
     }
   ]
 }</pre>
+            </div>
+          </div>
         </section>
 
-        <!-- Thank You Page Example -->
+        <!-- Thank You Page -->
         <section id="thank-you" class="example-section">
           <div class="example-header">
-            <h2>🎉 Thank You Page</h2>
+            <h2>Thank You Page</h2>
             <p>Handle form submission and redirect to a thank you message.</p>
           </div>
-          
           <div class="example-demo">
             <div id="form-thank-you"></div>
             <div id="thank-you-message" style="display: none; padding: 2rem; background: #10b981; color: white; border-radius: 8px; text-align: center;">
-              <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">✅ Thank You!</h3>
+              <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Thank You!</h3>
               <p>Your form has been submitted successfully.</p>
             </div>
           </div>
-          
-          <div class="code-header">
-            <h3>Form Schema (JSON)</h3>
-            <button class="copy-btn" onclick="copyCode('thankyou-schema-code')">Copy Code</button>
-          </div>
-          <pre class="example-code" id="thankyou-schema-code">{
+          <div class="code-accordion">
+            <div class="code-accordion-header">
+              <button class="code-toggle-btn" onclick="toggleCode(this)"><span class="chevron">&#x25B6;</span> View Schema (JSON)</button>
+              <button class="copy-btn" onclick="copyCode('thankyou-schema-code')">Copy</button>
+            </div>
+            <div class="code-accordion-body">
+              <pre class="example-code" id="thankyou-schema-code">{
   "display": "form",
   "components": [
-    { "type": "textfield", "key": "firstName", "label": "First Name", 
-      "validate": { "required": true }},
-    { "type": "textfield", "key": "lastName", "label": "Last Name", 
-      "validate": { "required": true }},
-    { "type": "email", "key": "email", "label": "Email Address", 
-      "validate": { "required": true }},
-    { "type": "phoneNumber", "key": "phone", "label": "Phone Number" },
-    { "type": "textarea", "key": "message", "label": "Message", 
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "textfield", "key": "firstName", "label": "First Name",
+          "validate": { "required": true } }
+      ]},
+      { "width": 6, "components": [
+        { "type": "textfield", "key": "lastName", "label": "Last Name",
+          "validate": { "required": true } }
+      ]}
+    ]},
+    { "type": "columns", "columns": [
+      { "width": 6, "components": [
+        { "type": "email", "key": "email", "label": "Email Address",
+          "validate": { "required": true } }
+      ]},
+      { "width": 6, "components": [
+        { "type": "phoneNumber", "key": "phone", "label": "Phone Number" }
+      ]}
+    ]},
+    { "type": "textarea", "key": "message", "label": "Message",
       "validate": { "required": true }},
     { "type": "button", "action": "submit", "label": "Submit Form" }
   ]
 }</pre>
-          
-          <div class="code-header">
-            <h3>JavaScript Code</h3>
-            <button class="copy-btn" onclick="copyCode('thankyou-code')">Copy Code</button>
+            </div>
           </div>
-          <pre class="example-code" id="thankyou-code">Formio.createForm(document.getElementById('formio'), formSchema)
+          <div class="code-accordion">
+            <div class="code-accordion-header">
+              <button class="code-toggle-btn" onclick="toggleCode(this)"><span class="chevron">&#x25B6;</span> View JavaScript Code</button>
+              <button class="copy-btn" onclick="copyCode('thankyou-code')">Copy</button>
+            </div>
+            <div class="code-accordion-body">
+              <pre class="example-code" id="thankyou-code">Formio.createForm(document.getElementById('formio'), formSchema)
   .then(function(form) {
-    // Handle successful submission
     form.on('submitDone', function(submission) {
       console.log('Form submitted:', submission);
-      
-      // Hide form and show thank you message
       form.element.style.display = 'none';
       document.getElementById('thank-you-message').style.display = 'block';
-      
-      // Or redirect to another page:
-      // window.location = '/thank-you';
     });
   });</pre>
+            </div>
+          </div>
         </section>
 
-        <!-- Wizard Form Example -->
+        <!-- Venue Booking Wizard -->
         <section id="wizard-form" class="example-section">
           <div class="example-header">
-            <h2>🧙 Multi-Page Wizard</h2>
-            <p>Step-by-step form with multiple pages and progress indicator.</p>
+            <h2>Venue Booking Wizard</h2>
+            <p>Six-step wizard with side-by-side column layouts for event venue booking.</p>
           </div>
-          
           <div class="example-demo">
             <div id="form-wizard"></div>
           </div>
-          
-          <div class="code-header">
-            <h3>Form Schema (JSON)</h3>
-            <button class="copy-btn" onclick="copyCode('wizard-code')">Copy Code</button>
-          </div>
-          <pre class="example-code" id="wizard-code">{
+          <div class="code-accordion">
+            <div class="code-accordion-header">
+              <button class="code-toggle-btn" onclick="toggleCode(this)"><span class="chevron">&#x25B6;</span> View Schema (JSON)</button>
+              <button class="copy-btn" onclick="copyCode('wizard-code')">Copy</button>
+            </div>
+            <div class="code-accordion-body">
+              <pre class="example-code" id="wizard-code">{
   "display": "wizard",
   "components": [
     {
-      "type": "panel",
-      "key": "step1PersonalInfo",
-      "title": "Step 1: Personal Information",
+      "type": "panel", "key": "eventDetails", "title": "Event Details",
       "components": [
-        { "type": "textfield", "key": "firstName", "label": "First Name" },
-        { "type": "textfield", "key": "lastName", "label": "Last Name" },
-        { "type": "datetime", "key": "birthDate", "label": "Date of Birth" },
-        { "type": "select", "key": "gender", "label": "Gender" }
+        { "type": "textfield", "key": "eventName", "label": "Event Name",
+          "validate": { "required": true } },
+        { "type": "select", "key": "eventType", "label": "Event Type",
+          "data": { "values": [
+            { "label": "Birthday Party", "value": "birthday" },
+            { "label": "Corporate Event", "value": "corporate" },
+            { "label": "Family Reunion", "value": "reunion" },
+            { "label": "Community Gathering", "value": "community" }
+          ]}, "validate": { "required": true } },
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "number", "key": "adultCount", "label": "Number of Adults",
+              "validate": { "required": true, "min": 1 } }
+          ]},
+          { "width": 6, "components": [
+            { "type": "number", "key": "childCount", "label": "Number of Children" }
+          ]}
+        ]}
       ]
     },
     {
-      "type": "panel",
-      "key": "step2ContactInfo",
-      "title": "Step 2: Contact Information",
+      "type": "panel", "key": "requirements", "title": "Requirements",
       "components": [
-        { "type": "email", "key": "email", "label": "Email" },
-        { "type": "phoneNumber", "key": "phone", "label": "Phone" },
-        { "type": "textfield", "key": "address", "label": "Address" },
-        { "type": "select", "key": "country", "label": "Country" }
+        { "type": "radio", "key": "duration", "label": "Event Duration",
+          "values": [
+            { "label": "2 Hours", "value": "2h" },
+            { "label": "4 Hours (Half Day)", "value": "4h" },
+            { "label": "8 Hours (Full Day)", "value": "8h" }
+          ], "validate": { "required": true } },
+        { "type": "select", "key": "alcoholPolicy", "label": "Alcohol Policy",
+          "data": { "values": [
+            { "label": "No Alcohol", "value": "none" },
+            { "label": "BYOB", "value": "byob" },
+            { "label": "Licensed Bar", "value": "bar" }
+          ]} },
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "checkbox", "key": "needsKitchen",
+              "label": "Kitchen Access Required" }
+          ]},
+          { "width": 6, "components": [
+            { "type": "checkbox", "key": "needsGymnasium",
+              "label": "Gymnasium / Large Hall" }
+          ]}
+        ]},
+        { "type": "textarea", "key": "specialRequests",
+          "label": "Special Requests", "rows": 3 }
       ]
     },
     {
-      "type": "panel",
-      "key": "step3Preferences",
-      "title": "Step 3: Preferences & Review",
+      "type": "panel", "key": "venueSelection", "title": "Venue Selection",
       "components": [
-        { "type": "selectboxes", "key": "interests", "label": "Interests" },
-        { "type": "radio", "key": "contactMethod", "label": "Contact Method" },
-        { "type": "textarea", "key": "comments", "label": "Comments" },
-        { "type": "checkbox", "key": "terms", "label": "I agree to terms" }
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "textfield", "key": "venueName",
+              "label": "Preferred Venue Name" }
+          ]},
+          { "width": 6, "components": [
+            { "type": "select", "key": "venueType", "label": "Venue Type",
+              "data": { "values": [
+                { "label": "Community Center", "value": "community" },
+                { "label": "Park Pavilion", "value": "park" },
+                { "label": "Banquet Hall", "value": "banquet" },
+                { "label": "Rooftop", "value": "rooftop" }
+              ]} }
+          ]}
+        ]}
+      ]
+    },
+    {
+      "type": "panel", "key": "dateTime", "title": "Date & Time",
+      "components": [
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "datetime", "key": "eventDate", "label": "Event Date",
+              "format": "yyyy-MM-dd", "enableTime": false,
+              "validate": { "required": true } }
+          ]},
+          { "width": 6, "components": [
+            { "type": "time", "key": "startTime", "label": "Start Time",
+              "validate": { "required": true } }
+          ]}
+        ]}
+      ]
+    },
+    {
+      "type": "panel", "key": "contactInfo", "title": "Contact Information",
+      "components": [
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "textfield", "key": "contactName",
+              "label": "Contact Name",
+              "validate": { "required": true } }
+          ]},
+          { "width": 6, "components": [
+            { "type": "textfield", "key": "organization",
+              "label": "Organization (optional)" }
+          ]}
+        ]},
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "email", "key": "contactEmail",
+              "label": "Email",
+              "validate": { "required": true } }
+          ]},
+          { "width": 6, "components": [
+            { "type": "phoneNumber", "key": "contactPhone",
+              "label": "Phone",
+              "validate": { "required": true } }
+          ]}
+        ]}
+      ]
+    },
+    {
+      "type": "panel", "key": "reviewConfirm",
+      "title": "Review & Confirm",
+      "components": [
+        { "type": "checkbox", "key": "termsAccepted",
+          "label": "I agree to the venue rental terms and conditions",
+          "validate": { "required": true } },
+        { "type": "textarea", "key": "additionalNotes",
+          "label": "Additional Notes", "rows": 3 }
       ]
     }
   ]
 }</pre>
+            </div>
+          </div>
         </section>
 
-        <!-- More examples... -->
+        <!-- Multi-Page Wizard -->
+        <section id="multi-page-wizard" class="example-section">
+          <div class="example-header">
+            <h2>Multi-Page Wizard</h2>
+            <p>A classic three-step registration wizard with progress indicator and side-by-side column layouts.</p>
+          </div>
+          <div class="example-demo">
+            <div id="form-multi-wizard"></div>
+          </div>
+          <div class="code-accordion">
+            <div class="code-accordion-header">
+              <button class="code-toggle-btn" onclick="toggleCode(this)"><span class="chevron">&#x25B6;</span> View Schema (JSON)</button>
+              <button class="copy-btn" onclick="copyCode('multi-wizard-code')">Copy</button>
+            </div>
+            <div class="code-accordion-body">
+              <pre class="example-code" id="multi-wizard-code">{
+  "display": "wizard",
+  "components": [
+    {
+      "type": "panel", "key": "personalInfo", "title": "Personal Information",
+      "components": [
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "textfield", "key": "firstName", "label": "First Name",
+              "validate": { "required": true } }
+          ]},
+          { "width": 6, "components": [
+            { "type": "textfield", "key": "lastName", "label": "Last Name",
+              "validate": { "required": true } }
+          ]}
+        ]},
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "datetime", "key": "birthDate", "label": "Date of Birth",
+              "format": "yyyy-MM-dd", "enableTime": false }
+          ]},
+          { "width": 6, "components": [
+            { "type": "select", "key": "gender", "label": "Gender",
+              "data": { "values": [
+                { "label": "Male", "value": "male" },
+                { "label": "Female", "value": "female" },
+                { "label": "Non-binary", "value": "nonbinary" },
+                { "label": "Prefer not to say", "value": "other" }
+              ]} }
+          ]}
+        ]}
+      ]
+    },
+    {
+      "type": "panel", "key": "contactInfo", "title": "Contact Information",
+      "components": [
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "email", "key": "email", "label": "Email",
+              "validate": { "required": true } }
+          ]},
+          { "width": 6, "components": [
+            { "type": "phoneNumber", "key": "phone", "label": "Phone",
+              "validate": { "required": true } }
+          ]}
+        ]},
+        { "type": "textfield", "key": "address", "label": "Street Address" },
+        { "type": "columns", "columns": [
+          { "width": 6, "components": [
+            { "type": "textfield", "key": "city", "label": "City" }
+          ]},
+          { "width": 6, "components": [
+            { "type": "select", "key": "country", "label": "Country",
+              "data": { "values": [
+                { "label": "United States", "value": "us" },
+                { "label": "Canada", "value": "ca" },
+                { "label": "United Kingdom", "value": "uk" },
+                { "label": "Australia", "value": "au" }
+              ]},
+              "validate": { "required": true } }
+          ]}
+        ]}
+      ]
+    },
+    {
+      "type": "panel", "key": "preferences", "title": "Preferences & Review",
+      "components": [
+        { "type": "selectboxes", "key": "interests", "label": "Areas of Interest",
+          "values": [
+            { "label": "Product Updates", "value": "products" },
+            { "label": "Newsletter", "value": "newsletter" },
+            { "label": "Special Offers", "value": "offers" },
+            { "label": "Events & Webinars", "value": "events" }
+          ]},
+        { "type": "radio", "key": "contactMethod", "label": "Preferred Contact Method",
+          "values": [
+            { "label": "Email", "value": "email" },
+            { "label": "Phone", "value": "phone" },
+            { "label": "SMS", "value": "sms" }
+          ],
+          "validate": { "required": true } },
+        { "type": "textarea", "key": "comments", "label": "Additional Comments", "rows": 3 },
+        { "type": "checkbox", "key": "terms", "label": "I agree to the terms and conditions",
+          "validate": { "required": true } }
+      ]
+    }
+  ]
+}</pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- Conditional Logic -->
         <section id="conditional-logic" class="example-section">
           <div class="example-header">
-            <h2>🔀 Conditional Logic</h2>
+            <h2>Conditional Logic</h2>
             <p>Show/hide fields based on user input.</p>
           </div>
           <div class="example-demo">
@@ -453,9 +943,10 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
           </div>
         </section>
 
+        <!-- File Upload -->
         <section id="file-upload" class="example-section">
           <div class="example-header">
-            <h2>📁 File Upload</h2>
+            <h2>File Upload</h2>
             <p>Upload files to Cloudflare R2 storage.</p>
           </div>
           <div class="example-demo">
@@ -463,19 +954,21 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
           </div>
         </section>
 
+        <!-- Address -->
         <section id="address-maps" class="example-section">
           <div class="example-header">
-            <h2>📍 Address with Maps</h2>
-            <p>Google Maps autocomplete for address input.</p>
+            <h2>Address</h2>
+            <p>Street, city, state, and ZIP code fields.</p>
           </div>
           <div class="example-demo">
             <div id="form-address"></div>
           </div>
         </section>
 
+        <!-- Signature -->
         <section id="signature" class="example-section">
           <div class="example-header">
-            <h2>✍️ Signature Pad</h2>
+            <h2>Signature Pad</h2>
             <p>Capture digital signatures.</p>
           </div>
           <div class="example-demo">
@@ -483,9 +976,10 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
           </div>
         </section>
 
+        <!-- Data Grid -->
         <section id="data-grid" class="example-section">
           <div class="example-header">
-            <h2>📊 Data Grid</h2>
+            <h2>Data Grid</h2>
             <p>Repeatable data entry with add/remove rows.</p>
           </div>
           <div class="example-demo">
@@ -493,14 +987,14 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
           </div>
         </section>
 
+        <!-- Turnstile -->
         <section id="turnstile-protection" class="example-section">
           <div class="example-header">
-            <h2>🛡️ Turnstile Protection</h2>
+            <h2>Turnstile Protection</h2>
             <p>CAPTCHA-free bot protection by Cloudflare - drag and drop from the Premium section in the form builder.</p>
           </div>
-          
           <div class="info-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 10px 0; font-size: 18px;">✨ Key Features</h3>
+            <h3 style="margin: 0 0 10px 0; font-size: 18px;">Key Features</h3>
             <ul style="margin: 0; padding-left: 20px;">
               <li><strong>No CAPTCHA puzzles</strong> - Seamless user experience</li>
               <li><strong>Invisible protection</strong> - Works in the background</li>
@@ -508,37 +1002,32 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
               <li><strong>Privacy-first</strong> - Cloudflare's secure infrastructure</li>
             </ul>
           </div>
-          
           <div class="example-demo">
             <div id="form-turnstile"></div>
           </div>
-          
           <div class="info-box" style="margin-top: 20px;">
-            <strong>🔧 Setup Instructions:</strong>
+            <strong>Setup Instructions:</strong>
             <ol style="margin: 10px 0 0 20px; padding: 0;">
-              <li>Go to <strong>Settings → Plugins</strong> and enable Turnstile plugin</li>
+              <li>Go to <strong>Settings &rarr; Plugins</strong> and enable Turnstile plugin</li>
               <li>Get free API keys from <a href="https://dash.cloudflare.com/?to=/:account/turnstile" target="_blank" style="color: #3b82f6;">Cloudflare Dashboard</a></li>
               <li>Configure site key and secret key in plugin settings</li>
               <li>Drag Turnstile component from <strong>Premium</strong> section in form builder</li>
             </ol>
           </div>
-          
           <div class="info-box" style="margin-top: 15px; background: #fef3c7; border: 1px solid #fbbf24;">
-            <strong>💡 Pro Tip:</strong> Use <code>"appearance": "interaction-only"</code> for invisible mode - the widget only appears when suspicious activity is detected!
+            <strong>Pro Tip:</strong> Use <code>"appearance": "interaction-only"</code> for invisible mode - the widget only appears when suspicious activity is detected!
           </div>
         </section>
 
-      </main>
-    </div>
+      </div><!-- .detail-inner -->
+    </div><!-- #examples-detail -->
 
     <!-- Load Form.io -->
     <script src="https://cdn.form.io/formiojs/formio.full.min.js"></script>
-    
+
     <!-- Register Turnstile Component -->
     <script>
-      // Register custom Turnstile component (same as public forms)
       (function() {
-        // Will register when Form.io loads
         function registerTurnstile() {
           if (!window.Formio || !window.Formio.Components) {
             return false;
@@ -562,10 +1051,10 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
               return super.render(\`
                 <div ref="turnstileContainer" class="formio-component-turnstile">
                   <div ref="turnstileWidget" style="margin: 15px 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; text-align: center; color: white;">
-                    <div style="font-size: 32px; margin-bottom: 10px;">🛡️</div>
+                    <div style="font-size: 32px; margin-bottom: 10px;">&#x1F6E1;&#xFE0F;</div>
                     <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">Turnstile Verification</div>
                     <div style="font-size: 13px; opacity: 0.9;">CAPTCHA-free bot protection by Cloudflare</div>
-                    <div style="font-size: 12px; margin-top: 10px; opacity: 0.8;">Enable Turnstile plugin in Settings → Plugins to activate</div>
+                    <div style="font-size: 12px; margin-top: 10px; opacity: 0.8;">Enable Turnstile plugin in Settings to activate</div>
                   </div>
                 </div>
               \`);
@@ -578,156 +1067,191 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
           }
 
           Formio.Components.addComponent('turnstile', TurnstileComponent);
-          console.log('✅ Turnstile component registered on examples page');
           return true;
         }
-        
-        // Try to register immediately
+
         if (!registerTurnstile()) {
-          // If Form.io not loaded yet, try again after a delay
           setTimeout(registerTurnstile, 100);
         }
       })();
     </script>
-    
+
     <script>
-      // Debug: Check if elements exist
-      console.log('Script loaded');
-      
-      // Navigation function
-      function setupNavigation() {
-        console.log('Setting up navigation...');
-        const links = document.querySelectorAll('.example-link');
-        console.log('Found', links.length, 'navigation links');
-        
-        // Navigation
-        links.forEach(link => {
-          link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const targetId = this.getAttribute('href').substring(1);
-            console.log('Navigating to:', targetId);
-            
-            // Update active link
-            document.querySelectorAll('.example-link').forEach(l => l.classList.remove('active'));
-            this.classList.add('active');
-            
-            // Update active section
-            document.querySelectorAll('.example-section').forEach(s => s.classList.remove('active'));
-            const targetSection = document.getElementById(targetId);
-            if (targetSection) {
-              targetSection.classList.add('active');
-              console.log('Activated section:', targetId);
-            } else {
-              console.error('Section not found:', targetId);
-            }
-            
-            // Scroll to top
-            const content = document.querySelector('.examples-content');
-            if (content) {
-              content.scrollTop = 0;
-            }
-            
-            // Update URL hash
-            window.location.hash = targetId;
-          });
-        });
-        
-        // Handle initial hash on page load
-        function handleHash() {
-          const hash = window.location.hash.substring(1);
-          console.log('Handling hash:', hash);
-          if (hash) {
-            const link = document.querySelector('.example-link[href="#' + hash + '"]');
-            if (link) {
-              link.click();
-            }
-          }
-        }
-        
-        // Call on load and hash change
-        handleHash();
-        window.addEventListener('hashchange', handleHash);
+      /* ── Navigation ── */
+      function showExample(id) {
+        document.getElementById('bento-grid').style.display = 'none';
+        document.getElementById('examples-detail').style.display = '';
+        document.querySelectorAll('.example-section').forEach(function(s) { s.classList.remove('active'); });
+        var sec = document.getElementById(id);
+        if (sec) sec.classList.add('active');
+        window.location.hash = id;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
-      // Copy code function
+      function showGrid() {
+        document.getElementById('bento-grid').style.display = '';
+        document.getElementById('examples-detail').style.display = 'none';
+        document.querySelectorAll('.example-section').forEach(function(s) { s.classList.remove('active'); });
+        history.replaceState(null, '', window.location.pathname);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function setupNavigation() {
+        // Card clicks
+        document.querySelectorAll('.bento-card[data-target]').forEach(function(card) {
+          card.addEventListener('click', function() {
+            showExample(this.getAttribute('data-target'));
+          });
+        });
+
+        // Back link
+        var backLink = document.getElementById('back-to-grid');
+        if (backLink) {
+          backLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            showGrid();
+          });
+        }
+
+        // Handle initial hash
+        var hash = window.location.hash.substring(1);
+        if (hash) {
+          showExample(hash);
+        }
+
+        // Hash change
+        window.addEventListener('hashchange', function() {
+          var h = window.location.hash.substring(1);
+          if (h) {
+            showExample(h);
+          } else {
+            showGrid();
+          }
+        });
+      }
+
+      /* ── Code accordion toggle ── */
+      window.toggleCode = function(btn) {
+        btn.classList.toggle('open');
+        var body = btn.closest('.code-accordion').querySelector('.code-accordion-body');
+        if (body) body.classList.toggle('open');
+      };
+
+      /* ── Copy code ── */
       window.copyCode = function(elementId) {
-        const code = document.getElementById(elementId).textContent;
-        navigator.clipboard.writeText(code).then(() => {
-          const btn = event.target;
-          const originalText = btn.textContent;
+        var code = document.getElementById(elementId).textContent;
+        navigator.clipboard.writeText(code).then(function() {
+          var btn = event.target;
+          var orig = btn.textContent;
           btn.textContent = 'Copied!';
-          setTimeout(() => btn.textContent = originalText, 2000);
+          setTimeout(function() { btn.textContent = orig; }, 2000);
         });
       };
 
-      // Initialize forms
+      /* ── Form schemas & init ── */
       function initForms() {
-        const kitchenSinkSchema = {
+        var kitchenSinkSchema = {
           display: 'form',
           components: [
-            { 
-              type: 'htmlelement', 
-              tag: 'h3', 
+            {
+              type: 'htmlelement',
+              tag: 'h3',
               content: 'Basic Fields',
               className: 'mb-3 text-lg font-semibold'
             },
-            { type: 'textfield', key: 'firstName', label: 'First Name', placeholder: 'Enter your first name', validate: { required: true } },
-            { type: 'textfield', key: 'lastName', label: 'Last Name', placeholder: 'Enter your last name', validate: { required: true } },
-            { type: 'email', key: 'email', label: 'Email Address', placeholder: 'you@example.com', validate: { required: true } },
-            { type: 'phoneNumber', key: 'phone', label: 'Phone Number', placeholder: '(555) 555-5555' },
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'textfield', key: 'firstName', label: 'First Name', placeholder: 'Enter your first name', validate: { required: true } }
+                ]},
+                { width: 6, components: [
+                  { type: 'textfield', key: 'lastName', label: 'Last Name', placeholder: 'Enter your last name', validate: { required: true } }
+                ]}
+              ]
+            },
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'email', key: 'email', label: 'Email Address', placeholder: 'you@example.com', validate: { required: true } }
+                ]},
+                { width: 6, components: [
+                  { type: 'phoneNumber', key: 'phone', label: 'Phone Number', placeholder: '(555) 555-5555' }
+                ]}
+              ]
+            },
             { type: 'number', key: 'age', label: 'Age', placeholder: '18', validate: { min: 18, max: 120 } },
             { type: 'password', key: 'password', label: 'Password', placeholder: 'Enter password', validate: { required: true } },
             { type: 'url', key: 'website', label: 'Website', placeholder: 'https://example.com' },
             { type: 'textarea', key: 'bio', label: 'Biography', rows: 4, placeholder: 'Tell us about yourself' },
-            
-            { 
-              type: 'htmlelement', 
-              tag: 'h3', 
+
+            {
+              type: 'htmlelement',
+              tag: 'h3',
               content: 'Date & Time Fields',
               className: 'mt-4 mb-3 text-lg font-semibold'
             },
-            { type: 'datetime', key: 'appointmentDateTime', label: 'Appointment Date & Time', format: 'yyyy-MM-dd hh:mm a', enableTime: true },
-            { type: 'day', key: 'birthDate', label: 'Birth Date (Day/Month/Year)' },
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'datetime', key: 'appointmentDateTime', label: 'Appointment Date & Time', format: 'yyyy-MM-dd hh:mm a', enableTime: true }
+                ]},
+                { width: 6, components: [
+                  { type: 'day', key: 'birthDate', label: 'Birth Date (Day/Month/Year)' }
+                ]}
+              ]
+            },
             { type: 'time', key: 'preferredTime', label: 'Preferred Contact Time' },
-            
-            { 
-              type: 'htmlelement', 
-              tag: 'h3', 
+
+            {
+              type: 'htmlelement',
+              tag: 'h3',
               content: 'Selection Fields',
               className: 'mt-4 mb-3 text-lg font-semibold'
             },
-            { 
-              type: 'select', 
-              key: 'country', 
-              label: 'Country', 
-              placeholder: 'Select your country',
-              data: { 
-                values: [
-                  { label: 'United States', value: 'us' },
-                  { label: 'Canada', value: 'ca' },
-                  { label: 'United Kingdom', value: 'uk' },
-                  { label: 'Australia', value: 'au' },
-                  { label: 'Germany', value: 'de' },
-                  { label: 'France', value: 'fr' }
-                ] 
-              }
-            },
-            { 
-              type: 'selectboxes', 
-              key: 'interests', 
-              label: 'Interests (Multiple Selection)', 
-              values: [
-                { label: 'Sports', value: 'sports' },
-                { label: 'Music', value: 'music' },
-                { label: 'Technology', value: 'tech' },
-                { label: 'Travel', value: 'travel' },
-                { label: 'Reading', value: 'reading' }
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  {
+                    type: 'select',
+                    key: 'country',
+                    label: 'Country',
+                    placeholder: 'Select your country',
+                    data: {
+                      values: [
+                        { label: 'United States', value: 'us' },
+                        { label: 'Canada', value: 'ca' },
+                        { label: 'United Kingdom', value: 'uk' },
+                        { label: 'Australia', value: 'au' },
+                        { label: 'Germany', value: 'de' },
+                        { label: 'France', value: 'fr' }
+                      ]
+                    }
+                  }
+                ]},
+                { width: 6, components: [
+                  {
+                    type: 'selectboxes',
+                    key: 'interests',
+                    label: 'Interests (Multiple Selection)',
+                    values: [
+                      { label: 'Sports', value: 'sports' },
+                      { label: 'Music', value: 'music' },
+                      { label: 'Technology', value: 'tech' },
+                      { label: 'Travel', value: 'travel' },
+                      { label: 'Reading', value: 'reading' }
+                    ]
+                  }
+                ]}
               ]
             },
-            { 
-              type: 'radio', 
-              key: 'gender', 
-              label: 'Gender', 
+            {
+              type: 'radio',
+              key: 'gender',
+              label: 'Gender',
               values: [
                 { label: 'Male', value: 'male' },
                 { label: 'Female', value: 'female' },
@@ -735,31 +1259,40 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
                 { label: 'Prefer not to say', value: 'prefer_not_to_say' }
               ]
             },
-            { type: 'checkbox', key: 'newsletter', label: 'Subscribe to newsletter' },
-            { type: 'checkbox', key: 'terms', label: 'I agree to the terms and conditions', validate: { required: true } },
-            
-            { 
-              type: 'htmlelement', 
-              tag: 'h3', 
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'checkbox', key: 'newsletter', label: 'Subscribe to newsletter' }
+                ]},
+                { width: 6, components: [
+                  { type: 'checkbox', key: 'terms', label: 'I agree to the terms and conditions', validate: { required: true } }
+                ]}
+              ]
+            },
+
+            {
+              type: 'htmlelement',
+              tag: 'h3',
               content: 'Advanced Fields',
               className: 'mt-4 mb-3 text-lg font-semibold'
             },
-            { 
-              type: 'currency', 
-              key: 'salary', 
-              label: 'Expected Salary', 
+            {
+              type: 'currency',
+              key: 'salary',
+              label: 'Expected Salary',
               currency: 'USD',
               placeholder: '$50,000'
             },
-            { 
-              type: 'tags', 
-              key: 'skills', 
-              label: 'Skills (Type and press Enter)', 
+            {
+              type: 'tags',
+              key: 'skills',
+              label: 'Skills (Type and press Enter)',
               placeholder: 'e.g. JavaScript, Python, React'
             },
-            { 
-              type: 'survey', 
-              key: 'satisfaction', 
+            {
+              type: 'survey',
+              key: 'satisfaction',
               label: 'Satisfaction Survey',
               questions: [
                 { label: 'Product Quality', value: 'quality' },
@@ -773,54 +1306,81 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
                 { label: 'Excellent', value: '4' }
               ]
             },
-            { 
-              type: 'signature', 
-              key: 'signature', 
-              label: 'Signature', 
+            {
+              type: 'signature',
+              key: 'signature',
+              label: 'Signature',
               footer: 'Sign above',
               width: '100%',
               height: '150px'
             },
-            { 
-              type: 'file', 
-              key: 'resume', 
-              label: 'Upload Resume (PDF, DOC)', 
+            {
+              type: 'file',
+              key: 'resume',
+              label: 'Upload Resume (PDF, DOC)',
               storage: 'base64',
               filePattern: '.pdf,.doc,.docx',
               fileMaxSize: '5MB'
             },
-            
+
             { type: 'button', action: 'submit', label: 'Submit Kitchen Sink Form', theme: 'primary', className: 'mt-4' }
           ]
         };
         Formio.createForm(document.getElementById('form-kitchen-sink'), kitchenSinkSchema);
 
         // Simple Contact
-        const contactSchema = {
+        var contactSchema = {
           display: 'form',
           components: [
-            { type: 'textfield', key: 'name', label: 'Full Name', validate: { required: true } },
-            { type: 'email', key: 'email', label: 'Email Address', validate: { required: true } },
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'textfield', key: 'name', label: 'Full Name', validate: { required: true } }
+                ]},
+                { width: 6, components: [
+                  { type: 'email', key: 'email', label: 'Email Address', validate: { required: true } }
+                ]}
+              ]
+            },
             { type: 'textarea', key: 'message', label: 'Message', rows: 5, validate: { required: true } },
             { type: 'button', action: 'submit', label: 'Send Message', theme: 'primary' }
           ]
         };
         Formio.createForm(document.getElementById('form-simple-contact'), contactSchema);
 
-        // Thank You Page - Match Form.io's official example
-        const thankYouSchema = {
+        // Thank You Page
+        var thankYouSchema = {
           display: 'form',
           components: [
-            { 
-              type: 'htmlelement', 
-              tag: 'p', 
+            {
+              type: 'htmlelement',
+              tag: 'p',
               content: 'Fill out this form and watch it redirect to a thank you page after submission.',
               className: 'mb-4 text-gray-600'
             },
-            { type: 'textfield', key: 'firstName', label: 'First Name', placeholder: 'Enter your first name', validate: { required: true } },
-            { type: 'textfield', key: 'lastName', label: 'Last Name', placeholder: 'Enter your last name', validate: { required: true } },
-            { type: 'email', key: 'email', label: 'Email Address', placeholder: 'you@example.com', validate: { required: true } },
-            { type: 'phoneNumber', key: 'phone', label: 'Phone Number', placeholder: '(555) 555-5555' },
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'textfield', key: 'firstName', label: 'First Name', placeholder: 'Enter your first name', validate: { required: true } }
+                ]},
+                { width: 6, components: [
+                  { type: 'textfield', key: 'lastName', label: 'Last Name', placeholder: 'Enter your last name', validate: { required: true } }
+                ]}
+              ]
+            },
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'email', key: 'email', label: 'Email Address', placeholder: 'you@example.com', validate: { required: true } }
+                ]},
+                { width: 6, components: [
+                  { type: 'phoneNumber', key: 'phone', label: 'Phone Number', placeholder: '(555) 555-5555' }
+                ]}
+              ]
+            },
             { type: 'textarea', key: 'message', label: 'Message', rows: 4, placeholder: 'Your message here...', validate: { required: true } },
             { type: 'button', action: 'submit', label: 'Submit Form', theme: 'primary' }
           ]
@@ -828,94 +1388,283 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         Formio.createForm(document.getElementById('form-thank-you'), thankYouSchema)
           .then(function(form) {
             form.on('submitDone', function(submission) {
-              console.log('Form submitted:', submission);
               form.element.style.display = 'none';
-              const thankYouMsg = document.getElementById('thank-you-message');
-              thankYouMsg.style.display = 'block';
-              // In a real application, you would redirect:
-              // window.location = '/thank-you-page';
+              document.getElementById('thank-you-message').style.display = 'block';
             });
           });
 
-        // Wizard - Proper 3-step multi-page wizard
-        const wizardSchema = {
+        // Venue Booking Wizard
+        var wizardSchema = {
           display: 'wizard',
           components: [
             {
               type: 'panel',
-              key: 'step1PersonalInfo',
-              title: 'Step 1: Personal Information',
+              key: 'eventDetails',
+              title: 'Event Details',
               components: [
-                { 
-                  type: 'htmlelement', 
-                  tag: 'p', 
+                { type: 'textfield', key: 'eventName', label: 'Event Name', placeholder: 'e.g. Annual Family Reunion', validate: { required: true } },
+                {
+                  type: 'select', key: 'eventType', label: 'Event Type',
+                  data: { values: [
+                    { label: 'Birthday Party', value: 'birthday' },
+                    { label: 'Corporate Event', value: 'corporate' },
+                    { label: 'Family Reunion', value: 'reunion' },
+                    { label: 'Community Gathering', value: 'community' },
+                    { label: 'Wedding Reception', value: 'wedding' },
+                    { label: 'Other', value: 'other' }
+                  ]},
+                  validate: { required: true }
+                },
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'number', key: 'adultCount', label: 'Number of Adults', placeholder: '0', validate: { required: true, min: 1 } }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'number', key: 'childCount', label: 'Number of Children', placeholder: '0' }
+                    ]}
+                  ]
+                }
+              ]
+            },
+            {
+              type: 'panel',
+              key: 'requirements',
+              title: 'Requirements',
+              components: [
+                {
+                  type: 'radio', key: 'duration', label: 'Event Duration',
+                  values: [
+                    { label: '2 Hours', value: '2h' },
+                    { label: '4 Hours (Half Day)', value: '4h' },
+                    { label: '8 Hours (Full Day)', value: '8h' }
+                  ],
+                  validate: { required: true }
+                },
+                {
+                  type: 'select', key: 'alcoholPolicy', label: 'Alcohol Policy',
+                  data: { values: [
+                    { label: 'No Alcohol', value: 'none' },
+                    { label: 'BYOB', value: 'byob' },
+                    { label: 'Licensed Bar', value: 'bar' }
+                  ]}
+                },
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'checkbox', key: 'needsKitchen', label: 'Kitchen Access Required' }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'checkbox', key: 'needsGymnasium', label: 'Gymnasium / Large Hall' }
+                    ]}
+                  ]
+                },
+                { type: 'textarea', key: 'specialRequests', label: 'Special Requests', rows: 3, placeholder: 'Anything else we should know...' }
+              ]
+            },
+            {
+              type: 'panel',
+              key: 'venueSelection',
+              title: 'Venue Selection',
+              components: [
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'textfield', key: 'venueName', label: 'Preferred Venue Name', placeholder: 'e.g. Riverside Pavilion' }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'select', key: 'venueType', label: 'Venue Type',
+                        data: { values: [
+                          { label: 'Community Center', value: 'community' },
+                          { label: 'Park Pavilion', value: 'park' },
+                          { label: 'Banquet Hall', value: 'banquet' },
+                          { label: 'Rooftop', value: 'rooftop' },
+                          { label: 'Indoor Arena', value: 'arena' }
+                        ]}
+                      }
+                    ]}
+                  ]
+                }
+              ]
+            },
+            {
+              type: 'panel',
+              key: 'dateTime',
+              title: 'Date & Time',
+              components: [
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'datetime', key: 'eventDate', label: 'Event Date', format: 'yyyy-MM-dd', enableTime: false, validate: { required: true } }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'time', key: 'startTime', label: 'Start Time', validate: { required: true } }
+                    ]}
+                  ]
+                }
+              ]
+            },
+            {
+              type: 'panel',
+              key: 'contactInfo',
+              title: 'Contact Information',
+              components: [
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'textfield', key: 'contactName', label: 'Contact Name', validate: { required: true } }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'textfield', key: 'organization', label: 'Organization (optional)' }
+                    ]}
+                  ]
+                },
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'email', key: 'contactEmail', label: 'Email', validate: { required: true } }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'phoneNumber', key: 'contactPhone', label: 'Phone', validate: { required: true } }
+                    ]}
+                  ]
+                }
+              ]
+            },
+            {
+              type: 'panel',
+              key: 'reviewConfirm',
+              title: 'Review & Confirm',
+              components: [
+                { type: 'checkbox', key: 'termsAccepted', label: 'I agree to the venue rental terms and conditions', validate: { required: true } },
+                { type: 'textarea', key: 'additionalNotes', label: 'Additional Notes', rows: 3, placeholder: 'Final notes or questions...' }
+              ]
+            }
+          ]
+        };
+        Formio.createForm(document.getElementById('form-wizard'), wizardSchema);
+
+        // Multi-Page Wizard (classic 3-step registration)
+        var multiWizardSchema = {
+          display: 'wizard',
+          components: [
+            {
+              type: 'panel',
+              key: 'personalInfo',
+              title: 'Personal Information',
+              components: [
+                {
+                  type: 'htmlelement',
+                  tag: 'p',
                   content: 'Please provide your personal information.',
                   className: 'mb-3 text-gray-600'
                 },
-                { type: 'textfield', key: 'firstName', label: 'First Name', placeholder: 'John', validate: { required: true } },
-                { type: 'textfield', key: 'lastName', label: 'Last Name', placeholder: 'Doe', validate: { required: true } },
-                { type: 'datetime', key: 'birthDate', label: 'Date of Birth', format: 'yyyy-MM-dd', validate: { required: true } },
-                { 
-                  type: 'select', 
-                  key: 'gender', 
-                  label: 'Gender',
-                  data: { 
-                    values: [
-                      { label: 'Male', value: 'male' },
-                      { label: 'Female', value: 'female' },
-                      { label: 'Non-binary', value: 'nonbinary' },
-                      { label: 'Prefer not to say', value: 'other' }
-                    ]
-                  }
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'textfield', key: 'firstName', label: 'First Name', placeholder: 'John', validate: { required: true } }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'textfield', key: 'lastName', label: 'Last Name', placeholder: 'Doe', validate: { required: true } }
+                    ]}
+                  ]
+                },
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'datetime', key: 'birthDate', label: 'Date of Birth', format: 'yyyy-MM-dd', enableTime: false, validate: { required: true } }
+                    ]},
+                    { width: 6, components: [
+                      {
+                        type: 'select',
+                        key: 'gender',
+                        label: 'Gender',
+                        data: {
+                          values: [
+                            { label: 'Male', value: 'male' },
+                            { label: 'Female', value: 'female' },
+                            { label: 'Non-binary', value: 'nonbinary' },
+                            { label: 'Prefer not to say', value: 'other' }
+                          ]
+                        }
+                      }
+                    ]}
+                  ]
                 }
               ]
             },
             {
               type: 'panel',
-              key: 'step2ContactInfo',
-              title: 'Step 2: Contact Information',
+              key: 'contactInfo',
+              title: 'Contact Information',
               components: [
-                { 
-                  type: 'htmlelement', 
-                  tag: 'p', 
+                {
+                  type: 'htmlelement',
+                  tag: 'p',
                   content: 'How can we reach you?',
                   className: 'mb-3 text-gray-600'
                 },
-                { type: 'email', key: 'email', label: 'Email Address', placeholder: 'john.doe@example.com', validate: { required: true } },
-                { type: 'phoneNumber', key: 'phone', label: 'Phone Number', placeholder: '(555) 555-5555', validate: { required: true } },
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'email', key: 'email', label: 'Email Address', placeholder: 'john.doe@example.com', validate: { required: true } }
+                    ]},
+                    { width: 6, components: [
+                      { type: 'phoneNumber', key: 'phone', label: 'Phone Number', placeholder: '(555) 555-5555', validate: { required: true } }
+                    ]}
+                  ]
+                },
                 { type: 'textfield', key: 'address', label: 'Street Address', placeholder: '123 Main St' },
-                { type: 'textfield', key: 'city', label: 'City', placeholder: 'New York' },
-                { 
-                  type: 'select', 
-                  key: 'country', 
-                  label: 'Country',
-                  data: { 
-                    values: [
-                      { label: 'United States', value: 'us' },
-                      { label: 'Canada', value: 'ca' },
-                      { label: 'United Kingdom', value: 'uk' },
-                      { label: 'Australia', value: 'au' }
-                    ]
-                  },
-                  validate: { required: true }
+                {
+                  type: 'columns',
+                  columns: [
+                    { width: 6, components: [
+                      { type: 'textfield', key: 'city', label: 'City', placeholder: 'New York' }
+                    ]},
+                    { width: 6, components: [
+                      {
+                        type: 'select',
+                        key: 'country',
+                        label: 'Country',
+                        data: {
+                          values: [
+                            { label: 'United States', value: 'us' },
+                            { label: 'Canada', value: 'ca' },
+                            { label: 'United Kingdom', value: 'uk' },
+                            { label: 'Australia', value: 'au' }
+                          ]
+                        },
+                        validate: { required: true }
+                      }
+                    ]}
+                  ]
                 }
               ]
             },
             {
               type: 'panel',
-              key: 'step3Preferences',
-              title: 'Step 3: Preferences & Review',
+              key: 'preferences',
+              title: 'Preferences & Review',
               components: [
-                { 
-                  type: 'htmlelement', 
-                  tag: 'p', 
+                {
+                  type: 'htmlelement',
+                  tag: 'p',
                   content: 'Almost done! Tell us your preferences.',
                   className: 'mb-3 text-gray-600'
                 },
-                { 
-                  type: 'selectboxes', 
-                  key: 'interests', 
-                  label: 'Areas of Interest', 
+                {
+                  type: 'selectboxes',
+                  key: 'interests',
+                  label: 'Areas of Interest',
                   values: [
                     { label: 'Product Updates', value: 'products' },
                     { label: 'Newsletter', value: 'newsletter' },
@@ -923,9 +1672,9 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
                     { label: 'Events & Webinars', value: 'events' }
                   ]
                 },
-                { 
-                  type: 'radio', 
-                  key: 'contactMethod', 
+                {
+                  type: 'radio',
+                  key: 'contactMethod',
                   label: 'Preferred Contact Method',
                   values: [
                     { label: 'Email', value: 'email' },
@@ -940,14 +1689,14 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
             }
           ]
         };
-        Formio.createForm(document.getElementById('form-wizard'), wizardSchema);
+        Formio.createForm(document.getElementById('form-multi-wizard'), multiWizardSchema);
 
         // Conditional Logic
-        const conditionalSchema = {
+        var conditionalSchema = {
           display: 'form',
           components: [
             { type: 'checkbox', key: 'hasCompany', label: 'I am registering on behalf of a company' },
-            { type: 'textfield', key: 'companyName', label: 'Company Name', 
+            { type: 'textfield', key: 'companyName', label: 'Company Name',
               conditional: { show: true, when: 'hasCompany', eq: true }
             },
             { type: 'button', action: 'submit', label: 'Submit', theme: 'primary' }
@@ -955,40 +1704,49 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         };
         Formio.createForm(document.getElementById('form-conditional'), conditionalSchema);
 
-        // File Upload - Proper example with actual file field
-        const fileSchema = {
+        // File Upload
+        var fileSchema = {
           display: 'form',
           components: [
-            { 
-              type: 'htmlelement', 
-              tag: 'p', 
+            {
+              type: 'htmlelement',
+              tag: 'p',
               content: 'Upload files to Cloudflare R2 storage (or base64 encoding for demo).',
               className: 'mb-4 text-gray-600'
             },
-            { type: 'textfield', key: 'name', label: 'Your Name', placeholder: 'John Doe', validate: { required: true } },
-            { type: 'email', key: 'email', label: 'Email Address', placeholder: 'john@example.com', validate: { required: true } },
-            { 
-              type: 'file', 
-              key: 'resume', 
-              label: 'Upload Resume (PDF, DOC, DOCX)', 
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'textfield', key: 'name', label: 'Your Name', placeholder: 'John Doe', validate: { required: true } }
+                ]},
+                { width: 6, components: [
+                  { type: 'email', key: 'email', label: 'Email Address', placeholder: 'john@example.com', validate: { required: true } }
+                ]}
+              ]
+            },
+            {
+              type: 'file',
+              key: 'resume',
+              label: 'Upload Resume (PDF, DOC, DOCX)',
               storage: 'base64',
               filePattern: '.pdf,.doc,.docx',
               fileMaxSize: '5MB',
               validate: { required: true }
             },
-            { 
-              type: 'file', 
-              key: 'portfolio', 
-              label: 'Portfolio/Work Samples (Optional)', 
+            {
+              type: 'file',
+              key: 'portfolio',
+              label: 'Portfolio/Work Samples (Optional)',
               storage: 'base64',
               filePattern: '.pdf,.zip,.jpg,.png',
               fileMaxSize: '10MB',
               multiple: false
             },
-            { 
-              type: 'file', 
-              key: 'attachments', 
-              label: 'Additional Attachments (Multiple files allowed)', 
+            {
+              type: 'file',
+              key: 'attachments',
+              label: 'Additional Attachments (Multiple files allowed)',
               storage: 'base64',
               multiple: true,
               fileMaxSize: '5MB'
@@ -999,13 +1757,22 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         };
         Formio.createForm(document.getElementById('form-file-upload'), fileSchema);
 
-        // Address (without API key for demo)
-        const addressSchema = {
+        // Address
+        var addressSchema = {
           display: 'form',
           components: [
             { type: 'textfield', key: 'street', label: 'Street Address' },
-            { type: 'textfield', key: 'city', label: 'City' },
-            { type: 'textfield', key: 'state', label: 'State' },
+            {
+              type: 'columns',
+              columns: [
+                { width: 6, components: [
+                  { type: 'textfield', key: 'city', label: 'City' }
+                ]},
+                { width: 6, components: [
+                  { type: 'textfield', key: 'state', label: 'State' }
+                ]}
+              ]
+            },
             { type: 'textfield', key: 'zip', label: 'ZIP Code' },
             { type: 'button', action: 'submit', label: 'Submit', theme: 'primary' }
           ]
@@ -1013,7 +1780,7 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         Formio.createForm(document.getElementById('form-address'), addressSchema);
 
         // Signature
-        const signatureSchema = {
+        var signatureSchema = {
           display: 'form',
           components: [
             { type: 'textfield', key: 'name', label: 'Your Name' },
@@ -1024,12 +1791,12 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
         Formio.createForm(document.getElementById('form-signature'), signatureSchema);
 
         // Data Grid
-        const dataGridSchema = {
+        var dataGridSchema = {
           display: 'form',
           components: [
-            { 
-              type: 'datagrid', 
-              key: 'items', 
+            {
+              type: 'datagrid',
+              key: 'items',
               label: 'Items',
               components: [
                 { type: 'textfield', key: 'item', label: 'Item' },
@@ -1040,27 +1807,27 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
           ]
         };
         Formio.createForm(document.getElementById('form-data-grid'), dataGridSchema);
-        
+
         // Turnstile Protection Form
-        const turnstileSchema = {
+        var turnstileSchema = {
           components: [
-            { 
-              type: 'textfield', 
-              key: 'fullName', 
+            {
+              type: 'textfield',
+              key: 'fullName',
               label: 'Full Name',
               placeholder: 'Enter your full name',
               validate: { required: true }
             },
-            { 
-              type: 'email', 
-              key: 'email', 
+            {
+              type: 'email',
+              key: 'email',
               label: 'Email Address',
               placeholder: 'you@example.com',
               validate: { required: true }
             },
-            { 
-              type: 'textarea', 
-              key: 'message', 
+            {
+              type: 'textarea',
+              key: 'message',
               label: 'Message',
               placeholder: 'Tell us what you are thinking...',
               rows: 4,
@@ -1076,10 +1843,10 @@ export function renderFormsExamplesPage(data: FormsExamplesPageData): string {
               persistent: false,
               protected: true
             },
-            { 
-              type: 'button', 
-              action: 'submit', 
-              label: 'Send Secure Message', 
+            {
+              type: 'button',
+              action: 'submit',
+              label: 'Send Secure Message',
               theme: 'primary',
               block: true
             }

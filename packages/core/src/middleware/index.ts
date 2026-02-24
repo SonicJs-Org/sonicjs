@@ -16,6 +16,9 @@ export { AuthManager, requireAuth, requireRole, optionalAuth } from './auth'
 // Metrics middleware
 export { metricsMiddleware } from './metrics'
 
+// CSRF protection middleware
+export { csrfProtection, generateCsrfToken, validateCsrfToken } from './csrf'
+
 // Re-export types and functions that are referenced but implemented in monolith
 // These are placeholder exports to maintain API compatibility
 export type Permission = string

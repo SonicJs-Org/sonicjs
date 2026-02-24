@@ -29,6 +29,7 @@ import {
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
 import { metricsMiddleware } from './middleware/metrics'
+import { csrfProtection } from './middleware/csrf'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
@@ -68,6 +69,7 @@ export interface Variables {
   requestId?: string
   startTime?: number
   appVersion?: string
+  csrfToken?: string
 }
 
 export interface SonicJSConfig {
@@ -168,6 +170,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     // Security headers, CORS, etc.
     await next()
   })
+
+  // CSRF protection middleware
+  app.use('*', csrfProtection())
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {

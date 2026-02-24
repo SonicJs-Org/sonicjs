@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { loginAsAdmin, getCsrfTokenFromPage } from './utils/test-helpers';
 
 test.describe.skip('Database Tools', () => {
   test.beforeEach(async ({ page }) => {
@@ -342,7 +342,10 @@ test.describe('Database Tools API Endpoints', () => {
   });
 
   test('should require admin role for backup endpoint', async ({ page }) => {
-    const response = await page.request.post('/admin/database-tools/api/backup');
+    const csrfToken = await getCsrfTokenFromPage(page);
+    const response = await page.request.post('/admin/database-tools/api/backup', {
+      headers: { ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }
+    });
     
     // Should either succeed (if user is admin) or return 403
     expect([200, 403]).toContain(response.status());
@@ -358,7 +361,9 @@ test.describe('Database Tools API Endpoints', () => {
   });
 
   test('should require admin role for truncate endpoint', async ({ page }) => {
+    const csrfToken = await getCsrfTokenFromPage(page);
     const response = await page.request.post('/admin/database-tools/api/truncate', {
+      headers: { ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
       data: { confirmText: 'TRUNCATE ALL DATA' }
     });
     

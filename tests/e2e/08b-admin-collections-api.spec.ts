@@ -10,12 +10,14 @@ test.describe('Admin Collections API', () => {
     const page = await context.newPage();
     await loginAsAdmin(page);
     
-    // Extract auth cookies for API requests
+    // Extract auth cookies and CSRF token for API requests
     const cookies = await context.cookies();
     const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+    const csrfCookie = cookies.find(c => c.name === 'csrf_token');
     authHeaders = {
       'Cookie': cookieHeader,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(csrfCookie ? { 'X-CSRF-Token': csrfCookie.value } : {})
     };
     
     await context.close();

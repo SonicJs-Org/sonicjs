@@ -36,11 +36,12 @@ export interface FormData {
   title?: string
   description?: string
   className?: string
+  csrfToken?: string
 }
 
 export function renderForm(data: FormData): string {
   return `
-    <form 
+    <form
       ${data.id ? `id="${data.id}"` : ''}
       ${data.hxPost ? `hx-post="${data.hxPost}"` : data.hxPut ? `hx-put="${data.hxPut}"` : data.action ? `action="${data.action}"` : ''}
       ${data.hxTarget ? `hx-target="${data.hxTarget}"` : ''}
@@ -48,6 +49,7 @@ export function renderForm(data: FormData): string {
       class="${data.className || 'space-y-6'}"
       ${data.fields.some(f => f.type === 'file') ? 'enctype="multipart/form-data"' : ''}
     >
+      ${data.csrfToken ? `<input type="hidden" name="_csrf" value="${data.csrfToken}">` : ''}
       ${data.title ? `
         <div class="mb-6">
           <h2 class="text-lg font-medium text-gray-1">${data.title}</h2>

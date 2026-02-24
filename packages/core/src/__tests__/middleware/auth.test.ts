@@ -597,6 +597,170 @@ describe('requireAuth middleware - Error Handling', () => {
   })
 })
 
+describe('JWT secret externalization (env var)', () => {
+  it('should generate token with custom secret', async () => {
+    const customSecret = 'my-custom-secret-key-from-env'
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'admin', customSecret
+    )
+
+    expect(token).toBeTruthy()
+    expect(token.split('.')).toHaveLength(3)
+  })
+
+  it('should verify token with matching custom secret', async () => {
+    const customSecret = 'my-custom-secret-key-from-env'
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'admin', customSecret
+    )
+
+    const payload = await AuthManager.verifyToken(token, customSecret)
+    expect(payload).not.toBeNull()
+    expect(payload?.userId).toBe('user-123')
+    expect(payload?.email).toBe('test@example.com')
+  })
+
+  it('should reject token when verified with wrong secret', async () => {
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'admin', 'secret-a'
+    )
+
+    const payload = await AuthManager.verifyToken(token, 'secret-b')
+    expect(payload).toBeNull()
+  })
+
+  it('should reject custom-secret token when verified with fallback', async () => {
+    const customSecret = 'my-custom-secret-key-from-env'
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'admin', customSecret
+    )
+
+    // Verify without providing secret (uses fallback)
+    const payload = await AuthManager.verifyToken(token)
+    expect(payload).toBeNull()
+  })
+
+  it('should verify fallback-secret token without providing secret', async () => {
+    // Generate without custom secret (uses fallback)
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'admin'
+    )
+
+    // Verify without custom secret (uses same fallback)
+    const payload = await AuthManager.verifyToken(token)
+    expect(payload).not.toBeNull()
+    expect(payload?.userId).toBe('user-123')
+  })
+})
+
+describe('requireAuth middleware - JWT_SECRET from env', () => {
+  let mockNext: Next
+
+  beforeEach(() => {
+    mockNext = vi.fn()
+  })
+
+  it('should use JWT_SECRET from env when verifying tokens', async () => {
+    const envSecret = 'env-jwt-secret-12345'
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'admin', envSecret
+    )
+
+    const mockContext: any = {
+      req: {
+        header: vi.fn().mockImplementation((name: string) => {
+          if (name === 'Authorization') return `Bearer ${token}`
+          return undefined
+        }),
+        raw: { headers: new Headers() }
+      },
+      set: vi.fn(),
+      json: vi.fn(),
+      redirect: vi.fn(),
+      env: { JWT_SECRET: envSecret }
+    }
+
+    const middleware = requireAuth()
+    await middleware(mockContext as Context, mockNext)
+
+    expect(mockContext.set).toHaveBeenCalledWith('user', expect.objectContaining({
+      userId: 'user-123',
+      email: 'test@example.com',
+      role: 'admin'
+    }))
+    expect(mockNext).toHaveBeenCalled()
+  })
+
+  it('should reject token signed with different secret than env JWT_SECRET', async () => {
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'admin', 'wrong-secret'
+    )
+
+    const mockContext: any = {
+      req: {
+        header: vi.fn().mockImplementation((name: string) => {
+          if (name === 'Authorization') return `Bearer ${token}`
+          return undefined
+        }),
+        raw: { headers: new Headers() }
+      },
+      set: vi.fn(),
+      json: vi.fn().mockReturnValue({ error: 'Invalid or expired token' }),
+      redirect: vi.fn(),
+      env: { JWT_SECRET: 'correct-env-secret' }
+    }
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const middleware = requireAuth()
+    await middleware(mockContext as Context, mockNext)
+
+    expect(mockContext.json).toHaveBeenCalledWith(
+      { error: 'Invalid or expired token' },
+      401
+    )
+    expect(mockNext).not.toHaveBeenCalled()
+
+    consoleSpy.mockRestore()
+  })
+})
+
+describe('optionalAuth middleware - JWT_SECRET from env', () => {
+  let mockNext: Next
+
+  beforeEach(() => {
+    mockNext = vi.fn()
+  })
+
+  it('should use JWT_SECRET from env when verifying tokens', async () => {
+    const envSecret = 'env-jwt-secret-12345'
+    const token = await AuthManager.generateToken(
+      'user-123', 'test@example.com', 'user', envSecret
+    )
+
+    const mockContext: any = {
+      req: {
+        header: vi.fn().mockImplementation((name: string) => {
+          if (name === 'Authorization') return `Bearer ${token}`
+          return undefined
+        }),
+        raw: { headers: new Headers() }
+      },
+      set: vi.fn(),
+      env: { JWT_SECRET: envSecret }
+    }
+
+    const middleware = optionalAuth()
+    await middleware(mockContext as Context, mockNext)
+
+    expect(mockContext.set).toHaveBeenCalledWith('user', expect.objectContaining({
+      userId: 'user-123',
+      role: 'user'
+    }))
+    expect(mockNext).toHaveBeenCalled()
+  })
+})
+
 describe('requireRole middleware - Browser Redirects', () => {
   let mockContext: any
   let mockNext: Next

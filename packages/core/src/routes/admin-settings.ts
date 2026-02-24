@@ -433,7 +433,21 @@ adminSettingsRoutes.post('/api/database-tools/truncate', async (c) => {
     const db = c.env.DB
     const results = []
 
+    // Validate table names against actual database tables (prevents SQL injection)
+    const tablesResult = await db.prepare(`
+      SELECT name FROM sqlite_master
+      WHERE type='table'
+      AND name NOT LIKE 'sqlite_%'
+    `).all()
+    const validTables = new Set(
+      (tablesResult.results || []).map((row: any) => row.name)
+    )
+
     for (const tableName of tablesToTruncate) {
+      if (!validTables.has(tableName)) {
+        results.push({ table: tableName, success: false, error: 'Table not found' })
+        continue
+      }
       try {
         await db.prepare(`DELETE FROM ${tableName}`).run()
         results.push({ table: tableName, success: true })

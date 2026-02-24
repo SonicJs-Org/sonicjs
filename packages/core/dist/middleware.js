@@ -1,6 +1,6 @@
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-FQAOOSEB.js';
-import './chunk-YFJJU26H.js';
-import './chunk-DADFCDML.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './chunk-HLYL5S6M.js';
+import './chunk-TVIJ7U2H.js';
+import './chunk-5X6HGGYW.js';
 import './chunk-FICTAGD4.js';
 import './chunk-V4OQ3NZ2.js';
 //# sourceMappingURL=middleware.js.map

@@ -1,5 +1,28 @@
 import { Hono } from 'hono'
 import { TurnstileService } from '../plugins/core-plugins/turnstile-plugin/services/turnstile'
+import { sanitizeInput } from '../utils/sanitize'
+
+/**
+ * Recursively sanitize all string values in arbitrary JSON data.
+ * HTML-encodes entities (e.g., < becomes &lt;) to prevent stored XSS
+ * when form submission data is rendered in admin templates.
+ */
+function sanitizeDeep(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return sanitizeInput(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeDeep)
+  }
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = sanitizeDeep(v)
+    }
+    return result
+  }
+  return value // numbers, booleans, null pass through
+}
 
 type Bindings = {
   DB: D1Database
@@ -538,6 +561,10 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
       }
     }
 
+    // Sanitize all string values in submission data to prevent stored XSS.
+    // HTML-encodes entities (e.g., < becomes &lt;) before storage.
+    const sanitizedData = sanitizeDeep(body.data) as Record<string, unknown>
+
     // Create submission
     const submissionId = crypto.randomUUID()
     const now = Date.now()
@@ -550,7 +577,7 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
     `).bind(
       submissionId,
       form.id,
-      JSON.stringify(body.data),
+      JSON.stringify(sanitizedData),
       null, // user_id (for authenticated users)
       c.req.header('cf-connecting-ip') || null,
       c.req.header('user-agent') || null,

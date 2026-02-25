@@ -901,10 +901,21 @@ function renderStructuredArrayField(
   const fieldId = `field-${field.field_name}`
   const fieldName = field.field_name
   const arrayValue = normalizeStructuredArrayValue(value)
+  const arrayTitle = opts.itemLabel || field.field_label || 'Items'
+  const hasItemTitle = typeof opts.itemTitle === 'string' && opts.itemTitle.trim() !== ''
+  const arrayItemTitle = hasItemTitle ? opts.itemTitle.trim() : 'Item'
+  const addItemLabel = hasItemTitle ? `Add ${arrayItemTitle}` : 'Add item'
 
   const items = arrayValue
     .map((itemValue, index) =>
-      renderStructuredArrayItem(field, itemsConfig, String(index), itemValue, pluginStatuses)
+      renderStructuredArrayItem(
+        field,
+        itemsConfig,
+        String(index),
+        itemValue,
+        pluginStatuses,
+        arrayItemTitle,
+      ),
     )
     .join('')
 
@@ -923,14 +934,14 @@ function renderStructuredArrayField(
 
       <div class="flex items-center justify-between gap-3">
         <div class="text-sm text-zinc-500 dark:text-zinc-400">
-          ${escapeHtml(opts.itemLabel || 'Items')}
+          ${escapeHtml(arrayTitle)}
         </div>
         <button
           type="button"
           data-action="add-item"
           class="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800 dark:bg-white/10 dark:hover:bg-white/20"
         >
-          Add item
+          ${escapeHtml(addItemLabel)}
         </button>
       </div>
 
@@ -939,7 +950,14 @@ function renderStructuredArrayField(
       </div>
 
       <template data-structured-array-template>
-        ${renderStructuredArrayItem(field, itemsConfig, '__INDEX__', {}, pluginStatuses)}
+        ${renderStructuredArrayItem(
+          field,
+          itemsConfig,
+          '__INDEX__',
+          {},
+          pluginStatuses,
+          arrayItemTitle,
+        )}
       </template>
     </div>
     ${getDragSortableScript()}
@@ -952,7 +970,8 @@ function renderStructuredArrayItem(
   itemConfig: Record<string, any>,
   index: string,
   itemValue: any,
-  pluginStatuses: FieldRenderOptions['pluginStatuses']
+  pluginStatuses: FieldRenderOptions['pluginStatuses'],
+  arrayItemTitle: string,
 ): string {
   const itemFields = renderStructuredItemFields(field, itemConfig, index, itemValue, pluginStatuses)
 
@@ -965,8 +984,8 @@ function renderStructuredArrayItem(
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/>
             </svg>
           </div>
-          <div class="text-sm font-semibold text-zinc-900 dark:text-white">
-            Item <span class="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400" data-array-order-label></span>
+          <div class="text-sm font-semibold text-zinc-900 dark:text-white cursor-pointer" data-action="toggle-item">
+            ${escapeHtml(arrayItemTitle)} <span class="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400" data-array-order-label></span>
           </div>
         </div>
         <div class="flex flex-wrap gap-2 text-xs">

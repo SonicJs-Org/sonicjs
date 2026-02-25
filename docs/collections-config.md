@@ -1161,6 +1161,7 @@ metadata: {
 tags: {
   type: 'array',
   title: 'Tags',
+  itemTitle: 'Tag',
   description: 'Content tags',
   items: {
     type: 'string',

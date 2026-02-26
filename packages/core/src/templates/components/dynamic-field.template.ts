@@ -815,7 +815,7 @@ export function renderFieldGroup(
   const groupId = title.toLowerCase().replace(/\s+/g, '-')
 
   return `
-    <div class="field-group rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 mb-6">
+    <div class="field-group rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 mb-6" data-group-id="${escapeHtml(groupId)}">
       <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 px-6 py-4 ${collapsible ? 'cursor-pointer' : ''}" ${collapsible ? `onclick="toggleFieldGroup('${groupId}')"` : ''}>
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml(title)}
@@ -973,7 +973,7 @@ function renderStructuredObjectField(
   const isCollapsed = opts.collapsed !== false
 
   return `
-    <div class="field-group rounded-lg shadow-sm mb-6" data-structured-object data-field-name="${escapeHtml(fieldName)}">
+    <div class="field-group rounded-lg shadow-sm mb-6" data-group-id="${escapeHtml(groupId)}" data-structured-object data-field-name="${escapeHtml(fieldName)}">
       <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 pr-6 pb-4 cursor-pointer" onclick="toggleFieldGroup('${groupId}')">
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml(groupTitle)}
@@ -1411,6 +1411,58 @@ function getStructuredFieldScript(): string {
 
         function initializeStructuredFields() {
           const readFieldValue = window.sonicReadFieldValue;
+          const getArrayStateKey = (container) => {
+            const fieldName = container.dataset.fieldName || 'unknown';
+            return 'sonic:ui:repeaters:' + window.location.pathname + ':' + fieldName;
+          };
+
+          const readArrayState = (container) => {
+            try {
+              const raw = sessionStorage.getItem(getArrayStateKey(container));
+              if (!raw) return null;
+              const parsed = JSON.parse(raw);
+              return Array.isArray(parsed) ? parsed : null;
+            } catch {
+              return null;
+            }
+          };
+
+          const writeArrayState = (container, state) => {
+            try {
+              sessionStorage.setItem(getArrayStateKey(container), JSON.stringify(state));
+            } catch {}
+          };
+
+          const setArrayItemExpanded = (item, isExpanded) => {
+            const content = item.querySelector('[data-array-item-fields]');
+            const icon = item.querySelector('[data-item-toggle-icon]');
+            if (content instanceof HTMLElement) {
+              content.classList.toggle('hidden', !isExpanded);
+            }
+            if (icon instanceof Element) {
+              icon.classList.toggle('-rotate-90', !isExpanded);
+            }
+          };
+
+          const captureArrayState = (container) => {
+            return Array.from(container.querySelectorAll('.structured-array-item')).map((item) => {
+              const content = item.querySelector('[data-array-item-fields]');
+              return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
+            });
+          };
+
+          const applyArrayState = (container, state) => {
+            const items = Array.from(container.querySelectorAll('.structured-array-item'));
+            items.forEach((item, index) => {
+              if (typeof state[index] === 'boolean') {
+                setArrayItemExpanded(item, state[index]);
+              }
+            });
+          };
+
+          const syncArrayState = (container) => {
+            writeArrayState(container, captureArrayState(container));
+          };
 
           const readStructuredValue = (container) => {
             const fields = Array.from(container.querySelectorAll('.structured-subfield'));
@@ -1490,7 +1542,10 @@ function getStructuredFieldScript(): string {
               window.initializeDragSortable(list, {
                 itemSelector: '.structured-array-item',
                 handleSelector: '[data-action="drag-handle"]',
-                onUpdate: updateHiddenInput
+                onUpdate: () => {
+                  updateHiddenInput();
+                  syncArrayState(container);
+                }
               });
             }
 
@@ -1509,14 +1564,7 @@ function getStructuredFieldScript(): string {
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {
-                  const content = newItem.querySelector('[data-array-item-fields]');
-                  const icon = newItem.querySelector('[data-item-toggle-icon]');
-                  if (content instanceof HTMLElement) {
-                    content.classList.remove('hidden');
-                  }
-                  if (icon instanceof Element) {
-                    icon.classList.remove('-rotate-90');
-                  }
+                  setArrayItemExpanded(newItem, true);
                 }
                 if (typeof initializeTinyMCE === 'function') {
                   initializeTinyMCE();
@@ -1528,6 +1576,7 @@ function getStructuredFieldScript(): string {
                   initializeMDXEditor();
                 }
                 updateHiddenInput();
+                syncArrayState(container);
                 return;
               }
 
@@ -1536,19 +1585,16 @@ function getStructuredFieldScript(): string {
 
               if (action === 'toggle-item') {
                 const content = item.querySelector('[data-array-item-fields]');
-                const icon = item.querySelector('[data-item-toggle-icon]');
-                if (!content) return;
-                const isHidden = content.classList.contains('hidden');
-                content.classList.toggle('hidden', !isHidden);
-                if (icon) {
-                  icon.classList.toggle('-rotate-90', !isHidden);
-                }
+                if (!(content instanceof HTMLElement)) return;
+                setArrayItemExpanded(item, content.classList.contains('hidden'));
+                syncArrayState(container);
                 return;
               }
 
               if (action === 'remove-item') {
                 item.remove();
                 updateHiddenInput();
+                syncArrayState(container);
                 return;
               }
 
@@ -1557,6 +1603,7 @@ function getStructuredFieldScript(): string {
                 if (previous) {
                   list.insertBefore(item, previous);
                   updateHiddenInput();
+                  syncArrayState(container);
                 }
                 return;
               }
@@ -1566,6 +1613,7 @@ function getStructuredFieldScript(): string {
                 if (next) {
                   list.insertBefore(next, item);
                   updateHiddenInput();
+                  syncArrayState(container);
                 }
               }
             });
@@ -1587,6 +1635,12 @@ function getStructuredFieldScript(): string {
             });
 
             updateHiddenInput();
+            const savedArrayState = readArrayState(container);
+            if (savedArrayState) {
+              applyArrayState(container, savedArrayState);
+            } else {
+              syncArrayState(container);
+            }
           });
         }
 
@@ -1614,6 +1668,59 @@ function getBlocksFieldScript(): string {
     <script>
       if (!window.__sonicBlocksFieldInit) {
         window.__sonicBlocksFieldInit = true;
+
+        const getBlocksStateKey = (container) => {
+          const fieldName = container.dataset.fieldName || 'unknown';
+          return 'sonic:ui:blocks:' + window.location.pathname + ':' + fieldName;
+        };
+
+        const readBlocksState = (container) => {
+          try {
+            const raw = sessionStorage.getItem(getBlocksStateKey(container));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const writeBlocksState = (container, state) => {
+          try {
+            sessionStorage.setItem(getBlocksStateKey(container), JSON.stringify(state));
+          } catch {}
+        };
+
+        const setBlockExpanded = (item, isExpanded) => {
+          const content = item.querySelector('[data-block-content]');
+          const icon = item.querySelector('[data-block-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.toggle('hidden', !isExpanded);
+          }
+          if (icon instanceof Element) {
+            icon.classList.toggle('-rotate-90', !isExpanded);
+          }
+        };
+
+        const captureBlocksState = (container) => {
+          return Array.from(container.querySelectorAll('.blocks-item')).map((item) => {
+            const content = item.querySelector('[data-block-content]');
+            return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
+          });
+        };
+
+        const applyBlocksState = (container, state) => {
+          const items = Array.from(container.querySelectorAll('.blocks-item'));
+          items.forEach((item, index) => {
+            if (typeof state[index] === 'boolean') {
+              setBlockExpanded(item, state[index]);
+            }
+          });
+        };
+
+        const syncBlocksState = (container) => {
+          writeBlocksState(container, captureBlocksState(container));
+        };
 
         function initializeBlocksFields() {
           document.querySelectorAll('.blocks-field').forEach((container) => {
@@ -1701,7 +1808,10 @@ function getBlocksFieldScript(): string {
               window.initializeDragSortable(list, {
                 itemSelector: '.blocks-item',
                 handleSelector: '[data-action="drag-handle"]',
-                onUpdate: updateHiddenInput
+                onUpdate: () => {
+                  updateHiddenInput();
+                  syncBlocksState(container);
+                }
               });
             }
 
@@ -1727,14 +1837,7 @@ function getBlocksFieldScript(): string {
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {
-                  const content = newItem.querySelector('[data-block-content]');
-                  const icon = newItem.querySelector('[data-block-toggle-icon]');
-                  if (content instanceof HTMLElement) {
-                    content.classList.remove('hidden');
-                  }
-                  if (icon instanceof Element) {
-                    icon.classList.remove('-rotate-90');
-                  }
+                  setBlockExpanded(newItem, true);
                 }
                 if (typeSelect) {
                   typeSelect.value = '';
@@ -1744,6 +1847,7 @@ function getBlocksFieldScript(): string {
                   window.initializeStructuredFields();
                 }
                 updateHiddenInput();
+                syncBlocksState(container);
                 return;
               }
 
@@ -1752,13 +1856,9 @@ function getBlocksFieldScript(): string {
 
               if (action === 'toggle-block') {
                 const content = item.querySelector('[data-block-content]');
-                const icon = item.querySelector('[data-block-toggle-icon]');
-                if (!content) return;
-                const isHidden = content.classList.contains('hidden');
-                content.classList.toggle('hidden', !isHidden);
-                if (icon) {
-                  icon.classList.toggle('-rotate-90', !isHidden);
-                }
+                if (!(content instanceof HTMLElement)) return;
+                setBlockExpanded(item, content.classList.contains('hidden'));
+                syncBlocksState(container);
                 return;
               }
 
@@ -1767,10 +1867,12 @@ function getBlocksFieldScript(): string {
                   requestRepeaterDelete(() => {
                     item.remove();
                     updateHiddenInput();
+                    syncBlocksState(container);
                   }, 'block');
                 } else {
                   item.remove();
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
                 return;
               }
@@ -1780,6 +1882,7 @@ function getBlocksFieldScript(): string {
                 if (previous) {
                   list.insertBefore(item, previous);
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
                 return;
               }
@@ -1789,6 +1892,7 @@ function getBlocksFieldScript(): string {
                 if (next) {
                   list.insertBefore(next, item);
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
               }
             });
@@ -1810,6 +1914,12 @@ function getBlocksFieldScript(): string {
             });
 
             updateHiddenInput();
+            const savedBlocksState = readBlocksState(container);
+            if (savedBlocksState) {
+              applyBlocksState(container, savedBlocksState);
+            } else {
+              syncBlocksState(container);
+            }
           });
         }
 

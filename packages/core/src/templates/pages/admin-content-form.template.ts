@@ -431,19 +431,62 @@ export function renderContentFormPage(data: ContentFormData): string {
 
     <!-- Dynamic Field Scripts -->
     <script>
+      function getFieldGroupStorageKey(groupId) {
+        return 'sonic:ui:objects:' + window.location.pathname + ':' + groupId;
+      }
+
+      function loadFieldGroupState(groupId) {
+        try {
+          const value = sessionStorage.getItem(getFieldGroupStorageKey(groupId));
+          if (value === '1') return true;
+          if (value === '0') return false;
+        } catch {}
+        return null;
+      }
+
+      function saveFieldGroupState(groupId, isCollapsed) {
+        try {
+          sessionStorage.setItem(getFieldGroupStorageKey(groupId), isCollapsed ? '1' : '0');
+        } catch {}
+      }
+
+      function applyFieldGroupState(groupId, isCollapsed) {
+        const content = document.getElementById(groupId + '-content');
+        const icon = document.getElementById(groupId + '-icon');
+        if (!content || !icon) return;
+        content.classList.toggle('hidden', isCollapsed);
+        icon.classList.toggle('-rotate-90', isCollapsed);
+      }
+
+      function restoreFieldGroupStates() {
+        document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
+          const groupId = group.getAttribute('data-group-id');
+          if (!groupId) return;
+          const savedState = loadFieldGroupState(groupId);
+          if (savedState === null) return;
+          applyFieldGroupState(groupId, savedState);
+        });
+      }
+
       // Field group toggle
       function toggleFieldGroup(groupId) {
         const content = document.getElementById(groupId + '-content');
-        const icon = document.getElementById(groupId + '-icon');
-        
-        if (content.classList.contains('hidden')) {
-          content.classList.remove('hidden');
-          icon.classList.remove('-rotate-90');
-        } else {
-          content.classList.add('hidden');
-          icon.classList.add('-rotate-90');
-        }
+        if (!content) return;
+
+        const isCollapsed = !content.classList.contains('hidden');
+        applyFieldGroupState(groupId, isCollapsed);
+        saveFieldGroupState(groupId, isCollapsed);
       }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', restoreFieldGroupStates);
+      } else {
+        restoreFieldGroupStates();
+      }
+
+      document.addEventListener('htmx:afterSwap', function() {
+        setTimeout(restoreFieldGroupStates, 50);
+      });
 
       // Media field functions
       let currentMediaFieldId = null;

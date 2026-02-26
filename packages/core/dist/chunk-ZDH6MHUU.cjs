@@ -1,9 +1,9 @@
 'use strict';
 
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkGFKIWSGM_cjs = require('./chunk-GFKIWSGM.cjs');
+var chunkELKAJLYR_cjs = require('./chunk-ELKAJLYR.cjs');
 var chunkIIBRG5S5_cjs = require('./chunk-IIBRG5S5.cjs');
-var chunkZKA4WKRO_cjs = require('./chunk-ZKA4WKRO.cjs');
+var chunkCV3VJQSK_cjs = require('./chunk-CV3VJQSK.cjs');
 var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
 var chunk5HMR2SJW_cjs = require('./chunk-5HMR2SJW.cjs');
@@ -76,7 +76,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", chunkELKAJLYR_cjs.requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -142,7 +142,7 @@ apiContentCrudRoutes.post("/", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkELKAJLYR_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -206,7 +206,7 @@ apiContentCrudRoutes.put("/:id", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkELKAJLYR_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -242,7 +242,7 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunkGFKIWSGM_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkELKAJLYR_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
@@ -978,7 +978,7 @@ var fileValidationSchema = zod.z.object({
   // 50MB max
 });
 var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+apiMediaRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -1722,8 +1722,8 @@ apiSystemRoutes.get("/env", (c) => {
 });
 var api_system_default = apiSystemRoutes;
 var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
-adminApiRoutes.use("*", chunkGFKIWSGM_cjs.requireRole(["admin", "editor"]));
+adminApiRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
+adminApiRoutes.use("*", chunkELKAJLYR_cjs.requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -2233,7 +2233,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-JXEISWW5.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-7RCSUPXP.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2258,7 +2258,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-JXEISWW5.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-7RCSUPXP.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2277,7 +2277,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-JXEISWW5.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-7RCSUPXP.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -2759,7 +2759,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunkGFKIWSGM_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkELKAJLYR_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -2779,7 +2779,7 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkGFKIWSGM_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      const token = await chunkELKAJLYR_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2832,11 +2832,11 @@ authRoutes.post("/login", async (c) => {
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await chunkGFKIWSGM_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkELKAJLYR_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await chunkGFKIWSGM_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkELKAJLYR_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -2885,7 +2885,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", chunkELKAJLYR_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -2902,13 +2902,13 @@ authRoutes.get("/me", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunkGFKIWSGM_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", chunkELKAJLYR_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunkGFKIWSGM_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
+    const token = await chunkELKAJLYR_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -2968,7 +2968,7 @@ authRoutes.post("/register/form", async (c) => {
         </div>
       `);
     }
-    const passwordHash = await chunkGFKIWSGM_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkELKAJLYR_cjs.AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -2988,7 +2988,7 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await chunkGFKIWSGM_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
+    const token = await chunkELKAJLYR_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -3040,7 +3040,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const isValidPassword = await chunkGFKIWSGM_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkELKAJLYR_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -3048,7 +3048,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const token = await chunkGFKIWSGM_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkELKAJLYR_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -3107,7 +3107,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await chunkGFKIWSGM_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await chunkELKAJLYR_cjs.AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -3119,7 +3119,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await chunkGFKIWSGM_cjs.AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await chunkELKAJLYR_cjs.AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -3339,7 +3339,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunkGFKIWSGM_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkELKAJLYR_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -3358,7 +3358,7 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunkGFKIWSGM_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    const authToken = await chunkELKAJLYR_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
     cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
@@ -3588,7 +3588,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunkGFKIWSGM_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkELKAJLYR_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -4609,7 +4609,7 @@ function renderDynamicField(field, options = {}) {
   }
   const showLabel = field.field_type !== "boolean";
   return `
-    <div class="form-group">
+    <div class="form-group" data-has-errors="${errors.length > 0 ? "true" : "false"}">
       ${showLabel ? `
       <label for="${fieldId}" class="block text-sm/6 font-medium text-zinc-950 dark:text-white mb-2">
         ${escapeHtml2(field.field_label)}
@@ -4618,7 +4618,7 @@ function renderDynamicField(field, options = {}) {
       ` : ""}
       ${fieldHTML}
       ${errors.length > 0 ? `
-        <div class="mt-2 text-sm text-pink-600 dark:text-pink-400">
+        <div class="mt-2 text-sm text-pink-600 dark:text-pink-400" data-validation-error-message>
           ${errors.map((error) => `<div>${escapeHtml2(error)}</div>`).join("")}
         </div>
       ` : ""}
@@ -4633,7 +4633,7 @@ function renderDynamicField(field, options = {}) {
 function renderFieldGroup(title, fields, collapsible = false) {
   const groupId = title.toLowerCase().replace(/\s+/g, "-");
   return `
-    <div class="field-group rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 mb-6">
+    <div class="field-group rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 mb-6" data-group-id="${escapeHtml2(groupId)}">
       <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 px-6 py-4 ${collapsible ? "cursor-pointer" : ""}" ${collapsible ? `onclick="toggleFieldGroup('${groupId}')"` : ""}>
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml2(title)}
@@ -4714,7 +4714,7 @@ function renderBlocksField(field, options, baseClasses, errorClasses) {
   `;
 }
 function renderStructuredObjectField(field, options, baseClasses, errorClasses) {
-  const { value = {}, pluginStatuses = {} } = options;
+  const { value = {}, pluginStatuses = {}, errors = [] } = options;
   const opts = field.field_options || {};
   const properties = opts.properties && typeof opts.properties === "object" ? opts.properties : {};
   const fieldId = `field-${field.field_name}`;
@@ -4750,9 +4750,9 @@ function renderStructuredObjectField(field, options, baseClasses, errorClasses) 
     `;
   }
   const groupId = `object-${field.field_name}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  const isCollapsed = opts.collapsed !== false;
+  const isCollapsed = errors.length > 0 ? false : opts.collapsed !== false;
   return `
-    <div class="field-group rounded-lg shadow-sm mb-6" data-structured-object data-field-name="${escapeHtml2(fieldName)}">
+    <div class="field-group rounded-lg shadow-sm mb-6" data-group-id="${escapeHtml2(groupId)}" data-structured-object data-field-name="${escapeHtml2(fieldName)}">
       <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 pr-6 pb-4 cursor-pointer" onclick="toggleFieldGroup('${groupId}')">
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml2(groupTitle)}
@@ -5080,6 +5080,58 @@ function getStructuredFieldScript() {
 
         function initializeStructuredFields() {
           const readFieldValue = window.sonicReadFieldValue;
+          const getArrayStateKey = (container) => {
+            const fieldName = container.dataset.fieldName || 'unknown';
+            return 'sonic:ui:repeaters:' + window.location.pathname + ':' + fieldName;
+          };
+
+          const readArrayState = (container) => {
+            try {
+              const raw = sessionStorage.getItem(getArrayStateKey(container));
+              if (!raw) return null;
+              const parsed = JSON.parse(raw);
+              return Array.isArray(parsed) ? parsed : null;
+            } catch {
+              return null;
+            }
+          };
+
+          const writeArrayState = (container, state) => {
+            try {
+              sessionStorage.setItem(getArrayStateKey(container), JSON.stringify(state));
+            } catch {}
+          };
+
+          const setArrayItemExpanded = (item, isExpanded) => {
+            const content = item.querySelector('[data-array-item-fields]');
+            const icon = item.querySelector('[data-item-toggle-icon]');
+            if (content instanceof HTMLElement) {
+              content.classList.toggle('hidden', !isExpanded);
+            }
+            if (icon instanceof Element) {
+              icon.classList.toggle('-rotate-90', !isExpanded);
+            }
+          };
+
+          const captureArrayState = (container) => {
+            return Array.from(container.querySelectorAll('.structured-array-item')).map((item) => {
+              const content = item.querySelector('[data-array-item-fields]');
+              return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
+            });
+          };
+
+          const applyArrayState = (container, state) => {
+            const items = Array.from(container.querySelectorAll('.structured-array-item'));
+            items.forEach((item, index) => {
+              if (typeof state[index] === 'boolean') {
+                setArrayItemExpanded(item, state[index]);
+              }
+            });
+          };
+
+          const syncArrayState = (container) => {
+            writeArrayState(container, captureArrayState(container));
+          };
 
           const readStructuredValue = (container) => {
             const fields = Array.from(container.querySelectorAll('.structured-subfield'));
@@ -5159,7 +5211,10 @@ function getStructuredFieldScript() {
               window.initializeDragSortable(list, {
                 itemSelector: '.structured-array-item',
                 handleSelector: '[data-action="drag-handle"]',
-                onUpdate: updateHiddenInput
+                onUpdate: () => {
+                  updateHiddenInput();
+                  syncArrayState(container);
+                }
               });
             }
 
@@ -5178,14 +5233,7 @@ function getStructuredFieldScript() {
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {
-                  const content = newItem.querySelector('[data-array-item-fields]');
-                  const icon = newItem.querySelector('[data-item-toggle-icon]');
-                  if (content instanceof HTMLElement) {
-                    content.classList.remove('hidden');
-                  }
-                  if (icon instanceof Element) {
-                    icon.classList.remove('-rotate-90');
-                  }
+                  setArrayItemExpanded(newItem, true);
                 }
                 if (typeof initializeTinyMCE === 'function') {
                   initializeTinyMCE();
@@ -5197,6 +5245,7 @@ function getStructuredFieldScript() {
                   initializeMDXEditor();
                 }
                 updateHiddenInput();
+                syncArrayState(container);
                 return;
               }
 
@@ -5205,19 +5254,16 @@ function getStructuredFieldScript() {
 
               if (action === 'toggle-item') {
                 const content = item.querySelector('[data-array-item-fields]');
-                const icon = item.querySelector('[data-item-toggle-icon]');
-                if (!content) return;
-                const isHidden = content.classList.contains('hidden');
-                content.classList.toggle('hidden', !isHidden);
-                if (icon) {
-                  icon.classList.toggle('-rotate-90', !isHidden);
-                }
+                if (!(content instanceof HTMLElement)) return;
+                setArrayItemExpanded(item, content.classList.contains('hidden'));
+                syncArrayState(container);
                 return;
               }
 
               if (action === 'remove-item') {
                 item.remove();
                 updateHiddenInput();
+                syncArrayState(container);
                 return;
               }
 
@@ -5226,6 +5272,7 @@ function getStructuredFieldScript() {
                 if (previous) {
                   list.insertBefore(item, previous);
                   updateHiddenInput();
+                  syncArrayState(container);
                 }
                 return;
               }
@@ -5235,6 +5282,7 @@ function getStructuredFieldScript() {
                 if (next) {
                   list.insertBefore(next, item);
                   updateHiddenInput();
+                  syncArrayState(container);
                 }
               }
             });
@@ -5256,6 +5304,12 @@ function getStructuredFieldScript() {
             });
 
             updateHiddenInput();
+            const savedArrayState = readArrayState(container);
+            if (savedArrayState) {
+              applyArrayState(container, savedArrayState);
+            } else {
+              syncArrayState(container);
+            }
           });
         }
 
@@ -5282,6 +5336,59 @@ function getBlocksFieldScript() {
     <script>
       if (!window.__sonicBlocksFieldInit) {
         window.__sonicBlocksFieldInit = true;
+
+        const getBlocksStateKey = (container) => {
+          const fieldName = container.dataset.fieldName || 'unknown';
+          return 'sonic:ui:blocks:' + window.location.pathname + ':' + fieldName;
+        };
+
+        const readBlocksState = (container) => {
+          try {
+            const raw = sessionStorage.getItem(getBlocksStateKey(container));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const writeBlocksState = (container, state) => {
+          try {
+            sessionStorage.setItem(getBlocksStateKey(container), JSON.stringify(state));
+          } catch {}
+        };
+
+        const setBlockExpanded = (item, isExpanded) => {
+          const content = item.querySelector('[data-block-content]');
+          const icon = item.querySelector('[data-block-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.toggle('hidden', !isExpanded);
+          }
+          if (icon instanceof Element) {
+            icon.classList.toggle('-rotate-90', !isExpanded);
+          }
+        };
+
+        const captureBlocksState = (container) => {
+          return Array.from(container.querySelectorAll('.blocks-item')).map((item) => {
+            const content = item.querySelector('[data-block-content]');
+            return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
+          });
+        };
+
+        const applyBlocksState = (container, state) => {
+          const items = Array.from(container.querySelectorAll('.blocks-item'));
+          items.forEach((item, index) => {
+            if (typeof state[index] === 'boolean') {
+              setBlockExpanded(item, state[index]);
+            }
+          });
+        };
+
+        const syncBlocksState = (container) => {
+          writeBlocksState(container, captureBlocksState(container));
+        };
 
         function initializeBlocksFields() {
           document.querySelectorAll('.blocks-field').forEach((container) => {
@@ -5369,7 +5476,10 @@ function getBlocksFieldScript() {
               window.initializeDragSortable(list, {
                 itemSelector: '.blocks-item',
                 handleSelector: '[data-action="drag-handle"]',
-                onUpdate: updateHiddenInput
+                onUpdate: () => {
+                  updateHiddenInput();
+                  syncBlocksState(container);
+                }
               });
             }
 
@@ -5395,14 +5505,7 @@ function getBlocksFieldScript() {
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {
-                  const content = newItem.querySelector('[data-block-content]');
-                  const icon = newItem.querySelector('[data-block-toggle-icon]');
-                  if (content instanceof HTMLElement) {
-                    content.classList.remove('hidden');
-                  }
-                  if (icon instanceof Element) {
-                    icon.classList.remove('-rotate-90');
-                  }
+                  setBlockExpanded(newItem, true);
                 }
                 if (typeSelect) {
                   typeSelect.value = '';
@@ -5412,6 +5515,7 @@ function getBlocksFieldScript() {
                   window.initializeStructuredFields();
                 }
                 updateHiddenInput();
+                syncBlocksState(container);
                 return;
               }
 
@@ -5420,13 +5524,9 @@ function getBlocksFieldScript() {
 
               if (action === 'toggle-block') {
                 const content = item.querySelector('[data-block-content]');
-                const icon = item.querySelector('[data-block-toggle-icon]');
-                if (!content) return;
-                const isHidden = content.classList.contains('hidden');
-                content.classList.toggle('hidden', !isHidden);
-                if (icon) {
-                  icon.classList.toggle('-rotate-90', !isHidden);
-                }
+                if (!(content instanceof HTMLElement)) return;
+                setBlockExpanded(item, content.classList.contains('hidden'));
+                syncBlocksState(container);
                 return;
               }
 
@@ -5435,10 +5535,12 @@ function getBlocksFieldScript() {
                   requestRepeaterDelete(() => {
                     item.remove();
                     updateHiddenInput();
+                    syncBlocksState(container);
                   }, 'block');
                 } else {
                   item.remove();
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
                 return;
               }
@@ -5448,6 +5550,7 @@ function getBlocksFieldScript() {
                 if (previous) {
                   list.insertBefore(item, previous);
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
                 return;
               }
@@ -5457,6 +5560,7 @@ function getBlocksFieldScript() {
                 if (next) {
                   list.insertBefore(next, item);
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
               }
             });
@@ -5478,6 +5582,12 @@ function getBlocksFieldScript() {
             });
 
             updateHiddenInput();
+            const savedBlocksState = readBlocksState(container);
+            if (savedBlocksState) {
+              applyBlocksState(container, savedBlocksState);
+            } else {
+              syncBlocksState(container);
+            }
           });
         }
 
@@ -6037,6 +6147,7 @@ function getMDXEditorInitScript(config) {
 function renderContentFormPage(data) {
   const isEdit = data.isEdit || !!data.id;
   const title = isEdit ? `Edit: ${data.title || "Content"}` : `New ${data.collection.display_name}`;
+  const hasValidationErrors = Boolean(data.validationErrors && Object.keys(data.validationErrors).length > 0);
   const backUrl = data.referrerParams ? `/admin/content?${data.referrerParams}` : `/admin/content?collection=${data.collection.id}`;
   const coreFields = data.fields.filter((f) => ["title", "slug", "content"].includes(f.field_name));
   const contentFields = data.fields.filter((f) => !["title", "slug", "content"].includes(f.field_name) && !f.field_name.startsWith("meta_"));
@@ -6125,6 +6236,7 @@ function renderContentFormPage(data) {
             ${isEdit ? `hx-put="/admin/content/${data.id}"` : `hx-post="/admin/content"`}
             hx-target="#form-messages"
             hx-encoding="multipart/form-data"
+            data-has-validation-errors="${hasValidationErrors ? "true" : "false"}"
             class="space-y-6"
           >
             <input type="hidden" name="collection_id" value="${data.collection.id}">
@@ -6383,19 +6495,267 @@ function renderContentFormPage(data) {
 
     <!-- Dynamic Field Scripts -->
     <script>
+      function getFieldGroupStorageKey(groupId) {
+        return 'sonic:ui:objects:' + window.location.pathname + ':' + groupId;
+      }
+
+      function loadFieldGroupState(groupId) {
+        try {
+          const value = sessionStorage.getItem(getFieldGroupStorageKey(groupId));
+          if (value === '1') return true;
+          if (value === '0') return false;
+        } catch {}
+        return null;
+      }
+
+      function saveFieldGroupState(groupId, isCollapsed) {
+        try {
+          sessionStorage.setItem(getFieldGroupStorageKey(groupId), isCollapsed ? '1' : '0');
+        } catch {}
+      }
+
+      function applyFieldGroupState(groupId, isCollapsed) {
+        const content = document.getElementById(groupId + '-content');
+        const icon = document.getElementById(groupId + '-icon');
+        if (!content || !icon) return;
+        content.classList.toggle('hidden', isCollapsed);
+        icon.classList.toggle('-rotate-90', isCollapsed);
+      }
+
+      function restoreFieldGroupStates() {
+        document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
+          const groupId = group.getAttribute('data-group-id');
+          if (!groupId) return;
+          const savedState = loadFieldGroupState(groupId);
+          if (savedState === null) return;
+          applyFieldGroupState(groupId, savedState);
+        });
+      }
+
+      function setValidationHeaderIndicator(container) {
+        if (!(container instanceof Element)) return;
+        let header = null;
+        let markerTarget = null;
+
+        if (container.classList.contains('field-group')) {
+          header = container.querySelector(':scope > .field-group-header');
+          markerTarget = container.querySelector(':scope > .field-group-header h3');
+        } else if (container.classList.contains('structured-array-item')) {
+          header = container.querySelector('[data-action="toggle-item"]');
+          markerTarget = header;
+        } else if (container.classList.contains('blocks-item')) {
+          header = container.querySelector('[data-action="toggle-block"]');
+          markerTarget = header;
+        }
+
+        if (!(header instanceof HTMLElement)) return;
+        if (!(markerTarget instanceof HTMLElement)) {
+          markerTarget = header;
+        }
+
+        header.dataset.validationHeaderError = 'true';
+        header.classList.add('text-pink-700', 'dark:text-pink-300');
+
+        if (!markerTarget.querySelector('[data-validation-indicator]')) {
+          const marker = document.createElement('span');
+          marker.setAttribute('data-validation-indicator', 'true');
+          marker.className = 'ml-2 inline-block h-2 w-2 rounded-full bg-pink-500 align-middle';
+          marker.setAttribute('aria-hidden', 'true');
+          markerTarget.appendChild(marker);
+        }
+      }
+
+      function clearValidationIndicators() {
+        document.querySelectorAll('[data-validation-header-error="true"]').forEach((el) => {
+          if (!(el instanceof HTMLElement)) return;
+          delete el.dataset.validationHeaderError;
+          el.classList.remove('text-pink-700', 'dark:text-pink-300');
+        });
+
+        document.querySelectorAll('[data-validation-indicator]').forEach((el) => el.remove());
+      }
+
+      function expandContainerForValidation(container) {
+        if (!(container instanceof Element)) return;
+
+        if (container.classList.contains('field-group')) {
+          const groupId = container.getAttribute('data-group-id');
+          if (groupId) {
+            applyFieldGroupState(groupId, false);
+            return;
+          }
+          const content = container.querySelector(':scope > .field-group-content');
+          const icon = container.querySelector(':scope > .field-group-header svg[id$="-icon"]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+          return;
+        }
+
+        if (container.classList.contains('structured-array-item')) {
+          const content = container.querySelector('[data-array-item-fields]');
+          const icon = container.querySelector('[data-item-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+          return;
+        }
+
+        if (container.classList.contains('blocks-item')) {
+          const content = container.querySelector('[data-block-content]');
+          const icon = container.querySelector('[data-block-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+        }
+      }
+
+      function walkErrorContainers(node, expand) {
+        if (!(node instanceof Element)) return;
+        const visited = new Set();
+        let cursor = node;
+        while (cursor) {
+          const candidates = [
+            cursor.closest('.structured-array-item'),
+            cursor.closest('.blocks-item'),
+            cursor.closest('.field-group[data-group-id]')
+          ].filter((c) => c instanceof Element && !visited.has(c));
+
+          if (candidates.length === 0) break;
+
+          // Pick nearest ancestor container to preserve "first-error path only".
+          let nearest = candidates[0];
+          let bestDistance = Number.MAX_SAFE_INTEGER;
+          for (const candidate of candidates) {
+            let distance = 0;
+            let walker = cursor;
+            while (walker && walker !== candidate) {
+              walker = walker.parentElement;
+              distance += 1;
+            }
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              nearest = candidate;
+            }
+          }
+
+          visited.add(nearest);
+          setValidationHeaderIndicator(nearest);
+          if (expand) {
+            expandContainerForValidation(nearest);
+          }
+          cursor = nearest.parentElement;
+        }
+      }
+
+      function getFocusableTargetFromErrorGroup(group) {
+        if (!(group instanceof Element)) return null;
+        return (
+          group.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable="true"]') ||
+          group.querySelector('button:not([disabled])')
+        );
+      }
+
+      function revealServerValidationErrors() {
+        clearValidationIndicators();
+
+        const errorGroups = Array.from(document.querySelectorAll('.form-group[data-has-errors="true"]'));
+        if (errorGroups.length === 0) return;
+
+        // Add indicators for all errored sections, expand only first-error path.
+        errorGroups.forEach((group, index) => {
+          walkErrorContainers(group, index === 0);
+        });
+
+        const firstTarget = getFocusableTargetFromErrorGroup(errorGroups[0]);
+        if (firstTarget instanceof HTMLElement) {
+          firstTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstTarget.focus({ preventScroll: true });
+        }
+      }
+
+      function revealNativeValidationErrors(form) {
+        if (!(form instanceof HTMLFormElement)) return;
+        clearValidationIndicators();
+
+        const invalidControls = Array.from(form.querySelectorAll(':invalid'));
+        if (invalidControls.length === 0) return;
+
+        invalidControls.forEach((control, index) => {
+          walkErrorContainers(control, index === 0);
+        });
+
+        const first = invalidControls[0];
+        if (first instanceof HTMLElement) {
+          first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          first.focus({ preventScroll: true });
+        }
+      }
+
       // Field group toggle
       function toggleFieldGroup(groupId) {
         const content = document.getElementById(groupId + '-content');
-        const icon = document.getElementById(groupId + '-icon');
-        
-        if (content.classList.contains('hidden')) {
-          content.classList.remove('hidden');
-          icon.classList.remove('-rotate-90');
-        } else {
-          content.classList.add('hidden');
-          icon.classList.add('-rotate-90');
+        if (!content) return;
+
+        const isCollapsed = !content.classList.contains('hidden');
+        applyFieldGroupState(groupId, isCollapsed);
+        saveFieldGroupState(groupId, isCollapsed);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          restoreFieldGroupStates();
+          const form = document.getElementById('content-form');
+          if (form?.getAttribute('data-has-validation-errors') === 'true') {
+            revealServerValidationErrors();
+          }
+        });
+      } else {
+        restoreFieldGroupStates();
+        const form = document.getElementById('content-form');
+        if (form?.getAttribute('data-has-validation-errors') === 'true') {
+          revealServerValidationErrors();
         }
       }
+
+      document.addEventListener('htmx:afterSwap', function() {
+        setTimeout(() => {
+          restoreFieldGroupStates();
+          const form = document.getElementById('content-form');
+          if (form?.getAttribute('data-has-validation-errors') === 'true') {
+            revealServerValidationErrors();
+          }
+        }, 50);
+      });
+
+      let pendingNativeValidationReveal = false;
+      document.addEventListener('invalid', function(event) {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const form = target.closest('form');
+        if (!(form instanceof HTMLFormElement)) return;
+
+        if (pendingNativeValidationReveal) return;
+        pendingNativeValidationReveal = true;
+
+        // Expand only first invalid path synchronously so the browser can focus it
+        // and avoid "invalid form control is not focusable" errors.
+        walkErrorContainers(target, true);
+
+        setTimeout(() => {
+          pendingNativeValidationReveal = false;
+          revealNativeValidationErrors(form);
+        }, 0);
+      }, true);
 
       // Media field functions
       let currentMediaFieldId = null;
@@ -8240,7 +8600,7 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+adminContentRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
   const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
@@ -11270,7 +11630,7 @@ function renderUsersListPage(data) {
 
 // src/routes/admin-users.ts
 var userRoutes = new hono.Hono();
-userRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+userRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -11425,7 +11785,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -11488,7 +11848,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -11559,7 +11919,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunkGFKIWSGM_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkELKAJLYR_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -11567,7 +11927,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunkGFKIWSGM_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkELKAJLYR_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -11583,7 +11943,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -11650,7 +12010,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -11804,7 +12164,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunkGFKIWSGM_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkELKAJLYR_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -11827,7 +12187,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -11865,7 +12225,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -12090,7 +12450,7 @@ userRoutes.put("/users/:id", async (c) => {
         ).run();
       }
     }
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -12135,7 +12495,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -12176,7 +12536,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunkGFKIWSGM_cjs.logActivity(
+      await chunkELKAJLYR_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -12195,7 +12555,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunkGFKIWSGM_cjs.logActivity(
+      await chunkELKAJLYR_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -12261,7 +12621,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -12318,7 +12678,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -12354,7 +12714,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -12437,7 +12797,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -12544,7 +12904,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunkGFKIWSGM_cjs.logActivity(
+    await chunkELKAJLYR_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -13883,7 +14243,7 @@ var fileValidationSchema2 = zod.z.object({
   // 50MB max
 });
 var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+adminMediaRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -14469,7 +14829,7 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunkGFKIWSGM_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkELKAJLYR_cjs.requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -16692,7 +17052,7 @@ function renderEmailSettingsContent(plugin, settings) {
 
 // src/routes/admin-plugins.ts
 var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+adminPluginRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -18097,7 +18457,7 @@ function renderLogConfigPage(data) {
 
 // src/routes/admin-logs.ts
 var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+adminLogsRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -20427,7 +20787,7 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 // src/routes/admin-dashboard.ts
 var VERSION = chunk5HMR2SJW_cjs.getCoreVersion();
 var router = new hono.Hono();
-router.use("*", chunkGFKIWSGM_cjs.requireAuth());
+router.use("*", chunkELKAJLYR_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -22207,7 +22567,7 @@ function renderCollectionFormPage(data) {
 
 // src/routes/admin-collections.ts
 var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+adminCollectionsRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -24396,7 +24756,7 @@ function renderDatabaseToolsSettings(settings) {
 
 // src/routes/admin-settings.ts
 var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+adminSettingsRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -24564,7 +24924,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkZKA4WKRO_cjs.MigrationService(db);
+    const migrationService = new chunkCV3VJQSK_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -24588,7 +24948,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkZKA4WKRO_cjs.MigrationService(db);
+    const migrationService = new chunkCV3VJQSK_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -24606,7 +24966,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkZKA4WKRO_cjs.MigrationService(db);
+    const migrationService = new chunkCV3VJQSK_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -26484,7 +26844,7 @@ function renderFormCreatePage(data) {
 
 // src/routes/admin-forms.ts
 var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunkGFKIWSGM_cjs.requireAuth());
+adminFormsRoutes.use("*", chunkELKAJLYR_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -27616,7 +27976,7 @@ function renderAPIReferencePage(data) {
 // src/routes/admin-api-reference.ts
 var VERSION2 = chunk5HMR2SJW_cjs.getCoreVersion();
 var router2 = new hono.Hono();
-router2.use("*", chunkGFKIWSGM_cjs.requireAuth());
+router2.use("*", chunkELKAJLYR_cjs.requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -27897,5 +28257,5 @@ exports.router = router;
 exports.router2 = router2;
 exports.test_cleanup_default = test_cleanup_default;
 exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-THCZHX25.cjs.map
-//# sourceMappingURL=chunk-THCZHX25.cjs.map
+//# sourceMappingURL=chunk-ZDH6MHUU.cjs.map
+//# sourceMappingURL=chunk-ZDH6MHUU.cjs.map

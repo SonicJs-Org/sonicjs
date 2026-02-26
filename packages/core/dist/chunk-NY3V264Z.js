@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-VXTHM6MB.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-F3B7Q2TS.js';
 import { PluginService } from './chunk-27AOVQTR.js';
-import { MigrationService } from './chunk-K6TOTMAZ.js';
+import { MigrationService } from './chunk-3ZUCKXWH.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-VCH6HXVP.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-34QIAULP.js';
@@ -2231,7 +2231,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-ZI3P6YZN.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-LCELTSFO.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2256,7 +2256,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-ZI3P6YZN.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-LCELTSFO.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2275,7 +2275,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-ZI3P6YZN.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-LCELTSFO.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -4607,7 +4607,7 @@ function renderDynamicField(field, options = {}) {
   }
   const showLabel = field.field_type !== "boolean";
   return `
-    <div class="form-group">
+    <div class="form-group" data-has-errors="${errors.length > 0 ? "true" : "false"}">
       ${showLabel ? `
       <label for="${fieldId}" class="block text-sm/6 font-medium text-zinc-950 dark:text-white mb-2">
         ${escapeHtml2(field.field_label)}
@@ -4616,7 +4616,7 @@ function renderDynamicField(field, options = {}) {
       ` : ""}
       ${fieldHTML}
       ${errors.length > 0 ? `
-        <div class="mt-2 text-sm text-pink-600 dark:text-pink-400">
+        <div class="mt-2 text-sm text-pink-600 dark:text-pink-400" data-validation-error-message>
           ${errors.map((error) => `<div>${escapeHtml2(error)}</div>`).join("")}
         </div>
       ` : ""}
@@ -4631,7 +4631,7 @@ function renderDynamicField(field, options = {}) {
 function renderFieldGroup(title, fields, collapsible = false) {
   const groupId = title.toLowerCase().replace(/\s+/g, "-");
   return `
-    <div class="field-group rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 mb-6">
+    <div class="field-group rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 mb-6" data-group-id="${escapeHtml2(groupId)}">
       <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 px-6 py-4 ${collapsible ? "cursor-pointer" : ""}" ${collapsible ? `onclick="toggleFieldGroup('${groupId}')"` : ""}>
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml2(title)}
@@ -4712,7 +4712,7 @@ function renderBlocksField(field, options, baseClasses, errorClasses) {
   `;
 }
 function renderStructuredObjectField(field, options, baseClasses, errorClasses) {
-  const { value = {}, pluginStatuses = {} } = options;
+  const { value = {}, pluginStatuses = {}, errors = [] } = options;
   const opts = field.field_options || {};
   const properties = opts.properties && typeof opts.properties === "object" ? opts.properties : {};
   const fieldId = `field-${field.field_name}`;
@@ -4748,9 +4748,9 @@ function renderStructuredObjectField(field, options, baseClasses, errorClasses) 
     `;
   }
   const groupId = `object-${field.field_name}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  const isCollapsed = opts.collapsed !== false;
+  const isCollapsed = errors.length > 0 ? false : opts.collapsed !== false;
   return `
-    <div class="field-group rounded-lg shadow-sm mb-6" data-structured-object data-field-name="${escapeHtml2(fieldName)}">
+    <div class="field-group rounded-lg shadow-sm mb-6" data-group-id="${escapeHtml2(groupId)}" data-structured-object data-field-name="${escapeHtml2(fieldName)}">
       <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 pr-6 pb-4 cursor-pointer" onclick="toggleFieldGroup('${groupId}')">
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml2(groupTitle)}
@@ -5078,6 +5078,58 @@ function getStructuredFieldScript() {
 
         function initializeStructuredFields() {
           const readFieldValue = window.sonicReadFieldValue;
+          const getArrayStateKey = (container) => {
+            const fieldName = container.dataset.fieldName || 'unknown';
+            return 'sonic:ui:repeaters:' + window.location.pathname + ':' + fieldName;
+          };
+
+          const readArrayState = (container) => {
+            try {
+              const raw = sessionStorage.getItem(getArrayStateKey(container));
+              if (!raw) return null;
+              const parsed = JSON.parse(raw);
+              return Array.isArray(parsed) ? parsed : null;
+            } catch {
+              return null;
+            }
+          };
+
+          const writeArrayState = (container, state) => {
+            try {
+              sessionStorage.setItem(getArrayStateKey(container), JSON.stringify(state));
+            } catch {}
+          };
+
+          const setArrayItemExpanded = (item, isExpanded) => {
+            const content = item.querySelector('[data-array-item-fields]');
+            const icon = item.querySelector('[data-item-toggle-icon]');
+            if (content instanceof HTMLElement) {
+              content.classList.toggle('hidden', !isExpanded);
+            }
+            if (icon instanceof Element) {
+              icon.classList.toggle('-rotate-90', !isExpanded);
+            }
+          };
+
+          const captureArrayState = (container) => {
+            return Array.from(container.querySelectorAll('.structured-array-item')).map((item) => {
+              const content = item.querySelector('[data-array-item-fields]');
+              return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
+            });
+          };
+
+          const applyArrayState = (container, state) => {
+            const items = Array.from(container.querySelectorAll('.structured-array-item'));
+            items.forEach((item, index) => {
+              if (typeof state[index] === 'boolean') {
+                setArrayItemExpanded(item, state[index]);
+              }
+            });
+          };
+
+          const syncArrayState = (container) => {
+            writeArrayState(container, captureArrayState(container));
+          };
 
           const readStructuredValue = (container) => {
             const fields = Array.from(container.querySelectorAll('.structured-subfield'));
@@ -5157,7 +5209,10 @@ function getStructuredFieldScript() {
               window.initializeDragSortable(list, {
                 itemSelector: '.structured-array-item',
                 handleSelector: '[data-action="drag-handle"]',
-                onUpdate: updateHiddenInput
+                onUpdate: () => {
+                  updateHiddenInput();
+                  syncArrayState(container);
+                }
               });
             }
 
@@ -5176,14 +5231,7 @@ function getStructuredFieldScript() {
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {
-                  const content = newItem.querySelector('[data-array-item-fields]');
-                  const icon = newItem.querySelector('[data-item-toggle-icon]');
-                  if (content instanceof HTMLElement) {
-                    content.classList.remove('hidden');
-                  }
-                  if (icon instanceof Element) {
-                    icon.classList.remove('-rotate-90');
-                  }
+                  setArrayItemExpanded(newItem, true);
                 }
                 if (typeof initializeTinyMCE === 'function') {
                   initializeTinyMCE();
@@ -5195,6 +5243,7 @@ function getStructuredFieldScript() {
                   initializeMDXEditor();
                 }
                 updateHiddenInput();
+                syncArrayState(container);
                 return;
               }
 
@@ -5203,19 +5252,16 @@ function getStructuredFieldScript() {
 
               if (action === 'toggle-item') {
                 const content = item.querySelector('[data-array-item-fields]');
-                const icon = item.querySelector('[data-item-toggle-icon]');
-                if (!content) return;
-                const isHidden = content.classList.contains('hidden');
-                content.classList.toggle('hidden', !isHidden);
-                if (icon) {
-                  icon.classList.toggle('-rotate-90', !isHidden);
-                }
+                if (!(content instanceof HTMLElement)) return;
+                setArrayItemExpanded(item, content.classList.contains('hidden'));
+                syncArrayState(container);
                 return;
               }
 
               if (action === 'remove-item') {
                 item.remove();
                 updateHiddenInput();
+                syncArrayState(container);
                 return;
               }
 
@@ -5224,6 +5270,7 @@ function getStructuredFieldScript() {
                 if (previous) {
                   list.insertBefore(item, previous);
                   updateHiddenInput();
+                  syncArrayState(container);
                 }
                 return;
               }
@@ -5233,6 +5280,7 @@ function getStructuredFieldScript() {
                 if (next) {
                   list.insertBefore(next, item);
                   updateHiddenInput();
+                  syncArrayState(container);
                 }
               }
             });
@@ -5254,6 +5302,12 @@ function getStructuredFieldScript() {
             });
 
             updateHiddenInput();
+            const savedArrayState = readArrayState(container);
+            if (savedArrayState) {
+              applyArrayState(container, savedArrayState);
+            } else {
+              syncArrayState(container);
+            }
           });
         }
 
@@ -5280,6 +5334,59 @@ function getBlocksFieldScript() {
     <script>
       if (!window.__sonicBlocksFieldInit) {
         window.__sonicBlocksFieldInit = true;
+
+        const getBlocksStateKey = (container) => {
+          const fieldName = container.dataset.fieldName || 'unknown';
+          return 'sonic:ui:blocks:' + window.location.pathname + ':' + fieldName;
+        };
+
+        const readBlocksState = (container) => {
+          try {
+            const raw = sessionStorage.getItem(getBlocksStateKey(container));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const writeBlocksState = (container, state) => {
+          try {
+            sessionStorage.setItem(getBlocksStateKey(container), JSON.stringify(state));
+          } catch {}
+        };
+
+        const setBlockExpanded = (item, isExpanded) => {
+          const content = item.querySelector('[data-block-content]');
+          const icon = item.querySelector('[data-block-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.toggle('hidden', !isExpanded);
+          }
+          if (icon instanceof Element) {
+            icon.classList.toggle('-rotate-90', !isExpanded);
+          }
+        };
+
+        const captureBlocksState = (container) => {
+          return Array.from(container.querySelectorAll('.blocks-item')).map((item) => {
+            const content = item.querySelector('[data-block-content]');
+            return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
+          });
+        };
+
+        const applyBlocksState = (container, state) => {
+          const items = Array.from(container.querySelectorAll('.blocks-item'));
+          items.forEach((item, index) => {
+            if (typeof state[index] === 'boolean') {
+              setBlockExpanded(item, state[index]);
+            }
+          });
+        };
+
+        const syncBlocksState = (container) => {
+          writeBlocksState(container, captureBlocksState(container));
+        };
 
         function initializeBlocksFields() {
           document.querySelectorAll('.blocks-field').forEach((container) => {
@@ -5367,7 +5474,10 @@ function getBlocksFieldScript() {
               window.initializeDragSortable(list, {
                 itemSelector: '.blocks-item',
                 handleSelector: '[data-action="drag-handle"]',
-                onUpdate: updateHiddenInput
+                onUpdate: () => {
+                  updateHiddenInput();
+                  syncBlocksState(container);
+                }
               });
             }
 
@@ -5393,14 +5503,7 @@ function getBlocksFieldScript() {
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {
-                  const content = newItem.querySelector('[data-block-content]');
-                  const icon = newItem.querySelector('[data-block-toggle-icon]');
-                  if (content instanceof HTMLElement) {
-                    content.classList.remove('hidden');
-                  }
-                  if (icon instanceof Element) {
-                    icon.classList.remove('-rotate-90');
-                  }
+                  setBlockExpanded(newItem, true);
                 }
                 if (typeSelect) {
                   typeSelect.value = '';
@@ -5410,6 +5513,7 @@ function getBlocksFieldScript() {
                   window.initializeStructuredFields();
                 }
                 updateHiddenInput();
+                syncBlocksState(container);
                 return;
               }
 
@@ -5418,13 +5522,9 @@ function getBlocksFieldScript() {
 
               if (action === 'toggle-block') {
                 const content = item.querySelector('[data-block-content]');
-                const icon = item.querySelector('[data-block-toggle-icon]');
-                if (!content) return;
-                const isHidden = content.classList.contains('hidden');
-                content.classList.toggle('hidden', !isHidden);
-                if (icon) {
-                  icon.classList.toggle('-rotate-90', !isHidden);
-                }
+                if (!(content instanceof HTMLElement)) return;
+                setBlockExpanded(item, content.classList.contains('hidden'));
+                syncBlocksState(container);
                 return;
               }
 
@@ -5433,10 +5533,12 @@ function getBlocksFieldScript() {
                   requestRepeaterDelete(() => {
                     item.remove();
                     updateHiddenInput();
+                    syncBlocksState(container);
                   }, 'block');
                 } else {
                   item.remove();
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
                 return;
               }
@@ -5446,6 +5548,7 @@ function getBlocksFieldScript() {
                 if (previous) {
                   list.insertBefore(item, previous);
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
                 return;
               }
@@ -5455,6 +5558,7 @@ function getBlocksFieldScript() {
                 if (next) {
                   list.insertBefore(next, item);
                   updateHiddenInput();
+                  syncBlocksState(container);
                 }
               }
             });
@@ -5476,6 +5580,12 @@ function getBlocksFieldScript() {
             });
 
             updateHiddenInput();
+            const savedBlocksState = readBlocksState(container);
+            if (savedBlocksState) {
+              applyBlocksState(container, savedBlocksState);
+            } else {
+              syncBlocksState(container);
+            }
           });
         }
 
@@ -6035,6 +6145,7 @@ function getMDXEditorInitScript(config) {
 function renderContentFormPage(data) {
   const isEdit = data.isEdit || !!data.id;
   const title = isEdit ? `Edit: ${data.title || "Content"}` : `New ${data.collection.display_name}`;
+  const hasValidationErrors = Boolean(data.validationErrors && Object.keys(data.validationErrors).length > 0);
   const backUrl = data.referrerParams ? `/admin/content?${data.referrerParams}` : `/admin/content?collection=${data.collection.id}`;
   const coreFields = data.fields.filter((f) => ["title", "slug", "content"].includes(f.field_name));
   const contentFields = data.fields.filter((f) => !["title", "slug", "content"].includes(f.field_name) && !f.field_name.startsWith("meta_"));
@@ -6123,6 +6234,7 @@ function renderContentFormPage(data) {
             ${isEdit ? `hx-put="/admin/content/${data.id}"` : `hx-post="/admin/content"`}
             hx-target="#form-messages"
             hx-encoding="multipart/form-data"
+            data-has-validation-errors="${hasValidationErrors ? "true" : "false"}"
             class="space-y-6"
           >
             <input type="hidden" name="collection_id" value="${data.collection.id}">
@@ -6381,19 +6493,267 @@ function renderContentFormPage(data) {
 
     <!-- Dynamic Field Scripts -->
     <script>
+      function getFieldGroupStorageKey(groupId) {
+        return 'sonic:ui:objects:' + window.location.pathname + ':' + groupId;
+      }
+
+      function loadFieldGroupState(groupId) {
+        try {
+          const value = sessionStorage.getItem(getFieldGroupStorageKey(groupId));
+          if (value === '1') return true;
+          if (value === '0') return false;
+        } catch {}
+        return null;
+      }
+
+      function saveFieldGroupState(groupId, isCollapsed) {
+        try {
+          sessionStorage.setItem(getFieldGroupStorageKey(groupId), isCollapsed ? '1' : '0');
+        } catch {}
+      }
+
+      function applyFieldGroupState(groupId, isCollapsed) {
+        const content = document.getElementById(groupId + '-content');
+        const icon = document.getElementById(groupId + '-icon');
+        if (!content || !icon) return;
+        content.classList.toggle('hidden', isCollapsed);
+        icon.classList.toggle('-rotate-90', isCollapsed);
+      }
+
+      function restoreFieldGroupStates() {
+        document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
+          const groupId = group.getAttribute('data-group-id');
+          if (!groupId) return;
+          const savedState = loadFieldGroupState(groupId);
+          if (savedState === null) return;
+          applyFieldGroupState(groupId, savedState);
+        });
+      }
+
+      function setValidationHeaderIndicator(container) {
+        if (!(container instanceof Element)) return;
+        let header = null;
+        let markerTarget = null;
+
+        if (container.classList.contains('field-group')) {
+          header = container.querySelector(':scope > .field-group-header');
+          markerTarget = container.querySelector(':scope > .field-group-header h3');
+        } else if (container.classList.contains('structured-array-item')) {
+          header = container.querySelector('[data-action="toggle-item"]');
+          markerTarget = header;
+        } else if (container.classList.contains('blocks-item')) {
+          header = container.querySelector('[data-action="toggle-block"]');
+          markerTarget = header;
+        }
+
+        if (!(header instanceof HTMLElement)) return;
+        if (!(markerTarget instanceof HTMLElement)) {
+          markerTarget = header;
+        }
+
+        header.dataset.validationHeaderError = 'true';
+        header.classList.add('text-pink-700', 'dark:text-pink-300');
+
+        if (!markerTarget.querySelector('[data-validation-indicator]')) {
+          const marker = document.createElement('span');
+          marker.setAttribute('data-validation-indicator', 'true');
+          marker.className = 'ml-2 inline-block h-2 w-2 rounded-full bg-pink-500 align-middle';
+          marker.setAttribute('aria-hidden', 'true');
+          markerTarget.appendChild(marker);
+        }
+      }
+
+      function clearValidationIndicators() {
+        document.querySelectorAll('[data-validation-header-error="true"]').forEach((el) => {
+          if (!(el instanceof HTMLElement)) return;
+          delete el.dataset.validationHeaderError;
+          el.classList.remove('text-pink-700', 'dark:text-pink-300');
+        });
+
+        document.querySelectorAll('[data-validation-indicator]').forEach((el) => el.remove());
+      }
+
+      function expandContainerForValidation(container) {
+        if (!(container instanceof Element)) return;
+
+        if (container.classList.contains('field-group')) {
+          const groupId = container.getAttribute('data-group-id');
+          if (groupId) {
+            applyFieldGroupState(groupId, false);
+            return;
+          }
+          const content = container.querySelector(':scope > .field-group-content');
+          const icon = container.querySelector(':scope > .field-group-header svg[id$="-icon"]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+          return;
+        }
+
+        if (container.classList.contains('structured-array-item')) {
+          const content = container.querySelector('[data-array-item-fields]');
+          const icon = container.querySelector('[data-item-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+          return;
+        }
+
+        if (container.classList.contains('blocks-item')) {
+          const content = container.querySelector('[data-block-content]');
+          const icon = container.querySelector('[data-block-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+        }
+      }
+
+      function walkErrorContainers(node, expand) {
+        if (!(node instanceof Element)) return;
+        const visited = new Set();
+        let cursor = node;
+        while (cursor) {
+          const candidates = [
+            cursor.closest('.structured-array-item'),
+            cursor.closest('.blocks-item'),
+            cursor.closest('.field-group[data-group-id]')
+          ].filter((c) => c instanceof Element && !visited.has(c));
+
+          if (candidates.length === 0) break;
+
+          // Pick nearest ancestor container to preserve "first-error path only".
+          let nearest = candidates[0];
+          let bestDistance = Number.MAX_SAFE_INTEGER;
+          for (const candidate of candidates) {
+            let distance = 0;
+            let walker = cursor;
+            while (walker && walker !== candidate) {
+              walker = walker.parentElement;
+              distance += 1;
+            }
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              nearest = candidate;
+            }
+          }
+
+          visited.add(nearest);
+          setValidationHeaderIndicator(nearest);
+          if (expand) {
+            expandContainerForValidation(nearest);
+          }
+          cursor = nearest.parentElement;
+        }
+      }
+
+      function getFocusableTargetFromErrorGroup(group) {
+        if (!(group instanceof Element)) return null;
+        return (
+          group.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable="true"]') ||
+          group.querySelector('button:not([disabled])')
+        );
+      }
+
+      function revealServerValidationErrors() {
+        clearValidationIndicators();
+
+        const errorGroups = Array.from(document.querySelectorAll('.form-group[data-has-errors="true"]'));
+        if (errorGroups.length === 0) return;
+
+        // Add indicators for all errored sections, expand only first-error path.
+        errorGroups.forEach((group, index) => {
+          walkErrorContainers(group, index === 0);
+        });
+
+        const firstTarget = getFocusableTargetFromErrorGroup(errorGroups[0]);
+        if (firstTarget instanceof HTMLElement) {
+          firstTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstTarget.focus({ preventScroll: true });
+        }
+      }
+
+      function revealNativeValidationErrors(form) {
+        if (!(form instanceof HTMLFormElement)) return;
+        clearValidationIndicators();
+
+        const invalidControls = Array.from(form.querySelectorAll(':invalid'));
+        if (invalidControls.length === 0) return;
+
+        invalidControls.forEach((control, index) => {
+          walkErrorContainers(control, index === 0);
+        });
+
+        const first = invalidControls[0];
+        if (first instanceof HTMLElement) {
+          first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          first.focus({ preventScroll: true });
+        }
+      }
+
       // Field group toggle
       function toggleFieldGroup(groupId) {
         const content = document.getElementById(groupId + '-content');
-        const icon = document.getElementById(groupId + '-icon');
-        
-        if (content.classList.contains('hidden')) {
-          content.classList.remove('hidden');
-          icon.classList.remove('-rotate-90');
-        } else {
-          content.classList.add('hidden');
-          icon.classList.add('-rotate-90');
+        if (!content) return;
+
+        const isCollapsed = !content.classList.contains('hidden');
+        applyFieldGroupState(groupId, isCollapsed);
+        saveFieldGroupState(groupId, isCollapsed);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          restoreFieldGroupStates();
+          const form = document.getElementById('content-form');
+          if (form?.getAttribute('data-has-validation-errors') === 'true') {
+            revealServerValidationErrors();
+          }
+        });
+      } else {
+        restoreFieldGroupStates();
+        const form = document.getElementById('content-form');
+        if (form?.getAttribute('data-has-validation-errors') === 'true') {
+          revealServerValidationErrors();
         }
       }
+
+      document.addEventListener('htmx:afterSwap', function() {
+        setTimeout(() => {
+          restoreFieldGroupStates();
+          const form = document.getElementById('content-form');
+          if (form?.getAttribute('data-has-validation-errors') === 'true') {
+            revealServerValidationErrors();
+          }
+        }, 50);
+      });
+
+      let pendingNativeValidationReveal = false;
+      document.addEventListener('invalid', function(event) {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const form = target.closest('form');
+        if (!(form instanceof HTMLFormElement)) return;
+
+        if (pendingNativeValidationReveal) return;
+        pendingNativeValidationReveal = true;
+
+        // Expand only first invalid path synchronously so the browser can focus it
+        // and avoid "invalid form control is not focusable" errors.
+        walkErrorContainers(target, true);
+
+        setTimeout(() => {
+          pendingNativeValidationReveal = false;
+          revealNativeValidationErrors(form);
+        }, 0);
+      }, true);
 
       // Media field functions
       let currentMediaFieldId = null;
@@ -27871,5 +28231,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-QKY6I4B7.js.map
-//# sourceMappingURL=chunk-QKY6I4B7.js.map
+//# sourceMappingURL=chunk-NY3V264Z.js.map
+//# sourceMappingURL=chunk-NY3V264Z.js.map

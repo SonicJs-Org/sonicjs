@@ -697,6 +697,11 @@ export function renderContentFormPage(data: ContentFormData): string {
 
       // Media field functions
       let currentMediaFieldId = null;
+      function notifyFieldChange(input) {
+        if (!input) return;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
 
       function openMediaSelector(fieldId) {
         currentMediaFieldId = fieldId;
@@ -745,6 +750,7 @@ export function renderContentFormPage(data: ContentFormData): string {
         const hiddenInput = document.getElementById(fieldId);
         if (hiddenInput) {
           hiddenInput.value = originalValue;
+          notifyFieldChange(hiddenInput);
         }
 
         // If original value was empty, hide the preview and show select button
@@ -765,6 +771,7 @@ export function renderContentFormPage(data: ContentFormData): string {
 
         if (hiddenInput) {
           hiddenInput.value = '';
+          notifyFieldChange(hiddenInput);
         }
 
         if (preview) {
@@ -783,6 +790,7 @@ export function renderContentFormPage(data: ContentFormData): string {
 
         const values = hiddenInput.value.split(',').filter(url => url !== urlToRemove);
         hiddenInput.value = values.join(',');
+        notifyFieldChange(hiddenInput);
 
         // Remove preview item
         const previewItem = document.querySelector(\`[data-url="\${urlToRemove}"]\`);
@@ -812,6 +820,7 @@ export function renderContentFormPage(data: ContentFormData): string {
         const hiddenInput = document.getElementById(fieldId);
         if (hiddenInput) {
           hiddenInput.value = mediaUrl;
+          notifyFieldChange(hiddenInput);
         }
 
         // Update the preview
@@ -847,7 +856,9 @@ export function renderContentFormPage(data: ContentFormData): string {
       };
 
       function setMediaField(fieldId, mediaUrl) {
-        document.getElementById(fieldId).value = mediaUrl;
+        const hiddenInput = document.getElementById(fieldId);
+        hiddenInput.value = mediaUrl;
+        notifyFieldChange(hiddenInput);
         const preview = document.getElementById(fieldId + '-preview');
         preview.innerHTML = \`<img src="\${mediaUrl}" alt="Selected media" class="w-32 h-32 object-cover rounded-lg ring-1 ring-zinc-950/10 dark:ring-white/10">\`;
         preview.classList.remove('hidden');

@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-F3B7Q2TS.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-3M7OE4SN.js';
 import { PluginService } from './chunk-27AOVQTR.js';
-import { MigrationService } from './chunk-3ZUCKXWH.js';
+import { MigrationService } from './chunk-NZ43VGYN.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-VCH6HXVP.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-34QIAULP.js';
@@ -2231,7 +2231,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-LCELTSFO.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-WZ6O3BUT.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2256,7 +2256,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-LCELTSFO.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-WZ6O3BUT.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2275,7 +2275,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-LCELTSFO.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-WZ6O3BUT.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -6757,6 +6757,11 @@ function renderContentFormPage(data) {
 
       // Media field functions
       let currentMediaFieldId = null;
+      function notifyFieldChange(input) {
+        if (!input) return;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
 
       function openMediaSelector(fieldId) {
         currentMediaFieldId = fieldId;
@@ -6805,6 +6810,7 @@ function renderContentFormPage(data) {
         const hiddenInput = document.getElementById(fieldId);
         if (hiddenInput) {
           hiddenInput.value = originalValue;
+          notifyFieldChange(hiddenInput);
         }
 
         // If original value was empty, hide the preview and show select button
@@ -6825,6 +6831,7 @@ function renderContentFormPage(data) {
 
         if (hiddenInput) {
           hiddenInput.value = '';
+          notifyFieldChange(hiddenInput);
         }
 
         if (preview) {
@@ -6843,6 +6850,7 @@ function renderContentFormPage(data) {
 
         const values = hiddenInput.value.split(',').filter(url => url !== urlToRemove);
         hiddenInput.value = values.join(',');
+        notifyFieldChange(hiddenInput);
 
         // Remove preview item
         const previewItem = document.querySelector(\`[data-url="\${urlToRemove}"]\`);
@@ -6872,6 +6880,7 @@ function renderContentFormPage(data) {
         const hiddenInput = document.getElementById(fieldId);
         if (hiddenInput) {
           hiddenInput.value = mediaUrl;
+          notifyFieldChange(hiddenInput);
         }
 
         // Update the preview
@@ -6907,7 +6916,9 @@ function renderContentFormPage(data) {
       };
 
       function setMediaField(fieldId, mediaUrl) {
-        document.getElementById(fieldId).value = mediaUrl;
+        const hiddenInput = document.getElementById(fieldId);
+        hiddenInput.value = mediaUrl;
+        notifyFieldChange(hiddenInput);
         const preview = document.getElementById(fieldId + '-preview');
         preview.innerHTML = \`<img src="\${mediaUrl}" alt="Selected media" class="w-32 h-32 object-cover rounded-lg ring-1 ring-zinc-950/10 dark:ring-white/10">\`;
         preview.classList.remove('hidden');
@@ -28231,5 +28242,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-NY3V264Z.js.map
-//# sourceMappingURL=chunk-NY3V264Z.js.map
+//# sourceMappingURL=chunk-I5GOKJZV.js.map
+//# sourceMappingURL=chunk-I5GOKJZV.js.map

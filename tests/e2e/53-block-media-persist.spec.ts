@@ -33,7 +33,7 @@ test.describe('Block Media Persistence', () => {
     formData.append('files', blob, uploadedFileName);
     formData.append('folder', 'uploads');
 
-    const uploadResponse = await context.request.post('http://localhost:8787/api/media/upload-multiple', {
+    const uploadResponse = await context.request.post('/api/media/upload-multiple', {
       multipart: formData
     });
 
@@ -45,7 +45,7 @@ test.describe('Block Media Persistence', () => {
 
   test.afterEach(async ({ context }) => {
     if (uploadedFileId) {
-      await context.request.post('http://localhost:8787/api/media/bulk-delete', {
+      await context.request.post('/api/media/bulk-delete', {
         data: { fileIds: [uploadedFileId] }
       }).catch(() => {});
     }
@@ -78,7 +78,13 @@ test.describe('Block Media Persistence', () => {
 
     const firstBlock = blocksField.locator('.blocks-item').first();
     await firstBlock.locator('[data-block-field="heading"] input').fill('Media persistence hero');
-    await firstBlock.locator('[data-block-field="ctaPrimary"] input[name$="__label"]').fill('Primary CTA');
+    const ctaPrimaryField = firstBlock.locator('[data-block-field="ctaPrimary"]');
+    const ctaPrimaryLabelInput = ctaPrimaryField.locator('input[name$="__label"]');
+    if (!(await ctaPrimaryLabelInput.isVisible())) {
+      await ctaPrimaryField.locator('.field-group-header').first().click();
+      await expect(ctaPrimaryLabelInput).toBeVisible();
+    }
+    await ctaPrimaryLabelInput.fill('Primary CTA');
 
     const imageField = firstBlock.locator('[data-block-field="image"]');
     const selectMediaButton = imageField.locator('button:has-text("Select Media")');

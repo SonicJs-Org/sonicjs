@@ -442,22 +442,69 @@ export function renderContentFormPage(data: ContentFormData): string {
         return window.location.pathname + ':' + effectiveCollectionId;
       }
 
-      function getFieldGroupStorageKey(groupId) {
-        return 'sonic:ui:objects:' + getFieldGroupScope() + ':' + groupId;
+      function escapeRegExp(value) {
+        return value.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&');
       }
 
-      function loadFieldGroupState(groupId) {
+      function getItemPosition(itemSelector, item) {
+        if (!(item instanceof Element)) return -1;
+        const parent = item.parentElement;
+        if (!parent) return -1;
+        return Array.from(parent.querySelectorAll(':scope > ' + itemSelector)).indexOf(item);
+      }
+
+      function getFieldGroupStorageKey(groupOrId) {
+        const defaultGroupId = typeof groupOrId === 'string' ? groupOrId : (groupOrId?.getAttribute('data-group-id') || 'unknown');
+        const group = typeof groupOrId === 'string'
+          ? document.querySelector('.field-group[data-group-id="' + defaultGroupId + '"]')
+          : groupOrId;
+
+        const scopePrefix = 'sonic:ui:objects:' + getFieldGroupScope() + ':';
+        if (!(group instanceof Element)) {
+          return scopePrefix + defaultGroupId;
+        }
+
+        const fullFieldName = group.getAttribute('data-field-name') || '';
+
+        const blocksField = group.closest('.blocks-field');
+        const blockItem = group.closest('.blocks-item');
+        if (blocksField instanceof Element && blockItem instanceof Element) {
+          const blocksFieldName = blocksField.getAttribute('data-field-name') || 'unknown';
+          const blockPosition = getItemPosition('.blocks-item', blockItem);
+          const relativePath = fullFieldName.replace(
+            new RegExp('^block-' + escapeRegExp(blocksFieldName) + '-\\d+-'),
+            '',
+          ) || defaultGroupId;
+          return scopePrefix + 'blocks:' + blocksFieldName + ':' + blockPosition + ':' + relativePath;
+        }
+
+        const arrayField = group.closest('[data-structured-array][data-field-name]');
+        const arrayItem = group.closest('.structured-array-item');
+        if (arrayField instanceof Element && arrayItem instanceof Element) {
+          const arrayFieldName = arrayField.getAttribute('data-field-name') || 'unknown';
+          const itemPosition = getItemPosition('.structured-array-item', arrayItem);
+          const relativePath = fullFieldName.replace(
+            new RegExp('^array-' + escapeRegExp(arrayFieldName) + '-\\d+-'),
+            '',
+          ) || defaultGroupId;
+          return scopePrefix + 'repeaters:' + arrayFieldName + ':' + itemPosition + ':' + relativePath;
+        }
+
+        return scopePrefix + defaultGroupId;
+      }
+
+      function loadFieldGroupState(group) {
         try {
-          const value = sessionStorage.getItem(getFieldGroupStorageKey(groupId));
+          const value = sessionStorage.getItem(getFieldGroupStorageKey(group));
           if (value === '1') return true;
           if (value === '0') return false;
         } catch {}
         return null;
       }
 
-      function saveFieldGroupState(groupId, isCollapsed) {
+      function saveFieldGroupState(group, isCollapsed) {
         try {
-          sessionStorage.setItem(getFieldGroupStorageKey(groupId), isCollapsed ? '1' : '0');
+          sessionStorage.setItem(getFieldGroupStorageKey(group), isCollapsed ? '1' : '0');
         } catch {}
       }
 
@@ -473,9 +520,19 @@ export function renderContentFormPage(data: ContentFormData): string {
         document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
           const groupId = group.getAttribute('data-group-id');
           if (!groupId) return;
-          const savedState = loadFieldGroupState(groupId);
+          const savedState = loadFieldGroupState(group);
           if (savedState === null) return;
           applyFieldGroupState(groupId, savedState);
+        });
+      }
+
+      function persistAllFieldGroupStates() {
+        document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
+          const groupId = group.getAttribute('data-group-id');
+          if (!groupId) return;
+          const content = document.getElementById(groupId + '-content');
+          if (!content) return;
+          saveFieldGroupState(group, content.classList.contains('hidden'));
         });
       }
 
@@ -652,10 +709,12 @@ export function renderContentFormPage(data: ContentFormData): string {
       function toggleFieldGroup(groupId) {
         const content = document.getElementById(groupId + '-content');
         if (!content) return;
+        const group = content.closest('.field-group[data-group-id]');
+        if (!(group instanceof Element)) return;
 
         const isCollapsed = !content.classList.contains('hidden');
         applyFieldGroupState(groupId, isCollapsed);
-        saveFieldGroupState(groupId, isCollapsed);
+        saveFieldGroupState(group, isCollapsed);
       }
 
       if (document.readyState === 'loading') {
@@ -682,6 +741,23 @@ export function renderContentFormPage(data: ContentFormData): string {
             revealServerValidationErrors();
           }
         }, 50);
+      });
+
+      const contentFormEl = document.getElementById('content-form');
+      if (contentFormEl instanceof HTMLFormElement) {
+        contentFormEl.addEventListener('submit', () => {
+          persistAllFieldGroupStates();
+        }, true);
+      }
+
+      window.addEventListener('beforeunload', () => {
+        persistAllFieldGroupStates();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          persistAllFieldGroupStates();
+        }
       });
 
       let pendingNativeValidationReveal = false;

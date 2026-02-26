@@ -773,7 +773,7 @@ export function renderDynamicField(
   const showLabel = field.field_type !== 'boolean'
 
   return `
-    <div class="form-group">
+    <div class="form-group" data-has-errors="${errors.length > 0 ? 'true' : 'false'}">
       ${
         showLabel
           ? `
@@ -788,7 +788,7 @@ export function renderDynamicField(
       ${
         errors.length > 0
           ? `
-        <div class="mt-2 text-sm text-pink-600 dark:text-pink-400">
+        <div class="mt-2 text-sm text-pink-600 dark:text-pink-400" data-validation-error-message>
           ${errors.map((error) => `<div>${escapeHtml(error)}</div>`).join('')}
         </div>
       `
@@ -928,7 +928,7 @@ function renderStructuredObjectField(
   baseClasses: string,
   errorClasses: string,
 ): string {
-  const { value = {}, pluginStatuses = {} } = options
+  const { value = {}, pluginStatuses = {}, errors = [] } = options
   const opts = field.field_options || {}
   const properties = opts.properties && typeof opts.properties === 'object' ? opts.properties : {}
   const fieldId = `field-${field.field_name}`
@@ -970,7 +970,7 @@ function renderStructuredObjectField(
   }
 
   const groupId = `object-${field.field_name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-  const isCollapsed = opts.collapsed !== false
+  const isCollapsed = errors.length > 0 ? false : opts.collapsed !== false
 
   return `
     <div class="field-group rounded-lg shadow-sm mb-6" data-group-id="${escapeHtml(groupId)}" data-structured-object data-field-name="${escapeHtml(fieldName)}">

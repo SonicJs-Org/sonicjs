@@ -442,15 +442,25 @@ export function renderContentFormPage(data: ContentFormData): string {
         return window.location.pathname + ':' + effectiveCollectionId;
       }
 
-      function escapeRegExp(value) {
-        return value.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&');
-      }
-
       function getItemPosition(itemSelector, item) {
         if (!(item instanceof Element)) return -1;
         const parent = item.parentElement;
         if (!parent) return -1;
         return Array.from(parent.querySelectorAll(':scope > ' + itemSelector)).indexOf(item);
+      }
+
+      function stripIndexedFieldPrefix(fullFieldName, prefix) {
+        if (!fullFieldName || !prefix || !fullFieldName.startsWith(prefix)) {
+          return fullFieldName;
+        }
+
+        const remainder = fullFieldName.slice(prefix.length);
+        const indexMatch = remainder.match(/^(\\d+)(-|__)(.*)$/);
+        if (!indexMatch) {
+          return fullFieldName;
+        }
+
+        return indexMatch[3];
       }
 
       function getFieldGroupStorageKey(groupOrId) {
@@ -471,10 +481,7 @@ export function renderContentFormPage(data: ContentFormData): string {
         if (blocksField instanceof Element && blockItem instanceof Element) {
           const blocksFieldName = blocksField.getAttribute('data-field-name') || 'unknown';
           const blockPosition = getItemPosition('.blocks-item', blockItem);
-          const relativePath = fullFieldName.replace(
-            new RegExp('^block-' + escapeRegExp(blocksFieldName) + '-\\d+-'),
-            '',
-          ) || defaultGroupId;
+          const relativePath = stripIndexedFieldPrefix(fullFieldName, 'block-' + blocksFieldName + '-') || defaultGroupId;
           return scopePrefix + 'blocks:' + blocksFieldName + ':' + blockPosition + ':' + relativePath;
         }
 
@@ -483,10 +490,7 @@ export function renderContentFormPage(data: ContentFormData): string {
         if (arrayField instanceof Element && arrayItem instanceof Element) {
           const arrayFieldName = arrayField.getAttribute('data-field-name') || 'unknown';
           const itemPosition = getItemPosition('.structured-array-item', arrayItem);
-          const relativePath = fullFieldName.replace(
-            new RegExp('^array-' + escapeRegExp(arrayFieldName) + '-\\d+-'),
-            '',
-          ) || defaultGroupId;
+          const relativePath = stripIndexedFieldPrefix(fullFieldName, 'array-' + arrayFieldName + '-') || defaultGroupId;
           return scopePrefix + 'repeaters:' + arrayFieldName + ':' + itemPosition + ':' + relativePath;
         }
 
@@ -508,30 +512,59 @@ export function renderContentFormPage(data: ContentFormData): string {
         } catch {}
       }
 
-      function applyFieldGroupState(groupId, isCollapsed) {
-        const content = document.getElementById(groupId + '-content');
-        const icon = document.getElementById(groupId + '-icon');
-        if (!content || !icon) return;
+      function resolveFieldGroupElements(groupOrId) {
+        let group = null;
+
+        if (groupOrId instanceof Element) {
+          group = groupOrId.classList.contains('field-group')
+            ? groupOrId
+            : groupOrId.closest('.field-group[data-group-id]');
+        } else if (typeof groupOrId === 'string' && groupOrId) {
+          group = document.querySelector('.field-group[data-group-id="' + groupOrId + '"]');
+        }
+
+        let content = null;
+        let icon = null;
+
+        if (group instanceof Element) {
+          content = group.querySelector(':scope > .field-group-content');
+          icon = group.querySelector(':scope > .field-group-header svg[id$="-icon"]');
+        }
+
+        // Legacy fallback for any existing calls still passing string IDs.
+        if (!(content instanceof HTMLElement) && typeof groupOrId === 'string') {
+          content = document.getElementById(groupOrId + '-content');
+        }
+        if (!(icon instanceof Element) && typeof groupOrId === 'string') {
+          icon = document.getElementById(groupOrId + '-icon');
+        }
+
+        if (!(group instanceof Element) && content instanceof Element) {
+          group = content.closest('.field-group[data-group-id]');
+        }
+
+        return { group, content, icon };
+      }
+
+      function applyFieldGroupState(groupOrId, isCollapsed) {
+        const { content, icon } = resolveFieldGroupElements(groupOrId);
+        if (!(content instanceof HTMLElement) || !(icon instanceof Element)) return;
         content.classList.toggle('hidden', isCollapsed);
         icon.classList.toggle('-rotate-90', isCollapsed);
       }
 
       function restoreFieldGroupStates() {
         document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
-          const groupId = group.getAttribute('data-group-id');
-          if (!groupId) return;
           const savedState = loadFieldGroupState(group);
           if (savedState === null) return;
-          applyFieldGroupState(groupId, savedState);
+          applyFieldGroupState(group, savedState);
         });
       }
 
       function persistAllFieldGroupStates() {
         document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
-          const groupId = group.getAttribute('data-group-id');
-          if (!groupId) return;
-          const content = document.getElementById(groupId + '-content');
-          if (!content) return;
+          const { content } = resolveFieldGroupElements(group);
+          if (!(content instanceof HTMLElement)) return;
           saveFieldGroupState(group, content.classList.contains('hidden'));
         });
       }
@@ -583,19 +616,7 @@ export function renderContentFormPage(data: ContentFormData): string {
         if (!(container instanceof Element)) return;
 
         if (container.classList.contains('field-group')) {
-          const groupId = container.getAttribute('data-group-id');
-          if (groupId) {
-            applyFieldGroupState(groupId, false);
-            return;
-          }
-          const content = container.querySelector(':scope > .field-group-content');
-          const icon = container.querySelector(':scope > .field-group-header svg[id$="-icon"]');
-          if (content instanceof HTMLElement) {
-            content.classList.remove('hidden');
-          }
-          if (icon instanceof Element) {
-            icon.classList.remove('-rotate-90');
-          }
+          applyFieldGroupState(container, false);
           return;
         }
 
@@ -706,14 +727,13 @@ export function renderContentFormPage(data: ContentFormData): string {
       }
 
       // Field group toggle
-      function toggleFieldGroup(groupId) {
-        const content = document.getElementById(groupId + '-content');
-        if (!content) return;
-        const group = content.closest('.field-group[data-group-id]');
+      function toggleFieldGroup(groupOrTrigger) {
+        const { group, content } = resolveFieldGroupElements(groupOrTrigger);
         if (!(group instanceof Element)) return;
+        if (!(content instanceof HTMLElement)) return;
 
         const isCollapsed = !content.classList.contains('hidden');
-        applyFieldGroupState(groupId, isCollapsed);
+        applyFieldGroupState(group, isCollapsed);
         saveFieldGroupState(group, isCollapsed);
       }
 

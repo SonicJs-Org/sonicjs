@@ -19,7 +19,50 @@ function getReadFieldValueScript(): string {
           const nonHiddenInput = inputs.find((input) => input.type !== 'hidden' && input.type !== 'checkbox');
           const hiddenInput = inputs.find((input) => input.type === 'hidden');
 
+          const readStructuredFieldsHost = (host) => {
+            const fields = Array.from(host.querySelectorAll(':scope > .structured-subfield'));
+            if (fields.length === 1 && fields[0].dataset.structuredField === '__value') {
+              return window.sonicReadFieldValue(fields[0]);
+            }
+            return fields.reduce((acc, subfield) => {
+              const fieldName = subfield.dataset.structuredField;
+              if (!fieldName || fieldName === '__value') return acc;
+              acc[fieldName] = window.sonicReadFieldValue(subfield);
+              return acc;
+            }, {});
+          };
+
+          const readStructuredObject = () => {
+            const objectContainer = fieldWrapper.querySelector('[data-structured-object]');
+            if (!objectContainer) return null;
+            const host =
+              objectContainer.querySelector(':scope > [data-structured-object-fields]') ||
+              objectContainer.querySelector('[data-structured-object-fields]') ||
+              objectContainer;
+            return readStructuredFieldsHost(host);
+          };
+
+          const readStructuredArray = () => {
+            const arrayContainer = fieldWrapper.querySelector('[data-structured-array]');
+            if (!arrayContainer) return null;
+            const list = arrayContainer.querySelector('[data-structured-array-list]');
+            if (!list) return [];
+            const items = Array.from(list.querySelectorAll(':scope > .structured-array-item'));
+            return items.map((item) => {
+              const host =
+                item.querySelector(':scope > [data-array-item-fields]') ||
+                item.querySelector('[data-array-item-fields]') ||
+                item;
+              return readStructuredFieldsHost(host);
+            });
+          };
+
           if (fieldType === 'object' || fieldType === 'array') {
+            const liveValue = fieldType === 'array' ? readStructuredArray() : readStructuredObject();
+            if (liveValue !== null) {
+              return liveValue;
+            }
+
             if (!hiddenInput) {
               return fieldType === 'array' ? [] : {};
             }
@@ -816,7 +859,7 @@ export function renderFieldGroup(
 
   return `
     <div class="field-group rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 mb-6" data-group-id="${escapeHtml(groupId)}">
-      <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 px-6 py-4 ${collapsible ? 'cursor-pointer' : ''}" ${collapsible ? `onclick="toggleFieldGroup('${groupId}')"` : ''}>
+      <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 px-6 py-4 ${collapsible ? 'cursor-pointer' : ''}" ${collapsible ? `onclick="toggleFieldGroup(this)"` : ''}>
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml(title)}
           ${
@@ -982,7 +1025,7 @@ function renderStructuredObjectField(
 
   return `
     <div class="field-group rounded-lg shadow-sm mb-6" data-group-id="${escapeHtml(groupId)}" data-structured-object data-field-name="${escapeHtml(fieldName)}">
-      <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 pr-6 pb-4 cursor-pointer" onclick="toggleFieldGroup('${groupId}')">
+      <div class="field-group-header border-b border-zinc-950/5 dark:border-white/10 pr-6 pb-4 cursor-pointer" onclick="toggleFieldGroup(this)">
         <h3 class="text-base/7 font-semibold text-zinc-950 dark:text-white flex items-center">
           ${escapeHtml(groupTitle)}
           <svg id="${groupId}-icon" class="w-5 h-5 ml-2 transform transition-transform ${isCollapsed ? '-rotate-90' : ''} text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1483,7 +1526,12 @@ function getStructuredFieldScript(): string {
           };
 
           const readStructuredValue = (container) => {
-            const fields = Array.from(container.querySelectorAll('.structured-subfield'));
+            const fieldHost =
+              container.querySelector(':scope > [data-structured-object-fields]') ||
+              container.querySelector(':scope > .field-group-content > [data-structured-object-fields]') ||
+              container.querySelector(':scope > [data-array-item-fields]') ||
+              container;
+            const fields = Array.from(fieldHost.querySelectorAll(':scope > .structured-subfield'));
             if (fields.length === 1 && fields[0].dataset.structuredField === '__value') {
               return readFieldValue(fields[0]);
             }

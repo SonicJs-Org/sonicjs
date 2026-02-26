@@ -433,8 +433,17 @@ export function renderContentFormPage(data: ContentFormData): string {
 
     <!-- Dynamic Field Scripts -->
     <script>
+      const contentFormCollectionId = ${JSON.stringify(data.collection.id)};
+
+      function getFieldGroupScope() {
+        const url = new URL(window.location.href);
+        const urlCollectionId = url.searchParams.get('collection');
+        const effectiveCollectionId = urlCollectionId || contentFormCollectionId || '';
+        return window.location.pathname + ':' + effectiveCollectionId;
+      }
+
       function getFieldGroupStorageKey(groupId) {
-        return 'sonic:ui:objects:' + window.location.pathname + ':' + groupId;
+        return 'sonic:ui:objects:' + getFieldGroupScope() + ':' + groupId;
       }
 
       function loadFieldGroupState(groupId) {

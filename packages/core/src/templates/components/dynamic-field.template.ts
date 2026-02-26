@@ -969,7 +969,15 @@ function renderStructuredObjectField(
     `
   }
 
-  const groupId = `object-${field.field_name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  const groupId = `object-${field.field_name}`
+    .split('__INDEX__')
+    .map((segment) =>
+      segment
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, ''),
+    )
+    .join('__INDEX__')
   const isCollapsed = errors.length > 0 ? false : opts.collapsed !== false
 
   return `
@@ -1411,9 +1419,19 @@ function getStructuredFieldScript(): string {
 
         function initializeStructuredFields() {
           const readFieldValue = window.sonicReadFieldValue;
+          const getCollectionScope = () => {
+            const url = new URL(window.location.href);
+            const collectionFromQuery = url.searchParams.get('collection');
+            const form = document.getElementById('content-form');
+            const collectionInput = form?.querySelector('input[name="collection_id"]');
+            const collectionFromForm = collectionInput instanceof HTMLInputElement ? collectionInput.value : '';
+            const collectionId = collectionFromQuery || collectionFromForm || '';
+            return window.location.pathname + ':' + collectionId;
+          };
+
           const getArrayStateKey = (container) => {
             const fieldName = container.dataset.fieldName || 'unknown';
-            return 'sonic:ui:repeaters:' + window.location.pathname + ':' + fieldName;
+            return 'sonic:ui:repeaters:' + getCollectionScope() + ':' + fieldName;
           };
 
           const readArrayState = (container) => {
@@ -1668,10 +1686,19 @@ function getBlocksFieldScript(): string {
     <script>
       if (!window.__sonicBlocksFieldInit) {
         window.__sonicBlocksFieldInit = true;
+        const getCollectionScope = () => {
+          const url = new URL(window.location.href);
+          const collectionFromQuery = url.searchParams.get('collection');
+          const form = document.getElementById('content-form');
+          const collectionInput = form?.querySelector('input[name="collection_id"]');
+          const collectionFromForm = collectionInput instanceof HTMLInputElement ? collectionInput.value : '';
+          const collectionId = collectionFromQuery || collectionFromForm || '';
+          return window.location.pathname + ':' + collectionId;
+        };
 
         const getBlocksStateKey = (container) => {
           const fieldName = container.dataset.fieldName || 'unknown';
-          return 'sonic:ui:blocks:' + window.location.pathname + ':' + fieldName;
+          return 'sonic:ui:blocks:' + getCollectionScope() + ':' + fieldName;
         };
 
         const readBlocksState = (container) => {

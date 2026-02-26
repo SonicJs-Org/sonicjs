@@ -41,6 +41,7 @@ const pageBlocksCollection: CollectionConfig = {
           members: {
             type: 'array',
             title: 'Members',
+            itemTitle: 'Member',
             items: {
               type: 'object',
               properties: {

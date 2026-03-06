@@ -1,9 +1,9 @@
 'use strict';
 
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunkVD6MKNDW_cjs = require('./chunk-VD6MKNDW.cjs');
+var chunkZWU2YKG5_cjs = require('./chunk-ZWU2YKG5.cjs');
 var chunkIIBRG5S5_cjs = require('./chunk-IIBRG5S5.cjs');
-var chunkC2S5X6CO_cjs = require('./chunk-C2S5X6CO.cjs');
+var chunkP7VWWZ55_cjs = require('./chunk-P7VWWZ55.cjs');
 var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
 var chunk5HMR2SJW_cjs = require('./chunk-5HMR2SJW.cjs');
@@ -76,7 +76,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", chunkZWU2YKG5_cjs.requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -142,7 +142,7 @@ apiContentCrudRoutes.post("/", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkZWU2YKG5_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -206,7 +206,7 @@ apiContentCrudRoutes.put("/:id", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkZWU2YKG5_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -242,7 +242,7 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunkVD6MKNDW_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkZWU2YKG5_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
@@ -978,7 +978,7 @@ var fileValidationSchema = zod.z.object({
   // 50MB max
 });
 var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+apiMediaRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -1722,8 +1722,8 @@ apiSystemRoutes.get("/env", (c) => {
 });
 var api_system_default = apiSystemRoutes;
 var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
-adminApiRoutes.use("*", chunkVD6MKNDW_cjs.requireRole(["admin", "editor"]));
+adminApiRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
+adminApiRoutes.use("*", chunkZWU2YKG5_cjs.requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -2233,7 +2233,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-GIEAGZVF.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-TKG5TW7H.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2258,7 +2258,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-GIEAGZVF.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-TKG5TW7H.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2277,7 +2277,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-GIEAGZVF.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-TKG5TW7H.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -2759,7 +2759,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunkVD6MKNDW_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkZWU2YKG5_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -2779,7 +2779,7 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkVD6MKNDW_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      const token = await chunkZWU2YKG5_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2832,11 +2832,11 @@ authRoutes.post("/login", async (c) => {
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await chunkVD6MKNDW_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkZWU2YKG5_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await chunkVD6MKNDW_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkZWU2YKG5_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -2885,7 +2885,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", chunkZWU2YKG5_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -2902,13 +2902,13 @@ authRoutes.get("/me", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunkVD6MKNDW_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", chunkZWU2YKG5_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunkVD6MKNDW_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
+    const token = await chunkZWU2YKG5_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -2968,7 +2968,7 @@ authRoutes.post("/register/form", async (c) => {
         </div>
       `);
     }
-    const passwordHash = await chunkVD6MKNDW_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkZWU2YKG5_cjs.AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -2988,7 +2988,7 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await chunkVD6MKNDW_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
+    const token = await chunkZWU2YKG5_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -3040,7 +3040,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const isValidPassword = await chunkVD6MKNDW_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkZWU2YKG5_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -3048,7 +3048,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const token = await chunkVD6MKNDW_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkZWU2YKG5_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -3107,7 +3107,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await chunkVD6MKNDW_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await chunkZWU2YKG5_cjs.AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -3119,7 +3119,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await chunkVD6MKNDW_cjs.AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await chunkZWU2YKG5_cjs.AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -3339,7 +3339,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunkVD6MKNDW_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkZWU2YKG5_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -3358,7 +3358,7 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunkVD6MKNDW_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    const authToken = await chunkZWU2YKG5_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
     cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
@@ -3588,7 +3588,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunkVD6MKNDW_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkZWU2YKG5_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -5168,15 +5168,24 @@ function getStructuredFieldScript() {
             }
           };
 
+          const getArrayItems = (container, list) => {
+            if (list) {
+              return Array.from(list.querySelectorAll(':scope > .structured-array-item'));
+            }
+            return Array.from(
+              container.querySelectorAll(':scope > [data-structured-array-list] > .structured-array-item'),
+            );
+          };
+
           const captureArrayState = (container) => {
-            return Array.from(container.querySelectorAll('.structured-array-item')).map((item) => {
+            return getArrayItems(container).map((item) => {
               const content = item.querySelector('[data-array-item-fields]');
               return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
             });
           };
 
           const applyArrayState = (container, state) => {
-            const items = Array.from(container.querySelectorAll('.structured-array-item'));
+            const items = getArrayItems(container);
             items.forEach((item, index) => {
               if (typeof state[index] === 'boolean') {
                 setArrayItemExpanded(item, state[index]);
@@ -5208,109 +5217,204 @@ function getStructuredFieldScript() {
           };
 
           document.querySelectorAll('[data-structured-object]').forEach((container) => {
+            if (container.closest('template')) {
+              return;
+            }
             if (container.dataset.structuredInitialized === 'true') {
               return;
             }
-            container.dataset.structuredInitialized = 'true';
-            const hiddenInput = container.querySelector('input[type="hidden"]');
+            if (container.dataset.structuredInitializing === 'true') {
+              return;
+            }
+            container.dataset.structuredInitializing = 'true';
+            try {
+              const hiddenInput = container.querySelector('input[type="hidden"]');
 
-            const updateHiddenInput = () => {
-              if (!hiddenInput) return;
-              const value = readStructuredValue(container);
-              hiddenInput.value = JSON.stringify(value);
-            };
+              const updateHiddenInput = () => {
+                if (!hiddenInput) return;
+                const value = readStructuredValue(container);
+                hiddenInput.value = JSON.stringify(value);
+              };
 
-            container.addEventListener('input', updateHiddenInput);
-            container.addEventListener('change', updateHiddenInput);
-            updateHiddenInput();
+              container.addEventListener('input', updateHiddenInput);
+              container.addEventListener('change', updateHiddenInput);
+              updateHiddenInput();
+              container.dataset.structuredInitialized = 'true';
+            } catch (error) {
+              delete container.dataset.structuredInitialized;
+              console.error('[structured-object] initialization failed', error);
+            } finally {
+              delete container.dataset.structuredInitializing;
+            }
           });
 
           document.querySelectorAll('[data-structured-array]').forEach((container) => {
+            if (container.closest('template')) {
+              return;
+            }
             if (container.dataset.structuredInitialized === 'true') {
               return;
             }
-            container.dataset.structuredInitialized = 'true';
-            const list = container.querySelector('[data-structured-array-list]');
-            const hiddenInput = container.querySelector('input[type="hidden"]');
-            const template = container.querySelector('template[data-structured-array-template]');
-
-            const updateOrderLabels = () => {
-              const items = Array.from(container.querySelectorAll('.structured-array-item'));
-              items.forEach((item, index) => {
-                const label = item.querySelector('[data-array-order-label]');
-                if (label) {
-                  label.textContent = '#'+ (index + 1);
-                }
-
-                const moveUpButton = item.querySelector('[data-action="move-up"]');
-                if (moveUpButton instanceof HTMLButtonElement) {
-                  moveUpButton.disabled = index === 0;
-                }
-
-                const moveDownButton = item.querySelector('[data-action="move-down"]');
-                if (moveDownButton instanceof HTMLButtonElement) {
-                  moveDownButton.disabled = index === items.length - 1;
-                }
-              });
-            };
-
-            const updateHiddenInput = () => {
-              if (!hiddenInput || !list) return;
-              const items = Array.from(list.querySelectorAll('.structured-array-item'));
-              const values = items.map((item) => readStructuredValue(item));
-              hiddenInput.value = JSON.stringify(values);
-
-              const emptyState = list.querySelector('[data-structured-empty]');
-              if (emptyState) {
-                emptyState.style.display = values.length === 0 ? 'block' : 'none';
+            if (container.dataset.structuredInitializing === 'true') {
+              return;
+            }
+            container.dataset.structuredInitializing = 'true';
+            try {
+              const list = container.querySelector(':scope > [data-structured-array-list]');
+              const hiddenInput = container.querySelector(':scope > input[type="hidden"]');
+              const template = container.querySelector(':scope > template[data-structured-array-template]');
+              if (
+                template instanceof HTMLTemplateElement &&
+                typeof template.innerHTML === 'string' &&
+                template.innerHTML.trim()
+              ) {
+                container.__sonicStructuredArrayTemplate = template.innerHTML;
               }
-              updateOrderLabels();
-            };
 
-            if (typeof window.initializeDragSortable === 'function' && list) {
-              window.initializeDragSortable(list, {
-                itemSelector: '.structured-array-item',
-                handleSelector: '[data-action="drag-handle"]',
-                onUpdate: () => {
+              const getLiveList = () =>
+                list || container.querySelector(':scope > [data-structured-array-list]');
+              const getLiveHiddenInput = () =>
+                hiddenInput || container.querySelector(':scope > input[type="hidden"]');
+              const getTemplateHtml = () => {
+                const liveTemplate =
+                  template instanceof HTMLTemplateElement
+                    ? template
+                    : container.querySelector(':scope > template[data-structured-array-template]');
+                if (
+                  liveTemplate instanceof HTMLTemplateElement &&
+                  typeof liveTemplate.innerHTML === 'string' &&
+                  liveTemplate.innerHTML.trim()
+                ) {
+                  container.__sonicStructuredArrayTemplate = liveTemplate.innerHTML;
+                  return liveTemplate.innerHTML;
+                }
+                return typeof container.__sonicStructuredArrayTemplate === 'string'
+                  ? container.__sonicStructuredArrayTemplate
+                  : '';
+              };
+
+              const updateOrderLabels = () => {
+                const liveList = getLiveList();
+                if (!liveList) return;
+                const items = getArrayItems(container, liveList);
+                items.forEach((item, index) => {
+                  const label = item.querySelector('[data-array-order-label]');
+                  if (label) {
+                    label.textContent = '#'+ (index + 1);
+                  }
+
+                  const moveUpButton = item.querySelector('[data-action="move-up"]');
+                  if (moveUpButton instanceof HTMLButtonElement) {
+                    moveUpButton.disabled = index === 0;
+                  }
+
+                  const moveDownButton = item.querySelector('[data-action="move-down"]');
+                  if (moveDownButton instanceof HTMLButtonElement) {
+                    moveDownButton.disabled = index === items.length - 1;
+                  }
+                });
+              };
+
+              const updateHiddenInput = () => {
+                const liveHiddenInput = getLiveHiddenInput();
+                const liveList = getLiveList();
+                if (!liveHiddenInput || !liveList) return;
+                const items = getArrayItems(container, liveList);
+                const values = items.map((item) => readStructuredValue(item));
+                liveHiddenInput.value = JSON.stringify(values);
+                // Notify parent structured containers after non-input actions (add/remove/move)
+                // so nested array mutations are persisted correctly.
+                liveHiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+                const emptyState = liveList.querySelector(':scope > [data-structured-empty]');
+                if (emptyState) {
+                  emptyState.style.display = values.length === 0 ? 'block' : 'none';
+                }
+                updateOrderLabels();
+              };
+
+              const addArrayItem = () => {
+                const liveList = getLiveList();
+                if (!liveList) return;
+                const templateHtml = getTemplateHtml();
+                if (!templateHtml) return;
+                try {
+                  const nextIndex = getArrayItems(container, liveList).length;
+                  const html = templateHtml.replace(/__INDEX__/g, String(nextIndex));
+                  liveList.insertAdjacentHTML('beforeend', html);
+                  const newItem = liveList.lastElementChild;
+                  if (newItem instanceof HTMLElement) {
+                    // Ensure cloned template content can be initialized even if stale
+                    // data-structured-initialized attributes were copied.
+                    newItem
+                      .querySelectorAll('[data-structured-object], [data-structured-array]')
+                      .forEach((nestedContainer) => {
+                        if (nestedContainer instanceof HTMLElement) {
+                          delete nestedContainer.dataset.structuredInitialized;
+                        }
+                      });
+                    setArrayItemExpanded(newItem, true);
+                  }
+                  if (typeof initializeTinyMCE === 'function') {
+                    initializeTinyMCE();
+                  }
+                  if (typeof window.initializeQuillEditors === 'function') {
+                    window.initializeQuillEditors();
+                  }
+                  if (typeof initializeMDXEditor === 'function') {
+                    initializeMDXEditor();
+                  }
+                  if (typeof window.initializeStructuredFields === 'function') {
+                    window.initializeStructuredFields();
+                  }
                   updateHiddenInput();
                   syncArrayState(container);
+                } catch (error) {
+                  console.error('[structured-array] add-item failed', error);
                 }
-              });
-            }
+              };
 
-            container.addEventListener('click', (event) => {
+              const topLevelAddButton = container.querySelector(
+                ':scope > .flex.items-center.justify-between.gap-3 [data-action="add-item"]',
+              );
+              if (topLevelAddButton instanceof HTMLElement) {
+                topLevelAddButton.addEventListener('click', (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  addArrayItem();
+                });
+              }
+
+              const dragList = getLiveList();
+              if (typeof window.initializeDragSortable === 'function' && dragList) {
+                window.initializeDragSortable(dragList, {
+                  itemSelector: '.structured-array-item',
+                  handleSelector: '[data-action="drag-handle"]',
+                  onUpdate: () => {
+                    updateHiddenInput();
+                    syncArrayState(container);
+                  }
+                });
+              }
+
+              container.addEventListener('click', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
               const actionButton = target.closest('[data-action]');
               if (!actionButton || actionButton.hasAttribute('disabled')) return;
+              const actionOwner = actionButton.closest('[data-structured-array]');
+              if (actionOwner !== container) return;
 
-              const action = actionButton.getAttribute('data-action');
+                const action = actionButton.getAttribute('data-action');
 
-              if (action === 'add-item') {
-                if (!list || !template) return;
-                const nextIndex = list.querySelectorAll('.structured-array-item').length;
-                const html = template.innerHTML.replace(/__INDEX__/g, String(nextIndex));
-                list.insertAdjacentHTML('beforeend', html);
-                const newItem = list.lastElementChild;
-                if (newItem instanceof HTMLElement) {
-                  setArrayItemExpanded(newItem, true);
+                if (action === 'add-item') {
+                  addArrayItem();
+                  return;
                 }
-                if (typeof initializeTinyMCE === 'function') {
-                  initializeTinyMCE();
-                }
-                if (typeof window.initializeQuillEditors === 'function') {
-                  window.initializeQuillEditors();
-                }
-                if (typeof initializeMDXEditor === 'function') {
-                  initializeMDXEditor();
-                }
-                updateHiddenInput();
-                syncArrayState(container);
-                return;
-              }
 
               const item = actionButton.closest('.structured-array-item');
-              if (!item || !list) return;
+              const liveList = getLiveList();
+              if (!item || !liveList) return;
 
               if (action === 'toggle-item') {
                 const content = item.querySelector('[data-array-item-fields]');
@@ -5330,7 +5434,7 @@ function getStructuredFieldScript() {
               if (action === 'move-up') {
                 const previous = item.previousElementSibling;
                 if (previous) {
-                  list.insertBefore(item, previous);
+                  liveList.insertBefore(item, previous);
                   updateHiddenInput();
                   syncArrayState(container);
                 }
@@ -5340,35 +5444,42 @@ function getStructuredFieldScript() {
               if (action === 'move-down') {
                 const next = item.nextElementSibling;
                 if (next) {
-                  list.insertBefore(next, item);
+                  liveList.insertBefore(next, item);
                   updateHiddenInput();
                   syncArrayState(container);
                 }
               }
-            });
+              });
 
-            container.addEventListener('input', (event) => {
+              container.addEventListener('input', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
               if (target.closest('[data-structured-array-list]')) {
                 updateHiddenInput();
               }
-            });
+              });
 
-            container.addEventListener('change', (event) => {
+              container.addEventListener('change', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
               if (target.closest('[data-structured-array-list]')) {
                 updateHiddenInput();
               }
-            });
+              });
 
-            updateHiddenInput();
-            const savedArrayState = readArrayState(container);
-            if (savedArrayState) {
-              applyArrayState(container, savedArrayState);
-            } else {
-              syncArrayState(container);
+              updateHiddenInput();
+              const savedArrayState = readArrayState(container);
+              if (savedArrayState) {
+                applyArrayState(container, savedArrayState);
+              } else {
+                syncArrayState(container);
+              }
+              container.dataset.structuredInitialized = 'true';
+            } catch (error) {
+              delete container.dataset.structuredInitialized;
+              console.error('[structured-array] initialization failed', error);
+            } finally {
+              delete container.dataset.structuredInitializing;
             }
           });
         }
@@ -8785,7 +8896,7 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+adminContentRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
   const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
@@ -11815,7 +11926,7 @@ function renderUsersListPage(data) {
 
 // src/routes/admin-users.ts
 var userRoutes = new hono.Hono();
-userRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+userRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -11970,7 +12081,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -12033,7 +12144,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -12104,7 +12215,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunkVD6MKNDW_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkZWU2YKG5_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -12112,7 +12223,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunkVD6MKNDW_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkZWU2YKG5_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -12128,7 +12239,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -12195,7 +12306,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -12349,7 +12460,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunkVD6MKNDW_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkZWU2YKG5_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12372,7 +12483,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -12410,7 +12521,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -12635,7 +12746,7 @@ userRoutes.put("/users/:id", async (c) => {
         ).run();
       }
     }
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -12680,7 +12791,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -12721,7 +12832,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunkVD6MKNDW_cjs.logActivity(
+      await chunkZWU2YKG5_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -12740,7 +12851,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunkVD6MKNDW_cjs.logActivity(
+      await chunkZWU2YKG5_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -12806,7 +12917,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -12863,7 +12974,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -12899,7 +13010,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -12982,7 +13093,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -13089,7 +13200,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunkVD6MKNDW_cjs.logActivity(
+    await chunkZWU2YKG5_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -14428,7 +14539,7 @@ var fileValidationSchema2 = zod.z.object({
   // 50MB max
 });
 var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+adminMediaRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -15014,7 +15125,7 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunkVD6MKNDW_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkZWU2YKG5_cjs.requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -17237,7 +17348,7 @@ function renderEmailSettingsContent(plugin, settings) {
 
 // src/routes/admin-plugins.ts
 var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+adminPluginRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -18642,7 +18753,7 @@ function renderLogConfigPage(data) {
 
 // src/routes/admin-logs.ts
 var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+adminLogsRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -20972,7 +21083,7 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 // src/routes/admin-dashboard.ts
 var VERSION = chunk5HMR2SJW_cjs.getCoreVersion();
 var router = new hono.Hono();
-router.use("*", chunkVD6MKNDW_cjs.requireAuth());
+router.use("*", chunkZWU2YKG5_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -22752,7 +22863,7 @@ function renderCollectionFormPage(data) {
 
 // src/routes/admin-collections.ts
 var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+adminCollectionsRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -24941,7 +25052,7 @@ function renderDatabaseToolsSettings(settings) {
 
 // src/routes/admin-settings.ts
 var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+adminSettingsRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -25109,7 +25220,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkC2S5X6CO_cjs.MigrationService(db);
+    const migrationService = new chunkP7VWWZ55_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -25133,7 +25244,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkC2S5X6CO_cjs.MigrationService(db);
+    const migrationService = new chunkP7VWWZ55_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -25151,7 +25262,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkC2S5X6CO_cjs.MigrationService(db);
+    const migrationService = new chunkP7VWWZ55_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -27029,7 +27140,7 @@ function renderFormCreatePage(data) {
 
 // src/routes/admin-forms.ts
 var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunkVD6MKNDW_cjs.requireAuth());
+adminFormsRoutes.use("*", chunkZWU2YKG5_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -28161,7 +28272,7 @@ function renderAPIReferencePage(data) {
 // src/routes/admin-api-reference.ts
 var VERSION2 = chunk5HMR2SJW_cjs.getCoreVersion();
 var router2 = new hono.Hono();
-router2.use("*", chunkVD6MKNDW_cjs.requireAuth());
+router2.use("*", chunkZWU2YKG5_cjs.requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -28442,5 +28553,5 @@ exports.router = router;
 exports.router2 = router2;
 exports.test_cleanup_default = test_cleanup_default;
 exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-TWCWIM65.cjs.map
-//# sourceMappingURL=chunk-TWCWIM65.cjs.map
+//# sourceMappingURL=chunk-PLM7MFZM.cjs.map
+//# sourceMappingURL=chunk-PLM7MFZM.cjs.map

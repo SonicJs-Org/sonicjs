@@ -634,6 +634,40 @@ describe('renderDynamicField - Array Fields', () => {
     expect(html).toContain('Name');
     expect(html).toContain('URL');
   });
+
+  it('should scope structured array item queries to direct children', () => {
+    const field = createTestField({
+      field_type: 'array',
+      field_options: {
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'text', title: 'Name' },
+            children: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'text', title: 'Child name' },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const html = renderDynamicField(field, {
+      value: [{ name: 'Parent', children: [{ name: 'Child' }] }],
+    });
+
+    expect(html).toContain(":scope > .structured-array-item");
+    expect(html).not.toContain("querySelectorAll('.structured-array-item')");
+    expect(html).toContain(":scope > [data-structured-array-list]");
+    expect(html).toContain(":scope > input[type=\"hidden\"]");
+    expect(html).toContain(":scope > template[data-structured-array-template]");
+    expect(html).toContain(":scope > [data-structured-empty]");
+    expect(html).toContain('container.__sonicStructuredArrayTemplate');
+  });
 });
 
 describe('renderFieldGroup', () => {

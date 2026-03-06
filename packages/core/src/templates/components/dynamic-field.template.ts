@@ -1505,15 +1505,24 @@ function getStructuredFieldScript(): string {
             }
           };
 
+          const getArrayItems = (container, list) => {
+            if (list) {
+              return Array.from(list.querySelectorAll(':scope > .structured-array-item'));
+            }
+            return Array.from(
+              container.querySelectorAll(':scope > [data-structured-array-list] > .structured-array-item'),
+            );
+          };
+
           const captureArrayState = (container) => {
-            return Array.from(container.querySelectorAll('.structured-array-item')).map((item) => {
+            return getArrayItems(container).map((item) => {
               const content = item.querySelector('[data-array-item-fields]');
               return content instanceof HTMLElement ? !content.classList.contains('hidden') : false;
             });
           };
 
           const applyArrayState = (container, state) => {
-            const items = Array.from(container.querySelectorAll('.structured-array-item'));
+            const items = getArrayItems(container);
             items.forEach((item, index) => {
               if (typeof state[index] === 'boolean') {
                 setArrayItemExpanded(item, state[index]);
@@ -1545,109 +1554,204 @@ function getStructuredFieldScript(): string {
           };
 
           document.querySelectorAll('[data-structured-object]').forEach((container) => {
+            if (container.closest('template')) {
+              return;
+            }
             if (container.dataset.structuredInitialized === 'true') {
               return;
             }
-            container.dataset.structuredInitialized = 'true';
-            const hiddenInput = container.querySelector('input[type="hidden"]');
+            if (container.dataset.structuredInitializing === 'true') {
+              return;
+            }
+            container.dataset.structuredInitializing = 'true';
+            try {
+              const hiddenInput = container.querySelector('input[type="hidden"]');
 
-            const updateHiddenInput = () => {
-              if (!hiddenInput) return;
-              const value = readStructuredValue(container);
-              hiddenInput.value = JSON.stringify(value);
-            };
+              const updateHiddenInput = () => {
+                if (!hiddenInput) return;
+                const value = readStructuredValue(container);
+                hiddenInput.value = JSON.stringify(value);
+              };
 
-            container.addEventListener('input', updateHiddenInput);
-            container.addEventListener('change', updateHiddenInput);
-            updateHiddenInput();
+              container.addEventListener('input', updateHiddenInput);
+              container.addEventListener('change', updateHiddenInput);
+              updateHiddenInput();
+              container.dataset.structuredInitialized = 'true';
+            } catch (error) {
+              delete container.dataset.structuredInitialized;
+              console.error('[structured-object] initialization failed', error);
+            } finally {
+              delete container.dataset.structuredInitializing;
+            }
           });
 
           document.querySelectorAll('[data-structured-array]').forEach((container) => {
+            if (container.closest('template')) {
+              return;
+            }
             if (container.dataset.structuredInitialized === 'true') {
               return;
             }
-            container.dataset.structuredInitialized = 'true';
-            const list = container.querySelector('[data-structured-array-list]');
-            const hiddenInput = container.querySelector('input[type="hidden"]');
-            const template = container.querySelector('template[data-structured-array-template]');
-
-            const updateOrderLabels = () => {
-              const items = Array.from(container.querySelectorAll('.structured-array-item'));
-              items.forEach((item, index) => {
-                const label = item.querySelector('[data-array-order-label]');
-                if (label) {
-                  label.textContent = '#'+ (index + 1);
-                }
-
-                const moveUpButton = item.querySelector('[data-action="move-up"]');
-                if (moveUpButton instanceof HTMLButtonElement) {
-                  moveUpButton.disabled = index === 0;
-                }
-
-                const moveDownButton = item.querySelector('[data-action="move-down"]');
-                if (moveDownButton instanceof HTMLButtonElement) {
-                  moveDownButton.disabled = index === items.length - 1;
-                }
-              });
-            };
-
-            const updateHiddenInput = () => {
-              if (!hiddenInput || !list) return;
-              const items = Array.from(list.querySelectorAll('.structured-array-item'));
-              const values = items.map((item) => readStructuredValue(item));
-              hiddenInput.value = JSON.stringify(values);
-
-              const emptyState = list.querySelector('[data-structured-empty]');
-              if (emptyState) {
-                emptyState.style.display = values.length === 0 ? 'block' : 'none';
+            if (container.dataset.structuredInitializing === 'true') {
+              return;
+            }
+            container.dataset.structuredInitializing = 'true';
+            try {
+              const list = container.querySelector(':scope > [data-structured-array-list]');
+              const hiddenInput = container.querySelector(':scope > input[type="hidden"]');
+              const template = container.querySelector(':scope > template[data-structured-array-template]');
+              if (
+                template instanceof HTMLTemplateElement &&
+                typeof template.innerHTML === 'string' &&
+                template.innerHTML.trim()
+              ) {
+                container.__sonicStructuredArrayTemplate = template.innerHTML;
               }
-              updateOrderLabels();
-            };
 
-            if (typeof window.initializeDragSortable === 'function' && list) {
-              window.initializeDragSortable(list, {
-                itemSelector: '.structured-array-item',
-                handleSelector: '[data-action="drag-handle"]',
-                onUpdate: () => {
+              const getLiveList = () =>
+                list || container.querySelector(':scope > [data-structured-array-list]');
+              const getLiveHiddenInput = () =>
+                hiddenInput || container.querySelector(':scope > input[type="hidden"]');
+              const getTemplateHtml = () => {
+                const liveTemplate =
+                  template instanceof HTMLTemplateElement
+                    ? template
+                    : container.querySelector(':scope > template[data-structured-array-template]');
+                if (
+                  liveTemplate instanceof HTMLTemplateElement &&
+                  typeof liveTemplate.innerHTML === 'string' &&
+                  liveTemplate.innerHTML.trim()
+                ) {
+                  container.__sonicStructuredArrayTemplate = liveTemplate.innerHTML;
+                  return liveTemplate.innerHTML;
+                }
+                return typeof container.__sonicStructuredArrayTemplate === 'string'
+                  ? container.__sonicStructuredArrayTemplate
+                  : '';
+              };
+
+              const updateOrderLabels = () => {
+                const liveList = getLiveList();
+                if (!liveList) return;
+                const items = getArrayItems(container, liveList);
+                items.forEach((item, index) => {
+                  const label = item.querySelector('[data-array-order-label]');
+                  if (label) {
+                    label.textContent = '#'+ (index + 1);
+                  }
+
+                  const moveUpButton = item.querySelector('[data-action="move-up"]');
+                  if (moveUpButton instanceof HTMLButtonElement) {
+                    moveUpButton.disabled = index === 0;
+                  }
+
+                  const moveDownButton = item.querySelector('[data-action="move-down"]');
+                  if (moveDownButton instanceof HTMLButtonElement) {
+                    moveDownButton.disabled = index === items.length - 1;
+                  }
+                });
+              };
+
+              const updateHiddenInput = () => {
+                const liveHiddenInput = getLiveHiddenInput();
+                const liveList = getLiveList();
+                if (!liveHiddenInput || !liveList) return;
+                const items = getArrayItems(container, liveList);
+                const values = items.map((item) => readStructuredValue(item));
+                liveHiddenInput.value = JSON.stringify(values);
+                // Notify parent structured containers after non-input actions (add/remove/move)
+                // so nested array mutations are persisted correctly.
+                liveHiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+                const emptyState = liveList.querySelector(':scope > [data-structured-empty]');
+                if (emptyState) {
+                  emptyState.style.display = values.length === 0 ? 'block' : 'none';
+                }
+                updateOrderLabels();
+              };
+
+              const addArrayItem = () => {
+                const liveList = getLiveList();
+                if (!liveList) return;
+                const templateHtml = getTemplateHtml();
+                if (!templateHtml) return;
+                try {
+                  const nextIndex = getArrayItems(container, liveList).length;
+                  const html = templateHtml.replace(/__INDEX__/g, String(nextIndex));
+                  liveList.insertAdjacentHTML('beforeend', html);
+                  const newItem = liveList.lastElementChild;
+                  if (newItem instanceof HTMLElement) {
+                    // Ensure cloned template content can be initialized even if stale
+                    // data-structured-initialized attributes were copied.
+                    newItem
+                      .querySelectorAll('[data-structured-object], [data-structured-array]')
+                      .forEach((nestedContainer) => {
+                        if (nestedContainer instanceof HTMLElement) {
+                          delete nestedContainer.dataset.structuredInitialized;
+                        }
+                      });
+                    setArrayItemExpanded(newItem, true);
+                  }
+                  if (typeof initializeTinyMCE === 'function') {
+                    initializeTinyMCE();
+                  }
+                  if (typeof window.initializeQuillEditors === 'function') {
+                    window.initializeQuillEditors();
+                  }
+                  if (typeof initializeMDXEditor === 'function') {
+                    initializeMDXEditor();
+                  }
+                  if (typeof window.initializeStructuredFields === 'function') {
+                    window.initializeStructuredFields();
+                  }
                   updateHiddenInput();
                   syncArrayState(container);
+                } catch (error) {
+                  console.error('[structured-array] add-item failed', error);
                 }
-              });
-            }
+              };
 
-            container.addEventListener('click', (event) => {
+              const topLevelAddButton = container.querySelector(
+                ':scope > .flex.items-center.justify-between.gap-3 [data-action="add-item"]',
+              );
+              if (topLevelAddButton instanceof HTMLElement) {
+                topLevelAddButton.addEventListener('click', (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  addArrayItem();
+                });
+              }
+
+              const dragList = getLiveList();
+              if (typeof window.initializeDragSortable === 'function' && dragList) {
+                window.initializeDragSortable(dragList, {
+                  itemSelector: '.structured-array-item',
+                  handleSelector: '[data-action="drag-handle"]',
+                  onUpdate: () => {
+                    updateHiddenInput();
+                    syncArrayState(container);
+                  }
+                });
+              }
+
+              container.addEventListener('click', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
               const actionButton = target.closest('[data-action]');
               if (!actionButton || actionButton.hasAttribute('disabled')) return;
+              const actionOwner = actionButton.closest('[data-structured-array]');
+              if (actionOwner !== container) return;
 
-              const action = actionButton.getAttribute('data-action');
+                const action = actionButton.getAttribute('data-action');
 
-              if (action === 'add-item') {
-                if (!list || !template) return;
-                const nextIndex = list.querySelectorAll('.structured-array-item').length;
-                const html = template.innerHTML.replace(/__INDEX__/g, String(nextIndex));
-                list.insertAdjacentHTML('beforeend', html);
-                const newItem = list.lastElementChild;
-                if (newItem instanceof HTMLElement) {
-                  setArrayItemExpanded(newItem, true);
+                if (action === 'add-item') {
+                  addArrayItem();
+                  return;
                 }
-                if (typeof initializeTinyMCE === 'function') {
-                  initializeTinyMCE();
-                }
-                if (typeof window.initializeQuillEditors === 'function') {
-                  window.initializeQuillEditors();
-                }
-                if (typeof initializeMDXEditor === 'function') {
-                  initializeMDXEditor();
-                }
-                updateHiddenInput();
-                syncArrayState(container);
-                return;
-              }
 
               const item = actionButton.closest('.structured-array-item');
-              if (!item || !list) return;
+              const liveList = getLiveList();
+              if (!item || !liveList) return;
 
               if (action === 'toggle-item') {
                 const content = item.querySelector('[data-array-item-fields]');
@@ -1667,7 +1771,7 @@ function getStructuredFieldScript(): string {
               if (action === 'move-up') {
                 const previous = item.previousElementSibling;
                 if (previous) {
-                  list.insertBefore(item, previous);
+                  liveList.insertBefore(item, previous);
                   updateHiddenInput();
                   syncArrayState(container);
                 }
@@ -1677,35 +1781,42 @@ function getStructuredFieldScript(): string {
               if (action === 'move-down') {
                 const next = item.nextElementSibling;
                 if (next) {
-                  list.insertBefore(next, item);
+                  liveList.insertBefore(next, item);
                   updateHiddenInput();
                   syncArrayState(container);
                 }
               }
-            });
+              });
 
-            container.addEventListener('input', (event) => {
+              container.addEventListener('input', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
               if (target.closest('[data-structured-array-list]')) {
                 updateHiddenInput();
               }
-            });
+              });
 
-            container.addEventListener('change', (event) => {
+              container.addEventListener('change', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
               if (target.closest('[data-structured-array-list]')) {
                 updateHiddenInput();
               }
-            });
+              });
 
-            updateHiddenInput();
-            const savedArrayState = readArrayState(container);
-            if (savedArrayState) {
-              applyArrayState(container, savedArrayState);
-            } else {
-              syncArrayState(container);
+              updateHiddenInput();
+              const savedArrayState = readArrayState(container);
+              if (savedArrayState) {
+                applyArrayState(container, savedArrayState);
+              } else {
+                syncArrayState(container);
+              }
+              container.dataset.structuredInitialized = 'true';
+            } catch (error) {
+              delete container.dataset.structuredInitialized;
+              console.error('[structured-array] initialization failed', error);
+            } finally {
+              delete container.dataset.structuredInitializing;
             }
           });
         }

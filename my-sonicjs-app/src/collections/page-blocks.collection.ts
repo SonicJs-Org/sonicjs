@@ -125,6 +125,16 @@ const pageBlocksCollection: CollectionConfig = {
                 name: { type: 'string', title: 'Name', required: true },
                 role: { type: 'string', title: 'Role' },
                 photo: { type: 'media', title: 'Photo' },
+                children: {
+                  type: 'array',
+                  title: 'Children',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string', title: 'Name', required: true },
+                    },
+                  },
+                },
               },
             },
           },

@@ -1,3 +1,5 @@
+'use strict';
+
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -2105,6 +2107,6 @@ var MigrationService = class {
   }
 };
 
-export { MigrationService };
-//# sourceMappingURL=chunk-OFMBUJTG.js.map
-//# sourceMappingURL=chunk-OFMBUJTG.js.map
+exports.MigrationService = MigrationService;
+//# sourceMappingURL=chunk-NNSM76IB.cjs.map
+//# sourceMappingURL=chunk-NNSM76IB.cjs.map

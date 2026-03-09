@@ -1,9 +1,9 @@
 'use strict';
 
 var chunkVNLR35GO_cjs = require('./chunk-VNLR35GO.cjs');
-var chunk7UD6T45C_cjs = require('./chunk-7UD6T45C.cjs');
+var chunkNRPHQV4D_cjs = require('./chunk-NRPHQV4D.cjs');
 var chunkIIBRG5S5_cjs = require('./chunk-IIBRG5S5.cjs');
-var chunkQWLNUCC4_cjs = require('./chunk-QWLNUCC4.cjs');
+var chunkNNSM76IB_cjs = require('./chunk-NNSM76IB.cjs');
 var chunkSHCYIZAN_cjs = require('./chunk-SHCYIZAN.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
 var chunk5HMR2SJW_cjs = require('./chunk-5HMR2SJW.cjs');
@@ -76,7 +76,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", chunkNRPHQV4D_cjs.requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -142,7 +142,7 @@ apiContentCrudRoutes.post("/", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkNRPHQV4D_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -206,7 +206,7 @@ apiContentCrudRoutes.put("/:id", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkNRPHQV4D_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -242,7 +242,7 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunk7UD6T45C_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkNRPHQV4D_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
@@ -978,7 +978,7 @@ var fileValidationSchema = zod.z.object({
   // 50MB max
 });
 var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+apiMediaRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -1722,8 +1722,8 @@ apiSystemRoutes.get("/env", (c) => {
 });
 var api_system_default = apiSystemRoutes;
 var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
-adminApiRoutes.use("*", chunk7UD6T45C_cjs.requireRole(["admin", "editor"]));
+adminApiRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
+adminApiRoutes.use("*", chunkNRPHQV4D_cjs.requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -2233,7 +2233,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-X6NA7DCU.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-UBE5LL45.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2258,7 +2258,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-X6NA7DCU.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-UBE5LL45.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2277,7 +2277,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-X6NA7DCU.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-UBE5LL45.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -2759,7 +2759,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunk7UD6T45C_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkNRPHQV4D_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -2779,7 +2779,7 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunk7UD6T45C_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
+      const token = await chunkNRPHQV4D_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer");
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2832,11 +2832,11 @@ authRoutes.post("/login", async (c) => {
     if (!user) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const isValidPassword = await chunk7UD6T45C_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkNRPHQV4D_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.json({ error: "Invalid email or password" }, 401);
     }
-    const token = await chunk7UD6T45C_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkNRPHQV4D_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -2885,7 +2885,7 @@ authRoutes.get("/logout", (c) => {
   });
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", chunkNRPHQV4D_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -2902,13 +2902,13 @@ authRoutes.get("/me", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunk7UD6T45C_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", chunkNRPHQV4D_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunk7UD6T45C_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
+    const token = await chunkNRPHQV4D_cjs.AuthManager.generateToken(user.userId, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -2968,7 +2968,7 @@ authRoutes.post("/register/form", async (c) => {
         </div>
       `);
     }
-    const passwordHash = await chunk7UD6T45C_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkNRPHQV4D_cjs.AuthManager.hashPassword(password);
     const role = isFirstUser ? "admin" : "viewer";
     const userId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -2988,7 +2988,7 @@ authRoutes.post("/register/form", async (c) => {
       now.getTime(),
       now.getTime()
     ).run();
-    const token = await chunk7UD6T45C_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
+    const token = await chunkNRPHQV4D_cjs.AuthManager.generateToken(userId, normalizedEmail, role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -3040,7 +3040,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const isValidPassword = await chunk7UD6T45C_cjs.AuthManager.verifyPassword(password, user.password_hash);
+    const isValidPassword = await chunkNRPHQV4D_cjs.AuthManager.verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
       return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -3048,7 +3048,7 @@ authRoutes.post("/login/form", async (c) => {
         </div>
       `);
     }
-    const token = await chunk7UD6T45C_cjs.AuthManager.generateToken(user.id, user.email, user.role);
+    const token = await chunkNRPHQV4D_cjs.AuthManager.generateToken(user.id, user.email, user.role);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: false,
@@ -3107,7 +3107,7 @@ authRoutes.post("/seed-admin", async (c) => {
     `).run();
     const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
     if (existingAdmin) {
-      const passwordHash2 = await chunk7UD6T45C_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash2 = await chunkNRPHQV4D_cjs.AuthManager.hashPassword("sonicjs!");
       await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
       return c.json({
         message: "Admin user already exists (password updated)",
@@ -3119,7 +3119,7 @@ authRoutes.post("/seed-admin", async (c) => {
         }
       });
     }
-    const passwordHash = await chunk7UD6T45C_cjs.AuthManager.hashPassword("sonicjs!");
+    const passwordHash = await chunkNRPHQV4D_cjs.AuthManager.hashPassword("sonicjs!");
     const userId = "admin-user-id";
     const now = Date.now();
     const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -3339,7 +3339,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunk7UD6T45C_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkNRPHQV4D_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -3358,7 +3358,7 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunk7UD6T45C_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
+    const authToken = await chunkNRPHQV4D_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role);
     cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
@@ -3588,7 +3588,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunk7UD6T45C_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkNRPHQV4D_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -3953,6 +3953,39 @@ function getReadFieldValueScript() {
         window.__sonicReadFieldValueInit = true;
 
         window.sonicReadFieldValue = function(fieldWrapper) {
+          const getDirectChild = (parent, selector) => {
+            if (!(parent instanceof Element)) return null;
+            return Array.from(parent.children).find(
+              (child) => child instanceof Element && child.matches(selector),
+            ) || null;
+          };
+          const getDirectStructuredSubfields = (host) =>
+            Array.from(host.children).filter(
+              (child) => child instanceof Element && child.classList.contains('structured-subfield'),
+            );
+          const getStructuredObjectFieldsHost = (container) => {
+            const directFieldsHost = getDirectChild(container, '[data-structured-object-fields]');
+            if (directFieldsHost) return directFieldsHost;
+            const groupContent = getDirectChild(container, '.field-group-content');
+            const nestedFieldsHost = groupContent
+              ? getDirectChild(groupContent, '[data-structured-object-fields]')
+              : null;
+            if (nestedFieldsHost) return nestedFieldsHost;
+            return getDirectChild(container, '[data-array-item-fields]') || container;
+          };
+          const getDirectStructuredObject = (fieldWrapper) => {
+            const directObject = getDirectChild(fieldWrapper, '[data-structured-object]');
+            if (directObject) return directObject;
+            const formGroup = getDirectChild(fieldWrapper, '.form-group');
+            return formGroup ? getDirectChild(formGroup, '[data-structured-object]') : null;
+          };
+          const getDirectStructuredArray = (fieldWrapper) => {
+            const directArray = getDirectChild(fieldWrapper, '[data-structured-array]');
+            if (directArray) return directArray;
+            const formGroup = getDirectChild(fieldWrapper, '.form-group');
+            return formGroup ? getDirectChild(formGroup, '[data-structured-array]') : null;
+          };
+
           const fieldType = fieldWrapper.dataset.fieldType;
           const select = fieldWrapper.querySelector('select');
           const textarea = fieldWrapper.querySelector('textarea');
@@ -3962,7 +3995,7 @@ function getReadFieldValueScript() {
           const hiddenInput = inputs.find((input) => input.type === 'hidden');
 
           const readStructuredFieldsHost = (host) => {
-            const fields = Array.from(host.querySelectorAll(':scope > .structured-subfield'));
+            const fields = getDirectStructuredSubfields(host);
             if (fields.length === 1 && fields[0].dataset.structuredField === '__value') {
               return window.sonicReadFieldValue(fields[0]);
             }
@@ -3975,17 +4008,14 @@ function getReadFieldValueScript() {
           };
 
           const readStructuredObject = () => {
-            const objectContainer = fieldWrapper.querySelector('[data-structured-object]');
+            const objectContainer = getDirectStructuredObject(fieldWrapper);
             if (!objectContainer) return null;
-            const host =
-              objectContainer.querySelector(':scope > [data-structured-object-fields]') ||
-              objectContainer.querySelector('[data-structured-object-fields]') ||
-              objectContainer;
+            const host = getStructuredObjectFieldsHost(objectContainer);
             return readStructuredFieldsHost(host);
           };
 
           const readStructuredArray = () => {
-            const arrayContainer = fieldWrapper.querySelector('[data-structured-array]');
+            const arrayContainer = getDirectStructuredArray(fieldWrapper);
             if (!arrayContainer) return null;
             const list = arrayContainer.querySelector('[data-structured-array-list]');
             if (!list) return [];
@@ -5125,6 +5155,26 @@ function getStructuredFieldScript() {
 
         function initializeStructuredFields() {
           const readFieldValue = window.sonicReadFieldValue;
+          const getDirectChild = (parent, selector) => {
+            if (!(parent instanceof Element)) return null;
+            return Array.from(parent.children).find(
+              (child) => child instanceof Element && child.matches(selector),
+            ) || null;
+          };
+          const getDirectStructuredSubfields = (host) =>
+            Array.from(host.children).filter(
+              (child) => child instanceof Element && child.classList.contains('structured-subfield'),
+            );
+          const getStructuredValueHost = (container) => {
+            const directObjectHost = getDirectChild(container, '[data-structured-object-fields]');
+            if (directObjectHost) return directObjectHost;
+            const groupContent = getDirectChild(container, '.field-group-content');
+            const nestedObjectHost = groupContent
+              ? getDirectChild(groupContent, '[data-structured-object-fields]')
+              : null;
+            if (nestedObjectHost) return nestedObjectHost;
+            return getDirectChild(container, '[data-array-item-fields]') || container;
+          };
           const getCollectionScope = () => {
             const url = new URL(window.location.href);
             const collectionFromQuery = url.searchParams.get('collection');
@@ -5198,12 +5248,8 @@ function getStructuredFieldScript() {
           };
 
           const readStructuredValue = (container) => {
-            const fieldHost =
-              container.querySelector(':scope > [data-structured-object-fields]') ||
-              container.querySelector(':scope > .field-group-content > [data-structured-object-fields]') ||
-              container.querySelector(':scope > [data-array-item-fields]') ||
-              container;
-            const fields = Array.from(fieldHost.querySelectorAll(':scope > .structured-subfield'));
+            const fieldHost = getStructuredValueHost(container);
+            const fields = getDirectStructuredSubfields(fieldHost);
             if (fields.length === 1 && fields[0].dataset.structuredField === '__value') {
               return readFieldValue(fields[0]);
             }
@@ -5495,7 +5541,10 @@ function getStructuredFieldScript() {
         document.addEventListener('htmx:afterSwap', function() {
           setTimeout(initializeStructuredFields, 50);
         });
-      } else if (typeof window.initializeStructuredFields === 'function') {
+      } else if (
+        typeof window.initializeStructuredFields === 'function' &&
+        document.readyState !== 'loading'
+      ) {
         window.initializeStructuredFields();
       }
     </script>
@@ -8896,7 +8945,7 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+adminContentRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
   const cache = chunkVNLR35GO_cjs.getCacheService(chunkVNLR35GO_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
@@ -11926,7 +11975,7 @@ function renderUsersListPage(data) {
 
 // src/routes/admin-users.ts
 var userRoutes = new hono.Hono();
-userRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+userRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -12081,7 +12130,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -12144,7 +12193,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -12215,7 +12264,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunk7UD6T45C_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkNRPHQV4D_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -12223,7 +12272,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunk7UD6T45C_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkNRPHQV4D_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -12239,7 +12288,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -12306,7 +12355,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -12460,7 +12509,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunk7UD6T45C_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkNRPHQV4D_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12483,7 +12532,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -12521,7 +12570,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -12746,7 +12795,7 @@ userRoutes.put("/users/:id", async (c) => {
         ).run();
       }
     }
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -12791,7 +12840,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -12832,7 +12881,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunk7UD6T45C_cjs.logActivity(
+      await chunkNRPHQV4D_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -12851,7 +12900,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunk7UD6T45C_cjs.logActivity(
+      await chunkNRPHQV4D_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -12917,7 +12966,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -12974,7 +13023,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -13010,7 +13059,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -13093,7 +13142,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -13200,7 +13249,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunk7UD6T45C_cjs.logActivity(
+    await chunkNRPHQV4D_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -14539,7 +14588,7 @@ var fileValidationSchema2 = zod.z.object({
   // 50MB max
 });
 var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+adminMediaRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -15125,7 +15174,7 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunk7UD6T45C_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkNRPHQV4D_cjs.requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -17348,7 +17397,7 @@ function renderEmailSettingsContent(plugin, settings) {
 
 // src/routes/admin-plugins.ts
 var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+adminPluginRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -18753,7 +18802,7 @@ function renderLogConfigPage(data) {
 
 // src/routes/admin-logs.ts
 var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+adminLogsRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -21083,7 +21132,7 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 // src/routes/admin-dashboard.ts
 var VERSION = chunk5HMR2SJW_cjs.getCoreVersion();
 var router = new hono.Hono();
-router.use("*", chunk7UD6T45C_cjs.requireAuth());
+router.use("*", chunkNRPHQV4D_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -22863,7 +22912,7 @@ function renderCollectionFormPage(data) {
 
 // src/routes/admin-collections.ts
 var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+adminCollectionsRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -25052,7 +25101,7 @@ function renderDatabaseToolsSettings(settings) {
 
 // src/routes/admin-settings.ts
 var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+adminSettingsRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -25220,7 +25269,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkQWLNUCC4_cjs.MigrationService(db);
+    const migrationService = new chunkNNSM76IB_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -25244,7 +25293,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkQWLNUCC4_cjs.MigrationService(db);
+    const migrationService = new chunkNNSM76IB_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -25262,7 +25311,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkQWLNUCC4_cjs.MigrationService(db);
+    const migrationService = new chunkNNSM76IB_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -27140,7 +27189,7 @@ function renderFormCreatePage(data) {
 
 // src/routes/admin-forms.ts
 var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunk7UD6T45C_cjs.requireAuth());
+adminFormsRoutes.use("*", chunkNRPHQV4D_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -28272,7 +28321,7 @@ function renderAPIReferencePage(data) {
 // src/routes/admin-api-reference.ts
 var VERSION2 = chunk5HMR2SJW_cjs.getCoreVersion();
 var router2 = new hono.Hono();
-router2.use("*", chunk7UD6T45C_cjs.requireAuth());
+router2.use("*", chunkNRPHQV4D_cjs.requireAuth());
 var apiEndpoints = [
   // Auth endpoints
   {
@@ -28553,5 +28602,5 @@ exports.router = router;
 exports.router2 = router2;
 exports.test_cleanup_default = test_cleanup_default;
 exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-AOASPKUX.cjs.map
-//# sourceMappingURL=chunk-AOASPKUX.cjs.map
+//# sourceMappingURL=chunk-7W37CY24.cjs.map
+//# sourceMappingURL=chunk-7W37CY24.cjs.map

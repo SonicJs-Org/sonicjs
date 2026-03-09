@@ -140,6 +140,42 @@ const pageBlocksCollection: CollectionConfig = {
           },
         },
       },
+      openingHoursWeek: {
+        type: 'object',
+        title: 'Opening Hours',
+        properties: {
+          monday: {
+            type: 'object',
+            title: 'Monday',
+            objectLayout: 'flat',
+            properties: {
+              closed: { type: 'boolean', title: 'Closed', default: false },
+              opens: { type: 'string', title: 'Opens', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+              closes: { type: 'string', title: 'Closes', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+            },
+          },
+          tuesday: {
+            type: 'object',
+            title: 'Tuesday',
+            objectLayout: 'flat',
+            properties: {
+              closed: { type: 'boolean', title: 'Closed', default: false },
+              opens: { type: 'string', title: 'Opens', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+              closes: { type: 'string', title: 'Closes', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+            },
+          },
+          wednesday: {
+            type: 'object',
+            title: 'Wednesday',
+            objectLayout: 'flat',
+            properties: {
+              closed: { type: 'boolean', title: 'Closed', default: false },
+              opens: { type: 'string', title: 'Opens', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+              closes: { type: 'string', title: 'Closes', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+            },
+          },
+        },
+      },
 
       body: {
         type: 'array',

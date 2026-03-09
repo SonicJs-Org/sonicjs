@@ -583,6 +583,46 @@ describe('renderDynamicField - Object Fields', () => {
 
     expect(html).toContain('data-structured-object');
   });
+
+  it('should scope nested object host lookup to the current object container', () => {
+    const field = createTestField({
+      field_type: 'object',
+      field_options: {
+        properties: {
+          monday: {
+            type: 'object',
+            title: 'Monday',
+            objectLayout: 'flat',
+            properties: {
+              opens: { type: 'text', title: 'Opens' },
+              closes: { type: 'text', title: 'Closes' },
+            },
+          },
+          tuesday: {
+            type: 'object',
+            title: 'Tuesday',
+            objectLayout: 'flat',
+            properties: {
+              opens: { type: 'text', title: 'Opens' },
+              closes: { type: 'text', title: 'Closes' },
+            },
+          },
+        },
+      },
+    });
+    const html = renderDynamicField(field, {
+      value: {
+        monday: { opens: '09:00', closes: '17:00' },
+        tuesday: { opens: '10:00', closes: '18:00' },
+      },
+    });
+
+    expect(html).toContain('const getStructuredObjectFieldsHost = (container) =>');
+    expect(html).toContain("getDirectChild(container, '.field-group-content')");
+    expect(html).toContain('const getDirectStructuredObject = (fieldWrapper) =>');
+    expect(html).not.toContain("objectContainer.querySelector('[data-structured-object-fields]')");
+    expect(html).toContain("document.readyState !== 'loading'");
+  });
 });
 
 describe('renderDynamicField - Array Fields', () => {

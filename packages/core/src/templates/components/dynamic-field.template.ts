@@ -11,6 +11,39 @@ function getReadFieldValueScript(): string {
         window.__sonicReadFieldValueInit = true;
 
         window.sonicReadFieldValue = function(fieldWrapper) {
+          const getDirectChild = (parent, selector) => {
+            if (!(parent instanceof Element)) return null;
+            return Array.from(parent.children).find(
+              (child) => child instanceof Element && child.matches(selector),
+            ) || null;
+          };
+          const getDirectStructuredSubfields = (host) =>
+            Array.from(host.children).filter(
+              (child) => child instanceof Element && child.classList.contains('structured-subfield'),
+            );
+          const getStructuredObjectFieldsHost = (container) => {
+            const directFieldsHost = getDirectChild(container, '[data-structured-object-fields]');
+            if (directFieldsHost) return directFieldsHost;
+            const groupContent = getDirectChild(container, '.field-group-content');
+            const nestedFieldsHost = groupContent
+              ? getDirectChild(groupContent, '[data-structured-object-fields]')
+              : null;
+            if (nestedFieldsHost) return nestedFieldsHost;
+            return getDirectChild(container, '[data-array-item-fields]') || container;
+          };
+          const getDirectStructuredObject = (fieldWrapper) => {
+            const directObject = getDirectChild(fieldWrapper, '[data-structured-object]');
+            if (directObject) return directObject;
+            const formGroup = getDirectChild(fieldWrapper, '.form-group');
+            return formGroup ? getDirectChild(formGroup, '[data-structured-object]') : null;
+          };
+          const getDirectStructuredArray = (fieldWrapper) => {
+            const directArray = getDirectChild(fieldWrapper, '[data-structured-array]');
+            if (directArray) return directArray;
+            const formGroup = getDirectChild(fieldWrapper, '.form-group');
+            return formGroup ? getDirectChild(formGroup, '[data-structured-array]') : null;
+          };
+
           const fieldType = fieldWrapper.dataset.fieldType;
           const select = fieldWrapper.querySelector('select');
           const textarea = fieldWrapper.querySelector('textarea');
@@ -20,7 +53,7 @@ function getReadFieldValueScript(): string {
           const hiddenInput = inputs.find((input) => input.type === 'hidden');
 
           const readStructuredFieldsHost = (host) => {
-            const fields = Array.from(host.querySelectorAll(':scope > .structured-subfield'));
+            const fields = getDirectStructuredSubfields(host);
             if (fields.length === 1 && fields[0].dataset.structuredField === '__value') {
               return window.sonicReadFieldValue(fields[0]);
             }
@@ -33,17 +66,14 @@ function getReadFieldValueScript(): string {
           };
 
           const readStructuredObject = () => {
-            const objectContainer = fieldWrapper.querySelector('[data-structured-object]');
+            const objectContainer = getDirectStructuredObject(fieldWrapper);
             if (!objectContainer) return null;
-            const host =
-              objectContainer.querySelector(':scope > [data-structured-object-fields]') ||
-              objectContainer.querySelector('[data-structured-object-fields]') ||
-              objectContainer;
+            const host = getStructuredObjectFieldsHost(objectContainer);
             return readStructuredFieldsHost(host);
           };
 
           const readStructuredArray = () => {
-            const arrayContainer = fieldWrapper.querySelector('[data-structured-array]');
+            const arrayContainer = getDirectStructuredArray(fieldWrapper);
             if (!arrayContainer) return null;
             const list = arrayContainer.querySelector('[data-structured-array-list]');
             if (!list) return [];
@@ -1462,6 +1492,26 @@ function getStructuredFieldScript(): string {
 
         function initializeStructuredFields() {
           const readFieldValue = window.sonicReadFieldValue;
+          const getDirectChild = (parent, selector) => {
+            if (!(parent instanceof Element)) return null;
+            return Array.from(parent.children).find(
+              (child) => child instanceof Element && child.matches(selector),
+            ) || null;
+          };
+          const getDirectStructuredSubfields = (host) =>
+            Array.from(host.children).filter(
+              (child) => child instanceof Element && child.classList.contains('structured-subfield'),
+            );
+          const getStructuredValueHost = (container) => {
+            const directObjectHost = getDirectChild(container, '[data-structured-object-fields]');
+            if (directObjectHost) return directObjectHost;
+            const groupContent = getDirectChild(container, '.field-group-content');
+            const nestedObjectHost = groupContent
+              ? getDirectChild(groupContent, '[data-structured-object-fields]')
+              : null;
+            if (nestedObjectHost) return nestedObjectHost;
+            return getDirectChild(container, '[data-array-item-fields]') || container;
+          };
           const getCollectionScope = () => {
             const url = new URL(window.location.href);
             const collectionFromQuery = url.searchParams.get('collection');
@@ -1535,12 +1585,8 @@ function getStructuredFieldScript(): string {
           };
 
           const readStructuredValue = (container) => {
-            const fieldHost =
-              container.querySelector(':scope > [data-structured-object-fields]') ||
-              container.querySelector(':scope > .field-group-content > [data-structured-object-fields]') ||
-              container.querySelector(':scope > [data-array-item-fields]') ||
-              container;
-            const fields = Array.from(fieldHost.querySelectorAll(':scope > .structured-subfield'));
+            const fieldHost = getStructuredValueHost(container);
+            const fields = getDirectStructuredSubfields(fieldHost);
             if (fields.length === 1 && fields[0].dataset.structuredField === '__value') {
               return readFieldValue(fields[0]);
             }
@@ -1832,7 +1878,10 @@ function getStructuredFieldScript(): string {
         document.addEventListener('htmx:afterSwap', function() {
           setTimeout(initializeStructuredFields, 50);
         });
-      } else if (typeof window.initializeStructuredFields === 'function') {
+      } else if (
+        typeof window.initializeStructuredFields === 'function' &&
+        document.readyState !== 'loading'
+      ) {
         window.initializeStructuredFields();
       }
     </script>

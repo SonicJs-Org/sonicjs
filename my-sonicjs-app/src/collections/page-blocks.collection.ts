@@ -206,6 +206,24 @@ const pageBlocksCollection: CollectionConfig = {
                 image: { type: 'media', title: 'Image', required: true },
               },
             },
+            gallery: {
+              label: 'Gallery',
+              properties: {
+                heading: { type: 'string', title: 'Heading' },
+                images: {
+                  type: 'array',
+                  title: 'Images',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      image: { type: 'media', title: 'Image' },
+                      alt: { type: 'string', title: 'Alt' },
+                      caption: { type: 'string', title: 'Caption' },
+                    },
+                  },
+                },
+              },
+            },
             callToAction: {
               label: 'Call To Action',
               properties: {

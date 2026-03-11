@@ -1,7 +1,7 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-WLCPMUTO.js';
+import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-AERNYNDY.js';
 import { PluginService } from './chunk-27AOVQTR.js';
-import { MigrationService } from './chunk-RHWW3FCT.js';
+import { MigrationService } from './chunk-REQVCCXK.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-VCH6HXVP.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
 import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-34QIAULP.js';
@@ -2231,7 +2231,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-2JMBZEKT.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-DTUAMVNN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2256,7 +2256,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-2JMBZEKT.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-DTUAMVNN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2275,7 +2275,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-2JMBZEKT.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-DTUAMVNN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -4077,6 +4077,15 @@ function getReadFieldValueScript() {
     </script>
   `;
 }
+var STRUCTURED_INDEX_TOKEN = "__INDEX__";
+var BLOCK_INDEX_TOKEN = "__BLOCK_INDEX__";
+function sanitizeStructuredGroupId(fieldName) {
+  return `object-${fieldName}`.split(BLOCK_INDEX_TOKEN).map(
+    (blockSegment) => blockSegment.split(STRUCTURED_INDEX_TOKEN).map(
+      (segment) => segment.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    ).join(STRUCTURED_INDEX_TOKEN)
+  ).join(BLOCK_INDEX_TOKEN);
+}
 function renderDynamicField(field, options = {}) {
   const {
     value = "",
@@ -4614,6 +4623,7 @@ function renderDynamicField(field, options = {}) {
                   <button
                     type="button"
                     onclick="removeMediaFromMultiple('${fieldId}', '${url}')"
+                    data-media-remove="true"
                     class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700"
                     ${disabled ? "disabled" : ""}
                   >
@@ -4647,6 +4657,7 @@ function renderDynamicField(field, options = {}) {
               <button
                 type="button"
                 onclick="clearMediaField('${fieldId}')"
+                data-media-remove="true"
                 class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all"
                 ${disabled ? "disabled" : ""}
               >
@@ -4820,9 +4831,7 @@ function renderStructuredObjectField(field, options, baseClasses, errorClasses) 
       ${getStructuredFieldScript()}
     `;
   }
-  const groupId = `object-${field.field_name}`.split("__INDEX__").map(
-    (segment) => segment.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-  ).join("__INDEX__");
+  const groupId = sanitizeStructuredGroupId(field.field_name);
   const isCollapsed = errors.length > 0 ? false : opts.collapsed !== false;
   return `
     <div class="field-group rounded-lg shadow-sm mb-6" data-group-id="${escapeHtml2(groupId)}" data-structured-object data-field-name="${escapeHtml2(fieldName)}">
@@ -5037,7 +5046,7 @@ function normalizeBlocksValue(value, discriminator) {
 function renderBlockTemplate(field, block, discriminator, pluginStatuses) {
   return `
     <template data-block-template="${escapeHtml2(block.name)}">
-      ${renderBlockCard(field, block, discriminator, "__INDEX__", {}, pluginStatuses)}
+      ${renderBlockCard(field, block, discriminator, BLOCK_INDEX_TOKEN, {}, pluginStatuses)}
     </template>
   `;
 }
@@ -5320,6 +5329,11 @@ function getStructuredFieldScript() {
               const getLiveHiddenInput = () =>
                 hiddenInput || container.querySelector(':scope > input[type="hidden"]');
               const getTemplateHtml = () => {
+                if (typeof container.__sonicStructuredArrayTemplate === 'string' &&
+                    container.__sonicStructuredArrayTemplate.trim()) {
+                  return container.__sonicStructuredArrayTemplate;
+                }
+
                 const liveTemplate =
                   template instanceof HTMLTemplateElement
                     ? template
@@ -5728,7 +5742,7 @@ function getBlocksFieldScript() {
                 if (!template) return;
 
                 const nextIndex = list.querySelectorAll('.blocks-item').length;
-                const html = template.innerHTML.replace(/__INDEX__/g, String(nextIndex));
+                const html = template.innerHTML.replace(/__BLOCK_INDEX__/g, String(nextIndex));
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {
@@ -7090,29 +7104,88 @@ function renderContentFormPage(data) {
       }, true);
 
       // Media field functions
-      let currentMediaFieldId = null;
       function notifyFieldChange(input) {
         if (!input) return;
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
+      function getActiveMediaModal() {
+        const modal = document.getElementById('media-selector-modal');
+        return modal instanceof HTMLElement ? modal : null;
+      }
+
+      function getMediaFieldElements(fieldId) {
+        if (!fieldId) {
+          return {
+            fieldId: '',
+            hiddenInput: null,
+            preview: null,
+            mediaField: null,
+            actionsDiv: null,
+          };
+        }
+
+        const hiddenInput = document.getElementById(fieldId);
+        const preview = document.getElementById(fieldId + '-preview');
+        const mediaField = hiddenInput?.closest('.media-field-container') || null;
+        const actionsDiv = mediaField?.querySelector('.media-actions') || null;
+
+        return {
+          fieldId,
+          hiddenInput,
+          preview,
+          mediaField,
+          actionsDiv,
+        };
+      }
+
+      function getActiveMediaTarget() {
+        const modal = getActiveMediaModal();
+        const fieldId = modal?.dataset.targetFieldId || '';
+        return {
+          modal,
+          originalValue: modal?.dataset.originalValue || '',
+          ...getMediaFieldElements(fieldId),
+        };
+      }
+
+      function ensureSingleMediaRemoveButton(fieldId, actionsDiv) {
+        if (!(actionsDiv instanceof HTMLElement)) return;
+        const existingRemoveButton = actionsDiv.querySelector('[data-media-remove="true"]');
+        if (existingRemoveButton) return;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.setAttribute('data-media-remove', 'true');
+        removeBtn.onclick = () => clearMediaField(fieldId);
+        removeBtn.className = 'inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all';
+        removeBtn.textContent = 'Remove';
+        actionsDiv.appendChild(removeBtn);
+      }
+
       function openMediaSelector(fieldId) {
-        currentMediaFieldId = fieldId;
+        const existingModal = getActiveMediaModal();
+        if (existingModal) {
+          existingModal.remove();
+        }
+
         // Store the original value in case user cancels
-        const originalValue = document.getElementById(fieldId)?.value || '';
+        const originalValue = getMediaFieldElements(fieldId).hiddenInput?.value || '';
 
         // Open media library modal
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50';
         modal.id = 'media-selector-modal';
+        modal.dataset.targetFieldId = fieldId;
+        modal.dataset.originalValue = originalValue;
         modal.innerHTML = \`
           <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Select Media</h3>
             <div id="media-grid-container" hx-get="/admin/media/selector" hx-trigger="load"></div>
             <div class="mt-4 flex justify-end space-x-2">
               <button
-                onclick="cancelMediaSelection('\${fieldId}', '\${originalValue}')"
+                onclick="cancelMediaSelection()"
                 class="rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors">
                 Cancel
               </button>
@@ -7132,16 +7205,16 @@ function renderContentFormPage(data) {
       }
 
       function closeMediaSelector() {
-        const modal = document.getElementById('media-selector-modal');
+        const modal = getActiveMediaModal();
         if (modal) {
           modal.remove();
         }
-        currentMediaFieldId = null;
       }
 
-      function cancelMediaSelection(fieldId, originalValue) {
+      function cancelMediaSelection() {
+        const { hiddenInput, preview, originalValue } = getActiveMediaTarget();
+
         // Restore original value
-        const hiddenInput = document.getElementById(fieldId);
         if (hiddenInput) {
           hiddenInput.value = originalValue;
           notifyFieldChange(hiddenInput);
@@ -7149,7 +7222,6 @@ function renderContentFormPage(data) {
 
         // If original value was empty, hide the preview and show select button
         if (!originalValue) {
-          const preview = document.getElementById(fieldId + '-preview');
           if (preview) {
             preview.classList.add('hidden');
           }
@@ -7160,8 +7232,7 @@ function renderContentFormPage(data) {
       }
 
       function clearMediaField(fieldId) {
-        const hiddenInput = document.getElementById(fieldId);
-        const preview = document.getElementById(fieldId + '-preview');
+        const { hiddenInput, preview, actionsDiv } = getMediaFieldElements(fieldId);
 
         if (hiddenInput) {
           hiddenInput.value = '';
@@ -7175,11 +7246,16 @@ function renderContentFormPage(data) {
           }
           preview.classList.add('hidden');
         }
+
+        const removeButton = actionsDiv?.querySelector('[data-media-remove="true"]');
+        if (removeButton) {
+          removeButton.remove();
+        }
       }
 
       // Global function to remove a single media from multiple selection
       window.removeMediaFromMultiple = function(fieldId, urlToRemove) {
-        const hiddenInput = document.getElementById(fieldId);
+        const { hiddenInput, preview } = getMediaFieldElements(fieldId);
         if (!hiddenInput) return;
 
         const values = hiddenInput.value.split(',').filter(url => url !== urlToRemove);
@@ -7187,14 +7263,17 @@ function renderContentFormPage(data) {
         notifyFieldChange(hiddenInput);
 
         // Remove preview item
-        const previewItem = document.querySelector(\`[data-url="\${urlToRemove}"]\`);
+        const previewItem =
+          preview &&
+          Array.from(preview.querySelectorAll('[data-url]')).find(
+            (item) => item.getAttribute('data-url') === urlToRemove,
+          );
         if (previewItem) {
           previewItem.remove();
         }
 
         // Hide preview grid if empty
         if (values.length === 0) {
-          const preview = document.getElementById(fieldId + '-preview');
           if (preview) {
             preview.classList.add('hidden');
           }
@@ -7203,40 +7282,24 @@ function renderContentFormPage(data) {
 
       // Global function called by media selector buttons
       window.selectMediaFile = function(mediaId, mediaUrl, filename) {
-        if (!currentMediaFieldId) {
+        const { fieldId, hiddenInput, preview, actionsDiv } = getActiveMediaTarget();
+        if (!fieldId || !hiddenInput) {
           console.error('No field ID set for media selection');
           return;
         }
 
-        const fieldId = currentMediaFieldId;
-
         // Set the hidden input value to the media URL (not ID)
-        const hiddenInput = document.getElementById(fieldId);
-        if (hiddenInput) {
-          hiddenInput.value = mediaUrl;
-          notifyFieldChange(hiddenInput);
-        }
+        hiddenInput.value = mediaUrl;
+        notifyFieldChange(hiddenInput);
 
         // Update the preview
-        const preview = document.getElementById(fieldId + '-preview');
         if (preview) {
           preview.innerHTML = \`<img src="\${mediaUrl}" alt="\${filename}" class="w-32 h-32 object-cover rounded-lg border border-white/20">\`;
           preview.classList.remove('hidden');
         }
 
         // Show the remove button by finding the media actions container and updating it
-        const mediaField = hiddenInput?.closest('.media-field-container');
-        if (mediaField) {
-          const actionsDiv = mediaField.querySelector('.media-actions');
-          if (actionsDiv && !actionsDiv.querySelector('button:has-text("Remove")')) {
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.onclick = () => clearMediaField(fieldId);
-            removeBtn.className = 'inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all';
-            removeBtn.textContent = 'Remove';
-            actionsDiv.appendChild(removeBtn);
-          }
-        }
+        ensureSingleMediaRemoveButton(fieldId, actionsDiv);
 
         // DON'T close the modal - let user click OK button
         // Visual feedback: highlight the selected item
@@ -28576,5 +28639,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-XHSPEEC6.js.map
-//# sourceMappingURL=chunk-XHSPEEC6.js.map
+//# sourceMappingURL=chunk-RDD3RO7B.js.map
+//# sourceMappingURL=chunk-RDD3RO7B.js.map

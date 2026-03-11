@@ -138,6 +138,26 @@ function getReadFieldValueScript(): string {
   `
 }
 
+const STRUCTURED_INDEX_TOKEN = '__INDEX__'
+const BLOCK_INDEX_TOKEN = '__BLOCK_INDEX__'
+
+function sanitizeStructuredGroupId(fieldName: string): string {
+  return `object-${fieldName}`
+    .split(BLOCK_INDEX_TOKEN)
+    .map((blockSegment) =>
+      blockSegment
+        .split(STRUCTURED_INDEX_TOKEN)
+        .map((segment) =>
+          segment
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, ''),
+        )
+        .join(STRUCTURED_INDEX_TOKEN),
+    )
+    .join(BLOCK_INDEX_TOKEN)
+}
+
 export interface FieldDefinition {
   id: string
   field_name: string
@@ -764,6 +784,7 @@ export function renderDynamicField(
                   <button
                     type="button"
                     onclick="removeMediaFromMultiple('${fieldId}', '${url}')"
+                    data-media-remove="true"
                     class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700"
                     ${disabled ? 'disabled' : ''}
                   >
@@ -802,6 +823,7 @@ export function renderDynamicField(
               <button
                 type="button"
                 onclick="clearMediaField('${fieldId}')"
+                data-media-remove="true"
                 class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all"
                 ${disabled ? 'disabled' : ''}
               >
@@ -1042,15 +1064,7 @@ function renderStructuredObjectField(
     `
   }
 
-  const groupId = `object-${field.field_name}`
-    .split('__INDEX__')
-    .map((segment) =>
-      segment
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, ''),
-    )
-    .join('__INDEX__')
+  const groupId = sanitizeStructuredGroupId(field.field_name)
   const isCollapsed = errors.length > 0 ? false : opts.collapsed !== false
 
   return `
@@ -1337,7 +1351,7 @@ function renderBlockTemplate(
 ): string {
   return `
     <template data-block-template="${escapeHtml(block.name)}">
-      ${renderBlockCard(field, block, discriminator, '__INDEX__', {}, pluginStatuses)}
+      ${renderBlockCard(field, block, discriminator, BLOCK_INDEX_TOKEN, {}, pluginStatuses)}
     </template>
   `
 }
@@ -1659,6 +1673,11 @@ function getStructuredFieldScript(): string {
               const getLiveHiddenInput = () =>
                 hiddenInput || container.querySelector(':scope > input[type="hidden"]');
               const getTemplateHtml = () => {
+                if (typeof container.__sonicStructuredArrayTemplate === 'string' &&
+                    container.__sonicStructuredArrayTemplate.trim()) {
+                  return container.__sonicStructuredArrayTemplate;
+                }
+
                 const liveTemplate =
                   template instanceof HTMLTemplateElement
                     ? template
@@ -2068,7 +2087,7 @@ function getBlocksFieldScript(): string {
                 if (!template) return;
 
                 const nextIndex = list.querySelectorAll('.blocks-item').length;
-                const html = template.innerHTML.replace(/__INDEX__/g, String(nextIndex));
+                const html = template.innerHTML.replace(/__BLOCK_INDEX__/g, String(nextIndex));
                 list.insertAdjacentHTML('beforeend', html);
                 const newItem = list.lastElementChild;
                 if (newItem instanceof HTMLElement) {

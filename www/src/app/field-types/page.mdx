@@ -510,7 +510,7 @@ Quill editor (requires Quill Editor Plugin).
 
 ---
 
-### mdxeditor / markdown
+### markdown
 
 Markdown editor (requires EasyMDE Plugin).
 
@@ -518,13 +518,15 @@ Markdown editor (requires EasyMDE Plugin).
 
 ```typescript
 {
-  type: 'mdxeditor',
+  type: 'markdown',
   title: 'Documentation',
   height: 400
 }
 ```
 
 </CodeGroup>
+
+Legacy aliases `mdxeditor` and `easymde` are still supported for compatibility, but `markdown` is the canonical field type.
 
 **Storage:** `TEXT` (Markdown)
 

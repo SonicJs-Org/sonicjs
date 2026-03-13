@@ -1,6 +1,6 @@
 export { c as FilterCondition, d as FilterGroup, F as FilterOperator, f as QueryFilter, Q as QueryFilterBuilder, h as QueryResult, S as SONICJS_VERSION, T as TemplateRenderer, b as buildQuery, e as escapeHtml, g as getCoreVersion, m as metricsTracker, r as renderTemplate, s as sanitizeInput, a as sanitizeObject, t as templateRenderer } from './version-vktVAxhe.cjs';
 import { b as TelemetryConfig } from './telemetry-UiD1i9GS.cjs';
-import { b as BlockDefinitions } from './collection-config-BF95LgQb.cjs';
+import { b as BlockDefinitions } from './collection-config-BOK6_4_E.cjs';
 
 /**
  * Slug generation utilities for creating URL-friendly slugs

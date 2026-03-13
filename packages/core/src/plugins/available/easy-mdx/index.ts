@@ -164,7 +164,7 @@ export function getMDXEditorInitScript(config?: {
   const placeholder = config?.placeholder || 'Start writing your content...'
 
   return `
-    // Initialize EasyMDE (Markdown Editor) for all richtext fields
+    // Initialize EasyMDE (Markdown Editor) only for markdown-marked fields
     function initializeMDXEditor() {
       if (typeof EasyMDE === 'undefined') {
         console.warn('EasyMDE not loaded yet, retrying...');
@@ -173,7 +173,7 @@ export function getMDXEditorInitScript(config?: {
       }
 
       // Find all textareas that need EasyMDE
-      document.querySelectorAll('.richtext-container textarea').forEach((textarea) => {
+      document.querySelectorAll('.richtext-container[data-editor-provider="easymde"] textarea').forEach((textarea) => {
         // Skip if already initialized
         if (textarea.dataset.mdxeditorInitialized === 'true') {
           return;

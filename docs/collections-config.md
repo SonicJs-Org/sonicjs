@@ -83,6 +83,8 @@ SonicJS supports 30+ field types for building rich content schemas:
 | `markdown` | Markdown editor | Documentation, technical content |
 | `json` | JSON editor | Structured data, API responses |
 
+`markdown` is the canonical field type for the EasyMDE-backed markdown editor. Legacy aliases `mdxeditor` and `easymde` are still accepted for compatibility.
+
 ### Selections
 | Type | Description | Use Case |
 |------|-------------|----------|

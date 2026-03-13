@@ -61,11 +61,11 @@ export function getTinyMCEInitScript(config?: {
   const defaultHeight = config?.defaultHeight || 300
 
   return `
-    // Initialize TinyMCE for all richtext fields
+    // Initialize TinyMCE only for TinyMCE-backed richtext fields
     function initializeTinyMCE() {
       if (typeof tinymce !== 'undefined') {
         // Find all textareas that need TinyMCE
-        document.querySelectorAll('.richtext-container textarea').forEach((textarea) => {
+        document.querySelectorAll('.richtext-container[data-editor-provider="tinymce"] textarea').forEach((textarea) => {
           // Skip if already initialized
           if (tinymce.get(textarea.id)) {
             return;

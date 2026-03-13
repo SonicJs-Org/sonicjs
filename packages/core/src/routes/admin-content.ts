@@ -10,6 +10,7 @@ import { getCacheService, CACHE_CONFIGS } from '../services/cache'
 import type { Bindings, Variables } from '../app'
 import { PluginService } from '../services/plugin-service'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
+import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -197,19 +198,12 @@ async function getCollectionFields(db: D1Database, collectionId: string) {
             // Convert schema properties to field format
             let fieldOrder = 0
             return Object.entries(schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
-              // For select fields, convert enum/enumLabels to options array
-              let fieldOptions = { ...fieldConfig }
-              if (fieldConfig.type === 'select' && fieldConfig.enum) {
-                fieldOptions.options = fieldConfig.enum.map((value: string, index: number) => ({
-                  value: value,
-                  label: fieldConfig.enumLabels?.[index] || value
-                }))
-              }
+              const fieldOptions = buildSchemaFieldOptions(fieldConfig)
 
               return {
                 id: `schema-${fieldName}`,
                 field_name: fieldName,
-                field_type: fieldConfig.type || 'string',
+                field_type: resolveSchemaFieldType(fieldConfig),
                 field_label: fieldConfig.title || fieldName,
                 field_options: fieldOptions,
                 field_order: fieldOrder++,

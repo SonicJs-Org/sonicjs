@@ -468,10 +468,15 @@ describe('renderDynamicField - Rich Text Fields', () => {
       field_type: 'richtext',
       field_options: { height: 400 },
     });
-    const html = renderDynamicField(field, { value: '<p>Content</p>' });
+    const html = renderDynamicField(field, {
+      value: '<p>Content</p>',
+      pluginStatuses: { tinymceEnabled: true },
+    });
 
     expect(html).toContain('richtext-container');
     expect(html).toContain('data-height="400"');
+    expect(html).toContain('data-editor-family="richtext"');
+    expect(html).toContain('data-editor-provider="tinymce"');
     // Content gets HTML-escaped in the textarea
     expect(html).toContain('&lt;p&gt;Content&lt;/p&gt;');
   });
@@ -481,7 +486,9 @@ describe('renderDynamicField - Rich Text Fields', () => {
       field_type: 'richtext',
       field_options: { toolbar: 'minimal' },
     });
-    const html = renderDynamicField(field);
+    const html = renderDynamicField(field, {
+      pluginStatuses: { tinymceEnabled: true },
+    });
 
     expect(html).toContain('data-toolbar="minimal"');
   });
@@ -527,7 +534,31 @@ describe('renderDynamicField - Quill Editor Fields', () => {
     });
 
     expect(html).toContain('<textarea');
-    expect(html).toContain('MDXEditor plugin is inactive');
+    expect(html).toContain('Markdown editor plugin is inactive');
+  });
+
+  it('should fallback to textarea when markdown plugin is disabled', () => {
+    const field = createTestField({
+      field_type: 'markdown',
+    });
+    const html = renderDynamicField(field, {
+      pluginStatuses: { mdxeditorEnabled: false },
+    });
+
+    expect(html).toContain('<textarea');
+    expect(html).toContain('Markdown editor plugin is inactive');
+  });
+
+  it('should fallback to textarea when easymde alias is disabled', () => {
+    const field = createTestField({
+      field_type: 'easymde',
+    });
+    const html = renderDynamicField(field, {
+      pluginStatuses: { mdxeditorEnabled: false },
+    });
+
+    expect(html).toContain('<textarea');
+    expect(html).toContain('Markdown editor plugin is inactive');
   });
 
   it('should fallback to textarea when tinymce plugin is disabled', () => {
@@ -540,6 +571,19 @@ describe('renderDynamicField - Quill Editor Fields', () => {
 
     expect(html).toContain('<textarea');
     expect(html).toContain('TinyMCE plugin is inactive');
+  });
+
+  it('should fallback to textarea when canonical richtext plugin is disabled', () => {
+    const field = createTestField({
+      field_type: 'richtext',
+    });
+    const html = renderDynamicField(field, {
+      pluginStatuses: { tinymceEnabled: false },
+    });
+
+    expect(html).toContain('<textarea');
+    expect(html).toContain('TinyMCE plugin is inactive');
+    expect(html).not.toContain('data-editor-provider="tinymce"');
   });
 });
 
@@ -825,7 +869,44 @@ describe('renderDynamicField - MDXEditor Fields', () => {
 
     expect(html).toContain('richtext-container');
     expect(html).toContain('data-height="400"');
+    expect(html).toContain('data-editor-family="markdown"');
+    expect(html).toContain('data-editor-provider="easymde"');
     expect(html).toContain('# Markdown');
+  });
+
+  it('should render markdown container when enabled', () => {
+    const field = createTestField({
+      field_type: 'markdown',
+      field_options: { height: 320, toolbar: 'minimal' },
+    });
+    const html = renderDynamicField(field, {
+      value: '# Canonical Markdown',
+      pluginStatuses: { mdxeditorEnabled: true },
+    });
+
+    expect(html).toContain('richtext-container');
+    expect(html).toContain('data-height="320"');
+    expect(html).toContain('data-toolbar="minimal"');
+    expect(html).toContain('data-editor-family="markdown"');
+    expect(html).toContain('data-editor-provider="easymde"');
+    expect(html).toContain('# Canonical Markdown');
+  });
+
+  it('should render easymde alias container when enabled', () => {
+    const field = createTestField({
+      field_type: 'easymde',
+      field_options: { height: 360 },
+    });
+    const html = renderDynamicField(field, {
+      value: '## EasyMDE Alias',
+      pluginStatuses: { mdxeditorEnabled: true },
+    });
+
+    expect(html).toContain('richtext-container');
+    expect(html).toContain('data-height="360"');
+    expect(html).toContain('data-editor-family="markdown"');
+    expect(html).toContain('data-editor-provider="easymde"');
+    expect(html).toContain('## EasyMDE Alias');
   });
 });
 

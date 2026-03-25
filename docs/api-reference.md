@@ -332,10 +332,13 @@ Retrieve all content items with pagination.
 
 **Authentication:** None required
 
+Anonymous, viewer, and author requests return published content only. Admin and editor requests may filter by other statuses.
+
 **Cache Headers:** Cached for 5 minutes (API cache tier)
 
 **Query Parameters:**
 - `limit` (optional): Maximum number of items to return (default: 50, max: 100)
+- `status` (optional): Content status filter for admin/editor requests. Anonymous, viewer, and author requests are limited to published results.
 
 ```bash
 curl -X GET "http://localhost:8787/api/content?limit=10"
@@ -397,6 +400,8 @@ Retrieve content for a specific collection.
 
 **Authentication:** None required
 
+Anonymous, viewer, and author requests return published content only. Admin and editor requests may filter by other statuses.
+
 **Cache Headers:** Cached for 5 minutes (API cache tier)
 
 **Path Parameters:**
@@ -404,6 +409,7 @@ Retrieve content for a specific collection.
 
 **Query Parameters:**
 - `limit` (optional): Maximum number of items to return (default: 50, max: 100)
+- `status` (optional): Content status filter for admin/editor requests. Anonymous, viewer, and author requests are limited to published results.
 
 ```bash
 curl -X GET "http://localhost:8787/api/collections/blog-posts/content?limit=25"

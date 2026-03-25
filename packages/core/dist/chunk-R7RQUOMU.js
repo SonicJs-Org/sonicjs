@@ -1,10 +1,10 @@
-import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-5PH7K7YR.js';
-import { requireAuth, isPluginActive, requireRole, AuthManager, logActivity } from './chunk-FQAOOSEB.js';
+import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
+import { requireAuth, isPluginActive, optionalAuth, requireRole, AuthManager, logActivity } from './chunk-T5ZJOE4J.js';
 import { PluginService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-DADFCDML.js';
+import { MigrationService } from './chunk-ALQFJXV5.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-VCH6HXVP.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
-import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-PSRPBW3W.js';
+import { QueryFilterBuilder, sanitizeInput, getCoreVersion, escapeHtml, getBlocksFieldConfig, parseBlocksValue } from './chunk-34QIAULP.js';
 import { metricsTracker } from './chunk-FICTAGD4.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -14,6 +14,50 @@ import { html, raw } from 'hono/html';
 
 // src/schemas/index.ts
 var schemaDefinitions = [];
+
+// src/routes/api-content-access-policy.ts
+function canReadNonPublicContent(userRole) {
+  return userRole === "admin" || userRole === "editor";
+}
+function isStatusCondition(condition) {
+  return condition.field === "status";
+}
+function stripStatusConditions(group) {
+  if (!group) {
+    return void 0;
+  }
+  const and = group.and?.filter((condition) => !isStatusCondition(condition));
+  const or = group.or?.filter((condition) => !isStatusCondition(condition));
+  const normalizedGroup = {};
+  if (and && and.length > 0) {
+    normalizedGroup.and = and;
+  }
+  if (or && or.length > 0) {
+    normalizedGroup.or = or;
+  }
+  return normalizedGroup;
+}
+function normalizePublicContentFilter(filter, userRole) {
+  if (canReadNonPublicContent(userRole)) {
+    return filter;
+  }
+  const normalizedFilter = {
+    ...filter,
+    where: stripStatusConditions(filter.where)
+  };
+  if (!normalizedFilter.where) {
+    normalizedFilter.where = { and: [] };
+  }
+  if (!normalizedFilter.where.and) {
+    normalizedFilter.where.and = [];
+  }
+  normalizedFilter.where.and.push({
+    field: "status",
+    operator: "equals",
+    value: "published"
+  });
+  return normalizedFilter;
+}
 var apiContentCrudRoutes = new Hono();
 apiContentCrudRoutes.get("/check-slug", async (c) => {
   try {
@@ -369,7 +413,7 @@ apiRoutes.get("/", (c) => {
       "/api/collections/{collection}/content": {
         get: {
           summary: "Get Collection Content",
-          description: "Returns content items from a specific collection with filtering support",
+          description: "Returns content items from a specific collection with filtering support. Anonymous, viewer, and author requests are restricted to published content; admin and editor requests may query other statuses.",
           operationId: "getCollectionContent",
           tags: ["Content"],
           parameters: [
@@ -396,7 +440,7 @@ apiRoutes.get("/", (c) => {
               name: "status",
               in: "query",
               schema: { type: "string", enum: ["draft", "published", "archived"] },
-              description: "Filter by content status"
+              description: "Filter by content status. Anonymous, viewer, and author requests are limited to published content."
             }
           ],
           responses: {
@@ -423,7 +467,7 @@ apiRoutes.get("/", (c) => {
       "/api/content": {
         get: {
           summary: "List Content",
-          description: "Returns content items with advanced filtering support",
+          description: "Returns content items with advanced filtering support. Anonymous, viewer, and author requests are restricted to published content; admin and editor requests may query other statuses.",
           operationId: "getContent",
           tags: ["Content"],
           parameters: [
@@ -444,6 +488,12 @@ apiRoutes.get("/", (c) => {
               in: "query",
               schema: { type: "integer", default: 0 },
               description: "Number of items to skip"
+            },
+            {
+              name: "status",
+              in: "query",
+              schema: { type: "string", enum: ["draft", "published", "archived"] },
+              description: "Filter by content status. Anonymous, viewer, and author requests are limited to published content."
             }
           ],
           responses: {
@@ -720,7 +770,7 @@ apiRoutes.get("/collections", async (c) => {
     return c.json({ error: "Failed to fetch collections" }, 500);
   }
 });
-apiRoutes.get("/content", async (c) => {
+apiRoutes.get("/content", optionalAuth(), async (c) => {
   const executionStart = Date.now();
   try {
     const db = c.env.DB;
@@ -744,12 +794,13 @@ apiRoutes.get("/content", async (c) => {
       }
     }
     const filter = QueryFilterBuilder.parseFromQuery(queryParams);
-    if (!filter.limit) {
-      filter.limit = 50;
+    const normalizedFilter = normalizePublicContentFilter(filter, c.get("user")?.role);
+    if (!normalizedFilter.limit) {
+      normalizedFilter.limit = 50;
     }
-    filter.limit = Math.min(filter.limit, 1e3);
+    normalizedFilter.limit = Math.min(normalizedFilter.limit, 1e3);
     const builder3 = new QueryFilterBuilder();
-    const queryResult = builder3.build("content", filter);
+    const queryResult = builder3.build("content", normalizedFilter);
     if (queryResult.errors.length > 0) {
       return c.json({
         error: "Invalid filter parameters",
@@ -758,7 +809,7 @@ apiRoutes.get("/content", async (c) => {
     }
     const cacheEnabled = c.get("cacheEnabled");
     const cache = getCacheService(CACHE_CONFIGS.api);
-    const cacheKey = cache.generateKey("content-filtered", JSON.stringify({ filter, query: queryResult.sql }));
+    const cacheKey = cache.generateKey("content-filtered", JSON.stringify({ filter: normalizedFilter, query: queryResult.sql }));
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
       if (cacheResult.hit && cacheResult.data) {
@@ -801,7 +852,7 @@ apiRoutes.get("/content", async (c) => {
       meta: addTimingMeta(c, {
         count: results.length,
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-        filter,
+        filter: normalizedFilter,
         query: {
           sql: queryResult.sql,
           params: queryResult.params
@@ -824,7 +875,7 @@ apiRoutes.get("/content", async (c) => {
     }, 500);
   }
 });
-apiRoutes.get("/collections/:collection/content", async (c) => {
+apiRoutes.get("/collections/:collection/content", optionalAuth(), async (c) => {
   const executionStart = Date.now();
   try {
     const collection = c.req.param("collection");
@@ -836,23 +887,24 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
       return c.json({ error: "Collection not found" }, 404);
     }
     const filter = QueryFilterBuilder.parseFromQuery(queryParams);
-    if (!filter.where) {
-      filter.where = { and: [] };
+    const normalizedFilter = normalizePublicContentFilter(filter, c.get("user")?.role);
+    if (!normalizedFilter.where) {
+      normalizedFilter.where = { and: [] };
     }
-    if (!filter.where.and) {
-      filter.where.and = [];
+    if (!normalizedFilter.where.and) {
+      normalizedFilter.where.and = [];
     }
-    filter.where.and.push({
+    normalizedFilter.where.and.push({
       field: "collection_id",
       operator: "equals",
       value: collectionResult.id
     });
-    if (!filter.limit) {
-      filter.limit = 50;
+    if (!normalizedFilter.limit) {
+      normalizedFilter.limit = 50;
     }
-    filter.limit = Math.min(filter.limit, 1e3);
+    normalizedFilter.limit = Math.min(normalizedFilter.limit, 1e3);
     const builder3 = new QueryFilterBuilder();
-    const queryResult = builder3.build("content", filter);
+    const queryResult = builder3.build("content", normalizedFilter);
     if (queryResult.errors.length > 0) {
       return c.json({
         error: "Invalid filter parameters",
@@ -861,7 +913,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
     }
     const cacheEnabled = c.get("cacheEnabled");
     const cache = getCacheService(CACHE_CONFIGS.api);
-    const cacheKey = cache.generateKey("collection-content-filtered", `${collection}:${JSON.stringify({ filter, query: queryResult.sql })}`);
+    const cacheKey = cache.generateKey("collection-content-filtered", `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql })}`);
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource(cacheKey);
       if (cacheResult.hit && cacheResult.data) {
@@ -908,7 +960,7 @@ apiRoutes.get("/collections/:collection/content", async (c) => {
         },
         count: results.length,
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-        filter,
+        filter: normalizedFilter,
         query: {
           sql: queryResult.sql,
           params: queryResult.params
@@ -2231,7 +2283,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-WJVCIKQO.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KOSLTR3E.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2256,7 +2308,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-WJVCIKQO.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KOSLTR3E.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2275,7 +2327,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-WJVCIKQO.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KOSLTR3E.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -27758,5 +27810,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-7DU5PUKL.js.map
-//# sourceMappingURL=chunk-7DU5PUKL.js.map
+//# sourceMappingURL=chunk-R7RQUOMU.js.map
+//# sourceMappingURL=chunk-R7RQUOMU.js.map

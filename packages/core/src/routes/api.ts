@@ -656,10 +656,6 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
         count: results.length,
         timestamp: new Date().toISOString(),
         filter: normalizedFilter,
-        query: {
-          sql: queryResult.sql,
-          params: queryResult.params
-        },
         cache: {
           hit: false,
           source: 'database'
@@ -804,10 +800,6 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
         count: results.length,
         timestamp: new Date().toISOString(),
         filter: normalizedFilter,
-        query: {
-          sql: queryResult.sql,
-          params: queryResult.params
-        },
         cache: {
           hit: false,
           source: 'database'

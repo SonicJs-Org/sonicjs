@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { loginAsAdmin, getCsrfTokenFromPage } from './utils/test-helpers';
 
 test.describe.skip('Admin Migrations Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -325,7 +325,10 @@ test.describe('Migrations API Endpoints', () => {
 
   test('should require admin role for run migrations endpoint', async ({ page }) => {
     // This test verifies that the endpoint properly checks admin permissions
-    const response = await page.request.post('/admin/api/migrations/run');
+    const csrfToken = await getCsrfTokenFromPage(page);
+    const response = await page.request.post('/admin/api/migrations/run', {
+      headers: { ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }
+    });
     
     // Should either succeed (if user is admin) or return 403
     expect([200, 403]).toContain(response.status());

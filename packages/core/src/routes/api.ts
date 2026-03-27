@@ -3,7 +3,8 @@ import { cors } from 'hono/cors'
 import { schemaDefinitions } from '../schemas'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import { QueryFilterBuilder, QueryFilter } from '../utils'
-import { isPluginActive } from '../middleware'
+import { isPluginActive, optionalAuth } from '../middleware'
+import { normalizePublicContentFilter } from './api-content-access-policy'
 import apiContentCrudRoutes from './api-content-crud'
 import type { Bindings, Variables as AppVariables } from '../app'
 
@@ -163,7 +164,7 @@ apiRoutes.get('/', (c) => {
       '/api/collections/{collection}/content': {
         get: {
           summary: 'Get Collection Content',
-          description: 'Returns content items from a specific collection with filtering support',
+          description: 'Returns content items from a specific collection with filtering support. Anonymous, viewer, and author requests are restricted to published content; admin and editor requests may query other statuses.',
           operationId: 'getCollectionContent',
           tags: ['Content'],
           parameters: [
@@ -190,7 +191,7 @@ apiRoutes.get('/', (c) => {
               name: 'status',
               in: 'query',
               schema: { type: 'string', enum: ['draft', 'published', 'archived'] },
-              description: 'Filter by content status'
+              description: 'Filter by content status. Anonymous, viewer, and author requests are limited to published content.'
             }
           ],
           responses: {
@@ -217,7 +218,7 @@ apiRoutes.get('/', (c) => {
       '/api/content': {
         get: {
           summary: 'List Content',
-          description: 'Returns content items with advanced filtering support',
+          description: 'Returns content items with advanced filtering support. Anonymous, viewer, and author requests are restricted to published content; admin and editor requests may query other statuses.',
           operationId: 'getContent',
           tags: ['Content'],
           parameters: [
@@ -238,6 +239,12 @@ apiRoutes.get('/', (c) => {
               in: 'query',
               schema: { type: 'integer', default: 0 },
               description: 'Number of items to skip'
+            },
+            {
+              name: 'status',
+              in: 'query',
+              schema: { type: 'string', enum: ['draft', 'published', 'archived'] },
+              description: 'Filter by content status. Anonymous, viewer, and author requests are limited to published content.'
             }
           ],
           responses: {
@@ -535,7 +542,7 @@ apiRoutes.get('/collections', async (c) => {
 })
 
 // Basic content endpoint with advanced filtering
-apiRoutes.get('/content', async (c) => {
+apiRoutes.get('/content', optionalAuth(), async (c) => {
   const executionStart = Date.now()
 
   try {
@@ -567,16 +574,17 @@ apiRoutes.get('/content', async (c) => {
 
     // Parse filter from query parameters
     const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
+    const normalizedFilter = normalizePublicContentFilter(filter, c.get('user')?.role)
 
     // Set default limit if not provided
-    if (!filter.limit) {
-      filter.limit = 50
+    if (!normalizedFilter.limit) {
+      normalizedFilter.limit = 50
     }
-    filter.limit = Math.min(filter.limit, 1000) // Max 1000
+    normalizedFilter.limit = Math.min(normalizedFilter.limit, 1000) // Max 1000
 
     // Build SQL query from filter
     const builder = new QueryFilterBuilder()
-    const queryResult = builder.build('content', filter)
+    const queryResult = builder.build('content', normalizedFilter)
 
     // Check for query building errors
     if (queryResult.errors.length > 0) {
@@ -589,7 +597,7 @@ apiRoutes.get('/content', async (c) => {
     // Only use cache if cache plugin is active
     const cacheEnabled = c.get('cacheEnabled')
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    const cacheKey = cache.generateKey('content-filtered', JSON.stringify({ filter, query: queryResult.sql }))
+    const cacheKey = cache.generateKey('content-filtered', JSON.stringify({ filter: normalizedFilter, query: queryResult.sql }))
 
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource<any>(cacheKey)
@@ -647,7 +655,7 @@ apiRoutes.get('/content', async (c) => {
       meta: addTimingMeta(c, {
         count: results.length,
         timestamp: new Date().toISOString(),
-        filter: filter,
+        filter: normalizedFilter,
         query: {
           sql: queryResult.sql,
           params: queryResult.params
@@ -675,7 +683,7 @@ apiRoutes.get('/content', async (c) => {
 })
 
 // Collection-specific routes with advanced filtering
-apiRoutes.get('/collections/:collection/content', async (c) => {
+apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
   const executionStart = Date.now()
 
   try {
@@ -693,32 +701,33 @@ apiRoutes.get('/collections/:collection/content', async (c) => {
 
     // Parse filter from query parameters
     const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
+    const normalizedFilter = normalizePublicContentFilter(filter, c.get('user')?.role)
 
     // Add collection_id filter to where clause
-    if (!filter.where) {
-      filter.where = { and: [] }
+    if (!normalizedFilter.where) {
+      normalizedFilter.where = { and: [] }
     }
 
-    if (!filter.where.and) {
-      filter.where.and = []
+    if (!normalizedFilter.where.and) {
+      normalizedFilter.where.and = []
     }
 
     // Add collection filter
-    filter.where.and.push({
+    normalizedFilter.where.and.push({
       field: 'collection_id',
       operator: 'equals',
       value: (collectionResult as any).id
     })
 
     // Set default limit if not provided
-    if (!filter.limit) {
-      filter.limit = 50
+    if (!normalizedFilter.limit) {
+      normalizedFilter.limit = 50
     }
-    filter.limit = Math.min(filter.limit, 1000)
+    normalizedFilter.limit = Math.min(normalizedFilter.limit, 1000)
 
     // Build SQL query from filter
     const builder = new QueryFilterBuilder()
-    const queryResult = builder.build('content', filter)
+    const queryResult = builder.build('content', normalizedFilter)
 
     // Check for query building errors
     if (queryResult.errors.length > 0) {
@@ -731,7 +740,7 @@ apiRoutes.get('/collections/:collection/content', async (c) => {
     // Generate cache key
     const cacheEnabled = c.get('cacheEnabled')
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter, query: queryResult.sql })}`)
+    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql })}`)
 
     // Only check cache if plugin is enabled
     if (cacheEnabled) {
@@ -794,7 +803,7 @@ apiRoutes.get('/collections/:collection/content', async (c) => {
         },
         count: results.length,
         timestamp: new Date().toISOString(),
-        filter: filter,
+        filter: normalizedFilter,
         query: {
           sql: queryResult.sql,
           params: queryResult.params

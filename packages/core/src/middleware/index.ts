@@ -34,7 +34,7 @@ export const securityLoggingMiddleware: any = () => async (_c: any, next: any) =
 export const performanceLoggingMiddleware: any = () => async (_c: any, next: any) => await next()
 export const cacheHeaders: any = () => async (_c: any, next: any) => await next()
 export const compressionMiddleware: any = async (_c: any, next: any) => await next()
-export const securityHeaders: any = () => async (_c: any, next: any) => await next()
+export { securityHeadersMiddleware as securityHeaders } from './security-headers'
 
 // Other stubs
 export const PermissionManager: any = {}

@@ -183,6 +183,15 @@ app.post('/api/content', requireRole(['admin', 'editor']), async (c) => {
 
 </CodeGroup>
 
+### Public Content API Defaults
+
+The public content listing endpoints are readable without authentication, but anonymous callers are restricted to published content only:
+
+- `GET /api/content`
+- `GET /api/collections/:collection/content`
+
+If a caller is authenticated as an `admin` or `editor`, those same endpoints may be used to query other statuses such as `draft` or `archived`. `viewer` and `author` callers remain published-only on these public list endpoints. This keeps the default public API safe while preserving richer internal/headless use cases for privileged clients.
+
 ### Permission Checking
 
 <CodeGroup title="Manual Permission Check">

@@ -1429,7 +1429,7 @@ adminContentRoutes.get('/:id/versions', async (c) => {
 adminContentRoutes.post('/:id/restore/:version', async (c) => {
   try {
     const id = c.req.param('id')
-    const version = parseInt(c.req.param('version'))
+    const version = parseInt(c.req.param('version') || '0')
     const user = c.get('user')
     const db = c.env.DB
 
@@ -1516,7 +1516,7 @@ adminContentRoutes.post('/:id/restore/:version', async (c) => {
 adminContentRoutes.get('/:id/version/:version/preview', requireRole(['admin', 'editor', 'author']), async (c) => {
   try {
     const id = c.req.param('id')
-    const version = parseInt(c.req.param('version'))
+    const version = parseInt(c.req.param('version') || '0')
     const db = c.env.DB
 
     // Get the specific version

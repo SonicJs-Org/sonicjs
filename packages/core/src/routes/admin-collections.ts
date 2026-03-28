@@ -690,6 +690,11 @@ adminCollectionsRoutes.post('/:id/fields', async (c) => {
         fieldConfig.format = 'date-time'
       } else if (fieldType === 'select') {
         fieldConfig.enum = (parsedOptions as any).options || []
+      } else if (fieldType === 'radio') {
+        fieldConfig.type = 'radio'
+        if (!(parsedOptions as any).enum && (parsedOptions as any).options) {
+          fieldConfig.enum = (parsedOptions as any).options
+        }
       } else if (fieldType === 'media') {
         fieldConfig.format = 'media'
       } else if (fieldType === 'slug') {

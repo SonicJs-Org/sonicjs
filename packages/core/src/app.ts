@@ -29,6 +29,8 @@ import {
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
 import { metricsMiddleware } from './middleware/metrics'
+import { csrfProtection } from './middleware/csrf'
+import { securityHeadersMiddleware } from './middleware/security-headers'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
@@ -53,6 +55,8 @@ export interface Bindings {
   IMAGES_ACCOUNT_ID?: string
   IMAGES_API_TOKEN?: string
   ENVIRONMENT?: string
+  CORS_ORIGINS?: string
+  JWT_SECRET?: string
   BUCKET_NAME?: string
   GOOGLE_MAPS_API_KEY?: string
 }
@@ -68,6 +72,7 @@ export interface Variables {
   requestId?: string
   startTime?: number
   appVersion?: string
+  csrfToken?: string
 }
 
 export interface SonicJSConfig {
@@ -164,10 +169,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   })
 
   // Security middleware
-  app.use('*', async (_c, next) => {
-    // Security headers, CORS, etc.
-    await next()
-  })
+  app.use('*', securityHeadersMiddleware())
+
+  // CSRF protection middleware
+  app.use('*', csrfProtection())
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {

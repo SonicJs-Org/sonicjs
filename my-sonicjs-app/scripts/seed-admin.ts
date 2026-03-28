@@ -3,14 +3,37 @@ import { eq } from 'drizzle-orm'
 import { getPlatformProxy } from 'wrangler'
 
 /**
- * Hash password using Web Crypto API (same as SonicJS AuthManager)
+ * Hash password using PBKDF2 via Web Crypto API (same as SonicJS AuthManager)
  */
 async function hashPassword(password: string): Promise<string> {
+  const iterations = 100000
+  const salt = new Uint8Array(16)
+  crypto.getRandomValues(salt)
+
   const encoder = new TextEncoder()
-  const data = encoder.encode(password + 'salt-change-in-production')
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  )
+
+  const hashBuffer = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations,
+      hash: 'SHA-256'
+    },
+    keyMaterial,
+    256
+  )
+
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
+  const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+  return `pbkdf2:${iterations}:${saltHex}:${hashHex}`
 }
 
 /**

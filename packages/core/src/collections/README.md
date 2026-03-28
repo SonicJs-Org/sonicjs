@@ -121,6 +121,7 @@ Each field can have:
 ### Array/Object Fields:
 
 - `items`: Schema for array items
+- `itemTitle`: Optional singular item label used in array item cards/buttons (for example, `"Member"`)
 - `properties`: Schema for object properties
 
 ## Testing Collections

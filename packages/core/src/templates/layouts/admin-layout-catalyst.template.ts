@@ -249,6 +249,58 @@ export function renderAdminLayoutCatalyst(
   <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
+  <!-- CSRF: Auto-attach token to all HTMX and fetch requests -->
+  <script>
+    function getCsrfToken() {
+      var cookie = document.cookie.split('; ')
+        .find(function(row) { return row.startsWith('csrf_token='); });
+      return cookie ? cookie.substring(cookie.indexOf('=') + 1) : '';
+    }
+
+    document.addEventListener('htmx:configRequest', function(event) {
+      var token = getCsrfToken();
+      if (token) {
+        event.detail.headers['X-CSRF-Token'] = token;
+      }
+    });
+
+    (function() {
+      var originalFetch = window.fetch;
+      window.fetch = function(url, options) {
+        options = options || {};
+        var method = (options.method || 'GET').toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+          options.headers = options.headers || {};
+          if (options.headers instanceof Headers) {
+            if (!options.headers.has('X-CSRF-Token')) {
+              options.headers.set('X-CSRF-Token', getCsrfToken());
+            }
+          } else if (!Array.isArray(options.headers) && !options.headers['X-CSRF-Token']) {
+            options.headers['X-CSRF-Token'] = getCsrfToken();
+          }
+        }
+        return originalFetch.call(this, url, options);
+      };
+    })();
+
+    // Inject _csrf hidden field into regular form submissions (non-HTMX)
+    document.addEventListener('submit', function(event) {
+      var form = event.target;
+      if (!form || !form.tagName || form.tagName !== 'FORM') return;
+      var method = (form.method || 'GET').toUpperCase();
+      if (method === 'GET') return;
+      if (form.hasAttribute('hx-post') || form.hasAttribute('hx-put') ||
+          form.hasAttribute('hx-delete') || form.hasAttribute('hx-patch')) return;
+      if (!form.querySelector('input[name="_csrf"]')) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = '_csrf';
+        input.value = getCsrfToken();
+        form.appendChild(input);
+      }
+    });
+  </script>
+
   ${
     data.styles
       ? data.styles

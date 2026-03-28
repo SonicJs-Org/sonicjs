@@ -78,14 +78,16 @@ test.describe('Collections API', () => {
     });
 
     test('should handle CORS headers', async ({ request }) => {
+      // Use the origin configured in CORS_ORIGINS (wrangler.toml)
       const response = await request.get('/api/collections', {
         headers: {
-          'Origin': 'https://example.com'
+          'Origin': 'http://localhost:8787'
         }
       });
-      
+
       expect(response.ok()).toBeTruthy();
-      expect(response.headers()['access-control-allow-origin']).toBe('*');
+      // CORS now echoes back the allowed origin instead of wildcard
+      expect(response.headers()['access-control-allow-origin']).toBe('http://localhost:8787');
     });
 
     test('should have consistent timestamp format', async ({ request }) => {

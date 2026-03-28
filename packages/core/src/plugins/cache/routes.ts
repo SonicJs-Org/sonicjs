@@ -79,7 +79,7 @@ app.get('/stats', async (c: Context) => {
  * Statistics for a specific namespace
  */
 app.get('/stats/:namespace', async (c: Context) => {
-  const namespace = c.req.param('namespace')
+  const namespace = c.req.param('namespace')!
   const config = CACHE_CONFIGS[namespace]
 
   if (!config) {
@@ -122,7 +122,7 @@ app.post('/clear', async (c: Context) => {
  * Clear cache for a specific namespace
  */
 app.post('/clear/:namespace', async (c: Context) => {
-  const namespace = c.req.param('namespace')
+  const namespace = c.req.param('namespace')!
   const config = CACHE_CONFIGS[namespace]
 
   if (!config) {
@@ -310,8 +310,8 @@ app.get('/browser', async (c: Context) => {
  * Get detailed information about a specific cache entry
  */
 app.get('/browser/:namespace/:key', async (c: Context) => {
-  const namespace = c.req.param('namespace')
-  const key = decodeURIComponent(c.req.param('key'))
+  const namespace = c.req.param('namespace')!
+  const key = decodeURIComponent(c.req.param('key')!)
 
   const config = CACHE_CONFIGS[namespace]
   if (!config) {
@@ -506,7 +506,7 @@ app.post('/warm', async (c: Context) => {
  */
 app.post('/warm/:namespace', async (c: Context) => {
   try {
-    const namespace = c.req.param('namespace')
+    const namespace = c.req.param('namespace')!
     const body = await c.req.json()
     const { entries } = body
 

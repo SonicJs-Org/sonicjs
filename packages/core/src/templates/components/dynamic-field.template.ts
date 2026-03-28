@@ -108,9 +108,9 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
   if (field.field_type === 'quill' && !pluginStatuses.quillEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ Quill Editor plugin is inactive. Using textarea fallback.'
-  } else if (field.field_type === 'mdxeditor' && !pluginStatuses.mdxeditorEnabled) {
+  } else if ((field.field_type === 'mdxeditor' || field.field_type === 'easymde' || field.field_type === 'markdown') && !pluginStatuses.mdxeditorEnabled) {
     fallbackToTextarea = true
-    fallbackWarning = '⚠️ MDXEditor plugin is inactive. Using textarea fallback.'
+    fallbackWarning = '⚠️ EasyMDE plugin is inactive. Using textarea fallback.'
   } else if (field.field_type === 'tinymce' && !pluginStatuses.tinymceEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ TinyMCE plugin is inactive. Using textarea fallback.'
@@ -282,8 +282,11 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       break
 
     case 'mdxeditor':
-      // MDXEditor Rich Text Editor - renders same container as richtext
-      // The MDXEditor plugin initialization script will handle the editor initialization
+    case 'tinymce':
+    case 'easymde':
+    case 'markdown':
+      // Markdown/TinyMCE/MDX rich text editors render the same container as richtext.
+      // The editor plugin initialization scripts will handle the editor setup.
       fieldHTML = `
         <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || 'full'}">
           <textarea

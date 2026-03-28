@@ -699,6 +699,12 @@ adminCollectionsRoutes.post('/:id/fields', async (c) => {
         fieldConfig.type = 'quill'
       } else if (fieldType === 'mdxeditor') {
         fieldConfig.type = 'mdxeditor'
+      } else if (fieldType === 'tinymce') {
+        fieldConfig.type = 'tinymce'
+      } else if (fieldType === 'easymde') {
+        fieldConfig.type = 'easymde'
+      } else if (fieldType === 'markdown') {
+        fieldConfig.type = 'markdown'
       } else if (fieldType === 'reference') {
         fieldConfig.type = 'reference'
       }

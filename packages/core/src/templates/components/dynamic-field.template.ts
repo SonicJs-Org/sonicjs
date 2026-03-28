@@ -16,6 +16,7 @@ function getReadFieldValueScript(): string {
           const textarea = fieldWrapper.querySelector('textarea');
           const inputs = Array.from(fieldWrapper.querySelectorAll('input'));
           const checkbox = inputs.find((input) => input.type === 'checkbox');
+          const checkedRadio = inputs.find((input) => input.type === 'radio' && input.checked);
           const nonHiddenInput = inputs.find((input) => input.type !== 'hidden' && input.type !== 'checkbox');
           const hiddenInput = inputs.find((input) => input.type === 'hidden');
 
@@ -36,6 +37,10 @@ function getReadFieldValueScript(): string {
 
           if (fieldType === 'boolean' && checkbox) {
             return checkbox.checked;
+          }
+
+          if (fieldType === 'radio') {
+            return checkedRadio ? checkedRadio.value : '';
           }
 
           if (select) {
@@ -575,6 +580,52 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       `
       break
 
+    case 'radio':
+      const radioOptions =
+        opts.options ||
+        (Array.isArray(opts.enum)
+          ? opts.enum.map((optionValue: string, index: number) => ({
+              value: optionValue,
+              label: opts.enumLabels?.[index] || optionValue,
+            }))
+          : [])
+      const selectedRadioValue =
+        value !== undefined && value !== null
+          ? String(value)
+          : opts.default
+            ? String(opts.default)
+            : ''
+
+      const isInline = opts.inline === true
+      fieldHTML = `
+        <div class="${isInline ? 'flex flex-wrap gap-4' : 'space-y-3'}">
+          ${radioOptions
+            .map((option: any, index: number) => {
+              const optionValue = typeof option === 'string' ? option : option.value
+              const optionLabel = typeof option === 'string' ? option : option.label
+              const inputId = `${fieldId}-option-${index}`
+              const checked = selectedRadioValue === String(optionValue) ? 'checked' : ''
+              return `
+                <label for="${inputId}" class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                  <input
+                    type="radio"
+                    id="${inputId}"
+                    name="${fieldName}"
+                    value="${escapeHtml(optionValue)}"
+                    class="h-4 w-4 text-zinc-900 focus:ring-zinc-400 dark:text-white dark:focus:ring-white"
+                    ${checked}
+                    ${required}
+                    ${disabled ? 'disabled' : ''}
+                  >
+                  <span>${escapeHtml(optionLabel)}</span>
+                </label>
+              `
+            })
+            .join('')}
+        </div>
+      `
+      break
+
     case 'reference':
       let referenceCollections: string[] = []
       if (Array.isArray(opts.collection)) {
@@ -901,10 +952,21 @@ function renderStructuredArrayField(
   const fieldId = `field-${field.field_name}`
   const fieldName = field.field_name
   const arrayValue = normalizeStructuredArrayValue(value)
+  const arrayTitle = opts.itemLabel || field.field_label || 'Items'
+  const hasItemTitle = typeof opts.itemTitle === 'string' && opts.itemTitle.trim() !== ''
+  const arrayItemTitle = hasItemTitle ? opts.itemTitle.trim() : 'Item'
+  const addItemLabel = hasItemTitle ? `Add ${arrayItemTitle}` : 'Add item'
 
   const items = arrayValue
     .map((itemValue, index) =>
-      renderStructuredArrayItem(field, itemsConfig, String(index), itemValue, pluginStatuses)
+      renderStructuredArrayItem(
+        field,
+        itemsConfig,
+        String(index),
+        itemValue,
+        pluginStatuses,
+        arrayItemTitle,
+      ),
     )
     .join('')
 
@@ -923,14 +985,14 @@ function renderStructuredArrayField(
 
       <div class="flex items-center justify-between gap-3">
         <div class="text-sm text-zinc-500 dark:text-zinc-400">
-          ${escapeHtml(opts.itemLabel || 'Items')}
+          ${escapeHtml(arrayTitle)}
         </div>
         <button
           type="button"
           data-action="add-item"
           class="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800 dark:bg-white/10 dark:hover:bg-white/20"
         >
-          Add item
+          ${escapeHtml(addItemLabel)}
         </button>
       </div>
 
@@ -939,7 +1001,14 @@ function renderStructuredArrayField(
       </div>
 
       <template data-structured-array-template>
-        ${renderStructuredArrayItem(field, itemsConfig, '__INDEX__', {}, pluginStatuses)}
+        ${renderStructuredArrayItem(
+          field,
+          itemsConfig,
+          '__INDEX__',
+          {},
+          pluginStatuses,
+          arrayItemTitle,
+        )}
       </template>
     </div>
     ${getDragSortableScript()}
@@ -952,7 +1021,8 @@ function renderStructuredArrayItem(
   itemConfig: Record<string, any>,
   index: string,
   itemValue: any,
-  pluginStatuses: FieldRenderOptions['pluginStatuses']
+  pluginStatuses: FieldRenderOptions['pluginStatuses'],
+  arrayItemTitle: string,
 ): string {
   const itemFields = renderStructuredItemFields(field, itemConfig, index, itemValue, pluginStatuses)
 
@@ -965,8 +1035,8 @@ function renderStructuredArrayItem(
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/>
             </svg>
           </div>
-          <div class="text-sm font-semibold text-zinc-900 dark:text-white">
-            Item <span class="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400" data-array-order-label></span>
+          <div class="text-sm font-semibold text-zinc-900 dark:text-white cursor-pointer" data-action="toggle-item">
+            ${escapeHtml(arrayItemTitle)} <span class="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400" data-array-order-label></span>
           </div>
         </div>
         <div class="flex flex-wrap gap-2 text-xs">
@@ -1406,8 +1476,15 @@ function getStructuredFieldScript(): string {
               if (!item || !list) return;
 
               if (action === 'remove-item') {
-                item.remove();
-                updateHiddenInput();
+                if (typeof requestRepeaterDelete === 'function') {
+                  requestRepeaterDelete(() => {
+                    item.remove();
+                    updateHiddenInput();
+                  });
+                } else {
+                  item.remove();
+                  updateHiddenInput();
+                }
                 return;
               }
 
@@ -1599,8 +1676,15 @@ function getBlocksFieldScript(): string {
               if (!item || !list) return;
 
               if (action === 'remove-block') {
-                item.remove();
-                updateHiddenInput();
+                if (typeof requestRepeaterDelete === 'function') {
+                  requestRepeaterDelete(() => {
+                    item.remove();
+                    updateHiddenInput();
+                  }, 'block');
+                } else {
+                  item.remove();
+                  updateHiddenInput();
+                }
                 return;
               }
 

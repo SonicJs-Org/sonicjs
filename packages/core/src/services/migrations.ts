@@ -227,6 +227,21 @@ export class MigrationService {
         await this.markMigrationApplied('018', 'Settings Table', '018_settings_table.sql')
       }
     }
+
+    // Check if user_profiles table exists (migration 032)
+    // Table may already exist from app-level migration (my-sonicjs-app/migrations/018_user_profiles.sql)
+    if (!appliedMigrations.has('032')) {
+      const hasUserProfilesTable = await this.checkTablesExist(['user_profiles'])
+      if (hasUserProfilesTable) {
+        appliedMigrations.set('032', {
+          id: '032',
+          applied_at: new Date().toISOString(),
+          name: 'User Profiles',
+          filename: '032_user_profiles.sql'
+        })
+        await this.markMigrationApplied('032', 'User Profiles', '032_user_profiles.sql')
+      }
+    }
   }
 
   /**

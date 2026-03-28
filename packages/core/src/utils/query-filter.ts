@@ -49,6 +49,20 @@ export interface QueryResult {
 }
 
 /**
+ * Validate sort order value - only 'asc' or 'desc' are allowed.
+ * Returns the validated lowercase value, defaulting to 'asc' for invalid input.
+ */
+export function validateSortOrder(order: any): 'asc' | 'desc' {
+  if (typeof order === 'string') {
+    const normalized = order.toLowerCase().trim()
+    if (normalized === 'asc' || normalized === 'desc') {
+      return normalized
+    }
+  }
+  return 'asc'
+}
+
+/**
  * Query Filter Builder
  * Converts filter objects into SQL WHERE clauses with parameterized queries
  */
@@ -76,7 +90,7 @@ export class QueryFilterBuilder {
     // Build ORDER BY clause
     if (filter.sort && filter.sort.length > 0) {
       const orderClauses = filter.sort
-        .map(s => `${this.sanitizeFieldName(s.field)} ${s.order.toUpperCase()}`)
+        .map(s => `${this.sanitizeFieldName(s.field)} ${this.sanitizeSortOrder(s.order)}`)
         .join(', ')
       sql += ` ORDER BY ${orderClauses}`
     }
@@ -359,6 +373,18 @@ export class QueryFilterBuilder {
   }
 
   /**
+   * Sanitize sort order to prevent SQL injection
+   * Only allows 'ASC' or 'DESC', defaults to 'ASC' for any other value
+   */
+  private sanitizeSortOrder(order: string): string {
+    const normalized = String(order).toUpperCase().trim()
+    if (normalized === 'ASC' || normalized === 'DESC') {
+      return normalized
+    }
+    return 'ASC'
+  }
+
+  /**
    * Parse filter from query string
    */
   static parseFromQuery(query: Record<string, any>): QueryFilter {
@@ -413,9 +439,18 @@ export class QueryFilterBuilder {
     // Parse sort
     if (query.sort) {
       try {
-        filter.sort = typeof query.sort === 'string'
+        const parsed = typeof query.sort === 'string'
           ? JSON.parse(query.sort)
           : query.sort
+        // Validate and sanitize sort entries
+        if (Array.isArray(parsed)) {
+          filter.sort = parsed
+            .filter((s: any) => s && typeof s.field === 'string')
+            .map((s: any) => ({
+              field: s.field,
+              order: validateSortOrder(s.order)
+            }))
+        }
       } catch (e) {
         console.error('Failed to parse sort clause:', e)
       }

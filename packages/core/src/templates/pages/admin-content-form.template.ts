@@ -1,10 +1,10 @@
-import { renderAdminLayoutCatalyst, AdminLayoutCatalystData } from '../layouts/admin-layout-catalyst.template'
-import { renderAlert } from '../alert.template'
-import { renderDynamicField, renderFieldGroup, FieldDefinition } from '../components/dynamic-field.template'
-import { renderConfirmationDialog, getConfirmationDialogScript } from '../confirmation-dialog.template'
-import { getTinyMCEScript, getTinyMCEInitScript } from '../../plugins/available/tinymce-plugin'
+import { getMDXEditorInitScript, getMDXEditorScripts } from '../../plugins/available/easy-mdx'
+import { getTinyMCEInitScript, getTinyMCEScript } from '../../plugins/available/tinymce-plugin'
 import { getQuillCDN, getQuillInitScript } from '../../plugins/core-plugins/quill-editor'
-import { getMDXEditorScripts, getMDXEditorInitScript } from '../../plugins/available/easy-mdx'
+import { renderAlert } from '../alert.template'
+import { FieldDefinition, renderDynamicField, renderFieldGroup } from '../components/dynamic-field.template'
+import { getConfirmationDialogScript, renderConfirmationDialog } from '../confirmation-dialog.template'
+import { AdminLayoutCatalystData, renderAdminLayoutCatalyst } from '../layouts/admin-layout-catalyst.template'
 
 export interface Collection {
   id: string
@@ -18,6 +18,9 @@ export interface ContentFormData {
   id?: string
   title?: string
   slug?: string
+  created_at?: number
+  updated_at?: number
+  published_at?: number
   data?: any
   status?: string
   scheduled_publish_at?: number
@@ -75,7 +78,7 @@ export function renderContentFormPage(data: ContentFormData): string {
   const coreFields = data.fields.filter(f => ['title', 'slug', 'content'].includes(f.field_name))
   const contentFields = data.fields.filter(f => !['title', 'slug', 'content'].includes(f.field_name) && !f.field_name.startsWith('meta_'))
   const metaFields = data.fields.filter(f => f.field_name.startsWith('meta_'))
-  
+
   // Helper function to get field value - title and slug are stored as columns, others in data JSON
   const getFieldValue = (fieldName: string) => {
     if (fieldName === 'title') return data.title || data.data?.[fieldName] || ''
@@ -276,20 +279,20 @@ export function renderContentFormPage(data: ContentFormData): string {
               <dl class="space-y-3 text-sm">
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Created</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.data?.created_at ? new Date(data.data.created_at).toLocaleDateString() : 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.created_at ? new Date(data.created_at).toLocaleDateString() : 'Unknown'}</dd>
                 </div>
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Last Modified</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.data?.updated_at ? new Date(data.data.updated_at).toLocaleDateString() : 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.updated_at ? new Date(data.updated_at).toLocaleDateString() : 'Unknown'}</dd>
                 </div>
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Author</dt>
                   <dd class="mt-1 text-zinc-950 dark:text-white">${data.data?.author || 'Unknown'}</dd>
                 </div>
-                ${data.data?.published_at ? `
+                ${data.published_at ? `
                   <div>
                     <dt class="text-zinc-500 dark:text-zinc-400">Published</dt>
-                    <dd class="mt-1 text-zinc-950 dark:text-white">${new Date(data.data.published_at).toLocaleDateString()}</dd>
+                    <dd class="mt-1 text-zinc-950 dark:text-white">${new Date(data.published_at).toLocaleDateString()}</dd>
                   </div>
                 ` : ''}
               </dl>
@@ -398,25 +401,47 @@ export function renderContentFormPage(data: ContentFormData): string {
 
     <!-- Confirmation Dialogs -->
     ${renderConfirmationDialog({
-      id: 'duplicate-content-confirm',
-      title: 'Duplicate Content',
-      message: 'Create a copy of this content?',
-      confirmText: 'Duplicate',
-      cancelText: 'Cancel',
-      iconColor: 'blue',
-      confirmClass: 'bg-blue-500 hover:bg-blue-400',
-      onConfirm: 'performDuplicateContent()'
-    })}
+    id: 'duplicate-content-confirm',
+    title: 'Duplicate Content',
+    message: 'Create a copy of this content?',
+    confirmText: 'Duplicate',
+    cancelText: 'Cancel',
+    iconColor: 'blue',
+    confirmClass: 'bg-blue-500 hover:bg-blue-400',
+    onConfirm: 'performDuplicateContent()'
+  })}
 
     ${renderConfirmationDialog({
-      id: 'delete-content-confirm',
-      title: 'Delete Content',
-      message: 'Are you sure you want to delete this content? This action cannot be undone.',
+    id: 'delete-content-confirm',
+    title: 'Delete Content',
+    message: 'Are you sure you want to delete this content? This action cannot be undone.',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+    iconColor: 'red',
+    confirmClass: 'bg-red-500 hover:bg-red-400',
+    onConfirm: `performDeleteContent('${data.id}')`
+  })}
+
+    ${renderConfirmationDialog({
+      id: 'delete-repeater-item-confirm',
+      title: 'Delete Item',
+      message: 'Are you sure you want to delete this item? This action cannot be undone.',
       confirmText: 'Delete',
       cancelText: 'Cancel',
       iconColor: 'red',
       confirmClass: 'bg-red-500 hover:bg-red-400',
-      onConfirm: `performDeleteContent('${data.id}')`
+      onConfirm: 'performRepeaterDelete()'
+    })}
+
+    ${renderConfirmationDialog({
+      id: 'delete-block-confirm',
+      title: 'Delete Block',
+      message: 'Are you sure you want to delete this block? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      iconColor: 'red',
+      confirmClass: 'bg-red-500 hover:bg-red-400',
+      onConfirm: 'performRepeaterDelete()'
     })}
 
     ${getConfirmationDialogScript()}
@@ -975,6 +1000,29 @@ export function renderContentFormPage(data: ContentFormData): string {
         });
       }
 
+      // Repeater/blocks delete confirmation
+      let pendingRepeaterDelete = null;
+      function requestRepeaterDelete(callback, type = 'item') {
+        pendingRepeaterDelete = callback;
+        if (typeof showConfirmDialog === 'function') {
+          showConfirmDialog(type === 'block' ? 'delete-block-confirm' : 'delete-repeater-item-confirm');
+          return;
+        }
+        if (confirm('Remove this item? This action cannot be undone.')) {
+          if (typeof pendingRepeaterDelete === 'function') {
+            pendingRepeaterDelete();
+          }
+        }
+        pendingRepeaterDelete = null;
+      }
+
+      function performRepeaterDelete() {
+        if (typeof pendingRepeaterDelete === 'function') {
+          pendingRepeaterDelete();
+        }
+        pendingRepeaterDelete = null;
+      }
+
       function showVersionHistory(contentId) {
         // Create and show version history modal
         const modal = document.createElement('div');
@@ -1030,16 +1078,16 @@ export function renderContentFormPage(data: ContentFormData): string {
       });
 
       ${data.tinymceEnabled ? getTinyMCEInitScript({
-        skin: data.tinymceSettings?.skin,
-        defaultHeight: data.tinymceSettings?.defaultHeight,
-        defaultToolbar: data.tinymceSettings?.defaultToolbar
-      }) : ''}
+    skin: data.tinymceSettings?.skin,
+    defaultHeight: data.tinymceSettings?.defaultHeight,
+    defaultToolbar: data.tinymceSettings?.defaultToolbar
+  }) : ''}
 
       ${data.mdxeditorEnabled ? getMDXEditorInitScript({
-        defaultHeight: data.mdxeditorSettings?.defaultHeight,
-        toolbar: data.mdxeditorSettings?.toolbar,
-        placeholder: data.mdxeditorSettings?.placeholder
-      }) : ''}
+    defaultHeight: data.mdxeditorSettings?.defaultHeight,
+    toolbar: data.mdxeditorSettings?.toolbar,
+    placeholder: data.mdxeditorSettings?.placeholder
+  }) : ''}
     </script>
   `
 

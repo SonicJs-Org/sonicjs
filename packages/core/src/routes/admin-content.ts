@@ -11,6 +11,7 @@ import { ContentFormData, renderContentFormPage } from '../templates/pages/admin
 import { ContentListPageData, renderContentListPage } from '../templates/pages/admin-content-list.template'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
 import { escapeHtml, sanitizeRichText } from '../utils/sanitize'
+import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -198,19 +199,12 @@ async function getCollectionFields(db: D1Database, collectionId: string) {
             // Convert schema properties to field format
             let fieldOrder = 0
             return Object.entries(schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
-              // For select fields, convert enum/enumLabels to options array
-              let fieldOptions = { ...fieldConfig }
-              if (fieldConfig.type === 'select' && fieldConfig.enum) {
-                fieldOptions.options = fieldConfig.enum.map((value: string, index: number) => ({
-                  value: value,
-                  label: fieldConfig.enumLabels?.[index] || value
-                }))
-              }
+              const fieldOptions = buildSchemaFieldOptions(fieldConfig)
 
               return {
                 id: `schema-${fieldName}`,
                 field_name: fieldName,
-                field_type: fieldConfig.type || 'string',
+                field_type: resolveSchemaFieldType(fieldConfig),
                 field_label: fieldConfig.title || fieldName,
                 field_options: fieldOptions,
                 field_order: fieldOrder++,

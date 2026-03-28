@@ -90,6 +90,28 @@ export interface FieldRenderOptions {
   contentId?: string
 }
 
+function isMarkdownEditorFieldType(fieldType: string): boolean {
+  return fieldType === 'markdown' || fieldType === 'mdxeditor' || fieldType === 'easymde'
+}
+
+function getEditorMetadata(fieldType: string): { family: string; provider: string } | null {
+  if (fieldType === 'richtext' || fieldType === 'tinymce') {
+    return {
+      family: 'richtext',
+      provider: 'tinymce',
+    }
+  }
+
+  if (isMarkdownEditorFieldType(fieldType)) {
+    return {
+      family: 'markdown',
+      provider: 'easymde',
+    }
+  }
+
+  return null
+}
+
 export function renderDynamicField(field: FieldDefinition, options: FieldRenderOptions = {}): string {
   const { value = '', errors = [], disabled = false, className = '', pluginStatuses = {}, collectionId = '', contentId = '' } = options
   const opts = field.field_options || {}
@@ -108,10 +130,10 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
   if (field.field_type === 'quill' && !pluginStatuses.quillEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ Quill Editor plugin is inactive. Using textarea fallback.'
-  } else if (field.field_type === 'mdxeditor' && !pluginStatuses.mdxeditorEnabled) {
+  } else if (isMarkdownEditorFieldType(field.field_type) && !pluginStatuses.mdxeditorEnabled) {
     fallbackToTextarea = true
-    fallbackWarning = '⚠️ MDXEditor plugin is inactive. Using textarea fallback.'
-  } else if (field.field_type === 'tinymce' && !pluginStatuses.tinymceEnabled) {
+    fallbackWarning = '⚠️ Markdown editor plugin is inactive. Using textarea fallback.'
+  } else if ((field.field_type === 'richtext' || field.field_type === 'tinymce') && !pluginStatuses.tinymceEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ TinyMCE plugin is inactive. Using textarea fallback.'
   }
@@ -243,8 +265,11 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       break
 
     case 'richtext':
+    case 'tinymce':
+      {
+      const editorMetadata = getEditorMetadata(field.field_type)
       fieldHTML = `
-        <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || 'full'}">
+        <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || 'full'}" data-editor-family="${editorMetadata?.family || ''}" data-editor-provider="${editorMetadata?.provider || ''}">
           <textarea
             id="${fieldId}"
             name="${fieldName}"
@@ -255,6 +280,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
         </div>
       `
       break
+      }
 
     case 'quill':
       // Quill WYSIWYG Editor
@@ -281,11 +307,15 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       `
       break
 
+    case 'markdown':
     case 'mdxeditor':
-      // MDXEditor Rich Text Editor - renders same container as richtext
-      // The MDXEditor plugin initialization script will handle the editor initialization
+    case 'easymde':
+      {
+      const editorMetadata = getEditorMetadata(field.field_type)
+      // Markdown editor fields use the EasyMDE-backed richtext container.
+      // The EasyMDE plugin initialization script handles activation.
       fieldHTML = `
-        <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || 'full'}">
+        <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || 'full'}" data-editor-family="${editorMetadata?.family || ''}" data-editor-provider="${editorMetadata?.provider || ''}">
           <textarea
             id="${fieldId}"
             name="${fieldName}"
@@ -296,6 +326,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
         </div>
       `
       break
+      }
 
     case 'number':
       fieldHTML = `

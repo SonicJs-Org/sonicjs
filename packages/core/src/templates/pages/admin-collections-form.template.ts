@@ -44,7 +44,9 @@ function getFieldTypeBadge(fieldType: string): string {
     'slug': 'URL Slug',
     'richtext': 'Rich Text (TinyMCE)',
     'quill': 'Rich Text (Quill)',
-    'mdxeditor': 'EasyMDX',
+    'markdown': 'Markdown',
+    'mdxeditor': 'Markdown',
+    'easymde': 'Markdown',
     'number': 'Number',
     'boolean': 'Boolean',
     'date': 'Date',
@@ -57,7 +59,9 @@ function getFieldTypeBadge(fieldType: string): string {
     'slug': 'bg-sky-500/10 dark:bg-sky-400/10 text-sky-700 dark:text-sky-300 ring-sky-500/20 dark:ring-sky-400/20',
     'richtext': 'bg-purple-500/10 dark:bg-purple-400/10 text-purple-700 dark:text-purple-300 ring-purple-500/20 dark:ring-purple-400/20',
     'quill': 'bg-purple-500/10 dark:bg-purple-400/10 text-purple-700 dark:text-purple-300 ring-purple-500/20 dark:ring-purple-400/20',
+    'markdown': 'bg-purple-500/10 dark:bg-purple-400/10 text-purple-700 dark:text-purple-300 ring-purple-500/20 dark:ring-purple-400/20',
     'mdxeditor': 'bg-purple-500/10 dark:bg-purple-400/10 text-purple-700 dark:text-purple-300 ring-purple-500/20 dark:ring-purple-400/20',
+    'easymde': 'bg-purple-500/10 dark:bg-purple-400/10 text-purple-700 dark:text-purple-300 ring-purple-500/20 dark:ring-purple-400/20',
     'number': 'bg-green-500/10 dark:bg-green-400/10 text-green-700 dark:text-green-300 ring-green-500/20 dark:ring-green-400/20',
     'boolean': 'bg-amber-500/10 dark:bg-amber-400/10 text-amber-700 dark:text-amber-300 ring-amber-500/20 dark:ring-amber-400/20',
     'date': 'bg-cyan-500/10 dark:bg-cyan-400/10 text-cyan-700 dark:text-cyan-300 ring-cyan-500/20 dark:ring-cyan-400/20',
@@ -551,7 +555,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
                 <option value="slug">URL Slug</option>
                 ${data.editorPlugins?.tinymce ? '<option value="richtext">Rich Text (TinyMCE)</option>' : ''}
                 ${data.editorPlugins?.quill ? '<option value="quill">Rich Text (Quill)</option>' : ''}
-                ${data.editorPlugins?.easyMdx ? '<option value="mdxeditor">EasyMDX</option>' : ''}
+                ${data.editorPlugins?.easyMdx ? '<option value="markdown">Markdown</option>' : ''}
                 <option value="number">Number</option>
                 <option value="boolean">Boolean</option>
                 <option value="date">Date</option>
@@ -775,7 +779,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
           // Check if it's a schema field with field_options that might indicate the actual type
           if (field.field_options && typeof field.field_options === 'object') {
             // Only convert to richtext if type is explicitly 'string' and format is richtext
-            // Don't convert if it's already a specific editor type like 'mdxeditor', 'quill', etc.
+            // Don't convert if it's already a specific editor type like 'markdown', 'quill', etc.
             if (field.field_options.format === 'richtext' && uiFieldType === 'string') {
               uiFieldType = 'richtext';
             }
@@ -794,6 +798,12 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
 
           if (typeMapping[uiFieldType]) {
             uiFieldType = typeMapping[uiFieldType];
+          }
+
+          if (uiFieldType === 'mdxeditor' || uiFieldType === 'easymde') {
+            uiFieldType = 'markdown';
+          } else if (uiFieldType === 'tinymce') {
+            uiFieldType = 'richtext';
           }
 
           // Log all available options
@@ -882,7 +892,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
 
         console.log('[Edit Field] Showing options for field type:', fieldType, '(original:', field.field_type, ')');
 
-        if (['select', 'media', 'richtext', 'reference'].includes(fieldType)) {
+        if (['select', 'media', 'richtext', 'markdown', 'reference'].includes(fieldType)) {
           optionsContainer.classList.remove('hidden');
 
           // Set help text based on type
@@ -895,6 +905,9 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
               break;
             case 'richtext':
               helpText.textContent = 'Full-featured WYSIWYG text editor with formatting options';
+              break;
+            case 'markdown':
+              helpText.textContent = 'Markdown editor with live preview powered by the EasyMDE plugin';
               break;
             case 'reference':
               helpText.textContent = 'Link to content from other collections';
@@ -1036,7 +1049,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
         const fieldNameInput = document.getElementById('modal-field-name');
 
         // Show/hide options based on field type
-        if (['select', 'media', 'richtext', 'guid', 'reference'].includes(this.value)) {
+        if (['select', 'media', 'richtext', 'markdown', 'guid', 'reference'].includes(this.value)) {
           optionsContainer.classList.remove('hidden');
 
           // Set default options and help text based on type
@@ -1052,6 +1065,10 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
             case 'richtext':
               fieldOptions.value = '{"toolbar": "full", "height": 400}';
               helpText.textContent = 'Full-featured WYSIWYG text editor with formatting options';
+              break;
+            case 'markdown':
+              fieldOptions.value = '{"toolbar": "full", "height": 400}';
+              helpText.textContent = 'Markdown editor with live preview powered by the EasyMDE plugin';
               break;
             case 'reference':
               fieldOptions.value = '{"collection": ["pages", "posts"]}';

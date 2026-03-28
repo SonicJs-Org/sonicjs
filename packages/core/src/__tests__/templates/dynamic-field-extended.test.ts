@@ -527,7 +527,7 @@ describe('renderDynamicField - Quill Editor Fields', () => {
     });
 
     expect(html).toContain('<textarea');
-    expect(html).toContain('MDXEditor plugin is inactive');
+    expect(html).toContain('EasyMDE plugin is inactive');
   });
 
   it('should fallback to textarea when tinymce plugin is disabled', () => {

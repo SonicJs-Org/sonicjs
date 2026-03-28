@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { escapeHtml, sanitizeInput, sanitizeObject } from '../../utils/sanitize'
+import { escapeHtml, sanitizeInput, sanitizeObject, sanitizeRichText } from '../../utils/sanitize'
 
 describe('escapeHtml', () => {
   it('should escape HTML special characters', () => {
@@ -117,5 +117,70 @@ describe('sanitizeObject', () => {
   it('should handle empty objects', () => {
     const result = sanitizeObject({}, [])
     expect(result).toEqual({})
+  })
+})
+
+describe('sanitizeRichText', () => {
+  it('should remove script tags and their contents', () => {
+    const input = '<p>Hello</p><script>alert("xss")</script><p>World</p>'
+    expect(sanitizeRichText(input)).toBe('<p>Hello</p><p>World</p>')
+  })
+
+  it('should remove multiple script tags', () => {
+    const input = '<script>a()</script><p>safe</p><script>b()</script>'
+    expect(sanitizeRichText(input)).toBe('<p>safe</p>')
+  })
+
+  it('should remove event handler attributes', () => {
+    const input = '<img src="x.jpg" onerror="alert(1)">'
+    const result = sanitizeRichText(input)
+    expect(result).not.toContain('onerror')
+    expect(result).toContain('src="x.jpg"')
+  })
+
+  it('should remove various event handlers', () => {
+    const input = '<div onmouseover="alert(1)" onclick="steal()">text</div>'
+    const result = sanitizeRichText(input)
+    expect(result).not.toContain('onmouseover')
+    expect(result).not.toContain('onclick')
+    expect(result).toContain('text')
+  })
+
+  it('should remove javascript: URLs in href', () => {
+    const input = '<a href="javascript:alert(1)">click</a>'
+    const result = sanitizeRichText(input)
+    expect(result).not.toContain('javascript:')
+    expect(result).toContain('click')
+  })
+
+  it('should remove javascript: URLs in src', () => {
+    const input = '<iframe src="javascript:alert(1)"></iframe>'
+    const result = sanitizeRichText(input)
+    expect(result).not.toContain('javascript:')
+  })
+
+  it('should preserve safe HTML tags', () => {
+    const input = '<h1>Title</h1><p>Paragraph with <strong>bold</strong> and <em>italic</em></p>'
+    expect(sanitizeRichText(input)).toBe(input)
+  })
+
+  it('should preserve safe links', () => {
+    const input = '<a href="https://example.com">link</a>'
+    expect(sanitizeRichText(input)).toBe(input)
+  })
+
+  it('should handle empty string', () => {
+    expect(sanitizeRichText('')).toBe('')
+  })
+
+  it('should return empty string for non-string input', () => {
+    expect(sanitizeRichText(null as any)).toBe('')
+    expect(sanitizeRichText(undefined as any)).toBe('')
+    expect(sanitizeRichText(123 as any)).toBe('')
+  })
+
+  it('should handle script tags with attributes', () => {
+    const input = '<script type="text/javascript" src="evil.js"></script><p>safe</p>'
+    expect(sanitizeRichText(input)).toBe('<p>safe</p>')
   })
 })

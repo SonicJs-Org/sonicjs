@@ -282,7 +282,7 @@ export function createOTPLoginPlugin(): Plugin {
       }
 
       // Generate JWT token
-      const token = await AuthManager.generateToken(user.id, user.email, user.role)
+      const token = await AuthManager.generateToken(user.id, user.email, user.role, (c.env as any).JWT_SECRET)
 
       // Set HTTP-only cookie
       setCookie(c, 'auth_token', token, {

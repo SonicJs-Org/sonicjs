@@ -555,6 +555,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
                 <option value="number">Number</option>
                 <option value="boolean">Boolean</option>
                 <option value="date">Date</option>
+                <option value="radio">Radio</option>
                 <option value="select">Select</option>
                 <option value="media">Media</option>
                 <option value="reference">Reference</option>
@@ -882,13 +883,16 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
 
         console.log('[Edit Field] Showing options for field type:', fieldType, '(original:', field.field_type, ')');
 
-        if (['select', 'media', 'richtext', 'reference'].includes(fieldType)) {
+        if (['select', 'radio', 'media', 'richtext', 'reference'].includes(fieldType)) {
           optionsContainer.classList.remove('hidden');
 
           // Set help text based on type
           switch (fieldType) {
             case 'select':
               helpText.textContent = 'Create a dropdown select field with custom options';
+              break;
+            case 'radio':
+              helpText.textContent = 'Single selection from a list of radio options';
               break;
             case 'media':
               helpText.textContent = 'Upload and manage media files (images, videos, documents)';
@@ -1036,7 +1040,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
         const fieldNameInput = document.getElementById('modal-field-name');
 
         // Show/hide options based on field type
-        if (['select', 'media', 'richtext', 'guid', 'reference'].includes(this.value)) {
+        if (['select', 'radio', 'media', 'richtext', 'guid', 'reference'].includes(this.value)) {
           optionsContainer.classList.remove('hidden');
 
           // Set default options and help text based on type
@@ -1044,6 +1048,10 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
             case 'select':
               fieldOptions.value = '{"options": ["Option 1", "Option 2"], "multiple": false}';
               helpText.textContent = 'Create a dropdown select field with custom options';
+              break;
+            case 'radio':
+              fieldOptions.value = '{"enum": ["Option 1", "Option 2"], "enumLabels": ["Option 1", "Option 2"], "default": "Option 1", "inline": false}';
+              helpText.textContent = 'Single selection from a list of radio options';
               break;
             case 'media':
               fieldOptions.value = '{"accept": "image/*", "maxSize": "10MB"}';

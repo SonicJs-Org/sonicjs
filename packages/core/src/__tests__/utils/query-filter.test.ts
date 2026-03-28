@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { QueryFilterBuilder, buildQuery, type QueryFilter } from '../../utils/query-filter'
+import { describe, it, expect, vi } from 'vitest'
+import { QueryFilterBuilder, buildQuery, validateSortOrder, type QueryFilter } from '../../utils/query-filter'
 
 describe('QueryFilterBuilder', () => {
   it('should build basic SELECT query', () => {
@@ -898,5 +898,156 @@ describe('QueryFilterBuilder - Field Sanitization', () => {
     const result = builder.build('posts', filter)
 
     expect(result.sql).toBe('SELECT * FROM posts ORDER BY createdat DESC')
+  })
+})
+
+describe('Security: Sort order SQL injection prevention', () => {
+  describe('validateSortOrder', () => {
+    it('should accept "asc"', () => {
+      expect(validateSortOrder('asc')).toBe('asc')
+    })
+
+    it('should accept "desc"', () => {
+      expect(validateSortOrder('desc')).toBe('desc')
+    })
+
+    it('should accept "ASC" (case insensitive)', () => {
+      expect(validateSortOrder('ASC')).toBe('asc')
+    })
+
+    it('should accept "DESC" (case insensitive)', () => {
+      expect(validateSortOrder('DESC')).toBe('desc')
+    })
+
+    it('should accept "Desc" (mixed case)', () => {
+      expect(validateSortOrder('Desc')).toBe('desc')
+    })
+
+    it('should default to "asc" for SQL injection payload', () => {
+      expect(validateSortOrder('desc; DROP TABLE users; --')).toBe('asc')
+    })
+
+    it('should default to "asc" for UNION injection', () => {
+      expect(validateSortOrder('desc UNION SELECT * FROM users--')).toBe('asc')
+    })
+
+    it('should default to "asc" for empty string', () => {
+      expect(validateSortOrder('')).toBe('asc')
+    })
+
+    it('should default to "asc" for non-string values', () => {
+      expect(validateSortOrder(123)).toBe('asc')
+      expect(validateSortOrder(null)).toBe('asc')
+      expect(validateSortOrder(undefined)).toBe('asc')
+      expect(validateSortOrder({})).toBe('asc')
+      expect(validateSortOrder([])).toBe('asc')
+    })
+
+    it('should handle whitespace-padded values', () => {
+      expect(validateSortOrder(' asc ')).toBe('asc')
+      expect(validateSortOrder(' desc ')).toBe('desc')
+    })
+  })
+
+  describe('QueryFilterBuilder.build - sort order sanitization', () => {
+    it('should sanitize malicious sort order in SQL output', () => {
+      const builder = new QueryFilterBuilder()
+      const filter: QueryFilter = {
+        sort: [
+          { field: 'created_at', order: 'desc; DROP TABLE users; --' as any }
+        ]
+      }
+
+      const result = builder.build('content', filter)
+
+      expect(result.sql).toBe('SELECT * FROM content ORDER BY created_at ASC')
+      expect(result.sql).not.toContain('DROP')
+      expect(result.sql).not.toContain(';')
+    })
+
+    it('should sanitize UNION injection in sort order', () => {
+      const builder = new QueryFilterBuilder()
+      const filter: QueryFilter = {
+        sort: [
+          { field: 'id', order: 'asc UNION SELECT password FROM users--' as any }
+        ]
+      }
+
+      const result = builder.build('content', filter)
+
+      expect(result.sql).toBe('SELECT * FROM content ORDER BY id ASC')
+      expect(result.sql).not.toContain('UNION')
+      expect(result.sql).not.toContain('password')
+    })
+
+    it('should allow valid ASC order', () => {
+      const builder = new QueryFilterBuilder()
+      const filter: QueryFilter = {
+        sort: [{ field: 'name', order: 'asc' }]
+      }
+
+      const result = builder.build('users', filter)
+
+      expect(result.sql).toBe('SELECT * FROM users ORDER BY name ASC')
+    })
+
+    it('should allow valid DESC order', () => {
+      const builder = new QueryFilterBuilder()
+      const filter: QueryFilter = {
+        sort: [{ field: 'name', order: 'desc' }]
+      }
+
+      const result = builder.build('users', filter)
+
+      expect(result.sql).toBe('SELECT * FROM users ORDER BY name DESC')
+    })
+  })
+
+  describe('QueryFilterBuilder.parseFromQuery - sort order sanitization', () => {
+    it('should sanitize malicious sort order during parsing', () => {
+      const query = {
+        sort: JSON.stringify([{ field: 'created_at', order: 'desc; DROP TABLE users;--' }])
+      }
+
+      const filter = QueryFilterBuilder.parseFromQuery(query)
+
+      expect(filter.sort).toEqual([{ field: 'created_at', order: 'asc' }])
+    })
+
+    it('should preserve valid sort order during parsing', () => {
+      const query = {
+        sort: JSON.stringify([{ field: 'id', order: 'desc' }])
+      }
+
+      const filter = QueryFilterBuilder.parseFromQuery(query)
+
+      expect(filter.sort).toEqual([{ field: 'id', order: 'desc' }])
+    })
+
+    it('should filter out sort entries without a field', () => {
+      const query = {
+        sort: JSON.stringify([
+          { field: 'id', order: 'asc' },
+          { order: 'desc' },
+          { field: '', order: 'asc' }
+        ])
+      }
+
+      const filter = QueryFilterBuilder.parseFromQuery(query)
+
+      // Entry without field is filtered, entry with empty string field is kept (has typeof string)
+      expect(filter.sort?.length).toBe(2)
+      expect(filter.sort?.[0]).toEqual({ field: 'id', order: 'asc' })
+    })
+
+    it('should ignore non-array sort values', () => {
+      const query = {
+        sort: JSON.stringify({ field: 'id', order: 'asc' })
+      }
+
+      const filter = QueryFilterBuilder.parseFromQuery(query)
+
+      expect(filter.sort).toBeUndefined()
+    })
   })
 })

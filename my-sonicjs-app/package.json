@@ -30,7 +30,7 @@
     "@types/node": "^20.19.1",
     "drizzle-kit": "^0.30.0",
     "drizzle-orm": "^0.44.2",
-    "hono": "^4.11.7",
+    "hono": "^4.12.7",
     "typescript": "^5.8.3",
     "vitest": "^2.1.8",
     "wrangler": "^4.65.0",

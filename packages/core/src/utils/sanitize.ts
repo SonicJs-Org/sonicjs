@@ -37,6 +37,27 @@ export function sanitizeInput(input: string | null | undefined): string {
 }
 
 /**
+ * Sanitizes rich text HTML by stripping dangerous elements while preserving
+ * legitimate formatting. Removes script tags, event handlers, and javascript: URLs.
+ * @param html - The rich text HTML to sanitize
+ * @returns Sanitized HTML safe for rendering
+ */
+export function sanitizeRichText(html: string): string {
+  if (typeof html !== 'string') {
+    return ''
+  }
+
+  return html
+    // Remove script tags and their contents
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    // Remove event handler attributes (on*)
+    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    // Remove javascript: URLs in href/src/action attributes
+    .replace(/(href|src|action)\s*=\s*"javascript:[^"]*"/gi, '$1=""')
+    .replace(/(href|src|action)\s*=\s*'javascript:[^']*'/gi, "$1=''")
+}
+
+/**
  * Sanitizes an object's string properties
  * @param obj - Object with string properties to sanitize
  * @param fields - Array of field names to sanitize

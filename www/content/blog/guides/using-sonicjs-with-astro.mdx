@@ -91,78 +91,99 @@ The `create-sonicjs` command automatically:
 
 Your SonicJS API is now running at `http://localhost:8787`.
 
-### Create a Blog Posts Collection
+### Blog Posts Collection
 
-In the SonicJS admin panel (`http://localhost:8787/admin`), create a "Blog Posts" collection with these fields:
+> **Note:** The `create-sonicjs` scaffolding already includes a Blog Posts collection at `src/collections/blog-posts.collection.ts`. This guide uses that existing collection — no need to create one manually. The collection is registered in `src/index.ts` and auto-synced to the database on startup.
 
-| Field | Type | Required |
-|-------|------|----------|
-| title | Text | Yes |
-| slug | Text | Yes |
-| excerpt | Text | No |
-| content | Rich Text | Yes |
-| featuredImage | Media | No |
-| publishedAt | DateTime | No |
-
-Or define it programmatically in `src/collections/posts.ts`:
+Here's what the scaffolded collection looks like:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+// src/collections/blog-posts.collection.ts (already created by scaffolding)
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export const postsCollection = defineCollection({
+export default {
   name: 'blog-posts',
-  slug: 'blog-posts',
-  fields: {
-    title: {
-      type: 'string',
-      required: true,
-      maxLength: 200,
+  displayName: 'Blog Posts',
+  description: 'Manage your blog posts',
+  icon: '📝',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        title: 'Title',
+        required: true,
+        maxLength: 200
+      },
+      slug: {
+        type: 'slug',
+        title: 'URL Slug',
+        required: true,
+        maxLength: 200
+      },
+      excerpt: {
+        type: 'textarea',
+        title: 'Excerpt',
+        maxLength: 500
+      },
+      content: {
+        type: 'quill',
+        title: 'Content',
+        required: true
+      },
+      featuredImage: {
+        type: 'media',
+        title: 'Featured Image'
+      },
+      author: {
+        type: 'string',
+        title: 'Author',
+        required: true
+      },
+      publishedAt: {
+        type: 'datetime',
+        title: 'Published Date'
+      },
+      status: {
+        type: 'select',
+        title: 'Status',
+        enum: ['draft', 'published', 'archived'],
+        enumLabels: ['Draft', 'Published', 'Archived'],
+        default: 'draft'
+      },
+      tags: {
+        type: 'string',
+        title: 'Tags',
+        helpText: 'Comma-separated tags'
+      }
     },
-    slug: {
-      type: 'string',
-      required: true,
-      unique: true,
-    },
-    excerpt: {
-      type: 'text',
-      maxLength: 300,
-    },
-    content: {
-      type: 'richtext',
-      required: true,
-    },
-    featuredImage: {
-      type: 'media',
-    },
-    publishedAt: {
-      type: 'datetime',
-    },
+    required: ['title', 'slug', 'content', 'author']
   },
-})
+
+  listFields: ['title', 'author', 'status', 'publishedAt'],
+  searchFields: ['title', 'excerpt', 'author'],
+  defaultSort: 'createdAt',
+  defaultSortOrder: 'desc'
+} satisfies CollectionConfig
+```
+
+Collections are registered in `src/index.ts` via `registerCollections()`. To add your own collections, create a new file in `src/collections/` and add it to the array:
+
+```typescript
+// src/index.ts
+import blogPostsCollection from './collections/blog-posts.collection'
+import pagesCollection from './collections/pages.collection'
+
+registerCollections([
+  blogPostsCollection,
+  pagesCollection, // Your new collection
+])
 ```
 
 ### Add Sample Content
 
-Create a few blog posts through the admin panel or via the API:
-
-```bash
-curl -X POST "http://localhost:8787/api/content" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "collectionId": "blog-posts-collection-id",
-    "title": "Getting Started with Astro",
-    "slug": "getting-started-with-astro",
-    "status": "published",
-    "data": {
-      "title": "Getting Started with Astro",
-      "slug": "getting-started-with-astro",
-      "excerpt": "Learn how to build fast websites with Astro",
-      "content": "<p>Astro is a modern web framework...</p>",
-      "publishedAt": "2025-12-23T00:00:00Z"
-    }
-  }'
-```
+Create a few blog posts through the admin panel at `http://localhost:8787/admin`. Navigate to the **Blog Posts** collection and add some posts. Make sure to set the status to **published** so they appear on your Astro frontend.
 
 ---
 
@@ -196,6 +217,9 @@ Create a `.env` file in your Astro project root:
 # .env
 SONICJS_API_URL=http://localhost:8787
 SONICJS_API_TOKEN=your-api-token-here
+# NOTE: API token management is not yet available in v.2.8.0.
+# For local development, you can omit this variable.
+# The public content API does not require authentication for read access.
 ```
 
 Update `astro.config.mjs` to load environment variables:
@@ -249,6 +273,7 @@ interface BlogPost {
 }
 
 // Fetch all blog posts
+// Add client-side filtering since server-side filters don't work in v.2.8.0 (yet!).
 export async function getBlogPosts(): Promise<BlogPost[]> {
   const response = await fetch(
     `${API_URL}/api/collections/blog-posts/content?filter[status][equals]=published&sort=-created_at`
@@ -259,13 +284,13 @@ export async function getBlogPosts(): Promise<BlogPost[]> {
   }
 
   const result: SonicJSResponse<BlogPost[]> = await response.json();
-  return result.data;
+  return result.data.filter(post => post.status === 'published');
 }
 
 // Fetch a single blog post by slug
 export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> {
   const response = await fetch(
-    `${API_URL}/api/collections/blog-posts/content?filter[data.slug][equals]=${slug}&filter[status][equals]=published`
+    `${API_URL}/api/collections/blog-posts/content`
   );
 
   if (!response.ok) {
@@ -273,7 +298,9 @@ export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> 
   }
 
   const result: SonicJSResponse<BlogPost[]> = await response.json();
-  return result.data[0] || null;
+  return result.data.find(
+    post => post.data.slug === slug && post.status === 'published'
+  ) || null;
 }
 
 // Fetch all collections
@@ -521,6 +548,10 @@ if (!post) {
   }
 </style>
 ```
+
+> **NOTE:** In SSG mode, new content added after the dev server starts
+> requires a server restart or rebuild to generate new pages.
+> For dynamic content, see the SSR section in Part 4.
 
 ### Base Layout
 
@@ -918,6 +949,13 @@ Set your environment variables in the Cloudflare Pages dashboard:
 ---
 
 ## Troubleshooting
+
+### API Filters Not Working
+
+As of v2.8.0, server-side filter parameters (e.g., `filter[slug][equals]`)
+are not yet implemented. The API returns all content items regardless of
+filter params. Use client-side filtering as shown in the API client above.
+
 
 ### CORS Issues
 

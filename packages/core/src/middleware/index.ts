@@ -8,13 +8,19 @@
  */
 
 // Bootstrap middleware
-export { bootstrapMiddleware } from './bootstrap'
+export { bootstrapMiddleware, verifySecurityConfig } from './bootstrap'
 
 // Auth middleware
 export { AuthManager, requireAuth, requireRole, optionalAuth } from './auth'
 
 // Metrics middleware
 export { metricsMiddleware } from './metrics'
+
+// CSRF protection middleware
+export { csrfProtection, generateCsrfToken, validateCsrfToken } from './csrf'
+
+// Rate limiting middleware
+export { rateLimit } from './rate-limit'
 
 // Re-export types and functions that are referenced but implemented in monolith
 // These are placeholder exports to maintain API compatibility
@@ -31,7 +37,7 @@ export const securityLoggingMiddleware: any = () => async (_c: any, next: any) =
 export const performanceLoggingMiddleware: any = () => async (_c: any, next: any) => await next()
 export const cacheHeaders: any = () => async (_c: any, next: any) => await next()
 export const compressionMiddleware: any = async (_c: any, next: any) => await next()
-export const securityHeaders: any = () => async (_c: any, next: any) => await next()
+export { securityHeadersMiddleware as securityHeaders } from './security-headers'
 
 // Other stubs
 export const PermissionManager: any = {}

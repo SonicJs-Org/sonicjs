@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/sanitize'
+
 export type AlertType = 'success' | 'error' | 'warning' | 'info'
 
 export interface AlertData {
@@ -58,11 +60,11 @@ export function renderAlert(data: AlertData): string {
         <div class="${data.icon !== false ? 'ml-3' : ''}">
           ${data.title ? `
             <h3 class="text-sm font-semibold ${textClasses[data.type]}">
-              ${data.title}
+              ${escapeHtml(data.title)}
             </h3>
           ` : ''}
           <div class="${data.title ? 'mt-1 text-sm' : 'text-sm'} ${messageTextClasses[data.type]}">
-            <p>${data.message}</p>
+            <p>${escapeHtml(data.message)}</p>
           </div>
         </div>
         ${data.dismissible ? `

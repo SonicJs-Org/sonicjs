@@ -276,18 +276,13 @@ git push origin main
 
 ### Step 10: Announce Release
 
-**IMPORTANT: Always ask the user if they want to announce the release before proceeding.**
+Announce the release to Discord and Twitter automatically — no need to ask for confirmation:
 
-Ask: "Would you like me to announce this release to Discord and Twitter?"
-
-If the user confirms:
 ```bash
 npm run release:announce
 ```
 
 This posts to Discord and Twitter.
-
-If the user declines, skip this step and proceed to post-release verification.
 
 ### Step 11: Post-Release Verification
 

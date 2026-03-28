@@ -62,23 +62,25 @@ describe('AuthManager', () => {
     })
   })
 
-  describe('hashPassword', () => {
-    it('should hash a password', async () => {
+  describe('hashPassword (PBKDF2)', () => {
+    it('should hash a password in PBKDF2 format', async () => {
       const password = 'test-password-123'
       const hash = await AuthManager.hashPassword(password)
 
       expect(hash).toBeTruthy()
       expect(typeof hash).toBe('string')
       expect(hash).not.toBe(password)
-      expect(hash.length).toBe(64) // SHA-256 produces 64 hex characters
+      expect(hash.startsWith('pbkdf2:100000:')).toBe(true)
+      const parts = hash.split(':')
+      expect(parts).toHaveLength(4)
     })
 
-    it('should generate same hash for same password', async () => {
+    it('should generate different hashes for same password (random salt)', async () => {
       const password = 'test-password-123'
       const hash1 = await AuthManager.hashPassword(password)
       const hash2 = await AuthManager.hashPassword(password)
 
-      expect(hash1).toBe(hash2)
+      expect(hash1).not.toBe(hash2) // Different salts
     })
 
     it('should generate different hashes for different passwords', async () => {
@@ -90,7 +92,7 @@ describe('AuthManager', () => {
   })
 
   describe('verifyPassword', () => {
-    it('should verify correct password', async () => {
+    it('should verify correct password against PBKDF2 hash', async () => {
       const password = 'test-password-123'
       const hash = await AuthManager.hashPassword(password)
 
@@ -98,7 +100,7 @@ describe('AuthManager', () => {
       expect(isValid).toBe(true)
     })
 
-    it('should reject incorrect password', async () => {
+    it('should reject incorrect password against PBKDF2 hash', async () => {
       const password = 'test-password-123'
       const hash = await AuthManager.hashPassword(password)
 
@@ -106,12 +108,40 @@ describe('AuthManager', () => {
       expect(isValid).toBe(false)
     })
 
-    it('should reject empty password', async () => {
+    it('should reject empty password against PBKDF2 hash', async () => {
       const password = 'test-password-123'
       const hash = await AuthManager.hashPassword(password)
 
       const isValid = await AuthManager.verifyPassword('', hash)
       expect(isValid).toBe(false)
+    })
+
+    it('should verify correct password against legacy SHA-256 hash', async () => {
+      const password = 'test-password-123'
+      const legacyHash = await AuthManager.hashPasswordLegacy(password)
+
+      const isValid = await AuthManager.verifyPassword(password, legacyHash)
+      expect(isValid).toBe(true)
+    })
+
+    it('should reject incorrect password against legacy SHA-256 hash', async () => {
+      const password = 'test-password-123'
+      const legacyHash = await AuthManager.hashPasswordLegacy(password)
+
+      const isValid = await AuthManager.verifyPassword('wrong-password', legacyHash)
+      expect(isValid).toBe(false)
+    })
+  })
+
+  describe('isLegacyHash', () => {
+    it('should detect PBKDF2 hash as non-legacy', async () => {
+      const hash = await AuthManager.hashPassword('test')
+      expect(AuthManager.isLegacyHash(hash)).toBe(false)
+    })
+
+    it('should detect SHA-256 hash as legacy', async () => {
+      const hash = await AuthManager.hashPasswordLegacy('test')
+      expect(AuthManager.isLegacyHash(hash)).toBe(true)
     })
   })
 })

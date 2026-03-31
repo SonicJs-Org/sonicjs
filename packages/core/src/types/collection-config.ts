@@ -32,6 +32,9 @@ export type FieldType =
   | 'slug'
   | 'color'
   | 'file'
+  | 'tinymce'
+  | 'quill'
+  | 'easymde'
 
 export interface BlockDefinition {
   label?: string

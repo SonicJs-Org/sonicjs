@@ -1,4 +1,4 @@
-import { c as CollectionConfig, e as CollectionSyncResult } from './collection-config-BF95LgQb.cjs';
+import { c as CollectionConfig, e as CollectionSyncResult } from './collection-config-i8EaAF7z.js';
 import { D1Database as D1Database$1 } from '@cloudflare/workers-types';
 import * as drizzle_zod from 'drizzle-zod';
 import * as drizzle_orm_sqlite_core from 'drizzle-orm/sqlite-core';

@@ -1,10 +1,10 @@
 import { getCacheService, CACHE_CONFIGS, getLogger, SettingsService } from './chunk-G44QUVNM.js';
-import { requireAuth, isPluginActive, optionalAuth, requireRole, rateLimit, AuthManager, logActivity, generateCsrfToken } from './chunk-LNJSN5HE.js';
+import { requireAuth, isPluginActive, optionalAuth, requireRole, rateLimit, AuthManager, logActivity, generateCsrfToken } from './chunk-Y3VMEGY2.js';
 import { PluginService } from './chunk-YFJJU26H.js';
-import { MigrationService } from './chunk-BLVQAETI.js';
+import { MigrationService } from './chunk-GTFMI24U.js';
 import { init_admin_layout_catalyst_template, renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayoutCatalyst, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-JJS7JZCH.js';
 import { PluginBuilder, TurnstileService } from './chunk-J5WGMRSU.js';
-import { QueryFilterBuilder, getCoreVersion, getBlocksFieldConfig, parseBlocksValue } from './chunk-HRTRAPXO.js';
+import { QueryFilterBuilder, getCoreVersion, getBlocksFieldConfig, parseBlocksValue } from './chunk-5XAI2XUF.js';
 import { metricsTracker } from './chunk-FICTAGD4.js';
 import { escapeHtml, sanitizeRichText, sanitizeInput } from './chunk-TQABQWOP.js';
 import { Hono } from 'hono';
@@ -2281,7 +2281,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-7E42NTVA.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KHWFJ2HN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2306,7 +2306,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-7E42NTVA.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KHWFJ2HN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2325,7 +2325,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-7E42NTVA.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KHWFJ2HN.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -4780,6 +4780,7 @@ function getReadFieldValueScript() {
           const textarea = fieldWrapper.querySelector('textarea');
           const inputs = Array.from(fieldWrapper.querySelectorAll('input'));
           const checkbox = inputs.find((input) => input.type === 'checkbox');
+          const checkedRadio = inputs.find((input) => input.type === 'radio' && input.checked);
           const nonHiddenInput = inputs.find((input) => input.type !== 'hidden' && input.type !== 'checkbox');
           const hiddenInput = inputs.find((input) => input.type === 'hidden');
 
@@ -4800,6 +4801,10 @@ function getReadFieldValueScript() {
 
           if (fieldType === 'boolean' && checkbox) {
             return checkbox.checked;
+          }
+
+          if (fieldType === 'radio') {
+            return checkedRadio ? checkedRadio.value : '';
           }
 
           if (select) {
@@ -4841,9 +4846,9 @@ function renderDynamicField(field, options = {}) {
   if (field.field_type === "quill" && !pluginStatuses.quillEnabled) {
     fallbackToTextarea = true;
     fallbackWarning = "\u26A0\uFE0F Quill Editor plugin is inactive. Using textarea fallback.";
-  } else if (field.field_type === "mdxeditor" && !pluginStatuses.mdxeditorEnabled) {
+  } else if ((field.field_type === "mdxeditor" || field.field_type === "easymde" || field.field_type === "markdown") && !pluginStatuses.mdxeditorEnabled) {
     fallbackToTextarea = true;
-    fallbackWarning = "\u26A0\uFE0F MDXEditor plugin is inactive. Using textarea fallback.";
+    fallbackWarning = "\u26A0\uFE0F EasyMDE plugin is inactive. Using textarea fallback.";
   } else if (field.field_type === "tinymce" && !pluginStatuses.tinymceEnabled) {
     fallbackToTextarea = true;
     fallbackWarning = "\u26A0\uFE0F TinyMCE plugin is inactive. Using textarea fallback.";
@@ -5002,6 +5007,9 @@ function renderDynamicField(field, options = {}) {
       `;
       break;
     case "mdxeditor":
+    case "tinymce":
+    case "easymde":
+    case "markdown":
       fieldHTML = `
         <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || "full"}">
           <textarea
@@ -5283,6 +5291,39 @@ function renderDynamicField(field, options = {}) {
         ` : ""}
       `;
       break;
+    case "radio":
+      const radioOptions = opts.options || (Array.isArray(opts.enum) ? opts.enum.map((optionValue, index) => ({
+        value: optionValue,
+        label: opts.enumLabels?.[index] || optionValue
+      })) : []);
+      const selectedRadioValue = value !== void 0 && value !== null ? String(value) : opts.default ? String(opts.default) : "";
+      const isInline = opts.inline === true;
+      fieldHTML = `
+        <div class="${isInline ? "flex flex-wrap gap-4" : "space-y-3"}">
+          ${radioOptions.map((option, index) => {
+        const optionValue = typeof option === "string" ? option : option.value;
+        const optionLabel = typeof option === "string" ? option : option.label;
+        const inputId = `${fieldId}-option-${index}`;
+        const checked2 = selectedRadioValue === String(optionValue) ? "checked" : "";
+        return `
+                <label for="${inputId}" class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                  <input
+                    type="radio"
+                    id="${inputId}"
+                    name="${fieldName}"
+                    value="${escapeHtml3(optionValue)}"
+                    class="h-4 w-4 text-zinc-900 focus:ring-zinc-400 dark:text-white dark:focus:ring-white"
+                    ${checked2}
+                    ${required}
+                    ${disabled ? "disabled" : ""}
+                  >
+                  <span>${escapeHtml3(optionLabel)}</span>
+                </label>
+              `;
+      }).join("")}
+        </div>
+      `;
+      break;
     case "reference":
       let referenceCollections = [];
       if (Array.isArray(opts.collection)) {
@@ -5553,8 +5594,19 @@ function renderStructuredArrayField(field, options, baseClasses, errorClasses) {
   const fieldId = `field-${field.field_name}`;
   const fieldName = field.field_name;
   const arrayValue = normalizeStructuredArrayValue(value);
+  const arrayTitle = opts.itemLabel || field.field_label || "Items";
+  const hasItemTitle = typeof opts.itemTitle === "string" && opts.itemTitle.trim() !== "";
+  const arrayItemTitle = hasItemTitle ? opts.itemTitle.trim() : "Item";
+  const addItemLabel = hasItemTitle ? `Add ${arrayItemTitle}` : "Add item";
   const items = arrayValue.map(
-    (itemValue, index) => renderStructuredArrayItem(field, itemsConfig, String(index), itemValue, pluginStatuses)
+    (itemValue, index) => renderStructuredArrayItem(
+      field,
+      itemsConfig,
+      String(index),
+      itemValue,
+      pluginStatuses,
+      arrayItemTitle
+    )
   ).join("");
   const emptyState = arrayValue.length === 0 ? `
     <div class="rounded-lg border border-dashed border-zinc-200 dark:border-white/10 px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400" data-structured-empty>
@@ -5567,14 +5619,14 @@ function renderStructuredArrayField(field, options, baseClasses, errorClasses) {
 
       <div class="flex items-center justify-between gap-3">
         <div class="text-sm text-zinc-500 dark:text-zinc-400">
-          ${escapeHtml3(opts.itemLabel || "Items")}
+          ${escapeHtml3(arrayTitle)}
         </div>
         <button
           type="button"
           data-action="add-item"
           class="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800 dark:bg-white/10 dark:hover:bg-white/20"
         >
-          Add item
+          ${escapeHtml3(addItemLabel)}
         </button>
       </div>
 
@@ -5583,14 +5635,21 @@ function renderStructuredArrayField(field, options, baseClasses, errorClasses) {
       </div>
 
       <template data-structured-array-template>
-        ${renderStructuredArrayItem(field, itemsConfig, "__INDEX__", {}, pluginStatuses)}
+        ${renderStructuredArrayItem(
+    field,
+    itemsConfig,
+    "__INDEX__",
+    {},
+    pluginStatuses,
+    arrayItemTitle
+  )}
       </template>
     </div>
     ${getDragSortableScript()}
     ${getStructuredFieldScript()}
   `;
 }
-function renderStructuredArrayItem(field, itemConfig, index, itemValue, pluginStatuses) {
+function renderStructuredArrayItem(field, itemConfig, index, itemValue, pluginStatuses, arrayItemTitle) {
   const itemFields = renderStructuredItemFields(field, itemConfig, index, itemValue, pluginStatuses);
   return `
     <div class="structured-array-item rounded-lg border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-white/5 p-4 shadow-sm" data-array-index="${escapeHtml3(index)}" draggable="true">
@@ -5601,8 +5660,8 @@ function renderStructuredArrayItem(field, itemConfig, index, itemValue, pluginSt
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/>
             </svg>
           </div>
-          <div class="text-sm font-semibold text-zinc-900 dark:text-white">
-            Item <span class="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400" data-array-order-label></span>
+          <div class="text-sm font-semibold text-zinc-900 dark:text-white cursor-pointer" data-action="toggle-item">
+            ${escapeHtml3(arrayItemTitle)} <span class="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400" data-array-order-label></span>
           </div>
         </div>
         <div class="flex flex-wrap gap-2 text-xs">
@@ -5958,8 +6017,15 @@ function getStructuredFieldScript() {
               if (!item || !list) return;
 
               if (action === 'remove-item') {
-                item.remove();
-                updateHiddenInput();
+                if (typeof requestRepeaterDelete === 'function') {
+                  requestRepeaterDelete(() => {
+                    item.remove();
+                    updateHiddenInput();
+                  });
+                } else {
+                  item.remove();
+                  updateHiddenInput();
+                }
                 return;
               }
 
@@ -6150,8 +6216,15 @@ function getBlocksFieldScript() {
               if (!item || !list) return;
 
               if (action === 'remove-block') {
-                item.remove();
-                updateHiddenInput();
+                if (typeof requestRepeaterDelete === 'function') {
+                  requestRepeaterDelete(() => {
+                    item.remove();
+                    updateHiddenInput();
+                  }, 'block');
+                } else {
+                  item.remove();
+                  updateHiddenInput();
+                }
                 return;
               }
 
@@ -6558,6 +6631,28 @@ function renderContentFormPage(data) {
     iconColor: "red",
     confirmClass: "bg-red-500 hover:bg-red-400",
     onConfirm: `performDeleteContent('${data.id}')`
+  })}
+
+    ${renderConfirmationDialog({
+    id: "delete-repeater-item-confirm",
+    title: "Delete Item",
+    message: "Are you sure you want to delete this item? This action cannot be undone.",
+    confirmText: "Delete",
+    cancelText: "Cancel",
+    iconColor: "red",
+    confirmClass: "bg-red-500 hover:bg-red-400",
+    onConfirm: "performRepeaterDelete()"
+  })}
+
+    ${renderConfirmationDialog({
+    id: "delete-block-confirm",
+    title: "Delete Block",
+    message: "Are you sure you want to delete this block? This action cannot be undone.",
+    confirmText: "Delete",
+    cancelText: "Cancel",
+    iconColor: "red",
+    confirmClass: "bg-red-500 hover:bg-red-400",
+    onConfirm: "performRepeaterDelete()"
   })}
 
     ${getConfirmationDialogScript()}
@@ -7114,6 +7209,29 @@ function renderContentFormPage(data) {
             alert('Error deleting content');
           }
         });
+      }
+
+      // Repeater/blocks delete confirmation
+      let pendingRepeaterDelete = null;
+      function requestRepeaterDelete(callback, type = 'item') {
+        pendingRepeaterDelete = callback;
+        if (typeof showConfirmDialog === 'function') {
+          showConfirmDialog(type === 'block' ? 'delete-block-confirm' : 'delete-repeater-item-confirm');
+          return;
+        }
+        if (confirm('Remove this item? This action cannot be undone.')) {
+          if (typeof pendingRepeaterDelete === 'function') {
+            pendingRepeaterDelete();
+          }
+        }
+        pendingRepeaterDelete = null;
+      }
+
+      function performRepeaterDelete() {
+        if (typeof pendingRepeaterDelete === 'function') {
+          pendingRepeaterDelete();
+        }
+        pendingRepeaterDelete = null;
       }
 
       function showVersionHistory(contentId) {
@@ -21646,6 +21764,7 @@ function renderCollectionFormPage(data) {
                 <option value="number">Number</option>
                 <option value="boolean">Boolean</option>
                 <option value="date">Date</option>
+                <option value="radio">Radio</option>
                 <option value="select">Select</option>
                 <option value="media">Media</option>
                 <option value="reference">Reference</option>
@@ -21973,13 +22092,16 @@ function renderCollectionFormPage(data) {
 
         console.log('[Edit Field] Showing options for field type:', fieldType, '(original:', field.field_type, ')');
 
-        if (['select', 'media', 'richtext', 'reference'].includes(fieldType)) {
+        if (['select', 'radio', 'media', 'richtext', 'reference'].includes(fieldType)) {
           optionsContainer.classList.remove('hidden');
 
           // Set help text based on type
           switch (fieldType) {
             case 'select':
               helpText.textContent = 'Create a dropdown select field with custom options';
+              break;
+            case 'radio':
+              helpText.textContent = 'Single selection from a list of radio options';
               break;
             case 'media':
               helpText.textContent = 'Upload and manage media files (images, videos, documents)';
@@ -22127,7 +22249,7 @@ function renderCollectionFormPage(data) {
         const fieldNameInput = document.getElementById('modal-field-name');
 
         // Show/hide options based on field type
-        if (['select', 'media', 'richtext', 'guid', 'reference'].includes(this.value)) {
+        if (['select', 'radio', 'media', 'richtext', 'guid', 'reference'].includes(this.value)) {
           optionsContainer.classList.remove('hidden');
 
           // Set default options and help text based on type
@@ -22135,6 +22257,10 @@ function renderCollectionFormPage(data) {
             case 'select':
               fieldOptions.value = '{"options": ["Option 1", "Option 2"], "multiple": false}';
               helpText.textContent = 'Create a dropdown select field with custom options';
+              break;
+            case 'radio':
+              fieldOptions.value = '{"enum": ["Option 1", "Option 2"], "enumLabels": ["Option 1", "Option 2"], "default": "Option 1", "inline": false}';
+              helpText.textContent = 'Single selection from a list of radio options';
               break;
             case 'media':
               fieldOptions.value = '{"accept": "image/*", "maxSize": "10MB"}';
@@ -22710,6 +22836,11 @@ adminCollectionsRoutes.post("/:id/fields", async (c) => {
         fieldConfig.format = "date-time";
       } else if (fieldType === "select") {
         fieldConfig.enum = parsedOptions.options || [];
+      } else if (fieldType === "radio") {
+        fieldConfig.type = "radio";
+        if (!parsedOptions.enum && parsedOptions.options) {
+          fieldConfig.enum = parsedOptions.options;
+        }
       } else if (fieldType === "media") {
         fieldConfig.format = "media";
       } else if (fieldType === "slug") {
@@ -22719,6 +22850,12 @@ adminCollectionsRoutes.post("/:id/fields", async (c) => {
         fieldConfig.type = "quill";
       } else if (fieldType === "mdxeditor") {
         fieldConfig.type = "mdxeditor";
+      } else if (fieldType === "tinymce") {
+        fieldConfig.type = "tinymce";
+      } else if (fieldType === "easymde") {
+        fieldConfig.type = "easymde";
+      } else if (fieldType === "markdown") {
+        fieldConfig.type = "markdown";
       } else if (fieldType === "reference") {
         fieldConfig.type = "reference";
       }
@@ -27913,5 +28050,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, getConfirmationDialogScript2 as getConfirmationDialogScript, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userRoutes };
-//# sourceMappingURL=chunk-B5QH67QS.js.map
-//# sourceMappingURL=chunk-B5QH67QS.js.map
+//# sourceMappingURL=chunk-CH5UHZVM.js.map
+//# sourceMappingURL=chunk-CH5UHZVM.js.map

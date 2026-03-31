@@ -1053,8 +1053,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
         const fieldNameInput = document.getElementById('modal-field-name');
 
         // Show/hide options based on field type
-        if (['select', 'media', 'richtext', 'markdown', 'guid', 'reference'].includes(this.value)) {
-        if (['select', 'radio', 'media', 'richtext', 'guid', 'reference'].includes(this.value)) {
+        if (['select', 'radio', 'media', 'richtext', 'markdown', 'guid', 'reference'].includes(this.value)) {
           optionsContainer.classList.remove('hidden');
 
           // Set default options and help text based on type

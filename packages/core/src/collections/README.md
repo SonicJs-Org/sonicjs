@@ -123,6 +123,9 @@ Each field can have:
 - `items`: Schema for array items
 - `itemTitle`: Optional singular item label used in array item cards/buttons (for example, `"Member"`)
 - `properties`: Schema for object properties
+- `objectLayout`: Object field layout mode: `'nested'` (default) or `'flat'`
+- `collapsed`: For nested object layout, initial state (default: `true`; set `false` to start open)
+- Note: `collapsed` is ignored when `objectLayout` is `'flat'`
 
 ## Testing Collections
 

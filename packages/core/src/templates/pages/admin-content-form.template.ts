@@ -68,6 +68,7 @@ export interface ContentFormData {
 export function renderContentFormPage(data: ContentFormData): string {
   const isEdit = data.isEdit || !!data.id
   const title = isEdit ? `Edit: ${data.title || 'Content'}` : `New ${data.collection.display_name}`
+  const hasValidationErrors = Boolean(data.validationErrors && Object.keys(data.validationErrors).length > 0)
 
   // Construct back URL with preserved filters
   const backUrl = data.referrerParams
@@ -176,6 +177,7 @@ export function renderContentFormPage(data: ContentFormData): string {
             ${isEdit ? `hx-put="/admin/content/${data.id}"` : `hx-post="/admin/content"`}
             hx-target="#form-messages"
             hx-encoding="multipart/form-data"
+            data-has-validation-errors="${hasValidationErrors ? 'true' : 'false'}"
             class="space-y-6"
           >
             <input type="hidden" name="collection_id" value="${data.collection.id}">
@@ -456,39 +458,456 @@ export function renderContentFormPage(data: ContentFormData): string {
 
     <!-- Dynamic Field Scripts -->
     <script>
-      // Field group toggle
-      function toggleFieldGroup(groupId) {
-        const content = document.getElementById(groupId + '-content');
-        const icon = document.getElementById(groupId + '-icon');
-        
-        if (content.classList.contains('hidden')) {
-          content.classList.remove('hidden');
-          icon.classList.remove('rotate-[-90deg]');
-        } else {
-          content.classList.add('hidden');
-          icon.classList.add('rotate-[-90deg]');
+      const contentFormCollectionId = ${JSON.stringify(data.collection.id)};
+
+      function getFieldGroupScope() {
+        const url = new URL(window.location.href);
+        const urlCollectionId = url.searchParams.get('collection');
+        const effectiveCollectionId = urlCollectionId || contentFormCollectionId || '';
+        return window.location.pathname + ':' + effectiveCollectionId;
+      }
+
+      function getItemPosition(itemSelector, item) {
+        if (!(item instanceof Element)) return -1;
+        const parent = item.parentElement;
+        if (!parent) return -1;
+        return Array.from(parent.querySelectorAll(':scope > ' + itemSelector)).indexOf(item);
+      }
+
+      function stripIndexedFieldPrefix(fullFieldName, prefix) {
+        if (!fullFieldName || !prefix || !fullFieldName.startsWith(prefix)) {
+          return fullFieldName;
+        }
+
+        const remainder = fullFieldName.slice(prefix.length);
+        const indexMatch = remainder.match(/^(\\d+)(-|__)(.*)$/);
+        if (!indexMatch) {
+          return fullFieldName;
+        }
+
+        return indexMatch[3];
+      }
+
+      function getFieldGroupStorageKey(groupOrId) {
+        const defaultGroupId = typeof groupOrId === 'string' ? groupOrId : (groupOrId?.getAttribute('data-group-id') || 'unknown');
+        const group = typeof groupOrId === 'string'
+          ? document.querySelector('.field-group[data-group-id="' + defaultGroupId + '"]')
+          : groupOrId;
+
+        const scopePrefix = 'sonic:ui:objects:' + getFieldGroupScope() + ':';
+        if (!(group instanceof Element)) {
+          return scopePrefix + defaultGroupId;
+        }
+
+        const fullFieldName = group.getAttribute('data-field-name') || '';
+
+        const blocksField = group.closest('.blocks-field');
+        const blockItem = group.closest('.blocks-item');
+        if (blocksField instanceof Element && blockItem instanceof Element) {
+          const blocksFieldName = blocksField.getAttribute('data-field-name') || 'unknown';
+          const blockPosition = getItemPosition('.blocks-item', blockItem);
+          const relativePath = stripIndexedFieldPrefix(fullFieldName, 'block-' + blocksFieldName + '-') || defaultGroupId;
+          return scopePrefix + 'blocks:' + blocksFieldName + ':' + blockPosition + ':' + relativePath;
+        }
+
+        const arrayField = group.closest('[data-structured-array][data-field-name]');
+        const arrayItem = group.closest('.structured-array-item');
+        if (arrayField instanceof Element && arrayItem instanceof Element) {
+          const arrayFieldName = arrayField.getAttribute('data-field-name') || 'unknown';
+          const itemPosition = getItemPosition('.structured-array-item', arrayItem);
+          const relativePath = stripIndexedFieldPrefix(fullFieldName, 'array-' + arrayFieldName + '-') || defaultGroupId;
+          return scopePrefix + 'repeaters:' + arrayFieldName + ':' + itemPosition + ':' + relativePath;
+        }
+
+        return scopePrefix + defaultGroupId;
+      }
+
+      function loadFieldGroupState(group) {
+        try {
+          const value = sessionStorage.getItem(getFieldGroupStorageKey(group));
+          if (value === '1') return true;
+          if (value === '0') return false;
+        } catch {}
+        return null;
+      }
+
+      function saveFieldGroupState(group, isCollapsed) {
+        try {
+          sessionStorage.setItem(getFieldGroupStorageKey(group), isCollapsed ? '1' : '0');
+        } catch {}
+      }
+
+      function resolveFieldGroupElements(groupOrId) {
+        let group = null;
+
+        if (groupOrId instanceof Element) {
+          group = groupOrId.classList.contains('field-group')
+            ? groupOrId
+            : groupOrId.closest('.field-group[data-group-id]');
+        } else if (typeof groupOrId === 'string' && groupOrId) {
+          group = document.querySelector('.field-group[data-group-id="' + groupOrId + '"]');
+        }
+
+        let content = null;
+        let icon = null;
+
+        if (group instanceof Element) {
+          content = group.querySelector(':scope > .field-group-content');
+          icon = group.querySelector(':scope > .field-group-header svg[id$="-icon"]');
+        }
+
+        // Legacy fallback for any existing calls still passing string IDs.
+        if (!(content instanceof HTMLElement) && typeof groupOrId === 'string') {
+          content = document.getElementById(groupOrId + '-content');
+        }
+        if (!(icon instanceof Element) && typeof groupOrId === 'string') {
+          icon = document.getElementById(groupOrId + '-icon');
+        }
+
+        if (!(group instanceof Element) && content instanceof Element) {
+          group = content.closest('.field-group[data-group-id]');
+        }
+
+        return { group, content, icon };
+      }
+
+      function applyFieldGroupState(groupOrId, isCollapsed) {
+        const { content, icon } = resolveFieldGroupElements(groupOrId);
+        if (!(content instanceof HTMLElement) || !(icon instanceof Element)) return;
+        content.classList.toggle('hidden', isCollapsed);
+        icon.classList.toggle('-rotate-90', isCollapsed);
+      }
+
+      function restoreFieldGroupStates() {
+        document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
+          const savedState = loadFieldGroupState(group);
+          if (savedState === null) return;
+          applyFieldGroupState(group, savedState);
+        });
+      }
+
+      function persistAllFieldGroupStates() {
+        document.querySelectorAll('.field-group[data-group-id]').forEach((group) => {
+          const { content } = resolveFieldGroupElements(group);
+          if (!(content instanceof HTMLElement)) return;
+          saveFieldGroupState(group, content.classList.contains('hidden'));
+        });
+      }
+
+      function setValidationHeaderIndicator(container) {
+        if (!(container instanceof Element)) return;
+        let header = null;
+        let markerTarget = null;
+
+        if (container.classList.contains('field-group')) {
+          header = container.querySelector(':scope > .field-group-header');
+          markerTarget = container.querySelector(':scope > .field-group-header h3');
+        } else if (container.classList.contains('structured-array-item')) {
+          header = container.querySelector('[data-action="toggle-item"]');
+          markerTarget = header;
+        } else if (container.classList.contains('blocks-item')) {
+          header = container.querySelector('[data-action="toggle-block"]');
+          markerTarget = header;
+        }
+
+        if (!(header instanceof HTMLElement)) return;
+        if (!(markerTarget instanceof HTMLElement)) {
+          markerTarget = header;
+        }
+
+        header.dataset.validationHeaderError = 'true';
+        header.classList.add('text-pink-700', 'dark:text-pink-300');
+
+        if (!markerTarget.querySelector('[data-validation-indicator]')) {
+          const marker = document.createElement('span');
+          marker.setAttribute('data-validation-indicator', 'true');
+          marker.className = 'ml-2 inline-block h-2 w-2 rounded-full bg-pink-500 align-middle';
+          marker.setAttribute('aria-hidden', 'true');
+          markerTarget.appendChild(marker);
         }
       }
 
+      function clearValidationIndicators() {
+        document.querySelectorAll('[data-validation-header-error="true"]').forEach((el) => {
+          if (!(el instanceof HTMLElement)) return;
+          delete el.dataset.validationHeaderError;
+          el.classList.remove('text-pink-700', 'dark:text-pink-300');
+        });
+
+        document.querySelectorAll('[data-validation-indicator]').forEach((el) => el.remove());
+      }
+
+      function expandContainerForValidation(container) {
+        if (!(container instanceof Element)) return;
+
+        if (container.classList.contains('field-group')) {
+          applyFieldGroupState(container, false);
+          return;
+        }
+
+        if (container.classList.contains('structured-array-item')) {
+          const content = container.querySelector('[data-array-item-fields]');
+          const icon = container.querySelector('[data-item-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+          return;
+        }
+
+        if (container.classList.contains('blocks-item')) {
+          const content = container.querySelector('[data-block-content]');
+          const icon = container.querySelector('[data-block-toggle-icon]');
+          if (content instanceof HTMLElement) {
+            content.classList.remove('hidden');
+          }
+          if (icon instanceof Element) {
+            icon.classList.remove('-rotate-90');
+          }
+        }
+      }
+
+      function walkErrorContainers(node, expand) {
+        if (!(node instanceof Element)) return;
+        const visited = new Set();
+        let cursor = node;
+        while (cursor) {
+          const candidates = [
+            cursor.closest('.structured-array-item'),
+            cursor.closest('.blocks-item'),
+            cursor.closest('.field-group[data-group-id]')
+          ].filter((c) => c instanceof Element && !visited.has(c));
+
+          if (candidates.length === 0) break;
+
+          // Pick nearest ancestor container to preserve "first-error path only".
+          let nearest = candidates[0];
+          let bestDistance = Number.MAX_SAFE_INTEGER;
+          for (const candidate of candidates) {
+            let distance = 0;
+            let walker = cursor;
+            while (walker && walker !== candidate) {
+              walker = walker.parentElement;
+              distance += 1;
+            }
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              nearest = candidate;
+            }
+          }
+
+          visited.add(nearest);
+          setValidationHeaderIndicator(nearest);
+          if (expand) {
+            expandContainerForValidation(nearest);
+          }
+          cursor = nearest.parentElement;
+        }
+      }
+
+      function getFocusableTargetFromErrorGroup(group) {
+        if (!(group instanceof Element)) return null;
+        return (
+          group.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable="true"]') ||
+          group.querySelector('button:not([disabled])')
+        );
+      }
+
+      function revealServerValidationErrors() {
+        clearValidationIndicators();
+
+        const errorGroups = Array.from(document.querySelectorAll('.form-group[data-has-errors="true"]'));
+        if (errorGroups.length === 0) return;
+
+        // Add indicators for all errored sections, expand only first-error path.
+        errorGroups.forEach((group, index) => {
+          walkErrorContainers(group, index === 0);
+        });
+
+        const firstTarget = getFocusableTargetFromErrorGroup(errorGroups[0]);
+        if (firstTarget instanceof HTMLElement) {
+          firstTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstTarget.focus({ preventScroll: true });
+        }
+      }
+
+      function revealNativeValidationErrors(form) {
+        if (!(form instanceof HTMLFormElement)) return;
+        clearValidationIndicators();
+
+        const invalidControls = Array.from(form.querySelectorAll(':invalid'));
+        if (invalidControls.length === 0) return;
+
+        invalidControls.forEach((control, index) => {
+          walkErrorContainers(control, index === 0);
+        });
+
+        const first = invalidControls[0];
+        if (first instanceof HTMLElement) {
+          first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          first.focus({ preventScroll: true });
+        }
+      }
+
+      // Field group toggle
+      function toggleFieldGroup(groupOrTrigger) {
+        const { group, content } = resolveFieldGroupElements(groupOrTrigger);
+        if (!(group instanceof Element)) return;
+        if (!(content instanceof HTMLElement)) return;
+
+        const isCollapsed = !content.classList.contains('hidden');
+        applyFieldGroupState(group, isCollapsed);
+        saveFieldGroupState(group, isCollapsed);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          restoreFieldGroupStates();
+          const form = document.getElementById('content-form');
+          if (form?.getAttribute('data-has-validation-errors') === 'true') {
+            revealServerValidationErrors();
+          }
+        });
+      } else {
+        restoreFieldGroupStates();
+        const form = document.getElementById('content-form');
+        if (form?.getAttribute('data-has-validation-errors') === 'true') {
+          revealServerValidationErrors();
+        }
+      }
+
+      document.addEventListener('htmx:afterSwap', function() {
+        setTimeout(() => {
+          restoreFieldGroupStates();
+          const form = document.getElementById('content-form');
+          if (form?.getAttribute('data-has-validation-errors') === 'true') {
+            revealServerValidationErrors();
+          }
+        }, 50);
+      });
+
+      const contentFormEl = document.getElementById('content-form');
+      if (contentFormEl instanceof HTMLFormElement) {
+        contentFormEl.addEventListener('submit', () => {
+          persistAllFieldGroupStates();
+        }, true);
+      }
+
+      window.addEventListener('beforeunload', () => {
+        persistAllFieldGroupStates();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          persistAllFieldGroupStates();
+        }
+      });
+
+      let pendingNativeValidationReveal = false;
+      document.addEventListener('invalid', function(event) {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const form = target.closest('form');
+        if (!(form instanceof HTMLFormElement)) return;
+
+        if (pendingNativeValidationReveal) return;
+        pendingNativeValidationReveal = true;
+
+        // Expand only first invalid path synchronously so the browser can focus it
+        // and avoid "invalid form control is not focusable" errors.
+        walkErrorContainers(target, true);
+
+        setTimeout(() => {
+          pendingNativeValidationReveal = false;
+          revealNativeValidationErrors(form);
+        }, 0);
+      }, true);
+
       // Media field functions
-      let currentMediaFieldId = null;
+      function notifyFieldChange(input) {
+        if (!input) return;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      function getActiveMediaModal() {
+        const modal = document.getElementById('media-selector-modal');
+        return modal instanceof HTMLElement ? modal : null;
+      }
+
+      function getMediaFieldElements(fieldId) {
+        if (!fieldId) {
+          return {
+            fieldId: '',
+            hiddenInput: null,
+            preview: null,
+            mediaField: null,
+            actionsDiv: null,
+          };
+        }
+
+        const hiddenInput = document.getElementById(fieldId);
+        const preview = document.getElementById(fieldId + '-preview');
+        const mediaField = hiddenInput?.closest('.media-field-container') || null;
+        const actionsDiv = mediaField?.querySelector('.media-actions') || null;
+
+        return {
+          fieldId,
+          hiddenInput,
+          preview,
+          mediaField,
+          actionsDiv,
+        };
+      }
+
+      function getActiveMediaTarget() {
+        const modal = getActiveMediaModal();
+        const fieldId = modal?.dataset.targetFieldId || '';
+        return {
+          modal,
+          originalValue: modal?.dataset.originalValue || '',
+          ...getMediaFieldElements(fieldId),
+        };
+      }
+
+      function ensureSingleMediaRemoveButton(fieldId, actionsDiv) {
+        if (!(actionsDiv instanceof HTMLElement)) return;
+        const existingRemoveButton = actionsDiv.querySelector('[data-media-remove="true"]');
+        if (existingRemoveButton) return;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.setAttribute('data-media-remove', 'true');
+        removeBtn.onclick = () => clearMediaField(fieldId);
+        removeBtn.className = 'inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all';
+        removeBtn.textContent = 'Remove';
+        actionsDiv.appendChild(removeBtn);
+      }
 
       function openMediaSelector(fieldId) {
-        currentMediaFieldId = fieldId;
+        const existingModal = getActiveMediaModal();
+        if (existingModal) {
+          existingModal.remove();
+        }
+
         // Store the original value in case user cancels
-        const originalValue = document.getElementById(fieldId)?.value || '';
+        const originalValue = getMediaFieldElements(fieldId).hiddenInput?.value || '';
 
         // Open media library modal
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50';
         modal.id = 'media-selector-modal';
+        modal.dataset.targetFieldId = fieldId;
+        modal.dataset.originalValue = originalValue;
         modal.innerHTML = \`
           <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <h3 class="text-lg font-semibold text-zinc-950 dark:text-white mb-4">Select Media</h3>
             <div id="media-grid-container" hx-get="/admin/media/selector" hx-trigger="load"></div>
             <div class="mt-4 flex justify-end space-x-2">
               <button
-                onclick="cancelMediaSelection('\${fieldId}', '\${originalValue}')"
+                onclick="cancelMediaSelection()"
                 class="rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors">
                 Cancel
               </button>
@@ -508,23 +927,23 @@ export function renderContentFormPage(data: ContentFormData): string {
       }
 
       function closeMediaSelector() {
-        const modal = document.getElementById('media-selector-modal');
+        const modal = getActiveMediaModal();
         if (modal) {
           modal.remove();
         }
-        currentMediaFieldId = null;
       }
 
-      function cancelMediaSelection(fieldId, originalValue) {
+      function cancelMediaSelection() {
+        const { hiddenInput, preview, originalValue } = getActiveMediaTarget();
+
         // Restore original value
-        const hiddenInput = document.getElementById(fieldId);
         if (hiddenInput) {
           hiddenInput.value = originalValue;
+          notifyFieldChange(hiddenInput);
         }
 
         // If original value was empty, hide the preview and show select button
         if (!originalValue) {
-          const preview = document.getElementById(fieldId + '-preview');
           if (preview) {
             preview.classList.add('hidden');
           }
@@ -535,11 +954,11 @@ export function renderContentFormPage(data: ContentFormData): string {
       }
 
       function clearMediaField(fieldId) {
-        const hiddenInput = document.getElementById(fieldId);
-        const preview = document.getElementById(fieldId + '-preview');
+        const { hiddenInput, preview, actionsDiv } = getMediaFieldElements(fieldId);
 
         if (hiddenInput) {
           hiddenInput.value = '';
+          notifyFieldChange(hiddenInput);
         }
 
         if (preview) {
@@ -549,25 +968,34 @@ export function renderContentFormPage(data: ContentFormData): string {
           }
           preview.classList.add('hidden');
         }
+
+        const removeButton = actionsDiv?.querySelector('[data-media-remove="true"]');
+        if (removeButton) {
+          removeButton.remove();
+        }
       }
 
       // Global function to remove a single media from multiple selection
       window.removeMediaFromMultiple = function(fieldId, urlToRemove) {
-        const hiddenInput = document.getElementById(fieldId);
+        const { hiddenInput, preview } = getMediaFieldElements(fieldId);
         if (!hiddenInput) return;
 
         const values = hiddenInput.value.split(',').filter(url => url !== urlToRemove);
         hiddenInput.value = values.join(',');
+        notifyFieldChange(hiddenInput);
 
         // Remove preview item
-        const previewItem = document.querySelector(\`[data-url="\${urlToRemove}"]\`);
+        const previewItem =
+          preview &&
+          Array.from(preview.querySelectorAll('[data-url]')).find(
+            (item) => item.getAttribute('data-url') === urlToRemove,
+          );
         if (previewItem) {
           previewItem.remove();
         }
 
         // Hide preview grid if empty
         if (values.length === 0) {
-          const preview = document.getElementById(fieldId + '-preview');
           if (preview) {
             preview.classList.add('hidden');
           }
@@ -576,39 +1004,24 @@ export function renderContentFormPage(data: ContentFormData): string {
 
       // Global function called by media selector buttons
       window.selectMediaFile = function(mediaId, mediaUrl, filename) {
-        if (!currentMediaFieldId) {
+        const { fieldId, hiddenInput, preview, actionsDiv } = getActiveMediaTarget();
+        if (!fieldId || !hiddenInput) {
           console.error('No field ID set for media selection');
           return;
         }
 
-        const fieldId = currentMediaFieldId;
-
         // Set the hidden input value to the media URL (not ID)
-        const hiddenInput = document.getElementById(fieldId);
-        if (hiddenInput) {
-          hiddenInput.value = mediaUrl;
-        }
+        hiddenInput.value = mediaUrl;
+        notifyFieldChange(hiddenInput);
 
         // Update the preview
-        const preview = document.getElementById(fieldId + '-preview');
         if (preview) {
           preview.innerHTML = \`<img src="\${mediaUrl}" alt="\${filename}" class="w-32 h-32 object-cover rounded-lg border border-white/20">\`;
           preview.classList.remove('hidden');
         }
 
         // Show the remove button by finding the media actions container and updating it
-        const mediaField = hiddenInput?.closest('.media-field-container');
-        if (mediaField) {
-          const actionsDiv = mediaField.querySelector('.media-actions');
-          if (actionsDiv && !actionsDiv.querySelector('button:has-text("Remove")')) {
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.onclick = () => clearMediaField(fieldId);
-            removeBtn.className = 'inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all';
-            removeBtn.textContent = 'Remove';
-            actionsDiv.appendChild(removeBtn);
-          }
-        }
+        ensureSingleMediaRemoveButton(fieldId, actionsDiv);
 
         // DON'T close the modal - let user click OK button
         // Visual feedback: highlight the selected item
@@ -622,7 +1035,9 @@ export function renderContentFormPage(data: ContentFormData): string {
       };
 
       function setMediaField(fieldId, mediaUrl) {
-        document.getElementById(fieldId).value = mediaUrl;
+        const hiddenInput = document.getElementById(fieldId);
+        hiddenInput.value = mediaUrl;
+        notifyFieldChange(hiddenInput);
         const preview = document.getElementById(fieldId + '-preview');
         preview.innerHTML = \`<img src="\${mediaUrl}" alt="Selected media" class="w-32 h-32 object-cover rounded-lg ring-1 ring-zinc-950/10 dark:ring-white/10">\`;
         preview.classList.remove('hidden');

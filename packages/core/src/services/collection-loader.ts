@@ -176,6 +176,15 @@ export function validateCollectionConfig(config: CollectionConfig): { valid: boo
         errors.push(`Reference field "${fieldName}" is missing collection property`)
       }
 
+      const layoutValue = fieldConfig.objectLayout
+      if (layoutValue !== undefined) {
+        if (fieldConfig.type !== 'object') {
+          errors.push(`Field "${fieldName}" uses objectLayout but is not an object field`)
+        } else if (!['nested', 'flat'].includes(layoutValue)) {
+          errors.push(`Object field "${fieldName}" has invalid objectLayout. Use "nested" or "flat"`)
+        }
+      }
+
       // Validate select fields
       if (['select', 'multiselect', 'radio'].includes(fieldConfig.type) && !fieldConfig.enum) {
         errors.push(`Select field "${fieldName}" is missing enum options`)

@@ -2,7 +2,7 @@ import { getTelemetryConfig, sanitizeErrorMessage, sanitizeRoute, generateInstal
 import { __export } from './chunk-V4OQ3NZ2.js';
 import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod/v4';
-import { getTableColumns, getViewSelectedFields, isTable, is, Column, SQL, isView, inArray, eq, like, gte, lte, and, count, asc, desc } from 'drizzle-orm';
+import { isTable, getTableColumns, getViewSelectedFields, is, Column, SQL, isView, inArray, eq, like, gte, lte, and, count, asc, desc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 
 // src/db/schema.ts

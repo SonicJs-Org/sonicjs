@@ -69,6 +69,8 @@ export interface FieldConfig {
   properties?: Record<string, FieldConfig>
   blocks?: BlockDefinitions
   discriminator?: string
+  collapsed?: boolean
+  objectLayout?: 'nested' | 'flat'
 
   // UI hints
   format?: string

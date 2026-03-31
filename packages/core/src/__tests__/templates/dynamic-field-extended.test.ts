@@ -583,6 +583,46 @@ describe('renderDynamicField - Object Fields', () => {
 
     expect(html).toContain('data-structured-object');
   });
+
+  it('should scope nested object host lookup to the current object container', () => {
+    const field = createTestField({
+      field_type: 'object',
+      field_options: {
+        properties: {
+          monday: {
+            type: 'object',
+            title: 'Monday',
+            objectLayout: 'flat',
+            properties: {
+              opens: { type: 'text', title: 'Opens' },
+              closes: { type: 'text', title: 'Closes' },
+            },
+          },
+          tuesday: {
+            type: 'object',
+            title: 'Tuesday',
+            objectLayout: 'flat',
+            properties: {
+              opens: { type: 'text', title: 'Opens' },
+              closes: { type: 'text', title: 'Closes' },
+            },
+          },
+        },
+      },
+    });
+    const html = renderDynamicField(field, {
+      value: {
+        monday: { opens: '09:00', closes: '17:00' },
+        tuesday: { opens: '10:00', closes: '18:00' },
+      },
+    });
+
+    expect(html).toContain('const getStructuredObjectFieldsHost = (container) =>');
+    expect(html).toContain("getDirectChild(container, '.field-group-content')");
+    expect(html).toContain('const getDirectStructuredObject = (fieldWrapper) =>');
+    expect(html).not.toContain("objectContainer.querySelector('[data-structured-object-fields]')");
+    expect(html).toContain("document.readyState !== 'loading'");
+  });
 });
 
 describe('renderDynamicField - Array Fields', () => {
@@ -633,6 +673,40 @@ describe('renderDynamicField - Array Fields', () => {
     expect(html).toContain('data-structured-array');
     expect(html).toContain('Name');
     expect(html).toContain('URL');
+  });
+
+  it('should scope structured array item queries to direct children', () => {
+    const field = createTestField({
+      field_type: 'array',
+      field_options: {
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'text', title: 'Name' },
+            children: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'text', title: 'Child name' },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const html = renderDynamicField(field, {
+      value: [{ name: 'Parent', children: [{ name: 'Child' }] }],
+    });
+
+    expect(html).toContain(":scope > .structured-array-item");
+    expect(html).not.toContain("querySelectorAll('.structured-array-item')");
+    expect(html).toContain(":scope > [data-structured-array-list]");
+    expect(html).toContain(":scope > input[type=\"hidden\"]");
+    expect(html).toContain(":scope > template[data-structured-array-template]");
+    expect(html).toContain(":scope > [data-structured-empty]");
+    expect(html).toContain('container.__sonicStructuredArrayTemplate');
   });
 });
 

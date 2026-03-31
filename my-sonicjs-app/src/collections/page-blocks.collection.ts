@@ -1,5 +1,82 @@
 import type { CollectionConfig } from '@sonicjs-cms/core'
 
+const heroBlock = {
+  label: 'Hero',
+  properties: {
+    heading: { type: 'string', title: 'Heading', required: true },
+    height: {
+      type: 'radio',
+      title: 'Height',
+      enum: ['small', 'medium', 'full'],
+      enumLabels: ['Small', 'Medium', 'Full'],
+      default: 'medium',
+      inline: true,
+    },
+    subheading: { type: 'textarea', title: 'Subheading', maxLength: 600 },
+    image: { type: 'media', title: 'Background/Image' },
+    imageAlt: { type: 'string', title: 'Image Alt' },
+
+    ctaPrimary: {
+      title: 'Primary CTA',
+      type: 'object',
+      properties: {
+        label: { type: 'string', title: 'Label' },
+        link: {
+          title: 'Link',
+          type: 'object',
+          properties: {
+            mode: {
+              type: 'select',
+              title: 'Link type',
+              enum: ['none', 'internal', 'external'],
+              enumLabels: ['None', 'Internal', 'External'],
+              default: 'none',
+            },
+            reference: { type: 'reference', title: 'Internal reference', collection: 'pages' },
+            url: { type: 'url', title: 'External URL' },
+          },
+        },
+        style: {
+          type: 'select',
+          title: 'Button style',
+          enum: ['primary', 'secondary'],
+          enumLabels: ['Primary', 'Secondary'],
+          default: 'primary',
+        },
+      },
+    },
+    ctaSecondary: {
+      title: 'Secondary CTA',
+      type: 'object',
+      properties: {
+        label: { type: 'string', title: 'Label' },
+        link: {
+          title: 'Link',
+          type: 'object',
+          properties: {
+            mode: {
+              type: 'select',
+              title: 'Type',
+              enum: ['none', 'internal', 'external'],
+              enumLabels: ['None', 'Internal', 'External'],
+              default: 'none',
+            },
+            reference: { type: 'reference', title: 'Internal reference', collection: 'pages' },
+            url: { type: 'url', title: 'External URL' },
+          },
+        },
+        style: {
+          type: 'select',
+          title: 'Button style',
+          enum: ['primary', 'secondary'],
+          enumLabels: ['Primary', 'Secondary'],
+          default: 'primary',
+        },
+      },
+    },
+  },
+}
+
 const pageBlocksCollection: CollectionConfig = {
   name: 'page_blocks',
   displayName: 'Page Blocks',
@@ -28,6 +105,7 @@ const pageBlocksCollection: CollectionConfig = {
       seo: {
         type: 'object',
         title: 'SEO',
+        objectLayout: 'flat',
         properties: {
           title: { type: 'string', title: 'SEO title' },
           description: { type: 'textarea', title: 'SEO description' },
@@ -47,7 +125,53 @@ const pageBlocksCollection: CollectionConfig = {
                 name: { type: 'string', title: 'Name', required: true },
                 role: { type: 'string', title: 'Role' },
                 photo: { type: 'media', title: 'Photo' },
+                children: {
+                  type: 'array',
+                  title: 'Children',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string', title: 'Name', required: true },
+                    },
+                  },
+                },
               },
+            },
+          },
+        },
+      },
+      openingHoursWeek: {
+        type: 'object',
+        title: 'Opening Hours',
+        properties: {
+          monday: {
+            type: 'object',
+            title: 'Monday',
+            objectLayout: 'flat',
+            properties: {
+              closed: { type: 'boolean', title: 'Closed', default: false },
+              opens: { type: 'string', title: 'Opens', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+              closes: { type: 'string', title: 'Closes', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+            },
+          },
+          tuesday: {
+            type: 'object',
+            title: 'Tuesday',
+            objectLayout: 'flat',
+            properties: {
+              closed: { type: 'boolean', title: 'Closed', default: false },
+              opens: { type: 'string', title: 'Opens', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+              closes: { type: 'string', title: 'Closes', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+            },
+          },
+          wednesday: {
+            type: 'object',
+            title: 'Wednesday',
+            objectLayout: 'flat',
+            properties: {
+              closed: { type: 'boolean', title: 'Closed', default: false },
+              opens: { type: 'string', title: 'Opens', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
+              closes: { type: 'string', title: 'Closes', pattern: '^([01]\\d|2[0-3]):(00|30)$' },
             },
           },
         },
@@ -60,6 +184,7 @@ const pageBlocksCollection: CollectionConfig = {
           type: 'object',
           discriminator: 'blockType',
           blocks: {
+            hero: heroBlock,
             text: {
               label: 'Text',
               properties: {
@@ -79,6 +204,24 @@ const pageBlocksCollection: CollectionConfig = {
                 title: { type: 'string', title: 'Title', required: true },
                 body: { type: 'textarea', title: 'Body text', required: true },
                 image: { type: 'media', title: 'Image', required: true },
+              },
+            },
+            gallery: {
+              label: 'Gallery',
+              properties: {
+                heading: { type: 'string', title: 'Heading' },
+                images: {
+                  type: 'array',
+                  title: 'Images',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      image: { type: 'media', title: 'Image' },
+                      alt: { type: 'string', title: 'Alt' },
+                      caption: { type: 'string', title: 'Caption' },
+                    },
+                  },
+                },
               },
             },
             callToAction: {

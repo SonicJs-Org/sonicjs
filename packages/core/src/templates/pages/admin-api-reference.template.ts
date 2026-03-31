@@ -1,11 +1,13 @@
 import { renderAdminLayoutCatalyst, AdminLayoutCatalystData } from '../layouts/admin-layout-catalyst.template'
+import { CATEGORY_INFO } from '../../services/route-metadata'
 
 export interface APIEndpoint {
   method: string
   path: string
   description: string
-  authentication: boolean
+  authentication: boolean | 'unknown'
   category: string
+  documented?: boolean
 }
 
 export interface APIReferencePageData {
@@ -18,6 +20,35 @@ export interface APIReferencePageData {
   version?: string
 }
 
+function renderAuthBadge(auth: boolean | 'unknown'): string {
+  if (auth === true) {
+    return `
+      <span class="shrink-0 inline-flex items-center gap-x-1 rounded-md bg-amber-50 dark:bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-700/10 dark:ring-amber-400/20">
+        <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        Auth
+      </span>`
+  }
+  if (auth === false) {
+    return `
+      <span class="shrink-0 inline-flex items-center gap-x-1 rounded-md bg-lime-50 dark:bg-lime-500/10 px-2 py-1 text-xs font-medium text-lime-700 dark:text-lime-300 ring-1 ring-inset ring-lime-700/10 dark:ring-lime-400/20">
+        <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Public
+      </span>`
+  }
+  // unknown
+  return `
+    <span class="shrink-0 inline-flex items-center gap-x-1 rounded-md bg-zinc-50 dark:bg-zinc-500/10 px-2 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 ring-1 ring-inset ring-zinc-500/10 dark:ring-zinc-400/20">
+      <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      Unknown
+    </span>`
+}
+
 export function renderAPIReferencePage(data: APIReferencePageData): string {
   // Group endpoints by category
   const endpointsByCategory = data.endpoints.reduce((acc, endpoint) => {
@@ -28,34 +59,14 @@ export function renderAPIReferencePage(data: APIReferencePageData): string {
     return acc
   }, {} as Record<string, APIEndpoint[]>)
 
-  // Category order and descriptions
-  const categoryInfo = {
-    'Auth': {
-      title: 'Authentication',
-      description: 'User authentication and authorization endpoints',
-      icon: '🔐'
-    },
-    'Content': {
-      title: 'Content Management',
-      description: 'Content creation, retrieval, and management',
-      icon: '📝'
-    },
-    'Media': {
-      title: 'Media Management',
-      description: 'File upload, storage, and media operations',
-      icon: '🖼️'
-    },
-    'Admin': {
-      title: 'Admin Interface',
-      description: 'Administrative panel and management features',
-      icon: '⚙️'
-    },
-    'System': {
-      title: 'System',
-      description: 'Health checks and system information',
-      icon: '🔧'
-    }
-  }
+  // Get unique categories from actual data
+  const categories = Object.keys(endpointsByCategory)
+
+  // Count stats
+  const totalEndpoints = data.endpoints.length
+  const publicEndpoints = data.endpoints.filter(e => e.authentication === false).length
+  const protectedEndpoints = data.endpoints.filter(e => e.authentication === true).length
+  const undocumentedCount = data.endpoints.filter(e => e.documented === false).length
 
   const pageContent = `
     <div class="space-y-6">
@@ -63,7 +74,7 @@ export function renderAPIReferencePage(data: APIReferencePageData): string {
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">API Reference</h1>
-          <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">Complete documentation of all available API endpoints</p>
+          <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">Auto-discovered documentation of all registered API endpoints</p>
         </div>
         <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
           <a href="/api" target="_blank" class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm">
@@ -76,29 +87,35 @@ export function renderAPIReferencePage(data: APIReferencePageData): string {
       </div>
 
       <!-- Stats -->
-      <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div class="rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 px-6 py-5">
           <dt class="text-sm/6 font-medium text-zinc-500 dark:text-zinc-400">Total Endpoints</dt>
           <dd class="mt-2 flex items-baseline gap-x-2">
-            <span class="text-4xl font-semibold tracking-tight text-zinc-950 dark:text-white">${data.endpoints.length}</span>
+            <span class="text-4xl font-semibold tracking-tight text-zinc-950 dark:text-white">${totalEndpoints}</span>
           </dd>
         </div>
         <div class="rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 px-6 py-5">
           <dt class="text-sm/6 font-medium text-zinc-500 dark:text-zinc-400">Public Endpoints</dt>
           <dd class="mt-2 flex items-baseline gap-x-2">
-            <span class="text-4xl font-semibold tracking-tight text-lime-600 dark:text-lime-400">${data.endpoints.filter(e => !e.authentication).length}</span>
+            <span class="text-4xl font-semibold tracking-tight text-lime-600 dark:text-lime-400">${publicEndpoints}</span>
           </dd>
         </div>
         <div class="rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 px-6 py-5">
           <dt class="text-sm/6 font-medium text-zinc-500 dark:text-zinc-400">Protected Endpoints</dt>
           <dd class="mt-2 flex items-baseline gap-x-2">
-            <span class="text-4xl font-semibold tracking-tight text-amber-600 dark:text-amber-400">${data.endpoints.filter(e => e.authentication).length}</span>
+            <span class="text-4xl font-semibold tracking-tight text-amber-600 dark:text-amber-400">${protectedEndpoints}</span>
           </dd>
         </div>
         <div class="rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 px-6 py-5">
           <dt class="text-sm/6 font-medium text-zinc-500 dark:text-zinc-400">Categories</dt>
           <dd class="mt-2 flex items-baseline gap-x-2">
-            <span class="text-4xl font-semibold tracking-tight text-cyan-600 dark:text-cyan-400">${Object.keys(endpointsByCategory).length}</span>
+            <span class="text-4xl font-semibold tracking-tight text-cyan-600 dark:text-cyan-400">${categories.length}</span>
+          </dd>
+        </div>
+        <div class="rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 px-6 py-5">
+          <dt class="text-sm/6 font-medium text-zinc-500 dark:text-zinc-400">Undocumented</dt>
+          <dd class="mt-2 flex items-baseline gap-x-2">
+            <span class="text-4xl font-semibold tracking-tight ${undocumentedCount > 0 ? 'text-zinc-400 dark:text-zinc-500' : 'text-lime-600 dark:text-lime-400'}">${undocumentedCount}</span>
           </dd>
         </div>
       </dl>
@@ -150,9 +167,11 @@ export function renderAPIReferencePage(data: APIReferencePageData): string {
                   class="col-start-1 row-start-1 w-full appearance-none rounded-lg bg-white dark:bg-zinc-800 py-2 pl-3 pr-8 text-sm text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-950/10 dark:outline-white/10 *:bg-white dark:*:bg-zinc-800 focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-zinc-950 dark:focus:outline-white min-w-[200px]"
                 >
                   <option value="">All Categories</option>
-                  ${Object.keys(categoryInfo).map(category => `
-                    <option value="${category}">${(categoryInfo as any)[category].title}</option>
-                  `).join('')}
+                  ${categories.map(category => {
+                    const info = CATEGORY_INFO[category]
+                    const title = info ? info.title : category
+                    return `<option value="${category}">${title}</option>`
+                  }).join('\n                  ')}
                 </select>
                 <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-zinc-500 dark:text-zinc-400 sm:size-4">
                   <path d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
@@ -166,7 +185,7 @@ export function renderAPIReferencePage(data: APIReferencePageData): string {
       <!-- API Categories -->
       <div class="space-y-6">
         ${Object.entries(endpointsByCategory).map(([category, endpoints]) => {
-          const info = (categoryInfo as any)[category] || { title: category, description: '', icon: '📋' }
+          const info = CATEGORY_INFO[category] || { title: category, description: '', icon: '&#x1f4cb;' }
           return `
             <div class="api-category" data-category="${category}">
               <div class="rounded-lg bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 overflow-hidden">
@@ -200,23 +219,14 @@ export function renderAPIReferencePage(data: APIReferencePageData): string {
                         <div class="flex-1 min-w-0">
                           <div class="flex items-center gap-x-2 mb-2">
                             <code class="text-zinc-950 dark:text-white text-sm font-mono font-medium break-all">${endpoint.path}</code>
-                            ${endpoint.authentication ? `
-                              <span class="shrink-0 inline-flex items-center gap-x-1 rounded-md bg-amber-50 dark:bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-700/10 dark:ring-amber-400/20">
-                                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                                </svg>
-                                Auth
+                            ${renderAuthBadge(endpoint.authentication)}
+                            ${endpoint.documented === false ? `
+                              <span class="shrink-0 inline-flex items-center rounded-md bg-zinc-50 dark:bg-zinc-800 px-2 py-1 text-xs font-medium text-zinc-400 dark:text-zinc-500 ring-1 ring-inset ring-zinc-200 dark:ring-zinc-700">
+                                Auto-discovered
                               </span>
-                            ` : `
-                              <span class="shrink-0 inline-flex items-center gap-x-1 rounded-md bg-lime-50 dark:bg-lime-500/10 px-2 py-1 text-xs font-medium text-lime-700 dark:text-lime-300 ring-1 ring-inset ring-lime-700/10 dark:ring-lime-400/20">
-                                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                                Public
-                              </span>
-                            `}
+                            ` : ''}
                           </div>
-                          <p class="text-zinc-600 dark:text-zinc-400 text-sm leading-6">${endpoint.description}</p>
+                          <p class="text-zinc-600 dark:text-zinc-400 text-sm leading-6">${endpoint.description || '<em class="text-zinc-400 dark:text-zinc-500">No description available</em>'}</p>
                         </div>
                       </div>
                     </div>
@@ -294,8 +304,8 @@ export function renderAPIReferencePage(data: APIReferencePageData): string {
               const path = endpoint.dataset.path.toLowerCase();
               const description = endpoint.dataset.description.toLowerCase();
 
-              const matchesSearch = !searchTerm || 
-                path.includes(searchTerm) || 
+              const matchesSearch = !searchTerm ||
+                path.includes(searchTerm) ||
                 description.includes(searchTerm);
               const matchesMethod = !selectedMethod || method === selectedMethod;
 

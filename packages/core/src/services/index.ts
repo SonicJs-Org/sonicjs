@@ -50,3 +50,12 @@ export {
   initTelemetry,
   createInstallationIdentity
 } from './telemetry-service'
+
+// Route Metadata (auto-discovery for API reference)
+export {
+  buildRouteList,
+  setAppInstance,
+  getAppInstance,
+  CATEGORY_INFO
+} from './route-metadata'
+export type { RouteMetadata } from './route-metadata'

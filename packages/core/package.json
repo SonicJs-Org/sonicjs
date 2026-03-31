@@ -102,10 +102,12 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {
+    "csv-parse": "^5.6.0",
     "drizzle-zod": "^0.8.3",
     "highlight.js": "^11.11.1",
     "marked": "^16.4.1",
-    "semver": "^7.7.3"
+    "semver": "^7.7.3",
+    "tiny-lru": "^11.2.11"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.5",

@@ -22,6 +22,17 @@ export {
   fullCollectionSync,
 } from './collection-sync'
 
+// Form-Collection Sync
+export {
+  syncAllFormCollections,
+  syncFormCollection,
+  createContentFromSubmission,
+  deriveCollectionSchemaFromFormio,
+  deriveSubmissionTitle,
+  mapFormStatusToContentStatus,
+  backfillFormSubmissions,
+} from './form-collection-sync'
+
 // Database Migrations
 export { MigrationService } from './migrations'
 export type { Migration, MigrationStatus } from './migrations'

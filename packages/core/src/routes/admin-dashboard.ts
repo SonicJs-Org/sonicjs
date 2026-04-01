@@ -77,7 +77,7 @@ router.get('/stats', async (c) => {
     // Get collections count
     let collectionsCount = 0
     try {
-      const collectionsStmt = db.prepare('SELECT COUNT(*) as count FROM collections WHERE is_active = 1')
+      const collectionsStmt = db.prepare("SELECT COUNT(*) as count FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user')")
       const collectionsResult = await collectionsStmt.first()
       collectionsCount = (collectionsResult as any)?.count || 0
     } catch (error) {
@@ -87,7 +87,7 @@ router.get('/stats', async (c) => {
     // Get content count
     let contentCount = 0
     try {
-      const contentStmt = db.prepare('SELECT COUNT(*) as count FROM content')
+      const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content c JOIN collections col ON c.collection_id = col.id WHERE (col.source_type IS NULL OR col.source_type = 'user')")
       const contentResult = await contentStmt.first()
       contentCount = (contentResult as any)?.count || 0
     } catch (error) {

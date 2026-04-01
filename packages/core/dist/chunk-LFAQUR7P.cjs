@@ -1,14 +1,16 @@
-import { getTelemetryConfig, sanitizeErrorMessage, sanitizeRoute, generateInstallationId, generateProjectId } from './chunk-X7ZAEI5S.js';
-import { __export } from './chunk-V4OQ3NZ2.js';
-import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
-import { z } from 'zod/v4';
-import { isTable, getTableColumns, getViewSelectedFields, is, Column, SQL, isView, inArray, eq, like, gte, lte, and, count, asc, desc } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/d1';
-import { inspectRoutes } from 'hono/dev';
+'use strict';
+
+var chunkP3XDZL6Q_cjs = require('./chunk-P3XDZL6Q.cjs');
+var chunkIGJUBJBW_cjs = require('./chunk-IGJUBJBW.cjs');
+var sqliteCore = require('drizzle-orm/sqlite-core');
+var v4 = require('zod/v4');
+var drizzleOrm = require('drizzle-orm');
+var d1 = require('drizzle-orm/d1');
+var dev = require('hono/dev');
 
 // src/db/schema.ts
 var schema_exports = {};
-__export(schema_exports, {
+chunkIGJUBJBW_cjs.__export(schema_exports, {
   apiTokens: () => apiTokens,
   collections: () => collections,
   content: () => content,
@@ -84,15 +86,15 @@ function isWithEnum(column) {
   return "enumValues" in column && Array.isArray(column.enumValues) && column.enumValues.length > 0;
 }
 var isPgEnum = isWithEnum;
-var literalSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
-var jsonSchema = z.union([
+var literalSchema = v4.z.union([v4.z.string(), v4.z.number(), v4.z.boolean(), v4.z.null()]);
+var jsonSchema = v4.z.union([
   literalSchema,
-  z.record(z.string(), z.any()),
-  z.array(z.any())
+  v4.z.record(v4.z.string(), v4.z.any()),
+  v4.z.array(v4.z.any())
 ]);
-var bufferSchema = z.custom((v) => v instanceof Buffer);
+var bufferSchema = v4.z.custom((v) => v instanceof Buffer);
 function columnToSchema(column, factory) {
-  const z$1 = z;
+  const z$1 = v4.z;
   const coerce = {};
   let schema;
   if (isWithEnum(column)) {
@@ -260,13 +262,13 @@ function stringColumnToSchema(column, z2, coerce) {
   return max && fixed ? schema.length(max) : max ? schema.max(max) : schema;
 }
 function getColumns(tableLike) {
-  return isTable(tableLike) ? getTableColumns(tableLike) : getViewSelectedFields(tableLike);
+  return drizzleOrm.isTable(tableLike) ? drizzleOrm.getTableColumns(tableLike) : drizzleOrm.getViewSelectedFields(tableLike);
 }
 function handleColumns(columns, refinements, conditions, factory) {
   const columnSchemas = {};
   for (const [key, selected] of Object.entries(columns)) {
-    if (!is(selected, Column) && !is(selected, SQL) && !is(selected, SQL.Aliased) && typeof selected === "object") {
-      const columns2 = isTable(selected) || isView(selected) ? getColumns(selected) : selected;
+    if (!drizzleOrm.is(selected, drizzleOrm.Column) && !drizzleOrm.is(selected, drizzleOrm.SQL) && !drizzleOrm.is(selected, drizzleOrm.SQL.Aliased) && typeof selected === "object") {
+      const columns2 = drizzleOrm.isTable(selected) || drizzleOrm.isView(selected) ? getColumns(selected) : selected;
       columnSchemas[key] = handleColumns(columns2, refinements[key] ?? {}, conditions);
       continue;
     }
@@ -275,8 +277,8 @@ function handleColumns(columns, refinements, conditions, factory) {
       columnSchemas[key] = refinement;
       continue;
     }
-    const column = is(selected, Column) ? selected : void 0;
-    const schema = column ? columnToSchema(column) : z.any();
+    const column = drizzleOrm.is(selected, drizzleOrm.Column) ? selected : void 0;
+    const schema = column ? columnToSchema(column) : v4.z.any();
     const refined = typeof refinement === "function" ? refinement(schema) : schema;
     if (conditions.never(column)) {
       continue;
@@ -292,10 +294,10 @@ function handleColumns(columns, refinements, conditions, factory) {
       }
     }
   }
-  return z.object(columnSchemas);
+  return v4.z.object(columnSchemas);
 }
 function handleEnum(enum_, factory) {
-  const zod = z;
+  const zod = v4.z;
   return zod.enum(enum_.enumValues);
 }
 var selectConditions = {
@@ -321,166 +323,170 @@ var createInsertSchema = (entity, refine) => {
 };
 
 // src/db/schema.ts
-var users = sqliteTable("users", {
-  id: text("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  username: text("username").notNull().unique(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
-  passwordHash: text("password_hash"),
+var users = sqliteCore.sqliteTable("users", {
+  id: sqliteCore.text("id").primaryKey(),
+  email: sqliteCore.text("email").notNull().unique(),
+  username: sqliteCore.text("username").notNull().unique(),
+  firstName: sqliteCore.text("first_name").notNull(),
+  lastName: sqliteCore.text("last_name").notNull(),
+  passwordHash: sqliteCore.text("password_hash"),
   // Hashed password, nullable for OAuth users
-  role: text("role").notNull().default("viewer"),
+  role: sqliteCore.text("role").notNull().default("viewer"),
   // 'admin', 'editor', 'author', 'viewer'
-  avatar: text("avatar"),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  lastLoginAt: integer("last_login_at"),
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull()
+  avatar: sqliteCore.text("avatar"),
+  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+  lastLoginAt: sqliteCore.integer("last_login_at"),
+  createdAt: sqliteCore.integer("created_at").notNull(),
+  updatedAt: sqliteCore.integer("updated_at").notNull()
 });
-var collections = sqliteTable("collections", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  displayName: text("display_name").notNull(),
-  description: text("description"),
-  schema: text("schema", { mode: "json" }).notNull(),
+var collections = sqliteCore.sqliteTable("collections", {
+  id: sqliteCore.text("id").primaryKey(),
+  name: sqliteCore.text("name").notNull().unique(),
+  displayName: sqliteCore.text("display_name").notNull(),
+  description: sqliteCore.text("description"),
+  schema: sqliteCore.text("schema", { mode: "json" }).notNull(),
   // JSON schema definition
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  managed: integer("managed", { mode: "boolean" }).notNull().default(false),
+  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+  managed: sqliteCore.integer("managed", { mode: "boolean" }).notNull().default(false),
   // Config-managed collections cannot be edited in UI
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
+  sourceType: sqliteCore.text("source_type").default("user"),
+  // 'user' (normal), 'form' (form-derived)
+  sourceId: sqliteCore.text("source_id"),
+  // stores the form ID for form-derived collections
+  createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
+  updatedAt: sqliteCore.integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
-var content = sqliteTable("content", {
-  id: text("id").primaryKey(),
-  collectionId: text("collection_id").notNull().references(() => collections.id),
-  slug: text("slug").notNull(),
-  title: text("title").notNull(),
-  data: text("data", { mode: "json" }).notNull(),
+var content = sqliteCore.sqliteTable("content", {
+  id: sqliteCore.text("id").primaryKey(),
+  collectionId: sqliteCore.text("collection_id").notNull().references(() => collections.id),
+  slug: sqliteCore.text("slug").notNull(),
+  title: sqliteCore.text("title").notNull(),
+  data: sqliteCore.text("data", { mode: "json" }).notNull(),
   // JSON content data
-  status: text("status").notNull().default("draft"),
+  status: sqliteCore.text("status").notNull().default("draft"),
   // 'draft', 'published', 'archived'
-  publishedAt: integer("published_at", { mode: "timestamp" }),
-  authorId: text("author_id").notNull().references(() => users.id),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
+  publishedAt: sqliteCore.integer("published_at", { mode: "timestamp" }),
+  authorId: sqliteCore.text("author_id").notNull().references(() => users.id),
+  createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
+  updatedAt: sqliteCore.integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
-var contentVersions = sqliteTable("content_versions", {
-  id: text("id").primaryKey(),
-  contentId: text("content_id").notNull().references(() => content.id),
-  version: integer("version").notNull(),
-  data: text("data", { mode: "json" }).notNull(),
-  authorId: text("author_id").notNull().references(() => users.id),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
+var contentVersions = sqliteCore.sqliteTable("content_versions", {
+  id: sqliteCore.text("id").primaryKey(),
+  contentId: sqliteCore.text("content_id").notNull().references(() => content.id),
+  version: sqliteCore.integer("version").notNull(),
+  data: sqliteCore.text("data", { mode: "json" }).notNull(),
+  authorId: sqliteCore.text("author_id").notNull().references(() => users.id),
+  createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
-var media = sqliteTable("media", {
-  id: text("id").primaryKey(),
-  filename: text("filename").notNull(),
-  originalName: text("original_name").notNull(),
-  mimeType: text("mime_type").notNull(),
-  size: integer("size").notNull(),
-  width: integer("width"),
-  height: integer("height"),
-  folder: text("folder").notNull().default("uploads"),
-  r2Key: text("r2_key").notNull(),
+var media = sqliteCore.sqliteTable("media", {
+  id: sqliteCore.text("id").primaryKey(),
+  filename: sqliteCore.text("filename").notNull(),
+  originalName: sqliteCore.text("original_name").notNull(),
+  mimeType: sqliteCore.text("mime_type").notNull(),
+  size: sqliteCore.integer("size").notNull(),
+  width: sqliteCore.integer("width"),
+  height: sqliteCore.integer("height"),
+  folder: sqliteCore.text("folder").notNull().default("uploads"),
+  r2Key: sqliteCore.text("r2_key").notNull(),
   // R2 storage key
-  publicUrl: text("public_url").notNull(),
+  publicUrl: sqliteCore.text("public_url").notNull(),
   // CDN URL
-  thumbnailUrl: text("thumbnail_url"),
-  alt: text("alt"),
-  caption: text("caption"),
-  tags: text("tags", { mode: "json" }),
+  thumbnailUrl: sqliteCore.text("thumbnail_url"),
+  alt: sqliteCore.text("alt"),
+  caption: sqliteCore.text("caption"),
+  tags: sqliteCore.text("tags", { mode: "json" }),
   // JSON array of tags
-  uploadedBy: text("uploaded_by").notNull().references(() => users.id),
-  uploadedAt: integer("uploaded_at").notNull(),
-  updatedAt: integer("updated_at"),
-  publishedAt: integer("published_at"),
-  scheduledAt: integer("scheduled_at"),
-  archivedAt: integer("archived_at"),
-  deletedAt: integer("deleted_at")
+  uploadedBy: sqliteCore.text("uploaded_by").notNull().references(() => users.id),
+  uploadedAt: sqliteCore.integer("uploaded_at").notNull(),
+  updatedAt: sqliteCore.integer("updated_at"),
+  publishedAt: sqliteCore.integer("published_at"),
+  scheduledAt: sqliteCore.integer("scheduled_at"),
+  archivedAt: sqliteCore.integer("archived_at"),
+  deletedAt: sqliteCore.integer("deleted_at")
 });
-var apiTokens = sqliteTable("api_tokens", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  token: text("token").notNull().unique(),
-  userId: text("user_id").notNull().references(() => users.id),
-  permissions: text("permissions", { mode: "json" }).notNull(),
+var apiTokens = sqliteCore.sqliteTable("api_tokens", {
+  id: sqliteCore.text("id").primaryKey(),
+  name: sqliteCore.text("name").notNull(),
+  token: sqliteCore.text("token").notNull().unique(),
+  userId: sqliteCore.text("user_id").notNull().references(() => users.id),
+  permissions: sqliteCore.text("permissions", { mode: "json" }).notNull(),
   // Array of permissions
-  expiresAt: integer("expires_at", { mode: "timestamp" }),
-  lastUsedAt: integer("last_used_at", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
+  expiresAt: sqliteCore.integer("expires_at", { mode: "timestamp" }),
+  lastUsedAt: sqliteCore.integer("last_used_at", { mode: "timestamp" }),
+  createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
-var workflowHistory = sqliteTable("workflow_history", {
-  id: text("id").primaryKey(),
-  contentId: text("content_id").notNull().references(() => content.id),
-  action: text("action").notNull(),
-  fromStatus: text("from_status").notNull(),
-  toStatus: text("to_status").notNull(),
-  userId: text("user_id").notNull().references(() => users.id),
-  comment: text("comment"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
+var workflowHistory = sqliteCore.sqliteTable("workflow_history", {
+  id: sqliteCore.text("id").primaryKey(),
+  contentId: sqliteCore.text("content_id").notNull().references(() => content.id),
+  action: sqliteCore.text("action").notNull(),
+  fromStatus: sqliteCore.text("from_status").notNull(),
+  toStatus: sqliteCore.text("to_status").notNull(),
+  userId: sqliteCore.text("user_id").notNull().references(() => users.id),
+  comment: sqliteCore.text("comment"),
+  createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
-var plugins = sqliteTable("plugins", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  displayName: text("display_name").notNull(),
-  description: text("description"),
-  version: text("version").notNull(),
-  author: text("author").notNull(),
-  category: text("category").notNull(),
-  icon: text("icon"),
-  status: text("status").notNull().default("inactive"),
+var plugins = sqliteCore.sqliteTable("plugins", {
+  id: sqliteCore.text("id").primaryKey(),
+  name: sqliteCore.text("name").notNull().unique(),
+  displayName: sqliteCore.text("display_name").notNull(),
+  description: sqliteCore.text("description"),
+  version: sqliteCore.text("version").notNull(),
+  author: sqliteCore.text("author").notNull(),
+  category: sqliteCore.text("category").notNull(),
+  icon: sqliteCore.text("icon"),
+  status: sqliteCore.text("status").notNull().default("inactive"),
   // 'active', 'inactive', 'error'
-  isCore: integer("is_core", { mode: "boolean" }).notNull().default(false),
-  settings: text("settings", { mode: "json" }),
-  permissions: text("permissions", { mode: "json" }),
-  dependencies: text("dependencies", { mode: "json" }),
-  downloadCount: integer("download_count").notNull().default(0),
-  rating: integer("rating").notNull().default(0),
-  installedAt: integer("installed_at").notNull(),
-  activatedAt: integer("activated_at"),
-  lastUpdated: integer("last_updated").notNull(),
-  errorMessage: text("error_message"),
-  createdAt: integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3)),
-  updatedAt: integer("updated_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
+  isCore: sqliteCore.integer("is_core", { mode: "boolean" }).notNull().default(false),
+  settings: sqliteCore.text("settings", { mode: "json" }),
+  permissions: sqliteCore.text("permissions", { mode: "json" }),
+  dependencies: sqliteCore.text("dependencies", { mode: "json" }),
+  downloadCount: sqliteCore.integer("download_count").notNull().default(0),
+  rating: sqliteCore.integer("rating").notNull().default(0),
+  installedAt: sqliteCore.integer("installed_at").notNull(),
+  activatedAt: sqliteCore.integer("activated_at"),
+  lastUpdated: sqliteCore.integer("last_updated").notNull(),
+  errorMessage: sqliteCore.text("error_message"),
+  createdAt: sqliteCore.integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3)),
+  updatedAt: sqliteCore.integer("updated_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
 });
-var pluginHooks = sqliteTable("plugin_hooks", {
-  id: text("id").primaryKey(),
-  pluginId: text("plugin_id").notNull().references(() => plugins.id),
-  hookName: text("hook_name").notNull(),
-  handlerName: text("handler_name").notNull(),
-  priority: integer("priority").notNull().default(10),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
+var pluginHooks = sqliteCore.sqliteTable("plugin_hooks", {
+  id: sqliteCore.text("id").primaryKey(),
+  pluginId: sqliteCore.text("plugin_id").notNull().references(() => plugins.id),
+  hookName: sqliteCore.text("hook_name").notNull(),
+  handlerName: sqliteCore.text("handler_name").notNull(),
+  priority: sqliteCore.integer("priority").notNull().default(10),
+  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: sqliteCore.integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
 });
-var pluginRoutes = sqliteTable("plugin_routes", {
-  id: text("id").primaryKey(),
-  pluginId: text("plugin_id").notNull().references(() => plugins.id),
-  path: text("path").notNull(),
-  method: text("method").notNull(),
-  handlerName: text("handler_name").notNull(),
-  middleware: text("middleware", { mode: "json" }),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
+var pluginRoutes = sqliteCore.sqliteTable("plugin_routes", {
+  id: sqliteCore.text("id").primaryKey(),
+  pluginId: sqliteCore.text("plugin_id").notNull().references(() => plugins.id),
+  path: sqliteCore.text("path").notNull(),
+  method: sqliteCore.text("method").notNull(),
+  handlerName: sqliteCore.text("handler_name").notNull(),
+  middleware: sqliteCore.text("middleware", { mode: "json" }),
+  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: sqliteCore.integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
 });
-var pluginAssets = sqliteTable("plugin_assets", {
-  id: text("id").primaryKey(),
-  pluginId: text("plugin_id").notNull().references(() => plugins.id),
-  assetType: text("asset_type").notNull(),
+var pluginAssets = sqliteCore.sqliteTable("plugin_assets", {
+  id: sqliteCore.text("id").primaryKey(),
+  pluginId: sqliteCore.text("plugin_id").notNull().references(() => plugins.id),
+  assetType: sqliteCore.text("asset_type").notNull(),
   // 'css', 'js', 'image', 'font'
-  assetPath: text("asset_path").notNull(),
-  loadOrder: integer("load_order").notNull().default(100),
-  loadLocation: text("load_location").notNull().default("footer"),
+  assetPath: sqliteCore.text("asset_path").notNull(),
+  loadOrder: sqliteCore.integer("load_order").notNull().default(100),
+  loadLocation: sqliteCore.text("load_location").notNull().default("footer"),
   // 'header', 'footer'
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
+  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: sqliteCore.integer("created_at").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
 });
-var pluginActivityLog = sqliteTable("plugin_activity_log", {
-  id: text("id").primaryKey(),
-  pluginId: text("plugin_id").notNull().references(() => plugins.id),
-  action: text("action").notNull(),
-  userId: text("user_id"),
-  details: text("details", { mode: "json" }),
-  timestamp: integer("timestamp").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
+var pluginActivityLog = sqliteCore.sqliteTable("plugin_activity_log", {
+  id: sqliteCore.text("id").primaryKey(),
+  pluginId: sqliteCore.text("plugin_id").notNull().references(() => plugins.id),
+  action: sqliteCore.text("action").notNull(),
+  userId: sqliteCore.text("user_id"),
+  details: sqliteCore.text("details", { mode: "json" }),
+  timestamp: sqliteCore.integer("timestamp").notNull().$defaultFn(() => Math.floor(Date.now() / 1e3))
 });
 var insertUserSchema = createInsertSchema(users, {
   email: (schema) => schema.email(),
@@ -544,48 +550,48 @@ var insertPluginActivityLogSchema = createInsertSchema(pluginActivityLog, {
   action: (schema) => schema.min(1)
 });
 var selectPluginActivityLogSchema = createSelectSchema(pluginActivityLog);
-var systemLogs = sqliteTable("system_logs", {
-  id: text("id").primaryKey(),
-  level: text("level").notNull(),
+var systemLogs = sqliteCore.sqliteTable("system_logs", {
+  id: sqliteCore.text("id").primaryKey(),
+  level: sqliteCore.text("level").notNull(),
   // 'debug', 'info', 'warn', 'error', 'fatal'
-  category: text("category").notNull(),
+  category: sqliteCore.text("category").notNull(),
   // 'auth', 'api', 'workflow', 'plugin', 'media', 'system', etc.
-  message: text("message").notNull(),
-  data: text("data", { mode: "json" }),
+  message: sqliteCore.text("message").notNull(),
+  data: sqliteCore.text("data", { mode: "json" }),
   // Additional structured data
-  userId: text("user_id").references(() => users.id),
-  sessionId: text("session_id"),
-  requestId: text("request_id"),
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  method: text("method"),
+  userId: sqliteCore.text("user_id").references(() => users.id),
+  sessionId: sqliteCore.text("session_id"),
+  requestId: sqliteCore.text("request_id"),
+  ipAddress: sqliteCore.text("ip_address"),
+  userAgent: sqliteCore.text("user_agent"),
+  method: sqliteCore.text("method"),
   // HTTP method for API logs
-  url: text("url"),
+  url: sqliteCore.text("url"),
   // Request URL for API logs
-  statusCode: integer("status_code"),
+  statusCode: sqliteCore.integer("status_code"),
   // HTTP status code for API logs
-  duration: integer("duration"),
+  duration: sqliteCore.integer("duration"),
   // Request duration in milliseconds
-  stackTrace: text("stack_trace"),
+  stackTrace: sqliteCore.text("stack_trace"),
   // Error stack trace for error logs
-  tags: text("tags", { mode: "json" }),
+  tags: sqliteCore.text("tags", { mode: "json" }),
   // Array of tags for categorization
-  source: text("source"),
+  source: sqliteCore.text("source"),
   // Source component/module that generated the log
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
+  createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
-var logConfig = sqliteTable("log_config", {
-  id: text("id").primaryKey(),
-  category: text("category").notNull().unique(),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  level: text("level").notNull().default("info"),
+var logConfig = sqliteCore.sqliteTable("log_config", {
+  id: sqliteCore.text("id").primaryKey(),
+  category: sqliteCore.text("category").notNull().unique(),
+  enabled: sqliteCore.integer("enabled", { mode: "boolean" }).notNull().default(true),
+  level: sqliteCore.text("level").notNull().default("info"),
   // minimum log level to store
-  retention: integer("retention").notNull().default(30),
+  retention: sqliteCore.integer("retention").notNull().default(30),
   // days to keep logs
-  maxSize: integer("max_size").default(1e4),
+  maxSize: sqliteCore.integer("max_size").default(1e4),
   // max number of logs per category
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
+  createdAt: sqliteCore.integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date()),
+  updatedAt: sqliteCore.integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => /* @__PURE__ */ new Date())
 });
 var insertSystemLogSchema = createInsertSchema(systemLogs, {
   level: (schema) => schema.min(1),
@@ -598,78 +604,81 @@ var insertLogConfigSchema = createInsertSchema(logConfig, {
   level: (schema) => schema.min(1)
 });
 var selectLogConfigSchema = createSelectSchema(logConfig);
-var forms = sqliteTable("forms", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull().unique(),
+var forms = sqliteCore.sqliteTable("forms", {
+  id: sqliteCore.text("id").primaryKey(),
+  name: sqliteCore.text("name").notNull().unique(),
   // Machine name (e.g., "contact-form")
-  displayName: text("display_name").notNull(),
+  displayName: sqliteCore.text("display_name").notNull(),
   // Human name (e.g., "Contact Form")
-  description: text("description"),
-  category: text("category").notNull().default("general"),
+  description: sqliteCore.text("description"),
+  category: sqliteCore.text("category").notNull().default("general"),
   // contact, survey, registration, etc.
   // Form.io schema (JSON)
-  formioSchema: text("formio_schema", { mode: "json" }).notNull(),
+  formioSchema: sqliteCore.text("formio_schema", { mode: "json" }).notNull(),
   // Complete Form.io JSON schema
   // Settings (JSON)
-  settings: text("settings", { mode: "json" }),
+  settings: sqliteCore.text("settings", { mode: "json" }),
   // emailNotifications, successMessage, etc.
   // Status & Management
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
-  managed: integer("managed", { mode: "boolean" }).notNull().default(false),
+  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+  isPublic: sqliteCore.integer("is_public", { mode: "boolean" }).notNull().default(true),
+  managed: sqliteCore.integer("managed", { mode: "boolean" }).notNull().default(false),
   // Metadata
-  icon: text("icon"),
-  color: text("color"),
-  tags: text("tags", { mode: "json" }),
+  icon: sqliteCore.text("icon"),
+  color: sqliteCore.text("color"),
+  tags: sqliteCore.text("tags", { mode: "json" }),
   // JSON array
   // Stats
-  submissionCount: integer("submission_count").notNull().default(0),
-  viewCount: integer("view_count").notNull().default(0),
+  submissionCount: sqliteCore.integer("submission_count").notNull().default(0),
+  viewCount: sqliteCore.integer("view_count").notNull().default(0),
   // Ownership
-  createdBy: text("created_by").references(() => users.id),
-  updatedBy: text("updated_by").references(() => users.id),
+  createdBy: sqliteCore.text("created_by").references(() => users.id),
+  updatedBy: sqliteCore.text("updated_by").references(() => users.id),
   // Timestamps
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull()
+  createdAt: sqliteCore.integer("created_at").notNull(),
+  updatedAt: sqliteCore.integer("updated_at").notNull()
 });
-var formSubmissions = sqliteTable("form_submissions", {
-  id: text("id").primaryKey(),
-  formId: text("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
+var formSubmissions = sqliteCore.sqliteTable("form_submissions", {
+  id: sqliteCore.text("id").primaryKey(),
+  formId: sqliteCore.text("form_id").notNull().references(() => forms.id, { onDelete: "cascade" }),
   // Submission data
-  submissionData: text("submission_data", { mode: "json" }).notNull(),
+  submissionData: sqliteCore.text("submission_data", { mode: "json" }).notNull(),
   // The actual form data
   // Submission metadata
-  status: text("status").notNull().default("pending"),
+  status: sqliteCore.text("status").notNull().default("pending"),
   // pending, reviewed, approved, rejected, spam
-  submissionNumber: integer("submission_number"),
+  submissionNumber: sqliteCore.integer("submission_number"),
   // User information
-  userId: text("user_id").references(() => users.id),
-  userEmail: text("user_email"),
+  userId: sqliteCore.text("user_id").references(() => users.id),
+  userEmail: sqliteCore.text("user_email"),
   // Tracking
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  referrer: text("referrer"),
-  utmSource: text("utm_source"),
-  utmMedium: text("utm_medium"),
-  utmCampaign: text("utm_campaign"),
+  ipAddress: sqliteCore.text("ip_address"),
+  userAgent: sqliteCore.text("user_agent"),
+  referrer: sqliteCore.text("referrer"),
+  utmSource: sqliteCore.text("utm_source"),
+  utmMedium: sqliteCore.text("utm_medium"),
+  utmCampaign: sqliteCore.text("utm_campaign"),
   // Review/Processing
-  reviewedBy: text("reviewed_by").references(() => users.id),
-  reviewedAt: integer("reviewed_at"),
-  reviewNotes: text("review_notes"),
+  reviewedBy: sqliteCore.text("reviewed_by").references(() => users.id),
+  reviewedAt: sqliteCore.integer("reviewed_at"),
+  reviewNotes: sqliteCore.text("review_notes"),
   // Flags
-  isSpam: integer("is_spam", { mode: "boolean" }).notNull().default(false),
-  isArchived: integer("is_archived", { mode: "boolean" }).notNull().default(false),
+  isSpam: sqliteCore.integer("is_spam", { mode: "boolean" }).notNull().default(false),
+  isArchived: sqliteCore.integer("is_archived", { mode: "boolean" }).notNull().default(false),
+  // Content integration
+  contentId: sqliteCore.text("content_id").references(() => content.id),
+  // Links submission to its content item
   // Timestamps
-  submittedAt: integer("submitted_at").notNull(),
-  updatedAt: integer("updated_at").notNull()
+  submittedAt: sqliteCore.integer("submitted_at").notNull(),
+  updatedAt: sqliteCore.integer("updated_at").notNull()
 });
-var formFiles = sqliteTable("form_files", {
-  id: text("id").primaryKey(),
-  submissionId: text("submission_id").notNull().references(() => formSubmissions.id, { onDelete: "cascade" }),
-  mediaId: text("media_id").notNull().references(() => media.id, { onDelete: "cascade" }),
-  fieldName: text("field_name").notNull(),
+var formFiles = sqliteCore.sqliteTable("form_files", {
+  id: sqliteCore.text("id").primaryKey(),
+  submissionId: sqliteCore.text("submission_id").notNull().references(() => formSubmissions.id, { onDelete: "cascade" }),
+  mediaId: sqliteCore.text("media_id").notNull().references(() => media.id, { onDelete: "cascade" }),
+  fieldName: sqliteCore.text("field_name").notNull(),
   // Form field that uploaded this file
-  uploadedAt: integer("uploaded_at").notNull()
+  uploadedAt: sqliteCore.integer("uploaded_at").notNull()
 });
 var insertFormSchema = createInsertSchema(forms);
 var selectFormSchema = createSelectSchema(forms);
@@ -685,7 +694,7 @@ var Logger = class {
   configRefreshInterval = 6e4;
   // 1 minute
   constructor(database) {
-    this.db = drizzle(database);
+    this.db = d1.drizzle(database);
   }
   /**
    * Log a debug message
@@ -824,33 +833,33 @@ var Logger = class {
     try {
       const conditions = [];
       if (filter.level && filter.level.length > 0) {
-        conditions.push(inArray(systemLogs.level, filter.level));
+        conditions.push(drizzleOrm.inArray(systemLogs.level, filter.level));
       }
       if (filter.category && filter.category.length > 0) {
-        conditions.push(inArray(systemLogs.category, filter.category));
+        conditions.push(drizzleOrm.inArray(systemLogs.category, filter.category));
       }
       if (filter.userId) {
-        conditions.push(eq(systemLogs.userId, filter.userId));
+        conditions.push(drizzleOrm.eq(systemLogs.userId, filter.userId));
       }
       if (filter.source) {
-        conditions.push(eq(systemLogs.source, filter.source));
+        conditions.push(drizzleOrm.eq(systemLogs.source, filter.source));
       }
       if (filter.search) {
         conditions.push(
-          like(systemLogs.message, `%${filter.search}%`)
+          drizzleOrm.like(systemLogs.message, `%${filter.search}%`)
         );
       }
       if (filter.startDate) {
-        conditions.push(gte(systemLogs.createdAt, filter.startDate));
+        conditions.push(drizzleOrm.gte(systemLogs.createdAt, filter.startDate));
       }
       if (filter.endDate) {
-        conditions.push(lte(systemLogs.createdAt, filter.endDate));
+        conditions.push(drizzleOrm.lte(systemLogs.createdAt, filter.endDate));
       }
-      const whereClause = conditions.length > 0 ? and(...conditions) : void 0;
-      const totalResult = await this.db.select({ count: count() }).from(systemLogs).where(whereClause);
+      const whereClause = conditions.length > 0 ? drizzleOrm.and(...conditions) : void 0;
+      const totalResult = await this.db.select({ count: drizzleOrm.count() }).from(systemLogs).where(whereClause);
       const total = totalResult[0]?.count || 0;
       const sortColumn = filter.sortBy === "level" ? systemLogs.level : filter.sortBy === "category" ? systemLogs.category : systemLogs.createdAt;
-      const sortFn = filter.sortOrder === "asc" ? asc : desc;
+      const sortFn = filter.sortOrder === "asc" ? drizzleOrm.asc : drizzleOrm.desc;
       const logs = await this.db.select().from(systemLogs).where(whereClause).orderBy(sortFn(sortColumn)).limit(filter.limit || 50).offset(filter.offset || 0);
       return { logs, total };
     } catch (error) {
@@ -867,7 +876,7 @@ var Logger = class {
       if (this.configCache.has(category) && now - this.lastConfigRefresh < this.configRefreshInterval) {
         return this.configCache.get(category) || null;
       }
-      const configs = await this.db.select().from(logConfig).where(eq(logConfig.category, category));
+      const configs = await this.db.select().from(logConfig).where(drizzleOrm.eq(logConfig.category, category));
       const config = configs[0] || null;
       if (config) {
         this.configCache.set(category, config);
@@ -887,7 +896,7 @@ var Logger = class {
       await this.db.update(logConfig).set({
         ...updates,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(logConfig.category, category));
+      }).where(drizzleOrm.eq(logConfig.category, category));
       this.configCache.delete(category);
     } catch (error) {
       console.error("Error updating log config:", error);
@@ -909,15 +918,15 @@ var Logger = class {
    */
   async cleanupCategory(category, maxSize) {
     try {
-      const countResult = await this.db.select({ count: count() }).from(systemLogs).where(eq(systemLogs.category, category));
+      const countResult = await this.db.select({ count: drizzleOrm.count() }).from(systemLogs).where(drizzleOrm.eq(systemLogs.category, category));
       const currentCount = countResult[0]?.count || 0;
       if (currentCount > maxSize) {
-        const cutoffLogs = await this.db.select({ createdAt: systemLogs.createdAt }).from(systemLogs).where(eq(systemLogs.category, category)).orderBy(desc(systemLogs.createdAt)).limit(1).offset(maxSize - 1);
+        const cutoffLogs = await this.db.select({ createdAt: systemLogs.createdAt }).from(systemLogs).where(drizzleOrm.eq(systemLogs.category, category)).orderBy(drizzleOrm.desc(systemLogs.createdAt)).limit(1).offset(maxSize - 1);
         if (cutoffLogs[0]) {
           await this.db.delete(systemLogs).where(
-            and(
-              eq(systemLogs.category, category),
-              lte(systemLogs.createdAt, cutoffLogs[0].createdAt)
+            drizzleOrm.and(
+              drizzleOrm.eq(systemLogs.category, category),
+              drizzleOrm.lte(systemLogs.createdAt, cutoffLogs[0].createdAt)
             )
           );
         }
@@ -937,9 +946,9 @@ var Logger = class {
           const cutoffDate = /* @__PURE__ */ new Date();
           cutoffDate.setDate(cutoffDate.getDate() - config.retention);
           await this.db.delete(systemLogs).where(
-            and(
-              eq(systemLogs.category, config.category),
-              lte(systemLogs.createdAt, cutoffDate)
+            drizzleOrm.and(
+              drizzleOrm.eq(systemLogs.category, config.category),
+              drizzleOrm.lte(systemLogs.createdAt, cutoffDate)
             )
           );
         }
@@ -1232,7 +1241,7 @@ var TelemetryService = class {
   isInitialized = false;
   constructor(config) {
     this.config = {
-      ...getTelemetryConfig(),
+      ...chunkP3XDZL6Q_cjs.getTelemetryConfig(),
       ...config
     };
     this.enabled = this.config.enabled;
@@ -1325,7 +1334,7 @@ var TelemetryService = class {
   async trackInstallationFailed(error, properties) {
     await this.track("installation_failed", {
       ...properties,
-      errorType: sanitizeErrorMessage(error)
+      errorType: chunkP3XDZL6Q_cjs.sanitizeErrorMessage(error)
     });
   }
   /**
@@ -1340,7 +1349,7 @@ var TelemetryService = class {
   async trackPageView(route, properties) {
     await this.track("page_viewed", {
       ...properties,
-      route: sanitizeRoute(route)
+      route: chunkP3XDZL6Q_cjs.sanitizeRoute(route)
     });
   }
   /**
@@ -1349,7 +1358,7 @@ var TelemetryService = class {
   async trackError(error, properties) {
     await this.track("error_occurred", {
       ...properties,
-      errorType: sanitizeErrorMessage(error)
+      errorType: chunkP3XDZL6Q_cjs.sanitizeErrorMessage(error)
     });
   }
   /**
@@ -1384,11 +1393,11 @@ var TelemetryService = class {
     for (const [key, value] of Object.entries(properties)) {
       if (value === void 0) continue;
       if (key === "route" && typeof value === "string") {
-        sanitized[key] = sanitizeRoute(value);
+        sanitized[key] = chunkP3XDZL6Q_cjs.sanitizeRoute(value);
         continue;
       }
       if (key.toLowerCase().includes("error") && typeof value === "string") {
-        sanitized[key] = sanitizeErrorMessage(value);
+        sanitized[key] = chunkP3XDZL6Q_cjs.sanitizeErrorMessage(value);
         continue;
       }
       if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -1447,10 +1456,10 @@ async function initTelemetry(identity, config) {
   return service;
 }
 function createInstallationIdentity(projectName) {
-  const installationId = generateInstallationId();
+  const installationId = chunkP3XDZL6Q_cjs.generateInstallationId();
   const identity = { installationId };
   if (projectName) {
-    identity.projectId = generateProjectId(projectName);
+    identity.projectId = chunkP3XDZL6Q_cjs.generateProjectId(projectName);
   }
   return identity;
 }
@@ -1740,7 +1749,7 @@ function buildRouteList(app) {
   if (cachedRouteList) return cachedRouteList;
   if (!app) return [];
   try {
-    const routes = inspectRoutes(app);
+    const routes = dev.inspectRoutes(app);
     const seen = /* @__PURE__ */ new Set();
     const result = [];
     for (const route of routes) {
@@ -1787,6 +1796,59 @@ function buildRouteList(app) {
   }
 }
 
-export { CACHE_CONFIGS, CATEGORY_INFO, CacheService, Logger, SettingsService, TelemetryService, apiTokens, buildRouteList, collections, content, contentVersions, createInstallationIdentity, getAppInstance, getCacheService, getLogger, getTelemetryService, initLogger, initTelemetry, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, schema_exports, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, setAppInstance, systemLogs, users, workflowHistory };
-//# sourceMappingURL=chunk-7JMMLHPQ.js.map
-//# sourceMappingURL=chunk-7JMMLHPQ.js.map
+exports.CACHE_CONFIGS = CACHE_CONFIGS;
+exports.CATEGORY_INFO = CATEGORY_INFO;
+exports.CacheService = CacheService;
+exports.Logger = Logger;
+exports.SettingsService = SettingsService;
+exports.TelemetryService = TelemetryService;
+exports.apiTokens = apiTokens;
+exports.buildRouteList = buildRouteList;
+exports.collections = collections;
+exports.content = content;
+exports.contentVersions = contentVersions;
+exports.createInstallationIdentity = createInstallationIdentity;
+exports.getAppInstance = getAppInstance;
+exports.getCacheService = getCacheService;
+exports.getLogger = getLogger;
+exports.getTelemetryService = getTelemetryService;
+exports.initLogger = initLogger;
+exports.initTelemetry = initTelemetry;
+exports.insertCollectionSchema = insertCollectionSchema;
+exports.insertContentSchema = insertContentSchema;
+exports.insertLogConfigSchema = insertLogConfigSchema;
+exports.insertMediaSchema = insertMediaSchema;
+exports.insertPluginActivityLogSchema = insertPluginActivityLogSchema;
+exports.insertPluginAssetSchema = insertPluginAssetSchema;
+exports.insertPluginHookSchema = insertPluginHookSchema;
+exports.insertPluginRouteSchema = insertPluginRouteSchema;
+exports.insertPluginSchema = insertPluginSchema;
+exports.insertSystemLogSchema = insertSystemLogSchema;
+exports.insertUserSchema = insertUserSchema;
+exports.insertWorkflowHistorySchema = insertWorkflowHistorySchema;
+exports.logConfig = logConfig;
+exports.media = media;
+exports.pluginActivityLog = pluginActivityLog;
+exports.pluginAssets = pluginAssets;
+exports.pluginHooks = pluginHooks;
+exports.pluginRoutes = pluginRoutes;
+exports.plugins = plugins;
+exports.schema_exports = schema_exports;
+exports.selectCollectionSchema = selectCollectionSchema;
+exports.selectContentSchema = selectContentSchema;
+exports.selectLogConfigSchema = selectLogConfigSchema;
+exports.selectMediaSchema = selectMediaSchema;
+exports.selectPluginActivityLogSchema = selectPluginActivityLogSchema;
+exports.selectPluginAssetSchema = selectPluginAssetSchema;
+exports.selectPluginHookSchema = selectPluginHookSchema;
+exports.selectPluginRouteSchema = selectPluginRouteSchema;
+exports.selectPluginSchema = selectPluginSchema;
+exports.selectSystemLogSchema = selectSystemLogSchema;
+exports.selectUserSchema = selectUserSchema;
+exports.selectWorkflowHistorySchema = selectWorkflowHistorySchema;
+exports.setAppInstance = setAppInstance;
+exports.systemLogs = systemLogs;
+exports.users = users;
+exports.workflowHistory = workflowHistory;
+//# sourceMappingURL=chunk-LFAQUR7P.cjs.map
+//# sourceMappingURL=chunk-LFAQUR7P.cjs.map

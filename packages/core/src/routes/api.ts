@@ -512,7 +512,7 @@ apiRoutes.get('/collections', async (c) => {
     c.header('X-Cache-Status', 'MISS')
     c.header('X-Cache-Source', 'database')
 
-    const stmt = db.prepare('SELECT * FROM collections WHERE is_active = 1')
+    const stmt = db.prepare("SELECT * FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user')")
     const { results } = await stmt.all()
 
     // Parse schema and format results

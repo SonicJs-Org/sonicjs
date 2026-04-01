@@ -278,8 +278,8 @@ adminContentRoutes.get('/', async (c) => {
     const search = url.searchParams.get('search') || ''
     const offset = (page - 1) * limit
 
-    // Get all collections for filter dropdown
-    const collectionsStmt = db.prepare('SELECT id, name, display_name FROM collections WHERE is_active = 1 ORDER BY display_name')
+    // Get all collections for filter dropdown (exclude form-sourced)
+    const collectionsStmt = db.prepare("SELECT id, name, display_name FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY display_name")
     const { results: collectionsResults } = await collectionsStmt.all()
     const models = (collectionsResults || []).map((row: any) => ({
       name: row.name,
@@ -289,6 +289,9 @@ adminContentRoutes.get('/', async (c) => {
     // Build where conditions
     const conditions: string[] = []
     const params: any[] = []
+
+    // Hide content from form-sourced collections in the regular content list
+    conditions.push("(col.source_type IS NULL OR col.source_type = 'user')")
 
     // Always filter out deleted content unless specifically requested
     if (status !== 'deleted') {
@@ -443,7 +446,8 @@ adminContentRoutes.get('/new', async (c) => {
     if (!collectionId) {
       // Show collection selection page
       const db = c.env.DB
-      const collectionsStmt = db.prepare('SELECT id, name, display_name, description FROM collections WHERE is_active = 1 ORDER BY display_name')
+      // Exclude form-sourced collections — users shouldn't manually create content in form collections
+      const collectionsStmt = db.prepare("SELECT id, name, display_name, description FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY display_name")
       const { results } = await collectionsStmt.all()
 
       const collections = (results || []).map((row: any) => ({

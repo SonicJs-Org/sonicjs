@@ -41,6 +41,14 @@ export {
   getManagedCollections,
   cleanupRemovedCollections,
   fullCollectionSync,
+  // Form-Collection Sync
+  syncAllFormCollections,
+  syncFormCollection,
+  createContentFromSubmission,
+  deriveCollectionSchemaFromFormio,
+  deriveSubmissionTitle,
+  mapFormStatusToContentStatus,
+  backfillFormSubmissions,
   // Database Migrations
   MigrationService,
   // Logging

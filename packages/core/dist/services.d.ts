@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 export { b as CorePlugin, L as LogCategory, e as LogEntry, f as LogFilter, g as LogLevel, h as Logger, i as Migration, j as MigrationService, k as MigrationStatus, z as PluginBootstrapService, B as PluginService, E as cleanupRemovedCollections, I as fullCollectionSync, J as getAvailableCollectionNames, K as getLogger, O as getManagedCollections, Q as initLogger, a4 as isCollectionManaged, a5 as loadCollectionConfig, a6 as loadCollectionConfigs, ae as registerCollections, ar as syncCollection, as as syncCollections, av as validateCollectionConfig } from './plugin-bootstrap-WmpvYM5w.js';
+=======
+export { b as CorePlugin, L as LogCategory, e as LogEntry, f as LogFilter, g as LogLevel, h as Logger, i as Migration, j as MigrationService, k as MigrationStatus, z as PluginBootstrapService, B as PluginService, E as backfillFormSubmissions, F as cleanupRemovedCollections, J as createContentFromSubmission, K as deriveCollectionSchemaFromFormio, O as deriveSubmissionTitle, Q as fullCollectionSync, R as getAvailableCollectionNames, T as getLogger, V as getManagedCollections, X as initLogger, a8 as isCollectionManaged, a9 as loadCollectionConfig, aa as loadCollectionConfigs, ac as mapFormStatusToContentStatus, aj as registerCollections, aw as syncAllFormCollections, ax as syncCollection, ay as syncCollections, az as syncFormCollection, aC as validateCollectionConfig } from './plugin-bootstrap-CbpgYeZR.js';
+>>>>>>> 73f08faf1 (feat: integrate form submissions into content management system (#623))
 import { T as TelemetryConfig, b as TelemetryIdentity, a as TelemetryEvent, c as TelemetryProperties } from './telemetry-B9vIV4wh.js';
 import './collection-config-B4PG-AaF.js';
 import '@cloudflare/workers-types';

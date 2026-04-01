@@ -6,4 +6,5 @@
  */
 
 export { default as contactFormPlugin } from './contact-form/index'
+export { default as qrGeneratorPlugin } from './qr-generator/index'
 

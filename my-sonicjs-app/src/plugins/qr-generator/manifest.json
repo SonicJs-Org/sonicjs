@@ -1,0 +1,77 @@
+{
+  "id": "qr-generator",
+  "name": "QR Code Generator",
+  "version": "1.0.0",
+  "description": "Generate and manage QR codes with customizable styling",
+  "author": "ahaas",
+  "homepage": "https://sonicjs.com/plugins/qr-generator",
+  "license": "MIT",
+  "category": "utilities",
+  "tags": ["qr-code", "generator", "utilities"],
+  "dependencies": ["redirect-management"],
+  "settings": {
+    "enabled": {
+      "type": "boolean",
+      "label": "Enable QR Codes",
+      "description": "Enable or disable QR code generation",
+      "default": true
+    },
+    "defaultForegroundColor": {
+      "type": "string",
+      "label": "Default Foreground Color",
+      "description": "Default color for QR code modules (hex format)",
+      "default": "#000000"
+    },
+    "defaultBackgroundColor": {
+      "type": "string",
+      "label": "Default Background Color",
+      "description": "Default background color for QR codes (hex format)",
+      "default": "#ffffff"
+    },
+    "defaultErrorCorrection": {
+      "type": "string",
+      "label": "Default Error Correction",
+      "description": "Default error correction level (L, M, Q, H)",
+      "default": "M",
+      "enum": ["L", "M", "Q", "H"]
+    },
+    "defaultSize": {
+      "type": "number",
+      "label": "Default Size",
+      "description": "Default QR code size in pixels",
+      "default": 300
+    },
+    "defaultCornerShape": {
+      "type": "string",
+      "label": "Default Corner Shape",
+      "description": "Default shape for position marker corners",
+      "default": "square",
+      "enum": ["square", "rounded", "dots", "extra-rounded"]
+    },
+    "defaultDotShape": {
+      "type": "string",
+      "label": "Default Dot Shape",
+      "description": "Default shape for data modules",
+      "default": "square",
+      "enum": ["square", "rounded", "dots", "diamond"]
+    },
+    "defaultLogoUrl": {
+      "type": "string",
+      "label": "Default Logo",
+      "description": "Default logo to embed in QR codes (data URL or image URL)",
+      "default": ""
+    }
+  },
+  "permissions": {
+    "qr_code.generate": "Generate QR codes",
+    "qr_code.manage": "Manage QR codes and settings",
+    "qr_code.view": "View QR codes"
+  },
+  "routes": [],
+  "adminMenu": {
+    "label": "QR Codes",
+    "icon": "qrcode",
+    "path": "/admin/qr-codes",
+    "order": 87
+  }
+}

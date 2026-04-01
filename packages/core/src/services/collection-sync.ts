@@ -169,7 +169,11 @@ export async function isCollectionManaged(db: D1Database, collectionName: string
  */
 export async function getManagedCollections(db: D1Database): Promise<string[]> {
   try {
-    const stmt = db.prepare('SELECT name FROM collections WHERE managed = 1')
+    // Only return config-managed collections (source_type = 'user' or NULL).
+    // Form-derived collections (source_type = 'form') are managed by form-collection-sync
+    // and must not be included here — cleanupRemovedCollections would deactivate them
+    // since they don't appear in loadCollectionConfigs().
+    const stmt = db.prepare("SELECT name FROM collections WHERE managed = 1 AND (source_type IS NULL OR source_type = 'user')")
     const { results } = await stmt.all()
 
     return (results || []).map((row: any) => row.name)

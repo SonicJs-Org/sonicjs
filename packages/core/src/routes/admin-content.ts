@@ -278,12 +278,13 @@ adminContentRoutes.get('/', async (c) => {
     const search = url.searchParams.get('search') || ''
     const offset = (page - 1) * limit
 
-    // Get all collections for filter dropdown
-    const collectionsStmt = db.prepare('SELECT id, name, display_name FROM collections WHERE is_active = 1 ORDER BY display_name')
+    // Get all collections for filter dropdown (include form-sourced)
+    const collectionsStmt = db.prepare('SELECT id, name, display_name, source_type FROM collections WHERE is_active = 1 ORDER BY display_name')
     const { results: collectionsResults } = await collectionsStmt.all()
     const models = (collectionsResults || []).map((row: any) => ({
       name: row.name,
-      displayName: row.display_name
+      displayName: row.display_name,
+      sourceType: row.source_type || 'user'
     }))
 
     // Build where conditions
@@ -326,8 +327,9 @@ adminContentRoutes.get('/', async (c) => {
 
     // Get content items
     const contentStmt = db.prepare(`
-      SELECT c.id, c.title, c.slug, c.status, c.created_at, c.updated_at,
+      SELECT c.id, c.title, c.slug, c.status, c.data, c.created_at, c.updated_at,
              col.name as collection_name, col.display_name as collection_display_name,
+             col.source_type as collection_source_type,
              u.first_name, u.last_name, u.email as author_email
       FROM content c
       JOIN collections col ON c.collection_id = col.id
@@ -397,15 +399,34 @@ adminContentRoutes.get('/', async (c) => {
           break
       }
 
+      const isFormSourced = row.collection_source_type === 'form'
+
+      // For form-sourced content, extract metadata for display
+      let submitterEmail = ''
+      let submitterIp = ''
+      if (isFormSourced && row.data) {
+        try {
+          const contentData = typeof row.data === 'string' ? JSON.parse(row.data as string) : row.data
+          const meta = contentData?._submission_metadata
+          if (meta) {
+            submitterEmail = meta.email || ''
+            submitterIp = meta.ipAddress || ''
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
       return {
         id: row.id,
         title: row.title,
         slug: row.slug,
         modelName: row.collection_display_name,
+        collectionSourceType: row.collection_source_type || 'user',
         statusBadge,
-        authorName,
+        authorName: isFormSourced ? (submitterEmail || authorName) : authorName,
         formattedDate,
-        availableActions
+        availableActions,
+        submitterEmail,
+        submitterIp
       }
     })
 
@@ -443,7 +464,8 @@ adminContentRoutes.get('/new', async (c) => {
     if (!collectionId) {
       // Show collection selection page
       const db = c.env.DB
-      const collectionsStmt = db.prepare('SELECT id, name, display_name, description FROM collections WHERE is_active = 1 ORDER BY display_name')
+      // Exclude form-sourced collections — users shouldn't manually create content in form collections
+      const collectionsStmt = db.prepare("SELECT id, name, display_name, description FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY display_name")
       const { results } = await collectionsStmt.all()
 
       const collections = (results || []).map((row: any) => ({
@@ -630,6 +652,12 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       schema: content.collection_schema ? JSON.parse(content.collection_schema) : {}
     }
 
+    // Get source_type for the collection
+    const collectionMeta = await db.prepare('SELECT source_type FROM collections WHERE id = ?')
+      .bind(content.collection_id).first() as any
+    const collectionSourceType = collectionMeta?.source_type || 'user'
+
+
     const fields = await getCollectionFields(db, content.collection_id)
     const contentData = content.data ? JSON.parse(content.data) : {}
 
@@ -688,6 +716,7 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       mdxeditorEnabled,
       mdxeditorSettings,
       referrerParams,
+      collectionSourceType,
       user: user ? {
         name: user.email,
         email: user.email,

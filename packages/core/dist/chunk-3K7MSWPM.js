@@ -1,7 +1,5 @@
-'use strict';
-
-var chunkMNWKYY5E_cjs = require('./chunk-MNWKYY5E.cjs');
-var chunkIGJUBJBW_cjs = require('./chunk-IGJUBJBW.cjs');
+import { escapeHtml } from './chunk-TQABQWOP.js';
+import { __esm, __export, __toCommonJS } from './chunk-V4OQ3NZ2.js';
 
 // src/templates/components/logo.template.ts
 function renderLogo(data = {}) {
@@ -45,7 +43,7 @@ function renderLogo(data = {}) {
   return logoContent;
 }
 var sizeClasses;
-var init_logo_template = chunkIGJUBJBW_cjs.__esm({
+var init_logo_template = __esm({
   "src/templates/components/logo.template.ts"() {
     sizeClasses = {
       sm: "h-6 w-auto",
@@ -58,7 +56,7 @@ var init_logo_template = chunkIGJUBJBW_cjs.__esm({
 
 // src/templates/layouts/admin-layout-catalyst.template.ts
 var admin_layout_catalyst_template_exports = {};
-chunkIGJUBJBW_cjs.__export(admin_layout_catalyst_template_exports, {
+__export(admin_layout_catalyst_template_exports, {
   renderAdminLayoutCatalyst: () => renderAdminLayoutCatalyst,
   renderCatalystCheckbox: () => renderCatalystCheckbox
 });
@@ -524,6 +522,20 @@ function renderCatalystSidebar(currentPath = "", user, dynamicMenuItems, isMobil
       </svg>`
     },
     {
+      label: "Redirects",
+      path: "/admin/redirects",
+      icon: `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+      </svg>`
+    },
+    {
+      label: "QR Codes",
+      path: "/admin/qr-codes",
+      icon: `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+      </svg>`
+    },
+    {
       label: "Plugins",
       path: "/admin/plugins",
       icon: `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -670,7 +682,7 @@ function renderCatalystSidebar(currentPath = "", user, dynamicMenuItems, isMobil
     </nav>
   `;
 }
-var init_admin_layout_catalyst_template = chunkIGJUBJBW_cjs.__esm({
+var init_admin_layout_catalyst_template = __esm({
   "src/templates/layouts/admin-layout-catalyst.template.ts"() {
     init_logo_template();
   }
@@ -721,11 +733,11 @@ function renderAlert(data) {
         <div class="${data.icon !== false ? "ml-3" : ""}">
           ${data.title ? `
             <h3 class="text-sm font-semibold ${textClasses[data.type]}">
-              ${chunkMNWKYY5E_cjs.escapeHtml(data.title)}
+              ${escapeHtml(data.title)}
             </h3>
           ` : ""}
           <div class="${data.title ? "mt-1 text-sm" : "text-sm"} ${messageTextClasses[data.type]}">
-            <p>${chunkMNWKYY5E_cjs.escapeHtml(data.message)}</p>
+            <p>${escapeHtml(data.message)}</p>
           </div>
         </div>
         ${data.dismissible ? `
@@ -1208,7 +1220,7 @@ init_logo_template();
 function renderAdminLayout(data) {
   const {
     renderAdminLayoutCatalyst: renderAdminLayoutCatalyst2
-  } = (init_admin_layout_catalyst_template(), chunkIGJUBJBW_cjs.__toCommonJS(admin_layout_catalyst_template_exports));
+  } = (init_admin_layout_catalyst_template(), __toCommonJS(admin_layout_catalyst_template_exports));
   return renderAdminLayoutCatalyst2(data);
 }
 function adminLayoutV2(data) {
@@ -1710,6 +1722,20 @@ function renderSidebar(currentPath, user, dynamicMenuItems) {
       path: "/admin/users",
       icon: `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
         <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+      </svg>`
+    },
+    {
+      label: "Redirects",
+      path: "/admin/redirects",
+      icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+      </svg>`
+    },
+    {
+      label: "QR Codes",
+      path: "/admin/qr-codes",
+      icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
       </svg>`
     },
     {
@@ -3598,22 +3624,6 @@ function renderFormField(field) {
   `;
 }
 
-exports.adminLayoutV2 = adminLayoutV2;
-exports.getConfirmationDialogScript = getConfirmationDialogScript;
-exports.init_admin_layout_catalyst_template = init_admin_layout_catalyst_template;
-exports.init_logo_template = init_logo_template;
-exports.renderAdminLayout = renderAdminLayout;
-exports.renderAdminLayoutCatalyst = renderAdminLayoutCatalyst;
-exports.renderAlert = renderAlert;
-exports.renderCheckboxPage = renderCheckboxPage;
-exports.renderCodeExamplesList = renderCodeExamplesList;
-exports.renderConfirmationDialog = renderConfirmationDialog;
-exports.renderDesignPage = renderDesignPage;
-exports.renderForm = renderForm;
-exports.renderFormField = renderFormField;
-exports.renderLogo = renderLogo;
-exports.renderPagination = renderPagination;
-exports.renderTable = renderTable;
-exports.renderTestimonialsList = renderTestimonialsList;
-//# sourceMappingURL=chunk-LTKV7AE5.cjs.map
-//# sourceMappingURL=chunk-LTKV7AE5.cjs.map
+export { adminLayoutV2, getConfirmationDialogScript, init_admin_layout_catalyst_template, init_logo_template, renderAdminLayout, renderAdminLayoutCatalyst, renderAlert, renderCheckboxPage, renderCodeExamplesList, renderConfirmationDialog, renderDesignPage, renderForm, renderFormField, renderLogo, renderPagination, renderTable, renderTestimonialsList };
+//# sourceMappingURL=chunk-3K7MSWPM.js.map
+//# sourceMappingURL=chunk-3K7MSWPM.js.map

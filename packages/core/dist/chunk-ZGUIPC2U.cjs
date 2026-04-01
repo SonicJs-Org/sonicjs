@@ -1,4 +1,6 @@
-import { init_admin_layout_catalyst_template, init_logo_template, renderAdminLayoutCatalyst } from './chunk-JJS7JZCH.js';
+'use strict';
+
+var chunkZSL5TAXV_cjs = require('./chunk-ZSL5TAXV.cjs');
 
 // src/templates/filter-bar.template.ts
 function renderFilterBar(data) {
@@ -66,11 +68,11 @@ function renderFilterBar(data) {
 }
 
 // src/templates/index.ts
-init_admin_layout_catalyst_template();
-init_logo_template();
+chunkZSL5TAXV_cjs.init_admin_layout_catalyst_template();
+chunkZSL5TAXV_cjs.init_logo_template();
 
 // src/templates/pages/admin-forms-docs.template.ts
-init_admin_layout_catalyst_template();
+chunkZSL5TAXV_cjs.init_admin_layout_catalyst_template();
 function renderFormsDocsPage(data) {
   const pageContent = `
     <style>
@@ -1351,11 +1353,11 @@ function MyForm() {
     user: data.user,
     version: data.version
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkZSL5TAXV_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/templates/pages/admin-forms-examples.template.ts
-init_admin_layout_catalyst_template();
+chunkZSL5TAXV_cjs.init_admin_layout_catalyst_template();
 function renderFormsExamplesPage(data) {
   const pageContent = `
     <style>
@@ -2458,9 +2460,11 @@ function renderFormsExamplesPage(data) {
     user: data.user,
     version: data.version
   };
-  return renderAdminLayoutCatalyst(layoutData);
+  return chunkZSL5TAXV_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
-export { renderFilterBar, renderFormsDocsPage, renderFormsExamplesPage };
-//# sourceMappingURL=chunk-74XCYEI7.js.map
-//# sourceMappingURL=chunk-74XCYEI7.js.map
+exports.renderFilterBar = renderFilterBar;
+exports.renderFormsDocsPage = renderFormsDocsPage;
+exports.renderFormsExamplesPage = renderFormsExamplesPage;
+//# sourceMappingURL=chunk-ZGUIPC2U.cjs.map
+//# sourceMappingURL=chunk-ZGUIPC2U.cjs.map

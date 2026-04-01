@@ -16,6 +16,11 @@ vi.mock('../../middleware', () => ({
       await next()
     }
   },
+  requireRole: () => {
+    return async (_c: any, next: any) => {
+      await next()
+    }
+  },
   logActivity: vi.fn(),
   AuthManager: {
     generateToken: vi.fn(),

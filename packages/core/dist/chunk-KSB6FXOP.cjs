@@ -1,12 +1,12 @@
 'use strict';
 
 var chunk64APW3DW_cjs = require('./chunk-64APW3DW.cjs');
-var chunkQHGPH4TZ_cjs = require('./chunk-QHGPH4TZ.cjs');
+var chunkDQZVU3WB_cjs = require('./chunk-DQZVU3WB.cjs');
 var chunkMPT5PA6U_cjs = require('./chunk-MPT5PA6U.cjs');
-var chunkFFPYFW2D_cjs = require('./chunk-FFPYFW2D.cjs');
+var chunkLDFMYRG6_cjs = require('./chunk-LDFMYRG6.cjs');
 var chunkLTKV7AE5_cjs = require('./chunk-LTKV7AE5.cjs');
 var chunk6FHNRRJ3_cjs = require('./chunk-6FHNRRJ3.cjs');
-var chunkBQLA3TXT_cjs = require('./chunk-BQLA3TXT.cjs');
+var chunkSHU7Q66Q_cjs = require('./chunk-SHU7Q66Q.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var chunkMNWKYY5E_cjs = require('./chunk-MNWKYY5E.cjs');
 var hono = require('hono');
@@ -121,7 +121,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.post("/", chunkDQZVU3WB_cjs.requireAuth(), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -187,7 +187,7 @@ apiContentCrudRoutes.post("/", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkDQZVU3WB_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -251,7 +251,7 @@ apiContentCrudRoutes.put("/:id", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkDQZVU3WB_cjs.requireAuth(), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -287,7 +287,7 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunkQHGPH4TZ_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkDQZVU3WB_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
@@ -778,7 +778,7 @@ apiRoutes.get("/collections", async (c) => {
     return c.json({ error: "Failed to fetch collections" }, 500);
   }
 });
-apiRoutes.get("/content", chunkQHGPH4TZ_cjs.optionalAuth(), async (c) => {
+apiRoutes.get("/content", chunkDQZVU3WB_cjs.optionalAuth(), async (c) => {
   const executionStart = Date.now();
   try {
     const db = c.env.DB;
@@ -801,13 +801,13 @@ apiRoutes.get("/content", chunkQHGPH4TZ_cjs.optionalAuth(), async (c) => {
         });
       }
     }
-    const filter = chunkBQLA3TXT_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = chunkSHU7Q66Q_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
     const normalizedFilter = normalizePublicContentFilter(filter, c.get("user")?.role);
     if (!normalizedFilter.limit) {
       normalizedFilter.limit = 50;
     }
     normalizedFilter.limit = Math.min(normalizedFilter.limit, 1e3);
-    const builder3 = new chunkBQLA3TXT_cjs.QueryFilterBuilder();
+    const builder3 = new chunkSHU7Q66Q_cjs.QueryFilterBuilder();
     const queryResult = builder3.build("content", normalizedFilter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -879,7 +879,7 @@ apiRoutes.get("/content", chunkQHGPH4TZ_cjs.optionalAuth(), async (c) => {
     }, 500);
   }
 });
-apiRoutes.get("/collections/:collection/content", chunkQHGPH4TZ_cjs.optionalAuth(), async (c) => {
+apiRoutes.get("/collections/:collection/content", chunkDQZVU3WB_cjs.optionalAuth(), async (c) => {
   const executionStart = Date.now();
   try {
     const collection = c.req.param("collection");
@@ -890,7 +890,7 @@ apiRoutes.get("/collections/:collection/content", chunkQHGPH4TZ_cjs.optionalAuth
     if (!collectionResult) {
       return c.json({ error: "Collection not found" }, 404);
     }
-    const filter = chunkBQLA3TXT_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
+    const filter = chunkSHU7Q66Q_cjs.QueryFilterBuilder.parseFromQuery(queryParams);
     const normalizedFilter = normalizePublicContentFilter(filter, c.get("user")?.role);
     if (!normalizedFilter.where) {
       normalizedFilter.where = { and: [] };
@@ -907,7 +907,7 @@ apiRoutes.get("/collections/:collection/content", chunkQHGPH4TZ_cjs.optionalAuth
       normalizedFilter.limit = 50;
     }
     normalizedFilter.limit = Math.min(normalizedFilter.limit, 1e3);
-    const builder3 = new chunkBQLA3TXT_cjs.QueryFilterBuilder();
+    const builder3 = new chunkSHU7Q66Q_cjs.QueryFilterBuilder();
     const queryResult = builder3.build("content", normalizedFilter);
     if (queryResult.errors.length > 0) {
       return c.json({
@@ -1028,7 +1028,7 @@ var fileValidationSchema = zod.z.object({
   // 50MB max
 });
 var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+apiMediaRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -1772,8 +1772,8 @@ apiSystemRoutes.get("/env", (c) => {
 });
 var api_system_default = apiSystemRoutes;
 var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
-adminApiRoutes.use("*", chunkQHGPH4TZ_cjs.requireRole(["admin", "editor"]));
+adminApiRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
+adminApiRoutes.use("*", chunkDQZVU3WB_cjs.requireRole(["admin", "editor"]));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -2283,7 +2283,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-TCZJ7WUG.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-QQWGDWGB.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2308,7 +2308,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-TCZJ7WUG.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-QQWGDWGB.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2327,7 +2327,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-TCZJ7WUG.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-QQWGDWGB.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -2738,7 +2738,7 @@ var JWT_SECRET_FALLBACK = "your-super-secret-jwt-key-change-in-production";
 async function setCsrfCookie(c) {
   const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK;
   const isDev = c.env?.ENVIRONMENT === "development" || !c.env?.ENVIRONMENT;
-  const csrfToken = await chunkQHGPH4TZ_cjs.generateCsrfToken(secret);
+  const csrfToken = await chunkDQZVU3WB_cjs.generateCsrfToken(secret);
   cookie.setCookie(c, "csrf_token", csrfToken, {
     httpOnly: false,
     secure: !isDev,
@@ -2795,7 +2795,7 @@ var loginSchema = zod.z.object({
 });
 authRoutes.post(
   "/register",
-  chunkQHGPH4TZ_cjs.rateLimit({ max: 3, windowMs: 60 * 1e3, keyPrefix: "register" }),
+  chunkDQZVU3WB_cjs.rateLimit({ max: 3, windowMs: 60 * 1e3, keyPrefix: "register" }),
   async (c) => {
     try {
       const db = c.env.DB;
@@ -2832,7 +2832,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       await db.prepare(`
@@ -2852,7 +2852,7 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkQHGPH4TZ_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer", c.env.JWT_SECRET);
+      const token = await chunkDQZVU3WB_cjs.AuthManager.generateToken(userId, normalizedEmail, "viewer", c.env.JWT_SECRET);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2886,7 +2886,7 @@ authRoutes.post(
 );
 authRoutes.post(
   "/login",
-  chunkQHGPH4TZ_cjs.rateLimit({ max: 5, windowMs: 60 * 1e3, keyPrefix: "login" }),
+  chunkDQZVU3WB_cjs.rateLimit({ max: 5, windowMs: 60 * 1e3, keyPrefix: "login" }),
   async (c) => {
     try {
       const body = await c.req.json();
@@ -2909,19 +2909,19 @@ authRoutes.post(
       if (!user) {
         return c.json({ error: "Invalid email or password" }, 401);
       }
-      const isValidPassword = await chunkQHGPH4TZ_cjs.AuthManager.verifyPassword(password, user.password_hash);
+      const isValidPassword = await chunkDQZVU3WB_cjs.AuthManager.verifyPassword(password, user.password_hash);
       if (!isValidPassword) {
         return c.json({ error: "Invalid email or password" }, 401);
       }
-      if (chunkQHGPH4TZ_cjs.AuthManager.isLegacyHash(user.password_hash)) {
+      if (chunkDQZVU3WB_cjs.AuthManager.isLegacyHash(user.password_hash)) {
         try {
-          const newHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(password);
+          const newHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(password);
           await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(newHash, Date.now(), user.id).run();
         } catch (rehashError) {
           console.error("Password rehash failed (non-fatal):", rehashError);
         }
       }
-      const token = await chunkQHGPH4TZ_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET);
+      const token = await chunkDQZVU3WB_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2974,7 +2974,7 @@ authRoutes.get("/logout", (c) => {
   clearCsrfCookie(c);
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", chunkDQZVU3WB_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -2991,13 +2991,13 @@ authRoutes.get("/me", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post("/refresh", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
+authRoutes.post("/refresh", chunkDQZVU3WB_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
     }
-    const token = await chunkQHGPH4TZ_cjs.AuthManager.generateToken(user.userId, user.email, user.role, c.env.JWT_SECRET);
+    const token = await chunkDQZVU3WB_cjs.AuthManager.generateToken(user.userId, user.email, user.role, c.env.JWT_SECRET);
     cookie.setCookie(c, "auth_token", token, {
       httpOnly: true,
       secure: true,
@@ -3014,7 +3014,7 @@ authRoutes.post("/refresh", chunkQHGPH4TZ_cjs.requireAuth(), async (c) => {
 });
 authRoutes.post(
   "/register/form",
-  chunkQHGPH4TZ_cjs.rateLimit({ max: 3, windowMs: 60 * 1e3, keyPrefix: "register" }),
+  chunkDQZVU3WB_cjs.rateLimit({ max: 3, windowMs: 60 * 1e3, keyPrefix: "register" }),
   async (c) => {
     try {
       const db = c.env.DB;
@@ -3061,7 +3061,7 @@ authRoutes.post(
         </div>
       `);
       }
-      const passwordHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(password);
       const role = isFirstUser ? "admin" : "viewer";
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
@@ -3081,7 +3081,7 @@ authRoutes.post(
         now.getTime(),
         now.getTime()
       ).run();
-      const token = await chunkQHGPH4TZ_cjs.AuthManager.generateToken(userId, normalizedEmail, role, c.env.JWT_SECRET);
+      const token = await chunkDQZVU3WB_cjs.AuthManager.generateToken(userId, normalizedEmail, role, c.env.JWT_SECRET);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: false,
@@ -3114,7 +3114,7 @@ authRoutes.post(
 );
 authRoutes.post(
   "/login/form",
-  chunkQHGPH4TZ_cjs.rateLimit({ max: 5, windowMs: 60 * 1e3, keyPrefix: "login" }),
+  chunkDQZVU3WB_cjs.rateLimit({ max: 5, windowMs: 60 * 1e3, keyPrefix: "login" }),
   async (c) => {
     try {
       const formData = await c.req.formData();
@@ -3138,7 +3138,7 @@ authRoutes.post(
         </div>
       `);
       }
-      const isValidPassword = await chunkQHGPH4TZ_cjs.AuthManager.verifyPassword(password, user.password_hash);
+      const isValidPassword = await chunkDQZVU3WB_cjs.AuthManager.verifyPassword(password, user.password_hash);
       if (!isValidPassword) {
         return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -3146,15 +3146,15 @@ authRoutes.post(
         </div>
       `);
       }
-      if (chunkQHGPH4TZ_cjs.AuthManager.isLegacyHash(user.password_hash)) {
+      if (chunkDQZVU3WB_cjs.AuthManager.isLegacyHash(user.password_hash)) {
         try {
-          const newHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(password);
+          const newHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(password);
           await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(newHash, Date.now(), user.id).run();
         } catch (rehashError) {
           console.error("Password rehash failed (non-fatal):", rehashError);
         }
       }
-      const token = await chunkQHGPH4TZ_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET);
+      const token = await chunkDQZVU3WB_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: false,
@@ -3196,7 +3196,7 @@ authRoutes.post(
 );
 authRoutes.post(
   "/seed-admin",
-  chunkQHGPH4TZ_cjs.rateLimit({ max: 2, windowMs: 60 * 1e3, keyPrefix: "seed-admin" }),
+  chunkDQZVU3WB_cjs.rateLimit({ max: 2, windowMs: 60 * 1e3, keyPrefix: "seed-admin" }),
   async (c) => {
     try {
       const db = c.env.DB;
@@ -3218,7 +3218,7 @@ authRoutes.post(
     `).run();
       const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
       if (existingAdmin) {
-        const passwordHash2 = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword("sonicjs!");
+        const passwordHash2 = await chunkDQZVU3WB_cjs.AuthManager.hashPassword("sonicjs!");
         await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
         return c.json({
           message: "Admin user already exists (password updated)",
@@ -3230,7 +3230,7 @@ authRoutes.post(
           }
         });
       }
-      const passwordHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword("sonicjs!");
       const userId = "admin-user-id";
       const now = Date.now();
       const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -3451,7 +3451,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -3470,7 +3470,7 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const authToken = await chunkQHGPH4TZ_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET);
+    const authToken = await chunkDQZVU3WB_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET);
     cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
@@ -3487,7 +3487,7 @@ authRoutes.post("/accept-invitation", async (c) => {
 });
 authRoutes.post(
   "/request-password-reset",
-  chunkQHGPH4TZ_cjs.rateLimit({ max: 3, windowMs: 15 * 60 * 1e3, keyPrefix: "password-reset" }),
+  chunkDQZVU3WB_cjs.rateLimit({ max: 3, windowMs: 15 * 60 * 1e3, keyPrefix: "password-reset" }),
   async (c) => {
     try {
       const formData = await c.req.formData();
@@ -3705,7 +3705,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -8304,9 +8304,9 @@ function parseFieldValue(field, formData, options = {}) {
   const { skipValidation = false } = options;
   const value = formData.get(field.field_name);
   const errors = [];
-  const blocksConfig = chunkBQLA3TXT_cjs.getBlocksFieldConfig(field.field_options);
+  const blocksConfig = chunkSHU7Q66Q_cjs.getBlocksFieldConfig(field.field_options);
   if (blocksConfig) {
-    const parsed = chunkBQLA3TXT_cjs.parseBlocksValue(value, blocksConfig);
+    const parsed = chunkSHU7Q66Q_cjs.parseBlocksValue(value, blocksConfig);
     if (!skipValidation && field.is_required && parsed.value.length === 0) {
       parsed.errors.push(`${field.field_label} is required`);
     }
@@ -8416,7 +8416,7 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+adminContentRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
   const cache = chunk64APW3DW_cjs.getCacheService(chunk64APW3DW_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
@@ -9106,7 +9106,7 @@ adminContentRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminContentRoutes.post("/preview", chunkQHGPH4TZ_cjs.requireRole(["admin", "editor", "author"]), async (c) => {
+adminContentRoutes.post("/preview", chunkDQZVU3WB_cjs.requireRole(["admin", "editor", "author"]), async (c) => {
   try {
     const formData = await c.req.formData();
     const collectionId = formData.get("collection_id");
@@ -9484,7 +9484,7 @@ adminContentRoutes.post("/:id/restore/:version", async (c) => {
     return c.json({ success: false, error: "Failed to restore version" });
   }
 });
-adminContentRoutes.get("/:id/version/:version/preview", chunkQHGPH4TZ_cjs.requireRole(["admin", "editor", "author"]), async (c) => {
+adminContentRoutes.get("/:id/version/:version/preview", chunkDQZVU3WB_cjs.requireRole(["admin", "editor", "author"]), async (c) => {
   try {
     const id = c.req.param("id");
     const version = parseInt(c.req.param("version") || "0");
@@ -11451,7 +11451,7 @@ function renderUsersListPage(data) {
 
 // src/routes/admin-users.ts
 var userRoutes = new hono.Hono();
-userRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+userRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -11606,7 +11606,7 @@ userRoutes.put("/profile", async (c) => {
       Date.now(),
       user.userId
     ).run();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -11669,7 +11669,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -11740,7 +11740,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunkQHGPH4TZ_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkDQZVU3WB_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -11748,7 +11748,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -11764,7 +11764,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -11831,7 +11831,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -11985,7 +11985,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunkQHGPH4TZ_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkDQZVU3WB_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -12008,7 +12008,7 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -12046,7 +12046,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -12271,7 +12271,7 @@ userRoutes.put("/users/:id", async (c) => {
         ).run();
       }
     }
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -12316,7 +12316,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -12357,7 +12357,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunkQHGPH4TZ_cjs.logActivity(
+      await chunkDQZVU3WB_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -12376,7 +12376,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunkQHGPH4TZ_cjs.logActivity(
+      await chunkDQZVU3WB_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -12442,7 +12442,7 @@ userRoutes.post("/invite-user", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -12499,7 +12499,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -12535,7 +12535,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -12618,7 +12618,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -12725,7 +12725,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunkQHGPH4TZ_cjs.logActivity(
+    await chunkDQZVU3WB_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -14064,7 +14064,7 @@ var fileValidationSchema2 = zod.z.object({
   // 50MB max
 });
 var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+adminMediaRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -14650,7 +14650,7 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunkQHGPH4TZ_cjs.requireRole("admin"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkDQZVU3WB_cjs.requireRole("admin"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -16873,7 +16873,7 @@ function renderEmailSettingsContent(plugin, settings) {
 
 // src/routes/admin-plugins.ts
 var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+adminPluginRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 var AVAILABLE_PLUGINS = [
   {
     id: "third-party-faq",
@@ -18278,7 +18278,7 @@ function renderLogConfigPage(data) {
 
 // src/routes/admin-logs.ts
 var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+adminLogsRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -20606,9 +20606,9 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 }
 
 // src/routes/admin-dashboard.ts
-var VERSION = chunkBQLA3TXT_cjs.getCoreVersion();
+var VERSION = chunkSHU7Q66Q_cjs.getCoreVersion();
 var router = new hono.Hono();
-router.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+router.use("*", chunkDQZVU3WB_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -22427,7 +22427,7 @@ function renderCollectionFormPage(data) {
 
 // src/routes/admin-collections.ts
 var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+adminCollectionsRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -24622,7 +24622,7 @@ function renderDatabaseToolsSettings(settings) {
 
 // src/routes/admin-settings.ts
 var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+adminSettingsRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -24790,7 +24790,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkFFPYFW2D_cjs.MigrationService(db);
+    const migrationService = new chunkLDFMYRG6_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -24814,7 +24814,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkFFPYFW2D_cjs.MigrationService(db);
+    const migrationService = new chunkLDFMYRG6_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -24832,7 +24832,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkFFPYFW2D_cjs.MigrationService(db);
+    const migrationService = new chunkLDFMYRG6_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -26722,7 +26722,7 @@ function renderFormCreatePage(data) {
 
 // src/routes/admin-forms.ts
 var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+adminFormsRoutes.use("*", chunkDQZVU3WB_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -27873,9 +27873,9 @@ function renderAPIReferencePage(data) {
 }
 
 // src/routes/admin-api-reference.ts
-var VERSION2 = chunkBQLA3TXT_cjs.getCoreVersion();
+var VERSION2 = chunkSHU7Q66Q_cjs.getCoreVersion();
 var router2 = new hono.Hono();
-router2.use("*", chunkQHGPH4TZ_cjs.requireAuth());
+router2.use("*", chunkDQZVU3WB_cjs.requireAuth());
 router2.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -27962,5 +27962,5 @@ exports.router = router;
 exports.router2 = router2;
 exports.test_cleanup_default = test_cleanup_default;
 exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-YZY472ZT.cjs.map
-//# sourceMappingURL=chunk-YZY472ZT.cjs.map
+//# sourceMappingURL=chunk-KSB6FXOP.cjs.map
+//# sourceMappingURL=chunk-KSB6FXOP.cjs.map

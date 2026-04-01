@@ -741,12 +741,19 @@ adminPluginRoutes.post('/:id/settings', async (c) => {
     const pluginService = new PluginService(db)
     await pluginService.updatePluginSettings(pluginId, settings)
 
-    // TODO: Clear auth validation cache if updating core-auth plugin
-    // Commented out until authValidationService is migrated
-    // if (pluginId === 'core-auth') {
-    //   authValidationService.clearCache()
-    //   console.log('[AuthSettings] Cache cleared after updating authentication settings')
-    // }
+    // Clear auth validation cache if updating core-auth plugin
+    if (pluginId === 'core-auth') {
+      try {
+        const cacheKv = c.env.CACHE_KV
+        if (cacheKv) {
+          await cacheKv.delete('auth:settings')
+          await cacheKv.delete('auth:registration-enabled')
+          console.log('[AuthSettings] Cache cleared after updating authentication settings')
+        }
+      } catch (cacheError) {
+        console.error('[AuthSettings] Failed to clear cache:', cacheError)
+      }
+    }
 
     return c.json({ success: true })
   } catch (error) {

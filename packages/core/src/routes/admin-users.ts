@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { requireAuth, logActivity, AuthManager } from '../middleware'
+import { requireAuth, requireRole, logActivity, AuthManager } from '../middleware'
 import { sanitizeInput } from '../utils/sanitize'
 import { renderProfilePage, renderAvatarImage, type UserProfile, type ProfilePageData } from '../templates/pages/admin-profile.template'
 import { renderAlert } from '../templates/components/alert.template'
@@ -13,6 +13,15 @@ const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Apply authentication middleware to all routes
 userRoutes.use('*', requireAuth())
+
+// Enforce admin-only access on user management routes
+userRoutes.use('/users/*', requireRole(['admin']))
+userRoutes.use('/users', requireRole(['admin']))
+userRoutes.use('/invite-user', requireRole(['admin']))
+userRoutes.use('/resend-invitation/*', requireRole(['admin']))
+userRoutes.use('/cancel-invitation/*', requireRole(['admin']))
+userRoutes.use('/activity-logs', requireRole(['admin']))
+userRoutes.use('/activity-logs/*', requireRole(['admin']))
 
 // Redirect /admin to /admin/dashboard
 userRoutes.get('/', (c) => {
@@ -621,7 +630,9 @@ userRoutes.post('/users/new', async (c) => {
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     const bio = sanitizeInput(formData.get('bio')?.toString()) || null
-    const role = formData.get('role')?.toString() || 'viewer'
+    const roleInput = formData.get('role')?.toString() || 'viewer'
+    const validRoles = ['admin', 'editor', 'author', 'viewer']
+    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
     const password = formData.get('password')?.toString() || ''
     const confirmPassword = formData.get('confirm_password')?.toString() || ''
     const isActive = formData.get('is_active') === '1'
@@ -882,7 +893,9 @@ userRoutes.put('/users/:id', async (c) => {
     const username = sanitizeInput(formData.get('username')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
-    const role = formData.get('role')?.toString() || 'viewer'
+    const roleInput = formData.get('role')?.toString() || 'viewer'
+    const validRoles = ['admin', 'editor', 'author', 'viewer']
+    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
     const isActive = formData.get('is_active') === '1'
     const emailVerified = formData.get('email_verified') === '1'
 

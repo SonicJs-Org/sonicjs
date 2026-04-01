@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { requireAuth } from '../middleware'
+import { requireAuth, requireRole } from '../middleware'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import type { Bindings, Variables } from '../app'
 
@@ -82,7 +82,7 @@ apiContentCrudRoutes.get('/:id', async (c) => {
 })
 
 // POST /api/content - Create new content (requires authentication)
-apiContentCrudRoutes.post('/', requireAuth(), async (c) => {
+apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
   try {
     const db = c.env.DB
     const user = c.get('user')
@@ -172,7 +172,7 @@ apiContentCrudRoutes.post('/', requireAuth(), async (c) => {
 })
 
 // PUT /api/content/:id - Update content (requires authentication)
-apiContentCrudRoutes.put('/:id', requireAuth(), async (c) => {
+apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
   try {
     const id = c.req.param('id')
     const db = c.env.DB
@@ -263,7 +263,7 @@ apiContentCrudRoutes.put('/:id', requireAuth(), async (c) => {
 })
 
 // DELETE /api/content/:id - Delete content (requires authentication)
-apiContentCrudRoutes.delete('/:id', requireAuth(), async (c) => {
+apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
   try {
     const id = c.req.param('id')
     const db = c.env.DB

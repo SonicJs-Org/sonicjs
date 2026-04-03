@@ -189,6 +189,24 @@ export class PluginBootstrapService {
         index_media: false,
       },
     },
+    {
+      id: "oauth-providers",
+      name: "oauth-providers",
+      display_name: "OAuth Providers",
+      description: "OAuth2/OIDC social login with GitHub, Google, and more",
+      version: "1.0.0-beta.1",
+      author: "SonicJS Team",
+      category: "authentication",
+      icon: "🔑",
+      permissions: ["oauth:manage"],
+      dependencies: [],
+      settings: {
+        providers: {
+          github: { clientId: "", clientSecret: "", enabled: false },
+          google: { clientId: "", clientSecret: "", enabled: false },
+        },
+      },
+    },
   ];
 
   /**

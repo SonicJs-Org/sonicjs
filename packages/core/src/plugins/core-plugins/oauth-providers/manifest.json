@@ -1,0 +1,38 @@
+{
+  "name": "oauth-providers",
+  "displayName": "OAuth Providers",
+  "description": "OAuth2/OIDC social login with GitHub, Google, and more",
+  "version": "1.0.0-beta.1",
+  "author": {
+    "name": "SonicJS Team",
+    "email": "team@sonicjs.com"
+  },
+  "category": "authentication",
+  "icon": "shield",
+  "isCore": true,
+  "dependencies": [],
+  "settings": {
+    "providers": {
+      "type": "object",
+      "description": "Configure OAuth provider credentials",
+      "properties": {
+        "github": {
+          "type": "object",
+          "properties": {
+            "clientId": { "type": "string", "title": "GitHub Client ID" },
+            "clientSecret": { "type": "string", "title": "GitHub Client Secret", "format": "password" },
+            "enabled": { "type": "boolean", "title": "Enable GitHub Login", "default": false }
+          }
+        },
+        "google": {
+          "type": "object",
+          "properties": {
+            "clientId": { "type": "string", "title": "Google Client ID" },
+            "clientSecret": { "type": "string", "title": "Google Client Secret", "format": "password" },
+            "enabled": { "type": "boolean", "title": "Enable Google Login", "default": false }
+          }
+        }
+      }
+    }
+  }
+}

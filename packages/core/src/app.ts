@@ -35,6 +35,7 @@ import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
+import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
@@ -211,6 +212,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin routes - Cache (dashboard and management API)
   // Fixes GitHub Issue #461: Cache routes were not registered
   app.route('/admin/cache', cachePlugin.getRoutes())
+
+  // Plugin routes - OAuth Providers (MUST be registered BEFORE admin/plugins to avoid route conflict)
+  if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
+    for (const route of oauthProvidersPlugin.routes) {
+      app.route(route.path, route.handler as any)
+    }
+  }
 
   // Plugin routes - OTP Login (MUST be registered BEFORE admin/plugins to avoid route conflict)
   // Register OTP Login routes first so they take precedence over the generic /:id handler

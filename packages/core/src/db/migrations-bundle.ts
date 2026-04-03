@@ -239,6 +239,13 @@ export const bundledMigrations: BundledMigration[] = [
     filename: '033_form_content_integration.sql',
     description: 'Migration 033: Form Content Integration',
     sql: "-- Migration 033: Form-Content Integration\n-- Adds bridge columns to link forms to collections and submissions to content items\n\n-- Add source_type and source_id to collections for form-derived collections\nALTER TABLE collections ADD COLUMN source_type TEXT DEFAULT 'user';\nALTER TABLE collections ADD COLUMN source_id TEXT;\n\n-- Index for efficient lookup of form-derived collections\nCREATE INDEX IF NOT EXISTS idx_collections_source ON collections(source_type, source_id);\n\n-- Add content_id to form_submissions for linking to content items\nALTER TABLE form_submissions ADD COLUMN content_id TEXT REFERENCES content(id);\n\n-- Index for efficient lookup by content_id\nCREATE INDEX IF NOT EXISTS idx_form_submissions_content_id ON form_submissions(content_id);\n\n-- Create system user for anonymous form submissions\nINSERT OR IGNORE INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)\nVALUES ('system-form-submission', 'system-forms@sonicjs.internal', 'system-forms', 'Form', 'Submission', NULL, 'viewer', 0, strftime('%s','now') * 1000, strftime('%s','now') * 1000);\n"
+  },
+  {
+    id: '034',
+    name: 'OAuth Accounts',
+    filename: '034_oauth_accounts.sql',
+    description: 'Migration 034: OAuth Accounts table for social login providers',
+    sql: "-- Migration 034: OAuth Accounts\n-- Stores linked OAuth provider accounts for social login\n\nCREATE TABLE IF NOT EXISTS oauth_accounts (\n  id TEXT PRIMARY KEY,\n  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n  provider TEXT NOT NULL,\n  provider_account_id TEXT NOT NULL,\n  access_token TEXT,\n  refresh_token TEXT,\n  token_expires_at INTEGER,\n  profile_data TEXT,\n  created_at INTEGER NOT NULL,\n  updated_at INTEGER NOT NULL\n);\n\n-- Unique constraint: one link per provider per external account\nCREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_accounts_provider_account ON oauth_accounts(provider, provider_account_id);\n\n-- Index for looking up a user's linked accounts\nCREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id ON oauth_accounts(user_id);\n\n-- Index for provider lookups\nCREATE INDEX IF NOT EXISTS idx_oauth_accounts_provider ON oauth_accounts(provider);\n"
   }
 ]
 

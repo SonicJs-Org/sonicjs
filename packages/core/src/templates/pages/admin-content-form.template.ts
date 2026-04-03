@@ -1455,7 +1455,15 @@ export function renderContentFormPage(data: ContentFormData): string {
         fetch(\`/admin/content/\${contentId}/versions\`)
         .then(response => response.text())
         .then(html => {
-          document.getElementById('version-history-content').innerHTML = html;
+          const container = document.getElementById('version-history-content');
+          container.innerHTML = html;
+          // Script tags inserted via innerHTML are not executed by the browser,
+          // so we need to manually create and append them for execution.
+          container.querySelectorAll('script').forEach(oldScript => {
+            const newScript = document.createElement('script');
+            newScript.textContent = oldScript.textContent;
+            oldScript.replaceWith(newScript);
+          });
         })
         .catch(error => {
           console.error('Error loading version history:', error);

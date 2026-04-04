@@ -1,0 +1,301 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Setup', id: 'setup' },
+  { title: 'Creating Redirects', id: 'creating-redirects' },
+  { title: 'CSV Import & Export', id: 'csv-import-export' },
+  { title: 'Cloudflare Integration', id: 'cloudflare-integration' },
+  { title: 'API Reference', id: 'api-reference' },
+  { title: 'Configuration', id: 'configuration' },
+]
+
+# Redirect Management Plugin
+
+Manage URL redirects with exact, wildcard, and regex matching. Includes CSV bulk import/export, analytics tracking, and optional Cloudflare Bulk Redirects integration. {{ className: 'lead' }}
+
+## Overview
+
+The Redirect Management plugin handles URL redirects at the application level with sub-millisecond lookups via an LRU cache. It supports multiple matching strategies and integrates with Cloudflare's edge network for maximum performance.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '🔀',
+      title: 'Flexible Matching',
+      description: 'Exact, wildcard, and regex URL matching with priority ordering',
+    },
+    {
+      icon: '📊',
+      title: 'Analytics',
+      description: 'Track hit counts and last-hit timestamps for every redirect',
+    },
+    {
+      icon: '📋',
+      title: 'Bulk Operations',
+      description: 'CSV import/export with validation and duplicate handling',
+    },
+    {
+      icon: '☁️',
+      title: 'Cloudflare Edge',
+      description: 'Sync eligible redirects to Cloudflare Bulk Redirects for edge-level processing',
+    },
+  ]}
+  columns={2}
+/>
+
+---
+
+## Setup
+
+The Redirect Management plugin is a core plugin. Activate it in the admin panel:
+
+1. Navigate to **Admin** → **Plugins**
+2. Find **Redirect Management**
+3. Click **Activate**
+
+The plugin creates two database tables: `redirects` and `redirect_analytics`.
+
+Access the admin UI at **Admin** → **Redirects** in the sidebar.
+
+---
+
+## Creating Redirects
+
+### Match Types
+
+| Type | Description | Cloudflare Eligible |
+|------|-------------|---------------------|
+| **Exact** | URL must match exactly | Yes |
+| **Wildcard** | Prefix/contains matching | Yes |
+| **Regex** | Regular expression pattern | No |
+
+### Status Codes
+
+| Code | Meaning | Use Case |
+|------|---------|----------|
+| **301** | Moved Permanently | SEO-safe permanent redirects |
+| **302** | Found (Temporary) | Temporary redirects |
+| **307** | Temporary Redirect | Preserves HTTP method |
+| **308** | Permanent Redirect | Preserves HTTP method |
+| **410** | Gone | Content permanently removed (no redirect) |
+
+### Redirect Options
+
+Each redirect supports Cloudflare-aligned options:
+
+| Option | Description |
+|--------|-------------|
+| **Preserve Query String** | Forward query parameters to destination |
+| **Include Subdomains** | Match across subdomains |
+| **Subpath Matching** | Match subpaths under the source URL |
+| **Preserve Path Suffix** | Append matched subpath to destination |
+
+### Admin Form
+
+Create redirects via the admin UI at `/admin/redirects/new`:
+
+1. Enter **Source URL** (e.g., `/old-page`)
+2. Enter **Destination URL** (e.g., `/new-page` or `https://example.com`)
+3. Select **Status Code** and **Match Type**
+4. Toggle options as needed
+5. Click **Create Redirect**
+
+The plugin validates for circular redirects and duplicate sources before saving.
+
+---
+
+## CSV Import & Export
+
+### Exporting
+
+Click **Export CSV** on the redirects list page. The export respects any active filters. CSV columns:
+
+```
+id, source_url, destination_url, match_type, status_code, active,
+preserve_query_string, include_subdomains, subpath_matching,
+preserve_path_suffix, created_at, updated_at
+```
+
+### Importing
+
+Click **Import CSV** and upload a CSV file (max 10MB). Required columns: `source_url` and `destination_url`.
+
+**Duplicate Handling Strategies:**
+
+| Strategy | Behavior |
+|----------|----------|
+| **Reject** | Fail entire import if any duplicate is found |
+| **Skip** | Import only new redirects, skip duplicates |
+| **Update** | Overwrite existing redirects with CSV values |
+
+**Validation checks:**
+- URL format validation (must start with `/`, `http://`, or `https://`)
+- Status code validation (301, 302, 307, 308, 410)
+- Intra-file duplicate detection
+- Database duplicate detection
+- Circular redirect chain detection
+
+If errors are found, the system returns an error CSV with line numbers and error messages for each invalid row.
+
+<CodeGroup title="CSV Import Example">
+
+```csv {{title:'Sample CSV'}}
+source_url,destination_url,match_type,status_code,active
+/old-blog,/blog,exact,301,true
+/legacy/*,/new/*,wildcard,301,true
+/temp-page,/landing,exact,302,true
+```
+
+</CodeGroup>
+
+---
+
+## Cloudflare Integration
+
+Sync eligible redirects to Cloudflare Bulk Redirects for edge-level processing, eliminating the need to hit your Workers for common redirects.
+
+### Requirements
+
+Set these environment variables:
+
+```bash
+CLOUDFLARE_API_TOKEN=your_token_here
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+```
+
+The API token needs **Account Filter Lists Edit** and **Account Rulesets Edit** permissions.
+
+### Eligibility
+
+A redirect is synced to Cloudflare only if:
+- Match type is **Exact** or **Wildcard** (not Regex)
+- Status code is **301**, **302**, **307**, or **308** (not 410)
+- Redirect is **active**
+
+### Sync Modes
+
+**Auto-sync on create:** Enable `autoOffloadEnabled` in plugin settings. Eligible redirects are automatically synced to Cloudflare after creation.
+
+**Manual sync:** Click **Sync to Cloudflare** in the admin UI to sync all eligible redirects. This clears existing Cloudflare items and replaces them with the current set.
+
+**Real-time sync:** Individual redirects are synced to Cloudflare after create/update operations (non-blocking).
+
+### Cloudflare Resources
+
+The plugin creates and manages:
+- A redirect list named `sonicjs-redirects`
+- A ruleset named `SonicJS Bulk Redirects` in the `http_request_redirect` phase
+
+---
+
+## API Reference
+
+### REST API
+
+All API routes are mounted at `/api/redirects` and support Bearer token authentication via the `REDIRECTS_API_KEY` environment variable.
+
+<ApiEndpoint method="GET" path="/api/redirects" description="List redirects with filtering and pagination" auth={true} />
+
+Query parameters: `isActive`, `statusCode`, `matchType`, `search`, `limit` (default 50), `offset`
+
+<ApiEndpoint method="GET" path="/api/redirects/:id" description="Get a single redirect" auth={true} />
+
+<ApiEndpoint method="POST" path="/api/redirects" description="Create a redirect" auth={true} />
+
+<CodeGroup title="Create Redirect">
+
+```bash {{title:'cURL'}}
+curl -X POST http://localhost:8787/api/redirects \
+  -H "Authorization: Bearer {api_key}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "/old-page",
+    "destination": "/new-page",
+    "matchType": 0,
+    "statusCode": 301,
+    "preserveQueryString": false
+  }'
+```
+
+```javascript
+const response = await fetch('http://localhost:8787/api/redirects', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    source: '/old-page',
+    destination: '/new-page',
+    matchType: 0,
+    statusCode: 301,
+  }),
+})
+```
+
+</CodeGroup>
+
+<ApiEndpoint method="PUT" path="/api/redirects/:id" description="Update a redirect" auth={true} />
+
+<ApiEndpoint method="DELETE" path="/api/redirects/:id" description="Soft-delete a redirect" auth={true} />
+
+### Admin Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/redirects` | List page with filters and pagination |
+| GET | `/admin/redirects/new` | Create form |
+| GET | `/admin/redirects/:id/edit` | Edit form with audit trail |
+| POST | `/admin/redirects` | Create redirect |
+| PUT | `/admin/redirects/:id` | Update redirect |
+| DELETE | `/admin/redirects/:id` | Delete redirect |
+| POST | `/admin/redirects/bulk-delete` | Delete multiple redirects |
+| GET | `/admin/redirects/export` | Export filtered redirects as CSV |
+| POST | `/admin/redirects/import` | Import redirects from CSV |
+| POST | `/admin/redirects/sync-cloudflare` | Manual Cloudflare sync |
+
+---
+
+## Configuration
+
+### Plugin Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable/disable redirect processing |
+| `autoOffloadEnabled` | boolean | `false` | Auto-sync eligible redirects to Cloudflare |
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CLOUDFLARE_API_TOKEN` | For Cloudflare sync | API token with Lists Edit + Rulesets Edit |
+| `CLOUDFLARE_ACCOUNT_ID` | For Cloudflare sync | Your Cloudflare account ID |
+| `REDIRECTS_API_KEY` | For REST API | Bearer token for API authentication |
+
+### Middleware
+
+The redirect middleware processes incoming requests with sub-millisecond lookups:
+
+1. Normalizes the URL (lowercase, strips trailing slash)
+2. Checks the LRU cache (capacity: 1000 entries)
+3. Falls back to database on cache miss
+4. Records hit analytics asynchronously
+5. Executes the redirect
+
+The cache is automatically invalidated on create, update, and delete operations.
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/plugins/qr-generator" variant="text" arrow="right">
+    <>QR Code Generator plugin</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/core" variant="text" arrow="right">
+    <>View all core plugins</>
+  </Button>
+</div>

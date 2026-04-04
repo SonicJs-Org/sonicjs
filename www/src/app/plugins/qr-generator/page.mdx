@@ -1,0 +1,235 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Installation', id: 'installation' },
+  { title: 'Admin UI', id: 'admin-ui' },
+  { title: 'API Endpoints', id: 'api-endpoints' },
+  { title: 'Configuration', id: 'configuration' },
+  { title: 'Redirect Tracking', id: 'redirect-tracking' },
+]
+
+# QR Code Generator Plugin
+
+Generate and manage QR codes with customizable styling, logo embedding, and scan tracking via redirect integration. {{ className: 'lead' }}
+
+## Overview
+
+The QR Code Generator plugin provides a complete QR code management system built into SonicJS. Create branded QR codes with custom colors, shapes, and logos, then track scans through automatic redirect integration.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '📱',
+      title: 'Custom Styling',
+      description: 'Custom colors, corner shapes, dot shapes, and eye colors',
+    },
+    {
+      icon: '🖼️',
+      title: 'Logo Embedding',
+      description: 'Embed logos with automatic error correction upgrade to Level H',
+    },
+    {
+      icon: '📊',
+      title: 'Scan Tracking',
+      description: 'Track scans via short URL redirects with analytics',
+    },
+    {
+      icon: '📥',
+      title: 'Export Formats',
+      description: 'Download as SVG or PNG at 72, 150, or 300 DPI',
+    },
+  ]}
+  columns={2}
+/>
+
+---
+
+## Installation
+
+The QR Code Generator is a core plugin. Activate it in the admin panel:
+
+1. Navigate to **Admin** → **Plugins**
+2. Find **QR Code Generator**
+3. Click **Activate**
+
+<Note>
+This plugin requires the **Redirect Management** plugin for scan tracking. Install it first if you want tracking functionality.
+</Note>
+
+---
+
+## Admin UI
+
+Access QR code management at `/admin/qr-codes` in the sidebar.
+
+### List View
+
+The list page displays all QR codes with:
+- SVG thumbnail preview
+- Name and destination URL
+- Error correction level
+- Scan count (from redirect analytics)
+- Created by and date
+- Search across names and URLs
+- Pagination with configurable page size
+
+### Create / Edit Form
+
+The form includes several sections:
+
+**Basic Settings:**
+- **Name** — Optional label for the QR code
+- **Destination URL** — Required. Supports `http://`, `https://`, `mailto:`, `tel:`, and `sms:` schemes
+- **Error Correction** — L (7%), M (15%), Q (25%), H (30%) recovery
+- **Size** — Output size in pixels
+
+**Colors:**
+- Foreground and background color pickers with hex input
+- Optional eye color (position detection patterns)
+- WCAG contrast ratio display with low-contrast warnings
+
+**Shapes:**
+- **Corner Shape** — square, rounded, dots, extra-rounded
+- **Dot Shape** — square, rounded, dots, diamond
+
+**Logo:**
+- Paste a data URL or upload an image
+- Logo automatically limited to 5% of QR code area
+- Error correction upgrades to Level H when a logo is present
+
+**Live Preview:**
+- Real-time SVG preview updates on every form change
+- Displays the short code redirect URL for copying
+
+---
+
+## API Endpoints
+
+### Public Routes
+
+<ApiEndpoint method="GET" path="/qr/:code" description="Redirect handler for QR code scans" auth={false} />
+
+When a QR code is scanned, the short URL redirects to the destination:
+- **Active codes** — 302 redirect to destination URL
+- **Deleted codes** — 410 Gone with a branded expired page
+- **Unknown codes** — 404 Not Found
+
+Scans are automatically tracked by the Redirect Management plugin.
+
+### Admin Routes
+
+All admin routes require authentication.
+
+<ApiEndpoint method="GET" path="/admin/qr-codes" description="List QR codes with pagination and search" auth={true} />
+
+Query parameters: `page`, `limit`, `search`, `success`
+
+<ApiEndpoint method="POST" path="/admin/qr-codes" description="Create a new QR code" auth={true} />
+
+<CodeGroup title="Create QR Code">
+
+```bash {{title:'cURL'}}
+curl -X POST http://localhost:8787/admin/qr-codes \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d 'name=My+QR&destination_url=https://example.com&error_correction=M&size=300'
+```
+
+</CodeGroup>
+
+**Form fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Optional label |
+| `destination_url` | string | Required. Must start with http://, https://, mailto:, tel:, or sms: |
+| `foreground_color` | string | Hex color (default: #000000) |
+| `background_color` | string | Hex color (default: #ffffff) |
+| `error_correction` | string | L, M, Q, or H (default: M) |
+| `size` | number | Pixels (default: 300) |
+| `corner_shape` | string | square, rounded, dots, extra-rounded |
+| `dot_shape` | string | square, rounded, dots, diamond |
+| `eye_color` | string | Optional hex color for position detection patterns |
+| `logo_url` | string | Data URL or image URL |
+
+<ApiEndpoint method="PUT" path="/admin/qr-codes/:id" description="Update an existing QR code" auth={true} />
+
+<ApiEndpoint method="DELETE" path="/admin/qr-codes/:id" description="Soft-delete a QR code and its redirect" auth={true} />
+
+<ApiEndpoint method="GET" path="/admin/qr-codes/:id/download/png" description="Download QR code as PNG" auth={true} />
+
+Query parameter: `dpi` — 72 (web), 150 (screen), or 300 (print). Default: 300.
+
+<ApiEndpoint method="POST" path="/admin/qr-codes/preview" description="Generate a real-time SVG preview (HTMX)" auth={true} />
+
+---
+
+## Configuration
+
+Configure default values in the plugin settings:
+
+<CodeGroup title="Plugin Settings">
+
+```json
+{
+  "enabled": true,
+  "defaultForegroundColor": "#000000",
+  "defaultBackgroundColor": "#ffffff",
+  "defaultErrorCorrection": "M",
+  "defaultSize": 300,
+  "defaultCornerShape": "square",
+  "defaultDotShape": "square",
+  "defaultLogoUrl": ""
+}
+```
+
+</CodeGroup>
+
+### Permissions
+
+| Permission | Description |
+|-----------|-------------|
+| `qr_code.generate` | Generate QR codes |
+| `qr_code.manage` | Manage QR codes and settings |
+| `qr_code.view` | View QR codes |
+
+The admin sidebar menu requires `admin` or `qr.manage` permission.
+
+---
+
+## Redirect Tracking
+
+QR codes integrate with the [Redirect Management](/plugins/redirect-management) plugin for scan analytics.
+
+### How It Works
+
+1. When a QR code is created, a 6-character short code is generated (e.g., `a1B2c3`)
+2. A redirect entry is created: `/qr/a1B2c3` → destination URL
+3. When scanned, the redirect fires and analytics are recorded
+4. Scan counts appear in the QR code list view
+
+### Short Codes
+
+- 6-character alphanumeric codes using nanoid
+- 62^6 = 56.8 billion possible combinations
+- Collision-resistant with uniqueness checking
+- Example URL: `https://your-domain.com/qr/a1B2c3`
+
+### Atomic Operations
+
+QR code and redirect records are always created, updated, and deleted together in a single D1 batch operation to ensure consistency.
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/plugins/redirect-management" variant="text" arrow="right">
+    <>Redirect Management plugin</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/core" variant="text" arrow="right">
+    <>View all core plugins</>
+  </Button>
+</div>

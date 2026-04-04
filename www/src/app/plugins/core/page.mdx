@@ -7,6 +7,8 @@ export const sections = [
   { title: 'Cache Plugin', id: 'cache-plugin' },
   { title: 'Database Tools', id: 'database-tools' },
   { title: 'Seed Data Plugin', id: 'seed-data-plugin' },
+  { title: 'QR Code Generator', id: 'qr-code-generator' },
+  { title: 'Redirect Management', id: 'redirect-management' },
 ]
 
 # Core Plugins Reference
@@ -55,6 +57,16 @@ Core plugins extend SonicJS with critical features like authentication, media ma
       icon: '🌱',
       title: 'Seed Data',
       description: 'Sample data generation for development and testing',
+    },
+    {
+      icon: '📱',
+      title: 'QR Code Generator',
+      description: 'Generate styled QR codes with logo embedding and scan tracking',
+    },
+    {
+      icon: '🔀',
+      title: 'Redirect Management',
+      description: 'URL redirects with CSV import/export and Cloudflare edge sync',
     },
   ]}
   columns={3}
@@ -951,6 +963,55 @@ await generateSeedData({
 <Note>
 The seed data plugin should be disabled in production environments. It's designed for development and testing only.
 </Note>
+
+---
+
+## QR Code Generator
+
+The QR Code Generator plugin provides a complete QR code management system with customizable styling, logo embedding, and scan tracking.
+
+### Features
+
+- **Custom Styling** — Colors, corner shapes (square/rounded/dots/extra-rounded), dot shapes (square/rounded/dots/diamond), and eye colors
+- **Logo Embedding** — Embed logos with automatic error correction upgrade to Level H
+- **Scan Tracking** — Track scans via short URL redirects (`/qr/{shortCode}`) with analytics
+- **Export Formats** — SVG and PNG at 72, 150, or 300 DPI
+- **Admin UI** — Full CRUD interface with live preview, search, and pagination
+
+### Admin Pages
+
+- **/admin/qr-codes** — QR code management interface
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/qr-generator" variant="text" arrow="right">
+    <>Full QR Code Generator documentation</>
+  </Button>
+</div>
+
+---
+
+## Redirect Management
+
+The Redirect Management plugin handles URL redirects with sub-millisecond lookups, CSV bulk operations, and Cloudflare edge integration.
+
+### Features
+
+- **Flexible Matching** — Exact, wildcard, and regex URL matching
+- **Status Codes** — 301, 302, 307, 308, and 410 (Gone)
+- **Analytics** — Hit counts and last-hit timestamps for every redirect
+- **CSV Import/Export** — Bulk operations with validation and duplicate handling strategies
+- **Cloudflare Sync** — Offload eligible redirects to Cloudflare Bulk Redirects for edge-level processing
+- **LRU Cache** — Sub-millisecond redirect lookups with 1000-entry cache
+
+### Admin Pages
+
+- **/admin/redirects** — Redirect management interface
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/redirect-management" variant="text" arrow="right">
+    <>Full Redirect Management documentation</>
+  </Button>
+</div>
 
 ---
 

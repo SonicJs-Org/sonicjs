@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { requireAuth } from '../middleware'
 import { renderPluginsListPage, PluginsListPageData, Plugin } from '../templates/pages/admin-plugins-list.template'
 import { renderPluginSettingsPage, PluginSettingsPageData } from '../templates/pages/admin-plugin-settings.template'
+import { SettingsService } from '../services/settings'
 import { PluginService } from '../services'
 // TODO: authValidationService not yet migrated - commented out temporarily
 // import { authValidationService } from '../services/auth-validation'
@@ -262,18 +263,10 @@ adminPluginRoutes.get('/:id', async (c) => {
 
     // For OTP Login plugin, add site name and email config status
     if (pluginId === 'otp-login') {
-      // Get site name from general settings
-      const generalSettings = await db.prepare(`
-        SELECT value FROM settings WHERE key = 'general'
-      `).first() as { value: string } | null
-
-      let siteName = 'SonicJS'
-      if (generalSettings?.value) {
-        try {
-          const parsed = JSON.parse(generalSettings.value)
-          siteName = parsed.siteName || 'SonicJS'
-        } catch (e) { /* ignore */ }
-      }
+      // Get site name from general settings via SettingsService
+      const settingsService = new SettingsService(db)
+      const generalSettings = await settingsService.getGeneralSettings()
+      const siteName = generalSettings.siteName || 'SonicJS'
 
       // Check if email plugin is configured
       const emailPlugin = await db.prepare(`

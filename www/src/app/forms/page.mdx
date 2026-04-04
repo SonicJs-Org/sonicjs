@@ -1,0 +1,327 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Creating Forms', id: 'creating-forms' },
+  { title: 'How It Works', id: 'how-it-works' },
+  { title: 'Submissions', id: 'submissions' },
+  { title: 'Content API', id: 'content-api' },
+  { title: 'Public Form Endpoints', id: 'public-form-endpoints' },
+  { title: 'Security', id: 'security' },
+]
+
+# Forms as Collections
+
+Build forms with a drag-and-drop builder. Forms are automatically stored as collections and submissions become queryable content items via the Content API. {{ className: 'lead' }}
+
+## Overview
+
+SonicJS treats forms as first-class content. When you create a form, the system automatically generates a "shadow collection" that mirrors the form's fields. Every submission is dual-written to both the `form_submissions` table and the `content` table, making form data queryable through the standard Content API.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '🎨',
+      title: 'Form Builder',
+      description: 'Drag-and-drop Form.io builder with 20+ field types',
+    },
+    {
+      icon: '📦',
+      title: 'Collections Sync',
+      description: 'Forms automatically create shadow collections with derived schemas',
+    },
+    {
+      icon: '🔍',
+      title: 'Content API',
+      description: 'Query submissions using the same API as any other content',
+    },
+    {
+      icon: '🛡️',
+      title: 'Security',
+      description: 'XSS sanitization, Turnstile CAPTCHA, and input validation',
+    },
+  ]}
+  columns={2}
+/>
+
+---
+
+## Creating Forms
+
+### Admin UI
+
+1. Navigate to **Admin** → **Forms**
+2. Click **New Form**
+3. Enter a **name** (machine-friendly, lowercase with underscores) and **display name**
+4. Click **Create** to open the Form Builder
+
+The Form Builder provides a full drag-and-drop interface powered by Form.io:
+- Text fields, textareas, emails, phone numbers, URLs
+- Numbers, checkboxes, selects, radio buttons
+- Date/time pickers, file uploads, signatures
+- Layout components: panels, fieldsets, columns, tabs
+- Address fields with Google Maps integration
+
+### Form Settings
+
+Each form supports:
+- **Category** — contact, survey, registration, or custom
+- **Public/Private** — control whether the form is publicly accessible
+- **Turnstile CAPTCHA** — per-form or global bot protection
+- **Success Message** — custom message shown after submission
+- **Email Notifications** — optional notification on submission
+
+---
+
+## How It Works
+
+### Shadow Collections
+
+When a form is created or updated, SonicJS automatically derives a collection schema from the Form.io definition:
+
+```
+Form.io Schema → Shadow Collection Schema → Content Table
+```
+
+**Naming convention:** A form named `contact` creates a collection named `form_contact` with display name "Contact (Form)".
+
+**Field mapping:**
+
+| Form.io Type | Collection Schema Type |
+|-------------|----------------------|
+| textfield, textarea, password, url | `string` |
+| email | `string` with `format: 'email'` |
+| number, currency | `number` |
+| checkbox | `boolean` |
+| select, radio | `select` with `enum` values |
+| datetime, date, time | `string` with `format: 'date-time'` |
+| file, signature | `string` |
+| address | `object` |
+
+Layout components (panels, fieldsets, columns, tabs) are skipped — only their nested field components are extracted.
+
+### Bootstrap Sync
+
+On application startup, `syncAllFormCollections()` runs automatically to:
+1. Create or update shadow collections for all active forms
+2. Backfill any submissions that don't yet have content records
+
+This ensures the content table stays in sync even if records were created before the sync feature was added.
+
+---
+
+## Submissions
+
+### Submission Flow
+
+1. User fills out a public form
+2. `POST /api/forms/{identifier}/submit` is called
+3. All string values are recursively HTML-entity encoded (XSS prevention)
+4. A `form_submissions` record is created
+5. A `content` record is created in the shadow collection (dual-write)
+6. The submission is linked to the content via `content_id`
+
+### Submission Data Structure
+
+Each content item created from a submission includes:
+
+```json
+{
+  "id": "content-uuid",
+  "title": "John Doe",
+  "slug": "submission-abc12345",
+  "status": "published",
+  "collectionId": "form_contact-collection-id",
+  "data": {
+    "title": "John Doe",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "message": "Hello!",
+    "_submission_metadata": {
+      "submissionId": "submission-uuid",
+      "formId": "form-uuid",
+      "formName": "contact",
+      "email": "john@example.com",
+      "ipAddress": "192.168.1.1",
+      "userAgent": "Mozilla/5.0...",
+      "submittedAt": 1706000000000
+    }
+  }
+}
+```
+
+The title is automatically derived from submission data using this priority: name → fullName → firstName + lastName → email → subject → fallback "{Form Name} - {date}".
+
+### Viewing Submissions
+
+- **Admin Forms UI** — `/admin/forms/:id/submissions` shows a table of all submissions
+- **Content API** — Query the shadow collection like any other content
+
+---
+
+## Content API
+
+Form submissions are queryable through the standard Content API. Shadow collections are hidden from the regular content admin UI but fully accessible via the API.
+
+### List Submissions
+
+<CodeGroup title="Query Form Submissions">
+
+```bash {{title:'cURL'}}
+curl "http://localhost:8787/api/collections/form_contact/content?limit=25"
+```
+
+```javascript
+const response = await fetch(
+  'http://localhost:8787/api/collections/form_contact/content?limit=25'
+)
+const { data, meta } = await response.json()
+
+// Each item in data contains the submission fields + _submission_metadata
+```
+
+</CodeGroup>
+
+### Filter Submissions
+
+Use standard Content API filters:
+
+```bash
+# Search by email
+curl "http://localhost:8787/api/collections/form_contact/content?filter[data.email][equals]=john@example.com"
+
+# Get recent submissions
+curl "http://localhost:8787/api/collections/form_contact/content?sort=-created_at&limit=10"
+```
+
+### Get Single Submission
+
+```bash
+curl "http://localhost:8787/api/content/{contentId}"
+```
+
+### List Form Collections
+
+Form-sourced collections have `source_type: 'form'` in the collections API:
+
+```bash
+curl "http://localhost:8787/api/collections"
+```
+
+---
+
+## Public Form Endpoints
+
+### Render Form
+
+<ApiEndpoint method="GET" path="/forms/:name" description="Render a public HTML form page" auth={false} />
+
+Returns a complete HTML page with the Form.io renderer, Turnstile integration, and client-side submission handling.
+
+### Get Form Schema
+
+<ApiEndpoint method="GET" path="/api/forms/:identifier/schema" description="Get Form.io schema as JSON for headless frontends" auth={false} />
+
+Accepts form ID or name. Only returns active, public forms.
+
+```json
+{
+  "id": "form-uuid",
+  "name": "contact",
+  "displayName": "Contact Form",
+  "description": "Get in touch",
+  "category": "contact",
+  "schema": { "components": [...] },
+  "settings": { ... },
+  "submitUrl": "/api/forms/contact/submit"
+}
+```
+
+### Submit Form
+
+<ApiEndpoint method="POST" path="/api/forms/:identifier/submit" description="Submit form data" auth={false} />
+
+<CodeGroup title="Submit Form">
+
+```bash {{title:'cURL'}}
+curl -X POST http://localhost:8787/api/forms/contact/submit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "message": "Hello!"
+    }
+  }'
+```
+
+```javascript
+const response = await fetch('/api/forms/contact/submit', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    data: {
+      name: 'John Doe',
+      email: 'john@example.com',
+      message: 'Hello!',
+    },
+  }),
+})
+
+const { success, submissionId, contentId } = await response.json()
+```
+
+</CodeGroup>
+
+### Turnstile Config
+
+<ApiEndpoint method="GET" path="/api/forms/:identifier/turnstile-config" description="Get Turnstile CAPTCHA configuration for a form" auth={false} />
+
+Returns: `enabled`, `siteKey`, `theme`, `size`, `mode`, `appearance`. Supports per-form settings with global fallback.
+
+---
+
+## Security
+
+### XSS Prevention
+
+All submitted string values are recursively HTML-entity encoded before storage. This includes nested objects and arrays. Characters like `<`, `>`, `"`, `'`, and `&` are escaped.
+
+### Turnstile CAPTCHA
+
+Enable Cloudflare Turnstile on a per-form basis or globally:
+
+1. Configure the Turnstile plugin with your site key and secret
+2. Enable Turnstile in individual form settings, or use the global default
+3. The public form renderer automatically includes the Turnstile widget
+
+### Access Control
+
+- **Public submissions** — attributed to a `system-form-submission` system user
+- **Authenticated submissions** — attributed to the logged-in user
+- **Submission content** — published with status `published`, access controlled by user role
+- **Form management** — requires authentication via `requireAuth()` middleware
+
+<Note>
+Form submissions are exempt from CSRF protection since they are public endpoints. Use Turnstile CAPTCHA for bot protection.
+</Note>
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/collections" variant="text" arrow="right">
+    <>Learn about collections</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/api" variant="text" arrow="right">
+    <>Content API reference</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/turnstile" variant="text" arrow="right">
+    <>Turnstile CAPTCHA plugin</>
+  </Button>
+</div>

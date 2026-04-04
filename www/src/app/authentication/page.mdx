@@ -4,6 +4,7 @@ export const sections = [
   { title: 'Passwordless Authentication', id: 'passwordless-authentication' },
   { title: 'User Management', id: 'user-management' },
   { title: 'RBAC', id: 'rbac' },
+  { title: 'Security', id: 'security' },
 ]
 
 # Authentication
@@ -292,22 +293,43 @@ const { user, token } = await response.json();
 
 ### User Roles
 
-SonicJS supports four built-in roles:
+SonicJS supports four built-in roles with specific enforcement across the system:
 
 <Properties>
   <Property name="admin" type="string">
-    Full system access. Can manage users, content, settings, and plugins.
+    Full system access. Can manage users, collections, content, settings, and plugins.
   </Property>
   <Property name="editor" type="string">
-    Content management. Can create, edit, publish, and delete content.
+    Content management. Can create, edit, publish, and delete content. Can read collections but not create or modify them.
   </Property>
   <Property name="author" type="string">
-    Content creation. Can create and edit own content, but not publish.
+    Own content only. Can create content and edit their own items. Cannot publish or delete. Limited to draft/review states.
   </Property>
   <Property name="viewer" type="string">
-    Read-only access. Can view content but not modify.
+    Read-only access. Can view published content but cannot create, edit, or delete anything.
   </Property>
 </Properties>
+
+### Permission Matrix
+
+| Capability | Admin | Editor | Author | Viewer |
+|-----------|-------|--------|--------|--------|
+| Create/edit/delete users | Yes | No | No | No |
+| Create/edit/delete collections | Yes | No | No | No |
+| Create content | Yes | Yes | Yes | No |
+| Edit any content | Yes | Yes | No | No |
+| Edit own content | Yes | Yes | Yes | No |
+| Publish content | Yes | Yes | No | No |
+| Delete content | Yes | Yes (own) | No | No |
+| View activity logs | Yes | No | No | No |
+| Manage plugins | Yes | No | No | No |
+| Access admin panel | Yes | Yes | Yes | Limited |
+
+### Default Roles
+
+- The **first registered user** is automatically assigned the `admin` role
+- All subsequent self-registered users default to the `viewer` role
+- Admins can change user roles via the admin panel
 
 ### Middleware
 
@@ -330,6 +352,59 @@ app.use('/api/*', optionalAuth())
 ```
 
 </CodeGroup>
+
+The `requireRole()` middleware returns a 403 JSON response for API requests or redirects to `/auth/login` for browser requests. Role checking uses constant-time comparison to prevent timing attacks.
+
+---
+
+## Security
+
+### Password Hashing
+
+SonicJS uses **PBKDF2-SHA256** with strong parameters for password storage:
+
+- **100,000 iterations** (NIST-recommended minimum)
+- **16-byte random salt** per password
+- **256-bit derived key**
+- Format: `pbkdf2:<iterations>:<salt_hex>:<hash_hex>`
+
+Legacy SHA-256 hashes are automatically upgraded to PBKDF2 on next successful login.
+
+### Rate Limiting
+
+Authentication endpoints are protected with KV-based rate limiting:
+
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| `POST /auth/login` | 5 attempts | 60 seconds |
+| `POST /auth/register` | 3 attempts | 60 seconds |
+| `POST /auth/seed-admin` | 2 attempts | 60 seconds |
+| `POST /auth/request-password-reset` | 3 attempts | 15 minutes |
+
+Rate limiting uses Cloudflare KV for distributed state and gracefully degrades if KV is unavailable. Responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
+
+### CSRF Protection
+
+SonicJS implements a **signed double-submit cookie pattern** for CSRF protection:
+
+- Tokens are HMAC-SHA256 signed using the `JWT_SECRET`
+- Validation checks the `X-CSRF-Token` header against the `csrf_token` cookie
+- Falls back to reading `_csrf` from form body for traditional form submissions
+- Cookie settings: `sameSite: 'Strict'`, `secure: true` in production, 24-hour expiry
+
+**Exempt paths:** Login, registration, public form submissions, and API-key-only requests are exempt from CSRF validation.
+
+### Security Headers
+
+All responses include security headers:
+
+| Header | Value |
+|--------|-------|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` (production) |
 
 ---
 

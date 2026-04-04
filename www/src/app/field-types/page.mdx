@@ -548,7 +548,7 @@ TinyMCE editor (requires TinyMCE Plugin).
 
 ### object
 
-Nested group of fields.
+Nested group of fields with optional collapsible grouping.
 
 <CodeGroup title="Object Field">
 
@@ -581,8 +581,54 @@ Nested group of fields.
 | Option | Type | Description |
 |--------|------|-------------|
 | `properties` | object | Nested field definitions |
+| `objectLayout` | string | `'nested'` (default) or `'flat'` — controls grouping behavior |
+| `collapsed` | boolean | Initial collapse state for nested layout (default: `false`) |
 
 **Storage:** `JSON`
+
+### Collapsible Field Groups
+
+Use `objectLayout: 'nested'` (the default) to render object fields as a collapsible group with a clickable header and chevron icon. Use `objectLayout: 'flat'` to render fields inline without any grouping wrapper.
+
+<CodeGroup title="Collapsible Object Group">
+
+```typescript
+{
+  type: 'object',
+  title: 'Advanced Settings',
+  objectLayout: 'nested',  // Default — renders as collapsible group
+  collapsed: true,          // Starts collapsed
+  properties: {
+    cacheControl: { type: 'string', title: 'Cache Control' },
+    canonicalUrl: { type: 'url', title: 'Canonical URL' },
+  }
+}
+```
+
+</CodeGroup>
+
+<CodeGroup title="Flat Object Layout">
+
+```typescript
+{
+  type: 'object',
+  title: 'SEO',
+  objectLayout: 'flat',    // No grouping, no collapse
+  properties: {
+    title: { type: 'string', title: 'SEO title' },
+    description: { type: 'textarea', title: 'SEO description' },
+  }
+}
+```
+
+</CodeGroup>
+
+**Collapse behavior:**
+- `collapsed: true` — group starts collapsed (hidden)
+- `collapsed: false` or omitted — group starts expanded (visible)
+- If the group contains validation errors, it **automatically expands** regardless of the `collapsed` setting
+- Collapse state is **persisted in sessionStorage** per page and collection, so the user's preference is remembered across form interactions and HTMX swaps
+- State is saved on toggle, form submit, page visibility change, and before unload
 
 ---
 

@@ -26,6 +26,8 @@ export { aiSearchPlugin } from './ai-search-plugin'
 export { AISearchService, IndexManager } from './ai-search-plugin'
 export { oauthProvidersPlugin, createOAuthProvidersPlugin } from './oauth-providers'
 export { OAuthService, BUILT_IN_PROVIDERS } from './oauth-providers/oauth-service'
+export { globalVariablesPlugin, createGlobalVariablesPlugin } from './global-variables-plugin'
+export { resolveVariables, resolveVariablesInObject } from './global-variables-plugin'
 
 // Core plugins list - now imported from auto-generated registry
 export const CORE_PLUGIN_IDS = [
@@ -44,7 +46,8 @@ export const CORE_PLUGIN_IDS = [
   'otp-login',
   'turnstile',
   'ai-search',
-  'oauth-providers'
+  'oauth-providers',
+  'global-variables'
 ] as const
 
 export type CorePluginNames = (typeof CORE_PLUGIN_IDS)[number]

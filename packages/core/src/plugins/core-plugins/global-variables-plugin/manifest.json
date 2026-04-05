@@ -1,0 +1,27 @@
+{
+  "id": "global-variables",
+  "name": "Global Variables",
+  "version": "1.0.0-beta.1",
+  "description": "Dynamic content variables that can be referenced as inline tokens in rich text fields. Supports {variable_key} syntax with server-side resolution.",
+  "author": "SonicJS Team",
+  "homepage": "https://sonicjs.com/plugins/global-variables",
+  "repository": "https://github.com/SonicJs-Org/sonicjs",
+  "license": "MIT",
+  "category": "content",
+  "tags": ["variables", "tokens", "dynamic-content", "rich-text", "globals"],
+  "dependencies": [],
+  "settings": {
+    "enableResolution": true,
+    "cacheEnabled": true,
+    "cacheTTL": 300
+  },
+  "hooks": {
+    "onActivate": "activate",
+    "onDeactivate": "deactivate"
+  },
+  "routes": [],
+  "permissions": {
+    "global-variables:manage": "Manage global variables",
+    "global-variables:view": "View global variables"
+  }
+}

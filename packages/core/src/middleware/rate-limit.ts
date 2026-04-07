@@ -46,7 +46,7 @@ export function rateLimit(options: RateLimitOptions) {
 
       if (entry.count > max) {
         // Store the updated count even when rejecting
-        await kv.put(key, JSON.stringify(entry), { expirationTtl: Math.max(ttlSeconds, 1) })
+        await kv.put(key, JSON.stringify(entry), { expirationTtl: Math.max(ttlSeconds, 60) })
 
         const retryAfter = Math.ceil((entry.resetAt - now) / 1000)
         c.header('Retry-After', String(retryAfter))
@@ -56,7 +56,7 @@ export function rateLimit(options: RateLimitOptions) {
         return c.json({ error: 'Too many requests. Please try again later.' }, 429)
       }
 
-      await kv.put(key, JSON.stringify(entry), { expirationTtl: Math.max(ttlSeconds, 1) })
+      await kv.put(key, JSON.stringify(entry), { expirationTtl: Math.max(ttlSeconds, 60) })
 
       c.header('X-RateLimit-Limit', String(max))
       c.header('X-RateLimit-Remaining', String(max - entry.count))

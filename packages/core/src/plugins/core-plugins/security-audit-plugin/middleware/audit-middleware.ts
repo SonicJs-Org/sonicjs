@@ -75,21 +75,29 @@ export function securityAuditMiddleware() {
     const { ip, userAgent, countryCode, method } = extractRequestInfo(c)
     const fingerprint = generateFingerprint(ip, userAgent)
 
-    // For login POST, check lockout before proceeding
-    if (path === '/auth/login' && method === 'POST') {
-      let email = ''
+    // For login POST, extract email and check lockout before proceeding
+    const isLoginPost = (path === '/auth/login' || path === '/auth/login/form') && method === 'POST'
+    let preExtractedEmail = ''
+
+    if (isLoginPost) {
       try {
-        // Clone the request to read body without consuming it
-        const body = await c.req.json()
-        email = body?.email?.toLowerCase() || ''
-        // We need to re-set the body - but Hono caches parsed JSON so this works
+        if (path === '/auth/login/form') {
+          // Form-based login: clone request to read formData without consuming it
+          const clonedReq = c.req.raw.clone()
+          const formData = await clonedReq.formData()
+          preExtractedEmail = (formData.get('email') as string || '').toLowerCase()
+        } else {
+          // JSON login: Hono caches parsed JSON so this is safe
+          const body = await c.req.json()
+          preExtractedEmail = body?.email?.toLowerCase() || ''
+        }
       } catch {
         // Can't parse body, continue
       }
 
-      if (email && settings.bruteForce.enabled) {
+      if (preExtractedEmail && settings.bruteForce.enabled) {
         const detector = new BruteForceDetector(c.env.CACHE_KV, settings.bruteForce)
-        const lockStatus = await detector.isLocked(ip, email)
+        const lockStatus = await detector.isLocked(ip, preExtractedEmail)
 
         if (lockStatus.locked) {
           const service = new SecurityAuditService(db, settings)
@@ -97,7 +105,7 @@ export function securityAuditMiddleware() {
           const logPromise = service.logEvent({
             eventType: 'login_failure',
             severity: 'warning',
-            email,
+            email: preExtractedEmail,
             ipAddress: ip,
             userAgent,
             countryCode: countryCode || undefined,
@@ -123,7 +131,7 @@ export function securityAuditMiddleware() {
     await next()
 
     // After response, log the event asynchronously
-    const logPromise = logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerprint, path, method)
+    const logPromise = logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerprint, path, method, preExtractedEmail)
 
     if (c.executionCtx?.waitUntil) {
       c.executionCtx.waitUntil(logPromise)
@@ -140,26 +148,44 @@ async function logAuthEvent(
   countryCode: string | null,
   fingerprint: string,
   path: string,
-  method: string
+  method: string,
+  preExtractedEmail: string = ''
 ): Promise<void> {
   try {
     const service = new SecurityAuditService(db, settings)
     const status = c.res.status
+    const isLoginPost = (path === '/auth/login' || path === '/auth/login/form') && method === 'POST'
+    const isFormLogin = path === '/auth/login/form'
 
     // Login POST
-    if (path === '/auth/login' && method === 'POST') {
-      if (status === 200) {
+    if (isLoginPost) {
+      // Determine if login succeeded or failed.
+      // JSON login: 200 = success, 401/400 = failure
+      // Form login: always returns 200 — check if response set an auth cookie (HX-Redirect header indicates success)
+      let loginSucceeded: boolean
+      if (isFormLogin) {
+        // Form login redirects to /admin on success via HX-Redirect header or meta refresh
+        const hxRedirect = c.res.headers.get('HX-Redirect')
+        const setCookieHeader = c.res.headers.get('set-cookie') || ''
+        loginSucceeded = !!(hxRedirect?.includes('/admin') || setCookieHeader.includes('auth_token'))
+      } else {
+        loginSucceeded = status === 200
+      }
+
+      if (loginSucceeded) {
         if (!settings.logging.logSuccessfulLogins) return
 
         // Try to get user info from response
-        let email = ''
+        let email = preExtractedEmail
         let userId = ''
-        try {
-          const cloned = c.res.clone()
-          const body = await cloned.json() as any
-          email = body?.user?.email || ''
-          userId = body?.user?.id || ''
-        } catch { /* ignore */ }
+        if (!isFormLogin) {
+          try {
+            const cloned = c.res.clone()
+            const body = await cloned.json() as any
+            email = body?.user?.email || email
+            userId = body?.user?.id || ''
+          } catch { /* ignore */ }
+        }
 
         await service.logEvent({
           eventType: 'login_success',
@@ -173,13 +199,9 @@ async function logAuthEvent(
           requestMethod: method,
           fingerprint
         })
-      } else if (status === 401 || status === 400) {
-        // Failed login
-        let email = ''
-        try {
-          // The original request body was already parsed by the route handler
-          // We can't re-read it, but we can try to get the email from the error context
-        } catch { /* ignore */ }
+      } else {
+        // Failed login — use pre-extracted email since body is already consumed
+        const email = preExtractedEmail
 
         await service.logEvent({
           eventType: 'login_failure',

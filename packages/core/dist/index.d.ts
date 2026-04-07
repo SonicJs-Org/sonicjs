@@ -1,11 +1,12 @@
-export { B as Bindings, S as SonicJSApp, a as SonicJSConfig, V as Variables, c as createSonicJSApp, s as setupCoreMiddleware, b as setupCoreRoutes } from './app-Blg3U4YB.js';
+export { B as Bindings, a as SonicJSApp, S as SonicJSConfig, V as Variables, c as createSonicJSApp, s as setupCoreMiddleware, b as setupCoreRoutes } from './app-COElO4Rm.js';
 import { B as schema } from './plugin-bootstrap-CZ1GDum7.js';
 export { D as Collection, E as Content, C as CorePlugin, F as DbPlugin, G as DbPluginHook, L as LogCategory, H as LogConfig, a as LogEntry, b as LogFilter, c as LogLevel, d as Logger, I as Media, M as Migration, e as MigrationService, f as MigrationStatus, N as NewCollection, J as NewContent, K as NewLogConfig, O as NewMedia, Q as NewPlugin, R as NewPluginActivityLog, S as NewPluginAsset, T as NewPluginHook, U as NewPluginRoute, V as NewSystemLog, W as NewUser, X as NewWorkflowHistory, Y as PluginActivityLog, Z as PluginAsset, P as PluginBootstrapService, _ as PluginRoute, g as PluginServiceClass, $ as SystemLog, a0 as User, a1 as WorkflowHistory, a2 as apiTokens, h as backfillFormSubmissions, i as cleanupRemovedCollections, a3 as collections, a4 as content, a5 as contentVersions, j as createContentFromSubmission, k as deriveCollectionSchemaFromFormio, l as deriveSubmissionTitle, m as fullCollectionSync, n as getAvailableCollectionNames, o as getLogger, p as getManagedCollections, q as initLogger, a6 as insertCollectionSchema, a7 as insertContentSchema, a8 as insertLogConfigSchema, a9 as insertMediaSchema, aa as insertPluginActivityLogSchema, ab as insertPluginAssetSchema, ac as insertPluginHookSchema, ad as insertPluginRouteSchema, ae as insertPluginSchema, af as insertSystemLogSchema, ag as insertUserSchema, ah as insertWorkflowHistorySchema, r as isCollectionManaged, s as loadCollectionConfig, t as loadCollectionConfigs, ai as logConfig, u as mapFormStatusToContentStatus, aj as media, ak as pluginActivityLog, al as pluginAssets, am as pluginHooks, an as pluginRoutes, ao as plugins, v as registerCollections, ap as selectCollectionSchema, aq as selectContentSchema, ar as selectLogConfigSchema, as as selectMediaSchema, at as selectPluginActivityLogSchema, au as selectPluginAssetSchema, av as selectPluginHookSchema, aw as selectPluginRouteSchema, ax as selectPluginSchema, ay as selectSystemLogSchema, az as selectUserSchema, aA as selectWorkflowHistorySchema, w as syncAllFormCollections, x as syncCollection, y as syncCollections, z as syncFormCollection, aB as systemLogs, aC as users, A as validateCollectionConfig, aD as workflowHistory } from './plugin-bootstrap-CZ1GDum7.js';
 export { AuthManager, Permission, PermissionManager, UserPermissions, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './middleware.js';
 export { H as HookSystemImpl, a as HookUtils, P as PluginManagerClass, b as PluginRegistryImpl, c as PluginValidatorClass, S as ScopedHookSystemClass } from './plugin-manager-Efx9RyDX.js';
 export { ROUTES_INFO, adminApiRoutes, adminCheckboxRoutes, adminCodeExamplesRoutes, adminCollectionsRoutes, adminContentRoutes, adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, adminTestimonialsRoutes, adminUsersRoutes, apiContentCrudRoutes, apiMediaRoutes, apiRoutes, apiSystemRoutes, authRoutes } from './routes.js';
 export { A as AlertData, C as ConfirmationDialogOptions, F as Filter, a as FilterBarData, b as FilterOption, c as FormData, d as FormField, P as PaginationData, T as TableColumn, e as TableData, g as getConfirmationDialogScript, r as renderAlert, f as renderConfirmationDialog, h as renderFilterBar, i as renderForm, j as renderFormField, k as renderPagination, l as renderTable } from './filter-bar.template-DlVYMk-T.js';
-export { C as CollectionConfig, b as CollectionConfigModule, c as CollectionSchema, d as CollectionSyncResult, F as FieldConfig, e as FieldType } from './collection-config-B4PG-AaF.js';
+import { e as FieldType } from './collection-config-B4PG-AaF.js';
+export { C as CollectionConfig, b as CollectionConfigModule, c as CollectionSchema, d as CollectionSyncResult, F as FieldConfig } from './collection-config-B4PG-AaF.js';
 export { A as AuthService, C as ContentService, H as HOOKS, a as HookContext, b as HookHandler, c as HookName, d as HookSystem, M as MediaService, P as Plugin, f as PluginAdminPage, g as PluginBuilderOptions, h as PluginComponent, i as PluginConfig, j as PluginContext, k as PluginHook, l as PluginLogger, m as PluginManager, n as PluginMenuItem, o as PluginMiddleware, p as PluginModel, q as PluginRegistry, r as PluginRoutes, s as PluginService, t as PluginStatus, u as PluginValidationResult, v as PluginValidator, S as ScopedHookSystem } from './plugin-DDYetMF-.js';
 export { P as PluginManifest } from './plugin-manifest-Dpy8wxIB.js';
 export { F as FilterCondition, a as FilterGroup, b as FilterOperator, Q as QueryFilter, c as QueryFilterBuilder, d as QueryResult, S as SONICJS_VERSION, T as TemplateRenderer, e as buildQuery, f as escapeHtml, g as getCoreVersion, m as metricsTracker, r as renderTemplate, s as sanitizeInput, h as sanitizeObject, t as templateRenderer } from './version-ChpccWQ1.js';
@@ -637,6 +638,53 @@ declare class OAuthService {
 }
 
 /**
+ * User Profile Config Registry
+ *
+ * Global singleton storing developer-defined custom profile field definitions.
+ * Set once at app boot via defineUserProfile(), queried by routes and templates.
+ */
+
+interface ProfileFieldDefinition {
+    name: string;
+    label: string;
+    type: FieldType;
+    options?: string[];
+    default?: any;
+    required?: boolean;
+    placeholder?: string;
+    helpText?: string;
+    hidden?: boolean;
+    fields?: ProfileFieldDefinition[];
+    validation?: {
+        min?: number;
+        max?: number;
+        pattern?: string;
+    };
+}
+interface UserProfileConfig {
+    fields: ProfileFieldDefinition[];
+    registrationFields?: string[];
+}
+declare function defineUserProfile(config: UserProfileConfig): void;
+declare function getUserProfileConfig(): UserProfileConfig | null;
+
+/**
+ * User Profiles Plugin
+ *
+ * Configurable custom profile fields for users.
+ * Developers call defineUserProfile() at app boot to declare custom fields
+ * that are stored as JSON in user_profiles.data and rendered in the admin UI.
+ *
+ * API Routes:
+ *   GET  /api/user-profiles/schema     → Public field definitions
+ *   GET  /api/user-profiles/:userId    → Get custom data for a user (auth required)
+ *   PUT  /api/user-profiles/:userId    → Update custom data for a user (auth required)
+ */
+
+declare function createUserProfilesPlugin(): Plugin;
+declare const userProfilesPlugin: Plugin;
+
+/**
  * @sonicjs/core - Main Entry Point
  *
  * Core framework for SonicJS headless CMS
@@ -656,4 +704,4 @@ declare class OAuthService {
 
 declare const VERSION: string;
 
-export { BUILT_IN_PROVIDERS, OAuthService, PluginBuilder, PluginHelpers, VERSION, createDb, createOAuthProvidersPlugin, oauthProvidersPlugin };
+export { BUILT_IN_PROVIDERS, FieldType, OAuthService, PluginBuilder, PluginHelpers, type ProfileFieldDefinition, type UserProfileConfig, VERSION, createDb, createOAuthProvidersPlugin, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, oauthProvidersPlugin, userProfilesPlugin };

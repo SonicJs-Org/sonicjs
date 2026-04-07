@@ -1,12 +1,12 @@
-import { renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-DJXV5PAD.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes } from './chunk-DJXV5PAD.js';
+import { renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-AAQBPKE7.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-AAQBPKE7.js';
 import { SettingsService, setAppInstance, schema_exports } from './chunk-TBJY2FF7.js';
 export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-TBJY2FF7.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-I7PDSZKH.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-I7PDSZKH.js';
-import { PluginService } from './chunk-NMLFKXWW.js';
-export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-NMLFKXWW.js';
-export { MigrationService } from './chunk-UJKPAG6Q.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-R2CU57WQ.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-R2CU57WQ.js';
+import { PluginService } from './chunk-H3XXBAMO.js';
+export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-H3XXBAMO.js';
+export { MigrationService } from './chunk-RKKOSGTL.js';
 export { renderFilterBar } from './chunk-BWZBKLOC.js';
 import { init_admin_layout_catalyst_template, renderAdminLayout, renderAdminLayoutCatalyst } from './chunk-76TX6XND.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-76TX6XND.js';
@@ -6020,22 +6020,29 @@ function securityAuditMiddleware() {
     const settings = await getPluginSettings(db);
     const { ip, userAgent, countryCode, method } = extractRequestInfo(c);
     const fingerprint = generateFingerprint(ip, userAgent);
-    if (path === "/auth/login" && method === "POST") {
-      let email = "";
+    const isLoginPost = (path === "/auth/login" || path === "/auth/login/form") && method === "POST";
+    let preExtractedEmail = "";
+    if (isLoginPost) {
       try {
-        const body = await c.req.json();
-        email = body?.email?.toLowerCase() || "";
+        if (path === "/auth/login/form") {
+          const clonedReq = c.req.raw.clone();
+          const formData = await clonedReq.formData();
+          preExtractedEmail = (formData.get("email") || "").toLowerCase();
+        } else {
+          const body = await c.req.json();
+          preExtractedEmail = body?.email?.toLowerCase() || "";
+        }
       } catch {
       }
-      if (email && settings.bruteForce.enabled) {
+      if (preExtractedEmail && settings.bruteForce.enabled) {
         const detector = new BruteForceDetector(c.env.CACHE_KV, settings.bruteForce);
-        const lockStatus = await detector.isLocked(ip, email);
+        const lockStatus = await detector.isLocked(ip, preExtractedEmail);
         if (lockStatus.locked) {
           const service = new SecurityAuditService(db, settings);
           const logPromise2 = service.logEvent({
             eventType: "login_failure",
             severity: "warning",
-            email,
+            email: preExtractedEmail,
             ipAddress: ip,
             userAgent,
             countryCode: countryCode || void 0,
@@ -6055,27 +6062,39 @@ function securityAuditMiddleware() {
       }
     }
     await next();
-    const logPromise = logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerprint, path, method);
+    const logPromise = logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerprint, path, method, preExtractedEmail);
     if (c.executionCtx?.waitUntil) {
       c.executionCtx.waitUntil(logPromise);
     }
   };
 }
-async function logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerprint, path, method) {
+async function logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerprint, path, method, preExtractedEmail = "") {
   try {
     const service = new SecurityAuditService(db, settings);
     const status = c.res.status;
-    if (path === "/auth/login" && method === "POST") {
-      if (status === 200) {
+    const isLoginPost = (path === "/auth/login" || path === "/auth/login/form") && method === "POST";
+    const isFormLogin = path === "/auth/login/form";
+    if (isLoginPost) {
+      let loginSucceeded;
+      if (isFormLogin) {
+        const hxRedirect = c.res.headers.get("HX-Redirect");
+        const setCookieHeader = c.res.headers.get("set-cookie") || "";
+        loginSucceeded = !!(hxRedirect?.includes("/admin") || setCookieHeader.includes("auth_token"));
+      } else {
+        loginSucceeded = status === 200;
+      }
+      if (loginSucceeded) {
         if (!settings.logging.logSuccessfulLogins) return;
-        let email = "";
+        let email = preExtractedEmail;
         let userId = "";
-        try {
-          const cloned = c.res.clone();
-          const body = await cloned.json();
-          email = body?.user?.email || "";
-          userId = body?.user?.id || "";
-        } catch {
+        if (!isFormLogin) {
+          try {
+            const cloned = c.res.clone();
+            const body = await cloned.json();
+            email = body?.user?.email || email;
+            userId = body?.user?.id || "";
+          } catch {
+          }
         }
         await service.logEvent({
           eventType: "login_success",
@@ -6089,11 +6108,8 @@ async function logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerp
           requestMethod: method,
           fingerprint
         });
-      } else if (status === 401 || status === 400) {
-        let email = "";
-        try {
-        } catch {
-        }
+      } else {
+        const email = preExtractedEmail;
         await service.logEvent({
           eventType: "login_failure",
           severity: "warning",
@@ -6106,7 +6122,53 @@ async function logAuthEvent(c, db, settings, ip, userAgent, countryCode, fingerp
           fingerprint,
           details: { statusCode: status }
         });
-        if (email && settings.bruteForce.enabled) ;
+        if (email && settings.bruteForce.enabled) {
+          const detector = new BruteForceDetector(c.env.CACHE_KV, settings.bruteForce);
+          const result = await detector.recordFailedAttempt(ip, email);
+          if (result.shouldLockIP) {
+            await detector.lockIP(ip);
+            await service.logEvent({
+              eventType: "account_lockout",
+              severity: "critical",
+              email,
+              ipAddress: ip,
+              userAgent,
+              countryCode: countryCode || void 0,
+              requestPath: path,
+              requestMethod: method,
+              fingerprint,
+              details: { reason: "brute_force_ip", attemptCount: result.ipCount }
+            });
+          }
+          if (result.shouldLockEmail) {
+            await detector.lockEmail(email);
+            await service.logEvent({
+              eventType: "account_lockout",
+              severity: "critical",
+              email,
+              ipAddress: ip,
+              userAgent,
+              countryCode: countryCode || void 0,
+              requestPath: path,
+              requestMethod: method,
+              fingerprint,
+              details: { reason: "brute_force_email", attemptCount: result.emailCount }
+            });
+          }
+          if (result.isSuspicious) {
+            await service.logEvent({
+              eventType: "suspicious_activity",
+              severity: "critical",
+              ipAddress: ip,
+              userAgent,
+              countryCode: countryCode || void 0,
+              requestPath: path,
+              requestMethod: method,
+              fingerprint,
+              details: { reason: "multiple_emails_from_ip", ipCount: result.ipCount }
+            });
+          }
+        }
       }
     }
     if (path === "/auth/register" && method === "POST" && settings.logging.logRegistrations) {
@@ -8164,6 +8226,11 @@ function createSonicJSApp(config = {}) {
   app2.route("/admin/cache", cache_default.getRoutes());
   if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
     for (const route of oauthProvidersPlugin.routes) {
+      app2.route(route.path, route.handler);
+    }
+  }
+  if (userProfilesPlugin.routes && userProfilesPlugin.routes.length > 0) {
+    for (const route of userProfilesPlugin.routes) {
       app2.route(route.path, route.handler);
     }
   }

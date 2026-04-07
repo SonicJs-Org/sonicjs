@@ -225,6 +225,19 @@ export class PluginBootstrapService {
         cacheTTL: 300,
       },
     },
+    {
+      id: "user-profiles",
+      name: "user-profiles",
+      display_name: "User Profiles",
+      description: "Configurable custom profile fields for users",
+      version: "1.0.0-beta.1",
+      author: "SonicJS Team",
+      category: "users",
+      icon: "👤",
+      permissions: ["user-profiles:manage"],
+      dependencies: [],
+      settings: {},
+    },
   ];
 
   /**

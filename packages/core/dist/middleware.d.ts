@@ -1,6 +1,6 @@
 import * as hono from 'hono';
 import { Context, Next, MiddlewareHandler } from 'hono';
-import { a as SonicJSConfig } from './app-Blg3U4YB.js';
+import { S as SonicJSConfig } from './app-COElO4Rm.js';
 import '@cloudflare/workers-types';
 
 type Bindings = {

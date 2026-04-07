@@ -30,6 +30,8 @@ export { globalVariablesPlugin, createGlobalVariablesPlugin } from './global-var
 export { resolveVariables, resolveVariablesInObject } from './global-variables-plugin'
 export { securityAuditPlugin, createSecurityAuditPlugin } from './security-audit-plugin'
 export { SecurityAuditService, BruteForceDetector, securityAuditMiddleware } from './security-audit-plugin'
+export { userProfilesPlugin, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig } from './user-profiles'
+export type { ProfileFieldDefinition, UserProfileConfig } from './user-profiles'
 
 // Core plugins list - now imported from auto-generated registry
 export const CORE_PLUGIN_IDS = [
@@ -50,7 +52,8 @@ export const CORE_PLUGIN_IDS = [
   'ai-search',
   'oauth-providers',
   'global-variables',
-  'security-audit'
+  'security-audit',
+  'user-profiles'
 ] as const
 
 export type CorePluginNames = (typeof CORE_PLUGIN_IDS)[number]

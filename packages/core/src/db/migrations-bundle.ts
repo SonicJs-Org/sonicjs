@@ -242,9 +242,16 @@ export const bundledMigrations: BundledMigration[] = [
   },
   {
     id: '034',
+    name: 'User Profile Custom Data',
+    filename: '0011_user_profiles_data.sql',
+    description: 'Migration 034: Add custom data column to user_profiles for plugin-defined fields',
+    sql: "-- Migration 0011: Add custom data column to user_profiles\n-- Stores plugin-defined custom profile fields as JSON\n-- Used by the user-profiles plugin for developer-defined fields\n\nALTER TABLE user_profiles ADD COLUMN data TEXT DEFAULT '{}';\n"
+  },
+  {
+    id: '035',
     name: 'Security Audit Plugin',
     filename: '034_security_audit_plugin.sql',
-    description: 'Migration 034: Security Audit Plugin',
+    description: 'Migration 035: Security Audit Plugin',
     sql: "-- Security Audit Plugin\n-- Tracks login attempts, registrations, and security events for monitoring and brute-force detection\n\nCREATE TABLE IF NOT EXISTS security_events (\n  id TEXT PRIMARY KEY,\n  event_type TEXT NOT NULL,\n  severity TEXT NOT NULL DEFAULT 'info',\n  user_id TEXT,\n  email TEXT,\n  ip_address TEXT,\n  user_agent TEXT,\n  country_code TEXT,\n  request_path TEXT,\n  request_method TEXT,\n  details TEXT,\n  fingerprint TEXT,\n  blocked INTEGER NOT NULL DEFAULT 0,\n  created_at INTEGER NOT NULL\n);\n\nCREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(event_type);\nCREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id);\nCREATE INDEX IF NOT EXISTS idx_security_events_email ON security_events(email);\nCREATE INDEX IF NOT EXISTS idx_security_events_ip ON security_events(ip_address);\nCREATE INDEX IF NOT EXISTS idx_security_events_severity ON security_events(severity);\nCREATE INDEX IF NOT EXISTS idx_security_events_created ON security_events(created_at);\nCREATE INDEX IF NOT EXISTS idx_security_events_fingerprint ON security_events(fingerprint);\n"
   }
 ]

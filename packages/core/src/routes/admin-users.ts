@@ -8,6 +8,7 @@ import { renderUserEditPage, type UserEditPageData, type UserEditData, type User
 import { renderUserNewPage, type UserNewPageData } from '../templates/pages/admin-user-new.template'
 import { renderUsersListPage, type UsersListPageData, type User } from '../templates/pages/admin-users-list.template'
 import type { Bindings, Variables } from '../app'
+import { getUserProfileConfig, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData } from '../plugins/core-plugins/user-profiles'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -107,10 +108,16 @@ userRoutes.get('/profile', async (c) => {
       last_login_at: userProfile.last_login_at
     }
 
+    // Get custom profile data
+    const customData = await getCustomData(db, user!.userId)
+    const profileConfig = getUserProfileConfig()
+    const customProfileFieldsHtml = renderCustomProfileSection(profileConfig, customData)
+
     const pageData: ProfilePageData = {
       profile,
       timezones: TIMEZONES,
       languages: LANGUAGES,
+      customProfileFieldsHtml,
       user: {
         name: `${profile.first_name} ${profile.last_name}`.trim() || profile.username || user!.email,
         email: user!.email,
@@ -209,6 +216,19 @@ userRoutes.put('/profile', async (c) => {
       user!.userId
     ).run()
 
+    // Save custom profile fields
+    const profileConfig = getUserProfileConfig()
+    if (profileConfig) {
+      const rawCustom = extractCustomFieldsFromForm(formData, profileConfig)
+      const sanitized = sanitizeCustomData(rawCustom, profileConfig)
+      const validation = validateCustomData(sanitized, profileConfig)
+      if (!validation.valid) {
+        const errorMessages = Object.values(validation.errors).join(', ')
+        return c.html(renderAlert({ type: 'error', message: errorMessages, dismissible: true }), 400)
+      }
+      await saveCustomData(db, user!.userId, sanitized)
+    }
+
     // Log the activity
     await logActivity(
       db, user!.userId, 'profile.update', 'users', user!.userId,
@@ -217,7 +237,7 @@ userRoutes.put('/profile', async (c) => {
       c.req.header('user-agent')
     )
 
-    return c.html(renderAlert({ 
+    return c.html(renderAlert({
       type: 'success', 
       message: 'Profile updated successfully!',
       dismissible: true 
@@ -823,7 +843,7 @@ userRoutes.get('/users/:id/edit', async (c) => {
 
     // Get user profile data
     const profileStmt = db.prepare(`
-      SELECT display_name, bio, company, job_title, website, location, date_of_birth
+      SELECT display_name, bio, company, job_title, website, location, date_of_birth, data
       FROM user_profiles
       WHERE user_id = ?
     `)
@@ -839,6 +859,14 @@ userRoutes.get('/users/:id/edit', async (c) => {
       location: profileData.location,
       dateOfBirth: profileData.date_of_birth
     } : undefined
+
+    // Parse custom profile data
+    let customData: Record<string, any> = {}
+    if (profileData?.data) {
+      try { customData = JSON.parse(profileData.data) } catch {}
+    }
+    const profileConfig = getUserProfileConfig()
+    const customProfileFieldsHtml = renderCustomProfileSection(profileConfig, customData)
 
     // Convert to UserEditData interface
     const editData: UserEditData = {
@@ -861,6 +889,7 @@ userRoutes.get('/users/:id/edit', async (c) => {
     const pageData: UserEditPageData = {
       userToEdit: editData,
       roles: ROLES,
+      customProfileFieldsHtml,
       user: {
         name: user!.email.split('@')[0] || user!.email,
         email: user!.email,
@@ -916,6 +945,23 @@ userRoutes.put('/users/:id', async (c) => {
     const profileLocation = sanitizeInput(formData.get('profile_location')?.toString()) || null
     const profileDateOfBirthStr = formData.get('profile_date_of_birth')?.toString()?.trim() || null
     const profileDateOfBirth = profileDateOfBirthStr ? new Date(profileDateOfBirthStr).getTime() : null
+
+    // Extract custom profile fields
+    const profileConfig = getUserProfileConfig()
+    let customDataJson: string | null = null
+    if (profileConfig) {
+      const rawCustom = extractCustomFieldsFromForm(formData, profileConfig)
+      const sanitized = sanitizeCustomData(rawCustom, profileConfig)
+      const validation = validateCustomData(sanitized, profileConfig)
+      if (!validation.valid) {
+        const errorMessages = Object.values(validation.errors).join(', ')
+        return c.html(renderAlert({ type: 'error', message: errorMessages, dismissible: true }), 400)
+      }
+      // Merge with existing custom data
+      const existingCustom = await getCustomData(db, userId)
+      const merged = { ...existingCustom, ...sanitized }
+      customDataJson = JSON.stringify(merged)
+    }
 
     // Validate required fields
     if (!firstName || !lastName || !username || !email) {
@@ -1023,22 +1069,26 @@ userRoutes.put('/users/:id', async (c) => {
           UPDATE user_profiles SET
             display_name = ?, bio = ?, company = ?, job_title = ?,
             website = ?, location = ?, date_of_birth = ?, updated_at = ?
+            ${customDataJson !== null ? ', data = ?' : ''}
           WHERE user_id = ?
         `)
-        await updateProfileStmt.bind(
+        const updateBindings = [
           profileDisplayName, profileBio, profileCompany, profileJobTitle,
-          profileWebsite, profileLocation, profileDateOfBirth, now, userId
-        ).run()
+          profileWebsite, profileLocation, profileDateOfBirth, now,
+          ...(customDataJson !== null ? [customDataJson] : []),
+          userId
+        ]
+        await updateProfileStmt.bind(...updateBindings).run()
       } else {
         // Create new profile
         const profileId = `profile_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
         const insertProfileStmt = db.prepare(`
-          INSERT INTO user_profiles (id, user_id, display_name, bio, company, job_title, website, location, date_of_birth, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO user_profiles (id, user_id, display_name, bio, company, job_title, website, location, date_of_birth, data, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         await insertProfileStmt.bind(
           profileId, userId, profileDisplayName, profileBio, profileCompany, profileJobTitle,
-          profileWebsite, profileLocation, profileDateOfBirth, now, now
+          profileWebsite, profileLocation, profileDateOfBirth, customDataJson || '{}', now, now
         ).run()
       }
     }

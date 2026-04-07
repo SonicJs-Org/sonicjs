@@ -1,0 +1,15 @@
+{
+  "name": "user-profiles",
+  "displayName": "User Profiles",
+  "description": "Configurable custom profile fields for users",
+  "version": "1.0.0-beta.1",
+  "author": {
+    "name": "SonicJS Team",
+    "email": "team@sonicjs.com"
+  },
+  "category": "users",
+  "icon": "user",
+  "isCore": true,
+  "dependencies": [],
+  "settings": {}
+}

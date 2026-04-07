@@ -35,6 +35,7 @@ export interface UserEditPageData {
   roles: Array<{ value: string; label: string }>
   error?: string
   success?: string
+  customProfileFieldsHtml?: string
   user?: {
     name: string
     email: string
@@ -250,6 +251,8 @@ export function renderUserEditPage(data: UserEditPageData): string {
                   >${escapeHtml(data.userToEdit.profile?.bio || '')}</textarea>
                 </div>
               </div>
+
+              ${data.customProfileFieldsHtml || ''}
 
               <!-- Set Password -->
               <div class="mb-8">

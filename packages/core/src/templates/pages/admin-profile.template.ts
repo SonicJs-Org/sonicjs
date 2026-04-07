@@ -26,6 +26,7 @@ export interface ProfilePageData {
   languages: Array<{ value: string; label: string }>
   error?: string
   success?: string
+  customProfileFieldsHtml?: string
   user?: {
     name: string
     email: string
@@ -154,6 +155,8 @@ export function renderProfilePage(data: ProfilePageData): string {
                   placeholder="Tell us about yourself..."
                 >${data.profile.bio || ''}</textarea>
               </div>
+
+              ${data.customProfileFieldsHtml || ''}
 
               <!-- Preferences -->
               <div class="pt-6 border-t border-zinc-950/5 dark:border-white/5">

@@ -10,6 +10,7 @@ import { getCacheService, CACHE_CONFIGS } from '../services'
 import { authValidationService, isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
 import type { RegistrationData } from '../services/auth-validation'
 import type { Bindings, Variables } from '../app'
+import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData } from '../plugins/core-plugins/user-profiles'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
 
@@ -177,9 +178,25 @@ authRoutes.post('/register',
         now.getTime()
       ).run()
       
+      // Save custom profile fields if configured
+      const profileConfig = getUserProfileConfig()
+      if (profileConfig) {
+        const regFields = getRegistrationFields()
+        if (regFields.length > 0) {
+          const customData: Record<string, any> = { ...getProfileFieldDefaults() }
+          for (const field of regFields) {
+            if (requestData[field.name] !== undefined) {
+              customData[field.name] = requestData[field.name]
+            }
+          }
+          const sanitized = sanitizeCustomData(customData, profileConfig)
+          await saveCustomData(db, userId, sanitized)
+        }
+      }
+
       // Generate JWT token
       const token = await AuthManager.generateToken(userId, normalizedEmail, 'viewer', c.env.JWT_SECRET)
-      
+
       // Set HTTP-only cookie
       setCookie(c, 'auth_token', token, {
         httpOnly: true,
@@ -489,6 +506,23 @@ authRoutes.post('/register/form',
       now.getTime(),
       now.getTime()
     ).run()
+
+    // Save custom profile fields if configured
+    const profileConfig = getUserProfileConfig()
+    if (profileConfig) {
+      const regFields = getRegistrationFields()
+      if (regFields.length > 0) {
+        const customData: Record<string, any> = { ...getProfileFieldDefaults() }
+        for (const field of regFields) {
+          const raw = formData.get(field.name)?.toString()
+          if (raw !== undefined && raw !== null) {
+            customData[field.name] = raw
+          }
+        }
+        const sanitized = sanitizeCustomData(customData, profileConfig)
+        await saveCustomData(db, userId, sanitized)
+      }
+    }
 
     // Generate JWT token
     const token = await AuthManager.generateToken(userId, normalizedEmail, role, c.env.JWT_SECRET)

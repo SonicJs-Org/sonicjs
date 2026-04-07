@@ -311,6 +311,10 @@ export { PluginBuilder, PluginHelpers } from './plugins/sdk'
 export { oauthProvidersPlugin, createOAuthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 export { OAuthService, BUILT_IN_PROVIDERS } from './plugins/core-plugins/oauth-providers/oauth-service'
 
+// User Profiles Plugin
+export { userProfilesPlugin, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig } from './plugins/core-plugins/user-profiles'
+export type { ProfileFieldDefinition, UserProfileConfig } from './plugins/core-plugins/user-profiles'
+
 // ============================================================================
 // Version
 // ============================================================================

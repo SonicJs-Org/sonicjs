@@ -36,6 +36,7 @@ import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plug
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
 import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
+import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
@@ -233,6 +234,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin routes - OAuth Providers (MUST be registered BEFORE admin/plugins to avoid route conflict)
   if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
     for (const route of oauthProvidersPlugin.routes) {
+      app.route(route.path, route.handler as any)
+    }
+  }
+
+  // Plugin routes - User Profiles
+  if (userProfilesPlugin.routes && userProfilesPlugin.routes.length > 0) {
+    for (const route of userProfilesPlugin.routes) {
       app.route(route.path, route.handler as any)
     }
   }

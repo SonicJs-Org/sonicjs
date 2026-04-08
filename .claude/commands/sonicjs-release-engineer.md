@@ -4,6 +4,7 @@ You are a specialized agent that manages npm package releases and dependency upd
 
 1. **Updating npm dependencies** - Keep dependencies current and secure
 2. **Publishing packages to npm** - Release new versions of `@sonicjs-cms/core` and `create-sonicjs`
+3. **Updating feature documentation** - Ensure website docs reflect product changes included in each release
 
 ## Background
 
@@ -274,7 +275,66 @@ git commit -m "docs(www): add v<VERSION> to changelog and homepage
 git push origin main
 ```
 
-### Step 10: Announce Release
+### Step 10: Update Feature Documentation
+
+After publishing, review all commits since the last release to identify new features, configuration changes, API changes, or behavioral changes that should be reflected in the website documentation pages under `www/src/app/`.
+
+#### 10a. Identify Documentation-Impacting Changes
+
+```bash
+# Get the previous release tag
+PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1)
+
+# List commits since last release, filtering for feature/fix commits
+git log $PREV_TAG..HEAD --oneline --no-merges | grep -E "^[a-f0-9]+ (feat|fix|refactor|breaking)"
+```
+
+Review each relevant commit and determine which documentation pages need updating.
+
+#### 10b. Map Changes to Documentation Pages
+
+Common mappings (not exhaustive):
+- **Authentication/User changes** → `www/src/app/authentication/page.mdx`
+- **API route changes** → `www/src/app/api/page.mdx`
+- **Collection/field changes** → `www/src/app/collections/page.mdx`, `www/src/app/field-types/page.mdx`
+- **Database/migration changes** → `www/src/app/database/page.mdx`
+- **Plugin changes** → `www/src/app/plugins/<plugin-name>/page.mdx`
+- **Security changes** → `www/src/app/security/page.mdx`
+- **Deployment changes** → `www/src/app/deployment/page.mdx`
+- **Configuration changes** → `www/src/app/configuration/page.mdx`
+- **Form changes** → `www/src/app/forms/page.mdx`
+- **Webhook changes** → `www/src/app/webhooks/page.mdx`
+- **Routing/middleware changes** → `www/src/app/routing/page.mdx`
+
+#### 10c. Update Each Affected Documentation Page
+
+For each page that needs updating:
+1. Read the current page to understand its structure and style
+2. Add, update, or remove sections to accurately reflect the current product behavior
+3. Keep the existing page style and component patterns consistent
+4. Include code examples where appropriate
+
+#### 10d. Verify Documentation Build
+
+```bash
+cd www && npm run build
+```
+
+#### 10e. Commit Documentation Updates
+
+```bash
+git add www/src/app/
+git commit -m "docs(www): update feature documentation for v<VERSION>
+
+Updated pages: [list affected pages]
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+git push origin main
+```
+
+**IMPORTANT:** If no feature documentation changes are needed (e.g., patch release with only internal bug fixes), skip this step and note that no documentation updates were required.
+
+### Step 11: Announce Release
 
 Announce the release to Discord and Twitter automatically — no need to ask for confirmation:
 
@@ -284,7 +344,7 @@ npm run release:announce
 
 This posts to Discord and Twitter.
 
-### Step 11: Post-Release Verification
+### Step 12: Post-Release Verification
 
 After completing all steps, verify:
 
@@ -301,6 +361,8 @@ After completing all steps, verify:
 3. **GitHub release exists**: Check releases page
 
 4. **Changelog updated**: Verify the docs website changelog includes the new version
+
+5. **Feature docs updated**: Verify that documentation pages reflect all product changes in this release
 
 ## Workflow 3: Pre-release Versions (Alpha/Beta/RC)
 

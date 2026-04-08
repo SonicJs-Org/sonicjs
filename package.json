@@ -56,7 +56,7 @@
     "@sonicjs-cms/core": "^2.0.1",
     "clsx": "^2.1.1",
     "drizzle-kit": "^0.31.2",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "highlight.js": "^11.11.1",
     "hono": "^4.12.7",

@@ -119,7 +119,7 @@
     "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.50.0",
     "@vitest/coverage-v8": "^4.0.5",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "^0.45.2",
     "eslint": "^9.39.2",
     "glob": "^10.5.0",
     "hono": "^4.12.7",

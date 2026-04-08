@@ -3,6 +3,7 @@ export const sections = [
   { title: 'JWT Authentication', id: 'jwt-authentication' },
   { title: 'Passwordless Authentication', id: 'passwordless-authentication' },
   { title: 'User Management', id: 'user-management' },
+  { title: 'User Profiles', id: 'user-profiles' },
   { title: 'RBAC', id: 'rbac' },
   { title: 'Security', id: 'security' },
 ]
@@ -286,6 +287,182 @@ const { user, token } = await response.json();
 ```
 
 </CodeGroup>
+
+---
+
+## User Profiles
+
+SonicJS includes configurable user profiles that let you define custom fields for your users without modifying database migrations. Custom data is stored as JSON in the `user_profiles.data` column and rendered automatically in the admin UI.
+
+### Configuring Custom Profile Fields
+
+Define custom fields at app boot using `defineUserProfile()`:
+
+<CodeGroup title="Profile Configuration">
+
+```typescript
+import { SonicJS, defineUserProfile } from "@sonicjs-cms/core"
+
+defineUserProfile({
+  fields: [
+    {
+      name: "plan",
+      label: "Subscription Plan",
+      type: "select",
+      options: ["free", "pro", "enterprise"],
+      default: "free"
+    },
+    {
+      name: "company_size",
+      label: "Company Size",
+      type: "number",
+      required: true,
+      validation: { min: 1, max: 10000 }
+    },
+    {
+      name: "industry",
+      label: "Industry",
+      type: "select",
+      options: ["tech", "healthcare", "finance", "education", "other"]
+    },
+    {
+      name: "onboarding_completed",
+      label: "Onboarding Completed",
+      type: "boolean",
+      default: false
+    }
+  ],
+  // Optional: which custom fields appear on the registration form
+  registrationFields: ["plan", "company_size"],
+})
+
+const app = SonicJS({ /* ... */ })
+```
+
+</CodeGroup>
+
+Custom fields support the same field types as collections: `string`, `number`, `boolean`, `select`, `textarea`, `json`, and `object` (for nested fields).
+
+### Field Definition Properties
+
+<Properties>
+  <Property name="name" type="string">
+    Machine name used as the JSON key when storing data.
+  </Property>
+  <Property name="label" type="string">
+    Human-readable label displayed in the admin UI.
+  </Property>
+  <Property name="type" type="string">
+    Field type — reuses the same types available in collections.
+  </Property>
+  <Property name="options" type="string[]">
+    Available choices for `select`, `multiselect`, or `radio` field types.
+  </Property>
+  <Property name="default" type="any">
+    Default value applied when creating new profiles.
+  </Property>
+  <Property name="required" type="boolean">
+    Whether the field must have a value on save. Defaults to `false`.
+  </Property>
+  <Property name="validation" type="object">
+    Constraints: `min`/`max` for numbers, `pattern` (regex) for strings.
+  </Property>
+  <Property name="hidden" type="boolean">
+    When `true`, the field is available via API but hidden from the admin UI.
+  </Property>
+</Properties>
+
+### Profile API Endpoints
+
+<ApiEndpoint method="GET" path="/api/user-profiles/schema" description="Get the profile field definitions (public)" auth={false} />
+
+Returns the configured field schema so frontend apps can render profile forms dynamically.
+
+<ApiEndpoint method="GET" path="/api/user-profiles/:userId" description="Get custom profile data for a user" auth={true} />
+
+```json
+{
+  "userId": "usr-xyz",
+  "customData": {
+    "plan": "pro",
+    "company_size": 50,
+    "industry": "tech"
+  }
+}
+```
+
+<ApiEndpoint method="PUT" path="/api/user-profiles/:userId" description="Update custom profile data" auth={true} />
+
+<CodeGroup title="Update Profile">
+
+```bash {{title:'cURL'}}
+curl -X PUT http://localhost:8787/api/user-profiles/usr-xyz \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customData": {
+      "plan": "enterprise",
+      "company_size": 200
+    }
+  }'
+```
+
+```javascript
+const response = await fetch('http://localhost:8787/api/user-profiles/usr-xyz', {
+  method: 'PUT',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    customData: {
+      plan: 'enterprise',
+      company_size: 200
+    }
+  })
+});
+```
+
+</CodeGroup>
+
+Validation errors return a structured response:
+
+```json
+{
+  "error": "Validation failed",
+  "errors": {
+    "plan": "Plan must be one of: free, pro, enterprise"
+  }
+}
+```
+
+### Admin UI Integration
+
+Custom profile fields appear automatically in:
+- **User edit page** (`/admin/users/:id/edit`) — admins can edit any user's custom fields
+- **Profile page** (`/admin/profile`) — users can edit their own custom fields
+
+Fields are rendered below the standard profile fields (display name, bio, company, etc.) using the same dynamic field renderer as collections.
+
+### Registration Form Integration
+
+When `registrationFields` is specified in the config, those custom fields are included in the registration form at `/auth/register`. Defaults from the field config are applied for any fields not included in `registrationFields`.
+
+### Built-in Profile Fields
+
+Every user profile includes these standard fields out of the box:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `display_name` | string | Public display name |
+| `bio` | string | Short biography |
+| `company` | string | Company or organization |
+| `job_title` | string | Job title or role |
+| `website` | string | Personal or company website |
+| `location` | string | Geographic location |
+| `date_of_birth` | integer | Date of birth (unix timestamp) |
+
+Custom fields defined via `defineUserProfile()` extend these — they do not replace them.
 
 ---
 

@@ -28,6 +28,13 @@ export { oauthProvidersPlugin, createOAuthProvidersPlugin } from './oauth-provid
 export { OAuthService, BUILT_IN_PROVIDERS } from './oauth-providers/oauth-service'
 export { globalVariablesPlugin, createGlobalVariablesPlugin } from './global-variables-plugin'
 export { resolveVariables, resolveVariablesInObject } from './global-variables-plugin'
+export { getVariableBlotScript, getVariableTinyMceScript } from './global-variables-plugin'
+export { shortcodesPlugin, createShortcodesPlugin } from './shortcodes-plugin'
+export { resolveShortcodes, resolveShortcodesInObject, registerShortcodeHandler } from './shortcodes-plugin'
+export { getShortcodeBlotScript, getShortcodeTinyMceScript } from './shortcodes-plugin'
+export { wrapAdminPage } from './_shared/admin-template'
+export { getSharedQuillStyles, getSharedQuillScript, getQuillEnhancerPollerScript } from './_shared/quill-shared'
+export { getSharedTinyMceStyles, getTinyMcePluginScript } from './_shared/tinymce-shared'
 export { securityAuditPlugin, createSecurityAuditPlugin } from './security-audit-plugin'
 export { SecurityAuditService, BruteForceDetector, securityAuditMiddleware } from './security-audit-plugin'
 export { userProfilesPlugin, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig } from './user-profiles'
@@ -52,6 +59,7 @@ export const CORE_PLUGIN_IDS = [
   'ai-search',
   'oauth-providers',
   'global-variables',
+  'shortcodes',
   'security-audit',
   'user-profiles'
 ] as const

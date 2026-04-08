@@ -1,14 +1,14 @@
 {
   "id": "global-variables",
   "name": "Global Variables",
-  "version": "1.0.0-beta.1",
-  "description": "Dynamic content variables that can be referenced as inline tokens in rich text fields. Supports {variable_key} syntax with server-side resolution.",
-  "author": "SonicJS Team",
+  "version": "1.1.0",
+  "description": "Dynamic content variables with inline token support. Manage key-value variables via admin UI and use {variable_key} syntax in rich text fields for server-side resolution. Includes full CRUD admin page.",
+  "author": "SonicJS Community",
   "homepage": "https://sonicjs.com/plugins/global-variables",
   "repository": "https://github.com/SonicJs-Org/sonicjs",
   "license": "MIT",
   "category": "content",
-  "tags": ["variables", "tokens", "dynamic-content", "rich-text", "globals"],
+  "tags": ["variables", "tokens", "dynamic-content", "rich-text", "globals", "admin"],
   "dependencies": [],
   "settings": {
     "enableResolution": true,
@@ -17,11 +17,30 @@
   },
   "hooks": {
     "onActivate": "activate",
-    "onDeactivate": "deactivate"
+    "onDeactivate": "deactivate",
+    "onInstall": "install",
+    "onUninstall": "uninstall"
   },
-  "routes": [],
+  "routes": [
+    {
+      "path": "/api/global-variables",
+      "description": "CRUD API for global variables",
+      "requiresAuth": true
+    },
+    {
+      "path": "/admin/global-variables",
+      "description": "Admin page for managing global variables",
+      "requiresAuth": true
+    }
+  ],
   "permissions": {
-    "global-variables:manage": "Manage global variables",
-    "global-variables:view": "View global variables"
+    "global-variables:manage": "Create, update, and delete global variables",
+    "global-variables:view": "View global variables and their values"
+  },
+  "adminMenu": {
+    "label": "Global Variables",
+    "icon": "variable",
+    "path": "/admin/global-variables",
+    "order": 45
   }
 }

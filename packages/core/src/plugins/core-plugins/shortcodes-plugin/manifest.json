@@ -1,0 +1,45 @@
+{
+  "id": "shortcodes",
+  "name": "Shortcodes",
+  "version": "1.0.0",
+  "description": "Registered shortcode functions for dynamic content. Use [[shortcode_name param=\"value\"]] syntax in rich text fields for server-side resolution. Includes handler registry, CRUD admin, and live preview.",
+  "author": "SonicJS Community",
+  "homepage": "https://sonicjs.com/plugins/shortcodes",
+  "repository": "https://github.com/SonicJs-Org/sonicjs",
+  "license": "MIT",
+  "category": "content",
+  "tags": ["shortcodes", "dynamic-content", "rich-text", "functions", "templates"],
+  "dependencies": [],
+  "settings": {
+    "enableResolution": true,
+    "cacheEnabled": true
+  },
+  "hooks": {
+    "onActivate": "activate",
+    "onDeactivate": "deactivate",
+    "onInstall": "install",
+    "onUninstall": "uninstall"
+  },
+  "routes": [
+    {
+      "path": "/api/shortcodes",
+      "description": "Shortcodes CRUD API + preview + handler list",
+      "requiresAuth": true
+    },
+    {
+      "path": "/admin/shortcodes",
+      "description": "Admin page for managing shortcodes",
+      "requiresAuth": true
+    }
+  ],
+  "permissions": {
+    "shortcodes:manage": "Create, update, and delete shortcodes",
+    "shortcodes:view": "View shortcodes and their definitions"
+  },
+  "adminMenu": {
+    "label": "Shortcodes",
+    "icon": "bolt",
+    "path": "/admin/shortcodes",
+    "order": 46
+  }
+}

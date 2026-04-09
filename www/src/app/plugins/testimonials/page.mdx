@@ -1,0 +1,501 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Features', id: 'features' },
+  { title: 'Data Schema', id: 'data-schema' },
+  { title: 'API Endpoints', id: 'api-endpoints' },
+  { title: 'Permissions', id: 'permissions' },
+  { title: 'Admin Interface', id: 'admin-interface' },
+  { title: 'Integration', id: 'integration' },
+  { title: 'Database Schema', id: 'database-schema' },
+]
+
+# Testimonials Plugin
+
+Customer testimonials and reviews management with star ratings, publish controls, and a filterable REST API. {{ className: 'lead' }}
+
+---
+
+## Overview
+
+The Testimonials plugin gives SonicJS sites a turnkey system for collecting and displaying customer testimonials. Each testimonial captures the author's name, title, company, review text, and an optional 1-5 star rating. A full CRUD API lets you query by publish status and minimum rating.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '⭐',
+      title: 'Star Ratings',
+      description: 'Optional 1-5 star rating with database-level validation',
+    },
+    {
+      icon: '👤',
+      title: 'Author Profiles',
+      description: 'Capture author name, job title, and company for each testimonial',
+    },
+    {
+      icon: '📡',
+      title: 'REST API',
+      description: 'Full CRUD API with filtering by publish status and minimum rating',
+    },
+    {
+      icon: '🔒',
+      title: 'Publish Control',
+      description: 'Draft and published states with sort ordering for display',
+    },
+  ]}
+  columns={2}
+/>
+
+---
+
+## Features
+
+### Testimonial Management
+- Store testimonials with author name, title, company, and review text
+- Optional 1-5 star rating (enforced at both schema and database level)
+- Toggle between draft and published states
+- Custom sort ordering for curated display
+
+### Filtering API
+- Filter by published status
+- Filter by minimum star rating
+- Results ordered by sort order then creation date (newest first)
+- Zod-validated request bodies on create and update
+
+### Automatic Timestamps
+- `created_at` set on insert
+- `updated_at` refreshed automatically via database trigger
+
+---
+
+## Data Schema
+
+The plugin validates all data using Zod:
+
+<CodeGroup title="Testimonial Schema">
+
+```typescript
+import { z } from 'zod'
+
+const testimonialSchema = z.object({
+  id: z.number().optional(),
+  authorName: z.string().min(1, 'Author name is required').max(100),
+  authorTitle: z.string().max(100).optional(),
+  authorCompany: z.string().max(100).optional(),
+  testimonialText: z.string().min(1, 'Testimonial text is required').max(1000),
+  rating: z.number().min(1).max(5).optional(),
+  isPublished: z.boolean().default(true),
+  sortOrder: z.number().default(0),
+  createdAt: z.number().optional(),
+  updatedAt: z.number().optional(),
+})
+```
+
+</CodeGroup>
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `authorName` | string | Yes | Name of the testimonial author (max 100 chars) |
+| `authorTitle` | string | No | Author's job title (max 100 chars) |
+| `authorCompany` | string | No | Author's company name (max 100 chars) |
+| `testimonialText` | string | Yes | The testimonial content (max 1000 chars) |
+| `rating` | number | No | Star rating from 1 to 5 |
+| `isPublished` | boolean | No | Publish state, defaults to `true` |
+| `sortOrder` | number | No | Display order, defaults to `0` |
+
+---
+
+## API Endpoints
+
+All endpoints are mounted at `/api/testimonials`.
+
+### List Testimonials
+
+<CodeGroup title="GET /api/testimonials">
+
+```bash
+# Get all testimonials
+curl https://your-site.com/api/testimonials
+
+# Filter by published status
+curl https://your-site.com/api/testimonials?published=true
+
+# Filter by minimum rating
+curl https://your-site.com/api/testimonials?minRating=4
+
+# Combine filters
+curl "https://your-site.com/api/testimonials?published=true&minRating=4"
+```
+
+</CodeGroup>
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `published` | `"true"` or `"false"` | Filter by publish status |
+| `minRating` | number (1-5) | Return only testimonials with rating >= value |
+
+**Response:**
+
+<CodeGroup title="List Response">
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "author_name": "Jane Smith",
+      "author_title": "CTO",
+      "author_company": "Acme Corp",
+      "testimonial_text": "SonicJS transformed our content workflow...",
+      "rating": 5,
+      "isPublished": 1,
+      "sortOrder": 0,
+      "created_at": 1712678400,
+      "updated_at": 1712678400
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+### Get Single Testimonial
+
+<CodeGroup title="GET /api/testimonials/:id">
+
+```bash
+curl https://your-site.com/api/testimonials/1
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Single Response">
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "author_name": "Jane Smith",
+    "author_title": "CTO",
+    "author_company": "Acme Corp",
+    "testimonial_text": "SonicJS transformed our content workflow...",
+    "rating": 5,
+    "isPublished": 1,
+    "sortOrder": 0,
+    "created_at": 1712678400,
+    "updated_at": 1712678400
+  }
+}
+```
+
+</CodeGroup>
+
+### Create Testimonial
+
+<CodeGroup title="POST /api/testimonials">
+
+```bash
+curl -X POST https://your-site.com/api/testimonials \
+  -H "Content-Type: application/json" \
+  -d '{
+    "authorName": "John Doe",
+    "authorTitle": "Lead Developer",
+    "authorCompany": "Tech Inc",
+    "testimonialText": "The plugin system is incredibly flexible.",
+    "rating": 5,
+    "isPublished": true,
+    "sortOrder": 1
+  }'
+```
+
+</CodeGroup>
+
+**Response (201):**
+
+<CodeGroup title="Create Response">
+
+```json
+{
+  "success": true,
+  "data": { "id": 2, "author_name": "John Doe", "..." : "..." },
+  "message": "Testimonial created successfully"
+}
+```
+
+</CodeGroup>
+
+### Update Testimonial
+
+Supports partial updates -- only include the fields you want to change.
+
+<CodeGroup title="PUT /api/testimonials/:id">
+
+```bash
+curl -X PUT https://your-site.com/api/testimonials/2 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rating": 4,
+    "isPublished": false
+  }'
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Update Response">
+
+```json
+{
+  "success": true,
+  "data": { "id": 2, "author_name": "John Doe", "rating": 4, "isPublished": 0, "..." : "..." },
+  "message": "Testimonial updated successfully"
+}
+```
+
+</CodeGroup>
+
+### Delete Testimonial
+
+<CodeGroup title="DELETE /api/testimonials/:id">
+
+```bash
+curl -X DELETE https://your-site.com/api/testimonials/2
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Delete Response">
+
+```json
+{
+  "success": true,
+  "message": "Testimonial deleted successfully"
+}
+```
+
+</CodeGroup>
+
+### Error Responses
+
+All endpoints return consistent error shapes:
+
+| Status | Condition | Body |
+|--------|-----------|------|
+| 400 | Validation failed | `{ "success": false, "error": "Validation failed", "details": [...] }` |
+| 404 | Not found | `{ "error": "Testimonial not found" }` |
+| 500 | Server error | `{ "success": false, "error": "Failed to ..." }` |
+
+---
+
+## Permissions
+
+The Testimonials plugin uses role-based access for admin operations.
+
+### Admin Access
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | Full access to all testimonial operations |
+| `editor` | Create, edit, and delete testimonials |
+
+### API Access
+
+The REST API routes do **not** require authentication by default. To restrict API access, wrap the routes with your own auth middleware.
+
+<CodeGroup title="Restrict API Access">
+
+```typescript
+import { Hono } from 'hono'
+import { authMiddleware } from './middleware/auth'
+
+const app = new Hono()
+
+// Protect all testimonial API routes
+app.use('/api/testimonials/*', authMiddleware())
+```
+
+</CodeGroup>
+
+---
+
+## Admin Interface
+
+The plugin registers three admin pages and a sidebar menu item.
+
+### Testimonials List
+
+**Path:** `/admin/testimonials`
+
+Browse and manage all testimonials:
+- View testimonials in a sortable list
+- See author info, rating, and publish status at a glance
+- Quick publish/unpublish toggles
+
+### Create Testimonial
+
+**Path:** `/admin/testimonials/new`
+
+Add a new testimonial with the full form:
+- Author name, title, and company fields
+- Testimonial text area
+- Star rating selector (1-5)
+- Publish toggle and sort order
+
+### Edit Testimonial
+
+**Path:** `/admin/testimonials/:id`
+
+Edit an existing testimonial with the same form layout.
+
+### Menu Item
+
+The plugin adds a **Testimonials** item to the admin sidebar with a star icon at position 60.
+
+---
+
+## Integration
+
+### Plugin Registration
+
+<CodeGroup title="Register the Plugin">
+
+```typescript
+import { createTestimonialPlugin } from '@sonicjs-cms/core/plugins'
+
+// Using the factory function
+const testimonialsPlugin = createTestimonialPlugin()
+
+// Or import the pre-built instance
+import { testimonialsPlugin } from '@sonicjs-cms/core/plugins'
+```
+
+</CodeGroup>
+
+### Lifecycle Hooks
+
+The plugin implements install, uninstall, activate, and deactivate lifecycle hooks:
+
+<CodeGroup title="Lifecycle Hooks">
+
+```typescript
+// Install: creates the testimonials table and indexes
+// Uninstall: drops the testimonials table
+// Activate / Deactivate: logging only
+
+builder.lifecycle({
+  install: async (context) => {
+    await context.db.prepare(testimonialMigration).run()
+  },
+  uninstall: async (context) => {
+    await context.db.prepare('DROP TABLE IF EXISTS testimonials').run()
+  },
+  activate: async () => { /* logs activation */ },
+  deactivate: async () => { /* logs deactivation */ },
+})
+```
+
+</CodeGroup>
+
+### Querying from Custom Code
+
+<CodeGroup title="Custom Query - Top Rated">
+
+```typescript
+import { Hono } from 'hono'
+
+const app = new Hono()
+
+// Get top-rated published testimonials for a widget
+app.get('/api/top-testimonials', async (c) => {
+  const db = (c as any).env?.DB
+
+  const { results } = await db
+    .prepare(
+      'SELECT * FROM testimonials WHERE isPublished = 1 AND rating >= 4 ORDER BY rating DESC, sortOrder ASC LIMIT 5'
+    )
+    .all()
+
+  return c.json({ data: results })
+})
+```
+
+</CodeGroup>
+
+<CodeGroup title="Custom Query - By Company">
+
+```typescript
+app.get('/api/testimonials-by-company/:company', async (c) => {
+  const company = c.req.param('company')
+  const db = (c as any).env?.DB
+
+  const { results } = await db
+    .prepare(
+      'SELECT * FROM testimonials WHERE author_company = ? AND isPublished = 1 ORDER BY sortOrder ASC'
+    )
+    .bind(company)
+    .all()
+
+  return c.json({ data: results })
+})
+```
+
+</CodeGroup>
+
+---
+
+## Database Schema
+
+The plugin creates a single table with supporting indexes and an update trigger:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER (PK) | Auto-incrementing primary key |
+| `author_name` | TEXT | Testimonial author name (NOT NULL) |
+| `author_title` | TEXT | Author's job title |
+| `author_company` | TEXT | Author's company |
+| `testimonial_text` | TEXT | The testimonial content (NOT NULL) |
+| `rating` | INTEGER | Star rating, 1-5 (CHECK constraint) |
+| `isPublished` | INTEGER | 1 = published, 0 = draft (NOT NULL) |
+| `sortOrder` | INTEGER | Display order (NOT NULL, default 0) |
+| `created_at` | INTEGER | Unix timestamp, set on insert |
+| `updated_at` | INTEGER | Unix timestamp, auto-updated via trigger |
+
+### Indexes
+
+| Index | Column |
+|-------|--------|
+| `idx_testimonials_published` | `isPublished` |
+| `idx_testimonials_sort_order` | `sortOrder` |
+| `idx_testimonials_rating` | `rating` |
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/plugins/code-examples" variant="text" arrow="right">
+    <>Code Examples plugin</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/collections" variant="text" arrow="right">
+    <>Learn about collections</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/hooks" variant="text" arrow="right">
+    <>Hook into plugin events</>
+  </Button>
+</div>

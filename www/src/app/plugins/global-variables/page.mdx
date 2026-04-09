@@ -1,0 +1,505 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Setup', id: 'setup' },
+  { title: 'Defining Variables', id: 'defining-variables' },
+  { title: 'Using Variables in Content', id: 'using-variables-in-content' },
+  { title: 'API Reference', id: 'api-reference' },
+  { title: 'Configuration', id: 'configuration' },
+  { title: 'Caching', id: 'caching' },
+  { title: 'Admin UI', id: 'admin-ui' },
+  { title: 'Advanced Usage', id: 'advanced-usage' },
+  { title: 'Troubleshooting', id: 'troubleshooting' },
+]
+
+# Global Variables Plugin
+
+Define reusable key-value variables and reference them as inline tokens in your content using `{variable_key}` syntax. Variables are resolved server-side on every content read, so updates propagate instantly. {{ className: 'lead' }}
+
+---
+
+## Overview
+
+The Global Variables plugin lets you store dynamic content values (company name, phone number, pricing, legal text, etc.) in a central location and reference them throughout your site content. When content is fetched, all `{variable_key}` tokens are automatically replaced with their current values.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '🔄',
+      title: 'Dynamic Content',
+      description: 'Change a value once and it updates everywhere it is referenced',
+    },
+    {
+      icon: '🏷️',
+      title: 'Inline Tokens',
+      description: 'Use simple {variable_key} syntax in any text field',
+    },
+    {
+      icon: '⚡',
+      title: 'In-Memory Cache',
+      description: 'Variables are cached for fast resolution with a configurable TTL',
+    },
+    {
+      icon: '📂',
+      title: 'Categories',
+      description: 'Organize variables into categories for easier management',
+    },
+  ]}
+  columns={2}
+/>
+
+### Use Cases
+
+- **Branding** - Company name, tagline, copyright year
+- **Contact info** - Phone numbers, email addresses, office locations
+- **Pricing** - Plan prices, discount codes, trial durations
+- **Legal** - Policy version numbers, compliance text
+- **Feature flags** - Simple on/off text swaps
+
+---
+
+## Setup
+
+### Step 1: Register the Plugin
+
+Add the Global Variables plugin to your SonicJS configuration:
+
+<CodeGroup title="Register Plugin">
+
+```typescript
+import { globalVariablesPlugin } from '@sonicjs-cms/core/plugins'
+
+export default {
+  plugins: [
+    globalVariablesPlugin,
+    // ... other plugins
+  ],
+}
+```
+
+</CodeGroup>
+
+The plugin automatically creates the `global_variables` database table on activation. No manual migration is needed.
+
+### Step 2: Create Variables
+
+Use the API or Admin UI to create your first variables. See the sections below for details on both methods.
+
+---
+
+## Defining Variables
+
+Each variable has the following fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `key` | string | Yes | Unique identifier. Lowercase letters, numbers, and underscores only. Max 100 characters. |
+| `value` | string | Yes | The replacement text. Max 10,000 characters. |
+| `description` | string | No | Human-readable note about the variable's purpose. Max 500 characters. |
+| `category` | string | No | Grouping label (e.g. `branding`, `contact`, `pricing`). Max 50 characters. |
+| `isActive` | boolean | No | Whether the variable is resolved in content. Defaults to `true`. |
+
+### Key Format Rules
+
+Variable keys must match the pattern `^[a-z0-9_]+$`:
+
+- Lowercase letters (`a-z`)
+- Numbers (`0-9`)
+- Underscores (`_`)
+- No spaces, hyphens, or uppercase letters
+
+<CodeGroup title="Valid and Invalid Keys">
+
+```text
+# Valid keys
+company_name
+support_email
+price_pro_monthly
+copyright_year_2026
+
+# Invalid keys
+Company-Name     (uppercase and hyphens)
+support email    (spaces)
+price.pro        (dots)
+```
+
+</CodeGroup>
+
+---
+
+## Using Variables in Content
+
+Reference any active variable in your content by wrapping its key in curly braces:
+
+<CodeGroup title="Token Syntax">
+
+```text
+Welcome to {company_name}! Contact us at {support_email}.
+
+Our Pro plan starts at {price_pro_monthly}/month.
+```
+
+</CodeGroup>
+
+When this content is read through the SonicJS API, the tokens are replaced with their stored values:
+
+<CodeGroup title="Resolved Output">
+
+```text
+Welcome to Acme Corp! Contact us at support@acme.com.
+
+Our Pro plan starts at $49/month.
+```
+
+</CodeGroup>
+
+### Resolution Behavior
+
+- Tokens are resolved **server-side** on every content read via the `content:read` hook.
+- **Unresolved tokens are left as-is.** If `{unknown_key}` has no matching variable, it remains literally as `{unknown_key}` in the output. This makes it easy to spot missing or misspelled keys.
+- **Inactive variables are not resolved.** Setting `isActive` to `false` effectively disables a variable without deleting it.
+- Resolution is **recursive** -- it processes all string values in nested objects and arrays.
+
+---
+
+## API Reference
+
+All endpoints are mounted at `/api/global-variables` and require authentication.
+
+### List All Variables
+
+<CodeGroup title="GET /api/global-variables">
+
+```bash
+# List all variables
+curl -X GET https://your-site.com/api/global-variables \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Filter by category
+curl -X GET "https://your-site.com/api/global-variables?category=branding" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Filter by active status
+curl -X GET "https://your-site.com/api/global-variables?active=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+</CodeGroup>
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `category` | string | Filter by category name |
+| `active` | `"true"` or `"false"` | Filter by active status |
+
+**Response:**
+
+<CodeGroup title="List Response">
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "key": "company_name",
+      "value": "Acme Corp",
+      "description": "The company display name",
+      "category": "branding",
+      "isActive": true,
+      "createdAt": 1712649600,
+      "updatedAt": 1712649600
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+### Get Resolved Key-Value Map
+
+Returns a flat object of all active variables. Useful for client-side rendering.
+
+<CodeGroup title="GET /api/global-variables/resolve">
+
+```bash
+curl -X GET https://your-site.com/api/global-variables/resolve \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Resolve Response">
+
+```json
+{
+  "success": true,
+  "data": {
+    "company_name": "Acme Corp",
+    "support_email": "support@acme.com",
+    "price_pro_monthly": "$49"
+  }
+}
+```
+
+</CodeGroup>
+
+### Get Single Variable
+
+<CodeGroup title="GET /api/global-variables/:id">
+
+```bash
+curl -X GET https://your-site.com/api/global-variables/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+</CodeGroup>
+
+### Create a Variable
+
+<CodeGroup title="POST /api/global-variables">
+
+```bash
+curl -X POST https://your-site.com/api/global-variables \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "company_name",
+    "value": "Acme Corp",
+    "description": "The company display name",
+    "category": "branding",
+    "isActive": true
+  }'
+```
+
+</CodeGroup>
+
+Returns `201` on success. Returns `409` if a variable with the same key already exists.
+
+### Update a Variable
+
+<CodeGroup title="PUT /api/global-variables/:id">
+
+```bash
+curl -X PUT https://your-site.com/api/global-variables/1 \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "value": "Acme Corporation"
+  }'
+```
+
+</CodeGroup>
+
+Only the fields you include in the request body are updated. Omitted fields remain unchanged.
+
+### Delete a Variable
+
+<CodeGroup title="DELETE /api/global-variables/:id">
+
+```bash
+curl -X DELETE https://your-site.com/api/global-variables/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+</CodeGroup>
+
+---
+
+## Configuration
+
+The plugin manifest exposes the following settings:
+
+<CodeGroup title="Plugin Settings">
+
+```typescript
+interface GlobalVariablesSettings {
+  enableResolution: boolean  // Enable/disable token resolution (default: true)
+  cacheEnabled: boolean      // Enable in-memory variable cache (default: true)
+  cacheTTL: number           // Cache time-to-live in seconds (default: 300)
+}
+```
+
+</CodeGroup>
+
+### Permissions
+
+| Permission | Description |
+|------------|-------------|
+| `global-variables:manage` | Create, update, and delete variables |
+| `global-variables:view` | View variables in the admin UI and API |
+
+---
+
+## Caching
+
+Variables are cached in memory to avoid a database query on every content read.
+
+- **TTL:** 5 minutes (300 seconds) by default.
+- **Invalidation:** The cache is automatically invalidated whenever a variable is created, updated, or deleted through the API.
+- **Scope:** The cache is per-worker instance. In a multi-worker deployment, changes propagate to other workers after their local cache expires.
+
+<Note>
+If you update a variable directly in the database (bypassing the API), the cache will not be invalidated until the TTL expires. Always use the API for variable management to ensure immediate consistency.
+</Note>
+
+---
+
+## Admin UI
+
+The plugin adds a **Global Variables** menu item to the SonicJS admin panel at `/admin/global-variables`. The admin page displays all variables in a table with the following columns:
+
+- **Token** - The `{key}` syntax for easy copy-paste
+- **Value** - The current replacement value
+- **Description** - The human-readable note
+- **Category** - The grouping label
+- **Active** - A green or gray dot indicating active status
+
+Variables are sorted by category and then by key.
+
+---
+
+## Advanced Usage
+
+### Direct Resolver Usage
+
+You can use the variable resolver directly in your own code without going through the content hook:
+
+<CodeGroup title="Direct Resolution">
+
+```typescript
+import {
+  resolveVariables,
+  resolveVariablesInObject,
+} from '@sonicjs-cms/core/plugins'
+
+// Resolve tokens in a single string
+const variables = new Map([
+  ['company_name', 'Acme Corp'],
+  ['year', '2026'],
+])
+
+const resolved = resolveVariables(
+  'Copyright {year} {company_name}',
+  variables
+)
+// => "Copyright 2026 Acme Corp"
+
+// Resolve tokens in a nested object
+const data = {
+  title: 'Welcome to {company_name}',
+  meta: {
+    description: 'Since {year}',
+  },
+  tags: ['{company_name}', 'cms'],
+}
+
+const resolvedData = resolveVariablesInObject(data, variables)
+// => { title: "Welcome to Acme Corp", meta: { description: "Since 2026" }, tags: ["Acme Corp", "cms"] }
+```
+
+</CodeGroup>
+
+### Database-Backed Resolution
+
+For resolving variables in custom route handlers using the database:
+
+<CodeGroup title="Database Resolution">
+
+```typescript
+import { resolveContentVariables } from '@sonicjs-cms/core/plugins'
+
+app.get('/api/custom-endpoint', async (c) => {
+  const db = c.env.DB
+
+  const content = {
+    heading: 'Contact {company_name}',
+    body: 'Email us at {support_email}',
+  }
+
+  // Fetches variables from DB (with caching) and resolves tokens
+  const resolved = await resolveContentVariables(content, db)
+
+  return c.json(resolved)
+})
+```
+
+</CodeGroup>
+
+### Programmatic Cache Control
+
+<CodeGroup title="Cache Management">
+
+```typescript
+import { invalidateCache } from '@sonicjs-cms/core/plugins'
+
+// Force the variable cache to refresh on the next content read
+invalidateCache()
+```
+
+</CodeGroup>
+
+---
+
+## Troubleshooting
+
+### Tokens Not Being Replaced
+
+**Check the key format:**
+- Keys must be lowercase alphanumeric with underscores only (`^[a-z0-9_]+$`)
+- The token `{My-Variable}` will never resolve because the key contains uppercase and a hyphen
+
+**Check the variable is active:**
+- Inactive variables are skipped during resolution
+- Verify via `GET /api/global-variables?active=true`
+
+**Check spelling:**
+- Unresolved tokens are left as-is, so `{comapny_name}` (typo) will not match `company_name`
+
+### Variables Not Updating
+
+**Cache TTL:**
+- After updating a variable through the API, the change takes effect immediately for the current worker
+- Other workers will pick up the change within 5 minutes (or the configured TTL)
+- If you updated the database directly, wait for the cache to expire
+
+**Verify the update succeeded:**
+
+<CodeGroup title="Verify Update">
+
+```bash
+curl -X GET https://your-site.com/api/global-variables/resolve \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+</CodeGroup>
+
+### Duplicate Key Error (409)
+
+Variable keys must be unique. If you receive a `409 Conflict` response when creating a variable, a variable with that key already exists. Use the `PUT` endpoint to update it instead.
+
+### Table Not Found Errors
+
+The `global_variables` table is created automatically when the plugin activates. If you see errors related to the table not existing:
+
+1. Verify the plugin is registered in your configuration
+2. Check the application logs for `[GlobalVariables] Table created/verified`
+3. Ensure the database binding (`DB`) is correctly configured
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/plugins/core" variant="text" arrow="right">
+    <>Explore other core plugins</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/development" variant="text" arrow="right">
+    <>Build custom plugins</>
+  </Button>
+</div>

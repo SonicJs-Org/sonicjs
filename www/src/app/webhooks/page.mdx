@@ -1,133 +1,350 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Registering webhooks', id: 'registering-webhooks' },
+  { title: 'Consuming webhooks', id: 'consuming-webhooks' },
+  { title: 'Event types', id: 'event-types' },
+  { title: 'Webhook payload', id: 'webhook-payload' },
+  { title: 'Delivery and retries', id: 'delivery-and-retries' },
+  { title: 'Security', id: 'security' },
+  { title: 'Delivery history', id: 'delivery-history' },
+]
+
 # Webhooks
 
-In this guide, we will look at how to register and consume webhooks to integrate your app with Protocol. With webhooks, your app can know when something happens in Protocol, such as someone sending a message or adding a contact. {{ className: 'lead' }}
+Register and consume webhooks to integrate your SonicJS application with external services. Webhooks notify your app in real time when content is created, workflows transition, users are added, and more. {{ className: 'lead' }}
+
+---
+
+## Overview
+
+SonicJS webhooks are part of the **workflow plugin** and are powered by the `WebhookService`. When an event occurs inside SonicJS — such as content being published or a workflow state changing — an HTTP POST request is sent to every active webhook that is subscribed to that event.
+
+Key characteristics:
+
+- **Event-driven** — webhooks fire automatically when subscribed events occur.
+- **Signed payloads** — each delivery can include an HMAC-SHA256 signature for verification.
+- **Automatic retries** — failed deliveries are retried with exponential backoff.
+- **Delivery log** — every attempt is recorded in the `webhook_deliveries` table for auditing.
+
+---
 
 ## Registering webhooks
 
-To register a new webhook, you need to have a URL in your app that Protocol can call. You can configure a new webhook from the Protocol dashboard under [API settings](#). Give your webhook a name, pick the [events](#event-types) you want to listen for, and add your URL.
+Webhooks are registered programmatically through the `WebhookService`. You provide a name, a destination URL, the events you want to subscribe to, and an optional secret for signature verification.
 
-Now, whenever something of interest happens in your app, a webhook is fired off by Protocol. In the next section, we'll look at how to consume webhooks.
+<CodeGroup title="Creating a webhook">
+
+```typescript
+import { WebhookService } from '@sonicjs-cms/core'
+
+// The service requires a D1 database binding
+const webhookService = new WebhookService(env.DB)
+
+const webhookId = await webhookService.createWebhook(
+  'My Integration',                        // name
+  'https://example.com/webhooks/sonicjs',  // url
+  ['content.created', 'content.published'], // events
+  'whsec_your_secret_key',                 // secret (optional)
+  3,                                        // retry count (default: 3)
+  30                                        // timeout in seconds (default: 30)
+)
+```
+
+</CodeGroup>
+
+### Updating a webhook
+
+You can update any property of an existing webhook — its URL, subscribed events, active status, and more.
+
+<CodeGroup title="Updating a webhook">
+
+```typescript
+await webhookService.updateWebhook(webhookId, {
+  events: ['content.created', 'content.updated', 'content.published'],
+  is_active: true,
+  retry_count: 5,
+})
+```
+
+</CodeGroup>
+
+### Listing and deleting webhooks
+
+<CodeGroup title="Managing webhooks">
+
+```typescript
+// List all webhooks
+const allWebhooks = await webhookService.getWebhooks()
+
+// List only active webhooks
+const activeWebhooks = await webhookService.getWebhooks(true)
+
+// Get a single webhook by ID
+const webhook = await webhookService.getWebhook(webhookId)
+
+// Delete a webhook
+await webhookService.deleteWebhook(webhookId)
+```
+
+</CodeGroup>
+
+---
 
 ## Consuming webhooks
 
-When your app receives a webhook request from Protocol, check the `type` attribute to see what event caused it. The first part of the event type will tell you the payload type, e.g., a conversation, message, etc.
+When SonicJS fires a webhook, it sends an HTTP `POST` request to your registered URL. The request body is JSON and always includes the event type in the `event` field.
 
-```json {{ title: 'Example webhook payload' }}
-{
-  "id": "a056V7R7NmNRjl70",
-  "type": "conversation.updated",
-  "payload": {
-    "id": "WAz8eIbvDR60rouK"
-    // ...
+<CodeGroup title="Example: Express webhook handler">
+
+```typescript
+import express from 'express'
+const app = express()
+
+app.post('/webhooks/sonicjs', express.json(), (req, res) => {
+  const { id, event, timestamp, data, webhook_id } = req.body
+
+  switch (event) {
+    case 'content.created':
+      console.log('New content created:', data.id)
+      break
+    case 'content.published':
+      console.log('Content published:', data.id)
+      break
+    case 'workflow.transition':
+      console.log(`Workflow: ${data.from_state} → ${data.to_state}`)
+      break
   }
-}
+
+  // Respond with 2xx to acknowledge receipt
+  res.status(200).json({ received: true })
+})
 ```
 
-In the example above, a conversation was `updated`, and the payload type is a `conversation`.
+</CodeGroup>
 
-<div className="not-prose">
-  <Button href="#event-types" variant="text" arrow="right">
-    <>See all event types</>
-  </Button>
-</div>
+<Note>
+  Always respond with a `2xx` status code to acknowledge the webhook. Any non-2xx response is treated as a failure and will trigger a retry.
+</Note>
 
 ---
 
 ## Event types
 
-<Row>
-  <Col>
+SonicJS fires webhooks for content lifecycle events, workflow transitions, and user events.
 
-    <Properties>
-      <Property name="contact.created">
-        A new contact was created.
-      </Property>
-      <Property name="contact.updated">
-        An existing contact was updated.
-      </Property>
-      <Property name="contact.deleted">
-        A contact was successfully deleted.
-      </Property>
-      <Property name="conversation.created">
-        A new conversation was created.
-      </Property>
-      <Property name="conversation.updated">
-        An existing conversation was updated.
-      </Property>
-      <Property name="conversation.deleted">
-        A conversation was successfully deleted.
-      </Property>
-      <Property name="message.created">
-        A new message was created.
-      </Property>
-      <Property name="message.updated">
-        An existing message was updated.
-      </Property>
-      <Property name="message.deleted">
-        A message was successfully deleted.
-      </Property>
-      <Property name="group.created">
-        A new group was created.
-      </Property>
-      <Property name="group.updated">
-        An existing group was updated.
-      </Property>
-      <Property name="group.deleted">
-        A group was successfully deleted.
-      </Property>
-      <Property name="attachment.created">
-        A new attachment was created.
-      </Property>
-      <Property name="attachment.updated">
-        An existing attachment was updated.
-      </Property>
-      <Property name="attachment.deleted">
-        An attachment was successfully deleted.
-      </Property>
-    </Properties>
+<Properties>
+  <Property name="content.created">
+    New content was created in any collection.
+  </Property>
+  <Property name="content.updated">
+    An existing content entry was modified. The payload includes a `changes` object with the modified fields.
+  </Property>
+  <Property name="content.published">
+    Content transitioned to the published state.
+  </Property>
+  <Property name="workflow.transition">
+    A content item moved between workflow states (e.g., draft to pending-review). The payload includes `from_state` and `to_state`.
+  </Property>
+  <Property name="user.created">
+    A new user account was created.
+  </Property>
+</Properties>
 
-  </Col>
-  <Col sticky>
+**Example payload (content.updated):**
 
-    ```json {{ 'title': 'Example payload' }}
-    {
-      "id": "a056V7R7NmNRjl70",
-      "type": "message.updated",
-      "payload": {
-        "id": "SIuAFUNKdSYHZF2w",
-        "conversation_id": "xgQQXg3hrtjh7AvZ",
-        "contact": {
-          "id": "WAz8eIbvDR60rouK",
-          "username": "KevinMcCallister",
-          "phone_number": "1-800-759-3000",
-          "avatar_url": "https://assets.protocol.chat/avatars/kevin.jpg",
-          "last_active_at": 705103200,
-          "created_at": 692233200
-        },
-        "message": "I’m traveling with my dad. He’s at a meeting. I hate meetings.",
-        "reactions": [],
-        "attachments": [],
-        "read_at": 705103200,
-        "created_at": 692233200,
-        "updated_at": 692233200
-      }
-    }
-    ```
+```json
+{
+  "id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a",
+  "event": "content.updated",
+  "timestamp": "2025-03-15T10:30:00.000Z",
+  "data": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "Getting Started with SonicJS",
+    "collection_id": "blog-posts",
+    "changes": {
+      "title": "Updated: Getting Started with SonicJS",
+      "status": "published"
+    },
+    "action": "updated"
+  },
+  "webhook_id": "w1x2y3z4-5678-90ab-cdef-1234567890ab"
+}
+```
 
-  </Col>
-</Row>
+---
+
+## Webhook payload
+
+Every webhook delivery uses a consistent envelope format.
+
+<Properties>
+  <Property name="id" type="string">
+    Unique delivery ID (UUID). Use this to deduplicate deliveries on your end.
+  </Property>
+  <Property name="event" type="string">
+    The event type that triggered this webhook (e.g., `content.created`).
+  </Property>
+  <Property name="timestamp" type="string">
+    ISO 8601 timestamp of when the event occurred.
+  </Property>
+  <Property name="data" type="object">
+    The event-specific payload. Always contains an `id` and `action` field, plus any additional data relevant to the event.
+  </Property>
+  <Property name="webhook_id" type="string">
+    The ID of the webhook configuration that matched this event.
+  </Property>
+</Properties>
+
+**Example envelope:**
+
+```json
+{
+  "id": "delivery-uuid",
+  "event": "content.created",
+  "timestamp": "2025-03-15T10:30:00.000Z",
+  "data": {
+    "id": "content-uuid",
+    "title": "My New Post",
+    "collection_id": "blog-posts",
+    "action": "created"
+  },
+  "webhook_id": "webhook-uuid"
+}
+```
+
+### Event-specific payloads
+
+Each event type includes different fields in the `data` object.
+
+**content.created / content.published**
+
+<Properties>
+  <Property name="data.id" type="string">
+    The content entry ID.
+  </Property>
+  <Property name="data.action" type="string">
+    `"created"` or `"published"`.
+  </Property>
+</Properties>
+
+The `data` object also includes all fields from the content entry itself (title, collection_id, custom fields, etc.).
+
+**content.updated**
+
+Includes the same fields as above, plus:
+
+<Properties>
+  <Property name="data.changes" type="object">
+    An object containing only the fields that were modified.
+  </Property>
+</Properties>
+
+**workflow.transition**
+
+<Properties>
+  <Property name="data.content_id" type="string">
+    The content entry that transitioned.
+  </Property>
+  <Property name="data.from_state" type="string">
+    The previous workflow state (e.g., `"draft"`).
+  </Property>
+  <Property name="data.to_state" type="string">
+    The new workflow state (e.g., `"pending-review"`).
+  </Property>
+</Properties>
+
+**user.created**
+
+<Properties>
+  <Property name="data.id" type="string">
+    The new user's ID.
+  </Property>
+  <Property name="data.action" type="string">
+    Always `"created"`.
+  </Property>
+</Properties>
+
+The `data` object also includes user fields (username, email, role, etc.).
+
+**Example (workflow.transition):**
+
+```json
+{
+  "id": "f1e2d3c4-b5a6-7890-1234-567890abcdef",
+  "event": "workflow.transition",
+  "timestamp": "2025-03-15T14:00:00.000Z",
+  "data": {
+    "content_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "from_state": "pending-review",
+    "to_state": "approved",
+    "action": "workflow_transition"
+  },
+  "webhook_id": "w1x2y3z4-5678-90ab-cdef-1234567890ab"
+}
+```
+
+---
+
+## Delivery and retries
+
+SonicJS automatically retries failed webhook deliveries using **exponential backoff**. Each webhook has a configurable `retry_count` (default: 3) and `timeout_seconds` (default: 30).
+
+| Attempt | Delay        |
+| ------- | ------------ |
+| 1       | Immediate    |
+| 2       | 4 seconds    |
+| 3       | 8 seconds    |
+| 4+      | 16+ seconds  |
+
+The delay follows the formula `2^attempt` seconds. After all retries are exhausted, the delivery is marked as failed and the webhook's `failure_count` is incremented.
+
+<Note>
+  SonicJS tracks `last_success_at`, `last_failure_at`, and `failure_count` on each webhook so you can monitor delivery health programmatically.
+</Note>
 
 ---
 
 ## Security
 
-To know for sure that a webhook was, in fact, sent by Protocol instead of a malicious actor, you can verify the request signature. Each webhook request contains a header named `x-protocol-signature`, and you can verify this signature by using your secret webhook key. The signature is an HMAC hash of the request payload hashed using your secret key. Here is an example of how to verify the signature in your app:
+To verify that a webhook delivery genuinely came from SonicJS, provide a `secret` when registering the webhook. SonicJS will then include an `X-SonicJS-Signature` header on every delivery containing an HMAC-SHA256 hash of the request body.
 
-<CodeGroup title="Verifying a request">
+### Request headers
+
+Every webhook delivery includes these headers:
+
+<Properties>
+  <Property name="Content-Type" type="string">
+    Always `application/json`.
+  </Property>
+  <Property name="User-Agent" type="string">
+    `SonicJS-Webhooks/1.0`.
+  </Property>
+  <Property name="X-SonicJS-Event" type="string">
+    The event type (e.g., `content.created`).
+  </Property>
+  <Property name="X-SonicJS-Delivery" type="string">
+    The unique delivery ID.
+  </Property>
+  <Property name="X-SonicJS-Timestamp" type="string">
+    ISO 8601 timestamp of the delivery.
+  </Property>
+  <Property name="X-SonicJS-Signature" type="string">
+    HMAC-SHA256 signature in the format `sha256=<hex>`. Only present when a secret is configured.
+  </Property>
+</Properties>
+
+### Verifying signatures
+
+<CodeGroup title="Verifying a webhook signature">
 
 ```js
-const signature = req.headers['x-protocol-signature']
-const hash = crypto.createHmac('sha256', secret).update(payload).digest('hex')
+const crypto = require('crypto')
+
+const signature = req.headers['x-sonicjs-signature']
+const payload = JSON.stringify(req.body)
+const hash =
+  'sha256=' +
+  crypto.createHmac('sha256', secret).update(payload).digest('hex')
 
 if (hash === signature) {
   // Request is verified
@@ -141,18 +358,24 @@ from flask import request
 import hashlib
 import hmac
 
-signature = request.headers.get("x-protocol-signature")
-hash = hmac.new(bytes(secret, "ascii"), bytes(payload, "ascii"), hashlib.sha256)
+signature = request.headers.get("x-sonicjs-signature")
+payload = request.get_data(as_text=True)
+hash_value = "sha256=" + hmac.new(
+    bytes(secret, "ascii"),
+    bytes(payload, "ascii"),
+    hashlib.sha256
+).hexdigest()
 
-if hash.hexdigest() == signature:
+if hash_value == signature:
     # Request is verified
 else:
     # Request could not be verified
 ```
 
 ```php
-$signature = $request['headers']['x-protocol-signature'];
-$hash = hash_hmac('sha256', $payload, $secret);
+$signature = $request['headers']['x-sonicjs-signature'];
+$payload = file_get_contents('php://input');
+$hash = 'sha256=' . hash_hmac('sha256', $payload, $secret);
 
 if (hash_equals($hash, $signature)) {
   // Request is verified
@@ -163,4 +386,65 @@ if (hash_equals($hash, $signature)) {
 
 </CodeGroup>
 
-If your generated signature matches the `x-protocol-signature` header, you can be sure that the request was truly coming from Protocol. It's essential to keep your secret webhook key safe — otherwise, you can no longer be sure that a given webhook was sent by Protocol. Don't commit your secret webhook key to GitHub!
+<Note>
+  Keep your webhook secret safe. Never commit it to version control or expose it in client-side code. If your secret is compromised, update the webhook with a new secret immediately.
+</Note>
+
+---
+
+## Delivery history
+
+SonicJS stores a record of every webhook delivery attempt in the `webhook_deliveries` table. You can query delivery history and retry failed deliveries programmatically.
+
+<CodeGroup title="Working with delivery history">
+
+```typescript
+const webhookService = new WebhookService(env.DB)
+
+// Get recent deliveries for a specific webhook
+const deliveries = await webhookService.getWebhookDeliveries(webhookId, 50)
+
+// Get all recent deliveries across all webhooks
+const allDeliveries = await webhookService.getWebhookDeliveries()
+
+// Retry a failed delivery
+await webhookService.retryWebhookDelivery(deliveryId)
+
+// Get delivery statistics
+const stats = await webhookService.getWebhookStats(webhookId)
+// => { total_deliveries, successful_deliveries, failed_deliveries, average_response_time }
+
+// Clean up deliveries older than 30 days
+await webhookService.cleanupOldDeliveries(30)
+```
+
+</CodeGroup>
+
+### Delivery record fields
+
+<Properties>
+  <Property name="id" type="string">
+    Unique delivery ID.
+  </Property>
+  <Property name="webhook_id" type="string">
+    The webhook this delivery belongs to.
+  </Property>
+  <Property name="event_type" type="string">
+    The event that triggered this delivery.
+  </Property>
+  <Property name="payload" type="object">
+    The full JSON payload that was sent.
+  </Property>
+  <Property name="response_status" type="number">
+    HTTP status code returned by the receiving server, or `0` if the request failed entirely.
+  </Property>
+  <Property name="response_body" type="string">
+    The response body returned by the receiving server.
+  </Property>
+  <Property name="attempt_count" type="number">
+    Which attempt this delivery represents (1 for the initial attempt).
+  </Property>
+  <Property name="delivered_at" type="string">
+    Timestamp of when this delivery was attempted.
+  </Property>
+</Properties>

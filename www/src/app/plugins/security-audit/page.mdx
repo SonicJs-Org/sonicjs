@@ -1,0 +1,727 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Setup', id: 'setup' },
+  { title: 'Configuration', id: 'configuration' },
+  { title: 'Security Events', id: 'security-events' },
+  { title: 'Brute-Force Detection', id: 'brute-force-detection' },
+  { title: 'Audit Dashboard', id: 'audit-dashboard' },
+  { title: 'API Endpoints', id: 'api-endpoints' },
+  { title: 'Middleware', id: 'middleware' },
+  { title: 'Programmatic Usage', id: 'programmatic-usage' },
+  { title: 'Data Retention', id: 'data-retention' },
+  { title: 'Troubleshooting', id: 'troubleshooting' },
+]
+
+# Security Audit Plugin
+
+Monitor login attempts, detect brute-force attacks, and review security events with a built-in analytics dashboard. {{ className: 'lead' }}
+
+---
+
+## Overview
+
+The Security Audit plugin provides comprehensive security event logging, brute-force detection, and a real-time analytics dashboard for your SonicJS application. It automatically intercepts authentication routes and records security-relevant events to a D1 database, while using Cloudflare KV for fast lockout state.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '🔍',
+      title: 'Event Logging',
+      description: 'Tracks logins, registrations, lockouts, logouts, and suspicious activity',
+    },
+    {
+      icon: '🛡️',
+      title: 'Brute-Force Detection',
+      description: 'Automatic IP and email-based lockouts after repeated failures',
+    },
+    {
+      icon: '📊',
+      title: 'Analytics Dashboard',
+      description: 'Real-time stats, hourly trend charts, top IPs, and critical event feed',
+    },
+    {
+      icon: '⚙️',
+      title: 'Fully Configurable',
+      description: 'Tune thresholds, retention policies, and logging granularity from the admin UI',
+    },
+  ]}
+  columns={2}
+/>
+
+### Use Cases
+
+- **Login monitoring** - Track successful and failed login attempts across your site
+- **Brute-force prevention** - Automatically lock out IPs and accounts after repeated failures
+- **Incident investigation** - Search and filter events by type, severity, email, or IP address
+- **Compliance** - Maintain an audit trail of authentication events with configurable retention
+- **Threat detection** - Identify suspicious patterns like credential stuffing from a single IP
+
+---
+
+## Setup
+
+### Step 1: Enable the Plugin
+
+The Security Audit plugin is a core plugin included with SonicJS. Enable it from the admin panel:
+
+1. Go to **Admin > Plugins**
+2. Find **Security Audit** in the plugin list
+3. Click **Activate**
+
+### Step 2: Verify Database Table
+
+The plugin stores events in a `security_events` table. SonicJS creates this table automatically when the plugin is activated. If you need to create it manually:
+
+<CodeGroup title="Database Migration">
+
+```sql
+CREATE TABLE IF NOT EXISTS security_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'info',
+  user_id TEXT,
+  email TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  country_code TEXT,
+  request_path TEXT,
+  request_method TEXT,
+  details TEXT,
+  fingerprint TEXT,
+  blocked INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_security_events_type ON security_events(event_type);
+CREATE INDEX idx_security_events_created ON security_events(created_at);
+CREATE INDEX idx_security_events_ip ON security_events(ip_address);
+CREATE INDEX idx_security_events_email ON security_events(email);
+```
+
+</CodeGroup>
+
+### Step 3: Configure KV Namespace
+
+Brute-force detection uses Cloudflare KV for fast lockout lookups. Ensure your `wrangler.toml` includes a `CACHE_KV` binding:
+
+<CodeGroup title="wrangler.toml">
+
+```toml
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "your-kv-namespace-id"
+```
+
+</CodeGroup>
+
+### Step 4: Access the Dashboard
+
+Once activated, a **Security** menu item appears in the admin sidebar. Navigate to **Admin > Security** to view the dashboard.
+
+---
+
+## Configuration
+
+The plugin is configured through three setting groups: brute-force detection, event logging, and data retention. All settings can be changed from the admin UI at **Admin > Security > Settings**.
+
+<CodeGroup title="Settings Interface">
+
+```typescript
+interface SecurityAuditSettings {
+  bruteForce: {
+    enabled: boolean                  // Enable/disable brute-force detection
+    maxFailedAttemptsPerIP: number    // Max failures per IP before lockout (default: 10)
+    maxFailedAttemptsPerEmail: number // Max failures per email before lockout (default: 5)
+    windowMinutes: number             // Sliding window for counting failures (default: 15)
+    lockoutDurationMinutes: number    // How long lockouts last (default: 30)
+    alertThreshold: number            // Failures that trigger critical severity (default: 20)
+  }
+  logging: {
+    logSuccessfulLogins: boolean      // Log successful logins (default: true)
+    logLogouts: boolean               // Log logouts (default: true)
+    logRegistrations: boolean         // Log new registrations (default: true)
+    logPasswordResets: boolean        // Log password reset events (default: true)
+    logPermissionDenied: boolean      // Log permission denied events (default: true)
+  }
+  retention: {
+    daysToKeep: number                // Days to retain events (default: 90)
+    maxEvents: number                 // Maximum stored events (default: 100,000)
+    autoPurge: boolean                // Automatically purge old events (default: true)
+  }
+}
+```
+
+</CodeGroup>
+
+### Default Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `bruteForce.enabled` | `true` | Brute-force detection is on by default |
+| `bruteForce.maxFailedAttemptsPerIP` | `10` | Lock IP after 10 failures in the window |
+| `bruteForce.maxFailedAttemptsPerEmail` | `5` | Lock email after 5 failures in the window |
+| `bruteForce.windowMinutes` | `15` | Sliding window of 15 minutes |
+| `bruteForce.lockoutDurationMinutes` | `30` | Lockouts expire after 30 minutes |
+| `bruteForce.alertThreshold` | `20` | Mark as critical at 20+ failures |
+| `retention.daysToKeep` | `90` | Keep events for 90 days |
+| `retention.maxEvents` | `100,000` | Store up to 100k events |
+
+---
+
+## Security Events
+
+The plugin tracks the following event types, each with an associated severity level:
+
+### Event Types
+
+| Event Type | Severity | Description |
+|------------|----------|-------------|
+| `login_success` | `info` | A user successfully authenticated |
+| `login_failure` | `warning` | A login attempt failed (wrong password, unknown email) |
+| `registration` | `info` | A new user account was registered |
+| `password_reset_request` | `info` | A password reset was requested |
+| `password_reset_complete` | `info` | A password reset was completed |
+| `account_lockout` | `critical` | An IP or email was locked due to brute-force detection |
+| `suspicious_activity` | `critical` | Suspicious pattern detected (e.g., multiple emails from one IP) |
+| `logout` | `info` | A user logged out |
+| `permission_denied` | `warning` | A user attempted an unauthorized action |
+
+### Severity Levels
+
+- **info** - Normal operations (successful logins, logouts, registrations)
+- **warning** - Potential issues (failed logins, permission denied)
+- **critical** - Security threats (lockouts, suspicious activity)
+
+### Event Data
+
+Each event captures detailed context:
+
+<CodeGroup title="Event Structure">
+
+```typescript
+interface SecurityEvent {
+  id: string                        // Unique event ID
+  eventType: SecurityEventType      // Event type (see table above)
+  severity: SecuritySeverity        // info, warning, or critical
+  userId?: string                   // Associated user ID (if known)
+  email?: string                    // Associated email address
+  ipAddress?: string                // Client IP address
+  userAgent?: string                // Client user agent string
+  countryCode?: string              // Country code from CF-IPCountry header
+  requestPath?: string              // The request path (e.g., /auth/login)
+  requestMethod?: string            // HTTP method (POST, GET, etc.)
+  details?: Record<string, any>     // Additional context (e.g., lockout reason)
+  fingerprint?: string              // Client fingerprint (IP + User Agent hash)
+  blocked: boolean                  // Whether the request was blocked
+  createdAt: number                 // Timestamp in milliseconds
+}
+```
+
+</CodeGroup>
+
+---
+
+## Brute-Force Detection
+
+The brute-force detector uses Cloudflare KV to track failed login attempts in a sliding time window. When thresholds are exceeded, the offending IP or email is locked out automatically.
+
+### How It Works
+
+1. **Failed login recorded** - Each failed login increments counters for both the IP address and the email address
+2. **Window check** - Only failures within the configured window (default: 15 minutes) are counted
+3. **IP lockout** - If an IP exceeds `maxFailedAttemptsPerIP` (default: 10), the IP is locked
+4. **Email lockout** - If an email exceeds `maxFailedAttemptsPerEmail` (default: 5), the email is locked
+5. **Suspicious activity** - If 5+ different emails are attempted from a single IP, a suspicious activity event is raised
+6. **Lockout enforcement** - On subsequent login attempts, the middleware checks KV for active lockouts and returns `429 Too Many Requests` before the request reaches the auth handler
+7. **Auto-expiry** - Lockouts expire automatically after `lockoutDurationMinutes` (default: 30) using KV TTL
+
+### Lockout Response
+
+When a locked-out client attempts to login:
+
+<CodeGroup title="Lockout Response">
+
+```json
+// HTTP 429 Too Many Requests
+{
+  "error": "IP address temporarily locked due to excessive failed login attempts"
+}
+
+// Or for email-based lockouts:
+{
+  "error": "Account temporarily locked due to excessive failed login attempts"
+}
+```
+
+</CodeGroup>
+
+### Managing Lockouts
+
+Active lockouts can be viewed and released from the admin dashboard or via the API:
+
+<CodeGroup title="Lockout Management">
+
+```typescript
+import { BruteForceDetector } from '@sonicjs-cms/core/plugins'
+
+const detector = new BruteForceDetector(env.CACHE_KV, settings.bruteForce)
+
+// Check if an IP/email is locked
+const status = await detector.isLocked('192.168.1.1', 'user@example.com')
+// { locked: true, reason: 'IP address temporarily locked...' }
+
+// Get all active lockouts
+const lockouts = await detector.getActiveLockouts()
+// [{ key: 'security:locked:ip:192.168.1.1', type: 'ip', value: '192.168.1.1', lockedAt: 1712345678000 }]
+
+// Manually unlock an IP
+await detector.unlockIP('192.168.1.1')
+
+// Manually unlock an email
+await detector.unlockEmail('user@example.com')
+
+// Release a lockout by key
+await detector.releaseLockout('security:locked:ip:192.168.1.1')
+```
+
+</CodeGroup>
+
+---
+
+## Audit Dashboard
+
+The Security Audit dashboard is available at `/admin/plugins/security-audit` and provides three pages:
+
+### Dashboard (Overview)
+
+The main dashboard shows at-a-glance security metrics:
+
+- **Total Events** - Lifetime count of all recorded security events
+- **Failed Logins (24h)** - Number of failed login attempts in the last 24 hours with trend percentage vs. prior 24 hours
+- **Active Lockouts** - Count of currently locked-out IPs
+- **Flagged IPs** - IPs that have exceeded the failure threshold in the current window
+- **Failed Login Trend** - Hourly bar chart of failed logins over the last 24 hours
+- **Events by Type** - Breakdown of event types in the last 24 hours
+- **Top IPs** - Table of IPs with the most failed logins (with lock status)
+- **Recent Critical Events** - Feed of the most recent critical-severity events
+
+### Event Log
+
+The event log page at `/admin/plugins/security-audit/events` provides a filterable, paginated table of all security events. Filters include:
+
+- Event type (login success, login failure, registration, lockout, etc.)
+- Severity (info, warning, critical)
+- Email address (partial match)
+- IP address (partial match)
+
+Clicking a row expands it to show full details including user agent, request path, fingerprint, and any extra details JSON.
+
+### Settings
+
+The settings page at `/admin/plugins/security-audit/settings` lets admins configure all plugin settings through a form UI, including brute-force thresholds, logging toggles, and retention policies.
+
+---
+
+## API Endpoints
+
+All API endpoints require admin authentication and are mounted under `/api/security-audit`.
+
+### List Events
+
+<CodeGroup title="GET /api/security-audit/events">
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/events?type=login_failure&severity=warning&page=1&limit=50"
+```
+
+</CodeGroup>
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `type` | string | Filter by event type (e.g., `login_failure`) |
+| `severity` | string | Filter by severity (`info`, `warning`, `critical`) |
+| `email` | string | Filter by email (partial match) |
+| `ip` | string | Filter by IP address (partial match) |
+| `search` | string | Search across email, IP, and details |
+| `start` | number | Start timestamp (milliseconds) |
+| `end` | number | End timestamp (milliseconds) |
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Items per page (default: 50, max: 100) |
+| `sortBy` | string | Sort field: `created_at`, `event_type`, or `severity` |
+| `sortOrder` | string | Sort direction: `asc` or `desc` |
+
+**Response:**
+
+<CodeGroup title="Events Response">
+
+```json
+{
+  "events": [
+    {
+      "id": "a1b2c3d4-...",
+      "eventType": "login_failure",
+      "severity": "warning",
+      "email": "attacker@example.com",
+      "ipAddress": "203.0.113.42",
+      "countryCode": "CN",
+      "blocked": false,
+      "createdAt": 1712345678000
+    }
+  ],
+  "total": 142
+}
+```
+
+</CodeGroup>
+
+### Get Single Event
+
+<CodeGroup title="GET /api/security-audit/events/:id">
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/events/a1b2c3d4-..."
+```
+
+</CodeGroup>
+
+### Get Dashboard Stats
+
+<CodeGroup title="GET /api/security-audit/stats">
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/stats"
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Stats Response">
+
+```json
+{
+  "totalEvents": 1234,
+  "failedLogins24h": 47,
+  "failedLoginsTrend": -12,
+  "activeLockouts": 2,
+  "flaggedIPs": 3,
+  "eventsByType": {
+    "login_success": 89,
+    "login_failure": 47,
+    "registration": 5,
+    "account_lockout": 2
+  },
+  "eventsBySeverity": {
+    "info": 94,
+    "warning": 47,
+    "critical": 2
+  }
+}
+```
+
+</CodeGroup>
+
+### Get Top IPs
+
+<CodeGroup title="GET /api/security-audit/stats/ips">
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/stats/ips?limit=10"
+```
+
+</CodeGroup>
+
+### Get Hourly Trend
+
+<CodeGroup title="GET /api/security-audit/stats/trend">
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/stats/trend?hours=24"
+```
+
+</CodeGroup>
+
+### List Active Lockouts
+
+<CodeGroup title="GET /api/security-audit/lockouts">
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/lockouts"
+```
+
+</CodeGroup>
+
+### Release a Lockout
+
+<CodeGroup title="DELETE /api/security-audit/lockouts/:key">
+
+```bash
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/lockouts/security%3Alocked%3Aip%3A203.0.113.42"
+```
+
+</CodeGroup>
+
+### Purge Old Events
+
+<CodeGroup title="POST /api/security-audit/events/purge">
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"daysToKeep": 30}' \
+  "https://your-site.com/api/security-audit/events/purge"
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{ "success": true, "deleted": 542 }
+```
+
+### Export Events
+
+<CodeGroup title="GET /api/security-audit/export">
+
+```bash
+# Export as JSON
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/export"
+
+# Export as CSV
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://your-site.com/api/security-audit/export?format=csv"
+```
+
+</CodeGroup>
+
+Supports the same `type`, `severity`, `start`, and `end` filters as the events endpoint. CSV exports include up to 10,000 events.
+
+---
+
+## Middleware
+
+The plugin installs middleware that automatically intercepts all `/auth/*` routes. No manual setup is required once the plugin is activated.
+
+### What the Middleware Does
+
+1. **Pre-request** (login POST only):
+   - Extracts the email from the request body
+   - Checks KV for active IP or email lockouts
+   - If locked, returns `429` immediately without hitting the auth handler
+   - Logs the blocked attempt asynchronously via `waitUntil`
+
+2. **Post-request** (all auth routes):
+   - Inspects the response status to determine success or failure
+   - Logs the appropriate event type
+   - For failed logins, records the attempt in the brute-force detector
+   - Triggers lockouts if thresholds are exceeded
+   - Detects suspicious patterns (multiple emails from one IP)
+
+### Intercepted Routes
+
+| Route | Method | Event Logged |
+|-------|--------|-------------|
+| `/auth/login` | POST | `login_success` or `login_failure` |
+| `/auth/login/form` | POST | `login_success` or `login_failure` |
+| `/auth/register` | POST | `registration` |
+| `/auth/logout` | POST/GET | `logout` |
+
+### Using the Middleware Directly
+
+If you need to apply the middleware manually (e.g., in a custom app setup):
+
+<CodeGroup title="Manual Middleware">
+
+```typescript
+import { securityAuditMiddleware } from '@sonicjs-cms/core/plugins'
+
+const app = new Hono()
+
+// Apply to all routes - it only intercepts /auth/* internally
+app.use('*', securityAuditMiddleware())
+```
+
+</CodeGroup>
+
+---
+
+## Programmatic Usage
+
+### Logging Custom Events
+
+Use the `SecurityAuditService` to log events from your own code:
+
+<CodeGroup title="Custom Event Logging">
+
+```typescript
+import { SecurityAuditService } from '@sonicjs-cms/core/plugins'
+
+// In a route handler
+app.post('/api/admin/dangerous-action', async (c) => {
+  const service = new SecurityAuditService(c.env.DB)
+
+  await service.logEvent({
+    eventType: 'permission_denied',
+    severity: 'warning',
+    userId: c.get('user')?.userId,
+    email: c.get('user')?.email,
+    ipAddress: c.req.header('cf-connecting-ip') || 'unknown',
+    requestPath: '/api/admin/dangerous-action',
+    requestMethod: 'POST',
+    details: { reason: 'Insufficient permissions for bulk delete' }
+  })
+
+  return c.json({ error: 'Access denied' }, 403)
+})
+```
+
+</CodeGroup>
+
+### Querying Events
+
+<CodeGroup title="Query Events">
+
+```typescript
+import { SecurityAuditService } from '@sonicjs-cms/core/plugins'
+
+const service = new SecurityAuditService(env.DB)
+
+// Get all failed logins from the last hour
+const { events, total } = await service.getEvents({
+  eventType: 'login_failure',
+  startDate: Date.now() - 3600000,
+  page: 1,
+  limit: 100
+})
+
+// Get dashboard statistics
+const stats = await service.getStats()
+console.log(`Failed logins (24h): ${stats.failedLogins24h}`)
+console.log(`Active lockouts: ${stats.activeLockouts}`)
+
+// Get top offending IPs
+const topIPs = await service.getTopIPs(10)
+
+// Get hourly failure trend
+const trend = await service.getHourlyTrend(24)
+
+// Get recent critical events
+const critical = await service.getRecentCriticalEvents(20)
+```
+
+</CodeGroup>
+
+---
+
+## Data Retention
+
+The plugin supports configurable data retention to manage database size:
+
+- **Days to keep** - Events older than this are eligible for purging (default: 90 days)
+- **Max events** - Upper bound on stored events (default: 100,000)
+- **Auto-purge** - When enabled, old events are automatically cleaned up
+
+### Manual Purge
+
+Purge events older than a specific number of days via the API or the admin settings page:
+
+<CodeGroup title="Manual Purge">
+
+```typescript
+const service = new SecurityAuditService(env.DB)
+
+// Purge events older than 30 days
+const deletedCount = await service.purgeOldEvents(30)
+console.log(`Purged ${deletedCount} old events`)
+```
+
+</CodeGroup>
+
+Or use the **Purge Old Events** button on the Settings page in the admin UI.
+
+---
+
+## Troubleshooting
+
+### Events Not Being Logged
+
+**Check plugin is active:**
+- Go to **Admin > Plugins** and verify the Security Audit plugin status is "active"
+- The middleware only intercepts requests when the plugin is active
+
+**Check the database table:**
+- Verify the `security_events` table exists in your D1 database
+- Run `wrangler d1 execute your-db --command "SELECT COUNT(*) FROM security_events"` to check
+
+**Check route paths:**
+- The middleware only intercepts routes starting with `/auth/`
+- Custom authentication routes are not automatically captured
+
+### Brute-Force Detection Not Working
+
+**Check KV binding:**
+- Ensure `CACHE_KV` is properly bound in your `wrangler.toml`
+- The brute-force detector requires KV for state management
+
+**Check settings:**
+- Verify `bruteForce.enabled` is `true` in the plugin settings
+- Check that thresholds are set to reasonable values
+
+**Check email extraction:**
+- For JSON logins (`/auth/login`), the email must be in the request body as `email`
+- For form logins (`/auth/login/form`), the email must be in a form field named `email`
+
+### Dashboard Showing No Data
+
+**Check time range:**
+- The dashboard shows data for the last 24 hours by default
+- If no login attempts have occurred recently, charts will be empty
+
+**Check permissions:**
+- The dashboard and API require the `admin` role
+- Non-admin users receive a `403 Access Denied` response
+
+### Lockouts Not Expiring
+
+Lockouts use KV TTL for automatic expiration. If lockouts persist:
+
+- Verify the `lockoutDurationMinutes` setting is correct
+- Manually release lockouts from the dashboard or via the API
+- Check that KV is functioning correctly in your Cloudflare Workers environment
+
+<Note>
+The Security Audit plugin is currently in beta (v1.0.0-beta.1). Event types and API responses may change in future releases.
+</Note>
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/security" variant="text" arrow="right">
+    <>Learn about SonicJS security</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/core" variant="text" arrow="right">
+    <>Explore other core plugins</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/development" variant="text" arrow="right">
+    <>Build custom plugins</>
+  </Button>
+</div>

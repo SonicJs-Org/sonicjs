@@ -2,6 +2,7 @@ export const sections = [
   { title: 'Overview', id: 'overview' },
   { title: 'Core Plugins', id: 'core-plugins' },
   { title: 'Authentication Plugins', id: 'authentication-plugins' },
+  { title: 'Content Plugins', id: 'content-plugins' },
   { title: 'Editor Plugins', id: 'editor-plugins' },
   { title: 'Utility Plugins', id: 'utility-plugins' },
   { title: 'Plugin Management', id: 'plugin-management' },
@@ -20,9 +21,10 @@ SonicJS plugins provide modular functionality that can be enabled or disabled wi
 **Plugin Types:**
 
 - **Core Plugins** - Built-in plugins installed with SonicJS
-- **Authentication Plugins** - Passwordless login, OTP, magic links
+- **Authentication Plugins** - Passwordless login, OTP, magic links, OAuth social login
+- **Content Plugins** - Code examples, testimonials, global variables
 - **Editor Plugins** - Rich text and markdown editors
-- **Utility Plugins** - Email, workflows, database tools
+- **Utility Plugins** - Email, workflows, analytics, security audit, database tools
 
 **Key Features:**
 
@@ -194,6 +196,85 @@ Passwordless login via email magic links.
 
 ---
 
+### OAuth / Social Login Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0-beta.1
+
+Social login via OAuth2 providers (GitHub, Google).
+
+**Features:**
+- GitHub and Google OAuth2 integration
+- Automatic account linking by email
+- Manual account linking/unlinking
+- CSRF-protected OAuth flow
+
+**Installation:**
+
+1. Navigate to **Admin** → **Plugins**
+2. Find **OAuth Providers** plugin
+3. Click **Activate**
+4. Configure provider credentials (Client ID, Client Secret)
+
+**Usage:** See [Authentication - OAuth](/authentication#oauth-social-login) and [OAuth Plugin Docs](/plugins/oauth)
+
+---
+
+## Content Plugins
+
+Plugins for managing specialized content types.
+
+### Code Examples Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Manage and display code snippets with syntax highlighting and language tagging.
+
+**Features:**
+- Multi-language code snippet storage
+- Categorization and tagging
+- API access to code examples
+- Admin management interface
+
+**Usage:** See [Code Examples Plugin Docs](/plugins/code-examples)
+
+---
+
+### Testimonials Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Collect and display customer testimonials with ratings.
+
+**Features:**
+- Star ratings (1-5)
+- Featured testimonials
+- Company/role attribution
+- Avatar support
+
+**Usage:** See [Testimonials Plugin Docs](/plugins/testimonials)
+
+---
+
+### Global Variables Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Define reusable content variables that can be injected into content using `{variable_key}` tokens.
+
+**Features:**
+- Dynamic content token resolution
+- KV-cached variable lookups
+- Admin management UI
+- Programmatic API access
+
+**Usage:** See [Global Variables Plugin Docs](/plugins/global-variables)
+
+---
+
 ## Editor Plugins
 
 Rich text and markdown editing plugins for content fields.
@@ -299,6 +380,108 @@ Automate content workflows and approvals.
 - Notification triggers
 
 **Access:** **Admin** → **Workflows**
+
+**Usage:** See [Workflow Plugin Docs](/plugins/workflow)
+
+---
+
+### Analytics Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0-beta.1
+
+Privacy-focused, built-in website analytics.
+
+**Features:**
+- Page view tracking
+- Visitor metrics
+- Referrer tracking
+- No third-party scripts required
+
+**Usage:** See [Analytics Plugin Docs](/plugins/analytics)
+
+---
+
+### Security Audit Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0-beta.1
+
+Brute-force detection, security event logging, and audit dashboard.
+
+**Features:**
+- Login attempt monitoring
+- Automatic IP lockout on repeated failures
+- Security event audit log
+- Admin audit dashboard
+
+**Usage:** See [Security Audit Plugin Docs](/plugins/security-audit) and [Security - Audit Plugin](/security#security-audit-plugin)
+
+---
+
+### Turnstile Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Cloudflare Turnstile CAPTCHA integration for form protection.
+
+**Features:**
+- Bot protection for forms
+- Invisible challenge mode
+- Managed challenge mode
+- Cloudflare integration
+
+**Usage:** See [Turnstile Plugin Docs](/plugins/turnstile)
+
+---
+
+### QR Generator Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Generate QR codes for content and custom URLs.
+
+**Features:**
+- Dynamic QR code generation
+- Customizable size and format
+- API endpoint for programmatic access
+
+**Usage:** See [QR Generator Plugin Docs](/plugins/qr-generator)
+
+---
+
+### Redirect Management Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Manage URL redirects (301/302) from the admin panel.
+
+**Features:**
+- Permanent and temporary redirects
+- Wildcard patterns
+- Import/export support
+- Redirect chain detection
+
+**Usage:** See [Redirect Management Plugin Docs](/plugins/redirect-management)
+
+---
+
+### AI Search Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0-beta.1
+
+AI-powered content search using vector embeddings.
+
+**Features:**
+- Semantic search across content
+- Vector embedding generation
+- Relevance-ranked results
+
+**Usage:** See [AI Search Plugin Docs](/plugins/ai-search)
 
 ---
 

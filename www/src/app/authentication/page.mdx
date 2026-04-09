@@ -2,6 +2,7 @@ export const sections = [
   { title: 'Overview', id: 'overview' },
   { title: 'JWT Authentication', id: 'jwt-authentication' },
   { title: 'Passwordless Authentication', id: 'passwordless-authentication' },
+  { title: 'OAuth / Social Login', id: 'oauth-social-login' },
   { title: 'User Management', id: 'user-management' },
   { title: 'User Profiles', id: 'user-profiles' },
   { title: 'RBAC', id: 'rbac' },
@@ -247,6 +248,107 @@ curl -X POST http://localhost:8787/auth/magic-link/request \
 <Callout type="info">
 **Email Plugin Required:** Both OTP and Magic Link authentication require the Email Plugin to be configured with a valid email service (e.g., Resend, SendGrid).
 </Callout>
+
+---
+
+## OAuth / Social Login
+
+SonicJS supports OAuth2 social login through the **OAuth Providers** plugin, allowing users to sign in with GitHub, Google, and other providers using the standard authorization code flow.
+
+### Supported Providers
+
+| Provider | Scopes | Profile Data |
+|----------|--------|--------------|
+| **GitHub** | `read:user`, `user:email` | ID, email, name, avatar |
+| **Google** | `openid`, `email`, `profile` | ID, email, name, avatar |
+
+### Quick Setup
+
+1. Create an OAuth app on the provider (GitHub or Google)
+2. Navigate to **Admin > Plugins > OAuth Providers**
+3. Enter your **Client ID** and **Client Secret** for each provider
+4. Toggle **Enable** and save
+
+### OAuth Endpoints
+
+<ApiEndpoint method="GET" path="/auth/oauth/:provider" description="Redirect to provider authorization page" auth={false} />
+
+<ApiEndpoint method="GET" path="/auth/oauth/:provider/callback" description="Handle OAuth callback and authenticate user" auth={false} />
+
+<ApiEndpoint method="GET" path="/auth/oauth/accounts" description="List linked OAuth accounts for current user" auth={true} />
+
+<ApiEndpoint method="POST" path="/auth/oauth/link" description="Link an OAuth provider to current account" auth={true} />
+
+<ApiEndpoint method="POST" path="/auth/oauth/unlink" description="Unlink an OAuth provider from current account" auth={true} />
+
+### Usage
+
+Add social login buttons that point to the OAuth authorization endpoints:
+
+<CodeGroup title="Social Login">
+
+```html
+<a href="/auth/oauth/github">Sign in with GitHub</a>
+<a href="/auth/oauth/google">Sign in with Google</a>
+```
+
+```javascript
+// Programmatic redirect
+window.location.href = '/auth/oauth/github';
+```
+
+</CodeGroup>
+
+When a user authenticates via OAuth:
+- **Existing OAuth link** — the user is logged in directly
+- **Email matches an existing account** — the OAuth provider is automatically linked to the existing account
+- **New user** — an account is created from the OAuth profile with the `viewer` role
+
+### Account Linking and Unlinking
+
+Authenticated users can link additional OAuth providers or unlink existing ones:
+
+<CodeGroup title="Account Linking">
+
+```bash {{title:'Link a provider'}}
+curl -X POST http://localhost:8787/auth/oauth/link \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{ "provider": "google" }'
+
+# Response: { "redirectUrl": "https://accounts.google.com/..." }
+# Redirect the user to the returned URL to complete linking
+```
+
+```bash {{title:'Unlink a provider'}}
+curl -X POST http://localhost:8787/auth/oauth/unlink \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{ "provider": "github" }'
+
+# Response: { "success": true, "message": "github account unlinked" }
+```
+
+</CodeGroup>
+
+<Callout type="warning">
+A user cannot unlink their only authentication method. If they have no password and only one OAuth link, unlinking is blocked until they set a password or link another provider.
+</Callout>
+
+### Choosing an Authentication Method (Updated)
+
+| Method | Best For | Security | User Experience |
+|--------|----------|----------|-----------------|
+| **Email + Password** | Traditional apps, maximum control | High | Familiar, requires password management |
+| **OTP Login** | Mobile apps, high-security environments | Very High | Easy, no password needed, limited time |
+| **Magic Link** | Simplified onboarding, newsletters | High | Seamless, requires email access |
+| **OAuth / Social** | Consumer apps, developer tools | High | One-click, no new credentials needed |
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/oauth" variant="text" arrow="right">
+    <>Full OAuth plugin documentation</>
+  </Button>
+</div>
 
 ---
 

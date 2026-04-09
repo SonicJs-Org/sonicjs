@@ -1,0 +1,629 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Setup', id: 'setup' },
+  { title: 'Configuration', id: 'configuration' },
+  { title: 'Authentication Flow', id: 'authentication-flow' },
+  { title: 'API Reference', id: 'api-reference' },
+  { title: 'Account Linking', id: 'account-linking' },
+  { title: 'Advanced Usage', id: 'advanced-usage' },
+  { title: 'Troubleshooting', id: 'troubleshooting' },
+]
+
+# OAuth Providers Plugin (Social Login)
+
+Add social login to your SonicJS application with GitHub, Google, and more using the OAuth2 authorization code flow. {{ className: 'lead' }}
+
+---
+
+## Overview
+
+The OAuth Providers plugin enables users to sign in with their existing social accounts instead of creating a new username and password. It implements the standard OAuth2 authorization code flow with CSRF protection, automatic account creation, and provider linking.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '🔑',
+      title: 'Social Login',
+      description: 'Sign in with GitHub, Google, and other OAuth2 providers',
+    },
+    {
+      icon: '🔗',
+      title: 'Account Linking',
+      description: 'Link multiple OAuth providers to a single user account',
+    },
+    {
+      icon: '🛡️',
+      title: 'CSRF Protection',
+      description: 'State parameter validation with secure HTTP-only cookies',
+    },
+    {
+      icon: '👤',
+      title: 'Auto Registration',
+      description: 'Automatically create accounts from OAuth profiles',
+    },
+  ]}
+  columns={2}
+/>
+
+### Supported Providers
+
+| Provider | Scopes | Profile Data |
+|----------|--------|--------------|
+| **GitHub** | `read:user`, `user:email` | ID, email, name, avatar |
+| **Google** | `openid`, `email`, `profile` | ID, email, name, avatar |
+
+### How It Works
+
+1. User clicks "Sign in with GitHub" (or Google)
+2. SonicJS redirects to the provider's authorization page
+3. User grants permission on the provider's site
+4. Provider redirects back to SonicJS with an authorization code
+5. SonicJS exchanges the code for an access token
+6. SonicJS fetches the user profile and creates or links the account
+7. User is logged in with a JWT token
+
+---
+
+## Setup
+
+### Step 1: Create OAuth App on Provider
+
+**GitHub:**
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click **New OAuth App**
+3. Set **Authorization callback URL** to `https://yourdomain.com/auth/oauth/github/callback`
+4. Copy the **Client ID** and generate a **Client Secret**
+
+**Google:**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create a new **OAuth 2.0 Client ID**
+3. Add `https://yourdomain.com/auth/oauth/google/callback` as an **Authorized redirect URI**
+4. Copy the **Client ID** and **Client Secret**
+
+<Callout type="warning">
+For local development, use `http://localhost:8787/auth/oauth/github/callback` (or `/google/callback`) as your callback URL. GitHub allows `http` for localhost; Google requires you to add it as an authorized redirect URI.
+</Callout>
+
+### Step 2: Configure in Admin
+
+1. Go to **Admin > Plugins > OAuth Providers**
+2. Enter your Client ID and Client Secret for each provider
+3. Toggle **Enable** for each provider you want to activate
+4. Save settings
+
+### Step 3: Add Login Buttons
+
+Add social login buttons to your login page that link to the OAuth authorization endpoints:
+
+<CodeGroup title="Social Login Buttons">
+
+```html
+<!-- GitHub Login -->
+<a href="/auth/oauth/github" class="btn btn-github">
+  Sign in with GitHub
+</a>
+
+<!-- Google Login -->
+<a href="/auth/oauth/google" class="btn btn-google">
+  Sign in with Google
+</a>
+```
+
+```javascript
+// Programmatic redirect
+function loginWithGitHub() {
+  window.location.href = '/auth/oauth/github';
+}
+
+function loginWithGoogle() {
+  window.location.href = '/auth/oauth/google';
+}
+```
+
+</CodeGroup>
+
+---
+
+## Configuration
+
+The plugin stores provider credentials in the database via the admin plugin settings UI.
+
+<CodeGroup title="Plugin Settings Schema">
+
+```typescript
+interface OAuthPluginSettings {
+  providers: {
+    github?: {
+      clientId: string       // GitHub OAuth App Client ID
+      clientSecret: string   // GitHub OAuth App Client Secret
+      enabled: boolean       // Enable/disable GitHub login
+    }
+    google?: {
+      clientId: string       // Google OAuth Client ID
+      clientSecret: string   // Google OAuth Client Secret
+      enabled: boolean       // Enable/disable Google login
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+### Provider Configuration Details
+
+<Properties>
+  <Property name="clientId" type="string">
+    The OAuth Client ID obtained from the provider's developer console.
+  </Property>
+  <Property name="clientSecret" type="string">
+    The OAuth Client Secret obtained from the provider's developer console. Stored securely and never exposed to the client.
+  </Property>
+  <Property name="enabled" type="boolean">
+    Whether this provider is active. Defaults to `false`. Both `clientId` and `clientSecret` must be set for the provider to work.
+  </Property>
+</Properties>
+
+### Callback URLs
+
+The callback URL is automatically constructed from the incoming request headers:
+
+```
+{protocol}://{host}/auth/oauth/{provider}/callback
+```
+
+For example:
+- **Production:** `https://yourdomain.com/auth/oauth/github/callback`
+- **Local dev:** `http://localhost:8787/auth/oauth/google/callback`
+
+<Callout type="info">
+The callback URL uses `x-forwarded-proto` and `host` headers from the request, so it works correctly behind reverse proxies and load balancers.
+</Callout>
+
+---
+
+## Authentication Flow
+
+### OAuth2 Authorization Code Flow
+
+The plugin implements the standard OAuth2 authorization code flow with CSRF protection:
+
+<CodeGroup title="Flow Details">
+
+```
+1. GET /auth/oauth/github
+   → Generates random state parameter
+   → Stores state in HTTP-only cookie (10-minute expiry)
+   → Redirects to GitHub authorization URL
+
+2. User authorizes on GitHub
+   → GitHub redirects to /auth/oauth/github/callback?code=xxx&state=yyy
+
+3. GET /auth/oauth/github/callback
+   → Validates state parameter against cookie (CSRF protection)
+   → Clears state cookie
+   → Exchanges authorization code for access token
+   → Fetches user profile from GitHub API
+   → Creates or links user account
+   → Issues JWT and sets auth cookie
+   → Redirects to /admin
+```
+
+</CodeGroup>
+
+### Account Resolution
+
+When an OAuth callback is received, the plugin follows this logic:
+
+1. **Existing OAuth link found** — Updates tokens and logs in the linked user
+2. **No OAuth link, but email matches existing user** — Links OAuth to the existing account and logs in
+3. **No existing user** — Creates a new user account from the OAuth profile with the `viewer` role
+
+New users created via OAuth have:
+- Email from the provider profile
+- Name parsed from the provider profile
+- Username derived from the email prefix (with collision handling)
+- No password set (they authenticate exclusively via OAuth unless they set one later)
+- Default role of `viewer`
+
+---
+
+## API Reference
+
+### Initiate OAuth Login
+
+<ApiEndpoint method="GET" path="/auth/oauth/:provider" description="Redirect to OAuth provider authorization page" auth={false} />
+
+Starts the OAuth flow by redirecting the user to the provider's authorization page. The `:provider` parameter must be `github` or `google`.
+
+<CodeGroup title="Initiate Login">
+
+```bash {{title:'cURL'}}
+# Browser redirect — typically used as an <a> link, not via cURL
+curl -v http://localhost:8787/auth/oauth/github
+# → 302 redirect to https://github.com/login/oauth/authorize?client_id=...&state=...
+```
+
+```javascript
+// Redirect the user to start OAuth flow
+window.location.href = '/auth/oauth/github';
+```
+
+</CodeGroup>
+
+### OAuth Callback
+
+<ApiEndpoint method="GET" path="/auth/oauth/:provider/callback" description="Handle OAuth provider callback with authorization code" auth={false} />
+
+This endpoint is called by the OAuth provider after the user authorizes. It exchanges the authorization code for tokens, fetches the user profile, and creates or links the account.
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `code` | Authorization code from the provider |
+| `state` | CSRF state parameter (validated against cookie) |
+| `error` | Error code if the user denied access |
+| `error_description` | Human-readable error description |
+
+**On success:** Sets JWT auth cookie and redirects to `/admin`.
+
+**On failure:** Redirects to `/auth/login?error=...` with a descriptive error message.
+
+### List Linked Accounts
+
+<ApiEndpoint method="GET" path="/auth/oauth/accounts" description="List OAuth accounts linked to the current user" auth={true} />
+
+<CodeGroup title="List Linked Accounts">
+
+```bash {{title:'cURL'}}
+curl http://localhost:8787/auth/oauth/accounts \
+  -H "Authorization: Bearer eyJhbGc..."
+```
+
+```javascript
+const response = await fetch('/auth/oauth/accounts', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+const { accounts } = await response.json();
+```
+
+</CodeGroup>
+
+**Response (200 OK):**
+
+```json
+{
+  "accounts": [
+    {
+      "provider": "github",
+      "providerAccountId": "12345678",
+      "linkedAt": 1712000000000
+    },
+    {
+      "provider": "google",
+      "providerAccountId": "109876543210",
+      "linkedAt": 1712100000000
+    }
+  ]
+}
+```
+
+### Link OAuth Account
+
+<ApiEndpoint method="POST" path="/auth/oauth/link" description="Link an OAuth provider to the current user account" auth={true} />
+
+Returns a redirect URL to start the OAuth flow for account linking. The callback will automatically link the provider to the authenticated user's existing account.
+
+<CodeGroup title="Link Account">
+
+```bash {{title:'cURL'}}
+curl -X POST http://localhost:8787/auth/oauth/link \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{ "provider": "google" }'
+```
+
+```javascript
+const response = await fetch('/auth/oauth/link', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ provider: 'google' })
+});
+
+const { redirectUrl } = await response.json();
+window.location.href = redirectUrl;
+```
+
+</CodeGroup>
+
+**Response (200 OK):**
+
+```json
+{
+  "redirectUrl": "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&state=..."
+}
+```
+
+### Unlink OAuth Account
+
+<ApiEndpoint method="POST" path="/auth/oauth/unlink" description="Unlink an OAuth provider from the current user account" auth={true} />
+
+Removes an OAuth provider link from the user's account. This operation is blocked if it would leave the user with no authentication method (no password and no other OAuth links).
+
+<CodeGroup title="Unlink Account">
+
+```bash {{title:'cURL'}}
+curl -X POST http://localhost:8787/auth/oauth/unlink \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{ "provider": "github" }'
+```
+
+```javascript
+const response = await fetch('/auth/oauth/unlink', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ provider: 'github' })
+});
+
+const result = await response.json();
+// { success: true, message: "github account unlinked" }
+```
+
+</CodeGroup>
+
+**Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "message": "github account unlinked"
+}
+```
+
+**Error (400 Bad Request):**
+
+```json
+{
+  "error": "Cannot unlink the only authentication method. Set a password first."
+}
+```
+
+---
+
+## Account Linking
+
+### How Linking Works
+
+Users can connect multiple OAuth providers to a single SonicJS account:
+
+- **Automatic linking on login:** If a user signs in with OAuth and their email matches an existing account, the OAuth provider is automatically linked.
+- **Manual linking:** Authenticated users can link additional providers via the `POST /auth/oauth/link` endpoint.
+- **Safe unlinking:** Users can remove a provider link, but only if they have another authentication method (a password or another OAuth link).
+
+### Database Schema
+
+The plugin uses an `oauth_accounts` table to track provider links:
+
+```sql
+CREATE TABLE oauth_accounts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_account_id TEXT NOT NULL,
+  access_token TEXT,
+  refresh_token TEXT,
+  token_expires_at INTEGER,
+  profile_data TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+```
+
+| Column | Description |
+|--------|-------------|
+| `user_id` | Foreign key to the `users` table |
+| `provider` | Provider identifier (e.g., `github`, `google`) |
+| `provider_account_id` | The user's unique ID on the provider |
+| `access_token` | OAuth access token (updated on each login) |
+| `refresh_token` | OAuth refresh token (if provided by the provider) |
+| `token_expires_at` | Token expiration timestamp in milliseconds |
+| `profile_data` | JSON snapshot of the provider profile |
+
+---
+
+## Advanced Usage
+
+### Building a Social Login Page
+
+<CodeGroup title="Complete Login Page Example">
+
+```typescript
+import { Hono } from 'hono'
+
+const app = new Hono()
+
+app.get('/login', (c) => {
+  const error = c.req.query('error')
+
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+    <head><title>Login</title></head>
+    <body>
+      <h1>Sign In</h1>
+
+      ${error ? `<div class="error">${error}</div>` : ''}
+
+      <form method="POST" action="/auth/login">
+        <input name="email" type="email" placeholder="Email" required />
+        <input name="password" type="password" placeholder="Password" required />
+        <button type="submit">Sign In</button>
+      </form>
+
+      <hr />
+      <p>Or sign in with:</p>
+
+      <a href="/auth/oauth/github">Sign in with GitHub</a>
+      <a href="/auth/oauth/google">Sign in with Google</a>
+    </body>
+    </html>
+  `)
+})
+```
+
+</CodeGroup>
+
+### Checking Provider Availability
+
+Before showing social login buttons, you can check which providers are enabled:
+
+<CodeGroup title="Check Enabled Providers">
+
+```typescript
+// Server-side: check if a provider is configured
+async function getEnabledProviders(db: D1Database) {
+  const row = await db.prepare(
+    `SELECT settings FROM plugins WHERE id = 'oauth-providers'`
+  ).first()
+
+  if (!row?.settings) return []
+
+  const settings = JSON.parse(row.settings)
+  return Object.entries(settings.providers || {})
+    .filter(([_, config]) => config.enabled && config.clientId && config.clientSecret)
+    .map(([id]) => id)
+}
+
+// Usage in a route
+app.get('/login', async (c) => {
+  const providers = await getEnabledProviders(c.env.DB)
+
+  return c.html(`
+    ${providers.includes('github') ? '<a href="/auth/oauth/github">GitHub</a>' : ''}
+    ${providers.includes('google') ? '<a href="/auth/oauth/google">Google</a>' : ''}
+  `)
+})
+```
+
+</CodeGroup>
+
+### Account Settings Page
+
+Allow users to manage their linked OAuth accounts:
+
+<CodeGroup title="Account Settings">
+
+```javascript
+// Fetch linked accounts
+const response = await fetch('/auth/oauth/accounts', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+const { accounts } = await response.json();
+
+// Display linked accounts with unlink buttons
+accounts.forEach(account => {
+  console.log(`${account.provider} - linked ${new Date(account.linkedAt).toLocaleDateString()}`);
+});
+
+// Link a new provider
+async function linkProvider(provider) {
+  const response = await fetch('/auth/oauth/link', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ provider })
+  });
+
+  const { redirectUrl } = await response.json();
+  window.location.href = redirectUrl;
+}
+
+// Unlink a provider
+async function unlinkProvider(provider) {
+  const response = await fetch('/auth/oauth/unlink', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ provider })
+  });
+
+  const result = await response.json();
+  if (result.error) {
+    alert(result.error);
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## Troubleshooting
+
+### "OAuth provider is not configured or not enabled"
+
+- Verify that you have entered the Client ID and Client Secret in **Admin > Plugins > OAuth Providers**
+- Ensure the **Enable** toggle is turned on for the provider
+- Check that the plugin itself is activated
+
+### "Invalid OAuth state. Please try again."
+
+This indicates a CSRF validation failure. Possible causes:
+
+- The state cookie expired (10-minute window)
+- Cookies are being blocked by the browser
+- The user opened multiple OAuth flows in different tabs
+
+**Fix:** Have the user try again. Ensure cookies are enabled and `SameSite=Lax` is compatible with your setup.
+
+### "Could not retrieve email from OAuth provider"
+
+- **GitHub:** The user's email may be set to private. The plugin attempts to fetch emails via the GitHub API, but the user must have at least one verified email. Ensure the OAuth app requests the `user:email` scope.
+- **Google:** Ensure the `email` scope is included.
+
+### Callback URL Mismatch
+
+If the provider rejects the callback, verify that:
+
+- The callback URL registered with the provider matches exactly: `https://yourdomain.com/auth/oauth/{provider}/callback`
+- For local development: `http://localhost:8787/auth/oauth/{provider}/callback`
+- There are no trailing slashes or protocol mismatches
+
+### "Account is deactivated"
+
+The user's account exists but has been deactivated by an admin. An admin must re-enable the account in **Admin > Users**.
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/authentication" variant="text" arrow="right">
+    <>Learn about authentication</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/core" variant="text" arrow="right">
+    <>Explore other core plugins</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/development" variant="text" arrow="right">
+    <>Build custom plugins</>
+  </Button>
+</div>

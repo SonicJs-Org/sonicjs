@@ -1,0 +1,490 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Features', id: 'features' },
+  { title: 'Data Schema', id: 'data-schema' },
+  { title: 'API Endpoints', id: 'api-endpoints' },
+  { title: 'Permissions', id: 'permissions' },
+  { title: 'Admin Interface', id: 'admin-interface' },
+  { title: 'Integration', id: 'integration' },
+  { title: 'Database Schema', id: 'database-schema' },
+]
+
+# Code Examples Plugin
+
+Code snippets and examples library with syntax highlighting, categorization, and a full CRUD API. {{ className: 'lead' }}
+
+---
+
+## Overview
+
+The Code Examples plugin provides a complete system for managing code snippets and examples within SonicJS. Organize code by language and category, control visibility with publish states, and expose everything through a filterable REST API.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '💻',
+      title: 'Multi-Language Support',
+      description: 'Store and categorize code snippets for any programming language',
+    },
+    {
+      icon: '🏷️',
+      title: 'Tags & Categories',
+      description: 'Organize examples with categories and comma-separated tags',
+    },
+    {
+      icon: '📡',
+      title: 'REST API',
+      description: 'Full CRUD API with filtering by language, category, and publish status',
+    },
+    {
+      icon: '🔒',
+      title: 'Publish Control',
+      description: 'Draft and published states with sort ordering for display',
+    },
+  ]}
+  columns={2}
+/>
+
+---
+
+## Features
+
+### Code Management
+- Store code snippets with title, description, and source code
+- Specify the programming language for each example
+- Categorize examples into logical groups
+- Add comma-separated tags for flexible organization
+
+### Publishing & Ordering
+- Toggle publish state to control visibility
+- Set sort order for custom display sequencing
+- Automatic timestamps for creation and last update
+
+### Filtering API
+- Filter by publish status, language, or category
+- Results ordered by sort order then creation date (newest first)
+- Zod-validated request bodies on create and update
+
+---
+
+## Data Schema
+
+The plugin validates all data using Zod:
+
+<CodeGroup title="Code Example Schema">
+
+```typescript
+import { z } from 'zod'
+
+const codeExampleSchema = z.object({
+  id: z.number().optional(),
+  title: z.string().min(1, 'Title is required').max(200),
+  description: z.string().max(500).optional(),
+  code: z.string().min(1, 'Code is required'),
+  language: z.string().min(1, 'Language is required'),
+  category: z.string().max(50).optional(),
+  tags: z.string().max(200).optional(),
+  isPublished: z.boolean().default(true),
+  sortOrder: z.number().default(0),
+  createdAt: z.number().optional(),
+  updatedAt: z.number().optional(),
+})
+```
+
+</CodeGroup>
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | Yes | Display title (max 200 chars) |
+| `description` | string | No | Short description (max 500 chars) |
+| `code` | string | Yes | The code snippet content |
+| `language` | string | Yes | Programming language identifier |
+| `category` | string | No | Grouping category (max 50 chars) |
+| `tags` | string | No | Comma-separated tags (max 200 chars) |
+| `isPublished` | boolean | No | Publish state, defaults to `true` |
+| `sortOrder` | number | No | Display order, defaults to `0` |
+
+---
+
+## API Endpoints
+
+All endpoints are mounted at `/api/code-examples`.
+
+### List Code Examples
+
+<CodeGroup title="GET /api/code-examples">
+
+```bash
+# Get all code examples
+curl https://your-site.com/api/code-examples
+
+# Filter by published status
+curl https://your-site.com/api/code-examples?published=true
+
+# Filter by language
+curl https://your-site.com/api/code-examples?language=typescript
+
+# Filter by category
+curl https://your-site.com/api/code-examples?category=authentication
+
+# Combine filters
+curl "https://your-site.com/api/code-examples?published=true&language=typescript&category=authentication"
+```
+
+</CodeGroup>
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `published` | `"true"` or `"false"` | Filter by publish status |
+| `language` | string | Filter by exact language match |
+| `category` | string | Filter by exact category match |
+
+**Response:**
+
+<CodeGroup title="List Response">
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "title": "Fetch API Example",
+      "description": "Basic fetch request with error handling",
+      "code": "const res = await fetch('/api/data')...",
+      "language": "typescript",
+      "category": "networking",
+      "tags": "fetch,http,async",
+      "isPublished": 1,
+      "sortOrder": 0,
+      "created_at": 1712678400,
+      "updated_at": 1712678400
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+### Get Single Code Example
+
+<CodeGroup title="GET /api/code-examples/:id">
+
+```bash
+curl https://your-site.com/api/code-examples/1
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Single Response">
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "title": "Fetch API Example",
+    "code": "const res = await fetch('/api/data')...",
+    "language": "typescript",
+    "category": "networking",
+    "tags": "fetch,http,async",
+    "isPublished": 1,
+    "sortOrder": 0,
+    "created_at": 1712678400,
+    "updated_at": 1712678400
+  }
+}
+```
+
+</CodeGroup>
+
+### Create Code Example
+
+<CodeGroup title="POST /api/code-examples">
+
+```bash
+curl -X POST https://your-site.com/api/code-examples \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Hello World",
+    "code": "console.log(\"Hello, World!\")",
+    "language": "javascript",
+    "category": "basics",
+    "tags": "beginner,intro",
+    "isPublished": true,
+    "sortOrder": 1
+  }'
+```
+
+</CodeGroup>
+
+**Response (201):**
+
+<CodeGroup title="Create Response">
+
+```json
+{
+  "success": true,
+  "data": { "id": 2, "title": "Hello World", "..." : "..." },
+  "message": "Code example created successfully"
+}
+```
+
+</CodeGroup>
+
+### Update Code Example
+
+Supports partial updates -- only include the fields you want to change.
+
+<CodeGroup title="PUT /api/code-examples/:id">
+
+```bash
+curl -X PUT https://your-site.com/api/code-examples/2 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Hello World (Updated)",
+    "isPublished": false
+  }'
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Update Response">
+
+```json
+{
+  "success": true,
+  "data": { "id": 2, "title": "Hello World (Updated)", "isPublished": 0, "..." : "..." },
+  "message": "Code example updated successfully"
+}
+```
+
+</CodeGroup>
+
+### Delete Code Example
+
+<CodeGroup title="DELETE /api/code-examples/:id">
+
+```bash
+curl -X DELETE https://your-site.com/api/code-examples/2
+```
+
+</CodeGroup>
+
+**Response:**
+
+<CodeGroup title="Delete Response">
+
+```json
+{
+  "success": true,
+  "message": "Code example deleted successfully"
+}
+```
+
+</CodeGroup>
+
+### Error Responses
+
+All endpoints return consistent error shapes:
+
+| Status | Condition | Body |
+|--------|-----------|------|
+| 400 | Validation failed | `{ "success": false, "error": "Validation failed", "details": [...] }` |
+| 404 | Not found | `{ "error": "Code example not found" }` |
+| 500 | Server error | `{ "success": false, "error": "Failed to ..." }` |
+
+---
+
+## Permissions
+
+The Code Examples plugin uses role-based access for admin operations.
+
+### Admin Access
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | Full access to all code example operations |
+| `editor` | Create, edit, and delete code examples |
+
+### API Access
+
+The REST API routes do **not** require authentication by default. To restrict API access, wrap the routes with your own auth middleware.
+
+<CodeGroup title="Restrict API Access">
+
+```typescript
+import { Hono } from 'hono'
+import { authMiddleware } from './middleware/auth'
+
+const app = new Hono()
+
+// Protect all code example API routes
+app.use('/api/code-examples/*', authMiddleware())
+```
+
+</CodeGroup>
+
+---
+
+## Admin Interface
+
+The plugin registers three admin pages and a sidebar menu item.
+
+### Code Examples List
+
+**Path:** `/admin/code-examples`
+
+Browse and manage all code examples:
+- View all snippets in a sortable list
+- Quick-filter by language or category
+- Publish and unpublish from the list view
+
+### Create Code Example
+
+**Path:** `/admin/code-examples/new`
+
+Add a new code snippet with the full form:
+- Title, description, code editor
+- Language selector and category input
+- Tags, publish toggle, and sort order
+
+### Edit Code Example
+
+**Path:** `/admin/code-examples/:id`
+
+Edit an existing code snippet with the same form layout.
+
+### Menu Item
+
+The plugin adds a **Code Examples** item to the admin sidebar with a code icon at position 65.
+
+---
+
+## Integration
+
+### Plugin Registration
+
+<CodeGroup title="Register the Plugin">
+
+```typescript
+import { createCodeExamplesPlugin } from '@sonicjs-cms/core/plugins'
+
+// Using the factory function
+const codeExamplesPlugin = createCodeExamplesPlugin()
+
+// Or import the pre-built instance
+import { codeExamplesPlugin } from '@sonicjs-cms/core/plugins'
+```
+
+</CodeGroup>
+
+### Lifecycle Hooks
+
+The plugin implements install, uninstall, activate, and deactivate lifecycle hooks:
+
+<CodeGroup title="Lifecycle Hooks">
+
+```typescript
+// Install: creates the code_examples table and indexes
+// Uninstall: drops the code_examples table
+// Activate / Deactivate: logging only
+
+builder.lifecycle({
+  install: async (context) => {
+    await context.db.prepare(codeExampleMigration).run()
+  },
+  uninstall: async (context) => {
+    await context.db.prepare('DROP TABLE IF EXISTS code_examples').run()
+  },
+  activate: async () => { /* logs activation */ },
+  deactivate: async () => { /* logs deactivation */ },
+})
+```
+
+</CodeGroup>
+
+### Querying from Custom Code
+
+<CodeGroup title="Custom Query">
+
+```typescript
+import { Hono } from 'hono'
+
+const app = new Hono()
+
+app.get('/api/snippets-by-lang/:lang', async (c) => {
+  const lang = c.req.param('lang')
+  const db = (c as any).env?.DB
+
+  const { results } = await db
+    .prepare(
+      'SELECT * FROM code_examples WHERE language = ? AND isPublished = 1 ORDER BY sortOrder ASC'
+    )
+    .bind(lang)
+    .all()
+
+  return c.json({ data: results })
+})
+```
+
+</CodeGroup>
+
+---
+
+## Database Schema
+
+The plugin creates a single table with supporting indexes and an update trigger:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER (PK) | Auto-incrementing primary key |
+| `title` | TEXT | Code example title (NOT NULL) |
+| `description` | TEXT | Optional description |
+| `code` | TEXT | The code snippet (NOT NULL) |
+| `language` | TEXT | Programming language (NOT NULL) |
+| `category` | TEXT | Optional category |
+| `tags` | TEXT | Optional comma-separated tags |
+| `isPublished` | INTEGER | 1 = published, 0 = draft (NOT NULL) |
+| `sortOrder` | INTEGER | Display order (NOT NULL, default 0) |
+| `created_at` | INTEGER | Unix timestamp, set on insert |
+| `updated_at` | INTEGER | Unix timestamp, auto-updated via trigger |
+
+### Indexes
+
+| Index | Column |
+|-------|--------|
+| `idx_code_examples_published` | `isPublished` |
+| `idx_code_examples_sort_order` | `sortOrder` |
+| `idx_code_examples_language` | `language` |
+| `idx_code_examples_category` | `category` |
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/plugins/testimonials" variant="text" arrow="right">
+    <>Testimonials plugin</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/collections" variant="text" arrow="right">
+    <>Learn about collections</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/hooks" variant="text" arrow="right">
+    <>Hook into plugin events</>
+  </Button>
+</div>

@@ -1,3 +1,15 @@
+export const sections = [
+  { title: 'Authentication & Authorization', id: 'authentication--authorization' },
+  { title: 'API Security', id: 'api-security' },
+  { title: 'Infrastructure Security', id: 'infrastructure-security' },
+  { title: 'Security Audit Plugin', id: 'security-audit-plugin' },
+  { title: 'Security Hardening Timeline', id: 'security-hardening-timeline' },
+  { title: 'Configuration Guide', id: 'configuration-guide' },
+  { title: 'Responsible Disclosure', id: 'responsible-disclosure' },
+  { title: 'Security Audits', id: 'security-audits' },
+  { title: 'Dependencies', id: 'dependencies' },
+]
+
 # Security
 
 SonicJS takes security seriously. As a headless CMS that runs on Cloudflare Workers, we maintain a comprehensive security posture designed for edge-native deployments.
@@ -76,6 +88,52 @@ On boot, SonicJS checks your security configuration and warns about:
 - Edge-native TLS termination
 - Isolated execution per request (V8 isolates)
 - No persistent server state to compromise
+
+## Security Audit Plugin
+
+SonicJS includes a built-in **Security Audit Plugin** that provides security event logging, brute-force detection, and a real-time analytics dashboard. When activated, it automatically monitors all authentication routes and records events to your D1 database.
+
+### Key Capabilities
+
+- **Event logging** - Tracks login successes/failures, registrations, logouts, password resets, lockouts, and suspicious activity
+- **Brute-force detection** - Automatically locks out IPs after 10 failed attempts and email accounts after 5 failed attempts within a 15-minute sliding window (all thresholds configurable)
+- **Suspicious pattern detection** - Flags IPs that attempt logins with 5+ different email addresses (credential stuffing indicator)
+- **Real-time dashboard** - Summary cards, hourly trend charts, top offending IPs, and a critical events feed at `/admin/plugins/security-audit`
+- **Searchable event log** - Filter events by type, severity, email, or IP address with pagination
+- **Lockout management** - View and manually release active lockouts from the dashboard or via API
+- **Data export** - Export events as JSON or CSV for external analysis
+- **Configurable retention** - Set how long events are kept (default: 90 days) with optional auto-purge
+
+### How Lockouts Work
+
+When brute-force detection is enabled, the plugin uses Cloudflare KV for fast lockout state:
+
+1. Each failed login increments counters for the IP and email address
+2. When an IP exceeds the threshold, it is locked and receives `429 Too Many Requests` on subsequent login attempts
+3. When an email exceeds its threshold, that account is locked regardless of the source IP
+4. Lockouts automatically expire after the configured duration (default: 30 minutes) using KV TTL
+
+### API Access
+
+All security audit data is available via authenticated admin API endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/security-audit/events` | List and filter security events |
+| `GET /api/security-audit/stats` | Dashboard statistics (24h metrics, trends) |
+| `GET /api/security-audit/stats/ips` | Top IPs by failed login count |
+| `GET /api/security-audit/stats/trend` | Hourly failed login trend |
+| `GET /api/security-audit/lockouts` | List active IP and email lockouts |
+| `DELETE /api/security-audit/lockouts/:key` | Release a specific lockout |
+| `GET /api/security-audit/export?format=csv` | Export events as CSV or JSON |
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/security-audit" variant="text" arrow="right">
+    <>Full Security Audit Plugin documentation</>
+  </Button>
+</div>
+
+---
 
 ## Security Hardening Timeline
 

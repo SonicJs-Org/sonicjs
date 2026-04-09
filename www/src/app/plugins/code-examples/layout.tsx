@@ -1,9 +1,9 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Webhooks',
+  title: 'Code Examples Plugin - SonicJS',
   description:
-    'Register and consume webhooks to integrate your SonicJS application with external services. Get notified when content, workflow, or user events occur.',
+    'Code snippets and examples library for SonicJS with syntax highlighting, categorization, and a full CRUD API.',
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

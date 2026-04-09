@@ -45,7 +45,7 @@ export function renderCustomProfileSection(
 
   return `
               <!-- Custom Profile Fields -->
-              <div class="pt-6 border-t border-zinc-950/5 dark:border-white/5">
+              <div class="py-6 border-t border-b border-zinc-950/5 dark:border-white/5">
                 <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-4">Custom Profile Fields</h3>
                 <div class="space-y-4">
                   ${fieldsHtml}

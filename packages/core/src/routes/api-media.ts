@@ -99,8 +99,8 @@ apiMediaRoutes.post('/upload', async (c) => {
     const publicUrl = `https://pub-${bucketName}.r2.dev/${r2Key}`
     
     // Extract image dimensions if it's an image
-    let width: number | undefined
-    let height: number | undefined
+    let width: number | null = null
+    let height: number | null = null
     
     if (file.type.startsWith('image/') && !file.type.includes('svg')) {
       try {
@@ -113,7 +113,7 @@ apiMediaRoutes.post('/upload', async (c) => {
     }
 
     // Generate thumbnail URL for images
-    let thumbnailUrl: string | undefined
+    let thumbnailUrl: string | null = null
     if (file.type.startsWith('image/') && c.env.IMAGES_ACCOUNT_ID) {
       thumbnailUrl = `https://imagedelivery.net/${c.env.IMAGES_ACCOUNT_ID}/${r2Key}/thumbnail`
     }
@@ -149,12 +149,12 @@ apiMediaRoutes.post('/upload', async (c) => {
       mediaRecord.original_name,
       mediaRecord.mime_type,
       mediaRecord.size,
-      mediaRecord.width ?? null,
-      mediaRecord.height ?? null,
+      mediaRecord.width,
+      mediaRecord.height,
       mediaRecord.folder,
       mediaRecord.r2_key,
       mediaRecord.public_url,
-      mediaRecord.thumbnail_url ?? null,
+      mediaRecord.thumbnail_url,
       mediaRecord.uploaded_by,
       mediaRecord.uploaded_at
     ).run()
@@ -258,8 +258,8 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
         const publicUrl = `https://pub-${bucketName}.r2.dev/${r2Key}`
         
         // Extract image dimensions if it's an image
-        let width: number | undefined
-        let height: number | undefined
+        let width: number | null = null
+        let height: number | null = null
         
         if (file.type.startsWith('image/') && !file.type.includes('svg')) {
           try {
@@ -272,7 +272,7 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
         }
 
         // Generate thumbnail URL for images
-        let thumbnailUrl: string | undefined
+        let thumbnailUrl: string | null = null
         if (file.type.startsWith('image/') && c.env.IMAGES_ACCOUNT_ID) {
           thumbnailUrl = `https://imagedelivery.net/${c.env.IMAGES_ACCOUNT_ID}/${r2Key}/thumbnail`
         }
@@ -307,12 +307,12 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
           mediaRecord.original_name,
           mediaRecord.mime_type,
           mediaRecord.size,
-          mediaRecord.width ?? null,
-          mediaRecord.height ?? null,
+          mediaRecord.width,
+          mediaRecord.height,
           mediaRecord.folder,
           mediaRecord.r2_key,
           mediaRecord.public_url,
-          mediaRecord.thumbnail_url ?? null,
+          mediaRecord.thumbnail_url,
           mediaRecord.uploaded_by,
           mediaRecord.uploaded_at
         ).run()

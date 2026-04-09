@@ -1056,7 +1056,7 @@ userRoutes.put('/users/:id', async (c) => {
     const hasProfileData = profileDisplayName || profileBio || profileCompany ||
       profileJobTitle || profileWebsite || profileLocation || profileDateOfBirth
 
-    if (hasProfileData) {
+    if (hasProfileData || customDataJson !== null) {
       const now = Date.now()
 
       // Check if profile exists

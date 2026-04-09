@@ -70,6 +70,16 @@ vi.mock('../../templates/pages/admin-users-list.template', () => ({
   User: {}
 }))
 
+vi.mock('../../plugins/core-plugins/user-profiles', () => ({
+  getUserProfileConfig: vi.fn().mockReturnValue(undefined),
+  renderCustomProfileSection: vi.fn().mockReturnValue(''),
+  getCustomData: vi.fn().mockResolvedValue({}),
+  saveCustomData: vi.fn(),
+  extractCustomFieldsFromForm: vi.fn().mockReturnValue({}),
+  sanitizeCustomData: vi.fn().mockReturnValue({}),
+  validateCustomData: vi.fn().mockReturnValue({ valid: true, errors: {} })
+}))
+
 import { userRoutes } from '../../routes/admin-users'
 
 // Create call-order based D1 mock
@@ -356,6 +366,55 @@ describe('Admin Users - Profile on Edit Page', () => {
       // Only 2 prepare calls: uniqueness check + user update.
       // logActivity is mocked so it won't add more.
       expect(mockDb.prepare.mock.calls.length).toBe(2)
+    })
+
+    it('should save custom profile data even when no standard profile fields are set (issue #768)', async () => {
+      // Mock getUserProfileConfig to return a config with custom fields
+      const { getUserProfileConfig, extractCustomFieldsFromForm, sanitizeCustomData, getCustomData } = await import('../../plugins/core-plugins/user-profiles')
+      vi.mocked(getUserProfileConfig).mockReturnValue({
+        fields: [
+          { name: 'plan', label: 'Plan', type: 'radio', options: ['free', 'monthly', 'annual', 'lifetime'], default: 'free', required: true }
+        ]
+      } as any)
+      vi.mocked(extractCustomFieldsFromForm).mockReturnValue({ plan: 'monthly' })
+      vi.mocked(sanitizeCustomData).mockReturnValue({ plan: 'monthly' })
+      vi.mocked(getCustomData).mockResolvedValue({ plan: 'free' })
+
+      mockDb = createOrderedMockDb([
+        { first: null },                // call 0: uniqueness check — no conflict
+        { run: { success: true } },     // call 1: UPDATE users SET ...
+        { first: { id: 'prof-1' } },    // call 2: SELECT id FROM user_profiles — profile exists
+        { run: { success: true } }      // call 3: UPDATE user_profiles SET ... (with custom data)
+      ])
+
+      app = createApp(mockDb)
+
+      // Submit only user fields + custom field — no standard profile_* keys
+      const body = createFormBody({
+        ...baseUserFields,
+        'custom_plan': 'monthly'
+      })
+
+      const res = await app.request('/admin/users/user-123', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      }, {
+        DB: mockDb,
+        KV: {},
+        CACHE_KV: {}
+      })
+
+      expect(res.status).toBe(200)
+      const data = JSON.parse(await res.text())
+      expect(data.type).toBe('success')
+
+      // Should have 4 prepare calls: uniqueness check + user update + profile check + profile update
+      // This verifies the profile block is NOT skipped when custom data is present
+      expect(mockDb.prepare.mock.calls.length).toBe(4)
+
+      // Reset mocks
+      vi.mocked(getUserProfileConfig).mockReturnValue(undefined as any)
     })
 
     it('should return error on profile database failure', async () => {

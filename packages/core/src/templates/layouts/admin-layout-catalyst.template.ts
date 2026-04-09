@@ -426,10 +426,14 @@ export function renderAdminLayoutCatalyst(
 
     // Close dropdown when clicking outside
     document.addEventListener('click', function(event) {
-      const dropdown = document.getElementById('userDropdown');
+      const dropdowns = document.querySelectorAll('.userDropdown');
       const button = event.target.closest('[data-user-menu]');
-      if (!button && dropdown && !dropdown.contains(event.target)) {
-        dropdown.classList.add('hidden');
+      if (!button) {
+        dropdowns.forEach(function(dropdown) {
+          if (!dropdown.contains(event.target)) {
+            dropdown.classList.add('hidden');
+          }
+        });
       }
     });
 

@@ -53,7 +53,7 @@ export function parseShortcodeParams(paramStr: string): Record<string, string> {
   const regex = /(\w+)="([^"]*)"/g
   let match
   while ((match = regex.exec(paramStr)) !== null) {
-    params[match[1]] = match[2]
+    params[match[1]!] = match[2]!
   }
   return params
 }
@@ -78,8 +78,8 @@ export async function resolveShortcodes(
 
   let m
   while ((m = SHORTCODE_PATTERN.exec(text)) !== null) {
-    const name = m[1]
-    const paramStr = m[2]
+    const name = m[1]!
+    const paramStr = m[2] || ''
     const params = parseShortcodeParams(paramStr)
     const handler = handlerRegistry.get(name)
 
@@ -146,8 +146,8 @@ registerShortcodeHandler('current_date', (params) => {
   return format
     .replace('YYYY', String(now.getFullYear()))
     .replace('YY', String(now.getFullYear()).slice(-2))
-    .replace('MMMM', months[now.getMonth()])
-    .replace('MMM', monthsShort[now.getMonth()])
+    .replace('MMMM', months[now.getMonth()]!)
+    .replace('MMM', monthsShort[now.getMonth()]!)
     .replace('MM', String(now.getMonth() + 1).padStart(2, '0'))
     .replace('DD', String(now.getDate()).padStart(2, '0'))
     .replace('D', String(now.getDate()))

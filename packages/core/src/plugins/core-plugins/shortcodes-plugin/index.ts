@@ -15,7 +15,7 @@
  */
 
 import { Hono } from 'hono'
-import { PluginBuilder } from '../../../sdk/plugin-builder'
+import { PluginBuilder } from '../../sdk/plugin-builder'
 import { wrapAdminPage } from '../_shared/admin-template'
 import {
   resolveShortcodesInObject,

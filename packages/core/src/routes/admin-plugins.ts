@@ -23,7 +23,7 @@ const AVAILABLE_PLUGINS = [
     version: '2.0.0',
     author: 'Community Developer',
     category: 'content',
-    icon: '❓',
+    icon: 'â',
     permissions: ['manage:faqs'],
     dependencies: [],
     is_core: false
@@ -36,7 +36,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0-beta.1',
     author: 'SonicJS',
     category: 'demo',
-    icon: '🎯',
+    icon: 'ð¯',
     permissions: [],
     dependencies: [],
     is_core: false
@@ -49,7 +49,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0-beta.1',
     author: 'SonicJS Team',
     category: 'system',
-    icon: '🗄️',
+    icon: 'ðï¸',
     permissions: ['manage:database', 'admin'],
     dependencies: [],
     is_core: false
@@ -62,7 +62,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0-beta.1',
     author: 'SonicJS Team',
     category: 'development',
-    icon: '🌱',
+    icon: 'ð±',
     permissions: ['admin'],
     dependencies: [],
     is_core: false
@@ -75,7 +75,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0',
     author: 'SonicJS Team',
     category: 'editor',
-    icon: '✍️',
+    icon: 'âï¸',
     permissions: [],
     dependencies: [],
     is_core: true
@@ -88,7 +88,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0',
     author: 'SonicJS Team',
     category: 'editor',
-    icon: '📝',
+    icon: 'ð',
     permissions: [],
     dependencies: [],
     is_core: false
@@ -101,7 +101,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0',
     author: 'SonicJS Team',
     category: 'editor',
-    icon: '📝',
+    icon: 'ð',
     permissions: [],
     dependencies: [],
     is_core: false
@@ -114,7 +114,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0',
     author: 'SonicJS Team',
     category: 'security',
-    icon: '🛡️',
+    icon: 'ð¡ï¸',
     permissions: [],
     dependencies: [],
     is_core: true
@@ -127,7 +127,7 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0-beta.1',
     author: 'SonicJS Team',
     category: 'security',
-    icon: '🛡️',
+    icon: 'ð¡ï¸',
     permissions: ['security-audit:view', 'security-audit:manage'],
     dependencies: [],
     is_core: false
@@ -140,10 +140,23 @@ const AVAILABLE_PLUGINS = [
     version: '1.0.0',
     author: 'SonicJS Team',
     category: 'search',
-    icon: '🔍',
+    icon: 'ð',
     permissions: [],
     dependencies: [],
     is_core: true
+  },
+  {
+    id: 'form-builder',
+    name: 'form-builder',
+    display_name: 'Form Builder',
+    description: 'Drag-and-drop form builder with conditional logic, file uploads, and email notifications. Create contact forms, surveys, and data collection forms.',
+    version: '1.0.0',
+    author: 'SonicJS Team',
+    category: 'content',
+    icon: '\u{1F4DD}',
+    permissions: ['forms:create', 'forms:manage', 'forms:submissions'],
+    dependencies: [],
+    is_core: false
   }
 ]
 
@@ -418,7 +431,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '2.0.0',
         author: 'Community Developer',
         category: 'content',
-        icon: '❓',
+        icon: 'â',
         permissions: ['manage:faqs'],
         dependencies: [],
         settings: {
@@ -441,7 +454,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0-beta.1',
         author: 'SonicJS',
         category: 'demo',
-        icon: '🎯',
+        icon: 'ð¯',
         permissions: [],
         dependencies: [],
         settings: {
@@ -464,7 +477,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0-beta.1',
         author: 'SonicJS Team',
         category: 'security',
-        icon: '🔐',
+        icon: 'ð',
         permissions: ['manage:users', 'manage:roles', 'manage:permissions'],
         dependencies: [],
         is_core: true,
@@ -484,7 +497,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0-beta.1',
         author: 'SonicJS Team',
         category: 'media',
-        icon: '📸',
+        icon: 'ð¸',
         permissions: ['manage:media', 'upload:files'],
         dependencies: [],
         is_core: true,
@@ -504,7 +517,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0-beta.1',
         author: 'SonicJS Team',
         category: 'content',
-        icon: '🔄',
+        icon: 'ð',
         permissions: ['manage:workflows', 'approve:content'],
         dependencies: [],
         is_core: true,
@@ -524,7 +537,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0-beta.1',
         author: 'SonicJS Team',
         category: 'system',
-        icon: '🗄️',
+        icon: 'ðï¸',
         permissions: ['manage:database', 'admin'],
         dependencies: [],
         is_core: false,
@@ -549,7 +562,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0-beta.1',
         author: 'SonicJS Team',
         category: 'development',
-        icon: '🌱',
+        icon: 'ð±',
         permissions: ['admin'],
         dependencies: [],
         is_core: false,
@@ -573,7 +586,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0',
         author: 'SonicJS Team',
         category: 'editor',
-        icon: '✍️',
+        icon: 'âï¸',
         permissions: [],
         dependencies: [],
         is_core: true,
@@ -598,7 +611,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0',
         author: 'SonicJS Team',
         category: 'editor',
-        icon: '📝',
+        icon: 'ð',
         permissions: [],
         dependencies: [],
         is_core: false,
@@ -623,7 +636,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0',
         author: 'SonicJS Team',
         category: 'editor',
-        icon: '📝',
+        icon: 'ð',
         permissions: [],
         dependencies: [],
         is_core: false,
@@ -648,7 +661,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0-beta.1',
         author: 'SonicJS Team',
         category: 'security',
-        icon: '🛡️',
+        icon: 'ð¡ï¸',
         permissions: ['security-audit:view', 'security-audit:manage'],
         dependencies: [],
         is_core: false,
@@ -700,7 +713,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0',
         author: 'SonicJS Team',
         category: 'search',
-        icon: '🔍',
+        icon: 'ð',
         permissions: [],
         dependencies: [],
         is_core: true,
@@ -720,7 +733,7 @@ adminPluginRoutes.post('/install', async (c) => {
         version: '1.0.0',
         author: 'SonicJS Team',
         category: 'security',
-        icon: '🛡️',
+        icon: 'ð¡ï¸',
         permissions: [],
         dependencies: [],
         is_core: true,
@@ -738,6 +751,30 @@ adminPluginRoutes.post('/install', async (c) => {
       })
 
       return c.json({ success: true, plugin: turnstilePlugin })
+    }
+
+    // Handle Form Builder plugin installation
+    if (body.name === 'form-builder') {
+      const formBuilderPlugin = await pluginService.installPlugin({
+        id: 'form-builder',
+        name: 'form-builder',
+        display_name: 'Form Builder',
+        description: 'Drag-and-drop form builder with conditional logic, file uploads, and email notifications. Create contact forms, surveys, and data collection forms.',
+        version: '1.0.0',
+        author: 'SonicJS Team',
+        category: 'content',
+        icon: '\u{1F4DD}',
+        permissions: ['forms:create', 'forms:manage', 'forms:submissions'],
+        dependencies: [],
+        settings: {
+          enableNotifications: true,
+          enableFileUploads: true,
+          maxSubmissionsPerForm: 0,
+          submissionRetentionDays: 90
+        }
+      })
+
+      return c.json({ success: true, plugin: formBuilderPlugin })
     }
 
     return c.json({ error: 'Plugin not found in registry' }, 404)

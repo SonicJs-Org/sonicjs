@@ -170,6 +170,80 @@ describe('renderDynamicField - TDZ Bug Fix (Issue #555)', () => {
   });
 });
 
+describe('renderDynamicField - Select enum fallback (Issue #763)', () => {
+  it('should render select options from enum when opts.options is not set', () => {
+    const selectField: FieldDefinition = {
+      id: 'plan-field',
+      field_name: 'plan',
+      field_type: 'select',
+      field_label: 'Plan',
+      field_options: {
+        enum: ['free', 'monthly', 'annual', 'lifetime'],
+        enumLabels: ['Free', 'Monthly', 'Annual', 'Lifetime'],
+      },
+      field_order: 1,
+      is_required: true,
+      is_searchable: false,
+    };
+
+    const html = renderDynamicField(selectField, { value: 'free' });
+
+    expect(html).toContain('<select');
+    expect(html).toContain('value="free"');
+    expect(html).toContain('Free');
+    expect(html).toContain('Monthly');
+    expect(html).toContain('Annual');
+    expect(html).toContain('Lifetime');
+    expect(html).toContain('selected');
+  });
+
+  it('should render select options from enum without enumLabels', () => {
+    const selectField: FieldDefinition = {
+      id: 'plan-field',
+      field_name: 'plan',
+      field_type: 'select',
+      field_label: 'Plan',
+      field_options: {
+        enum: ['free', 'monthly'],
+      },
+      field_order: 1,
+      is_required: false,
+      is_searchable: false,
+    };
+
+    const html = renderDynamicField(selectField, { value: '' });
+
+    expect(html).toContain('<select');
+    expect(html).toContain('value="free"');
+    expect(html).toContain('value="monthly"');
+  });
+
+  it('should prefer opts.options over opts.enum when both are present', () => {
+    const selectField: FieldDefinition = {
+      id: 'plan-field',
+      field_name: 'plan',
+      field_type: 'select',
+      field_label: 'Plan',
+      field_options: {
+        options: [
+          { value: 'a', label: 'Option A' },
+          { value: 'b', label: 'Option B' },
+        ],
+        enum: ['x', 'y'],
+      },
+      field_order: 1,
+      is_required: false,
+      is_searchable: false,
+    };
+
+    const html = renderDynamicField(selectField, { value: 'a' });
+
+    expect(html).toContain('Option A');
+    expect(html).toContain('Option B');
+    expect(html).not.toContain('value="x"');
+  });
+});
+
 describe('renderDynamicField - Media', () => {
   const baseField: FieldDefinition = {
     id: 'test-field',

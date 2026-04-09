@@ -680,7 +680,14 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       break
 
     case 'select':
-      const selectOptions = opts.options || []
+      const selectOptions =
+        opts.options ||
+        (Array.isArray(opts.enum)
+          ? opts.enum.map((optionValue: string, index: number) => ({
+              value: optionValue,
+              label: opts.enumLabels?.[index] || optionValue,
+            }))
+          : [])
       const multiple = opts.multiple ? 'multiple' : ''
       const selectedValues = Array.isArray(value) ? value : [value]
 

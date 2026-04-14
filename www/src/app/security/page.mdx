@@ -47,7 +47,8 @@ SonicJS enforces role-based permissions across all routes:
 ### CSRF Protection
 - Signed double-submit cookie pattern on all state-changing endpoints
 - Automatic token generation and validation
-- Exempt: public read-only API endpoints
+- Exempt: safe methods (GET, HEAD, OPTIONS), auth routes, public form submissions, event tracking API, Stripe webhooks, and search API
+- Requests with `Authorization` header (Bearer token or API key) bypass CSRF — CSRF only applies to cookie-authenticated sessions
 
 ### CORS Configuration
 - Cross-origin requests restricted to explicitly allowed origins via `CORS_ORIGINS` environment variable
@@ -106,7 +107,7 @@ SonicJS includes a built-in **Security Audit Plugin** that provides security eve
 
 ### How Lockouts Work
 
-When brute-force detection is enabled, the plugin uses Cloudflare KV for fast lockout state:
+When brute-force detection is enabled, the plugin uses Cloudflare KV for fast lockout state. If the `CACHE_KV` binding is not available, the brute-force detector gracefully degrades — all KV-dependent methods return safe defaults instead of crashing:
 
 1. Each failed login increments counters for the IP and email address
 2. When an IP exceeds the threshold, it is locked and receives `429 Too Many Requests` on subsequent login attempts
@@ -139,6 +140,7 @@ All security audit data is available via authenticated admin API endpoints:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v2.16.0 | Apr 2026 | BruteForceDetector KV resilience, CSRF exempt path expansion, Authorization header bypass for API clients |
 | v2.9.0 | Apr 2026 | RBAC enforcement on all admin routes |
 | v2.8.3 | Mar 2026 | SQL injection fix, XSS fixes (reflected + stored), PBKDF2 hashing, CSRF protection, rate limiting, CORS restrictions, security headers, JWT secret to env var |
 | v2.8.2 | Mar 2026 | Public form XSS sanitization, content API access restrictions |

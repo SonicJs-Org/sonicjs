@@ -5,6 +5,7 @@ export const sections = [
   { title: 'Tracking Page Views', id: 'tracking-page-views' },
   { title: 'Custom Events', id: 'custom-events' },
   { title: 'API Reference', id: 'api-reference' },
+  { title: 'Event Tracking API', id: 'event-tracking-api' },
   { title: 'Analytics Service', id: 'analytics-service' },
   { title: 'Admin Dashboard', id: 'admin-dashboard' },
   { title: 'Configuration', id: 'configuration' },
@@ -387,6 +388,125 @@ All analytics endpoints require authentication with `admin` or `analytics:read` 
         "recentEvents": []
       }
     }
+    ```
+
+    </CodeGroup>
+  </Col>
+</Row>
+
+### Event Tracking API <span className="px-2 py-0.5 text-xs font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded">NEW in v2.16.0</span>
+
+The `/api/events` endpoint provides a public HTTP API for tracking events from client-side code, external services, or any HTTP client. No authentication required for tracking; admin auth required for querying.
+
+<Row>
+  <Col>
+    **Track a single event:**
+
+    **Request Body:**
+    - `event` (required) - Event name
+    - `category` - Event category (default: `general`)
+    - `data` - Additional metadata object
+    - `path` - Page URL path
+    - `session_id` - Session identifier
+    - `user_id` - User identifier
+  </Col>
+  <Col>
+    <CodeGroup title="Track Single Event">
+
+    ```bash
+    curl -X POST 'https://your-app.workers.dev/api/events' \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "event": "button_click",
+        "category": "ui",
+        "data": { "button": "signup", "variant": "hero" },
+        "path": "/pricing"
+      }'
+    ```
+
+    </CodeGroup>
+
+    <CodeGroup title="Response">
+
+    ```json
+    {
+      "success": true,
+      "id": "evt_abc123"
+    }
+    ```
+
+    </CodeGroup>
+  </Col>
+</Row>
+
+<Row>
+  <Col>
+    **Track batch events (up to 100):**
+
+    Send an array of events in a single request for better performance.
+  </Col>
+  <Col>
+    <CodeGroup title="Batch Track">
+
+    ```bash
+    curl -X POST 'https://your-app.workers.dev/api/events' \
+      -H 'Content-Type: application/json' \
+      -d '[
+        { "event": "page_view", "path": "/home" },
+        { "event": "page_view", "path": "/about" },
+        { "event": "click", "category": "nav", "data": { "target": "pricing" } }
+      ]'
+    ```
+
+    </CodeGroup>
+
+    <CodeGroup title="Response">
+
+    ```json
+    {
+      "success": true,
+      "count": 3
+    }
+    ```
+
+    </CodeGroup>
+  </Col>
+</Row>
+
+<Row>
+  <Col>
+    **Query events** (admin auth required):
+
+    **Query Parameters:**
+    - `event` - Filter by event name
+    - `category` - Filter by category
+    - `limit` - Max results (default: 100)
+    - `offset` - Pagination offset
+  </Col>
+  <Col>
+    <CodeGroup title="Query Events">
+
+    ```bash
+    curl -X GET 'https://your-app.workers.dev/api/events?category=ui&limit=50' \
+      -H 'Authorization: Bearer YOUR_TOKEN'
+    ```
+
+    </CodeGroup>
+  </Col>
+</Row>
+
+<Row>
+  <Col>
+    **Get event stats** (admin auth required):
+
+    Returns aggregated counts grouped by event name.
+  </Col>
+  <Col>
+    <CodeGroup title="Event Stats">
+
+    ```bash
+    curl -X GET 'https://your-app.workers.dev/api/events/stats' \
+      -H 'Authorization: Bearer YOUR_TOKEN'
     ```
 
     </CodeGroup>

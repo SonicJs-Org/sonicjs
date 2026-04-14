@@ -22,7 +22,7 @@ export class BruteForceDetector {
     shouldLockEmail: boolean
     isSuspicious: boolean
   }> {
-    if (!this.settings.enabled) {
+    if (!this.settings.enabled || !this.kv) {
       return { ipCount: 0, emailCount: 0, shouldLockIP: false, shouldLockEmail: false, isSuspicious: false }
     }
 
@@ -50,7 +50,7 @@ export class BruteForceDetector {
   }
 
   async isLocked(ip: string, email: string): Promise<{ locked: boolean, reason?: string }> {
-    if (!this.settings.enabled) {
+    if (!this.settings.enabled || !this.kv) {
       return { locked: false }
     }
 
@@ -68,6 +68,7 @@ export class BruteForceDetector {
   }
 
   async lockIP(ip: string): Promise<void> {
+    if (!this.kv) return
     const ttl = this.settings.lockoutDurationMinutes * 60
     await this.kv.put(`${LOCK_PREFIX}ip:${ip}`, JSON.stringify({
       lockedAt: Date.now(),
@@ -76,6 +77,7 @@ export class BruteForceDetector {
   }
 
   async lockEmail(email: string): Promise<void> {
+    if (!this.kv) return
     const ttl = this.settings.lockoutDurationMinutes * 60
     await this.kv.put(`${LOCK_PREFIX}email:${email}`, JSON.stringify({
       lockedAt: Date.now(),
@@ -84,14 +86,17 @@ export class BruteForceDetector {
   }
 
   async unlockIP(ip: string): Promise<void> {
+    if (!this.kv) return
     await this.kv.delete(`${LOCK_PREFIX}ip:${ip}`)
   }
 
   async unlockEmail(email: string): Promise<void> {
+    if (!this.kv) return
     await this.kv.delete(`${LOCK_PREFIX}email:${email}`)
   }
 
   async getActiveLockouts(): Promise<Array<{ key: string, type: 'ip' | 'email', value: string, lockedAt: number }>> {
+    if (!this.kv) return []
     // KV list with prefix to find all active lockouts
     const ipLocks = await this.kv.list({ prefix: `${LOCK_PREFIX}ip:` })
     const emailLocks = await this.kv.list({ prefix: `${LOCK_PREFIX}email:` })
@@ -128,6 +133,7 @@ export class BruteForceDetector {
   }
 
   async releaseLockout(key: string): Promise<void> {
+    if (!this.kv) return
     await this.kv.delete(key)
   }
 

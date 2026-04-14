@@ -122,6 +122,11 @@ const DEFAULT_EXEMPT_PATHS = [
   '/auth/accept-invitation',
   '/auth/reset-password',
   '/auth/request-password-reset',
+  '/auth/otp',
+  '/auth/magic-link',
+  '/auth/verify',
+  '/api/stripe/webhook',
+  '/api/events',
 ]
 
 /**
@@ -198,6 +203,15 @@ export function csrfProtection(options: CsrfOptions = {}) {
     // Bearer-only or API-key-only requests (no auth_token cookie) — exempt
     const authCookie = getCookie(c, 'auth_token')
     if (!authCookie) {
+      await next()
+      return
+    }
+
+    // Requests with an Authorization header use token-based auth — the cookie
+    // is incidental and CSRF protection is unnecessary (the attacker cannot
+    // forge the Authorization header from a cross-origin page).
+    const authHeader = c.req.header('Authorization')
+    if (authHeader) {
       await next()
       return
     }

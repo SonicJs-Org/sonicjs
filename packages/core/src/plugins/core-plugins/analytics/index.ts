@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 // import { z } from 'zod'
 import { PluginBuilder, PluginHelpers } from '../../sdk/plugin-builder'
 import { Plugin, HOOKS } from '@sonicjs-cms/core'
+import { analyticsAdminRoutes } from './routes/admin'
 
 export function createAnalyticsPlugin(): Plugin {
   const builder = PluginBuilder.create({
@@ -103,6 +104,13 @@ export function createAnalyticsPlugin(): Plugin {
     requiresAuth: true,
     roles: ['admin', 'analytics:read'],
     priority: 3
+  })
+
+  // Admin dashboard routes
+  builder.addRoute('/admin/analytics', analyticsAdminRoutes as any, {
+    description: 'Analytics admin dashboard',
+    requiresAuth: true,
+    priority: 50
   })
 
   // Add analytics tracking middleware

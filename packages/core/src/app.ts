@@ -43,6 +43,8 @@ import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugi
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
+import { analyticsPlugin } from './plugins/core-plugins/analytics'
+import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import cachePlugin from './plugins/cache'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
@@ -253,6 +255,16 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       app.route(route.path, route.handler as any)
     }
   }
+
+  // Plugin routes - Analytics (must be before /admin/plugins catch-all)
+  if (analyticsPlugin.routes && analyticsPlugin.routes.length > 0) {
+    for (const route of analyticsPlugin.routes) {
+      app.route(route.path, route.handler as any)
+    }
+  }
+
+  // Public event tracking API — POST /api/events (open), GET /api/events (admin)
+  app.route('/api/events', eventsApiRoutes)
 
   // Plugin routes - Stripe (must be before /admin/plugins catch-all)
   if (stripePlugin.routes && stripePlugin.routes.length > 0) {

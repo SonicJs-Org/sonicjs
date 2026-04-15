@@ -112,6 +112,10 @@ export interface SonicJSConfig {
     afterAuth?: Array<(c: Context, next: () => Promise<void>) => Promise<void>>
   }
 
+  // Admin access control
+  // Roles allowed to access the /admin panel. Defaults to ['admin'].
+  adminAccessRoles?: string[]
+
   // App metadata
   version?: string
   name?: string
@@ -192,9 +196,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     }
   }
 
-  // Admin panel: require authentication and admin role
+  // Admin panel access control: require authentication and admin role by default
+  const adminRoles = config.adminAccessRoles || ['admin']
   app.use('/admin/*', requireAuth())
-  app.use('/admin/*', requireRole(['admin']))
+  app.use('/admin/*', requireRole(adminRoles))
 
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())

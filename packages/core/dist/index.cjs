@@ -1,16 +1,16 @@
 'use strict';
 
-var chunk26HYU7MX_cjs = require('./chunk-26HYU7MX.cjs');
-var chunkNZWFCUDA_cjs = require('./chunk-NZWFCUDA.cjs');
-var chunkUFPT5KCQ_cjs = require('./chunk-UFPT5KCQ.cjs');
+var chunkAFA5S6UU_cjs = require('./chunk-AFA5S6UU.cjs');
+var chunkXV6CY3IV_cjs = require('./chunk-XV6CY3IV.cjs');
+var chunkIAWDRRU3_cjs = require('./chunk-IAWDRRU3.cjs');
 var chunk43AB4EH4_cjs = require('./chunk-43AB4EH4.cjs');
-var chunkRVD7PLMU_cjs = require('./chunk-RVD7PLMU.cjs');
+var chunkLMQZWQTT_cjs = require('./chunk-LMQZWQTT.cjs');
 var chunk4ZSNJDLS_cjs = require('./chunk-4ZSNJDLS.cjs');
 var chunkOHYBNCVL_cjs = require('./chunk-OHYBNCVL.cjs');
 var chunkUYJ6TJHX_cjs = require('./chunk-UYJ6TJHX.cjs');
-var chunkABB34XUS_cjs = require('./chunk-ABB34XUS.cjs');
+var chunkZUXOAZWZ_cjs = require('./chunk-ZUXOAZWZ.cjs');
 var chunk635JAMSE_cjs = require('./chunk-635JAMSE.cjs');
-var chunkVUISYUHY_cjs = require('./chunk-VUISYUHY.cjs');
+var chunkYQW2GCJ3_cjs = require('./chunk-YQW2GCJ3.cjs');
 require('./chunk-P3XDZL6Q.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var chunkMNWKYY5E_cjs = require('./chunk-MNWKYY5E.cjs');
@@ -560,7 +560,7 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkUFPT5KCQ_cjs.requireAuth());
+  router3.use("*", chunkIAWDRRU3_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
@@ -1777,7 +1777,7 @@ function createOTPLoginPlugin() {
           console.warn("Failed to parse OTP plugin settings, using defaults");
         }
       }
-      const settingsService = new chunkNZWFCUDA_cjs.SettingsService(db);
+      const settingsService = new chunkXV6CY3IV_cjs.SettingsService(db);
       const generalSettings = await settingsService.getGeneralSettings();
       const siteName = generalSettings.siteName;
       const canRequest = await otpService.checkRateLimit(normalizedEmail, settings);
@@ -1939,7 +1939,7 @@ function createOTPLoginPlugin() {
           error: "Account is deactivated"
         }, 403);
       }
-      const token = await chunkUFPT5KCQ_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET);
+      const token = await chunkIAWDRRU3_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2409,13 +2409,13 @@ function createOAuthProvidersPlugin() {
         if (!user || !user.is_active) {
           return c.redirect("/auth/login?error=Account is deactivated");
         }
-        const jwt2 = await chunkUFPT5KCQ_cjs.AuthManager.generateToken(
+        const jwt2 = await chunkIAWDRRU3_cjs.AuthManager.generateToken(
           user.id,
           user.email,
           user.role,
           c.env.JWT_SECRET
         );
-        chunkUFPT5KCQ_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax" });
+        chunkIAWDRRU3_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax" });
         return c.redirect("/admin");
       }
       const existingUser = await oauthService.findUserByEmail(profile.email);
@@ -2432,13 +2432,13 @@ function createOAuthProvidersPlugin() {
           tokenExpiresAt: tokenExpiresAt ?? void 0,
           profileData: JSON.stringify(profile)
         });
-        const jwt2 = await chunkUFPT5KCQ_cjs.AuthManager.generateToken(
+        const jwt2 = await chunkIAWDRRU3_cjs.AuthManager.generateToken(
           existingUser.id,
           existingUser.email,
           existingUser.role,
           c.env.JWT_SECRET
         );
-        chunkUFPT5KCQ_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax" });
+        chunkIAWDRRU3_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax" });
         return c.redirect("/admin");
       }
       const newUserId = await oauthService.createUserFromOAuth(profile);
@@ -2451,13 +2451,13 @@ function createOAuthProvidersPlugin() {
         tokenExpiresAt: tokenExpiresAt ?? void 0,
         profileData: JSON.stringify(profile)
       });
-      const jwt = await chunkUFPT5KCQ_cjs.AuthManager.generateToken(
+      const jwt = await chunkIAWDRRU3_cjs.AuthManager.generateToken(
         newUserId,
         profile.email.toLowerCase(),
         "viewer",
         c.env.JWT_SECRET
       );
-      chunkUFPT5KCQ_cjs.AuthManager.setAuthCookie(c, jwt, { sameSite: "Lax" });
+      chunkIAWDRRU3_cjs.AuthManager.setAuthCookie(c, jwt, { sameSite: "Lax" });
       return c.redirect("/admin");
     } catch (error) {
       console.error("OAuth callback error:", error);
@@ -4150,7 +4150,7 @@ function renderSettingsPage(data) {
 
 // src/plugins/core-plugins/ai-search-plugin/routes/admin.ts
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkUFPT5KCQ_cjs.requireAuth());
+adminRoutes.use("*", chunkIAWDRRU3_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -4551,13 +4551,13 @@ function createMagicLinkAuthPlugin() {
         SET used = 1, used_at = ?
         WHERE id = ?
       `).bind(Date.now(), magicLink.id).run();
-      const jwtToken = await chunkUFPT5KCQ_cjs.AuthManager.generateToken(
+      const jwtToken = await chunkIAWDRRU3_cjs.AuthManager.generateToken(
         user.id,
         user.email,
         user.role,
         c.env.JWT_SECRET
       );
-      chunkUFPT5KCQ_cjs.AuthManager.setAuthCookie(c, jwtToken);
+      chunkIAWDRRU3_cjs.AuthManager.setAuthCookie(c, jwtToken);
       await db.prepare(`
         UPDATE users SET last_login_at = ? WHERE id = ?
       `).bind(Date.now(), user.id).run();
@@ -5567,7 +5567,7 @@ function renderSecuritySettingsPage(data) {
 
 // src/plugins/core-plugins/security-audit-plugin/routes/admin.ts
 var adminRoutes2 = new hono.Hono();
-adminRoutes2.use("*", chunkUFPT5KCQ_cjs.requireAuth());
+adminRoutes2.use("*", chunkIAWDRRU3_cjs.requireAuth());
 adminRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
   if (user?.role !== "admin") {
@@ -5700,7 +5700,7 @@ var BruteForceDetector = class {
   }
   settings;
   async recordFailedAttempt(ip, email) {
-    if (!this.settings.enabled) {
+    if (!this.settings.enabled || !this.kv) {
       return { ipCount: 0, emailCount: 0, shouldLockIP: false, shouldLockEmail: false, isSuspicious: false };
     }
     const windowMs = this.settings.windowMinutes * 60 * 1e3;
@@ -5717,7 +5717,7 @@ var BruteForceDetector = class {
     return { ipCount, emailCount, shouldLockIP, shouldLockEmail, isSuspicious };
   }
   async isLocked(ip, email) {
-    if (!this.settings.enabled) {
+    if (!this.settings.enabled || !this.kv) {
       return { locked: false };
     }
     const ipLocked = await this.kv.get(`${LOCK_PREFIX}ip:${ip}`);
@@ -5731,6 +5731,7 @@ var BruteForceDetector = class {
     return { locked: false };
   }
   async lockIP(ip) {
+    if (!this.kv) return;
     const ttl = this.settings.lockoutDurationMinutes * 60;
     await this.kv.put(`${LOCK_PREFIX}ip:${ip}`, JSON.stringify({
       lockedAt: Date.now(),
@@ -5738,6 +5739,7 @@ var BruteForceDetector = class {
     }), { expirationTtl: ttl });
   }
   async lockEmail(email) {
+    if (!this.kv) return;
     const ttl = this.settings.lockoutDurationMinutes * 60;
     await this.kv.put(`${LOCK_PREFIX}email:${email}`, JSON.stringify({
       lockedAt: Date.now(),
@@ -5745,12 +5747,15 @@ var BruteForceDetector = class {
     }), { expirationTtl: ttl });
   }
   async unlockIP(ip) {
+    if (!this.kv) return;
     await this.kv.delete(`${LOCK_PREFIX}ip:${ip}`);
   }
   async unlockEmail(email) {
+    if (!this.kv) return;
     await this.kv.delete(`${LOCK_PREFIX}email:${email}`);
   }
   async getActiveLockouts() {
+    if (!this.kv) return [];
     const ipLocks = await this.kv.list({ prefix: `${LOCK_PREFIX}ip:` });
     const emailLocks = await this.kv.list({ prefix: `${LOCK_PREFIX}email:` });
     const lockouts = [];
@@ -5781,6 +5786,7 @@ var BruteForceDetector = class {
     return lockouts;
   }
   async releaseLockout(key) {
+    if (!this.kv) return;
     await this.kv.delete(key);
   }
   isAboveAlertThreshold(count) {
@@ -5837,7 +5843,7 @@ var BruteForceDetector = class {
 
 // src/plugins/core-plugins/security-audit-plugin/routes/api.ts
 var apiRoutes2 = new hono.Hono();
-apiRoutes2.use("*", chunkUFPT5KCQ_cjs.requireAuth());
+apiRoutes2.use("*", chunkIAWDRRU3_cjs.requireAuth());
 apiRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
   if (user?.role !== "admin") {
@@ -6992,7 +6998,7 @@ var DEFAULT_SETTINGS3 = {
 
 // src/plugins/core-plugins/stripe-plugin/routes/admin.ts
 var adminRoutes3 = new hono.Hono();
-adminRoutes3.use("*", chunkUFPT5KCQ_cjs.requireAuth());
+adminRoutes3.use("*", chunkIAWDRRU3_cjs.requireAuth());
 adminRoutes3.use("*", async (c, next) => {
   const user = c.get("user");
   if (user?.role !== "admin") {
@@ -7475,7 +7481,7 @@ apiRoutes3.post("/webhook", async (c) => {
   }
   return c.json({ received: true });
 });
-apiRoutes3.post("/create-checkout-session", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
+apiRoutes3.post("/create-checkout-session", chunkIAWDRRU3_cjs.requireAuth(), async (c) => {
   const db = c.env.DB;
   const user = c.get("user");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
@@ -7515,7 +7521,7 @@ apiRoutes3.post("/create-checkout-session", chunkUFPT5KCQ_cjs.requireAuth(), asy
   });
   return c.json({ sessionId: session.id, url: session.url });
 });
-apiRoutes3.get("/subscription", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/subscription", chunkIAWDRRU3_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const db = c.env.DB;
@@ -7527,7 +7533,7 @@ apiRoutes3.get("/subscription", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
   }
   return c.json({ subscription });
 });
-apiRoutes3.get("/subscriptions", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/subscriptions", chunkIAWDRRU3_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -7543,7 +7549,7 @@ apiRoutes3.get("/subscriptions", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
   const result = await subscriptionService.list(filters);
   return c.json(result);
 });
-apiRoutes3.get("/stats", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/stats", chunkIAWDRRU3_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -7552,7 +7558,7 @@ apiRoutes3.get("/stats", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
   const stats = await subscriptionService.getStats();
   return c.json(stats);
 });
-apiRoutes3.post("/sync-subscriptions", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
+apiRoutes3.post("/sync-subscriptions", chunkIAWDRRU3_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -7600,7 +7606,7 @@ apiRoutes3.post("/sync-subscriptions", chunkUFPT5KCQ_cjs.requireAuth(), async (c
     }, 500);
   }
 });
-apiRoutes3.get("/events", chunkUFPT5KCQ_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/events", chunkIAWDRRU3_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -7756,6 +7762,672 @@ function pluginMenuMiddleware() {
     }
   };
 }
+
+// src/plugins/types.ts
+var HOOKS2 = {
+  // Request lifecycle
+  REQUEST_START: "request:start",
+  REQUEST_END: "request:end",
+  USER_LOGIN: "user:login"};
+chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+var adminRoutes4 = new hono.Hono();
+adminRoutes4.use("*", chunkIAWDRRU3_cjs.requireAuth());
+adminRoutes4.use("*", async (c, next) => {
+  const user = c.get("user");
+  if (user?.role !== "admin") {
+    return c.text("Access denied", 403);
+  }
+  return next();
+});
+adminRoutes4.get("/", async (c) => {
+  const user = c.get("user");
+  const db = c.env.DB;
+  let totalRequests = 0;
+  let uniqueIPs = 0;
+  let avgDuration = 0;
+  let errorCount = 0;
+  let topPages = [];
+  let recentActivity = [];
+  try {
+    const now = Math.floor(Date.now() / 1e3);
+    const dayAgo = now - 86400;
+    const [requestsResult, ipsResult, durationResult, errorsResult, pagesResult, activityResult] = await Promise.all([
+      db.prepare("SELECT COUNT(*) as count FROM system_logs WHERE category = ? AND created_at > ?").bind("api", dayAgo).first(),
+      db.prepare("SELECT COUNT(DISTINCT ip_address) as count FROM system_logs WHERE category = ? AND created_at > ?").bind("api", dayAgo).first(),
+      db.prepare("SELECT AVG(duration) as avg FROM system_logs WHERE category = ? AND created_at > ? AND duration IS NOT NULL").bind("api", dayAgo).first(),
+      db.prepare("SELECT COUNT(*) as count FROM system_logs WHERE level IN (?, ?) AND created_at > ?").bind("error", "fatal", dayAgo).first(),
+      db.prepare("SELECT url, COUNT(*) as views FROM system_logs WHERE category = ? AND created_at > ? AND url IS NOT NULL GROUP BY url ORDER BY views DESC LIMIT 10").bind("api", dayAgo).all(),
+      db.prepare("SELECT url, method, status_code, duration, created_at FROM system_logs WHERE category = ? ORDER BY created_at DESC LIMIT 20").bind("api").all()
+    ]);
+    totalRequests = requestsResult?.count || 0;
+    uniqueIPs = ipsResult?.count || 0;
+    avgDuration = Math.round(durationResult?.avg || 0);
+    errorCount = errorsResult?.count || 0;
+    topPages = (pagesResult.results || []).map((r) => ({ path: r.url, views: r.views }));
+    recentActivity = activityResult.results || [];
+  } catch {
+  }
+  const content2 = `
+    <div class="space-y-8">
+      <div>
+        <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Analytics Dashboard</h1>
+        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Last 24 hours overview from system logs</p>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total Requests</p>
+          <p class="mt-2 text-3xl font-semibold text-zinc-950 dark:text-white">${totalRequests.toLocaleString()}</p>
+        </div>
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Unique Visitors</p>
+          <p class="mt-2 text-3xl font-semibold text-zinc-950 dark:text-white">${uniqueIPs.toLocaleString()}</p>
+        </div>
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Avg Response Time</p>
+          <p class="mt-2 text-3xl font-semibold text-zinc-950 dark:text-white">${avgDuration}ms</p>
+        </div>
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Errors</p>
+          <p class="mt-2 text-3xl font-semibold ${errorCount > 0 ? "text-red-600 dark:text-red-400" : "text-zinc-950 dark:text-white"}">${errorCount.toLocaleString()}</p>
+        </div>
+      </div>
+
+      <!-- Top Pages -->
+      <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10">
+        <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+          <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Top Pages</h2>
+        </div>
+        <div class="divide-y divide-zinc-950/5 dark:divide-white/10">
+          ${topPages.length > 0 ? topPages.map((p) => `
+            <div class="flex items-center justify-between px-6 py-3">
+              <span class="text-sm text-zinc-700 dark:text-zinc-300 font-mono truncate">${escapeHtml3(p.path)}</span>
+              <span class="text-sm font-medium text-zinc-500 dark:text-zinc-400">${p.views}</span>
+            </div>
+          `).join("") : `
+            <div class="px-6 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              No page views recorded yet. Analytics data will appear once requests are logged.
+            </div>
+          `}
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10">
+        <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+          <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Recent Activity</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+              <tr>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Path</th>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Method</th>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Status</th>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Duration</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-950/5 dark:divide-white/10">
+              ${recentActivity.length > 0 ? recentActivity.map((a) => `
+                <tr>
+                  <td class="px-6 py-2 font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-xs">${escapeHtml3(a.url || "")}</td>
+                  <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${a.method === "GET" ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}">${a.method || ""}</span></td>
+                  <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${(a.status_code || 0) >= 400 ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"}">${a.status_code || ""}</span></td>
+                  <td class="px-6 py-2 text-zinc-500 dark:text-zinc-400">${a.duration || 0}ms</td>
+                </tr>
+              `).join("") : `
+                <tr>
+                  <td colspan="4" class="px-6 py-8 text-center text-zinc-500 dark:text-zinc-400">No activity recorded yet.</td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+  return c.html(chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst({
+    title: "Analytics",
+    pageTitle: "Analytics Dashboard",
+    currentPath: "/admin/analytics",
+    version: c.get("appVersion"),
+    user: user ? {
+      name: user.email.split("@")[0] || "Admin",
+      email: user.email,
+      role: user.role
+    } : void 0,
+    content: content2,
+    dynamicMenuItems: c.get("pluginMenuItems")
+  }));
+});
+function escapeHtml3(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// src/plugins/core-plugins/analytics/index.ts
+function createAnalyticsPlugin() {
+  const builder = chunk635JAMSE_cjs.PluginBuilder.create({
+    name: "core-analytics",
+    version: "1.0.0-beta.1",
+    description: "Core analytics tracking and reporting plugin"
+  });
+  builder.metadata({
+    author: {
+      name: "SonicJS Team",
+      email: "team@sonicjs.com"
+    },
+    license: "MIT",
+    compatibility: "^0.1.0",
+    dependencies: ["core-auth"]
+    // Requires auth for admin access
+  });
+  const analyticsAPI = new hono.Hono();
+  analyticsAPI.get("/stats", async (c) => {
+    const timeRange = c.req.query("range") || "7d";
+    c.req.query("metric") || "all";
+    return c.json({
+      message: "Analytics stats",
+      data: {
+        pageviews: 12500,
+        uniqueVisitors: 3200,
+        sessions: 4800,
+        avgSessionDuration: 245,
+        bounceRate: 0.35,
+        topPages: [
+          { path: "/", views: 3200 },
+          { path: "/about", views: 1800 },
+          { path: "/contact", views: 950 }
+        ],
+        timeRange
+      }
+    });
+  });
+  analyticsAPI.post("/track", async (c) => {
+    const event = await c.req.json();
+    console.info("Analytics event tracked:", event);
+    return c.json({
+      message: "Event tracked successfully",
+      eventId: `event-${Date.now()}`
+    });
+  });
+  analyticsAPI.get("/reports", async (c) => {
+    const reportType = c.req.query("type") || "traffic";
+    const startDate = c.req.query("start");
+    const endDate = c.req.query("end");
+    return c.json({
+      message: "Analytics report",
+      data: {
+        reportType,
+        dateRange: { start: startDate, end: endDate },
+        data: []
+      }
+    });
+  });
+  analyticsAPI.get("/realtime", async (c) => {
+    return c.json({
+      message: "Real-time analytics",
+      data: {
+        activeUsers: 23,
+        activePages: [
+          { path: "/", users: 8 },
+          { path: "/blog", users: 5 },
+          { path: "/products", users: 4 }
+        ],
+        recentEvents: []
+      }
+    });
+  });
+  builder.addRoute("/api/analytics", analyticsAPI, {
+    description: "Analytics tracking and reporting API",
+    requiresAuth: true,
+    roles: ["admin", "analytics:read"],
+    priority: 3
+  });
+  builder.addRoute("/admin/analytics", adminRoutes4, {
+    description: "Analytics admin dashboard",
+    requiresAuth: true,
+    priority: 50
+  });
+  builder.addSingleMiddleware("analytics-tracker", async (c, next) => {
+    const start = Date.now();
+    const path = c.req.path;
+    const method = c.req.method;
+    const userAgent = c.req.header("user-agent");
+    const referer = c.req.header("referer");
+    const ip = c.req.header("CF-Connecting-IP") || c.req.header("x-forwarded-for");
+    await next();
+    const duration = Date.now() - start;
+    const status = c.res.status;
+    const analyticsData = {
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      path,
+      method,
+      status,
+      duration,
+      userAgent,
+      referer,
+      ip,
+      responseSize: c.res.headers.get("content-length") || 0
+    };
+    console.debug("Analytics tracking:", analyticsData);
+  }, {
+    description: "Track page views and request analytics",
+    global: true,
+    priority: 99
+    // Run last to capture response data
+  });
+  builder.addService("analyticsService", {
+    trackEvent: async (event) => {
+      console.info("Tracking event:", event);
+      return { eventId: `event-${Date.now()}` };
+    },
+    trackPageView: async (data) => {
+      console.info("Tracking pageview:", data.path);
+      return { viewId: `view-${Date.now()}` };
+    },
+    getStats: async (_timeRange) => {
+      return {
+        pageviews: 12500,
+        sessions: 4800,
+        uniqueVisitors: 3200
+      };
+    },
+    generateReport: async (type, options) => {
+      console.info(`Generating ${type} report with options:`, options);
+      return { reportId: `report-${Date.now()}` };
+    }
+  }, {
+    description: "Core analytics tracking service",
+    singleton: true
+  });
+  const pageViewSchema = chunk635JAMSE_cjs.PluginHelpers.createSchema([
+    { name: "path", type: "string", optional: false },
+    { name: "title", type: "string", optional: true },
+    { name: "referrer", type: "string", optional: true },
+    { name: "userAgent", type: "string", optional: true },
+    { name: "ipAddress", type: "string", optional: true },
+    { name: "sessionId", type: "string", optional: true },
+    { name: "userId", type: "number", optional: true },
+    { name: "duration", type: "number", optional: true }
+  ]);
+  const eventSchema = chunk635JAMSE_cjs.PluginHelpers.createSchema([
+    { name: "eventType", type: "string", optional: false },
+    { name: "eventName", type: "string", optional: false },
+    { name: "eventData", type: "object", optional: true },
+    { name: "path", type: "string", optional: true },
+    { name: "sessionId", type: "string", optional: true },
+    { name: "userId", type: "number", optional: true }
+  ]);
+  const pageViewMigration = chunk635JAMSE_cjs.PluginHelpers.createMigration("analytics_pageviews", [
+    { name: "id", type: "INTEGER", primaryKey: true },
+    { name: "path", type: "TEXT", nullable: false },
+    { name: "title", type: "TEXT", nullable: true },
+    { name: "referrer", type: "TEXT", nullable: true },
+    { name: "user_agent", type: "TEXT", nullable: true },
+    { name: "ip_address", type: "TEXT", nullable: true },
+    { name: "session_id", type: "TEXT", nullable: true },
+    { name: "user_id", type: "INTEGER", nullable: true },
+    { name: "duration", type: "INTEGER", nullable: true }
+  ]);
+  const eventMigration = chunk635JAMSE_cjs.PluginHelpers.createMigration("analytics_events", [
+    { name: "id", type: "INTEGER", primaryKey: true },
+    { name: "event_type", type: "TEXT", nullable: false },
+    { name: "event_name", type: "TEXT", nullable: false },
+    { name: "event_data", type: "TEXT", nullable: true },
+    { name: "path", type: "TEXT", nullable: true },
+    { name: "session_id", type: "TEXT", nullable: true },
+    { name: "user_id", type: "INTEGER", nullable: true }
+  ]);
+  builder.addModel("PageView", {
+    tableName: "analytics_pageviews",
+    schema: pageViewSchema,
+    migrations: [pageViewMigration]
+  });
+  builder.addModel("AnalyticsEvent", {
+    tableName: "analytics_events",
+    schema: eventSchema,
+    migrations: [eventMigration]
+  });
+  builder.addHook(HOOKS2.REQUEST_START, async (data, _context) => {
+    data.analytics = {
+      startTime: Date.now(),
+      sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+    return data;
+  }, {
+    priority: 1,
+    description: "Initialize analytics tracking for requests"
+  });
+  builder.addHook(HOOKS2.REQUEST_END, async (data, _context) => {
+    if (data.analytics) {
+      const duration = Date.now() - data.analytics.startTime;
+      console.debug(`Request completed in ${duration}ms`);
+    }
+    return data;
+  }, {
+    priority: 1,
+    description: "Complete analytics tracking for requests"
+  });
+  builder.addHook(HOOKS2.USER_LOGIN, async (data, context) => {
+    await context.services?.analyticsService?.trackEvent({
+      eventType: "auth",
+      eventName: "user_login",
+      userId: data.userId,
+      eventData: { loginMethod: data.method }
+    });
+    return data;
+  }, {
+    priority: 8,
+    description: "Track user login events"
+  });
+  builder.addHook("content:view", async (data, context) => {
+    await context.services?.analyticsService?.trackEvent({
+      eventType: "content",
+      eventName: "content_view",
+      eventData: {
+        contentId: data.id,
+        contentType: data.type,
+        title: data.title
+      }
+    });
+    return data;
+  }, {
+    priority: 8,
+    description: "Track content view events"
+  });
+  builder.addAdminPage(
+    "/analytics",
+    "Analytics Dashboard",
+    "AnalyticsDashboardView",
+    {
+      description: "View analytics overview and key metrics",
+      permissions: ["admin", "analytics:read"],
+      icon: "chart-bar"
+    }
+  );
+  builder.addAdminPage(
+    "/analytics/reports",
+    "Analytics Reports",
+    "AnalyticsReportsView",
+    {
+      description: "Generate and view detailed analytics reports",
+      permissions: ["admin", "analytics:read"],
+      icon: "document-report"
+    }
+  );
+  builder.addAdminPage(
+    "/analytics/realtime",
+    "Real-time Analytics",
+    "AnalyticsRealtimeView",
+    {
+      description: "View real-time visitor activity",
+      permissions: ["admin", "analytics:read"],
+      icon: "lightning-bolt"
+    }
+  );
+  builder.addAdminPage(
+    "/analytics/settings",
+    "Analytics Settings",
+    "AnalyticsSettingsView",
+    {
+      description: "Configure analytics tracking and data collection",
+      permissions: ["admin", "analytics:configure"],
+      icon: "cog"
+    }
+  );
+  builder.addMenuItem("Analytics", "/admin/analytics", {
+    icon: "chart-bar",
+    order: 40,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Dashboard", "/admin/analytics", {
+    icon: "chart-bar",
+    parent: "Analytics",
+    order: 1,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Reports", "/admin/analytics/reports", {
+    icon: "document-report",
+    parent: "Analytics",
+    order: 2,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Real-time", "/admin/analytics/realtime", {
+    icon: "lightning-bolt",
+    parent: "Analytics",
+    order: 3,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Settings", "/admin/analytics/settings", {
+    icon: "cog",
+    parent: "Analytics",
+    order: 4,
+    permissions: ["admin", "analytics:configure"]
+  });
+  builder.lifecycle({
+    install: async () => {
+      console.info("Installing analytics plugin...");
+    },
+    activate: async () => {
+      console.info("Activating analytics plugin...");
+    },
+    deactivate: async () => {
+      console.info("Deactivating analytics plugin...");
+    },
+    configure: async (config) => {
+      console.info("Configuring analytics plugin...", config);
+    }
+  });
+  return builder.build();
+}
+var analyticsPlugin = createAnalyticsPlugin();
+
+// src/plugins/core-plugins/analytics/services/event-tracking-service.ts
+var EventTrackingService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  async trackEvent(input) {
+    const id = crypto.randomUUID();
+    const category = input.category || "user-activity";
+    await this.db.prepare(`
+      INSERT INTO analytics_events (id, event, category, properties, user_id, session_id, ip_address, user_agent, path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      input.event,
+      category,
+      input.properties ? JSON.stringify(input.properties) : null,
+      input.userId || null,
+      input.sessionId || null,
+      input.ipAddress || null,
+      input.userAgent || null,
+      input.path || null
+    ).run();
+    return id;
+  }
+  async trackBatch(events) {
+    const ids = [];
+    const stmts = events.map((input) => {
+      const id = crypto.randomUUID();
+      ids.push(id);
+      const category = input.category || "user-activity";
+      return this.db.prepare(`
+        INSERT INTO analytics_events (id, event, category, properties, user_id, session_id, ip_address, user_agent, path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id,
+        input.event,
+        category,
+        input.properties ? JSON.stringify(input.properties) : null,
+        input.userId || null,
+        input.sessionId || null,
+        input.ipAddress || null,
+        input.userAgent || null,
+        input.path || null
+      );
+    });
+    await this.db.batch(stmts);
+    return ids;
+  }
+  async queryEvents(filters = {}) {
+    const conditions = [];
+    const params = [];
+    if (filters.event) {
+      conditions.push("event = ?");
+      params.push(filters.event);
+    }
+    if (filters.category) {
+      conditions.push("category = ?");
+      params.push(filters.category);
+    }
+    if (filters.userId) {
+      conditions.push("user_id = ?");
+      params.push(filters.userId);
+    }
+    if (filters.sessionId) {
+      conditions.push("session_id = ?");
+      params.push(filters.sessionId);
+    }
+    if (filters.startDate) {
+      conditions.push("created_at >= ?");
+      params.push(filters.startDate);
+    }
+    if (filters.endDate) {
+      conditions.push("created_at <= ?");
+      params.push(filters.endDate);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+    const [countResult, eventsResult] = await Promise.all([
+      this.db.prepare(`SELECT COUNT(*) as total FROM analytics_events ${where}`).bind(...params).first(),
+      this.db.prepare(`SELECT * FROM analytics_events ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all()
+    ]);
+    const events = (eventsResult.results || []).map((e) => ({
+      ...e,
+      properties: e.properties ? JSON.parse(e.properties) : null
+    }));
+    return { events, total: countResult?.total || 0 };
+  }
+  async getStats(startDate, endDate) {
+    const conditions = [];
+    const params = [];
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const [totals, topEvents] = await Promise.all([
+      this.db.prepare(`
+        SELECT
+          COUNT(*) as total_events,
+          COUNT(DISTINCT user_id) as unique_users,
+          COUNT(DISTINCT session_id) as unique_sessions
+        FROM analytics_events ${where}
+      `).bind(...params).first(),
+      this.db.prepare(`
+        SELECT event, COUNT(*) as count
+        FROM analytics_events ${where}
+        GROUP BY event ORDER BY count DESC LIMIT 20
+      `).bind(...params).all()
+    ]);
+    return {
+      totalEvents: totals?.total_events || 0,
+      uniqueUsers: totals?.unique_users || 0,
+      uniqueSessions: totals?.unique_sessions || 0,
+      topEvents: (topEvents.results || []).map((r) => ({ event: r.event, count: r.count }))
+    };
+  }
+};
+
+// src/plugins/core-plugins/analytics/routes/api.ts
+var apiRoutes4 = new hono.Hono();
+apiRoutes4.post("/", async (c) => {
+  const db = c.env.DB;
+  const service = new EventTrackingService(db);
+  const ip = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const userAgent = c.req.header("user-agent") || "";
+  const user = c.get("user");
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  if (Array.isArray(body)) {
+    if (body.length > 100) {
+      return c.json({ error: "Batch size limit is 100 events" }, 400);
+    }
+    const events = body.map((e) => ({
+      event: e.event,
+      category: e.category || "user-activity",
+      properties: e.properties,
+      userId: user?.userId || e.userId,
+      sessionId: e.sessionId,
+      ipAddress: ip,
+      userAgent,
+      path: e.path
+    }));
+    const invalid = events.find((e) => !e.event || typeof e.event !== "string");
+    if (invalid) {
+      return c.json({ error: 'Each event must have an "event" string field' }, 400);
+    }
+    const ids = await service.trackBatch(events);
+    return c.json({ success: true, eventIds: ids, count: ids.length });
+  }
+  if (!body.event || typeof body.event !== "string") {
+    return c.json({ error: '"event" field is required and must be a string' }, 400);
+  }
+  const eventId = await service.trackEvent({
+    event: body.event,
+    category: body.category || "user-activity",
+    properties: body.properties,
+    userId: user?.userId || body.userId,
+    sessionId: body.sessionId,
+    ipAddress: ip,
+    userAgent,
+    path: body.path
+  });
+  return c.json({ success: true, eventId });
+});
+apiRoutes4.get("/", async (c) => {
+  const user = c.get("user");
+  if (!user || user.role !== "admin") {
+    return c.json({ error: "Admin access required" }, 403);
+  }
+  const db = c.env.DB;
+  const service = new EventTrackingService(db);
+  const filters = {
+    event: c.req.query("event") || void 0,
+    category: c.req.query("category") || void 0,
+    userId: c.req.query("userId") || void 0,
+    sessionId: c.req.query("sessionId") || void 0,
+    startDate: c.req.query("startDate") ? parseInt(c.req.query("startDate")) : void 0,
+    endDate: c.req.query("endDate") ? parseInt(c.req.query("endDate")) : void 0,
+    limit: c.req.query("limit") ? parseInt(c.req.query("limit")) : 50,
+    offset: c.req.query("offset") ? parseInt(c.req.query("offset")) : 0
+  };
+  const result = await service.queryEvents(filters);
+  return c.json(result);
+});
+apiRoutes4.get("/stats", async (c) => {
+  const user = c.get("user");
+  if (!user || user.role !== "admin") {
+    return c.json({ error: "Admin access required" }, 403);
+  }
+  const db = c.env.DB;
+  const service = new EventTrackingService(db);
+  const startDate = c.req.query("startDate") ? parseInt(c.req.query("startDate")) : void 0;
+  const endDate = c.req.query("endDate") ? parseInt(c.req.query("endDate")) : void 0;
+  const stats = await service.getStats(startDate, endDate);
+  return c.json(stats);
+});
 
 // src/plugins/cache/services/cache-config.ts
 var CACHE_CONFIGS = {
@@ -8898,7 +9570,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunk26HYU7MX_cjs.renderConfirmationDialog({
+    ${chunkAFA5S6UU_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -8909,7 +9581,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunk26HYU7MX_cjs.renderConfirmationDialog({
+    ${chunkAFA5S6UU_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -8920,7 +9592,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunk26HYU7MX_cjs.getConfirmationDialogScript()}
+    ${chunkAFA5S6UU_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -9606,14 +10278,14 @@ var faviconSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 // src/app.ts
 function createSonicJSApp(config = {}) {
   const app2 = new hono.Hono();
-  const appVersion = config.version || chunkVUISYUHY_cjs.getCoreVersion();
+  const appVersion = config.version || chunkYQW2GCJ3_cjs.getCoreVersion();
   const appName = config.name || "SonicJS AI";
   app2.use("*", async (c, next) => {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkUFPT5KCQ_cjs.metricsMiddleware());
-  app2.use("*", chunkUFPT5KCQ_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkIAWDRRU3_cjs.metricsMiddleware());
+  app2.use("*", chunkIAWDRRU3_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -9622,29 +10294,29 @@ function createSonicJSApp(config = {}) {
   app2.use("*", async (_c, next) => {
     await next();
   });
-  app2.use("*", chunkUFPT5KCQ_cjs.securityHeadersMiddleware());
-  app2.use("*", chunkUFPT5KCQ_cjs.csrfProtection());
+  app2.use("*", chunkIAWDRRU3_cjs.securityHeadersMiddleware());
+  app2.use("*", chunkIAWDRRU3_cjs.csrfProtection());
   if (config.middleware?.afterAuth) {
     for (const middleware of config.middleware.afterAuth) {
       app2.use("*", middleware);
     }
   }
   app2.use("/admin/*", pluginMenuMiddleware());
-  app2.route("/api", chunk26HYU7MX_cjs.api_default);
-  app2.route("/api/media", chunk26HYU7MX_cjs.api_media_default);
-  app2.route("/api/system", chunk26HYU7MX_cjs.api_system_default);
-  app2.route("/admin/api", chunk26HYU7MX_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunk26HYU7MX_cjs.router);
-  app2.route("/admin/collections", chunk26HYU7MX_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunk26HYU7MX_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunk26HYU7MX_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunk26HYU7MX_cjs.public_forms_default);
-  app2.route("/api/forms", chunk26HYU7MX_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunk26HYU7MX_cjs.router2);
+  app2.route("/api", chunkAFA5S6UU_cjs.api_default);
+  app2.route("/api/media", chunkAFA5S6UU_cjs.api_media_default);
+  app2.route("/api/system", chunkAFA5S6UU_cjs.api_system_default);
+  app2.route("/admin/api", chunkAFA5S6UU_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunkAFA5S6UU_cjs.router);
+  app2.route("/admin/collections", chunkAFA5S6UU_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunkAFA5S6UU_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunkAFA5S6UU_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunkAFA5S6UU_cjs.public_forms_default);
+  app2.route("/api/forms", chunkAFA5S6UU_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunkAFA5S6UU_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunk26HYU7MX_cjs.admin_content_default);
-  app2.route("/admin/media", chunk26HYU7MX_cjs.adminMediaRoutes);
+  app2.route("/admin/content", chunkAFA5S6UU_cjs.admin_content_default);
+  app2.route("/admin/media", chunkAFA5S6UU_cjs.adminMediaRoutes);
   app2.use("/auth/*", securityAuditMiddleware());
   if (securityAuditPlugin.routes && securityAuditPlugin.routes.length > 0) {
     for (const route of securityAuditPlugin.routes) {
@@ -9662,8 +10334,8 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  if (chunk26HYU7MX_cjs.userProfilesPlugin.routes && chunk26HYU7MX_cjs.userProfilesPlugin.routes.length > 0) {
-    for (const route of chunk26HYU7MX_cjs.userProfilesPlugin.routes) {
+  if (chunkAFA5S6UU_cjs.userProfilesPlugin.routes && chunkAFA5S6UU_cjs.userProfilesPlugin.routes.length > 0) {
+    for (const route of chunkAFA5S6UU_cjs.userProfilesPlugin.routes) {
       app2.route(route.path, route.handler);
     }
   }
@@ -9672,16 +10344,22 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
+  if (analyticsPlugin.routes && analyticsPlugin.routes.length > 0) {
+    for (const route of analyticsPlugin.routes) {
+      app2.route(route.path, route.handler);
+    }
+  }
+  app2.route("/api/events", apiRoutes4);
   if (stripePlugin.routes && stripePlugin.routes.length > 0) {
     for (const route of stripePlugin.routes) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunk26HYU7MX_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunk26HYU7MX_cjs.adminLogsRoutes);
-  app2.route("/admin", chunk26HYU7MX_cjs.userRoutes);
-  app2.route("/auth", chunk26HYU7MX_cjs.auth_default);
-  app2.route("/", chunk26HYU7MX_cjs.test_cleanup_default);
+  app2.route("/admin/plugins", chunkAFA5S6UU_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunkAFA5S6UU_cjs.adminLogsRoutes);
+  app2.route("/admin", chunkAFA5S6UU_cjs.userRoutes);
+  app2.route("/auth", chunkAFA5S6UU_cjs.auth_default);
+  app2.route("/", chunkAFA5S6UU_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
       app2.route(route.path, route.handler);
@@ -9744,7 +10422,7 @@ function createSonicJSApp(config = {}) {
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
   });
-  chunkNZWFCUDA_cjs.setAppInstance(app2);
+  chunkXV6CY3IV_cjs.setAppInstance(app2);
   app2.notFound((c) => {
     return c.json({ error: "Not Found", status: 404 }, 404);
   });
@@ -9761,347 +10439,347 @@ function setupCoreRoutes(_app) {
   console.warn("setupCoreRoutes is deprecated. Use createSonicJSApp() instead.");
 }
 function createDb(d1$1) {
-  return d1.drizzle(d1$1, { schema: chunkNZWFCUDA_cjs.schema_exports });
+  return d1.drizzle(d1$1, { schema: chunkXV6CY3IV_cjs.schema_exports });
 }
 
 // src/index.ts
-var VERSION = chunkVUISYUHY_cjs.package_default.version;
+var VERSION = chunkYQW2GCJ3_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.ROUTES_INFO; }
+  get: function () { return chunkAFA5S6UU_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.admin_api_default; }
+  get: function () { return chunkAFA5S6UU_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.adminCheckboxRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.admin_code_examples_default; }
+  get: function () { return chunkAFA5S6UU_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.adminCollectionsRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.admin_content_default; }
+  get: function () { return chunkAFA5S6UU_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.router; }
+  get: function () { return chunkAFA5S6UU_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.adminDesignRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.adminLogsRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.adminMediaRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.adminPluginRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.adminSettingsRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.admin_testimonials_default; }
+  get: function () { return chunkAFA5S6UU_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.userRoutes; }
+  get: function () { return chunkAFA5S6UU_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.api_content_crud_default; }
+  get: function () { return chunkAFA5S6UU_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.api_media_default; }
+  get: function () { return chunkAFA5S6UU_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.api_default; }
+  get: function () { return chunkAFA5S6UU_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.api_system_default; }
+  get: function () { return chunkAFA5S6UU_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.auth_default; }
+  get: function () { return chunkAFA5S6UU_cjs.auth_default; }
 });
 Object.defineProperty(exports, "createUserProfilesPlugin", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.createUserProfilesPlugin; }
+  get: function () { return chunkAFA5S6UU_cjs.createUserProfilesPlugin; }
 });
 Object.defineProperty(exports, "defineUserProfile", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.defineUserProfile; }
+  get: function () { return chunkAFA5S6UU_cjs.defineUserProfile; }
 });
 Object.defineProperty(exports, "getUserProfileConfig", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.getUserProfileConfig; }
+  get: function () { return chunkAFA5S6UU_cjs.getUserProfileConfig; }
 });
 Object.defineProperty(exports, "userProfilesPlugin", {
   enumerable: true,
-  get: function () { return chunk26HYU7MX_cjs.userProfilesPlugin; }
+  get: function () { return chunkAFA5S6UU_cjs.userProfilesPlugin; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.Logger; }
+  get: function () { return chunkXV6CY3IV_cjs.Logger; }
 });
 Object.defineProperty(exports, "apiTokens", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.apiTokens; }
+  get: function () { return chunkXV6CY3IV_cjs.apiTokens; }
 });
 Object.defineProperty(exports, "collections", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.collections; }
+  get: function () { return chunkXV6CY3IV_cjs.collections; }
 });
 Object.defineProperty(exports, "content", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.content; }
+  get: function () { return chunkXV6CY3IV_cjs.content; }
 });
 Object.defineProperty(exports, "contentVersions", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.contentVersions; }
+  get: function () { return chunkXV6CY3IV_cjs.contentVersions; }
 });
 Object.defineProperty(exports, "getLogger", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.getLogger; }
+  get: function () { return chunkXV6CY3IV_cjs.getLogger; }
 });
 Object.defineProperty(exports, "initLogger", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.initLogger; }
+  get: function () { return chunkXV6CY3IV_cjs.initLogger; }
 });
 Object.defineProperty(exports, "insertCollectionSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertCollectionSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertCollectionSchema; }
 });
 Object.defineProperty(exports, "insertContentSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertContentSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertContentSchema; }
 });
 Object.defineProperty(exports, "insertLogConfigSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertLogConfigSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertLogConfigSchema; }
 });
 Object.defineProperty(exports, "insertMediaSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertMediaSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertMediaSchema; }
 });
 Object.defineProperty(exports, "insertPluginActivityLogSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertPluginActivityLogSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertPluginActivityLogSchema; }
 });
 Object.defineProperty(exports, "insertPluginAssetSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertPluginAssetSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertPluginAssetSchema; }
 });
 Object.defineProperty(exports, "insertPluginHookSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertPluginHookSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertPluginHookSchema; }
 });
 Object.defineProperty(exports, "insertPluginRouteSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertPluginRouteSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertPluginRouteSchema; }
 });
 Object.defineProperty(exports, "insertPluginSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertPluginSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertPluginSchema; }
 });
 Object.defineProperty(exports, "insertSystemLogSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertSystemLogSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertSystemLogSchema; }
 });
 Object.defineProperty(exports, "insertUserSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertUserSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertUserSchema; }
 });
 Object.defineProperty(exports, "insertWorkflowHistorySchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.insertWorkflowHistorySchema; }
+  get: function () { return chunkXV6CY3IV_cjs.insertWorkflowHistorySchema; }
 });
 Object.defineProperty(exports, "logConfig", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.logConfig; }
+  get: function () { return chunkXV6CY3IV_cjs.logConfig; }
 });
 Object.defineProperty(exports, "media", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.media; }
+  get: function () { return chunkXV6CY3IV_cjs.media; }
 });
 Object.defineProperty(exports, "pluginActivityLog", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.pluginActivityLog; }
+  get: function () { return chunkXV6CY3IV_cjs.pluginActivityLog; }
 });
 Object.defineProperty(exports, "pluginAssets", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.pluginAssets; }
+  get: function () { return chunkXV6CY3IV_cjs.pluginAssets; }
 });
 Object.defineProperty(exports, "pluginHooks", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.pluginHooks; }
+  get: function () { return chunkXV6CY3IV_cjs.pluginHooks; }
 });
 Object.defineProperty(exports, "pluginRoutes", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.pluginRoutes; }
+  get: function () { return chunkXV6CY3IV_cjs.pluginRoutes; }
 });
 Object.defineProperty(exports, "plugins", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.plugins; }
+  get: function () { return chunkXV6CY3IV_cjs.plugins; }
 });
 Object.defineProperty(exports, "selectCollectionSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectCollectionSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectCollectionSchema; }
 });
 Object.defineProperty(exports, "selectContentSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectContentSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectContentSchema; }
 });
 Object.defineProperty(exports, "selectLogConfigSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectLogConfigSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectLogConfigSchema; }
 });
 Object.defineProperty(exports, "selectMediaSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectMediaSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectMediaSchema; }
 });
 Object.defineProperty(exports, "selectPluginActivityLogSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectPluginActivityLogSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectPluginActivityLogSchema; }
 });
 Object.defineProperty(exports, "selectPluginAssetSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectPluginAssetSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectPluginAssetSchema; }
 });
 Object.defineProperty(exports, "selectPluginHookSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectPluginHookSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectPluginHookSchema; }
 });
 Object.defineProperty(exports, "selectPluginRouteSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectPluginRouteSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectPluginRouteSchema; }
 });
 Object.defineProperty(exports, "selectPluginSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectPluginSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectPluginSchema; }
 });
 Object.defineProperty(exports, "selectSystemLogSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectSystemLogSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectSystemLogSchema; }
 });
 Object.defineProperty(exports, "selectUserSchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectUserSchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectUserSchema; }
 });
 Object.defineProperty(exports, "selectWorkflowHistorySchema", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.selectWorkflowHistorySchema; }
+  get: function () { return chunkXV6CY3IV_cjs.selectWorkflowHistorySchema; }
 });
 Object.defineProperty(exports, "systemLogs", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.systemLogs; }
+  get: function () { return chunkXV6CY3IV_cjs.systemLogs; }
 });
 Object.defineProperty(exports, "users", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.users; }
+  get: function () { return chunkXV6CY3IV_cjs.users; }
 });
 Object.defineProperty(exports, "workflowHistory", {
   enumerable: true,
-  get: function () { return chunkNZWFCUDA_cjs.workflowHistory; }
+  get: function () { return chunkXV6CY3IV_cjs.workflowHistory; }
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.AuthManager; }
+  get: function () { return chunkIAWDRRU3_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.PermissionManager; }
+  get: function () { return chunkIAWDRRU3_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.bootstrapMiddleware; }
+  get: function () { return chunkIAWDRRU3_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.cacheHeaders; }
+  get: function () { return chunkIAWDRRU3_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.compressionMiddleware; }
+  get: function () { return chunkIAWDRRU3_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkIAWDRRU3_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.getActivePlugins; }
+  get: function () { return chunkIAWDRRU3_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.isPluginActive; }
+  get: function () { return chunkIAWDRRU3_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.logActivity; }
+  get: function () { return chunkIAWDRRU3_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.loggingMiddleware; }
+  get: function () { return chunkIAWDRRU3_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.optionalAuth; }
+  get: function () { return chunkIAWDRRU3_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkIAWDRRU3_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.requireActivePlugin; }
+  get: function () { return chunkIAWDRRU3_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.requireActivePlugins; }
+  get: function () { return chunkIAWDRRU3_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.requireAnyPermission; }
+  get: function () { return chunkIAWDRRU3_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.requireAuth; }
+  get: function () { return chunkIAWDRRU3_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.requirePermission; }
+  get: function () { return chunkIAWDRRU3_cjs.requirePermission; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.requireRole; }
+  get: function () { return chunkIAWDRRU3_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.securityHeadersMiddleware; }
+  get: function () { return chunkIAWDRRU3_cjs.securityHeadersMiddleware; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkUFPT5KCQ_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkIAWDRRU3_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
@@ -10185,7 +10863,7 @@ Object.defineProperty(exports, "validateCollectionConfig", {
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunkRVD7PLMU_cjs.MigrationService; }
+  get: function () { return chunkLMQZWQTT_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,
@@ -10221,27 +10899,27 @@ Object.defineProperty(exports, "renderTable", {
 });
 Object.defineProperty(exports, "HookSystemImpl", {
   enumerable: true,
-  get: function () { return chunkABB34XUS_cjs.HookSystemImpl; }
+  get: function () { return chunkZUXOAZWZ_cjs.HookSystemImpl; }
 });
 Object.defineProperty(exports, "HookUtils", {
   enumerable: true,
-  get: function () { return chunkABB34XUS_cjs.HookUtils; }
+  get: function () { return chunkZUXOAZWZ_cjs.HookUtils; }
 });
 Object.defineProperty(exports, "PluginManagerClass", {
   enumerable: true,
-  get: function () { return chunkABB34XUS_cjs.PluginManager; }
+  get: function () { return chunkZUXOAZWZ_cjs.PluginManager; }
 });
 Object.defineProperty(exports, "PluginRegistryImpl", {
   enumerable: true,
-  get: function () { return chunkABB34XUS_cjs.PluginRegistryImpl; }
+  get: function () { return chunkZUXOAZWZ_cjs.PluginRegistryImpl; }
 });
 Object.defineProperty(exports, "PluginValidatorClass", {
   enumerable: true,
-  get: function () { return chunkABB34XUS_cjs.PluginValidator; }
+  get: function () { return chunkZUXOAZWZ_cjs.PluginValidator; }
 });
 Object.defineProperty(exports, "ScopedHookSystemClass", {
   enumerable: true,
-  get: function () { return chunkABB34XUS_cjs.ScopedHookSystem; }
+  get: function () { return chunkZUXOAZWZ_cjs.ScopedHookSystem; }
 });
 Object.defineProperty(exports, "PluginBuilder", {
   enumerable: true,
@@ -10253,31 +10931,31 @@ Object.defineProperty(exports, "PluginHelpers", {
 });
 Object.defineProperty(exports, "QueryFilterBuilder", {
   enumerable: true,
-  get: function () { return chunkVUISYUHY_cjs.QueryFilterBuilder; }
+  get: function () { return chunkYQW2GCJ3_cjs.QueryFilterBuilder; }
 });
 Object.defineProperty(exports, "SONICJS_VERSION", {
   enumerable: true,
-  get: function () { return chunkVUISYUHY_cjs.SONICJS_VERSION; }
+  get: function () { return chunkYQW2GCJ3_cjs.SONICJS_VERSION; }
 });
 Object.defineProperty(exports, "TemplateRenderer", {
   enumerable: true,
-  get: function () { return chunkVUISYUHY_cjs.TemplateRenderer; }
+  get: function () { return chunkYQW2GCJ3_cjs.TemplateRenderer; }
 });
 Object.defineProperty(exports, "buildQuery", {
   enumerable: true,
-  get: function () { return chunkVUISYUHY_cjs.buildQuery; }
+  get: function () { return chunkYQW2GCJ3_cjs.buildQuery; }
 });
 Object.defineProperty(exports, "getCoreVersion", {
   enumerable: true,
-  get: function () { return chunkVUISYUHY_cjs.getCoreVersion; }
+  get: function () { return chunkYQW2GCJ3_cjs.getCoreVersion; }
 });
 Object.defineProperty(exports, "renderTemplate", {
   enumerable: true,
-  get: function () { return chunkVUISYUHY_cjs.renderTemplate; }
+  get: function () { return chunkYQW2GCJ3_cjs.renderTemplate; }
 });
 Object.defineProperty(exports, "templateRenderer", {
   enumerable: true,
-  get: function () { return chunkVUISYUHY_cjs.templateRenderer; }
+  get: function () { return chunkYQW2GCJ3_cjs.templateRenderer; }
 });
 Object.defineProperty(exports, "metricsTracker", {
   enumerable: true,

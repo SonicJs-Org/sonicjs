@@ -1,17 +1,16 @@
--- Migration 035: Add data column to user_profiles
--- Stores custom profile fields as JSON (used by user-profiles plugin)
+-- Migration 035: Add data column to user_profiles (no-op)
 --
--- The data column was missing from migration 032 when the user-profiles plugin
--- was added in PR #747. The ALTER TABLE migration was placed in the wrong
--- directory (src/db/migrations/) so it was never bundled or executed.
--- This caused the user edit page to crash with a 500 error because the route
--- queries SELECT ... data FROM user_profiles.
+-- This migration originally added a missing 'data' column to user_profiles.
+-- Migration 032 has since been updated to include the column in the CREATE TABLE,
+-- so on fresh installs the column already exists by the time this runs.
 --
--- Migration 032 has been updated to include the column for fresh installs.
--- This migration handles existing databases that already ran 032 without it.
-
--- SQLite does not support IF NOT EXISTS for ALTER TABLE ADD COLUMN,
--- but re-adding an existing column is a no-op error that we catch at the
--- application level. The migration runner skips already-applied migrations
--- by ID, so this only runs on databases missing the column.
-ALTER TABLE user_profiles ADD COLUMN data TEXT DEFAULT '{}';
+-- The ALTER TABLE has been removed to prevent "duplicate column name: data" errors
+-- during fresh installs (GitHub issue #771). Wrangler's migration runner does not
+-- gracefully handle duplicate column errors like the runtime MigrationService does.
+--
+-- Existing databases that ran the old 032 (without the data column) get the column
+-- added at runtime by the core MigrationService, which skips duplicate-column errors.
+--
+-- This file is kept as a no-op so that wrangler's migration tracking remains
+-- consistent (it tracks migrations by filename).
+SELECT 1;

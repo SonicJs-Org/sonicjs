@@ -1,10 +1,8 @@
-'use strict';
-
-var chunk43AB4EH4_cjs = require('./chunk-43AB4EH4.cjs');
-var chunkRVD7PLMU_cjs = require('./chunk-RVD7PLMU.cjs');
-var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
-var jwt = require('hono/jwt');
-var cookie = require('hono/cookie');
+import { syncCollections, syncAllFormCollections, PluginBootstrapService } from './chunk-G7XSN72O.js';
+import { MigrationService } from './chunk-YZLXJDZ4.js';
+import { metricsTracker } from './chunk-FICTAGD4.js';
+import { sign, verify } from 'hono/jwt';
+import { setCookie, getCookie } from 'hono/cookie';
 
 // src/middleware/bootstrap.ts
 var bootstrapComplete = false;
@@ -57,23 +55,23 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new chunkRVD7PLMU_cjs.MigrationService(c.env.DB);
+      const migrationService = new MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await chunk43AB4EH4_cjs.syncCollections(c.env.DB);
+        await syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
       console.log("[Bootstrap] Syncing form collections...");
       try {
-        await chunk43AB4EH4_cjs.syncAllFormCollections(c.env.DB);
+        await syncAllFormCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing form collections:", error);
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new chunk43AB4EH4_cjs.PluginBootstrapService(c.env.DB);
+        const bootstrapService = new PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -101,11 +99,11 @@ var AuthManager = class {
       // 24 hours
       iat: Math.floor(Date.now() / 1e3)
     };
-    return await jwt.sign(payload, secret || JWT_SECRET_FALLBACK, "HS256");
+    return await sign(payload, secret || JWT_SECRET_FALLBACK, "HS256");
   }
   static async verifyToken(token, secret) {
     try {
-      const payload = await jwt.verify(token, secret || JWT_SECRET_FALLBACK, "HS256");
+      const payload = await verify(token, secret || JWT_SECRET_FALLBACK, "HS256");
       if (payload.exp < Math.floor(Date.now() / 1e3)) {
         return null;
       }
@@ -203,7 +201,7 @@ var AuthManager = class {
    * @param options - Optional cookie configuration
    */
   static setAuthCookie(c, token, options) {
-    cookie.setCookie(c, "auth_token", token, {
+    setCookie(c, "auth_token", token, {
       httpOnly: options?.httpOnly ?? true,
       secure: options?.secure ?? true,
       sameSite: options?.sameSite ?? "Strict",
@@ -217,7 +215,7 @@ var requireAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = cookie.getCookie(c, "auth_token");
+        token = getCookie(c, "auth_token");
       }
       if (!token) {
         const acceptHeader = c.req.header("Accept") || "";
@@ -288,7 +286,7 @@ var optionalAuth = () => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
       if (!token) {
-        token = cookie.getCookie(c, "auth_token");
+        token = getCookie(c, "auth_token");
       }
       if (token) {
         const jwtSecret = c.env?.JWT_SECRET;
@@ -310,7 +308,7 @@ var metricsMiddleware = () => {
   return async (c, next) => {
     const path = new URL(c.req.url).pathname;
     if (path !== "/admin/dashboard/api/metrics") {
-      chunkRCQ2HIQD_cjs.metricsTracker.recordRequest();
+      metricsTracker.recordRequest();
     }
     await next();
   };
@@ -371,7 +369,12 @@ var DEFAULT_EXEMPT_PATHS = [
   "/auth/seed-admin",
   "/auth/accept-invitation",
   "/auth/reset-password",
-  "/auth/request-password-reset"
+  "/auth/request-password-reset",
+  "/auth/otp",
+  "/auth/magic-link",
+  "/auth/verify",
+  "/api/stripe/webhook",
+  "/api/events"
 ];
 function isExemptPath(path, extraExemptPaths = []) {
   if (path.startsWith("/forms/") || path.startsWith("/api/forms/") || path === "/forms" || path === "/api/forms") {
@@ -407,12 +410,17 @@ function csrfProtection(options = {}) {
       await next();
       return;
     }
-    const authCookie = cookie.getCookie(c, "auth_token");
+    const authCookie = getCookie(c, "auth_token");
     if (!authCookie) {
       await next();
       return;
     }
-    const cookieToken = cookie.getCookie(c, "csrf_token");
+    const authHeader = c.req.header("Authorization");
+    if (authHeader) {
+      await next();
+      return;
+    }
+    const cookieToken = getCookie(c, "csrf_token");
     let headerToken = c.req.header("X-CSRF-Token");
     if (!headerToken) {
       const contentType = c.req.header("Content-Type") || "";
@@ -438,7 +446,7 @@ function csrfProtection(options = {}) {
   };
 }
 async function ensureCsrfCookie(c, secret) {
-  const existing = cookie.getCookie(c, "csrf_token");
+  const existing = getCookie(c, "csrf_token");
   if (existing) {
     const isValid = await validateCsrfToken(existing, secret);
     if (isValid) {
@@ -449,7 +457,7 @@ async function ensureCsrfCookie(c, secret) {
   const token = await generateCsrfToken(secret);
   c.set("csrfToken", token);
   const isDev = c.env?.ENVIRONMENT === "development" || !c.env?.ENVIRONMENT;
-  cookie.setCookie(c, "csrf_token", token, {
+  setCookie(c, "csrf_token", token, {
     httpOnly: false,
     // JS must read this cookie
     secure: !isDev,
@@ -544,31 +552,6 @@ var requireActivePlugins = () => async (_c, next) => await next();
 var getActivePlugins = () => [];
 var isPluginActive = () => false;
 
-exports.AuthManager = AuthManager;
-exports.PermissionManager = PermissionManager;
-exports.bootstrapMiddleware = bootstrapMiddleware;
-exports.cacheHeaders = cacheHeaders;
-exports.compressionMiddleware = compressionMiddleware;
-exports.csrfProtection = csrfProtection;
-exports.detailedLoggingMiddleware = detailedLoggingMiddleware;
-exports.generateCsrfToken = generateCsrfToken;
-exports.getActivePlugins = getActivePlugins;
-exports.isPluginActive = isPluginActive;
-exports.logActivity = logActivity;
-exports.loggingMiddleware = loggingMiddleware;
-exports.metricsMiddleware = metricsMiddleware;
-exports.optionalAuth = optionalAuth;
-exports.performanceLoggingMiddleware = performanceLoggingMiddleware;
-exports.rateLimit = rateLimit;
-exports.requireActivePlugin = requireActivePlugin;
-exports.requireActivePlugins = requireActivePlugins;
-exports.requireAnyPermission = requireAnyPermission;
-exports.requireAuth = requireAuth;
-exports.requirePermission = requirePermission;
-exports.requireRole = requireRole;
-exports.securityHeadersMiddleware = securityHeadersMiddleware;
-exports.securityLoggingMiddleware = securityLoggingMiddleware;
-exports.validateCsrfToken = validateCsrfToken;
-exports.verifySecurityConfig = verifySecurityConfig;
-//# sourceMappingURL=chunk-UFPT5KCQ.cjs.map
-//# sourceMappingURL=chunk-UFPT5KCQ.cjs.map
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, csrfProtection, detailedLoggingMiddleware, generateCsrfToken, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, rateLimit, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware, securityLoggingMiddleware, validateCsrfToken, verifySecurityConfig };
+//# sourceMappingURL=chunk-JCGTENN6.js.map
+//# sourceMappingURL=chunk-JCGTENN6.js.map

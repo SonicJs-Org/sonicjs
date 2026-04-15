@@ -1,21 +1,21 @@
-import { renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-7MMD5WMK.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-7MMD5WMK.js';
-import { SettingsService, setAppInstance, schema_exports } from './chunk-TBJY2FF7.js';
-export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-TBJY2FF7.js';
-import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-2BL2A62D.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-2BL2A62D.js';
+import { renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-5WQKF446.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-5WQKF446.js';
+import { SettingsService, setAppInstance, schema_exports } from './chunk-3P36UZXJ.js';
+export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-3P36UZXJ.js';
+import { requireAuth, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-JCGTENN6.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-JCGTENN6.js';
 import { PluginService, PLUGIN_REGISTRY } from './chunk-G7XSN72O.js';
 export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-G7XSN72O.js';
-export { MigrationService } from './chunk-5SOFMH66.js';
+export { MigrationService } from './chunk-YZLXJDZ4.js';
 export { renderFilterBar } from './chunk-ON5ZMSU4.js';
 import { renderAdminLayout } from './chunk-XWIA3HVX.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-XWIA3HVX.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-55RDMDOP.js';
-export { HookSystemImpl, HookUtils, PluginManager as PluginManagerClass, PluginRegistryImpl, PluginValidator as PluginValidatorClass, ScopedHookSystem as ScopedHookSystemClass } from './chunk-TFNTM3OA.js';
-import { PluginBuilder } from './chunk-EXNEW5US.js';
+export { HookSystemImpl, HookUtils, PluginManager as PluginManagerClass, PluginRegistryImpl, PluginValidator as PluginValidatorClass, ScopedHookSystem as ScopedHookSystemClass } from './chunk-NGTBJJXZ.js';
+import { PluginBuilder, PluginHelpers } from './chunk-EXNEW5US.js';
 export { PluginBuilder, PluginHelpers } from './chunk-EXNEW5US.js';
-import { package_default, getCoreVersion } from './chunk-EWXV2KG2.js';
-export { QueryFilterBuilder, SONICJS_VERSION, TemplateRenderer, buildQuery, getCoreVersion, renderTemplate, templateRenderer } from './chunk-EWXV2KG2.js';
+import { package_default, getCoreVersion } from './chunk-MVSCB4E3.js';
+export { QueryFilterBuilder, SONICJS_VERSION, TemplateRenderer, buildQuery, getCoreVersion, renderTemplate, templateRenderer } from './chunk-MVSCB4E3.js';
 import './chunk-X7ZAEI5S.js';
 export { metricsTracker } from './chunk-FICTAGD4.js';
 export { escapeHtml, sanitizeInput, sanitizeObject } from './chunk-TQABQWOP.js';
@@ -5705,7 +5705,7 @@ var BruteForceDetector = class {
   }
   settings;
   async recordFailedAttempt(ip, email) {
-    if (!this.settings.enabled) {
+    if (!this.settings.enabled || !this.kv) {
       return { ipCount: 0, emailCount: 0, shouldLockIP: false, shouldLockEmail: false, isSuspicious: false };
     }
     const windowMs = this.settings.windowMinutes * 60 * 1e3;
@@ -5722,7 +5722,7 @@ var BruteForceDetector = class {
     return { ipCount, emailCount, shouldLockIP, shouldLockEmail, isSuspicious };
   }
   async isLocked(ip, email) {
-    if (!this.settings.enabled) {
+    if (!this.settings.enabled || !this.kv) {
       return { locked: false };
     }
     const ipLocked = await this.kv.get(`${LOCK_PREFIX}ip:${ip}`);
@@ -5736,6 +5736,7 @@ var BruteForceDetector = class {
     return { locked: false };
   }
   async lockIP(ip) {
+    if (!this.kv) return;
     const ttl = this.settings.lockoutDurationMinutes * 60;
     await this.kv.put(`${LOCK_PREFIX}ip:${ip}`, JSON.stringify({
       lockedAt: Date.now(),
@@ -5743,6 +5744,7 @@ var BruteForceDetector = class {
     }), { expirationTtl: ttl });
   }
   async lockEmail(email) {
+    if (!this.kv) return;
     const ttl = this.settings.lockoutDurationMinutes * 60;
     await this.kv.put(`${LOCK_PREFIX}email:${email}`, JSON.stringify({
       lockedAt: Date.now(),
@@ -5750,12 +5752,15 @@ var BruteForceDetector = class {
     }), { expirationTtl: ttl });
   }
   async unlockIP(ip) {
+    if (!this.kv) return;
     await this.kv.delete(`${LOCK_PREFIX}ip:${ip}`);
   }
   async unlockEmail(email) {
+    if (!this.kv) return;
     await this.kv.delete(`${LOCK_PREFIX}email:${email}`);
   }
   async getActiveLockouts() {
+    if (!this.kv) return [];
     const ipLocks = await this.kv.list({ prefix: `${LOCK_PREFIX}ip:` });
     const emailLocks = await this.kv.list({ prefix: `${LOCK_PREFIX}email:` });
     const lockouts = [];
@@ -5786,6 +5791,7 @@ var BruteForceDetector = class {
     return lockouts;
   }
   async releaseLockout(key) {
+    if (!this.kv) return;
     await this.kv.delete(key);
   }
   isAboveAlertThreshold(count) {
@@ -7762,6 +7768,672 @@ function pluginMenuMiddleware() {
   };
 }
 
+// src/plugins/types.ts
+var HOOKS2 = {
+  // Request lifecycle
+  REQUEST_START: "request:start",
+  REQUEST_END: "request:end",
+  USER_LOGIN: "user:login"};
+init_admin_layout_catalyst_template();
+var adminRoutes4 = new Hono();
+adminRoutes4.use("*", requireAuth());
+adminRoutes4.use("*", async (c, next) => {
+  const user = c.get("user");
+  if (user?.role !== "admin") {
+    return c.text("Access denied", 403);
+  }
+  return next();
+});
+adminRoutes4.get("/", async (c) => {
+  const user = c.get("user");
+  const db = c.env.DB;
+  let totalRequests = 0;
+  let uniqueIPs = 0;
+  let avgDuration = 0;
+  let errorCount = 0;
+  let topPages = [];
+  let recentActivity = [];
+  try {
+    const now = Math.floor(Date.now() / 1e3);
+    const dayAgo = now - 86400;
+    const [requestsResult, ipsResult, durationResult, errorsResult, pagesResult, activityResult] = await Promise.all([
+      db.prepare("SELECT COUNT(*) as count FROM system_logs WHERE category = ? AND created_at > ?").bind("api", dayAgo).first(),
+      db.prepare("SELECT COUNT(DISTINCT ip_address) as count FROM system_logs WHERE category = ? AND created_at > ?").bind("api", dayAgo).first(),
+      db.prepare("SELECT AVG(duration) as avg FROM system_logs WHERE category = ? AND created_at > ? AND duration IS NOT NULL").bind("api", dayAgo).first(),
+      db.prepare("SELECT COUNT(*) as count FROM system_logs WHERE level IN (?, ?) AND created_at > ?").bind("error", "fatal", dayAgo).first(),
+      db.prepare("SELECT url, COUNT(*) as views FROM system_logs WHERE category = ? AND created_at > ? AND url IS NOT NULL GROUP BY url ORDER BY views DESC LIMIT 10").bind("api", dayAgo).all(),
+      db.prepare("SELECT url, method, status_code, duration, created_at FROM system_logs WHERE category = ? ORDER BY created_at DESC LIMIT 20").bind("api").all()
+    ]);
+    totalRequests = requestsResult?.count || 0;
+    uniqueIPs = ipsResult?.count || 0;
+    avgDuration = Math.round(durationResult?.avg || 0);
+    errorCount = errorsResult?.count || 0;
+    topPages = (pagesResult.results || []).map((r) => ({ path: r.url, views: r.views }));
+    recentActivity = activityResult.results || [];
+  } catch {
+  }
+  const content2 = `
+    <div class="space-y-8">
+      <div>
+        <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Analytics Dashboard</h1>
+        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Last 24 hours overview from system logs</p>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Total Requests</p>
+          <p class="mt-2 text-3xl font-semibold text-zinc-950 dark:text-white">${totalRequests.toLocaleString()}</p>
+        </div>
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Unique Visitors</p>
+          <p class="mt-2 text-3xl font-semibold text-zinc-950 dark:text-white">${uniqueIPs.toLocaleString()}</p>
+        </div>
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Avg Response Time</p>
+          <p class="mt-2 text-3xl font-semibold text-zinc-950 dark:text-white">${avgDuration}ms</p>
+        </div>
+        <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+          <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400">Errors</p>
+          <p class="mt-2 text-3xl font-semibold ${errorCount > 0 ? "text-red-600 dark:text-red-400" : "text-zinc-950 dark:text-white"}">${errorCount.toLocaleString()}</p>
+        </div>
+      </div>
+
+      <!-- Top Pages -->
+      <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10">
+        <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+          <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Top Pages</h2>
+        </div>
+        <div class="divide-y divide-zinc-950/5 dark:divide-white/10">
+          ${topPages.length > 0 ? topPages.map((p) => `
+            <div class="flex items-center justify-between px-6 py-3">
+              <span class="text-sm text-zinc-700 dark:text-zinc-300 font-mono truncate">${escapeHtml3(p.path)}</span>
+              <span class="text-sm font-medium text-zinc-500 dark:text-zinc-400">${p.views}</span>
+            </div>
+          `).join("") : `
+            <div class="px-6 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              No page views recorded yet. Analytics data will appear once requests are logged.
+            </div>
+          `}
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10">
+        <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+          <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Recent Activity</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+              <tr>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Path</th>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Method</th>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Status</th>
+                <th class="px-6 py-2 text-left font-medium text-zinc-500 dark:text-zinc-400">Duration</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-950/5 dark:divide-white/10">
+              ${recentActivity.length > 0 ? recentActivity.map((a) => `
+                <tr>
+                  <td class="px-6 py-2 font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-xs">${escapeHtml3(a.url || "")}</td>
+                  <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${a.method === "GET" ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}">${a.method || ""}</span></td>
+                  <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${(a.status_code || 0) >= 400 ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"}">${a.status_code || ""}</span></td>
+                  <td class="px-6 py-2 text-zinc-500 dark:text-zinc-400">${a.duration || 0}ms</td>
+                </tr>
+              `).join("") : `
+                <tr>
+                  <td colspan="4" class="px-6 py-8 text-center text-zinc-500 dark:text-zinc-400">No activity recorded yet.</td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+  return c.html(renderAdminLayoutCatalyst({
+    title: "Analytics",
+    pageTitle: "Analytics Dashboard",
+    currentPath: "/admin/analytics",
+    version: c.get("appVersion"),
+    user: user ? {
+      name: user.email.split("@")[0] || "Admin",
+      email: user.email,
+      role: user.role
+    } : void 0,
+    content: content2,
+    dynamicMenuItems: c.get("pluginMenuItems")
+  }));
+});
+function escapeHtml3(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// src/plugins/core-plugins/analytics/index.ts
+function createAnalyticsPlugin() {
+  const builder = PluginBuilder.create({
+    name: "core-analytics",
+    version: "1.0.0-beta.1",
+    description: "Core analytics tracking and reporting plugin"
+  });
+  builder.metadata({
+    author: {
+      name: "SonicJS Team",
+      email: "team@sonicjs.com"
+    },
+    license: "MIT",
+    compatibility: "^0.1.0",
+    dependencies: ["core-auth"]
+    // Requires auth for admin access
+  });
+  const analyticsAPI = new Hono();
+  analyticsAPI.get("/stats", async (c) => {
+    const timeRange = c.req.query("range") || "7d";
+    c.req.query("metric") || "all";
+    return c.json({
+      message: "Analytics stats",
+      data: {
+        pageviews: 12500,
+        uniqueVisitors: 3200,
+        sessions: 4800,
+        avgSessionDuration: 245,
+        bounceRate: 0.35,
+        topPages: [
+          { path: "/", views: 3200 },
+          { path: "/about", views: 1800 },
+          { path: "/contact", views: 950 }
+        ],
+        timeRange
+      }
+    });
+  });
+  analyticsAPI.post("/track", async (c) => {
+    const event = await c.req.json();
+    console.info("Analytics event tracked:", event);
+    return c.json({
+      message: "Event tracked successfully",
+      eventId: `event-${Date.now()}`
+    });
+  });
+  analyticsAPI.get("/reports", async (c) => {
+    const reportType = c.req.query("type") || "traffic";
+    const startDate = c.req.query("start");
+    const endDate = c.req.query("end");
+    return c.json({
+      message: "Analytics report",
+      data: {
+        reportType,
+        dateRange: { start: startDate, end: endDate },
+        data: []
+      }
+    });
+  });
+  analyticsAPI.get("/realtime", async (c) => {
+    return c.json({
+      message: "Real-time analytics",
+      data: {
+        activeUsers: 23,
+        activePages: [
+          { path: "/", users: 8 },
+          { path: "/blog", users: 5 },
+          { path: "/products", users: 4 }
+        ],
+        recentEvents: []
+      }
+    });
+  });
+  builder.addRoute("/api/analytics", analyticsAPI, {
+    description: "Analytics tracking and reporting API",
+    requiresAuth: true,
+    roles: ["admin", "analytics:read"],
+    priority: 3
+  });
+  builder.addRoute("/admin/analytics", adminRoutes4, {
+    description: "Analytics admin dashboard",
+    requiresAuth: true,
+    priority: 50
+  });
+  builder.addSingleMiddleware("analytics-tracker", async (c, next) => {
+    const start = Date.now();
+    const path = c.req.path;
+    const method = c.req.method;
+    const userAgent = c.req.header("user-agent");
+    const referer = c.req.header("referer");
+    const ip = c.req.header("CF-Connecting-IP") || c.req.header("x-forwarded-for");
+    await next();
+    const duration = Date.now() - start;
+    const status = c.res.status;
+    const analyticsData = {
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      path,
+      method,
+      status,
+      duration,
+      userAgent,
+      referer,
+      ip,
+      responseSize: c.res.headers.get("content-length") || 0
+    };
+    console.debug("Analytics tracking:", analyticsData);
+  }, {
+    description: "Track page views and request analytics",
+    global: true,
+    priority: 99
+    // Run last to capture response data
+  });
+  builder.addService("analyticsService", {
+    trackEvent: async (event) => {
+      console.info("Tracking event:", event);
+      return { eventId: `event-${Date.now()}` };
+    },
+    trackPageView: async (data) => {
+      console.info("Tracking pageview:", data.path);
+      return { viewId: `view-${Date.now()}` };
+    },
+    getStats: async (_timeRange) => {
+      return {
+        pageviews: 12500,
+        sessions: 4800,
+        uniqueVisitors: 3200
+      };
+    },
+    generateReport: async (type, options) => {
+      console.info(`Generating ${type} report with options:`, options);
+      return { reportId: `report-${Date.now()}` };
+    }
+  }, {
+    description: "Core analytics tracking service",
+    singleton: true
+  });
+  const pageViewSchema = PluginHelpers.createSchema([
+    { name: "path", type: "string", optional: false },
+    { name: "title", type: "string", optional: true },
+    { name: "referrer", type: "string", optional: true },
+    { name: "userAgent", type: "string", optional: true },
+    { name: "ipAddress", type: "string", optional: true },
+    { name: "sessionId", type: "string", optional: true },
+    { name: "userId", type: "number", optional: true },
+    { name: "duration", type: "number", optional: true }
+  ]);
+  const eventSchema = PluginHelpers.createSchema([
+    { name: "eventType", type: "string", optional: false },
+    { name: "eventName", type: "string", optional: false },
+    { name: "eventData", type: "object", optional: true },
+    { name: "path", type: "string", optional: true },
+    { name: "sessionId", type: "string", optional: true },
+    { name: "userId", type: "number", optional: true }
+  ]);
+  const pageViewMigration = PluginHelpers.createMigration("analytics_pageviews", [
+    { name: "id", type: "INTEGER", primaryKey: true },
+    { name: "path", type: "TEXT", nullable: false },
+    { name: "title", type: "TEXT", nullable: true },
+    { name: "referrer", type: "TEXT", nullable: true },
+    { name: "user_agent", type: "TEXT", nullable: true },
+    { name: "ip_address", type: "TEXT", nullable: true },
+    { name: "session_id", type: "TEXT", nullable: true },
+    { name: "user_id", type: "INTEGER", nullable: true },
+    { name: "duration", type: "INTEGER", nullable: true }
+  ]);
+  const eventMigration = PluginHelpers.createMigration("analytics_events", [
+    { name: "id", type: "INTEGER", primaryKey: true },
+    { name: "event_type", type: "TEXT", nullable: false },
+    { name: "event_name", type: "TEXT", nullable: false },
+    { name: "event_data", type: "TEXT", nullable: true },
+    { name: "path", type: "TEXT", nullable: true },
+    { name: "session_id", type: "TEXT", nullable: true },
+    { name: "user_id", type: "INTEGER", nullable: true }
+  ]);
+  builder.addModel("PageView", {
+    tableName: "analytics_pageviews",
+    schema: pageViewSchema,
+    migrations: [pageViewMigration]
+  });
+  builder.addModel("AnalyticsEvent", {
+    tableName: "analytics_events",
+    schema: eventSchema,
+    migrations: [eventMigration]
+  });
+  builder.addHook(HOOKS2.REQUEST_START, async (data, _context) => {
+    data.analytics = {
+      startTime: Date.now(),
+      sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+    return data;
+  }, {
+    priority: 1,
+    description: "Initialize analytics tracking for requests"
+  });
+  builder.addHook(HOOKS2.REQUEST_END, async (data, _context) => {
+    if (data.analytics) {
+      const duration = Date.now() - data.analytics.startTime;
+      console.debug(`Request completed in ${duration}ms`);
+    }
+    return data;
+  }, {
+    priority: 1,
+    description: "Complete analytics tracking for requests"
+  });
+  builder.addHook(HOOKS2.USER_LOGIN, async (data, context) => {
+    await context.services?.analyticsService?.trackEvent({
+      eventType: "auth",
+      eventName: "user_login",
+      userId: data.userId,
+      eventData: { loginMethod: data.method }
+    });
+    return data;
+  }, {
+    priority: 8,
+    description: "Track user login events"
+  });
+  builder.addHook("content:view", async (data, context) => {
+    await context.services?.analyticsService?.trackEvent({
+      eventType: "content",
+      eventName: "content_view",
+      eventData: {
+        contentId: data.id,
+        contentType: data.type,
+        title: data.title
+      }
+    });
+    return data;
+  }, {
+    priority: 8,
+    description: "Track content view events"
+  });
+  builder.addAdminPage(
+    "/analytics",
+    "Analytics Dashboard",
+    "AnalyticsDashboardView",
+    {
+      description: "View analytics overview and key metrics",
+      permissions: ["admin", "analytics:read"],
+      icon: "chart-bar"
+    }
+  );
+  builder.addAdminPage(
+    "/analytics/reports",
+    "Analytics Reports",
+    "AnalyticsReportsView",
+    {
+      description: "Generate and view detailed analytics reports",
+      permissions: ["admin", "analytics:read"],
+      icon: "document-report"
+    }
+  );
+  builder.addAdminPage(
+    "/analytics/realtime",
+    "Real-time Analytics",
+    "AnalyticsRealtimeView",
+    {
+      description: "View real-time visitor activity",
+      permissions: ["admin", "analytics:read"],
+      icon: "lightning-bolt"
+    }
+  );
+  builder.addAdminPage(
+    "/analytics/settings",
+    "Analytics Settings",
+    "AnalyticsSettingsView",
+    {
+      description: "Configure analytics tracking and data collection",
+      permissions: ["admin", "analytics:configure"],
+      icon: "cog"
+    }
+  );
+  builder.addMenuItem("Analytics", "/admin/analytics", {
+    icon: "chart-bar",
+    order: 40,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Dashboard", "/admin/analytics", {
+    icon: "chart-bar",
+    parent: "Analytics",
+    order: 1,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Reports", "/admin/analytics/reports", {
+    icon: "document-report",
+    parent: "Analytics",
+    order: 2,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Real-time", "/admin/analytics/realtime", {
+    icon: "lightning-bolt",
+    parent: "Analytics",
+    order: 3,
+    permissions: ["admin", "analytics:read"]
+  });
+  builder.addMenuItem("Settings", "/admin/analytics/settings", {
+    icon: "cog",
+    parent: "Analytics",
+    order: 4,
+    permissions: ["admin", "analytics:configure"]
+  });
+  builder.lifecycle({
+    install: async () => {
+      console.info("Installing analytics plugin...");
+    },
+    activate: async () => {
+      console.info("Activating analytics plugin...");
+    },
+    deactivate: async () => {
+      console.info("Deactivating analytics plugin...");
+    },
+    configure: async (config) => {
+      console.info("Configuring analytics plugin...", config);
+    }
+  });
+  return builder.build();
+}
+var analyticsPlugin = createAnalyticsPlugin();
+
+// src/plugins/core-plugins/analytics/services/event-tracking-service.ts
+var EventTrackingService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  async trackEvent(input) {
+    const id = crypto.randomUUID();
+    const category = input.category || "user-activity";
+    await this.db.prepare(`
+      INSERT INTO analytics_events (id, event, category, properties, user_id, session_id, ip_address, user_agent, path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      input.event,
+      category,
+      input.properties ? JSON.stringify(input.properties) : null,
+      input.userId || null,
+      input.sessionId || null,
+      input.ipAddress || null,
+      input.userAgent || null,
+      input.path || null
+    ).run();
+    return id;
+  }
+  async trackBatch(events) {
+    const ids = [];
+    const stmts = events.map((input) => {
+      const id = crypto.randomUUID();
+      ids.push(id);
+      const category = input.category || "user-activity";
+      return this.db.prepare(`
+        INSERT INTO analytics_events (id, event, category, properties, user_id, session_id, ip_address, user_agent, path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id,
+        input.event,
+        category,
+        input.properties ? JSON.stringify(input.properties) : null,
+        input.userId || null,
+        input.sessionId || null,
+        input.ipAddress || null,
+        input.userAgent || null,
+        input.path || null
+      );
+    });
+    await this.db.batch(stmts);
+    return ids;
+  }
+  async queryEvents(filters = {}) {
+    const conditions = [];
+    const params = [];
+    if (filters.event) {
+      conditions.push("event = ?");
+      params.push(filters.event);
+    }
+    if (filters.category) {
+      conditions.push("category = ?");
+      params.push(filters.category);
+    }
+    if (filters.userId) {
+      conditions.push("user_id = ?");
+      params.push(filters.userId);
+    }
+    if (filters.sessionId) {
+      conditions.push("session_id = ?");
+      params.push(filters.sessionId);
+    }
+    if (filters.startDate) {
+      conditions.push("created_at >= ?");
+      params.push(filters.startDate);
+    }
+    if (filters.endDate) {
+      conditions.push("created_at <= ?");
+      params.push(filters.endDate);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+    const [countResult, eventsResult] = await Promise.all([
+      this.db.prepare(`SELECT COUNT(*) as total FROM analytics_events ${where}`).bind(...params).first(),
+      this.db.prepare(`SELECT * FROM analytics_events ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all()
+    ]);
+    const events = (eventsResult.results || []).map((e) => ({
+      ...e,
+      properties: e.properties ? JSON.parse(e.properties) : null
+    }));
+    return { events, total: countResult?.total || 0 };
+  }
+  async getStats(startDate, endDate) {
+    const conditions = [];
+    const params = [];
+    if (startDate) {
+      conditions.push("created_at >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("created_at <= ?");
+      params.push(endDate);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const [totals, topEvents] = await Promise.all([
+      this.db.prepare(`
+        SELECT
+          COUNT(*) as total_events,
+          COUNT(DISTINCT user_id) as unique_users,
+          COUNT(DISTINCT session_id) as unique_sessions
+        FROM analytics_events ${where}
+      `).bind(...params).first(),
+      this.db.prepare(`
+        SELECT event, COUNT(*) as count
+        FROM analytics_events ${where}
+        GROUP BY event ORDER BY count DESC LIMIT 20
+      `).bind(...params).all()
+    ]);
+    return {
+      totalEvents: totals?.total_events || 0,
+      uniqueUsers: totals?.unique_users || 0,
+      uniqueSessions: totals?.unique_sessions || 0,
+      topEvents: (topEvents.results || []).map((r) => ({ event: r.event, count: r.count }))
+    };
+  }
+};
+
+// src/plugins/core-plugins/analytics/routes/api.ts
+var apiRoutes4 = new Hono();
+apiRoutes4.post("/", async (c) => {
+  const db = c.env.DB;
+  const service = new EventTrackingService(db);
+  const ip = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const userAgent = c.req.header("user-agent") || "";
+  const user = c.get("user");
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  if (Array.isArray(body)) {
+    if (body.length > 100) {
+      return c.json({ error: "Batch size limit is 100 events" }, 400);
+    }
+    const events = body.map((e) => ({
+      event: e.event,
+      category: e.category || "user-activity",
+      properties: e.properties,
+      userId: user?.userId || e.userId,
+      sessionId: e.sessionId,
+      ipAddress: ip,
+      userAgent,
+      path: e.path
+    }));
+    const invalid = events.find((e) => !e.event || typeof e.event !== "string");
+    if (invalid) {
+      return c.json({ error: 'Each event must have an "event" string field' }, 400);
+    }
+    const ids = await service.trackBatch(events);
+    return c.json({ success: true, eventIds: ids, count: ids.length });
+  }
+  if (!body.event || typeof body.event !== "string") {
+    return c.json({ error: '"event" field is required and must be a string' }, 400);
+  }
+  const eventId = await service.trackEvent({
+    event: body.event,
+    category: body.category || "user-activity",
+    properties: body.properties,
+    userId: user?.userId || body.userId,
+    sessionId: body.sessionId,
+    ipAddress: ip,
+    userAgent,
+    path: body.path
+  });
+  return c.json({ success: true, eventId });
+});
+apiRoutes4.get("/", async (c) => {
+  const user = c.get("user");
+  if (!user || user.role !== "admin") {
+    return c.json({ error: "Admin access required" }, 403);
+  }
+  const db = c.env.DB;
+  const service = new EventTrackingService(db);
+  const filters = {
+    event: c.req.query("event") || void 0,
+    category: c.req.query("category") || void 0,
+    userId: c.req.query("userId") || void 0,
+    sessionId: c.req.query("sessionId") || void 0,
+    startDate: c.req.query("startDate") ? parseInt(c.req.query("startDate")) : void 0,
+    endDate: c.req.query("endDate") ? parseInt(c.req.query("endDate")) : void 0,
+    limit: c.req.query("limit") ? parseInt(c.req.query("limit")) : 50,
+    offset: c.req.query("offset") ? parseInt(c.req.query("offset")) : 0
+  };
+  const result = await service.queryEvents(filters);
+  return c.json(result);
+});
+apiRoutes4.get("/stats", async (c) => {
+  const user = c.get("user");
+  if (!user || user.role !== "admin") {
+    return c.json({ error: "Admin access required" }, 403);
+  }
+  const db = c.env.DB;
+  const service = new EventTrackingService(db);
+  const startDate = c.req.query("startDate") ? parseInt(c.req.query("startDate")) : void 0;
+  const endDate = c.req.query("endDate") ? parseInt(c.req.query("endDate")) : void 0;
+  const stats = await service.getStats(startDate, endDate);
+  return c.json(stats);
+});
+
 // src/plugins/cache/services/cache-config.ts
 var CACHE_CONFIGS = {
   // Content (high read, low write)
@@ -9677,6 +10349,12 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
+  if (analyticsPlugin.routes && analyticsPlugin.routes.length > 0) {
+    for (const route of analyticsPlugin.routes) {
+      app2.route(route.path, route.handler);
+    }
+  }
+  app2.route("/api/events", apiRoutes4);
   if (stripePlugin.routes && stripePlugin.routes.length > 0) {
     for (const route of stripePlugin.routes) {
       app2.route(route.path, route.handler);

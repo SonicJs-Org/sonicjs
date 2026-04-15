@@ -263,6 +263,41 @@ export class MigrationService {
         await this.markMigrationApplied('032', 'User Profiles', '032_user_profiles.sql')
       }
     }
+
+    // Ensure user_profiles.data column exists (migration 035 is now a no-op).
+    // Databases that ran the old 032 (without data column) need the column added.
+    // Migration 035 was converted to a no-op to fix #771 (duplicate column error
+    // on fresh installs), so we add the column here if it's missing.
+    const hasUserProfilesTable = await this.checkTablesExist(['user_profiles'])
+    if (hasUserProfilesTable) {
+      const hasDataColumn = await this.checkColumnExists('user_profiles', 'data')
+      if (!hasDataColumn) {
+        try {
+          await this.db.prepare(`ALTER TABLE user_profiles ADD COLUMN data TEXT DEFAULT '{}'`).run()
+          console.log('[Migration] Added missing data column to user_profiles')
+        } catch (error) {
+          // Column may have been added concurrently; ignore duplicate column errors
+          const msg = error instanceof Error ? error.message : String(error)
+          if (!msg.includes('duplicate column name')) {
+            console.error('[Migration] Failed to add data column to user_profiles:', msg)
+          }
+        }
+      }
+    }
+
+    // Mark migration 035 as applied since it's now a no-op (column handled above)
+    if (!appliedMigrations.has('035')) {
+      const hasDataCol = hasUserProfilesTable && await this.checkColumnExists('user_profiles', 'data')
+      if (hasDataCol) {
+        appliedMigrations.set('035', {
+          id: '035',
+          applied_at: new Date().toISOString(),
+          name: 'User Profiles Data Column',
+          filename: '035_user_profiles_data_column.sql'
+        })
+        await this.markMigrationApplied('035', 'User Profiles Data Column', '035_user_profiles_data_column.sql')
+      }
+    }
   }
 
   /**

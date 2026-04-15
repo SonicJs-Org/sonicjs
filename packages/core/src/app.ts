@@ -42,6 +42,7 @@ import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
+import { requireAuth, requireRole } from './middleware/auth'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
@@ -190,6 +191,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       app.use('*', middleware)
     }
   }
+
+  // Admin panel: require authentication and admin role
+  app.use('/admin/*', requireAuth())
+  app.use('/admin/*', requireRole(['admin']))
 
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())

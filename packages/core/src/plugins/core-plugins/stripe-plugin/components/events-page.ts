@@ -62,7 +62,7 @@ export function renderEventsPage(data: EventsPageData): string {
             <tr>
               <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Time</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Type</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Object</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Object / User</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Status</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Event ID</th>
             </tr>
@@ -127,8 +127,26 @@ function formatTimestamp(timestamp: number): string {
   })
 }
 
+function extractUserInfo(event: StripeEventRecord): { userId?: string; email?: string } {
+  try {
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    const userId = data?.metadata?.sonicjs_user_id || data?.sonicjs_user_id
+    const email = data?.customer_email || data?.customerEmail || data?.receipt_email
+    return { userId: userId || undefined, email: email || undefined }
+  } catch {
+    return {}
+  }
+}
+
 function renderEventRow(event: StripeEventRecord): string {
   const errorTooltip = event.error ? ` title="${event.error.replace(/"/g, '&quot;')}"` : ''
+  const userInfo = extractUserInfo(event)
+  const userLink = userInfo.userId
+    ? `<a href="/admin/users/${userInfo.userId}" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">${userInfo.email || userInfo.userId}</a>`
+    : userInfo.email
+      ? `<span class="text-sm text-zinc-500 dark:text-zinc-400">${userInfo.email}</span>`
+      : ''
+
   return `
     <tr class="hover:bg-zinc-950/[0.025] dark:hover:bg-white/[0.025]"${errorTooltip}>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-zinc-500 dark:text-zinc-400">
@@ -140,6 +158,7 @@ function renderEventRow(event: StripeEventRecord): string {
       <td class="px-6 py-4 whitespace-nowrap">
         <div class="text-sm font-mono text-zinc-500 dark:text-zinc-400">${event.objectId || '-'}</div>
         <div class="text-xs text-zinc-400 dark:text-zinc-500">${event.objectType}</div>
+        ${userLink ? `<div class="mt-1">${userLink}</div>` : ''}
       </td>
       <td class="px-6 py-4 whitespace-nowrap">${eventStatusBadge(event.status)}</td>
       <td class="px-6 py-4 whitespace-nowrap text-xs font-mono text-zinc-400 dark:text-zinc-500">${event.stripeEventId}</td>

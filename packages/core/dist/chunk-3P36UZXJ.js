@@ -1819,5 +1819,5 @@ function buildRouteList(app) {
 }
 
 export { CACHE_CONFIGS, CATEGORY_INFO, CacheService, Logger, SettingsService, TelemetryService, apiTokens, buildRouteList, collections, content, contentVersions, createInstallationIdentity, getAppInstance, getCacheService, getLogger, getTelemetryService, initLogger, initTelemetry, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, schema_exports, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, setAppInstance, systemLogs, users, workflowHistory };
-//# sourceMappingURL=chunk-TBJY2FF7.js.map
-//# sourceMappingURL=chunk-TBJY2FF7.js.map
+//# sourceMappingURL=chunk-3P36UZXJ.js.map
+//# sourceMappingURL=chunk-3P36UZXJ.js.map

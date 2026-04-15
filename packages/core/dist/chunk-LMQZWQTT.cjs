@@ -1727,7 +1727,30 @@ CREATE INDEX IF NOT EXISTS idx_forms_turnstile ON forms(turnstile_enabled);
     name: "User Profiles Data Column",
     filename: "035_user_profiles_data_column.sql",
     description: "Migration 035: User Profiles Data Column",
-    sql: "-- Migration 035: Add data column to user_profiles\n-- Stores custom profile fields as JSON (used by user-profiles plugin)\n--\n-- The data column was missing from migration 032 when the user-profiles plugin\n-- was added in PR #747. The ALTER TABLE migration was placed in the wrong\n-- directory (src/db/migrations/) so it was never bundled or executed.\n-- This caused the user edit page to crash with a 500 error because the route\n-- queries SELECT ... data FROM user_profiles.\n--\n-- Migration 032 has been updated to include the column for fresh installs.\n-- This migration handles existing databases that already ran 032 without it.\n\n-- SQLite does not support IF NOT EXISTS for ALTER TABLE ADD COLUMN,\n-- but re-adding an existing column is a no-op error that we catch at the\n-- application level. The migration runner skips already-applied migrations\n-- by ID, so this only runs on databases missing the column.\nALTER TABLE user_profiles ADD COLUMN data TEXT DEFAULT '{}';\n"
+    sql: `-- Migration 035: Add data column to user_profiles (no-op)
+--
+-- This migration originally added a missing 'data' column to user_profiles.
+-- Migration 032 has since been updated to include the column in the CREATE TABLE,
+-- so on fresh installs the column already exists by the time this runs.
+--
+-- The ALTER TABLE has been removed to prevent "duplicate column name: data" errors
+-- during fresh installs (GitHub issue #771). Wrangler's migration runner does not
+-- gracefully handle duplicate column errors like the runtime MigrationService does.
+--
+-- Existing databases that ran the old 032 (without the data column) get the column
+-- added at runtime by the core MigrationService, which skips duplicate-column errors.
+--
+-- This file is kept as a no-op so that wrangler's migration tracking remains
+-- consistent (it tracks migrations by filename).
+SELECT 1;
+`
+  },
+  {
+    id: "036",
+    name: "Analytics Events",
+    filename: "036_analytics_events.sql",
+    description: "Migration 036: Analytics Events",
+    sql: "-- Migration 036: Analytics Events Table\n-- Provides storage for user behavior event tracking (page views, custom events)\n\nCREATE TABLE IF NOT EXISTS analytics_events (\n    id TEXT PRIMARY KEY,\n    event TEXT NOT NULL,\n    category TEXT NOT NULL DEFAULT 'user-activity',\n    properties TEXT,\n    user_id TEXT,\n    session_id TEXT,\n    ip_address TEXT,\n    user_agent TEXT,\n    path TEXT,\n    created_at INTEGER NOT NULL DEFAULT (unixepoch())\n);\n\nCREATE INDEX IF NOT EXISTS idx_analytics_events_event ON analytics_events(event);\nCREATE INDEX IF NOT EXISTS idx_analytics_events_category ON analytics_events(category);\nCREATE INDEX IF NOT EXISTS idx_analytics_events_user_id ON analytics_events(user_id);\nCREATE INDEX IF NOT EXISTS idx_analytics_events_session_id ON analytics_events(session_id);\nCREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at);\nCREATE INDEX IF NOT EXISTS idx_analytics_events_path ON analytics_events(path);\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -1925,8 +1948,8 @@ var MigrationService = class {
       await this.removeMigrationApplied("029");
     }
     if (!appliedMigrations.has("032")) {
-      const hasUserProfilesTable = await this.checkTablesExist(["user_profiles"]);
-      if (hasUserProfilesTable) {
+      const hasUserProfilesTable2 = await this.checkTablesExist(["user_profiles"]);
+      if (hasUserProfilesTable2) {
         appliedMigrations.set("032", {
           id: "032",
           applied_at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1934,6 +1957,33 @@ var MigrationService = class {
           filename: "032_user_profiles.sql"
         });
         await this.markMigrationApplied("032", "User Profiles", "032_user_profiles.sql");
+      }
+    }
+    const hasUserProfilesTable = await this.checkTablesExist(["user_profiles"]);
+    if (hasUserProfilesTable) {
+      const hasDataColumn = await this.checkColumnExists("user_profiles", "data");
+      if (!hasDataColumn) {
+        try {
+          await this.db.prepare(`ALTER TABLE user_profiles ADD COLUMN data TEXT DEFAULT '{}'`).run();
+          console.log("[Migration] Added missing data column to user_profiles");
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          if (!msg.includes("duplicate column name")) {
+            console.error("[Migration] Failed to add data column to user_profiles:", msg);
+          }
+        }
+      }
+    }
+    if (!appliedMigrations.has("035")) {
+      const hasDataCol = hasUserProfilesTable && await this.checkColumnExists("user_profiles", "data");
+      if (hasDataCol) {
+        appliedMigrations.set("035", {
+          id: "035",
+          applied_at: (/* @__PURE__ */ new Date()).toISOString(),
+          name: "User Profiles Data Column",
+          filename: "035_user_profiles_data_column.sql"
+        });
+        await this.markMigrationApplied("035", "User Profiles Data Column", "035_user_profiles_data_column.sql");
       }
     }
   }
@@ -2165,5 +2215,5 @@ var MigrationService = class {
 };
 
 exports.MigrationService = MigrationService;
-//# sourceMappingURL=chunk-RVD7PLMU.cjs.map
-//# sourceMappingURL=chunk-RVD7PLMU.cjs.map
+//# sourceMappingURL=chunk-LMQZWQTT.cjs.map
+//# sourceMappingURL=chunk-LMQZWQTT.cjs.map

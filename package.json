@@ -60,7 +60,7 @@
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "highlight.js": "^11.11.1",
-    "hono": "^4.12.12",
+    "hono": "^4.12.14",
     "marked": "^16.4.1",
     "motion": "^12.23.22",
     "semver": "^7.7.3",

@@ -150,6 +150,7 @@ apiRoutes.get('/:id', async (c: any) => {
 apiRoutes.post('/', async (c: any) => {
   try {
     const db = c.env.DB
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- snake_case keys accepted from JSON body for backwards compatibility
     const { name, display_name, displayName, description, handler_key, handlerKey, default_params, defaultParams, example_usage, exampleUsage, category } = await c.req.json()
     const scName = name
     const scHandlerKey = handler_key || handlerKey

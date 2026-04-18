@@ -5,6 +5,7 @@ Thank you for your interest in contributing to SonicJS!
 ## Quick Links
 
 - **[Full Contributing Guide](https://sonicjs.com/contributing)** - Detailed guide on how to contribute
+- **[Project Governance](./GOVERNANCE.md)** - How decisions are made and who the maintainers are
 - **[Good First Issues](https://github.com/lane711/sonicjs/labels/good%20first%20issue)** - Great starting points for new contributors
 - **[Help Wanted](https://github.com/lane711/sonicjs/labels/help%20wanted)** - Issues where we need community help
 
@@ -68,6 +69,19 @@ Before submitting a PR:
 - [ ] Changes are documented if needed
 - [ ] PR description explains the changes
 - [ ] Related issue is referenced
+- [ ] Commits are signed off (see DCO below)
+
+## Developer Certificate of Origin (DCO)
+
+By contributing to SonicJS, you certify that you wrote the code (or otherwise have the right to submit it) and agree to release it under the project's MIT license. This is formalized by the [Developer Certificate of Origin](https://developercertificate.org/).
+
+To signal your agreement, add a `Signed-off-by` line to each commit:
+
+```bash
+git commit -s -m "your commit message"
+```
+
+This appends a line like `Signed-off-by: Your Name <your.email@example.com>` to the commit message using your configured `user.name` and `user.email`.
 
 ## Questions?
 

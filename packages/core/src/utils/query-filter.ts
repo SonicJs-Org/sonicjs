@@ -13,6 +13,8 @@ export type FilterOperator =
   | 'less_than_equal'
   | 'like'
   | 'contains'
+  | 'starts_with'
+  | 'ends_with'
   | 'in'
   | 'not_in'
   | 'all'
@@ -20,6 +22,26 @@ export type FilterOperator =
   | 'near'
   | 'within'
   | 'intersects'
+
+const VALID_FILTER_OPERATORS: ReadonlySet<FilterOperator> = new Set<FilterOperator>([
+  'equals',
+  'not_equals',
+  'greater_than',
+  'greater_than_equal',
+  'less_than',
+  'less_than_equal',
+  'like',
+  'contains',
+  'starts_with',
+  'ends_with',
+  'in',
+  'not_in',
+  'all',
+  'exists',
+  'near',
+  'within',
+  'intersects'
+])
 
 export interface FilterCondition {
   field: string
@@ -176,6 +198,12 @@ export class QueryFilterBuilder {
       case 'contains':
         return this.buildContains(field, condition.value)
 
+      case 'starts_with':
+        return this.buildStartsWith(field, condition.value)
+
+      case 'ends_with':
+        return this.buildEndsWith(field, condition.value)
+
       case 'in':
         return this.buildIn(field, condition.value)
 
@@ -259,6 +287,22 @@ export class QueryFilterBuilder {
    */
   private buildContains(field: string, value: string): string {
     this.params.push(`%${value}%`)
+    return `${field} LIKE ?`
+  }
+
+  /**
+   * Build STARTS_WITH condition (case-insensitive prefix match)
+   */
+  private buildStartsWith(field: string, value: string): string {
+    this.params.push(`${value}%`)
+    return `${field} LIKE ?`
+  }
+
+  /**
+   * Build ENDS_WITH condition (case-insensitive suffix match)
+   */
+  private buildEndsWith(field: string, value: string): string {
+    this.params.push(`%${value}`)
     return `${field} LIKE ?`
   }
 
@@ -424,6 +468,26 @@ export class QueryFilterBuilder {
           value: query[queryParam]
         })
       }
+    }
+
+    // Parse bracket-syntax filters: filter[field][operator]=value or filter[field]=value
+    const bracketFilterRegex = /^filter\[([^\]]+)\](?:\[([^\]]+)\])?$/
+    for (const [key, rawValue] of Object.entries(query)) {
+      const match = key.match(bracketFilterRegex)
+      if (!match) continue
+
+      const field = match[1]
+      const operator = (match[2] || 'equals') as FilterOperator
+
+      if (!field || !VALID_FILTER_OPERATORS.has(operator)) continue
+      if (rawValue === undefined || rawValue === null) continue
+
+      let value: any = rawValue
+      if (operator === 'exists') {
+        value = value === 'true' || value === true || value === '1' || value === 1
+      }
+
+      filter.where.and.push({ field, operator, value })
     }
 
     // Parse limit

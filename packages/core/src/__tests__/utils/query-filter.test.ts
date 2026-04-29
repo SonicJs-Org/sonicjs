@@ -97,6 +97,38 @@ describe('QueryFilterBuilder', () => {
     expect(result.params).toEqual(['%example%'])
   })
 
+  it('should support starts_with operator', () => {
+    const builder = new QueryFilterBuilder()
+    const filter: QueryFilter = {
+      where: {
+        and: [
+          { field: 'title', operator: 'starts_with', value: 'Intro' }
+        ]
+      }
+    }
+
+    const result = builder.build('posts', filter)
+
+    expect(result.sql).toBe('SELECT * FROM posts WHERE (title LIKE ?)')
+    expect(result.params).toEqual(['Intro%'])
+  })
+
+  it('should support ends_with operator', () => {
+    const builder = new QueryFilterBuilder()
+    const filter: QueryFilter = {
+      where: {
+        and: [
+          { field: 'slug', operator: 'ends_with', value: '-guide' }
+        ]
+      }
+    }
+
+    const result = builder.build('posts', filter)
+
+    expect(result.sql).toBe('SELECT * FROM posts WHERE (slug LIKE ?)')
+    expect(result.params).toEqual(['%-guide'])
+  })
+
   it('should support IN operator with array', () => {
     const builder = new QueryFilterBuilder()
     const filter: QueryFilter = {
@@ -853,6 +885,141 @@ describe('QueryFilterBuilder.parseFromQuery - Edge Cases', () => {
     const filter = QueryFilterBuilder.parseFromQuery(query)
 
     expect(filter.where).toEqual({ and: [] })
+  })
+})
+
+describe('QueryFilterBuilder.parseFromQuery - Bracket Syntax', () => {
+  it('should parse filter[field][contains]=value', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[title][contains]': 'lyme'
+    })
+
+    expect(filter.where?.and).toContainEqual({
+      field: 'title',
+      operator: 'contains',
+      value: 'lyme'
+    })
+  })
+
+  it('should parse filter[field][equals]=value', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[status][equals]': 'published'
+    })
+
+    expect(filter.where?.and).toContainEqual({
+      field: 'status',
+      operator: 'equals',
+      value: 'published'
+    })
+  })
+
+  it('should default to equals when no operator is specified', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[slug]': 'about'
+    })
+
+    expect(filter.where?.and).toContainEqual({
+      field: 'slug',
+      operator: 'equals',
+      value: 'about'
+    })
+  })
+
+  it('should parse multiple bracket filters into AND conditions', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[status][equals]': 'published',
+      'filter[category][equals]': 'blog',
+      'filter[price][less_than]': '100'
+    })
+
+    expect(filter.where?.and).toHaveLength(3)
+    expect(filter.where?.and).toContainEqual({ field: 'status', operator: 'equals', value: 'published' })
+    expect(filter.where?.and).toContainEqual({ field: 'category', operator: 'equals', value: 'blog' })
+    expect(filter.where?.and).toContainEqual({ field: 'price', operator: 'less_than', value: '100' })
+  })
+
+  it('should parse starts_with via bracket syntax', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[title][starts_with]': 'How to'
+    })
+
+    expect(filter.where?.and).toContainEqual({
+      field: 'title',
+      operator: 'starts_with',
+      value: 'How to'
+    })
+  })
+
+  it('should parse ends_with via bracket syntax', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[slug][ends_with]': '-guide'
+    })
+
+    expect(filter.where?.and).toContainEqual({
+      field: 'slug',
+      operator: 'ends_with',
+      value: '-guide'
+    })
+  })
+
+  it('should coerce exists operator value to boolean', () => {
+    const trueFilter = QueryFilterBuilder.parseFromQuery({
+      'filter[avatar][exists]': 'true'
+    })
+    expect(trueFilter.where?.and).toContainEqual({
+      field: 'avatar',
+      operator: 'exists',
+      value: true
+    })
+
+    const falseFilter = QueryFilterBuilder.parseFromQuery({
+      'filter[avatar][exists]': 'false'
+    })
+    expect(falseFilter.where?.and).toContainEqual({
+      field: 'avatar',
+      operator: 'exists',
+      value: false
+    })
+  })
+
+  it('should ignore unknown operators silently', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[title][bogus_op]': 'value'
+    })
+
+    expect(filter.where?.and).toEqual([])
+  })
+
+  it('should ignore keys that do not match the filter[...] pattern', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'something[else]': 'foo',
+      'filter': 'bar',
+      'filter[]': 'empty',
+      'filter[title][contains][extra]': 'too-deep'
+    })
+
+    expect(filter.where?.and).toEqual([])
+  })
+
+  it('should produce SQL when combined with the builder', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      'filter[title][contains]': 'lyme'
+    })
+
+    const result = new QueryFilterBuilder().build('content', filter)
+
+    expect(result.sql).toBe('SELECT * FROM content WHERE (title LIKE ?)')
+    expect(result.params).toEqual(['%lyme%'])
+  })
+
+  it('should combine bracket filters with simple field filters and where param', () => {
+    const filter = QueryFilterBuilder.parseFromQuery({
+      status: 'published',
+      'filter[title][contains]': 'lyme'
+    })
+
+    expect(filter.where?.and).toContainEqual({ field: 'status', operator: 'equals', value: 'published' })
+    expect(filter.where?.and).toContainEqual({ field: 'title', operator: 'contains', value: 'lyme' })
   })
 })
 

@@ -14,15 +14,33 @@ SonicJS AI provides a powerful and flexible filtering system for querying conten
 
 ## Basic Usage
 
-Filters are passed as query parameters to the API endpoints. The main filter parameter is `where`, which accepts a JSON-encoded filter object.
+Filters can be passed to the API in two equivalent forms:
 
-### Simple Example
+1. **Bracket syntax** — `filter[field][operator]=value` (concise, recommended for simple queries)
+2. **`where` parameter** — a JSON-encoded filter object (required for OR groups and complex logic)
+
+Both forms can be combined in the same request; their conditions are combined with AND.
+
+### Bracket Syntax
+
+```bash
+GET /api/content?filter[status][equals]=published
+GET /api/content?filter[title][contains]=lyme&filter[status][equals]=published
+```
+
+When the operator is omitted, it defaults to `equals`:
+
+```bash
+GET /api/content?filter[slug]=about
+```
+
+### `where` Parameter (JSON)
 
 ```bash
 GET /api/content?where={"and":[{"field":"status","operator":"equals","value":"published"}]}
 ```
 
-### With URL Encoding
+URL-encoded:
 
 ```bash
 GET /api/content?where=%7B%22and%22%3A%5B%7B%22field%22%3A%22status%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22published%22%7D%5D%7D
@@ -203,6 +221,42 @@ Must contain the value entered, case-insensitive. Simpler than `like` - just che
         "field": "description",
         "operator": "contains",
         "value": "javascript"
+      }
+    ]
+  }
+}
+```
+
+### starts_with
+
+The field value must begin with the provided value. Case-insensitive.
+
+```json
+{
+  "where": {
+    "and": [
+      {
+        "field": "title",
+        "operator": "starts_with",
+        "value": "How to"
+      }
+    ]
+  }
+}
+```
+
+### ends_with
+
+The field value must end with the provided value. Case-insensitive.
+
+```json
+{
+  "where": {
+    "and": [
+      {
+        "field": "slug",
+        "operator": "ends_with",
+        "value": "-guide"
       }
     ]
   }

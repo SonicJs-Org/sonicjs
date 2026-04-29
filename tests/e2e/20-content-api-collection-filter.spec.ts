@@ -109,6 +109,55 @@ test.describe('Content API Collection Filtering', () => {
     console.log('✓ Non-existent collection returns empty array');
   });
 
+  test('should filter using bracket-syntax filter[field][contains] on collection content', async ({ request }) => {
+    const collectionsResponse = await request.get('/api/collections');
+    const collectionsData = await collectionsResponse.json();
+
+    if (collectionsData.data.length === 0) {
+      console.log('No collections found, skipping test');
+      return;
+    }
+
+    // Find a collection that has content with a title we can filter on
+    let collectionName: string | null = null;
+    let probeTitle: string | null = null;
+    for (const c of collectionsData.data) {
+      const probe = await request.get(`/api/collections/${c.name}/content?limit=100`);
+      if (!probe.ok()) continue;
+      const body = await probe.json();
+      const titled = body.data?.find((row: any) => typeof row.title === 'string' && row.title.length >= 3);
+      if (titled) {
+        collectionName = c.name;
+        probeTitle = titled.title;
+        break;
+      }
+    }
+
+    if (!collectionName || !probeTitle) {
+      console.log('No content with a usable title found, skipping bracket-syntax test');
+      return;
+    }
+
+    // Take a substring of the title that's unlikely to match every row
+    const needle = probeTitle.slice(0, Math.min(4, probeTitle.length));
+    const url = `/api/collections/${collectionName}/content?limit=100&filter[title][contains]=${encodeURIComponent(needle)}`;
+
+    const response = await request.get(url);
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+
+    expect(Array.isArray(data.data)).toBeTruthy();
+    expect(data.data.length).toBeGreaterThan(0);
+
+    const needleLower = needle.toLowerCase();
+    for (const item of data.data) {
+      expect(typeof item.title).toBe('string');
+      expect(item.title.toLowerCase()).toContain(needleLower);
+    }
+
+    console.log(`✓ Bracket-syntax filter[title][contains]=${needle} returned ${data.data.length} matching items`);
+  });
+
   test('should work with sort and order parameters', async ({ request }) => {
     // Get collections
     const collectionsResponse = await request.get('/api/collections');

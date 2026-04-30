@@ -49,6 +49,15 @@ export async function getAllPosts(): Promise<BlogPostMeta[]> {
         return null
       }
 
+      // Skip future-dated posts in production (scheduled publishing)
+      if (
+        data.publishedAt &&
+        new Date(data.publishedAt) > new Date() &&
+        process.env.NODE_ENV === 'production'
+      ) {
+        return null
+      }
+
       const slug = path.basename(filePath, '.mdx')
 
       return {
@@ -86,6 +95,15 @@ export async function getPost(slug: string): Promise<BlogPost | null> {
 
   // Skip drafts in production
   if (data.draft && process.env.NODE_ENV === 'production') {
+    return null
+  }
+
+  // Skip future-dated posts in production (scheduled publishing)
+  if (
+    data.publishedAt &&
+    new Date(data.publishedAt) > new Date() &&
+    process.env.NODE_ENV === 'production'
+  ) {
     return null
   }
 

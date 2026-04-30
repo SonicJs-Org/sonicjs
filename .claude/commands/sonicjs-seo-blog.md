@@ -44,11 +44,29 @@ Generate a high-quality, SEO-optimized blog post for SonicJS on the topic: $ARGU
 5. **Output Format**:
    Create the blog post as an MDX file with frontmatter metadata.
 
+6. **Hero Image Generation (REQUIRED — always run)**:
+   After writing the MDX file, you MUST generate a hero image for the post. Do not skip this step and do not ask the user — image generation is part of every blog post.
+
+   Procedure:
+   1. Create the directory `www/public/images/blog/[generated-slug]/` if it doesn't exist.
+   2. Source the env file: `source /Users/lane/Dropbox/Data/.env` to load `OPENAI_API_KEY`.
+   3. Build a DALL-E prompt using the brand guidelines and category template from the `sonicjs-blog-image` skill (`.claude/commands/sonicjs-blog-image.md`):
+      - 3D isometric visualization, dark slate background nearly black, electric blue (#3B82F6) glowing accents, futuristic enterprise tech aesthetic, no text/letters/logos.
+      - Pick the template that matches the post category (Tutorial, Comparison, Technical Deep Dive, or Use Case).
+   4. Call `POST https://api.openai.com/v1/images/generations` with `model: dall-e-3`, `size: 1792x1024`, `quality: hd`, `style: vivid`, `n: 1`. Use a `Bash` curl call so the key never enters the prompt.
+   5. Download the returned image URL (URLs expire in ~1 hour) to `www/public/images/blog/[generated-slug]/hero.png` using `curl -o`.
+   6. Verify the file exists and is non-empty.
+   7. Confirm the MDX frontmatter `featuredImage.url` points to `/images/blog/[generated-slug]/hero.png` and matches the saved file.
+
+   If the OpenAI API call fails (e.g. 401 invalid key, rate limit), report the failure clearly to the user with the exact error message and the path where the image was supposed to land — do not silently leave the post without an image. The user should know to refresh the key before retrying.
+
 ## File Location
 
-Create the file at: `www/src/app/blog/[generated-slug]/page.mdx`
+Blog posts live at: `www/content/blog/[category]/[generated-slug].mdx`
 
-Or if blog directory doesn't exist, create: `www/src/content/blog/[generated-slug].mdx`
+Where `[category]` is one of: `tutorials`, `guides`, `comparisons`, `deep-dives`. Pick the one that matches the post (e.g. step-by-step → `tutorials`, conceptual how-to → `guides`, "X vs Y" → `comparisons`, architecture/internals → `deep-dives`).
+
+Hero image lives at: `www/public/images/blog/[generated-slug]/hero.png`
 
 ## Content Guidelines
 

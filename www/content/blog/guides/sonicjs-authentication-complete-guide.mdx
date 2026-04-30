@@ -1,0 +1,396 @@
+---
+title: "SonicJS Authentication: A Complete Guide"
+description: "Learn how to wire up password, OAuth, magic link, and OTP authentication in SonicJS with JWTs, role-based access control, and Cloudflare KV-cached sessions."
+keywords:
+  - "sonicjs authentication"
+  - "headless cms authentication"
+  - "cloudflare workers jwt auth"
+  - "edge cms oauth"
+  - "headless cms otp login"
+  - "magic link authentication"
+category: "guides"
+tags:
+  - "authentication"
+  - "security"
+  - "jwt"
+  - "oauth"
+  - "rbac"
+  - "cloudflare"
+publishedAt: "2026-04-30"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: true
+featuredImage:
+  url: "/images/blog/sonicjs-authentication-complete-guide/hero.png"
+  alt: "Edge authentication illustration showing JWT tokens flowing through Cloudflare Workers with login methods for password, OAuth, magic link, and OTP"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "SonicJS Authentication: A Complete Guide"
+  description: "Password, OAuth, magic link, and OTP auth in SonicJS — with JWTs, RBAC, and KV-cached sessions on Cloudflare Workers."
+---
+
+# SonicJS Authentication: A Complete Guide
+
+<TLDRBox>
+**TL;DR** — SonicJS ships with four authentication methods out of the box: email/password, OAuth (GitHub & Google), magic links, and OTP email codes. All issue stateless JWTs that are cached in Cloudflare KV for sub-millisecond verification at the edge, and protected routes use simple `requireAuth()` and `requireRole()` middleware.
+
+**Key Stats:**
+- 4 built-in auth methods: password, OAuth, magic link, OTP
+- 100,000 PBKDF2 iterations for password hashing (SHA-256)
+- 5-minute KV cache for token verification — verify in under 5ms
+- 30-day default JWT TTL with sliding 7-day refresh window
+- 3 built-in RBAC roles: `admin`, `editor`, `viewer`
+</TLDRBox>
+
+Authentication is the part of your CMS that most people forget about until something breaks — or until a security audit lands on the calendar. The good news: if you're building on **SonicJS**, the heavy lifting is already done. SonicJS gives you four production-ready login methods, hardened defaults, and a JWT model designed for the edge.
+
+This guide walks through every layer of SonicJS authentication: what's in the box, how to configure it, how to protect routes, and how to integrate it with your frontend. Code examples are real — they map directly to the methods exported from `@sonicjs-cms/core`.
+
+## Why Authentication at the Edge Is Different
+
+Traditional Node.js CMS platforms lean on server-side sessions: you store a session ID in a cookie, look up the user in Redis or Postgres on every request, and call it a day. That works fine on a single VPS. It falls apart at the edge.
+
+SonicJS runs on **Cloudflare Workers**, which means every request might land in a different data center. There's no shared in-memory session store. A round-trip to a central database to validate every request would erase the latency win that made you choose the edge in the first place.
+
+That's why SonicJS authentication is **stateless first** (JWT) with an **opportunistic edge cache** (Cloudflare KV) layered on top. You get global verification in milliseconds without giving up the ability to revoke sessions or audit them.
+
+## The Four Built-In Authentication Methods
+
+Out of the box, SonicJS supports:
+
+| Method | Best for | Requires |
+|---|---|---|
+| **Email + password** | Traditional logins, admin users | Just SonicJS |
+| **OAuth (GitHub, Google)** | SaaS apps, social login | OAuth app credentials |
+| **Magic link** | Low-friction onboarding, B2B | Email provider |
+| **OTP email code** | Mobile-first apps, marketplaces | Email provider |
+
+You can enable any combination in the same project. A typical SaaS deployment, for example, might use **OAuth + magic link** for end users and keep **password** for the admin team.
+
+### 1. Email and Password
+
+The classic flow. SonicJS hashes passwords with **PBKDF2 (100,000 iterations, SHA-256)**, normalizes emails to lowercase, and verifies against the `users` table.
+
+```typescript
+// POST /auth/login
+fetch('https://your-cms.example.com/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'jane@example.com',
+    password: 'correct-horse-battery-staple',
+  }),
+})
+```
+
+The response sets an HTTP-only `auth_token` cookie *and* returns the JWT in the body, so you can use either depending on whether you're on the same origin (cookie) or calling cross-origin from a mobile app (Bearer token).
+
+### 2. OAuth Social Login
+
+SonicJS includes first-party OAuth providers for **GitHub** and **Google**. Configuration lives in environment variables — no external auth service required.
+
+```toml
+# wrangler.toml
+[vars]
+GITHUB_CLIENT_ID = "Iv1.xxxxxxxx"
+GITHUB_CLIENT_SECRET = "ghp_xxxxxxxx"
+GOOGLE_CLIENT_ID = "xxxx.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "GOCSPX-xxxxxxxx"
+```
+
+The flow is the standard authorization-code dance:
+
+```
+GET  /auth/oauth/github                  →  redirect to GitHub
+GET  /auth/oauth/github/callback?code=…  →  exchanges code, issues JWT
+```
+
+When the callback fires, SonicJS looks up an existing user by email, links the OAuth account, or creates a new user record if registration is open. The user is logged in with the same JWT cookie used by every other auth method, so downstream middleware doesn't care how they signed in.
+
+For the full setup walkthrough — registering callback URLs, scopes, and provider-specific quirks — see the [OAuth plugin documentation](/plugins/oauth).
+
+### 3. Magic Link
+
+Magic links are the friendliest way to log in: no password, no code to copy. The user clicks an email link and they're in.
+
+```typescript
+// Step 1: request a link
+await fetch('/auth/magic-link/request', {
+  method: 'POST',
+  body: JSON.stringify({ email: 'jane@example.com' }),
+})
+
+// Step 2: user clicks the link, lands here, JWT is issued
+// GET /auth/accept-magic-link?token=eyJ...
+```
+
+The link is signed and expires after 15 minutes. SonicJS rate-limits requests per email to prevent abuse.
+
+### 4. OTP (One-Time Password) Email Codes
+
+OTP is the same idea as a magic link but with a 6-digit code instead — better for mobile apps where deep-linking is painful.
+
+```typescript
+// Request a code
+await fetch('/auth/otp/request', {
+  method: 'POST',
+  body: JSON.stringify({ email: 'jane@example.com' }),
+})
+
+// Verify it
+await fetch('/auth/otp/verify', {
+  method: 'POST',
+  body: JSON.stringify({ email: 'jane@example.com', code: '482917' }),
+})
+```
+
+Defaults are conservative: 6-digit code, 15-minute expiry, 3 verification attempts per code, and 5 codes per hour per email. As of v2.18.0 you can also customize the OTP email's logo, login URL, and button text from the admin UI — handy for white-labeled deployments.
+
+## How JWTs Work in SonicJS
+
+Every successful login — regardless of method — produces the same artifact: a signed JWT containing the user's `userId`, `email`, `role`, and `exp`. The token is signed with **HS256** using the `JWT_SECRET` environment variable.
+
+```typescript
+// What's inside a SonicJS JWT
+{
+  "userId": "usr_abc123",
+  "email": "jane@example.com",
+  "role": "editor",
+  "iat": 1735689600,
+  "exp": 1738281600
+}
+```
+
+By default, tokens live for **30 days** with a **7-day refresh grace window**. Both are tunable per environment:
+
+```toml
+# wrangler.toml
+[vars]
+JWT_SECRET = "use-a-256-bit-secret-here"
+JWT_EXPIRES_IN = "30d"
+JWT_REFRESH_GRACE_SECONDS = "604800"  # 7 days
+```
+
+### KV-Cached Verification
+
+JWTs are stateless, so you *could* verify them on every request with no external state. SonicJS goes one better: verified tokens are cached in **Cloudflare KV** for 5 minutes under the key `auth:{token_prefix}`. The result is sub-millisecond auth checks for hot tokens, with fallback to full cryptographic verification on cache miss.
+
+This pattern — stateless verification + edge cache — is what lets SonicJS handle a global audience without a central session store. For a deeper dive into the same trick applied to content reads, see our [caching strategy guide](/blog/sonicjs-caching-strategy).
+
+### Refresh Tokens
+
+Long-lived JWTs aren't the right answer for every app. SonicJS exposes a refresh endpoint that swaps an expired token (within the grace window) for a fresh one without re-prompting the user:
+
+```typescript
+// POST /auth/refresh — accepts an expired token within the 7-day grace window
+const res = await fetch('/auth/refresh', {
+  method: 'POST',
+  credentials: 'include',
+})
+const { token } = await res.json()
+```
+
+Pair this with a short `JWT_EXPIRES_IN` (e.g. `1h`) for an industry-best-practice short-lived access token model.
+
+## Protecting Routes with Middleware
+
+SonicJS exports three auth middleware helpers from `@sonicjs-cms/core`:
+
+```typescript
+import { requireAuth, requireRole, optionalAuth } from '@sonicjs-cms/core'
+```
+
+### `requireAuth()` — Block Unauthenticated Requests
+
+The workhorse. Reads the token from the `Authorization: Bearer ...` header *or* the `auth_token` cookie (header wins), verifies it, and sets `c.get('user')` for downstream handlers.
+
+```typescript
+import { Hono } from 'hono'
+import { requireAuth } from '@sonicjs-cms/core'
+
+const app = new Hono<{ Bindings: Env }>()
+
+app.get('/api/profile', requireAuth(), async (c) => {
+  const user = c.get('user') // { userId, email, role, exp, iat }
+  return c.json({
+    userId: user.userId,
+    email: user.email,
+    role: user.role,
+  })
+})
+```
+
+If the token is missing or invalid, browser requests are redirected to `/auth/login` and API requests get a `401 JSON` error.
+
+### `requireRole()` — Authorization Layer
+
+Stack on top of `requireAuth()` to gate by role:
+
+```typescript
+import { requireAuth, requireRole } from '@sonicjs-cms/core'
+
+app.delete('/api/users/:id',
+  requireAuth(),
+  requireRole('admin'),
+  async (c) => {
+    const targetId = c.req.param('id')
+    // Only admins reach this handler
+    return c.json({ deleted: targetId })
+  }
+)
+
+// Multiple roles allowed
+app.post('/api/posts',
+  requireAuth(),
+  requireRole(['admin', 'editor']),
+  async (c) => {
+    // Editors and admins can create posts
+  }
+)
+```
+
+### `optionalAuth()` — User Context Without a Hard Block
+
+Sometimes you want personalization for logged-in users *and* a working anonymous experience. `optionalAuth()` decodes the token if present but never blocks the request:
+
+```typescript
+app.get('/api/posts', optionalAuth(), async (c) => {
+  const user = c.get('user') // may be undefined
+  const posts = user
+    ? await getPostsForUser(user.userId)
+    : await getPublicPosts()
+  return c.json(posts)
+})
+```
+
+## Role-Based Access Control (RBAC)
+
+SonicJS ships with three core roles. The first user to register is automatically promoted to `admin`; subsequent registrations default to `viewer`.
+
+| Role | Collections | Content | Users | Settings |
+|---|---|---|---|---|
+| **admin** | Full CRUD | Create / publish | Invite, demote, delete | Full access |
+| **editor** | Read | Create / publish | — | — |
+| **viewer** | Read | Read only | — | — |
+
+Roles are stored on the `users` row and embedded in the JWT, so the role check happens at the edge with zero database lookups. If you need finer-grained per-collection access, you can layer custom checks inside your route handlers or write a plugin that extends the role list — the [roadmap](/roadmap) tracks built-in fine-grained ACLs as an upcoming feature.
+
+## Frontend Integration
+
+### Same-Origin (Cookies)
+
+If your frontend runs on the same origin as your CMS, do nothing — the HTTP-only `auth_token` cookie is set automatically on login and sent on every fetch with `credentials: 'include'`.
+
+```typescript
+// Same-origin React/Vue/Astro app
+const res = await fetch('/api/profile', { credentials: 'include' })
+```
+
+### Cross-Origin (Bearer Token)
+
+For mobile apps or a separately-deployed SPA, use the JWT returned in the login response and send it as a Bearer token:
+
+```typescript
+const { token } = await fetch('https://cms.example.com/auth/login', {
+  method: 'POST',
+  body: JSON.stringify({ email, password }),
+}).then((r) => r.json())
+
+// Store in secure storage (e.g. iOS Keychain, expo-secure-store)
+// Then attach to every API request:
+await fetch('https://cms.example.com/api/profile', {
+  headers: { Authorization: `Bearer ${token}` },
+})
+```
+
+### Reading the Current User
+
+Whenever you need to render "logged in as Jane," call `/auth/me`:
+
+```typescript
+// Built-in endpoint, requires auth
+const me = await fetch('/auth/me', { credentials: 'include' }).then((r) => r.json())
+// { user: { id, email, role, name, ... } }
+```
+
+This is also the right place to handle "session expired" UX: if the request returns 401, redirect to login.
+
+## A Production Hardening Checklist
+
+The defaults are sane, but before going live, double-check:
+
+- **Strong `JWT_SECRET`** — at least 256 bits, generated with `openssl rand -base64 32`. Rotate via Cloudflare Worker secrets, never check into git.
+- **`ENVIRONMENT=production`** — flips the `Secure` flag on cookies (HTTPS only) and tightens defaults.
+- **`CORS_ORIGINS`** — set to an explicit allowlist; never `*` if you're using cookie-based auth.
+- **CSRF protection** — SonicJS exports `csrfProtection()` and `generateCsrfToken()` middleware. Apply them to state-changing routes that rely on cookie auth.
+- **Rate limiting** — apply the built-in `rateLimit()` middleware to login, OTP request, and password reset endpoints.
+- **Short access tokens for high-risk apps** — drop `JWT_EXPIRES_IN` to `1h` and rely on the refresh endpoint.
+- **Log auth events** — enable the security-audit plugin to track failed logins, brute-force attempts, and role changes.
+
+The full default-on protections (PBKDF2 iterations, SameSite=Strict, HTTP-only cookies, password complexity rules) are documented in the [security overview](/security).
+
+## Configuring Auth End-to-End
+
+Putting it all together, here's a minimal SonicJS project with all four auth methods enabled:
+
+```typescript
+// src/index.ts
+import { Hono } from 'hono'
+import { createSonicJS } from '@sonicjs-cms/core'
+import {
+  authPlugin,
+  oauthPlugin,
+  magicLinkPlugin,
+  otpLoginPlugin,
+} from '@sonicjs-cms/core/plugins'
+import { postsCollection } from './collections/posts'
+
+const app = new Hono<{ Bindings: Env }>()
+
+const cms = createSonicJS({
+  collections: [postsCollection],
+  plugins: [
+    authPlugin(),
+    oauthPlugin({ providers: ['github', 'google'] }),
+    magicLinkPlugin(),
+    otpLoginPlugin({
+      codeLength: 6,
+      codeExpiryMinutes: 15,
+      maxAttempts: 3,
+      rateLimitPerHour: 5,
+      allowNewUserRegistration: true,
+    }),
+  ],
+})
+
+app.route('/', cms.app)
+export default app
+```
+
+Each plugin only activates the routes it owns, so you pay zero cost for methods you don't enable.
+
+## Next Steps
+
+You now have a complete picture of SonicJS authentication: four login methods, JWTs cached at the edge, simple RBAC middleware, and a refresh model that scales globally. Where to go from here:
+
+- **[Authentication reference](/authentication)** — deep dive on every auth endpoint, request/response shape, and config option
+- **[Security overview](/security)** — defaults, CSRF, CORS, password hashing, rate limiting
+- **[OAuth plugin docs](/plugins/oauth)** — provider-specific setup for GitHub and Google
+- **[Caching strategy](/blog/sonicjs-caching-strategy)** — how SonicJS uses KV at the edge for both content and auth
+- **[Why edge-first CMS is the future](/blog/why-edge-first-cms-is-the-future)** — the architectural ideas that drove these auth decisions
+
+## Key Takeaways
+
+- SonicJS supports **password, OAuth, magic link, and OTP** authentication out of the box — mix and match per project.
+- All methods produce the same **stateless JWT**, signed with HS256 and cached in Cloudflare KV for fast edge verification.
+- **`requireAuth()`**, **`requireRole()`**, and **`optionalAuth()`** middleware cover the full permission spectrum in three lines of code.
+- **PBKDF2 100k iterations**, **HTTP-only SameSite cookies**, and **per-email rate limits** are on by default.
+- The refresh endpoint enables short-lived access tokens without re-prompting users.
+
+Have questions or want to share what you're building? Join us on [Discord](https://discord.gg/sonicjs) or [GitHub](https://github.com/lane711/sonicjs).
+
+Happy authenticating!

@@ -1,0 +1,575 @@
+---
+title: "Deploying SonicJS to Cloudflare Workers: A Step-by-Step Guide"
+description: "Ship a SonicJS headless CMS to Cloudflare Workers in minutes — wrangler config, D1, KV, R2, secrets, custom domains, preview deploys, and rollback in one guide."
+keywords:
+  - "deploy sonicjs cloudflare workers"
+  - "cloudflare workers cms deploy"
+  - "wrangler deploy headless cms"
+  - "cloudflare d1 deployment"
+  - "edge cms deployment"
+category: "tutorials"
+tags:
+  - "deployment"
+  - "cloudflare"
+  - "wrangler"
+  - "d1"
+  - "r2"
+  - "kv"
+  - "tutorial"
+publishedAt: "2026-05-06"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/deploy-sonicjs-to-cloudflare-workers/hero.png"
+  alt: "Isometric edge deployment illustration showing a glowing rocket platform launching code packets across a global network of Cloudflare data center nodes"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "Deploying SonicJS to Cloudflare Workers: A Step-by-Step Guide"
+  description: "From wrangler.toml to custom domain — a practical, command-by-command guide to shipping a SonicJS headless CMS on Cloudflare Workers."
+---
+
+# Deploying SonicJS to Cloudflare Workers: A Step-by-Step Guide
+
+<TLDRBox>
+**TL;DR** — SonicJS is built for Cloudflare Workers, so deployment is essentially three commands: create the D1, KV, and R2 bindings, drop the IDs into `wrangler.toml`, and run `npm run deploy`. The rest of this guide is the production polish — secrets, environments, preview URLs, custom domains, and rollback.
+
+**Key Stats:**
+- 300+ Cloudflare edge locations serve your CMS globally on day one
+- 0 ms cold start — Workers are warm everywhere, all the time
+- 1 command to deploy: `npm run deploy` (which runs `wrangler deploy`)
+- 100,000 free Worker requests / day on the free tier; 5 GB free D1 storage
+- Sub-50 ms response times for content reads worldwide
+</TLDRBox>
+
+You can build the most beautiful CMS in the world, but if shipping it requires a 40-step runbook, your team will dread every release. SonicJS was designed in the opposite direction: the deploy story is short, predictable, and almost entirely declarative. This guide walks through the whole thing — from a fresh project to a production deployment on a custom domain — using only the commands SonicJS actually ships with.
+
+By the end, you'll have:
+
+- A `wrangler.toml` wired up to D1, KV, and R2
+- Secrets managed with `wrangler secret`
+- Preview and production environments
+- A custom domain with automatic SSL
+- A working rollback procedure
+
+If you haven't created a project yet, start with the [Getting Started guide](/blog/getting-started-with-sonicjs) and meet back here when `npm run dev` is humming on `localhost:8787`.
+
+## Why Deploy SonicJS to Cloudflare Workers?
+
+Most CMS deployments end with "now provision a server, set up Nginx, configure systemd, and add a CDN in front of it." SonicJS skips all of that because it's built for the edge from the ground up.
+
+When you `wrangler deploy`, your code is pushed to **300+ Cloudflare data centers** simultaneously. There is no origin server. There is no autoscaling group. The Worker runtime is always warm — V8 isolates spin up in microseconds, so cold starts effectively don't exist.
+
+The data layer is just as boring (in the best way):
+
+- **D1** — SQLite at the edge, replicated globally, sub-millisecond reads on hot rows
+- **KV** — eventually-consistent key-value for cached content and JWT verification
+- **R2** — S3-compatible object storage with **zero egress fees**, perfect for media
+
+You bind these services in one `wrangler.toml` file. SonicJS reads them from `env` at runtime. No ORM connection strings, no S3 credentials in environment variables, no firewall rules. The platform handles the wiring.
+
+For the architectural backstory, see [why edge-first CMS is the future](/blog/why-edge-first-cms-is-the-future).
+
+## Prerequisites
+
+Before you deploy, make sure you have:
+
+- **Node.js 20+** and npm
+- **Wrangler CLI** v4 or later (`npm install -g wrangler`)
+- A **Cloudflare account** — the free tier is enough to ship; D1, KV, and R2 all have generous free allowances
+- A working SonicJS project (`npm create sonicjs-app my-cms`)
+
+```bash
+# Verify the prerequisites
+node --version          # v20+
+wrangler --version      # 4.52.x or later
+wrangler login          # opens a browser, saves credentials locally
+wrangler whoami         # confirms which account you're targeting
+```
+
+If `wrangler whoami` shows the wrong account (you have multiple), set the account explicitly in `wrangler.toml`:
+
+```toml
+account_id = "your-cloudflare-account-id"
+```
+
+## Step 1: Anatomy of a SonicJS `wrangler.toml`
+
+The starter template ships with a `wrangler.toml` that's already pointed at the right migrations directory. Here's what you'll work with:
+
+```toml
+name = "my-sonicjs-app"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare Workers settings
+workers_dev = true
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "my-sonicjs-db"
+database_id = "YOUR_DATABASE_ID"   # filled in next step
+migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
+
+# R2 Bucket for media storage
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "my-sonicjs-media"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "development"
+CORS_ORIGINS = "http://localhost:8787"
+
+# Production environment
+[env.production]
+name = "my-sonicjs-app-production"
+vars = { ENVIRONMENT = "production" }
+
+# Observability
+[observability]
+enabled = true
+```
+
+Three things to notice:
+
+1. **`compatibility_flags = ["nodejs_compat"]`** — required so SonicJS can use Node-style crypto and buffer APIs.
+2. **`migrations_dir`** points into `node_modules` — SonicJS ships its core schema migrations with the package, so you get fresh schema on every `npm install`.
+3. **`[observability]`** — enables Cloudflare's built-in request logs and metrics. Leave it on; it's free.
+
+## Step 2: Create the D1 Database
+
+D1 is SonicJS's primary data store. Create the production database with one command:
+
+```bash
+wrangler d1 create my-sonicjs-db
+```
+
+The CLI prints the binding stanza — copy the `database_id` into your `wrangler.toml`:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "my-sonicjs-db"
+database_id = "583c089c-1a4a-477d-9d58-06c07bf7c1d7"
+migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
+```
+
+Now apply the SonicJS schema. The starter project ships with these npm scripts:
+
+```bash
+# Apply migrations to the local SQLite copy (used by `wrangler dev`)
+npm run db:migrate:local
+
+# Apply migrations to the remote D1 database
+npm run db:migrate
+```
+
+Under the hood these run `wrangler d1 migrations apply DB` with and without `--local`. After the remote apply, sanity-check the tables exist:
+
+```bash
+wrangler d1 execute my-sonicjs-db \
+  --command="SELECT name FROM sqlite_master WHERE type='table';"
+```
+
+You should see `users`, `collections`, `content`, `content_versions`, `media`, `api_tokens`, and the plugin tables. For a deeper look at the schema and how Drizzle generates migrations, read the [database documentation](/database).
+
+## Step 3: Create the KV Namespace
+
+KV holds SonicJS's edge cache — API responses, collection metadata, and verified JWTs. Create the namespace:
+
+```bash
+wrangler kv namespace create CACHE_KV
+```
+
+Wrangler returns an `id`. Add it to `wrangler.toml`:
+
+```toml
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "a16f8246fc294d809c90b0fb2df6d363"
+```
+
+If you want a separate preview namespace for `wrangler dev` (recommended so dev traffic doesn't pollute production cache), create one with `--preview` and add the `preview_id`:
+
+```bash
+wrangler kv namespace create CACHE_KV --preview
+```
+
+The cache plugin uses keys like `cache:api:collections:all` and `cache:api:content-list:limit:50`. You can list them later with `wrangler kv key list --binding CACHE_KV`. For caching internals, see the [caching strategy guide](/caching).
+
+## Step 4: Create the R2 Bucket
+
+R2 stores uploaded media — images, PDFs, video. Cloudflare charges for storage but **never for egress**, so it's a great fit for a public-facing CMS.
+
+```bash
+wrangler r2 bucket create my-sonicjs-media
+```
+
+The starter `wrangler.toml` already has the binding:
+
+```toml
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "my-sonicjs-media"
+```
+
+Verify the bucket exists:
+
+```bash
+wrangler r2 bucket list
+```
+
+If you want media URLs to look like `https://media.yourdomain.com/uploads/...` instead of the raw R2 URL, attach a custom domain from the Cloudflare dashboard: **R2 → your-bucket → Settings → Connect Domain**. Cloudflare creates the DNS records automatically.
+
+## Step 5: Manage Secrets the Right Way
+
+There are two kinds of configuration in Cloudflare Workers:
+
+1. **Public variables** — go in `[vars]` in `wrangler.toml`, are visible to anyone with read access to the repo.
+2. **Secrets** — encrypted at rest, only readable by your Worker at runtime.
+
+Anything sensitive — JWT signing keys, OAuth client secrets, email API keys — must be a secret. Use `wrangler secret put`:
+
+```bash
+# JWT signing key (generate a strong one)
+openssl rand -base64 32 | wrangler secret put JWT_SECRET
+
+# OAuth credentials (if using the OAuth plugin)
+echo "Iv1.xxxxxxxx" | wrangler secret put GITHUB_CLIENT_ID
+echo "ghp_xxxxxxxx" | wrangler secret put GITHUB_CLIENT_SECRET
+
+# Email provider for magic link / OTP
+echo "your-resend-api-key" | wrangler secret put RESEND_API_KEY
+```
+
+List existing secrets (names only — values are never displayed):
+
+```bash
+wrangler secret list
+```
+
+For environment-specific secrets, append `--env production`:
+
+```bash
+echo "$(openssl rand -base64 32)" | wrangler secret put JWT_SECRET --env production
+```
+
+If you're using the OAuth, magic link, or OTP plugins, the [authentication guide](/authentication) walks through every secret each plugin expects.
+
+## Step 6: Public Variables and Environments
+
+The non-secret config — environment label, CORS allowlist, feature flags — lives in `wrangler.toml`. The starter splits dev and production cleanly:
+
+```toml
+# Default (local dev) vars
+[vars]
+ENVIRONMENT = "development"
+CORS_ORIGINS = "http://localhost:8787"
+
+# Production environment
+[env.production]
+name = "my-sonicjs-app-production"
+vars = { ENVIRONMENT = "production", CORS_ORIGINS = "https://yourdomain.com" }
+```
+
+To deploy against `[env.production]`, pass `--env production`:
+
+```bash
+wrangler deploy --env production
+```
+
+`ENVIRONMENT=production` does real work in SonicJS:
+
+- Cookies are flagged `Secure` (HTTPS only)
+- Verbose error stack traces are stripped from API responses
+- Stricter rate-limit defaults are applied
+
+Always set `CORS_ORIGINS` to an explicit allowlist in production. Never `*` if you rely on cookie-based auth — the [security overview](/security) explains why.
+
+## Step 7: Your First Deploy
+
+With bindings and secrets in place, you're ready to ship:
+
+```bash
+npm run deploy
+```
+
+That runs `wrangler deploy` in the background. The output looks like this:
+
+```
+✨  Compiled Worker successfully
+Total Upload: 1450.2 KiB / gzip: 312.6 KiB
+Uploaded my-sonicjs-app (3.21 sec)
+Deployed my-sonicjs-app triggers (0.85 sec)
+  https://my-sonicjs-app.your-subdomain.workers.dev
+Current Version ID: 7c9d4b2e-1234-5678-90ab-cdef12345678
+```
+
+Open the URL. You should see the SonicJS admin login. Hit the health endpoint to confirm everything is wired up:
+
+```bash
+curl https://my-sonicjs-app.your-subdomain.workers.dev/api/health
+# { "status": "healthy", "schemas": ["users", "collections", "content", ...] }
+```
+
+If the health check returns `unhealthy`, the most common cause is missing migrations on the remote D1. Run `npm run db:migrate` again and retry.
+
+## Step 8: Preview Deployments
+
+You don't want to deploy untested changes straight to your main URL. Cloudflare's preview deployment model is dead simple — every named environment gets its own URL.
+
+Add a preview environment to `wrangler.toml`:
+
+```toml
+[env.preview]
+name = "my-sonicjs-app-preview"
+vars = { ENVIRONMENT = "preview", CORS_ORIGINS = "https://preview.yourdomain.com" }
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "my-sonicjs-db-preview"
+database_id = "preview-database-id"
+
+[[env.preview.kv_namespaces]]
+binding = "CACHE_KV"
+id = "preview-kv-namespace-id"
+
+[[env.preview.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "my-sonicjs-media-preview"
+```
+
+Create the preview-flavored bindings (separate D1, separate KV, separate R2 — never share data with production):
+
+```bash
+wrangler d1 create my-sonicjs-db-preview
+wrangler kv namespace create CACHE_KV --env preview
+wrangler r2 bucket create my-sonicjs-media-preview
+```
+
+Then deploy:
+
+```bash
+wrangler deploy --env preview
+```
+
+Preview is now reachable at `https://my-sonicjs-app-preview.your-subdomain.workers.dev`. Promote to production when you're satisfied:
+
+```bash
+wrangler deploy --env production
+```
+
+## Step 9: Connect a Custom Domain
+
+The `workers.dev` URL is fine for testing, but production wants a real domain. There are two ways to wire one up:
+
+### Option A: Workers Custom Domain (recommended)
+
+The simplest path. From the dashboard:
+
+1. **Workers & Pages → my-sonicjs-app-production → Triggers**
+2. **Add Custom Domain → `cms.yourdomain.com`**
+
+Cloudflare creates the DNS record, provisions an SSL cert, and routes traffic. Done.
+
+### Option B: Routes via `wrangler.toml`
+
+If you want to declare routes in code (great for IaC workflows), use the `routes` array:
+
+```toml
+[env.production]
+name = "my-sonicjs-app-production"
+routes = [
+  { pattern = "cms.yourdomain.com/*", zone_name = "yourdomain.com" }
+]
+```
+
+Then `wrangler deploy --env production` will register the route. Either way, SSL is automatic — Cloudflare's edge certificates auto-renew with no action from you.
+
+Verify HTTPS is live:
+
+```bash
+curl -I https://cms.yourdomain.com/api/health
+```
+
+## Step 10: Monitoring and Observability
+
+Once you're live, you want eyes on the system. SonicJS deployments inherit two free monitoring layers:
+
+### Real-Time Logs
+
+Stream live request logs straight to your terminal:
+
+```bash
+wrangler tail --env production
+
+# Filter to errors only
+wrangler tail --env production --status error
+
+# Filter to a single endpoint by sampling
+wrangler tail --env production --sampling-rate 0.1
+```
+
+This is invaluable during a deploy — keep `tail` open in a second window so you spot regressions immediately.
+
+### Cloudflare Analytics
+
+Because you set `[observability] enabled = true` in `wrangler.toml`, every request is graphed:
+
+- **Workers & Pages → my-sonicjs-app-production → Analytics**
+- Watch P50, P95, P99 latencies, error rate, CPU time, request volume
+
+If you want long-term retention, hook up Logpush (S3, R2, Datadog, etc.) or drop Sentry into your Worker. Both options are documented in the deployment runbook.
+
+## Step 11: Rollback in 30 Seconds
+
+The worst deploy is the one you can't reverse. Wrangler ships with a one-command rollback:
+
+```bash
+# See what's deployed
+wrangler deployments list --env production
+
+# Roll back to the previous version
+wrangler rollback --env production
+
+# Roll back to a specific deployment ID
+wrangler rollback --env production --deployment-id abc123def456
+```
+
+Your Worker reverts to the prior version in seconds — no rebuild, no redeploy. Note that rollback only reverts **code**, not the database. If your bad deploy ran a migration, you'll need to manually reverse it (D1 doesn't support automatic down migrations).
+
+The safest pattern: take a backup before every production deploy.
+
+```bash
+wrangler d1 export my-sonicjs-db \
+  --output "backup-$(date +%Y%m%d-%H%M%S).sql"
+```
+
+Stash it in R2 or S3 and you have a panic button.
+
+## A Production Hardening Checklist
+
+Before you tell the world, run through this list:
+
+- [ ] **`ENVIRONMENT=production`** is set in `[env.production].vars`
+- [ ] **`CORS_ORIGINS`** is an explicit allowlist (no `*`)
+- [ ] **`JWT_SECRET`** is a 256-bit value, set via `wrangler secret put`, unique per env
+- [ ] All migrations applied: `wrangler d1 migrations list DB --env production`
+- [ ] Initial admin user seeded (or first registration completed)
+- [ ] Custom domain attached, SSL active, HTTPS enforced
+- [ ] Health check returns `healthy`: `curl https://cms.yourdomain.com/api/health`
+- [ ] `wrangler tail` clean for at least 5 minutes after deploy
+- [ ] D1 backup exported and stored off-platform
+- [ ] Rate limiting and CSRF middleware applied to state-changing routes (see [security](/security))
+
+Hit all ten and you're production-ready.
+
+## Troubleshooting Common Issues
+
+**`D1_ERROR: no such table: users`** — Migrations haven't run on the remote DB. Run `npm run db:migrate` (which is `wrangler d1 migrations apply DB`).
+
+**`JWT_SECRET is not defined`** — Secret missing in this environment. Confirm with `wrangler secret list --env production`, then `echo "..." | wrangler secret put JWT_SECRET --env production`.
+
+**`R2 bucket 'my-sonicjs-media' not found`** — Bucket binding mismatch. Run `wrangler r2 bucket list` and verify the name in `wrangler.toml` matches.
+
+**`KV namespace binding 'CACHE_KV' not found`** — Same problem as R2. List with `wrangler kv namespace list` and double-check the `id`.
+
+**Worker exceeds the 10 MB free-tier size limit** — Check your bundle: `wrangler deploy --dry-run --outdir dist`. Most often it's a forgotten dev dependency. Move it to `devDependencies` and re-deploy.
+
+**`Cannot find package '@sonicjs-cms/core'`** — Either you skipped `npm install` or your `main` path in `wrangler.toml` is wrong. The starter expects `main = "src/index.ts"`.
+
+For more deployment-specific issues, the [configuration guide](/configuration) documents every env var SonicJS reads.
+
+## Putting It All Together
+
+For reference, here's the production-ready `wrangler.toml` you should end up with:
+
+```toml
+name = "my-sonicjs-app"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "my-sonicjs-db"
+database_id = "your-d1-id"
+migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "my-sonicjs-media"
+
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "your-kv-id"
+
+[vars]
+ENVIRONMENT = "development"
+CORS_ORIGINS = "http://localhost:8787"
+
+[observability]
+enabled = true
+
+# ─── Production ───────────────────────────────
+[env.production]
+name = "my-sonicjs-app-production"
+routes = [
+  { pattern = "cms.yourdomain.com/*", zone_name = "yourdomain.com" }
+]
+vars = { ENVIRONMENT = "production", CORS_ORIGINS = "https://yourdomain.com" }
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "my-sonicjs-db"
+database_id = "your-d1-id"
+migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "my-sonicjs-media"
+
+[[env.production.kv_namespaces]]
+binding = "CACHE_KV"
+id = "your-kv-id"
+```
+
+And the deploy command stays exactly what it was on day one:
+
+```bash
+npm run deploy            # to default env
+wrangler deploy --env production  # to production
+```
+
+That's the entire deploy story.
+
+## Next Steps
+
+You've shipped a SonicJS CMS to the edge. Where to go from here:
+
+- **[Database guide](/database)** — schema design, migrations, and Drizzle ORM patterns
+- **[Caching strategy](/caching)** — the three-layer cache that keeps SonicJS fast at scale
+- **[Authentication](/authentication)** — wire up password, OAuth, magic link, and OTP login
+- **[Security overview](/security)** — production CORS, CSRF, rate limiting, password hashing
+- **[Configuration reference](/configuration)** — every env var, binding, and plugin option
+
+## Key Takeaways
+
+- **One config file** drives everything: `wrangler.toml` declares D1, KV, R2, env vars, and routes.
+- **One command** ships to global edge: `npm run deploy` or `wrangler deploy --env production`.
+- **Secrets stay encrypted** via `wrangler secret put` — never in the repo, never in `[vars]`.
+- **Preview environments** are first-class — separate bindings, separate URL, same code.
+- **Rollback is one command** (`wrangler rollback`), so deploying with confidence costs nothing.
+- **Cloudflare's free tier** covers most early-stage projects — 100k requests/day, 5 GB D1, free R2 egress.
+
+Have questions, or shipped something cool with SonicJS? Join us on [Discord](https://discord.gg/sonicjs) or [GitHub](https://github.com/lane711/sonicjs) — we'd love to hear about it.
+
+Happy shipping!

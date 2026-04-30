@@ -1,0 +1,394 @@
+---
+title: "File Uploads with SonicJS and Cloudflare R2"
+description: "Upload, validate, and serve images, video, and documents with SonicJS and Cloudflare R2 — multipart uploads, MIME checks, signed URLs, and image transforms."
+keywords:
+  - "sonicjs file uploads"
+  - "cloudflare r2 cms"
+  - "headless cms media uploads"
+  - "edge file storage"
+  - "r2 file uploads typescript"
+category: "tutorials"
+tags:
+  - "media"
+  - "file-uploads"
+  - "cloudflare"
+  - "r2"
+  - "storage"
+  - "tutorial"
+publishedAt: "2026-05-13"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/sonicjs-file-uploads-with-r2/hero.png"
+  alt: "Isometric illustration of files flowing from a client device into Cloudflare R2 storage cylinders over glowing blue trajectories"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "File Uploads with SonicJS and Cloudflare R2"
+  description: "End-to-end media uploads in SonicJS — R2 buckets, multipart forms, MIME validation, and image transforms at the edge."
+---
+
+# File Uploads with SonicJS and Cloudflare R2
+
+<TLDRBox>
+**TL;DR** — SonicJS ships with a complete media pipeline backed by Cloudflare R2. Define a `media` field on any collection, post a `multipart/form-data` request to `/api/media/upload`, and SonicJS validates the file, stores it in your R2 bucket, extracts image dimensions, and writes a row to the `media` table — all from a single Worker.
+
+**Key Stats:**
+- **50 MB** maximum upload size per file (default validation cap)
+- **20+ MIME types** allowed out of the box: JPEG, PNG, GIF, WebP, SVG, PDF, DOCX, MP4, WebM, MP3, WAV, and more
+- **$0 egress** when serving R2 assets through a Cloudflare custom domain
+- **1-year `Cache-Control`** automatically applied to public file responses
+- **Soft-delete** by default — files are tombstoned in D1 before being purged from R2
+</TLDRBox>
+
+Every CMS needs to handle files. Avatars, hero images, video clips, downloadable PDFs, podcast episodes — the moment your editors start using your platform, they expect upload to "just work." On most stacks, that's a multi-week project: provision S3, wire IAM, glue in a presigning service, write your own resizer, hope the egress bill stays sane.
+
+On **SonicJS**, it's already built. This tutorial walks through the full media pipeline: configuring the R2 binding, posting your first upload, validating MIME types, serving public URLs, plugging in image transforms, and deleting cleanly. Every snippet maps to real code in `@sonicjs-cms/core`.
+
+## Why R2 for a Headless CMS
+
+Cloudflare R2 is an S3-compatible object store — but with two characteristics that matter for an [edge-first CMS](/blog/why-edge-first-cms-is-the-future):
+
+1. **Zero egress fees.** Serving 1 TB of images from S3 costs about $90/month in bandwidth. From R2, it's $0. For a content-heavy site, that single line on the invoice is the entire ROI of moving to the edge.
+2. **Native Workers binding.** Your Worker doesn't reach for an HTTP SDK and AWS-style signing. It calls `c.env.MEDIA_BUCKET.put(...)` directly. No DNS, no auth round-trip, no marshalling — same datacenter, microsecond reads and writes.
+
+That's why SonicJS commits to R2 as the default storage layer. You can swap in any S3-compatible provider with a custom plugin, but the happy path is R2 and it stays that way.
+
+## Step 1: Configure the R2 Binding
+
+The starter template already includes a bucket; you just need to create it and link the ID. Open `wrangler.toml` and confirm the binding looks like this:
+
+```toml
+# wrangler.toml
+name = "my-cms"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "my-cms-db"
+database_id = "your-d1-id"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "my-cms-media"
+
+[vars]
+ENVIRONMENT = "development"
+BUCKET_NAME = "my-cms-media"
+# Optional — enables Cloudflare Images thumbnails
+# IMAGES_ACCOUNT_ID = "your-account-hash"
+```
+
+The binding name **must** be `MEDIA_BUCKET`. SonicJS reads `c.env.MEDIA_BUCKET` directly in its upload handler, so anything else won't pick up your bucket. The `BUCKET_NAME` env var is used to build the default `pub-{bucket}.r2.dev` URL — set it to the same value as `bucket_name`.
+
+Create the bucket with Wrangler:
+
+```bash
+# Create the R2 bucket
+wrangler r2 bucket create my-cms-media
+
+# (Optional) enable the public r2.dev URL for development
+wrangler r2 bucket dev-url enable my-cms-media
+```
+
+That's the entire infrastructure setup. The `media` table is part of the core SonicJS schema, so once you run `npm run db:migrate:local`, you have a place to record every uploaded file.
+
+## Step 2: Add a Media Field to a Collection
+
+SonicJS treats media references as a first-class [field type](/field-types). You don't store files inside your collection rows — you store a reference and let the media library own the bytes.
+
+```typescript
+// src/collections/posts.ts
+import { defineCollection } from '@sonicjs-cms/core'
+
+export const postsCollection = defineCollection({
+  name: 'posts',
+  slug: 'posts',
+  fields: {
+    title: { type: 'string', required: true, maxLength: 200 },
+    slug: { type: 'string', required: true, unique: true },
+    body: { type: 'richtext' },
+
+    // Single hero image
+    heroImage: {
+      type: 'media',
+      title: 'Hero image',
+      helpText: 'Recommended: 1792 × 1024 PNG or JPEG',
+    },
+
+    // A gallery of additional shots
+    gallery: {
+      type: 'array',
+      items: { type: 'media' },
+    },
+  },
+})
+```
+
+The `media` field stores the media record's ID. When you query a post via the [content API](/api), SonicJS resolves that ID into the full asset object — including `publicUrl`, `mimeType`, dimensions, and alt text — so frontends don't need to make a second round trip.
+
+## Step 3: Upload a File
+
+Uploads are done through `POST /api/media/upload` with a standard `multipart/form-data` body. The endpoint requires authentication (see the [authentication guide](/authentication) for how to issue tokens).
+
+### From the Command Line
+
+```bash
+curl -X POST https://my-cms.example.com/api/media/upload \
+  -H "Authorization: Bearer $SONIC_TOKEN" \
+  -F "file=@./hero.png" \
+  -F "folder=blog-heroes"
+```
+
+The response includes everything you need to render the asset right away:
+
+```json
+{
+  "success": true,
+  "file": {
+    "id": "9f2c1b7d8e3a4f5b6c7d",
+    "filename": "9f2c1b7d8e3a4f5b6c7d.png",
+    "originalName": "hero.png",
+    "mimeType": "image/png",
+    "size": 412879,
+    "width": 1792,
+    "height": 1024,
+    "r2_key": "blog-heroes/9f2c1b7d8e3a4f5b6c7d.png",
+    "publicUrl": "https://pub-my-cms-media.r2.dev/blog-heroes/9f2c1b7d8e3a4f5b6c7d.png",
+    "thumbnailUrl": null,
+    "uploadedAt": "2026-05-13T18:42:09.000Z"
+  }
+}
+```
+
+A few things SonicJS does for you on the server, all visible in `packages/core/src/routes/api-media.ts`:
+
+- Generates a **21-character ID** to use as the filename (so original names never collide).
+- Validates the MIME type against an explicit allowlist (no relying on user-supplied extensions).
+- Calls `c.env.MEDIA_BUCKET.put()` with `httpMetadata.contentType` set so the file serves with the correct MIME on download.
+- Stamps `customMetadata` with the uploader's `userId` and an ISO timestamp — useful for audit trails.
+- Sniffs JPEG/PNG headers to pull width/height with no third-party dependency.
+- Inserts a row into the `media` D1 table.
+
+### From a Browser with `fetch`
+
+The same shape works straight from a frontend form:
+
+```typescript
+async function uploadFile(file: File, folder = 'uploads') {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('folder', folder)
+
+  const res = await fetch('/api/media/upload', {
+    method: 'POST',
+    credentials: 'include', // sends the auth_token cookie
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error ?? 'Upload failed')
+  }
+
+  return res.json()
+}
+
+// Wire it up to an <input type="file">
+document.querySelector<HTMLInputElement>('#file')!
+  .addEventListener('change', async (e) => {
+    const input = e.target as HTMLInputElement
+    if (!input.files?.[0]) return
+    const result = await uploadFile(input.files[0], 'avatars')
+    console.log('Uploaded:', result.file.publicUrl)
+  })
+```
+
+If you need to upload several files at once, swap the endpoint for `/api/media/upload-multiple` and append every file to the same `files` field. The response splits successes from failures so a single bad file doesn't fail the whole batch.
+
+## Step 4: Validation — MIME Types and Size Limits
+
+The validation rules live in a single Zod schema in `api-media.ts`. They cover three things:
+
+```typescript
+// What the upload endpoint enforces
+const fileValidationSchema = z.object({
+  name: z.string().min(1).max(255),
+  type: z.string().refine((type) => allowedTypes.includes(type), {
+    message: 'Unsupported file type',
+  }),
+  size: z.number().min(1).max(50 * 1024 * 1024), // 50 MB
+})
+```
+
+The default allowlist:
+
+| Category | MIME types |
+|---|---|
+| **Images** | `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/svg+xml` |
+| **Documents** | `application/pdf`, `text/plain`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+| **Video** | `video/mp4`, `video/webm`, `video/ogg`, `video/avi`, `video/mov` |
+| **Audio** | `audio/mp3`, `audio/wav`, `audio/ogg`, `audio/m4a` |
+
+Two important details:
+
+1. **The MIME type comes from the browser**, which means the user can lie about it. SonicJS treats the MIME check as a first line of defense, not the last — never rely on it for security-critical decisions. For untrusted uploads, layer a server-side magic-byte sniffer or virus scanner via a [plugin](/plugins).
+2. **The 50 MB cap is the validator's number**, but the practical limit on Cloudflare Workers is the request body size — currently **100 MB** for paid plans and **10 MB** on the free plan. If you need bigger uploads, use a presigned R2 URL flow and bypass the Worker entirely.
+
+## Step 5: Serving Files
+
+Once a file is in R2, SonicJS gives you three ways to serve it.
+
+### A. The Default `pub-*.r2.dev` URL
+
+The simplest option — the `publicUrl` you already got back from the upload response:
+
+```
+https://pub-my-cms-media.r2.dev/blog-heroes/9f2c1b7d8e3a4f5b6c7d.png
+```
+
+This works the moment you enable the dev URL on the bucket. It's perfect for development. For production, you almost certainly want option B or C.
+
+### B. A Custom Domain
+
+In the Cloudflare dashboard, attach a custom domain (e.g. `cdn.example.com`) to your R2 bucket. After DNS propagates, every R2 object is reachable at `https://cdn.example.com/<key>`. Egress is free, the `Cache-Control` headers SonicJS sets are honored at the edge, and you control the URL surface.
+
+### C. The Built-In `/files/*` Proxy
+
+SonicJS exposes a Worker-side route that streams from R2 with consistent headers, including `Cache-Control: public, max-age=31536000` (one year) and permissive CORS:
+
+```
+GET https://my-cms.example.com/files/blog-heroes/9f2c1b7d8e3a4f5b6c7d.png
+```
+
+Use this when you want auth or transformation logic in front of an asset, or when you're keeping the R2 bucket private and don't want to expose it directly.
+
+### Public vs Private Buckets
+
+By default a fresh R2 bucket is **private** — you have to explicitly enable the dev URL or attach a custom domain to expose objects. That's the right default for a CMS; nothing leaks until you decide it should. If you have user-only assets (think paid downloads or personal documents), keep the bucket private and serve through `/files/*` behind `requireAuth()` middleware. See the [security guide](/security) for the full pattern.
+
+## Step 6: Image Transforms
+
+Cloudflare offers two products for transforming images: **Cloudflare Images** (a managed pipeline with variants) and **Image Resizing** (URL-based on-the-fly transforms). SonicJS supports the first natively.
+
+If you set the `IMAGES_ACCOUNT_ID` env var, every image upload also returns a `thumbnailUrl` pointing at Cloudflare Images:
+
+```typescript
+// What the response looks like with Cloudflare Images enabled
+{
+  "thumbnailUrl": "https://imagedelivery.net/<account-hash>/<r2-key>/thumbnail"
+}
+```
+
+You can swap `thumbnail` for any variant you've defined — `public`, `hero`, `square`, etc. — to get a different size from the same source bytes. Variants are configured in the Cloudflare dashboard, no code change required.
+
+For URL-based transforms (cropping, format conversion, quality), prefix any `/files/...` URL with `/cdn-cgi/image/<options>` once Image Resizing is enabled on the zone:
+
+```
+https://cdn.example.com/cdn-cgi/image/width=800,quality=80,format=webp/blog-heroes/hero.png
+```
+
+Either approach keeps source files untouched and serves transformed bytes from the cache.
+
+## Step 7: Deleting Files
+
+Two endpoints, both authenticated:
+
+```bash
+# Delete a single file
+curl -X DELETE https://my-cms.example.com/api/media/9f2c1b7d8e3a4f5b6c7d \
+  -H "Authorization: Bearer $SONIC_TOKEN"
+
+# Bulk delete (max 50 IDs per call)
+curl -X POST https://my-cms.example.com/api/media/bulk-delete \
+  -H "Authorization: Bearer $SONIC_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fileIds": ["9f2c1b...", "abc123..."]}'
+```
+
+Permissions are enforced server-side: only the original uploader or an `admin` role can delete a file. SonicJS performs a **soft delete** — the R2 object is removed and the `media` row gets a `deleted_at` timestamp. Existing references to the file ID still resolve in the database but stop returning a `publicUrl`, which lets you write a recovery flow before purging the row for good.
+
+## Putting It All Together: An Avatar Upload Component
+
+Here's a minimal end-to-end avatar uploader using everything above — it validates the type client-side, posts to the API, and stores the returned ID on the user profile.
+
+```typescript
+// avatar-uploader.ts
+const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_SIZE = 5 * 1024 * 1024 // 5 MB
+
+export async function uploadAvatar(file: File) {
+  if (!ALLOWED.includes(file.type)) {
+    throw new Error('Only JPEG, PNG, or WebP, please.')
+  }
+  if (file.size > MAX_SIZE) {
+    throw new Error('Avatar must be 5 MB or smaller.')
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('folder', 'avatars')
+
+  const upload = await fetch('/api/media/upload', {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  }).then((r) => r.json())
+
+  if (!upload.success) {
+    throw new Error(upload.error ?? 'Upload failed')
+  }
+
+  // Save the media reference on the current user's profile
+  await fetch('/api/content/users/me', {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avatar: upload.file.id }),
+  })
+
+  return upload.file.publicUrl
+}
+```
+
+Two HTTP calls, three layers of validation, one row in D1, one object in R2 — and it scales globally on the same Worker that serves the rest of your CMS.
+
+## Production Hardening Checklist
+
+Before pointing real traffic at this:
+
+- **Lock down CORS** — `CORS_ORIGINS` in `wrangler.toml` should list your frontend origins explicitly. Never `*` for an authenticated endpoint.
+- **Tighten the MIME allowlist** — if your app only needs images, fork the validation schema in your project and remove video/audio types entirely.
+- **Drop the size cap** — for an avatar app, 50 MB is overkill; bring it down to 5 MB or less to limit abuse.
+- **Rate-limit `/api/media/upload`** — apply the built-in `rateLimit()` middleware so a single user can't burn through your R2 quota.
+- **Use a custom domain for assets** — `pub-*.r2.dev` is fine for development but slow to revoke if a bucket leaks. A custom domain on a Cloudflare zone gives you per-route firewall rules.
+- **Audit deletes** — enable the security audit plugin to log who deleted what and when.
+
+## Next Steps
+
+You now have the full upload pipeline: a configured R2 binding, a `media` field on your [collections](/collections), authenticated multipart uploads, validated MIME types, public asset URLs, optional Cloudflare Images variants, and clean deletes. Where to go next:
+
+- **[Field types reference](/field-types)** — every option for the `media` field, including arrays, conditional display, and reference pickers
+- **[API reference](/api)** — the complete endpoint surface for `/api/media/*`
+- **[Security overview](/security)** — CSRF, CORS, rate limiting, and signed URL patterns for private assets
+- **[Authentication guide](/authentication)** — how to issue and refresh the tokens uploads require
+- **[Building a blog with SonicJS](/blog/building-a-blog-with-sonicjs)** — see the media field used end-to-end in a real project
+
+## Key Takeaways
+
+- The R2 binding is named **`MEDIA_BUCKET`** — SonicJS reads `c.env.MEDIA_BUCKET` directly, so the binding name must match exactly.
+- Uploads are plain **`multipart/form-data`** posts to `/api/media/upload` — no SDKs, no presigning, no AWS auth headers.
+- The default validator caps files at **50 MB** and accepts an explicit allowlist of about 20 MIME types covering images, video, audio, and documents.
+- Files are served via the public **`pub-*.r2.dev`** URL, a **custom domain**, or the Worker-side **`/files/*`** proxy with one-year caching.
+- Setting **`IMAGES_ACCOUNT_ID`** automatically wires Cloudflare Images variants into every image upload.
+- Deletes are **soft** by default — R2 objects go immediately, but the D1 row is tombstoned with `deleted_at`.
+
+Have questions or want to share what you're building? Join us on [Discord](https://discord.gg/sonicjs) or [GitHub](https://github.com/lane711/sonicjs).
+
+Happy uploading!

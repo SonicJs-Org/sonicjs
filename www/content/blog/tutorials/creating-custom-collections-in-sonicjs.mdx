@@ -1,0 +1,647 @@
+---
+title: "Creating Custom Collections in SonicJS"
+description: "Build production-ready content models in SonicJS with TypeScript-first collections, 30+ field types, references, validation, and auto-generated REST endpoints."
+keywords:
+  - "sonicjs collections"
+  - "headless cms collections"
+  - "typescript content schema"
+  - "edge cms collections"
+  - "custom content types"
+  - "sonicjs field types"
+category: "tutorials"
+tags:
+  - "collections"
+  - "content-modeling"
+  - "typescript"
+  - "schema"
+  - "tutorial"
+publishedAt: "2026-05-11"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/creating-custom-collections-in-sonicjs/hero.png"
+  alt: "Isometric illustration of SonicJS content collections architecture with stacked content cards, field shapes, and glowing connections to a central edge database"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "Creating Custom Collections in SonicJS"
+  description: "TypeScript-first collections in SonicJS — 30+ field types, references, validation, and auto-generated REST endpoints at the edge."
+---
+
+# Creating Custom Collections in SonicJS
+
+<TLDRBox>
+**TL;DR** — Collections are the heart of any SonicJS project: a single TypeScript file describes your content type, and SonicJS turns it into a typed database table, an admin UI, and a full REST API. Define a `CollectionConfig`, register it with `registerCollections([...])`, and let auto-sync handle the rest.
+
+**Key Stats:**
+- 30+ built-in field types — string, richtext, media, reference, blocks, arrays, objects, and more
+- 1 file = 1 schema + 1 admin screen + full CRUD REST API
+- Full TypeScript inference from `CollectionConfig` — autocomplete every field
+- Auto-sync on server start — no migration scripts to babysit
+- Works for both **code-based** and **UI-managed** collections in the same project
+</TLDRBox>
+
+If you've worked with a traditional headless CMS, you know the dance: click through a UI to define a content type, hope the schema export still works in production, write a migration script, deploy, repeat. **SonicJS collections** flip that on its head. Your content model lives in TypeScript, in your repo, version-controlled with the rest of your code — and SonicJS handles the database, the admin UI, and the API automatically.
+
+This tutorial walks through everything you need to ship a real, multi-collection content model: defining fields, setting up references between collections, validating input, and wiring everything up. By the end you'll have a working blog with three related collections (`posts`, `authors`, `categories`), a typed REST API, and an admin UI you didn't have to build.
+
+## What Is a Collection in SonicJS?
+
+A **collection** in SonicJS is a content type — the schema for one kind of thing your CMS manages. Think "blog posts," "products," "events," "team members." Each collection definition is a `CollectionConfig` object that tells SonicJS:
+
+- The collection's machine name and display name
+- Its field schema (what data each entry holds)
+- Validation rules and defaults
+- Optional UI hints — icon, default sort, list view fields, search fields
+
+When SonicJS boots, it reads your registered collections and:
+
+1. Creates or updates the underlying [database](/database) table
+2. Mounts a full REST [API](/api) at `/api/collections/{name}/content`
+3. Renders an admin screen at `/admin/collections/{name}`
+4. Generates types you can import in your frontend
+
+Two flavors are supported in the same project — see the [collections reference](/collections) for the full breakdown:
+
+- **Code-based collections** — defined in TypeScript, auto-synced on startup, version-controlled. Best for production.
+- **UI-created collections** — built in the admin UI, stored in the database. Best for prototyping.
+
+We're focused on the code-based path here, because that's what you'll use in real apps.
+
+## A Minimal Collection
+
+Let's start with the smallest useful collection: a `posts` content type with a title, slug, and body.
+
+```typescript
+// src/collections/posts.collection.ts
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export default {
+  name: 'posts',
+  displayName: 'Posts',
+  description: 'Blog articles and news',
+  icon: '📝',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        title: 'Title',
+        required: true,
+        maxLength: 200,
+      },
+      slug: {
+        type: 'slug',
+        title: 'URL Slug',
+        required: true,
+      },
+      body: {
+        type: 'richtext',
+        title: 'Body',
+        required: true,
+      },
+    },
+    required: ['title', 'slug', 'body'],
+  },
+
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
+```
+
+Three things to note:
+
+1. **`schema.type` is always `'object'`** — your collection's properties live under `schema.properties`. This mirrors JSON Schema.
+2. **`required` appears twice** — once on each field (form/validation level) and once at the schema level (serialization level). Both are honored.
+3. **`managed: true`** marks this as a code-managed collection, which makes it read-only in the admin UI (it shows up with a purple "Config" badge). Edit the file to change the schema.
+
+### Registering the Collection
+
+A collection on its own does nothing — you need to register it with SonicJS:
+
+```typescript
+// src/index.ts
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import postsCollection from './collections/posts.collection'
+
+registerCollections([postsCollection])
+
+export default createSonicJSApp({
+  collections: {
+    autoSync: true, // sync schema changes on startup
+  },
+})
+```
+
+Restart the dev server and SonicJS will:
+
+- Create the `posts` storage if it doesn't exist
+- Mount `GET/POST/PUT/DELETE /api/collections/posts/content`
+- Add a "Posts" item to the admin sidebar
+
+That's it for the minimum viable collection.
+
+## The Field Type Cheat Sheet
+
+SonicJS ships **30+ field types**. They fall into seven natural categories. The full list is on the [field types reference](/field-types) — here's the working subset you'll use most often:
+
+| Field type   | Use it for                       | Storage              |
+|--------------|----------------------------------|----------------------|
+| `string`     | Titles, names, short text        | `VARCHAR(255)`       |
+| `textarea`   | Excerpts, descriptions           | `TEXT`               |
+| `slug`       | URL paths (auto-generated, unique-checked) | `VARCHAR(100)` |
+| `email`      | Validated email addresses        | `VARCHAR(255)`       |
+| `url`        | Validated URLs                   | `VARCHAR(500)`       |
+| `richtext`   | WYSIWYG body content             | `TEXT` (HTML)        |
+| `markdown`   | Markdown body content            | `TEXT` (Markdown)    |
+| `number`     | Prices, quantities, ratings      | `DECIMAL(10,2)`      |
+| `boolean`    | Toggles, feature flags           | `BOOLEAN`            |
+| `date`       | Calendar dates (no time)         | `DATE`               |
+| `datetime`   | Timestamped events               | `DATETIME`           |
+| `select`     | Single-choice dropdown           | `VARCHAR(255)`       |
+| `multiselect`| Multi-choice dropdown            | `JSON` (array)       |
+| `radio`      | Single-choice radios             | `VARCHAR(255)`       |
+| `checkbox`   | Boolean checkbox                 | `BOOLEAN`            |
+| `media`      | Images, videos, documents        | `VARCHAR(500)` URL   |
+| `file`       | Generic file uploads             | `VARCHAR(500)` URL   |
+| `color`      | Hex color picker                 | `VARCHAR(7)`         |
+| `reference`  | Link to another collection       | `VARCHAR(255)` ID    |
+| `array`      | Repeatable list of items         | `JSON`               |
+| `object`     | Grouped/nested fields            | `JSON`               |
+| `json`       | Raw JSON blob                    | `JSON`               |
+
+Beyond those, the **rich-text editor variants** (`quill`, `tinymce`, `mdxeditor`, `easymde`) drop in when you have the matching editor plugin installed. They store the same `TEXT` content but wire up a different admin editor.
+
+The most powerful primitive isn't on this table: **blocks**. We'll cover those at the end.
+
+### How field types map to API behavior
+
+Every field type also affects what the API accepts and returns:
+
+- `string`/`textarea`/`richtext`/`markdown` → JSON `string`
+- `number` → JSON `number`
+- `boolean`/`checkbox` → JSON `boolean`
+- `date`/`datetime` → ISO 8601 `string`
+- `media`/`file` → `string` URL (or array for `multiple: true`)
+- `reference` → `string` ID of the referenced content
+- `array`/`object`/`json` → typed JSON value
+- `select` → enum-validated `string`; with `multiple: true`, `string[]`
+
+Validation runs on both the client (HTML5 + plugin checks) and the server (Zod-derived schema). If the request shape doesn't match, the API returns `400` with field-level error messages.
+
+## A Real Content Model: Blog with Posts, Authors, and Categories
+
+Let's build something realistic. A blog needs three related collections:
+
+- `authors` — people who write posts
+- `categories` — taxonomy buckets
+- `posts` — the actual articles, referencing one author and many categories
+
+We'll model it the way you'd actually ship it.
+
+### The Authors Collection
+
+```typescript
+// src/collections/authors.collection.ts
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export default {
+  name: 'authors',
+  displayName: 'Authors',
+  description: 'People who write content',
+  icon: '✍️',
+
+  schema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        title: 'Full Name',
+        required: true,
+        minLength: 2,
+        maxLength: 120,
+      },
+      slug: {
+        type: 'slug',
+        title: 'URL Slug',
+        required: true,
+      },
+      email: {
+        type: 'email',
+        title: 'Contact Email',
+      },
+      avatar: {
+        type: 'media',
+        title: 'Avatar',
+        allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+        maxFileSize: 2 * 1024 * 1024, // 2 MB
+      } as any,
+      bio: {
+        type: 'textarea',
+        title: 'Bio',
+        maxLength: 500,
+      },
+      social: {
+        type: 'object',
+        title: 'Social Links',
+        properties: {
+          twitter: { type: 'url', title: 'Twitter / X' },
+          github: { type: 'url', title: 'GitHub' },
+          website: { type: 'url', title: 'Website' },
+        },
+      },
+    },
+    required: ['name', 'slug'],
+  },
+
+  listFields: ['name', 'email', 'createdAt'],
+  searchFields: ['name', 'email', 'bio'],
+  defaultSort: 'name',
+  defaultSortOrder: 'asc',
+
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
+```
+
+Highlights:
+
+- The `slug` field gives you SEO-friendly URLs like `/authors/jane-doe`. Slugs are auto-generated from a `title`-like field and uniqueness-checked at write time.
+- The `social` object groups three URL fields under a collapsible header in the admin UI.
+- `listFields` controls which columns show in the admin list view; keep it short for performance (large lists with many fields hit the database harder).
+
+### The Categories Collection
+
+A category is small but pulls its weight as a foreign key target.
+
+```typescript
+// src/collections/categories.collection.ts
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export default {
+  name: 'categories',
+  displayName: 'Categories',
+  icon: '🗂️',
+
+  schema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        title: 'Name',
+        required: true,
+        maxLength: 80,
+      },
+      slug: {
+        type: 'slug',
+        title: 'URL Slug',
+        required: true,
+      },
+      color: {
+        type: 'color',
+        title: 'Badge Color',
+        default: '#3B82F6',
+      },
+      description: {
+        type: 'textarea',
+        title: 'Description',
+        maxLength: 240,
+      },
+    },
+    required: ['name', 'slug'],
+  },
+
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
+```
+
+### The Posts Collection (with References)
+
+Now the centerpiece — a post that **references** an author and **multiple** categories.
+
+```typescript
+// src/collections/posts.collection.ts
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export default {
+  name: 'posts',
+  displayName: 'Posts',
+  description: 'Blog articles and news',
+  icon: '📝',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        title: 'Title',
+        required: true,
+        minLength: 3,
+        maxLength: 200,
+      },
+      slug: {
+        type: 'slug',
+        title: 'URL Slug',
+        required: true,
+      },
+      excerpt: {
+        type: 'textarea',
+        title: 'Excerpt',
+        maxLength: 300,
+        helpText: 'Short summary used in listings and SEO meta tags',
+      },
+      body: {
+        type: 'richtext',
+        title: 'Body',
+        required: true,
+      },
+      featuredImage: {
+        type: 'media',
+        title: 'Featured Image',
+      },
+
+      // Single reference to an author
+      author: {
+        type: 'reference',
+        title: 'Author',
+        collection: 'authors',
+        required: true,
+      },
+
+      // Many-to-many style: an array of references to categories
+      categories: {
+        type: 'array',
+        title: 'Categories',
+        items: {
+          type: 'reference',
+          collection: 'categories',
+        },
+      },
+
+      status: {
+        type: 'select',
+        title: 'Status',
+        enum: ['draft', 'published', 'archived'],
+        enumLabels: ['Draft', 'Published', 'Archived'],
+        default: 'draft',
+        required: true,
+      },
+
+      publishedAt: {
+        type: 'datetime',
+        title: 'Publish Date',
+      },
+
+      featured: {
+        type: 'boolean',
+        title: 'Featured',
+        checkboxLabel: 'Show on homepage',
+        default: false,
+      },
+
+      seo: {
+        type: 'object',
+        title: 'SEO',
+        collapsed: true,
+        properties: {
+          metaTitle: {
+            type: 'string',
+            title: 'Meta Title',
+            maxLength: 60,
+          },
+          metaDescription: {
+            type: 'textarea',
+            title: 'Meta Description',
+            maxLength: 160,
+          },
+          canonicalUrl: { type: 'url', title: 'Canonical URL' },
+        },
+      },
+    },
+    required: ['title', 'slug', 'body', 'author', 'status'],
+  },
+
+  listFields: ['title', 'author', 'status', 'publishedAt'],
+  searchFields: ['title', 'excerpt', 'body'],
+  defaultSort: 'publishedAt',
+  defaultSortOrder: 'desc',
+
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
+```
+
+A few things this collection does that pay dividends in production:
+
+- **`author` is a single `reference`** — pointing at the `authors` collection. The admin UI renders this as a searchable picker; the API stores and returns the author's content ID.
+- **`categories` is an `array` of `reference` items** — SonicJS's idiomatic many-to-many. You get add, remove, and reorder controls in the admin and a JSON array of IDs in the API.
+- **`status` uses `enum` + `enumLabels`** — the enum values are what the API stores; the labels are what the admin displays.
+- **`seo` is a collapsed `object`** — keeps the form clean. The collapse state is persisted per user in `sessionStorage`.
+
+### Registering All Three
+
+```typescript
+// src/index.ts
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import postsCollection from './collections/posts.collection'
+import authorsCollection from './collections/authors.collection'
+import categoriesCollection from './collections/categories.collection'
+
+registerCollections([
+  authorsCollection,
+  categoriesCollection,
+  postsCollection,
+])
+
+export default createSonicJSApp({
+  collections: {
+    autoSync: true,
+  },
+})
+```
+
+Restart, and you'll see all three collections in the sidebar — each with its own list view, edit form, and REST endpoints.
+
+## Validation in Practice
+
+SonicJS validation is layered. Here's what's enforced at each level for our `posts` collection:
+
+| Rule                         | Where it runs            | What happens on failure        |
+|------------------------------|--------------------------|--------------------------------|
+| `required: true`             | Client + server          | 400 with `"field is required"` |
+| `minLength` / `maxLength`    | HTML5 + Zod              | 400 with length message        |
+| `pattern` (regex)            | HTML5 + Zod              | 400 with format message        |
+| `min` / `max` (numbers)      | HTML5 + Zod              | 400 out-of-range               |
+| `enum`                       | Client + server          | 400 invalid option             |
+| `slug` uniqueness            | Server (live API check)  | 409 conflict                   |
+| `media` MIME / size          | Browser + Worker         | 400 invalid file               |
+| `reference` exists           | Server                   | 400 invalid reference          |
+
+You generally don't need to layer your own validation on top — define the constraints declaratively in the schema and SonicJS does the rest. For business rules that go beyond field-level validation (e.g. "only admins can publish"), reach for [hooks](/hooks).
+
+## Hooks: Reacting to Collection Events
+
+Collections fire lifecycle events you can subscribe to with the [hooks system](/hooks). The most common ones for content:
+
+- `content:save` — fires before a content item is written, lets you mutate or reject the payload
+- `content:saved` — fires after a successful write
+- `content:delete` — fires before deletion
+- `content:read` — fires when content is fetched (great for transforming output)
+
+Example: auto-stamp `publishedAt` whenever a post moves to `published`:
+
+```typescript
+import { HOOKS } from '@sonicjs-cms/core'
+
+hooks.register(HOOKS.CONTENT_SAVE, async (data, context) => {
+  if (
+    context.collection === 'posts' &&
+    data.status === 'published' &&
+    !data.publishedAt
+  ) {
+    data.publishedAt = new Date().toISOString()
+  }
+  return data
+})
+```
+
+Hooks are great for cross-cutting concerns: stamping audit fields, sending webhooks on publish, denormalizing data for search indices, or invalidating cache keys.
+
+## Access and Authentication
+
+Collections inherit the SonicJS auth model. Out of the box:
+
+- **Read endpoints** (`GET /api/collections/{name}/content`) are public unless you front them with middleware.
+- **Write endpoints** (`POST`/`PUT`/`DELETE`) require an authenticated user.
+- The admin UI is gated by [authentication](/authentication) and the role-based middleware (`requireRole('admin')`, `requireRole('editor')`).
+
+For collection-specific access rules — say, "only the post's author can edit it" — combine `content:save` hooks with the auth context:
+
+```typescript
+hooks.register(HOOKS.CONTENT_SAVE, async (data, context) => {
+  if (context.collection !== 'posts') return data
+  if (context.operation === 'update') {
+    if (data.author !== context.user?.id && context.user?.role !== 'admin') {
+      throw new Error('Forbidden: you can only edit your own posts')
+    }
+  }
+  return data
+})
+```
+
+Pair that with `requireAuth()` on your custom routes and you have row-level access control.
+
+## Page Builder Pattern: Blocks
+
+For pages that need flexible layouts, **blocks** turn a single field into a discriminated union of content types.
+
+```typescript
+body: {
+  type: 'array',
+  title: 'Page Content',
+  items: {
+    type: 'object',
+    discriminator: 'blockType',
+    blocks: {
+      hero: {
+        label: 'Hero',
+        properties: {
+          headline: { type: 'string', title: 'Headline', required: true },
+          subhead: { type: 'textarea', title: 'Subhead' },
+          image: { type: 'media', title: 'Background Image' },
+        },
+      },
+      richText: {
+        label: 'Rich Text',
+        properties: {
+          body: { type: 'richtext', title: 'Body', required: true },
+        },
+      },
+      cta: {
+        label: 'Call To Action',
+        properties: {
+          title: { type: 'string', title: 'Title', required: true },
+          buttonText: { type: 'string', title: 'Button Text', required: true },
+          buttonUrl: { type: 'url', title: 'Button URL', required: true },
+        },
+      },
+    },
+  },
+},
+```
+
+Editors get a "+ Add block" picker; each block has its own typed fields; the API returns a typed array of `{ blockType, ...fields }` objects. This is the same pattern Notion and modern page builders use.
+
+## Tips for Designing Collections
+
+A few patterns that consistently produce healthy schemas:
+
+- **Pick `slug` over `string` for URLs.** It validates format, auto-generates from the title, and checks uniqueness for free.
+- **Use `select` (with `enum`) for any field with a fixed set of values.** It indexes more efficiently than `string` and lets editors pick from a dropdown.
+- **Reach for `reference` instead of duplicating data.** A `category_name` string drifts; a `reference` to `categories` stays correct.
+- **Group SEO and metadata in an `object`.** Editors can collapse it; the API still returns it inline.
+- **Keep `listFields` short.** Every column is a column the admin list view has to render.
+- **Index searchable fields explicitly.** Add common search fields to `searchFields` and create database indexes for the most-queried ones.
+
+## Working with Collections via the API
+
+Once your collections are registered, the API is automatic:
+
+```bash
+# List all posts (newest first by default)
+curl https://your-cms.example.com/api/collections/posts/content?limit=10
+
+# Get one post by ID
+curl https://your-cms.example.com/api/content/cm123
+
+# Filter and paginate
+curl "https://your-cms.example.com/api/collections/posts/content?status=published&limit=20&offset=0"
+
+# Create a post (auth required)
+curl -X POST https://your-cms.example.com/admin/content \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection": "posts",
+    "data": {
+      "title": "Hello, world",
+      "slug": "hello-world",
+      "body": "<p>It works.</p>",
+      "author": "auth_abc123",
+      "categories": ["cat_news"],
+      "status": "published"
+    }
+  }'
+```
+
+Full request/response shapes for every endpoint are in the [API reference](/api).
+
+## Next Steps
+
+You now have the full mental model: define a `CollectionConfig`, register it, and let SonicJS produce the database schema, admin UI, and REST API. From here:
+
+- **[Field types reference](/field-types)** — every field type, every option, every validation rule
+- **[Collections deep dive](/collections)** — UI vs code-based, blocks, repeatable arrays, and migration patterns
+- **[Database guide](/database)** — how D1, schema sync, and migrations actually work under the hood
+- **[Authentication](/authentication)** — protect collection write endpoints with JWT, OAuth, magic links, and OTP
+- **[Hooks reference](/hooks)** — every collection lifecycle event you can plug into
+- **[API reference](/api)** — the auto-generated REST endpoints in detail
+
+## Key Takeaways
+
+- A SonicJS **collection** is a single TypeScript file that produces a database schema, an admin UI, and a typed REST API.
+- **30+ field types** cover every real-world content shape — text, media, references, arrays, objects, blocks.
+- **References + arrays of references** model one-to-one and many-to-many relationships without writing SQL.
+- **Validation** is declarative: `required`, `minLength`, `pattern`, `enum`, and `min`/`max` are enforced on both client and server.
+- **Hooks** plug into `content:save`, `content:saved`, `content:delete`, and more for business logic and access control.
+- Use `managed: true` for production collections so their schema lives in git, not in the database.
+
+Have questions or building something interesting with collections? Join us on [Discord](https://discord.gg/sonicjs) or [GitHub](https://github.com/lane711/sonicjs) — we'd love to see what you ship.
+
+Happy modeling!

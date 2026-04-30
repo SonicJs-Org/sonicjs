@@ -1,0 +1,435 @@
+---
+title: "How SonicJS Uses Cloudflare D1 at the Edge"
+description: "A deep dive into the SonicJS D1 database layer — how Drizzle schemas, prepared statements, KV caching, and read replicas combine into an edge-native CMS data layer."
+keywords:
+  - "sonicjs d1 database"
+  - "cloudflare d1 cms"
+  - "edge sqlite database"
+  - "d1 drizzle orm"
+  - "headless cms database"
+category: "deep-dives"
+tags:
+  - "database"
+  - "cloudflare-d1"
+  - "drizzle-orm"
+  - "edge-computing"
+  - "sqlite"
+  - "performance"
+publishedAt: "2026-06-01"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/sonicjs-d1-database-deep-dive/hero.png"
+  alt: "Isometric visualization of a distributed edge database with floating SQLite shards, glowing query streams, and a central compute layer on a dark slate background"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "How SonicJS Uses Cloudflare D1 at the Edge"
+  description: "Inside the SonicJS data layer: D1 SQLite at the edge, Drizzle ORM schemas, prepared statements, KV caching, and the trade-offs vs Postgres."
+---
+
+# How SonicJS Uses Cloudflare D1 at the Edge
+
+<TLDRBox>
+**TL;DR** — SonicJS runs on **Cloudflare D1**, a serverless SQLite database deployed across Cloudflare's global network. The schema is defined in **Drizzle ORM** (`packages/core/src/db/schema.ts`), migrations are version-controlled SQL files bundled at build time, and hot reads are layered behind a Cloudflare KV cache for sub-10ms global latency. The result is a relational CMS data layer with no connection pools, no cold starts, and no database servers to manage.
+
+**Key Stats:**
+- **D1 = SQLite at the edge** — full SQL with indexes, joins, transactions, and `PRAGMA`s
+- **300+ Cloudflare locations** route reads to a regional read replica (Sessions API)
+- **10 GB per database, 50K databases per account** on the paid plan
+- **36 versioned migrations** bundled at build time in `packages/core/migrations/`
+- **5–15ms** cached reads via KV vs **20–60ms** cold D1 reads at the edge
+</TLDRBox>
+
+If you've used Postgres or MySQL with a traditional CMS, the SonicJS data layer will feel both familiar and refreshingly different. Familiar because it's still SQL, still relational, still backed by an ORM you can reason about. Different because it runs *inside* the same Cloudflare Worker that serves your requests — no connection pool, no separate database tier, no `host: db.us-east-1.amazonaws.com` to provision.
+
+This deep dive walks through how SonicJS uses **Cloudflare D1**, the engineering choices behind the schema, how Drizzle ORM is wired up, and the trade-offs you should know about before you ship to production.
+
+## What Cloudflare D1 Actually Is
+
+Cloudflare D1 is a **serverless SQLite database** that lives on Cloudflare's edge network. Under the hood, every D1 database is a real SQLite file managed by Cloudflare, with one **primary** region and (on the paid plan) **read replicas** spread across other regions.
+
+A few specifics that matter for CMS workloads:
+
+- **SQLite-compatible** — supports the full SQLite SQL dialect: indexes, joins, foreign keys, JSON1, full-text search via FTS5, and `PRAGMA` introspection.
+- **No connection pooling** — Workers connect to D1 via the binding (`env.DB`), not over TCP. There are no pools to size or exhaust.
+- **Global by default** — you bind D1 to a Worker, and the Worker accesses it from any data center.
+- **Sessions API** — Workers can pin a logical "session" to a particular replica to get read-your-writes consistency without paying the latency of round-tripping to the primary on every read.
+- **Limits per database** — 10 GB max size and 100 KB row size on current plans. Enough for a real CMS, but not the place for blob storage (use R2 for that — see the [database overview](/database) for the full architecture).
+
+The mental model is: **a SQLite file you can query from any of 300+ Cloudflare locations, with a smart routing layer between you and it.**
+
+## D1's Read Replicas and the Consistency Model
+
+Read replicas are where edge databases get philosophically interesting. By default, every D1 query is routed to the **primary** region of the database. That gives you **strong consistency** — every read sees every write — but at the cost of geographic latency. A user in Singapore hitting a database whose primary is in Virginia pays 200+ ms per query.
+
+D1 solves this with the **Sessions API**:
+
+```typescript
+// Pseudo-code: D1 Sessions API at the edge
+const session = env.DB.withSession('first-unconstrained')
+const results = await session
+  .prepare('SELECT * FROM content WHERE status = ?')
+  .bind('published')
+  .all()
+
+// The bookmark identifies the latest write the session has observed.
+// Subsequent queries on this session won't read older data.
+const bookmark = session.getBookmark()
+```
+
+The session carries a **bookmark** — a logical clock that says "I have observed at least this much of the write history." When the same user makes a follow-up request, you pass the bookmark back to the next session and D1 routes the read to a replica that has caught up at least that far. This gives you **causal / read-your-writes consistency** without the round-trip to the primary.
+
+For a CMS like SonicJS, the trade-off shakes out cleanly:
+
+- **Reads of published content** (most of your traffic) → served from the nearest replica, eventually consistent within seconds.
+- **Author editing flows** → use a session bookmark so the editor always sees their own latest save.
+- **Writes** → always go to the primary region.
+
+Most CMS traffic is read-dominant, which is exactly the workload D1 replicas are designed for.
+
+## How SonicJS Structures the Schema
+
+The full schema lives in [`packages/core/src/db/schema.ts`](https://github.com/lane711/sonicjs) and is the single source of truth. Drizzle takes that TypeScript and gives you a typed query builder; `drizzle-zod` converts the same definitions into runtime Zod validators for API input. One declaration, three artifacts.
+
+Here's a real slice from the SonicJS core schema:
+
+```typescript
+// packages/core/src/db/schema.ts
+import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { createInsertSchema, createSelectSchema } from 'drizzle-zod'
+
+// Users — authentication, RBAC, profile
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  username: text('username').notNull().unique(),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  passwordHash: text('password_hash'), // null for OAuth users
+  role: text('role').notNull().default('viewer'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  lastLoginAt: integer('last_login_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+})
+
+// Collections — dynamic schema definitions for content types
+export const collections = sqliteTable('collections', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  schema: text('schema', { mode: 'json' }).notNull(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  managed: integer('managed', { mode: 'boolean' }).notNull().default(false),
+  sourceType: text('source_type').default('user'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
+
+// Content — actual rows of every collection
+export const content = sqliteTable('content', {
+  id: text('id').primaryKey(),
+  collectionId: text('collection_id').notNull().references(() => collections.id),
+  slug: text('slug').notNull(),
+  title: text('title').notNull(),
+  data: text('data', { mode: 'json' }).notNull(),
+  status: text('status').notNull().default('draft'),
+  publishedAt: integer('published_at', { mode: 'timestamp' }),
+  authorId: text('author_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
+
+export type User = typeof users.$inferSelect
+export type NewUser = typeof users.$inferInsert
+export const insertUserSchema = createInsertSchema(users)
+export const selectUserSchema = createSelectSchema(users)
+```
+
+A few patterns worth calling out.
+
+### The "fixed core, flexible payload" pattern
+
+The `content` table has a fixed set of columns the CMS needs to reason about — `id`, `collection_id`, `slug`, `title`, `status`, `author_id`, timestamps — plus a single `data` column that stores the actual content body as JSON. This is the heart of how SonicJS supports arbitrary [collections](/collections) without re-creating tables.
+
+When you define a `BlogPost` collection with `body`, `excerpt`, and `coverImage` fields, those don't become new columns. They become keys inside `content.data`. SQLite's JSON1 extension (which D1 supports) lets you query into them when you need to, and Drizzle gives you a typed wrapper.
+
+The trade-off: you can't add an index on a field inside `data`. For high-cardinality query fields, you promote them to first-class columns or use D1's generated columns plus an index.
+
+### The plugin settings pattern
+
+Plugins like OAuth, magic link, OTP, and AI search all need to store configuration. Rather than each plugin owning its own table, SonicJS uses a generic `settings` table keyed by `(category, key)` with a JSON `value`:
+
+```sql
+-- packages/core/migrations/018_settings_table.sql
+CREATE TABLE IF NOT EXISTS settings (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(category, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_settings_category ON settings(category);
+CREATE INDEX IF NOT EXISTS idx_settings_category_key ON settings(category, key);
+```
+
+A plugin reads its config with `WHERE category = 'oauth' AND key = 'github_client_id'`. This avoids a migration for every plugin install and keeps the schema stable.
+
+### Sessions, audit, and workflow
+
+Other tables in the schema include `user_sessions` (for revocable sessions used alongside JWTs), `workflow_history` (audit trail for content state changes), `content_versions` (full version history), `media` (R2 metadata), `api_tokens` (programmatic access), `plugins` / `plugin_hooks` / `plugin_routes` (plugin registry), and a growing list of plugin-specific tables added by recent migrations.
+
+The full set is documented in the [database reference](/database).
+
+## Querying D1 the Drizzle Way
+
+Drizzle is the recommended way to query D1 in SonicJS because it gives you compile-time typing without giving up SQL's expressiveness. The connection helper is intentionally tiny:
+
+```typescript
+// packages/core/src/db/index.ts
+import { drizzle } from 'drizzle-orm/d1'
+import * as schema from './schema'
+
+export function createDb(d1: D1Database) {
+  return drizzle(d1, { schema })
+}
+
+export * from './schema'
+```
+
+Inside any Hono route handler:
+
+```typescript
+import { eq, and, desc } from 'drizzle-orm'
+import { createDb, content, users, collections } from '@sonicjs-cms/core'
+
+app.get('/api/posts', async (c) => {
+  const db = createDb(c.env.DB)
+
+  const posts = await db
+    .select({
+      id: content.id,
+      title: content.title,
+      slug: content.slug,
+      publishedAt: content.publishedAt,
+      authorEmail: users.email,
+    })
+    .from(content)
+    .innerJoin(users, eq(content.authorId, users.id))
+    .innerJoin(collections, eq(content.collectionId, collections.id))
+    .where(
+      and(
+        eq(collections.name, 'posts'),
+        eq(content.status, 'published')
+      )
+    )
+    .orderBy(desc(content.publishedAt))
+    .limit(20)
+
+  return c.json({ data: posts })
+})
+```
+
+That query compiles to a single prepared statement that D1 sends across the binding. No connection acquired, no connection returned — the binding itself is the API.
+
+### Prepared statements and `db.batch()`
+
+Under the hood, every Drizzle query becomes a D1 prepared statement, which gives you both **SQL-injection safety** and the **D1 query plan cache**. For multi-statement work, D1's `batch()` is what you want — it ships a list of statements as a single round-trip and runs them as an implicit transaction:
+
+```typescript
+// Bulk insert via prepared statements + batch()
+const stmt = c.env.DB.prepare(
+  'INSERT INTO content (id, collection_id, slug, title, data, status, author_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)'
+)
+
+const now = Date.now()
+const batch = items.map((item) =>
+  stmt.bind(
+    crypto.randomUUID(),
+    item.collectionId,
+    item.slug,
+    item.title,
+    JSON.stringify(item.data),
+    'draft',
+    item.authorId,
+    now,
+    now
+  )
+)
+
+await c.env.DB.batch(batch)
+```
+
+The batch is atomic and runs in a single network hop to the primary — far faster than `await` in a loop.
+
+## The Migration Workflow
+
+Migrations in SonicJS are **plain SQL files** that ship inside the `@sonicjs-cms/core` package. The core package contains 36 numbered migrations today, covering every schema change since v1:
+
+```
+packages/core/migrations/
+├── 001_initial_schema.sql
+├── 002_faq_plugin.sql
+├── 003_stage5_enhancements.sql
+├── ...
+├── 018_settings_table.sql
+├── 026_add_otp_login.sql
+├── 029_add_forms_system.sql
+├── 034_security_audit_plugin.sql
+└── 036_analytics_events.sql
+```
+
+A typical migration is small, idempotent, and reads like a code review:
+
+```sql
+-- packages/core/migrations/018_settings_table.sql
+CREATE TABLE IF NOT EXISTS settings (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(category, key)
+);
+
+INSERT OR IGNORE INTO settings (id, category, key, value, created_at, updated_at)
+VALUES
+  (lower(hex(randomblob(16))), 'general', 'siteName', '"SonicJS AI"', unixepoch() * 1000, unixepoch() * 1000),
+  (lower(hex(randomblob(16))), 'general', 'maintenanceMode', 'false', unixepoch() * 1000, unixepoch() * 1000);
+
+CREATE INDEX IF NOT EXISTS idx_settings_category ON settings(category);
+CREATE INDEX IF NOT EXISTS idx_settings_category_key ON settings(category, key);
+```
+
+### The build-time bundler
+
+Workers don't have filesystem access at runtime, so SonicJS bundles every SQL file into TypeScript at build time. The `prebuild` npm script runs `scripts/generate-migrations.ts`, which reads `packages/core/migrations/*.sql` and emits `src/db/migrations-bundle.ts` with the SQL embedded as string constants. At runtime, the `MigrationService` reads from the bundle, applies pending migrations, and tracks applied state in a `migrations` table:
+
+```typescript
+// What the runtime sees
+import { bundledMigrations, getMigrationSQLById } from './db/migrations-bundle'
+
+const status = await migrationService.getMigrationStatus()
+// { totalMigrations: 36, appliedMigrations: 35, pendingMigrations: 1, ... }
+
+await migrationService.runPendingMigrations()
+// Applies 036_analytics_events.sql to env.DB
+```
+
+For local development you can also use `wrangler d1 migrations apply DB --local` to run the same SQL against your local D1 instance directly.
+
+### Why not `drizzle-kit generate` only?
+
+Drizzle Kit can introspect the schema and generate diff SQL, and SonicJS uses it during development to sketch migrations. But the **shipped artifact** is hand-curated SQL in the `migrations/` directory. Two reasons:
+
+1. **Determinism.** Generated SQL diffs are sensitive to small schema reorderings; reviewing hand-written SQL keeps every column rename and index intentional.
+2. **Data migrations.** Many SonicJS migrations seed default plugin rows or backfill columns. That's awkward to express in a schema diff but trivial in a hand-written `INSERT OR IGNORE`.
+
+The result: Drizzle gives you typed queries, SQL files give you reviewable history, and the bundler gives you Worker-compatible packaging.
+
+## Performance: Cold Reads, Warm Reads, and KV-Cached Reads
+
+In practice, the SonicJS data layer has three latency tiers.
+
+| Tier | What runs | Typical latency |
+|---|---|---|
+| **KV cache hit** | Edge KV `GET` on a precomputed query key | **5–15 ms** globally |
+| **D1 replica read** | Drizzle/D1 query routed to nearest replica | **20–60 ms** (region-dependent) |
+| **D1 primary read/write** | Round-trip to the primary region | **40–200 ms** (region-dependent) |
+
+The third tier is the only one users notice — and it's where the layered cache matters. SonicJS uses a three-tier read path for hot content:
+
+```typescript
+// Conceptual: memory → KV → D1
+async function getPublishedPost(slug: string) {
+  // 1. In-isolate memory cache (instant for the duration of this isolate)
+  const memo = memoryCache.get(slug)
+  if (memo) return memo
+
+  // 2. Cloudflare KV — globally replicated, eventually consistent
+  const cached = await env.CACHE_KV.get(`post:${slug}`, 'json')
+  if (cached) {
+    memoryCache.set(slug, cached)
+    return cached
+  }
+
+  // 3. D1 — source of truth
+  const row = await db
+    .select()
+    .from(content)
+    .where(and(eq(content.slug, slug), eq(content.status, 'published')))
+    .limit(1)
+    .get()
+
+  if (row) {
+    memoryCache.set(slug, row)
+    await env.CACHE_KV.put(`post:${slug}`, JSON.stringify(row), { expirationTtl: 3600 })
+  }
+  return row
+}
+```
+
+The KV layer absorbs the long tail of repeated published-content reads, so D1 only handles writes, cache misses, and authenticated admin queries. For more on the cache design (including invalidation), see the [caching strategy guide](/caching).
+
+### Indexes still matter
+
+D1 is SQLite, so indexes are still the difference between a 5 ms query and a 500 ms one. SonicJS ships **single-column indexes** on every common lookup (`users.email`, `content.slug`, `content.status`, `collections.name`) plus **composite indexes** for the multi-column patterns the CMS hits most:
+
+```sql
+CREATE INDEX idx_content_collection_status ON content(collection_id, status);
+CREATE INDEX idx_content_author_status ON content(author_id, status, published_at DESC);
+CREATE INDEX idx_active_users ON users(email) WHERE is_active = 1;
+```
+
+The partial index on `users.email WHERE is_active = 1` is a small but high-impact one — the auth path is among the hottest queries in the system.
+
+## Trade-offs vs Postgres and MySQL
+
+D1 is a great fit for the CMS workload SonicJS targets, but it isn't a drop-in replacement for every Postgres deployment. The honest comparison:
+
+**Where D1 wins:**
+
+- **Zero ops.** No instances to size, no failover to script, no connection pool to tune.
+- **Edge latency.** Replicas in regions where Postgres would require setting up read replicas yourself.
+- **Cost.** Generous free tier (5 GB, 25M reads/day) and pay-per-request scaling that maps directly to traffic.
+- **Tight coupling with Workers.** The binding is faster and simpler than any TCP driver.
+
+**Where Postgres still wins:**
+
+- **Database size.** Postgres scales to terabytes; D1 caps at 10 GB per database (use multiple databases or push blob data to R2).
+- **Concurrency on the primary.** SQLite serializes writes — fine for CMS workloads, problematic for write-heavy SaaS analytics. (See `036_analytics_events.sql` and our [REST API guide](/api) for how SonicJS partitions hot write paths.)
+- **Advanced types.** Postgres has `jsonb`, arrays, enums, `RANGE`, and PostGIS. D1 has JSON1 and that's it.
+- **Stored procedures and PL/pgSQL.** D1 doesn't run server-side procedural code.
+
+For a content-driven workload where 95% of traffic is reads of a known set of slugs, D1 + KV is hard to beat. For a write-heavy OLTP system, you'd reach for Postgres on a managed platform and use SonicJS with [Hyperdrive](https://developers.cloudflare.com/hyperdrive/) — also supported, but a different architectural conversation.
+
+## Internal Links
+
+- **[Database reference](/database)** — full schema documentation, every table, every index
+- **[Caching strategy](/caching)** — three-tier memory → KV → D1 in detail
+- **[Collections](/collections)** — how collection schemas turn into rows in `content.data`
+- **[REST API](/api)** — endpoint reference for everything described here
+
+## Key Takeaways
+
+- **D1 is SQLite at the edge** — ACID, indexes, joins, no server to manage. SonicJS uses it as the system of record for users, collections, content, plugins, and audit data.
+- **Drizzle ORM provides typed queries**, and `drizzle-zod` reuses the same definitions for runtime validation — one schema, three artifacts.
+- **Schemas use a "fixed core, flexible payload" pattern** — stable columns for things the CMS reasons about, JSON `data` for collection-specific fields.
+- **Migrations are hand-curated SQL files** bundled at build time, applied by `MigrationService` at runtime. 36 migrations today and counting.
+- **Hot reads are served from KV**, cold reads hit a regional D1 replica, writes go to the primary. Use D1's Sessions API for read-your-writes consistency where needed.
+- **D1 trades some Postgres flexibility for zero-ops and edge latency** — the right call for content-driven workloads, an honest conversation for write-heavy ones.
+
+The data layer is one of the most opinionated parts of SonicJS, and almost every choice is downstream of one decision: *the database has to live where the request handler lives*. Once you accept that, D1 + Drizzle + KV is a remarkably small amount of moving parts for what it gives you.
+
+Have questions about extending the schema, adding a custom collection, or tuning queries for your workload? Join us on [Discord](https://discord.gg/sonicjs) or open an issue on [GitHub](https://github.com/lane711/sonicjs).
+
+Happy querying!

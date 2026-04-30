@@ -1,0 +1,424 @@
+---
+title: "SonicJS vs Ghost: Headless Blog Showdown"
+description: "Ghost is a polished publishing platform; SonicJS is a general-purpose edge-first headless CMS. Here's an honest comparison to help you choose."
+keywords:
+  - "sonicjs vs ghost"
+  - "ghost cms alternative"
+  - "headless blog cms"
+  - "edge blog platform"
+  - "modern blog cms"
+category: "comparisons"
+tags:
+  - "ghost"
+  - "comparison"
+  - "headless-cms"
+  - "blog"
+  - "edge-computing"
+publishedAt: "2026-05-27"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/sonicjs-vs-ghost/hero.png"
+  alt: "Side-by-side visualization of SonicJS as a general-purpose edge CMS hub versus Ghost as a focused single-purpose blog publishing platform"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "SonicJS vs Ghost: Headless Blog Showdown"
+  description: "Ghost is a beloved publishing platform with great writer UX. SonicJS is a general-purpose edge-first CMS. Here's how they really compare."
+---
+
+# SonicJS vs Ghost: Headless Blog Showdown
+
+<TLDRBox>
+**TL;DR** — Ghost is a polished, opinionated publishing platform with a delightful writer UX, built-in newsletter, and paid memberships out of the box. SonicJS is a general-purpose edge-first headless CMS with full content modeling, custom collections, and global sub-50ms latency. Pick Ghost if you want the fastest path to a beautiful newsletter-driven blog. Pick SonicJS when your project is more than a blog.
+
+**Key Stats:**
+- Ghost: 1M+ self-hosted installs, 100k+ Ghost(Pro) sites, mature membership product
+- SonicJS: Sub-50ms global API response (vs ~150-400ms for Ghost(Pro) cross-region)
+- Ghost: Single content type ("posts/pages"); SonicJS: unlimited custom collections
+- Ghost(Pro) starts at $9/mo (500 members); SonicJS on Cloudflare typically $5-20/mo for full traffic
+- Both are MIT-licensed open source
+</TLDRBox>
+
+If you've spent any time in the indie publishing world, you've probably bumped into [Ghost](https://ghost.org). It's a beloved, focused, beautifully-designed platform that turned writing-and-publishing into a first-class product. For a lot of newsletter-driven blogs and creator businesses, Ghost is a near-perfect fit — and we don't think anything in this post changes that.
+
+But "I want to publish a blog" and "I want to build a content-driven product" are very different sentences. Ghost is unapologetically the answer to the first one. **SonicJS** is built for the second.
+
+This post is an honest comparison. Where Ghost is better, we'll say so. Where SonicJS is the smarter foundation, we'll show you exactly why and how to get there.
+
+---
+
+## Quick Comparison
+
+| Feature | Ghost | SonicJS |
+|---|---|---|
+| **Primary use case** | Publishing platform / newsletter blog | General-purpose headless CMS |
+| **Architecture** | Node.js + MySQL/SQLite (traditional server) | Cloudflare Workers (edge-first) |
+| **Content model** | Built-in: posts, pages, tags, authors | Unlimited custom collections |
+| **Membership / paid subs** | Built-in (Stripe) | Plugin / custom (Stripe-friendly) |
+| **Newsletter** | Built-in (Mailgun) | Plugin / external (Resend, Postmark, etc.) |
+| **Editor** | Polished Lexical editor with cards | HTMX admin + rich text fields |
+| **Themes** | Handlebars themes ecosystem | Headless: bring your own frontend |
+| **API** | REST Content + Admin API | REST + auto-generated CRUD |
+| **TypeScript** | Partial (admin client) | Native, first-class |
+| **Hosting** | Ghost(Pro) or self-hosted Node.js + MySQL | Cloudflare Workers (D1 / KV / R2) |
+| **Cold starts** | Yes (Node.js process) | None (V8 isolates, 0-5ms) |
+| **License** | MIT | MIT |
+
+**The real distinction**: Ghost is a *product*. SonicJS is a *platform*. If your needs are 95% "post a blog and email subscribers," the product wins on speed-to-launch. If your needs include custom content types, multiple consumer apps, or non-blog content, the platform wins on optionality.
+
+---
+
+## Where Ghost Genuinely Shines
+
+Let's start with the things Ghost does that we admire — and that, honestly, no headless CMS quite matches today.
+
+### 1. Writer Experience Is the Whole Product
+
+Ghost's editor is one of the best on the web. It's based on Lexical, supports rich "cards" (images, embeds, bookmarks, callouts, code blocks with syntax highlighting), and feels closer to Notion than to a legacy CMS. The keyboard shortcuts are fast, the formatting is clean, and there's almost no learning curve.
+
+If your authors are non-technical writers — bloggers, journalists, creators — Ghost will make them happier than almost any general-purpose CMS, full stop.
+
+### 2. Newsletter Is First-Class
+
+Ghost ships with full email newsletter support out of the box. You configure Mailgun once, and every post can be published *and* emailed to subscribers in the same flow. Open rates, click tracking, and per-newsletter segmentation are all built in.
+
+For newsletter-first creators (think Stratechery, Platformer, Lenny's Newsletter), this is the killer feature. The fact that publish-to-web and publish-to-email are the same button is a huge UX win.
+
+### 3. Memberships and Paid Subscriptions
+
+Ghost's membership system is excellent. Stripe integration is built in. Tiered pricing (free / paid / premium), gated content, member-only newsletters, and signup flows all work without any code. It's effectively Substack-as-software.
+
+If you're monetizing writing directly through subscriptions, Ghost saves you weeks of plumbing.
+
+### 4. Themes Ecosystem
+
+Ghost has a healthy ecosystem of Handlebars-based themes. You can buy a polished theme, customize it slightly, and have a beautiful site within an afternoon.
+
+### 5. The Admin Is Polished
+
+Ghost's admin UI is genuinely a pleasure to use. Drafts, scheduling, multi-author workflows, analytics — all clean, all fast, all opinionated in the best way.
+
+---
+
+## Where SonicJS Wins (And Why It Matters)
+
+Now the other half. The things you give up by choosing Ghost — and that you don't have to give up with SonicJS.
+
+### 1. You Are Not Limited to "Posts"
+
+This is the single biggest divergence. Ghost has **one content type**: a post (with pages as a near-duplicate variant). You can tag, categorize, and feature posts, but you cannot define a "Product," "Recipe," "Event," "Job Posting," or "Course" as its own first-class content type with its own fields and relationships.
+
+In SonicJS, [collections](/collections) are the core primitive:
+
+```typescript
+import { defineCollection } from '@sonicjs-cms/core'
+
+const recipes = defineCollection({
+  name: 'recipes',
+  fields: {
+    title: { type: 'string', required: true },
+    cookTimeMinutes: { type: 'number' },
+    ingredients: { type: 'array', of: 'string' },
+    steps: { type: 'richtext' },
+    cuisine: { type: 'reference', collection: 'cuisines' },
+  },
+})
+```
+
+You get a typed REST [API](/api), admin CRUD UI, validation, and relations — for any content shape you can describe. Ghost cannot do this.
+
+### 2. Edge-First Performance
+
+Ghost runs on a traditional Node.js server with MySQL (or SQLite for small installs). It's fast — but it's only as fast as the closest data center to your visitor. A reader in Sydney hitting a Ghost(Pro) site hosted in the US is paying 200-400ms of network latency before Ghost even renders.
+
+SonicJS runs natively on **Cloudflare Workers**, with [three-tier caching](/caching) (memory → KV → D1) that serves content from 300+ edge locations:
+
+| Scenario | Ghost(Pro) | SonicJS |
+|---|---|---|
+| API response (same region) | 80-150ms | 15-30ms |
+| API response (cross-region) | 200-500ms | 30-60ms |
+| Cold start | Rare but present | 0-5ms (V8 isolates) |
+| Cached response | 30-80ms | 5-15ms |
+
+For globally-distributed audiences, this difference compounds.
+
+### 3. Headless by Design
+
+Ghost has a Content API and you *can* use it as a headless source for a Next.js, Astro, or Nuxt frontend. Plenty of teams do. But Ghost was designed as a coupled publish-and-render platform; the headless mode is bolted-on. Themes, newsletter design, and membership signup flows all assume Ghost's own renderer.
+
+SonicJS was designed headless from day one. Bring any frontend — Astro, Next.js, SvelteKit, native mobile, your own React app — and consume the [REST API](/api) the same way. There's no "but it works better with the built-in renderer" caveat.
+
+### 4. Cost at Scale
+
+Ghost(Pro) pricing is structured around **member counts**, which makes sense for newsletter creators but punishes high-traffic sites that aren't monetizing email:
+
+| Tier | Price | Members |
+|---|---|---|
+| Starter | $9/mo | 500 |
+| Creator | $25/mo | 1,000 |
+| Team | $50/mo | 1,000 (more authors) |
+| Business | $199/mo | 10,000 |
+
+Self-hosting Ghost is free, but you're managing a Node.js server, a MySQL database, an SMTP provider, and the upgrade treadmill yourself.
+
+SonicJS on Cloudflare:
+
+- **Free tier**: 100k requests/day, 10GB D1 storage, no member limit
+- **Workers Paid**: $5/mo base + usage
+- **Typical small/medium site**: $5-20/mo total, regardless of "members"
+
+For a site with 50k subscribers but mostly free readers, SonicJS is dramatically cheaper.
+
+### 5. Custom Logic at the Edge
+
+Want to gate content based on a custom rule? Run an A/B test? Personalize based on geo? Ghost has theme helpers and a Webhooks API, but anything non-trivial pushes you to a separate backend.
+
+SonicJS [plugins](/plugins) let you hook into the request lifecycle, add custom routes, and run code at the edge alongside your content:
+
+```typescript
+import { PluginBuilder } from '@sonicjs-cms/core'
+
+const personalizationPlugin = PluginBuilder.create('personalization')
+  .addHook('content:beforeReturn', async (post, ctx) => {
+    const country = ctx.request.cf?.country
+    if (country === 'DE' && post.translations?.de) {
+      return { ...post, content: post.translations.de }
+    }
+    return post
+  })
+  .build()
+```
+
+That hook runs in the same edge process as the content read — no extra hop, no extra service.
+
+### 6. TypeScript-Native, Code-First Schema
+
+Ghost's content model is fixed; you don't define schemas in code. SonicJS schemas live in your repo as TypeScript, version-controlled, type-safe end-to-end:
+
+```typescript
+const post = await cms.content.get<typeof postsCollection>('posts', slug)
+// post.title is string, post.author is User | null, etc.
+```
+
+If you've ever shipped to production and discovered a content-model mismatch in staging, you know why this matters.
+
+---
+
+## Recreating Ghost-Like Features in SonicJS
+
+If you love Ghost's *features* but want SonicJS's *flexibility*, here's how to build the Ghost happy-path on top of SonicJS.
+
+### 1. A Posts Collection
+
+```typescript
+import { defineCollection } from '@sonicjs-cms/core'
+
+export const posts = defineCollection({
+  name: 'posts',
+  fields: {
+    title: { type: 'string', required: true },
+    slug: { type: 'string', required: true, unique: true },
+    excerpt: { type: 'string' },
+    content: { type: 'richtext' },
+    featureImage: { type: 'media' },
+    author: { type: 'reference', collection: 'users' },
+    tags: { type: 'array', of: 'string' },
+    status: { type: 'enum', values: ['draft', 'scheduled', 'published'] },
+    publishedAt: { type: 'datetime' },
+    visibility: { type: 'enum', values: ['public', 'members', 'paid'] },
+  },
+})
+```
+
+That's the Ghost post model in 12 lines of TypeScript — except now you can add custom fields (a "reading time," a "sponsor," a "podcast embed") without forking anything.
+
+### 2. A Members Collection
+
+Ghost's membership system is a `members` table with subscription state. The SonicJS equivalent:
+
+```typescript
+export const members = defineCollection({
+  name: 'members',
+  fields: {
+    email: { type: 'string', required: true, unique: true },
+    name: { type: 'string' },
+    tier: { type: 'enum', values: ['free', 'paid', 'premium'] },
+    stripeCustomerId: { type: 'string' },
+    subscriptionStatus: { type: 'string' },
+    subscribedAt: { type: 'datetime' },
+  },
+})
+```
+
+Pair it with the [authentication](/authentication) plugin (magic link works beautifully for newsletter signups) and you have signup, login, and gated content. Stripe webhooks land via a custom plugin route that updates the `tier` field. That's the whole thing.
+
+### 3. Newsletter Sending via Plugin
+
+SonicJS doesn't ship a newsletter sender today, but a 60-line plugin gets you the Ghost flow (publish → email):
+
+```typescript
+import { PluginBuilder } from '@sonicjs-cms/core'
+
+const newsletterPlugin = PluginBuilder.create('newsletter')
+  .addHook('content:afterPublish', async (post, ctx) => {
+    if (post.collection !== 'posts') return
+    if (post.visibility === 'paid') return // gate as needed
+
+    const subscribers = await ctx.db
+      .from('members')
+      .where('subscribedAt', 'is not', null)
+      .all()
+
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ctx.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'newsletter@yourdomain.com',
+        to: subscribers.map((s) => s.email),
+        subject: post.title,
+        html: renderEmailTemplate(post),
+      }),
+    })
+  })
+  .build()
+```
+
+Swap Resend for Postmark, Mailgun, or any provider you prefer. You're not locked into one vendor the way Ghost is to Mailgun.
+
+### 4. Authors and Multi-Author Workflows
+
+Use SonicJS's built-in [authentication](/authentication) and RBAC. The default `admin` / `editor` / `viewer` roles cover the Ghost owner / editor / author model. If you need finer-grained roles (contributor, etc.), extend the role list — it's a couple lines of plugin code.
+
+### 5. Content API for Your Frontend
+
+You already have it. The auto-generated [REST API](/api) gives you `GET /api/content/posts`, `GET /api/content/posts/:slug`, filtering, pagination, and field selection — same patterns as Ghost's Content API. Plug it into Astro, Next.js, or whatever you prefer.
+
+---
+
+## When to Choose Ghost
+
+Ghost is the right answer when:
+
+- You're a **single-author newsletter or creator blog** and time-to-launch matters more than customization.
+- **Paid memberships and Substack-style monetization** are core to the business model.
+- Your authors are **non-technical writers** who will live in the editor every day.
+- You don't need any content types beyond posts, pages, and authors.
+- You're happy in the Handlebars themes ecosystem.
+- You want a **one-product solution** rather than assembling a stack.
+
+If three or more of those are true, just use Ghost. We mean it. Ghost is a great product, and reaching for a general-purpose CMS would be over-engineering.
+
+---
+
+## When to Choose SonicJS
+
+SonicJS is the right answer when:
+
+- Your project is **more than a blog** — products, events, recipes, courses, listings, dashboards, anything with custom content types.
+- You're powering **multiple consumer apps** (web + mobile + voice) from one content backend.
+- **Global performance matters** — international audiences, sub-50ms expectations, or sites that get hit hard during traffic spikes.
+- You want to **own the frontend** with Astro / Next.js / SvelteKit / your-framework-of-choice.
+- You need **custom logic in the request path** — A/B tests, personalization, edge gating, custom integrations.
+- You're optimizing for **infrastructure cost at scale** rather than newsletter monetization.
+- You prefer **TypeScript-first, code-first** schema and configuration.
+
+If your project crosses two or more of those, you'll outgrow Ghost. Better to start on a foundation that scales with you.
+
+---
+
+## Migration Considerations
+
+### Coming from Ghost to SonicJS
+
+If you're already on Ghost and considering a move, the migration is genuinely tractable:
+
+1. **Export Ghost content** via Settings → Labs → Export. You'll get a JSON file with posts, pages, tags, and users.
+2. **Define the equivalent SonicJS collection** (the schema above gets you 90% there).
+3. **Run a one-time import script** that walks the Ghost JSON and POSTs to `/api/content/posts`. Most Ghost exports import in under 5 minutes.
+4. **Migrate members** via Ghost's members CSV export → SonicJS members collection.
+5. **Re-point your frontend** to the SonicJS API (same REST patterns, mostly mechanical).
+6. **Wire newsletter sends** via the plugin pattern above.
+
+The trickiest piece is usually the editor migration — Ghost's mobiledoc/Lexical format needs a conversion to whatever rich text format you store in SonicJS. There are open-source Ghost-to-Markdown converters that handle this in one pass.
+
+### Going the Other Way
+
+You usually wouldn't — moving from a general-purpose CMS to a single-purpose blog engine is a strange trade. But if you've tried SonicJS and decided you really did just want Ghost, your data is in clean JSON via the API; Ghost's importer can take it.
+
+---
+
+## Performance & Hosting at a Glance
+
+| Aspect | Ghost(Pro) | Ghost (self-hosted) | SonicJS |
+|---|---|---|---|
+| Hosting | Managed | Bring your own server | Cloudflare Workers |
+| Database | MySQL (managed) | MySQL or SQLite | D1 (SQLite at edge) |
+| Storage | Included | Bring your own | R2 (built-in) |
+| Email | Mailgun (built-in) | Mailgun (you wire) | Plugin (Resend/Postmark/etc.) |
+| Cold starts | None (managed) | Possible | None (V8 isolates) |
+| Global edge | Cloudflare in front | Optional CDN | Native edge |
+| Scaling | Tier upgrade | Manual | Automatic |
+| Monthly cost (small site) | $9-25 | $5-20 server + maintenance | $0-10 |
+| Monthly cost (50k members) | $199+ | Variable | $5-20 |
+
+---
+
+## Honest Assessment of SonicJS Trade-offs
+
+We're going to call out our own gaps so this isn't a one-sided take:
+
+- **Editor polish**: Ghost's editor is more refined than SonicJS's admin rich-text experience today. We're investing here.
+- **No built-in newsletter UI**: You wire it via plugin. Ghost gives you analytics and broadcast UI for free.
+- **No theme marketplace**: SonicJS is headless; you bring or build a frontend. That's freedom *and* effort.
+- **Smaller community**: Ghost has been around since 2013 and has a big ecosystem. SonicJS is younger.
+- **No first-party Stripe membership product**: You build it on top of [authentication](/authentication) + collections. It's not hard, but it's not zero-config either.
+
+If those are blockers and your project is fundamentally a newsletter blog — go use Ghost. We'll cheer for you.
+
+---
+
+## Verdict
+
+Ghost and SonicJS aren't really competitors — they're answers to different questions.
+
+- **"What's the fastest way to launch a beautiful newsletter blog with paid subs?"** → Ghost. It's a finished product designed for exactly that, and it's excellent at it.
+- **"What's the best foundation for a content-driven product that may include a blog but goes well beyond it?"** → SonicJS. Custom collections, edge-first performance, headless by design, and the flexibility to grow without forklift migrations.
+
+If you're genuinely on the fence, ask yourself one question: *"In two years, will my content model still be just posts and pages?"* If the answer is yes, Ghost will treat you well. If the answer is "probably not, we'll have products, events, members with custom data, or a second app," then starting on a general-purpose [database](/database) and edge-native CMS will save you a future migration.
+
+---
+
+## Key Takeaways
+
+- **Ghost is a product, SonicJS is a platform.** Ghost wins on time-to-launch for newsletter blogs; SonicJS wins on flexibility and edge performance.
+- **Content modeling is the core split.** Ghost has one content type. SonicJS has unlimited custom [collections](/collections).
+- **Performance**: Ghost is fast; SonicJS is sub-50ms globally with zero cold starts thanks to Cloudflare Workers.
+- **You can recreate Ghost-style features in SonicJS** with a posts collection, members collection, and a small newsletter [plugin](/plugins).
+- **Pricing**: Ghost(Pro) scales with member count; SonicJS scales with traffic — and is usually cheaper for non-newsletter sites.
+- Use Ghost for creator newsletters. Use SonicJS when your project is more than a blog.
+
+---
+
+## Get Started
+
+```bash
+# Spin up a SonicJS project
+npx create-sonicjs-app my-cms
+cd my-cms
+npm run dev
+
+# Deploy when ready
+npx wrangler deploy
+```
+
+Have questions, want to share what you're building, or have a Ghost-to-SonicJS migration story? Join us on [Discord](https://discord.gg/sonicjs) or open an issue on [GitHub](https://github.com/lane711/sonicjs). We read everything.
+
+Happy publishing — whichever platform you land on.

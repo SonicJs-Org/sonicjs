@@ -1,0 +1,477 @@
+---
+title: "Building a REST API with SonicJS in 10 Minutes"
+description: "Build a production-ready REST API on Cloudflare Workers with SonicJS. Define a collection, deploy globally, and query with filters, sort, and pagination."
+keywords:
+  - "build rest api sonicjs"
+  - "cloudflare workers rest api"
+  - "headless cms rest api"
+  - "edge api tutorial"
+  - "typescript rest api"
+category: "tutorials"
+tags:
+  - "rest-api"
+  - "tutorial"
+  - "cloudflare-workers"
+  - "typescript"
+  - "collections"
+  - "edge"
+publishedAt: "2026-05-04"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/building-rest-api-with-sonicjs/hero.png"
+  alt: "3D isometric visualization of REST API architecture with HTTP method nodes connected by glowing data pathways to a central server"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "Building a REST API with SonicJS in 10 Minutes"
+  description: "Define a collection, ship a typed REST API to Cloudflare Workers, and query it with filter, sort, and pagination — in 10 minutes."
+---
+
+# Building a REST API with SonicJS in 10 Minutes
+
+<TLDRBox>
+**TL;DR** — Define a collection in TypeScript, run `npm run deploy`, and SonicJS gives you a fully-typed REST API on Cloudflare Workers — complete with filtering, sorting, pagination, KV-cached reads, and JWT-protected writes. No route boilerplate. No ORM glue. No server.
+
+**Key Stats:**
+- 10 minutes from `npm create` to a globally deployed REST API
+- 4 CRUD endpoints auto-generated per collection (GET list, GET one, POST, PUT, DELETE)
+- 16 filter operators built in: `equals`, `contains`, `greater_than`, `in`, `like`, and 11 more
+- Up to **1000 items per request** with cursor-friendly `limit` and `offset`
+- Sub-millisecond cached reads via Cloudflare KV — `X-Cache-Status: HIT` headers included
+</TLDRBox>
+
+If you've ever built a REST API the traditional way, you know the drill: scaffold an Express app, wire up an ORM, write the same five CRUD handlers for the tenth time, deploy to a single region, and add caching as a separate project six months later. **SonicJS** collapses all of that into a single TypeScript file plus a deploy command.
+
+This tutorial walks you from zero to a production REST API on Cloudflare's edge — including filtering, sorting, pagination, cache headers, and JWT-protected writes. The code samples map directly to the real `@sonicjs-cms/core` API surface, so you can paste them into your project and they'll work.
+
+## What You Get for Free
+
+Before we write any code, here's what SonicJS auto-generates the moment you register a collection:
+
+| Endpoint | Method | Auth | Purpose |
+|---|---|---|---|
+| `/api/collections/:name/content` | `GET` | Optional | List items with filter/sort/pagination |
+| `/api/content/:id` | `GET` | Optional | Get one item by ID |
+| `/api/content` | `POST` | Required | Create an item |
+| `/api/content/:id` | `PUT` | Required | Update an item |
+| `/api/content/:id` | `DELETE` | Required | Delete an item |
+
+Plus a few you'll appreciate as your project grows:
+
+- `/api/` — OpenAPI 3.0 spec for the entire CMS
+- `/api/health` — health check with database and KV status
+- `/api/collections` — list every active collection and its schema
+- `/api/content/check-slug` — slug uniqueness check (great for admin UIs)
+
+The reads run through a [three-tiered cache](/caching) (in-memory → Cloudflare KV → D1), and the writes invalidate the cache automatically.
+
+## Prerequisites
+
+You need three things before you start:
+
+- **Node.js 20+**
+- **A Cloudflare account** (the free tier handles this whole tutorial)
+- **Wrangler CLI** — Cloudflare's deploy tool
+
+```bash
+node --version          # v20.0.0 or higher
+npm install -g wrangler
+wrangler login
+```
+
+If you've never deployed a Cloudflare Worker before, our [Getting Started guide](/docs) walks through the account-linking step in detail.
+
+## Step 1: Scaffold the Project
+
+```bash
+npm create sonicjs-app my-api
+cd my-api
+npm install
+```
+
+This drops a working SonicJS project into `my-api/`. The structure is intentionally small:
+
+```
+my-api/
+├── src/
+│   ├── index.ts                    # App entry point
+│   └── collections/
+│       └── blog-posts.collection.ts
+├── wrangler.toml
+└── package.json
+```
+
+Open `src/index.ts` and you'll see the canonical SonicJS bootstrap — three function calls and you're done.
+
+```typescript
+import { Hono } from 'hono'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
+import blogPostsCollection from './collections/blog-posts.collection'
+
+registerCollections([blogPostsCollection])
+
+const config: SonicJSConfig = {
+  collections: { autoSync: true },
+}
+
+const coreApp = createSonicJSApp(config)
+
+const app = new Hono()
+app.route('/', coreApp)
+
+export default app
+```
+
+`createSonicJSApp()` returns a Hono app with every route — admin UI, auth endpoints, and the REST API — already mounted. `registerCollections()` is what makes your custom content types show up in the API.
+
+## Step 2: Define a Collection
+
+Collections are the heart of SonicJS. They describe a content type with a JSON-schema-like definition, and SonicJS uses that schema to generate REST endpoints, admin forms, and SQL migrations.
+
+Open `src/collections/blog-posts.collection.ts`:
+
+```typescript
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export default {
+  name: 'blog_posts',
+  displayName: 'Blog Posts',
+  description: 'Manage blog posts for the public site',
+  icon: '📝',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        title: 'Title',
+        required: true,
+        maxLength: 200,
+      },
+      slug: {
+        type: 'slug',
+        title: 'URL Slug',
+        required: true,
+        maxLength: 200,
+      },
+      excerpt: {
+        type: 'textarea',
+        title: 'Excerpt',
+        maxLength: 500,
+      },
+      content: {
+        type: 'quill',
+        title: 'Content',
+        required: true,
+      },
+      author: {
+        type: 'string',
+        title: 'Author',
+        required: true,
+      },
+      publishedAt: {
+        type: 'datetime',
+        title: 'Published At',
+      },
+      status: {
+        type: 'select',
+        title: 'Status',
+        enum: ['draft', 'published', 'archived'],
+        default: 'draft',
+      },
+    },
+    required: ['title', 'slug', 'content', 'author'],
+  },
+
+  listFields: ['title', 'author', 'status', 'publishedAt'],
+  searchFields: ['title', 'excerpt', 'author'],
+} satisfies CollectionConfig
+```
+
+A few details worth calling out:
+
+- **`name`** is what shows up in the URL — `/api/collections/blog_posts/content`. Stick to snake_case.
+- **`required`** at the field level enforces required-ness at the schema layer. The top-level `required` array is for JSON-schema compatibility.
+- **`type: 'slug'`** auto-generates a URL-safe slug from the title in the admin UI.
+- **`listFields`** controls which columns show up in the admin list view; **`searchFields`** drives the admin search box.
+
+Other field types you can use today: `string`, `textarea`, `quill` (rich text), `media`, `datetime`, `select`, `checkbox`, `number`, and `slug`. See the [collections reference](/collections) for the full list.
+
+## Step 3: Provision D1 and Deploy
+
+SonicJS persists content to **Cloudflare D1** — a SQLite database that runs on the edge alongside your Worker. The CLI does the wiring for you:
+
+```bash
+wrangler d1 create my-api-db
+```
+
+Wrangler prints a snippet like this — paste it into your `wrangler.toml`:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "my-api-db"
+database_id = "abc123-..."
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "your-kv-id"
+```
+
+Then run the migrations and deploy:
+
+```bash
+npm run db:migrate:prod
+npm run deploy
+```
+
+Wrangler returns a URL like `https://my-api.your-subdomain.workers.dev`. Your REST API is now live in **300+ Cloudflare data centers**, with no servers to manage.
+
+## Step 4: Make Your First Request
+
+Start with the OpenAPI root to confirm everything is wired up:
+
+```bash
+curl https://my-api.your-subdomain.workers.dev/api/
+```
+
+You'll get the full OpenAPI 3.0 spec back as JSON. Now list your (empty) collection:
+
+```bash
+curl https://my-api.your-subdomain.workers.dev/api/collections/blog_posts/content
+```
+
+```json
+{
+  "data": [],
+  "meta": {
+    "count": 0,
+    "timestamp": "2026-05-04T12:00:00.000Z",
+    "filter": { "where": { "and": [...] }, "limit": 50 },
+    "cache": { "hit": false, "source": "database" },
+    "timing": { "total": 12, "execution": 8, "unit": "ms" }
+  }
+}
+```
+
+The `meta` block is your friend: it tells you the cache status, timing, and the parsed filter SonicJS used to build the SQL.
+
+## Step 5: Create, Read, Update, Delete
+
+Writes require an authenticated request. Grab a JWT by logging in as the admin user that the bootstrap created (or use [magic links / OAuth](/authentication) if you've enabled them):
+
+```bash
+TOKEN=$(curl -s -X POST https://my-api.your-subdomain.workers.dev/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin123"}' | jq -r .token)
+```
+
+### Create (POST)
+
+```bash
+curl -X POST https://my-api.your-subdomain.workers.dev/api/content \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "collectionId": "blog_posts",
+    "title": "Hello, edge",
+    "slug": "hello-edge",
+    "status": "published",
+    "data": {
+      "author": "Jane",
+      "excerpt": "First post on the edge.",
+      "content": "<p>Welcome.</p>",
+      "publishedAt": "2026-05-04T12:00:00Z"
+    }
+  }'
+```
+
+The response is a `201 Created` with the full content row, including the auto-generated UUID:
+
+```json
+{
+  "data": {
+    "id": "9f1c2b1a-...",
+    "title": "Hello, edge",
+    "slug": "hello-edge",
+    "status": "published",
+    "collectionId": "blog_posts",
+    "data": { "author": "Jane", ... },
+    "created_at": 1730732400000,
+    "updated_at": 1730732400000
+  }
+}
+```
+
+### Read (GET)
+
+```bash
+# By ID
+curl https://my-api.your-subdomain.workers.dev/api/content/9f1c2b1a-...
+
+# Whole collection
+curl https://my-api.your-subdomain.workers.dev/api/collections/blog_posts/content
+```
+
+### Update (PUT)
+
+```bash
+curl -X PUT https://my-api.your-subdomain.workers.dev/api/content/9f1c2b1a-... \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title": "Hello, edge — revised"}'
+```
+
+PUT requests are partial updates — send only the fields that changed. SonicJS merges them and bumps `updated_at`.
+
+### Delete (DELETE)
+
+```bash
+curl -X DELETE https://my-api.your-subdomain.workers.dev/api/content/9f1c2b1a-... \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Returns `{ "success": true }` and invalidates every cache key that referenced the item.
+
+## Step 6: Filtering, Sorting, Pagination
+
+This is where the auto-generated API really earns its keep. Three query-string conventions cover 95% of real-world reads:
+
+### Simple Filters
+
+The two most common filters are exposed as plain query params:
+
+```bash
+# Status filter
+curl "https://my-api.../api/collections/blog_posts/content?status=published"
+
+# Pagination
+curl "https://my-api.../api/collections/blog_posts/content?limit=10&offset=20"
+```
+
+`limit` is capped at **1000** — request more and SonicJS clamps it silently.
+
+### Bracket-Syntax Filters
+
+For anything beyond `status`, use `filter[field][operator]=value`:
+
+```bash
+# Find posts whose title contains "edge"
+curl "https://my-api.../api/collections/blog_posts/content?filter[title][contains]=edge"
+
+# Posts created after a timestamp
+curl "https://my-api.../api/collections/blog_posts/content?filter[created_at][greater_than]=1730000000000"
+
+# Posts whose slug starts with "hello-"
+curl "https://my-api.../api/collections/blog_posts/content?filter[slug][starts_with]=hello-"
+
+# Multiple statuses at once
+curl "https://my-api.../api/collections/blog_posts/content?filter[status][in]=published,archived"
+```
+
+The full operator list, all 16 of them: `equals`, `not_equals`, `greater_than`, `greater_than_equal`, `less_than`, `less_than_equal`, `like`, `contains`, `starts_with`, `ends_with`, `in`, `not_in`, `all`, `exists`, `near`, `within`, `intersects`.
+
+### JSON `where` Clauses
+
+For boolean logic that doesn't fit query strings, pass a JSON `where` blob:
+
+```bash
+curl -G "https://my-api.../api/collections/blog_posts/content" \
+  --data-urlencode 'where={"or":[{"field":"status","operator":"equals","value":"published"},{"field":"status","operator":"equals","value":"archived"}]}'
+```
+
+`AND` and `OR` groups can nest, and conditions are parameterized — SonicJS uses the same `QueryFilterBuilder` internally to defend against SQL injection.
+
+### Sorting
+
+```bash
+# Sort by published date descending
+curl -G "https://my-api.../api/collections/blog_posts/content" \
+  --data-urlencode 'sort=[{"field":"publishedAt","order":"desc"}]'
+
+# Multi-column sort
+curl -G "https://my-api.../api/collections/blog_posts/content" \
+  --data-urlencode 'sort=[{"field":"status","order":"asc"},{"field":"created_at","order":"desc"}]'
+```
+
+## Cache Headers and Performance
+
+Every read response carries cache metadata in the headers and the `meta` block:
+
+```
+X-Cache-Status: HIT
+X-Cache-Source: kv
+X-Cache-TTL: 287
+X-Response-Time: 4ms
+```
+
+`X-Cache-Source` is one of `memory`, `kv`, or `database`. The first request after a write hits the database and warms KV; subsequent reads anywhere in the world get sub-millisecond responses.
+
+For a deep dive into how the cache layers interact, see the [caching strategy guide](/caching). For the database tuning details — D1 settings, indexes, and the read-vs-write tradeoff — read up on [D1 and the SonicJS database layer](/database).
+
+## Securing Writes
+
+Every mutating endpoint (`POST`, `PUT`, `DELETE`) is gated by SonicJS's built-in [`requireAuth()` and `requireRole()`](/authentication) middleware. The defaults:
+
+- **Allowed roles:** `admin`, `editor`, `author`
+- **Auth source:** `Authorization: Bearer <jwt>` header *or* the `auth_token` cookie
+- **JWT TTL:** 30 days, with a 7-day refresh window
+
+If you want public write access for a specific endpoint (uncommon, but useful for things like contact-form submissions), build a custom Hono route that bypasses the role check and writes to the same D1 table.
+
+## A Real-World Read Pattern
+
+Here's how a frontend might fetch the latest 10 published posts, with cache headers respected and pagination wired up:
+
+```typescript
+async function getRecentPosts(page = 0, perPage = 10) {
+  const params = new URLSearchParams({
+    status: 'published',
+    limit: String(perPage),
+    offset: String(page * perPage),
+    sort: JSON.stringify([{ field: 'publishedAt', order: 'desc' }]),
+  })
+
+  const res = await fetch(
+    `https://my-api.example.com/api/collections/blog_posts/content?${params}`,
+    { headers: { 'Accept': 'application/json' } }
+  )
+
+  const json = await res.json()
+  return {
+    posts: json.data,
+    cacheHit: res.headers.get('X-Cache-Status') === 'HIT',
+    timing: json.meta.timing,
+  }
+}
+```
+
+That's it. Globally distributed reads, automatic caching, and you write zero backend code per route.
+
+## Next Steps
+
+You've got a working REST API. Where to go from here:
+
+- **[REST API reference](/api)** — every endpoint, request shape, and response shape
+- **[Collections deep-dive](/collections)** — relations, validation, custom field types
+- **[Authentication](/authentication)** — OAuth, magic links, OTP, RBAC
+- **[Caching strategy](/caching)** — how the three-tier cache works under the hood
+- **[Database and migrations](/database)** — D1, schema sync, and zero-downtime updates
+
+## Key Takeaways
+
+- One TypeScript collection definition gives you a full REST API — list, read, create, update, delete.
+- SonicJS supports **16 filter operators**, multi-column sort, and `limit` + `offset` pagination on every collection endpoint.
+- Reads are cached in **memory + Cloudflare KV + D1**, with cache headers exposed on every response.
+- Writes are gated by JWT auth and role-based middleware — no extra glue code required.
+- Deployment is a single `npm run deploy` to Cloudflare's global edge.
+
+Have questions or want to share what you're shipping? Join us on [Discord](https://discord.gg/sonicjs) or [GitHub](https://github.com/lane711/sonicjs).
+
+Happy building!

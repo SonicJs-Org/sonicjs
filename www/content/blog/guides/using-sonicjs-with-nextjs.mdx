@@ -1,0 +1,657 @@
+---
+title: "Using SonicJS with Next.js: A Complete Integration Guide"
+description: "Build edge-fast content sites with Next.js 15 App Router and SonicJS — typed fetch helpers, RSC, ISR, generateStaticParams, and Cloudflare Pages deployment."
+keywords:
+  - "sonicjs nextjs"
+  - "headless cms nextjs"
+  - "nextjs cms integration"
+  - "nextjs cloudflare cms"
+  - "edge cms nextjs"
+category: "guides"
+tags:
+  - "nextjs"
+  - "integration"
+  - "frontend"
+  - "tutorial"
+  - "cloudflare"
+publishedAt: "2026-05-18"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/using-sonicjs-with-nextjs/hero.png"
+  alt: "Isometric visualization of a Next.js React Server Components stack consuming a SonicJS headless CMS over glowing edge API streams"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "Using SonicJS with Next.js: A Complete Integration Guide"
+  description: "Wire Next.js 15 App Router to SonicJS — typed fetch, Server Components, ISR, route handlers, and Cloudflare Pages deployment."
+---
+
+# Using SonicJS with Next.js: A Complete Integration Guide
+
+<TLDRBox>
+**TL;DR** — Pair Next.js 15's App Router with SonicJS to ship a fully typed, edge-cached, content-driven site. Fetch from React Server Components with the native `fetch` cache, statically generate dynamic routes with `generateStaticParams`, opt into ISR with `revalidate`, and proxy authenticated mutations through Route Handlers. Deploy both halves to Cloudflare for sub-50ms global response times.
+
+**Key Stats:**
+- Next.js **15** App Router + React **19** Server Components
+- Native `fetch` cache with `revalidate` for per-route ISR (60s default in this guide)
+- `force-static` for build-time SSG, `force-dynamic` for live data — same component
+- Sub-**50ms** SonicJS API responses from the edge KV cache
+- One stack, two render modes: **static export** *and* **server-rendered on Cloudflare Pages**
+</TLDRBox>
+
+Next.js 15 and SonicJS are a natural fit. Next.js gives you the most flexible React rendering model on the market — Server Components, streaming, ISR, and partial prerendering — while SonicJS delivers content from the edge with KV-backed caching that keeps p95 latency under 50ms. Put them together and you get a CMS-driven site that's fast at build time, fast at request time, and trivial to deploy globally.
+
+This guide walks through a complete integration: typed API client, Server Component data fetching, dynamic routing with `generateStaticParams`, ISR via `revalidate`, authenticated Route Handlers, and deployment to Cloudflare Pages in both static-export and server-render modes.
+
+## Why Next.js + SonicJS?
+
+| Feature | Benefit |
+|---------|---------|
+| **App Router + RSC** | Fetch SonicJS content on the server with zero client JS |
+| **Native `fetch` cache** | Per-request `revalidate` and tag-based invalidation built in |
+| **Edge-first SonicJS** | Sub-50ms responses from Cloudflare Workers + KV |
+| **TypeScript end-to-end** | Type your collection schemas once, reuse everywhere |
+| **Cloudflare Pages support** | Both halves of the stack on the same global network |
+| **Image optimization** | `next/image` with R2-hosted media via `remotePatterns` |
+
+## Prerequisites
+
+Before we begin, you'll need:
+
+- **Node.js 20+** — required for both Next.js 15 and SonicJS
+- **A running SonicJS instance** — local on `:8787` or deployed to Cloudflare Workers
+- **Familiarity with the App Router** — Server Components, Route Handlers, and the `app/` directory
+
+```bash
+# Verify your Node version
+node --version  # v20.0.0 or higher
+```
+
+## Part 1: Spin Up the SonicJS Backend
+
+If you don't already have SonicJS running, scaffold a project in two commands:
+
+```bash
+npx create-sonicjs my-cms
+cd my-cms
+npm run dev
+# CMS available at http://localhost:8787
+```
+
+`create-sonicjs` provisions the database schema, registers the default collections (including `blog-posts`), creates the admin user, and starts the Cloudflare Workers dev server. The blog posts collection lives at `src/collections/blog-posts.collection.ts` and is auto-registered in `src/index.ts` — see the [collections guide](/collections) for the full configuration reference.
+
+Open `http://localhost:8787/admin`, log in, and add a few posts. Set their `status` to `published` so they appear in your Next.js frontend.
+
+### The SonicJS REST API at a Glance
+
+Every collection you register is automatically exposed under `/api/collections/{name}/content`. The endpoints you'll use most:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/collections` | List every collection in the workspace |
+| `GET /api/collections/{name}/content` | List items (supports `limit`, `offset`, `sort`, `filter[…]`) |
+| `GET /api/collections/{name}/content/{id}` | Fetch a single item by ID |
+| `POST /api/collections/{name}/content` | Create (requires `Authorization: Bearer …`) |
+| `PATCH /api/collections/{name}/content/{id}` | Update (auth) |
+| `DELETE /api/collections/{name}/content/{id}` | Delete (auth) |
+
+Read endpoints are public by default. Write endpoints require a JWT — see the [authentication guide](/authentication). For the full payload shapes, query parameters, and pagination metadata, the [API reference](/api) is the canonical source.
+
+---
+
+## Part 2: Bootstrap the Next.js App
+
+```bash
+npx create-next-app@latest my-next-site \
+  --typescript --app --tailwind --eslint \
+  --src-dir --import-alias "@/*"
+
+cd my-next-site
+```
+
+When prompted, accept the App Router defaults. We'll be working entirely under `src/app/`.
+
+### Configure Environment Variables
+
+```bash
+# .env.local
+SONICJS_API_URL=http://localhost:8787
+SONICJS_API_TOKEN=
+# NOTE: Server-side only — never prefix with NEXT_PUBLIC_.
+# Read endpoints don't require a token; populate this when you start
+# making authenticated mutations from Route Handlers.
+```
+
+Because the App Router renders on the server by default, you keep secrets on the server side without leaking them to the browser. **Never** prefix `SONICJS_API_TOKEN` with `NEXT_PUBLIC_`.
+
+---
+
+## Part 3: A Typed SonicJS Fetch Helper
+
+Create a small client that wraps `fetch` and exposes type-safe helpers. This is the same pattern recommended in the [Astro guide](/blog/using-sonicjs-with-astro), adapted for Next.js's caching primitives.
+
+```typescript
+// src/lib/sonicjs.ts
+import 'server-only'
+
+const API_URL = process.env.SONICJS_API_URL ?? 'http://localhost:8787'
+const API_TOKEN = process.env.SONICJS_API_TOKEN
+
+export interface SonicJSResponse<T> {
+  data: T
+  meta: {
+    count: number
+    timestamp: string
+    cache: { hit: boolean; source: string }
+  }
+}
+
+export interface SonicJSItem<TData> {
+  id: string
+  title: string
+  slug: string
+  status: 'draft' | 'published' | 'archived'
+  data: TData
+  created_at: number
+  updated_at: number
+}
+
+export interface BlogPostData {
+  title: string
+  slug: string
+  excerpt?: string
+  content: string
+  featuredImage?: string
+  publishedAt?: string
+}
+
+export type BlogPost = SonicJSItem<BlogPostData>
+
+interface FetchOptions {
+  // Cache for N seconds, then revalidate in the background (ISR).
+  revalidate?: number | false
+  // Tag the response so you can `revalidateTag()` from a webhook.
+  tags?: string[]
+  // Force a fresh request — use sparingly.
+  noStore?: boolean
+}
+
+async function sonicFetch<T>(
+  path: string,
+  options: FetchOptions = {},
+): Promise<T> {
+  const url = `${API_URL}${path}`
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (API_TOKEN) headers.Authorization = `Bearer ${API_TOKEN}`
+
+  const next: RequestInit['next'] = options.noStore
+    ? undefined
+    : { revalidate: options.revalidate ?? 60, tags: options.tags }
+
+  const res = await fetch(url, {
+    headers,
+    cache: options.noStore ? 'no-store' : undefined,
+    next,
+  })
+
+  if (!res.ok) {
+    throw new Error(`SonicJS ${res.status}: ${res.statusText} (${path})`)
+  }
+  return res.json() as Promise<T>
+}
+
+// Public: list published posts (default ISR window: 60s)
+export function getBlogPosts(revalidate = 60) {
+  return sonicFetch<SonicJSResponse<BlogPost[]>>(
+    '/api/collections/blog-posts/content?sort=-created_at',
+    { revalidate, tags: ['blog-posts'] },
+  ).then((r) =>
+    // Filter client-side for v2.x compatibility; see Troubleshooting.
+    r.data.filter((p) => p.status === 'published'),
+  )
+}
+
+// Public: fetch a single post by slug
+export async function getBlogPostBySlug(slug: string) {
+  const r = await sonicFetch<SonicJSResponse<BlogPost[]>>(
+    '/api/collections/blog-posts/content',
+    { revalidate: 60, tags: [`blog-post:${slug}`] },
+  )
+  return (
+    r.data.find((p) => p.data.slug === slug && p.status === 'published') ??
+    null
+  )
+}
+```
+
+A few Next.js-specific notes:
+
+- **`'server-only'`** at the top is a hard guarantee — if you accidentally import this file from a Client Component, the build fails.
+- **`next: { revalidate, tags }`** is how App Router opts into ISR. SonicJS's edge cache and Next.js's data cache compose cleanly: SonicJS deduplicates across regions, Next.js deduplicates per route segment.
+- **Tags** let you invalidate from a webhook with `revalidateTag('blog-posts')` after a publish event.
+
+---
+
+## Part 4: Server Components Consuming SonicJS
+
+### Blog Listing Page
+
+```tsx
+// src/app/blog/page.tsx
+import Link from 'next/link'
+import Image from 'next/image'
+import { getBlogPosts } from '@/lib/sonicjs'
+
+// Statically build at deploy, revalidate every 60s in the background.
+export const revalidate = 60
+
+export default async function BlogIndex() {
+  const posts = await getBlogPosts()
+
+  return (
+    <main className="mx-auto max-w-5xl px-6 py-12">
+      <h1 className="text-4xl font-bold mb-8">Blog</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {posts.map((post) => (
+          <article
+            key={post.id}
+            className="rounded-xl border border-slate-200 overflow-hidden"
+          >
+            {post.data.featuredImage && (
+              <Image
+                src={post.data.featuredImage}
+                alt={post.data.title}
+                width={600}
+                height={400}
+                className="w-full h-48 object-cover"
+              />
+            )}
+            <div className="p-4">
+              <h2 className="text-xl font-semibold mb-2">
+                <Link href={`/blog/${post.data.slug}`}>
+                  {post.data.title}
+                </Link>
+              </h2>
+              {post.data.excerpt && (
+                <p className="text-slate-600">{post.data.excerpt}</p>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+    </main>
+  )
+}
+```
+
+The page is a Server Component — there's **no `'use client'`** marker, so React renders the HTML on the server, ships zero JavaScript for this view, and Next.js caches the result.
+
+### Dynamic Post Page with `generateStaticParams`
+
+```tsx
+// src/app/blog/[slug]/page.tsx
+import { notFound } from 'next/navigation'
+import Image from 'next/image'
+import Link from 'next/link'
+import { getBlogPosts, getBlogPostBySlug } from '@/lib/sonicjs'
+
+// Per-post ISR window — overrides parent layout's revalidate.
+export const revalidate = 60
+
+// Statically generate every published slug at build time.
+export async function generateStaticParams() {
+  const posts = await getBlogPosts()
+  return posts.map((p) => ({ slug: p.data.slug }))
+}
+
+// Per-page metadata — picked up by Next.js's <head> generator.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}) {
+  const { slug } = await params
+  const post = await getBlogPostBySlug(slug)
+  if (!post) return {}
+  return {
+    title: post.data.title,
+    description: post.data.excerpt,
+    openGraph: {
+      title: post.data.title,
+      description: post.data.excerpt,
+      images: post.data.featuredImage ? [post.data.featuredImage] : [],
+    },
+  }
+}
+
+export default async function PostPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}) {
+  const { slug } = await params
+  const post = await getBlogPostBySlug(slug)
+  if (!post) notFound()
+
+  return (
+    <article className="mx-auto max-w-3xl px-6 py-12">
+      <header className="mb-8">
+        <h1 className="text-4xl font-bold mb-2">{post.data.title}</h1>
+        {post.data.publishedAt && (
+          <time
+            dateTime={post.data.publishedAt}
+            className="text-slate-500"
+          >
+            {new Date(post.data.publishedAt).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </time>
+        )}
+      </header>
+
+      {post.data.featuredImage && (
+        <Image
+          src={post.data.featuredImage}
+          alt={post.data.title}
+          width={1200}
+          height={630}
+          className="w-full rounded-xl mb-8"
+          priority
+        />
+      )}
+
+      {/* Content from SonicJS Quill editor is sanitized HTML */}
+      <div
+        className="prose prose-slate max-w-none"
+        dangerouslySetInnerHTML={{ __html: post.data.content }}
+      />
+
+      <footer className="mt-12 pt-8 border-t border-slate-200">
+        <Link href="/blog" className="text-blue-600 hover:underline">
+          ← Back to Blog
+        </Link>
+      </footer>
+    </article>
+  )
+}
+```
+
+`generateStaticParams` is the App Router successor to Pages Router's `getStaticPaths`. Combined with `revalidate = 60`, every published slug is built once at deploy time and re-fetched on the next request after 60 seconds — classic ISR, no extra config.
+
+### Configuring `next/image` for R2 Media
+
+SonicJS stores uploads in Cloudflare R2 and serves them from a public bucket URL. Tell `next/image` it's allowed to optimize those URLs:
+
+```typescript
+// next.config.ts
+import type { NextConfig } from 'next'
+
+const config: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'pub-sonicjs-media-dev.r2.dev',
+      },
+      {
+        protocol: 'https',
+        hostname: 'media.your-cms.example.com',
+      },
+    ],
+  },
+}
+
+export default config
+```
+
+---
+
+## Part 5: Authenticated Mutations via Route Handlers
+
+Read endpoints are public, but writes (create / update / delete) require a JWT. The safest pattern is a **Route Handler** that runs on the server, attaches the token, and proxies the request — your token never reaches the browser.
+
+```typescript
+// src/app/api/posts/route.ts
+import { NextResponse, type NextRequest } from 'next/server'
+import { revalidateTag } from 'next/cache'
+
+export const runtime = 'edge' // Cloudflare-compatible
+
+export async function POST(req: NextRequest) {
+  // Validate the user's session (your auth of choice — NextAuth, Clerk, etc.)
+  const session = await getSession(req)
+  if (!session) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  const body = await req.json()
+
+  const upstream = await fetch(
+    `${process.env.SONICJS_API_URL}/api/collections/blog-posts/content`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.SONICJS_API_TOKEN}`,
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  if (!upstream.ok) {
+    const err = await upstream.text()
+    return NextResponse.json({ error: err }, { status: upstream.status })
+  }
+
+  // Bust the listing cache so the new post shows up on next request.
+  revalidateTag('blog-posts')
+
+  return NextResponse.json(await upstream.json(), { status: 201 })
+}
+
+// Stub — replace with your real auth lookup
+async function getSession(_req: NextRequest) {
+  return { userId: 'usr_demo' }
+}
+```
+
+The same pattern works for `PATCH`, `DELETE`, file uploads to `/api/media`, and any other mutation endpoint. See the [SDKs page](/sdks) for typed clients that wrap these endpoints if you'd rather skip the manual `fetch`.
+
+### Webhook-Driven Revalidation
+
+Wire SonicJS to call a Next.js Route Handler whenever content changes, and ISR becomes near-instantaneous:
+
+```typescript
+// src/app/api/revalidate/route.ts
+import { NextResponse, type NextRequest } from 'next/server'
+import { revalidateTag } from 'next/cache'
+
+export async function POST(req: NextRequest) {
+  const secret = req.headers.get('x-sonicjs-webhook-secret')
+  if (secret !== process.env.SONICJS_WEBHOOK_SECRET) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  }
+
+  const { collection, slug } = await req.json()
+  revalidateTag(collection)              // e.g. 'blog-posts'
+  if (slug) revalidateTag(`blog-post:${slug}`)
+
+  return NextResponse.json({ revalidated: true })
+}
+```
+
+Combine this with SonicJS's [caching layers](/caching) and you get the best of both worlds: aggressive default caching, surgical invalidation on writes.
+
+---
+
+## Part 6: Static Export vs. Server Rendering on Cloudflare
+
+Next.js on Cloudflare Pages supports two deployment shapes. Pick whichever matches your content cadence.
+
+### Option A — Full Static Export
+
+Best for marketing sites and docs where content changes a few times a day at most.
+
+```typescript
+// next.config.ts
+const config: NextConfig = {
+  output: 'export', // pure static HTML/CSS/JS — no server runtime
+  images: { unoptimized: true }, // required for static export
+}
+export default config
+```
+
+```bash
+npm run build
+npx wrangler pages deploy ./out
+```
+
+Every page is built ahead of time using `generateStaticParams` and uploaded as static assets. No cold starts, no compute, just edge HTML. Trade-off: no ISR, no Route Handlers — re-deploy to update.
+
+### Option B — Server Rendering on Cloudflare Pages
+
+Best for sites with frequent content updates, authenticated pages, or live data.
+
+```bash
+npm install -D @cloudflare/next-on-pages
+```
+
+Add a build script:
+
+```json
+// package.json
+{
+  "scripts": {
+    "build:cf": "next build && npx @cloudflare/next-on-pages",
+    "preview:cf": "wrangler pages dev .vercel/output/static",
+    "deploy:cf": "npm run build:cf && wrangler pages deploy .vercel/output/static"
+  }
+}
+```
+
+```bash
+npm run deploy:cf
+```
+
+You keep ISR, Route Handlers, `revalidateTag`, and `next/image` optimization — all running on Cloudflare's edge runtime. Set `SONICJS_API_URL`, `SONICJS_API_TOKEN`, and `SONICJS_WEBHOOK_SECRET` in the Cloudflare Pages dashboard under **Settings → Environment variables**.
+
+### Co-Locate the CMS
+
+For the lowest possible latency, deploy SonicJS to Cloudflare Workers in the same account:
+
+```bash
+# In your SonicJS project
+npm run deploy
+# https://my-cms.<your-subdomain>.workers.dev
+```
+
+Now your Next.js app and SonicJS share the same global network — internal API calls hop between Workers and Pages without ever leaving Cloudflare.
+
+---
+
+## Part 7: Performance Tuning
+
+### Tag-Based Cache Strategy
+
+A solid default: tag every list response with the collection name and every detail response with `{collection}:{slug}`. Then your webhook handler can precision-invalidate either or both.
+
+```typescript
+// List → tag the whole collection
+sonicFetch('/api/collections/blog-posts/content', {
+  tags: ['blog-posts'],
+})
+
+// Detail → tag the specific slug + the parent collection
+sonicFetch(`/api/collections/blog-posts/content/${id}`, {
+  tags: ['blog-posts', `blog-post:${slug}`],
+})
+```
+
+### Streaming with Suspense
+
+Long-running queries shouldn't block the shell. Wrap them in `<Suspense>` to stream the rest of the page first:
+
+```tsx
+import { Suspense } from 'react'
+
+export default function HomePage() {
+  return (
+    <main>
+      <Hero />
+      <Suspense fallback={<PostListSkeleton />}>
+        <RecentPosts />  {/* awaits getBlogPosts() */}
+      </Suspense>
+    </main>
+  )
+}
+```
+
+### Watch the Cache Headers
+
+SonicJS returns `X-Cache-Status` (`HIT`/`MISS`) and `X-Cache-Source` (`memory`, `kv`, or `origin`) on every read. Log them in development to confirm your cache strategy is working:
+
+```typescript
+const res = await fetch(url, { next: { revalidate: 60 } })
+if (process.env.NODE_ENV === 'development') {
+  console.log({
+    status: res.headers.get('X-Cache-Status'),
+    source: res.headers.get('X-Cache-Source'),
+  })
+}
+```
+
+---
+
+## Troubleshooting
+
+### Filters return all rows in v2.x
+
+Server-side `filter[…]` parameters land in a follow-up SonicJS release. Until then, fetch the collection and filter client-side (the helpers above already do this).
+
+### `Image` complains about a missing hostname
+
+Add the SonicJS R2 bucket to `next.config.ts`'s `images.remotePatterns`. Static-export builds need `images.unoptimized: true` instead.
+
+### `'server-only'` errors
+
+You imported `@/lib/sonicjs` from a Client Component. Either drop the `'use client'` directive or move the data fetch to a Server Component parent and pass results down as props.
+
+### Route Handler returns 401 in production
+
+Your `SONICJS_API_TOKEN` isn't set in the Cloudflare Pages environment. Add it under **Settings → Environment variables**, then redeploy.
+
+### ISR doesn't update after a publish
+
+Either reduce `revalidate` or add a webhook from SonicJS to `/api/revalidate` (see Part 5). On-demand `revalidateTag` is always faster than waiting for the timer.
+
+---
+
+## Key Takeaways
+
+- **Next.js 15 + SonicJS** gives you a fully typed, edge-cached content stack on a single platform.
+- **Server Components** keep CMS calls on the server — no client JS, no leaked tokens, native `fetch` caching.
+- **`generateStaticParams` + `revalidate`** is the clean App Router replacement for the old `getStaticPaths` + `revalidate` pair.
+- **Route Handlers** proxy authenticated mutations and call `revalidateTag` to keep ISR in lockstep with publishes.
+- **Cloudflare Pages** runs both shapes — pure static export for low-change sites, full SSR/ISR for live ones — alongside SonicJS Workers.
+
+## Next Steps
+
+- [API reference](/api) — every endpoint, query param, and response shape
+- [Collections](/collections) — designing schemas that your Next.js types can reuse
+- [Authentication](/authentication) — wiring user logins through to SonicJS-protected routes
+- [Caching](/caching) — how SonicJS's three-tier cache composes with Next.js's data cache
+- [SDKs](/sdks) — typed clients that wrap the REST API for you
+
+Have questions or want to share what you're shipping? Join us on [Discord](https://discord.gg/sonicjs) or [GitHub](https://github.com/lane711/sonicjs).
+
+Happy building with Next.js and SonicJS!

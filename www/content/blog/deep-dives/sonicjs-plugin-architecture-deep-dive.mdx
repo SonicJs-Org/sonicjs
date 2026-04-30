@@ -1,0 +1,383 @@
+---
+title: "Inside the SonicJS Plugin Architecture: A Deep Dive"
+description: "Tour the SonicJS plugin internals — registration order, lifecycle hooks, the plugins.settings JSON column, route mounting, and how core, available, and user plugins coexist."
+keywords:
+  - "sonicjs plugin architecture"
+  - "headless cms architecture"
+  - "edge cms internals"
+  - "cms plugin lifecycle"
+  - "extensible cms typescript"
+category: "deep-dives"
+tags:
+  - "architecture"
+  - "plugins"
+  - "internals"
+  - "typescript"
+  - "hono"
+  - "cloudflare"
+publishedAt: "2026-06-03"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/sonicjs-plugin-architecture-deep-dive/hero.png"
+  alt: "Layered isometric visualization of the SonicJS plugin architecture with stacked request lifecycle layers, floating plugin module blocks, and glowing hook event pulses propagating through the stack"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "Inside the SonicJS Plugin Architecture: A Deep Dive"
+  description: "How the SonicJS plugin system actually works — lifecycle, hook firing, settings persistence, route mounting order, and the core vs available vs user plugin tiers."
+---
+
+# Inside the SonicJS Plugin Architecture: A Deep Dive
+
+<TLDRBox>
+**TL;DR** — SonicJS plugins are TypeScript objects implementing a single `Plugin` interface. The `PluginManager` validates them, resolves dependencies into a load order, registers their routes, middleware, services, models, and hooks, then walks them through five lifecycle methods (`install` → `activate` → `configure` → `deactivate` → `uninstall`). Settings live in the `plugins.settings` JSON column and the relational `settings` table, with hooks fired through a priority-ordered, scoped event bus.
+
+**Key Stats:**
+- 21 core plugins ship with every SonicJS install (auth, media, analytics, OAuth, OTP, Stripe, and more)
+- 4 additional "available" plugins live alongside (`magic-link-auth`, `easy-mdx`, `tinymce-plugin`, `email-templates-plugin`)
+- 25+ named hook events across app, request, auth, content, media, plugin, admin, and DB lifecycles
+- 5 lifecycle methods per plugin: `install`, `uninstall`, `activate`, `deactivate`, `configure`
+- 5 dedicated database tables back the plugin system: `plugins`, `plugin_hooks`, `plugin_routes`, `plugin_assets`, `plugin_activity_log`
+</TLDRBox>
+
+If you've used [SonicJS plugins](/plugins) from the admin UI, you've seen the friendly side: a toggle, a settings page, and the feature lights up. This post is the unfriendly tour — the side most CMS docs gloss over. We're opening the hood on how `@sonicjs-cms/core` actually loads, registers, validates, and fires plugins on every request.
+
+This is **not** a tutorial on writing your first plugin (for that, see the user guide on extending SonicJS). This is a deep dive into the *internals*: the `Plugin` interface, the `PluginManager` orchestrator, the priority-ordered hook bus, the `plugins.settings` JSON column, and the deliberate route-mounting order in `createSonicJSApp()` that makes the whole system tick.
+
+If you're evaluating SonicJS for a project where you'll need to extend the CMS in serious ways — custom auth, custom routes, custom admin pages, third-party integrations — this is the architecture you're betting on.
+
+## Why a Plugin Architecture Matters at the Edge
+
+A traditional CMS plugin system is generally a side concern. WordPress can afford to load every active plugin's PHP on every request because it runs on long-lived processes with shared opcode caches. The cost is amortized.
+
+[SonicJS runs on Cloudflare Workers](/edge-features), where every isolate is short-lived, every byte of bundle size has a budget, and every middleware function runs synchronously in the request hot path. That changes the design constraints:
+
+- **Plugins must be tree-shakeable.** Disabled plugins shouldn't bloat the worker bundle.
+- **Registration must be deterministic.** Routes and hooks fire in a strict order, and that order has to be predictable across deployments.
+- **State must be portable.** A plugin can't rely on in-memory caches that survive between requests — settings have to come from D1 or KV.
+- **Failure must be isolated.** A buggy plugin should never bring down core CMS functionality.
+
+The SonicJS plugin architecture is built around those four constraints. Let's see how.
+
+## The Plugin Interface
+
+Every SonicJS plugin is a plain TypeScript object that satisfies the `Plugin` interface (defined in `packages/core/src/plugins/types.ts`). The full shape:
+
+```typescript
+export interface Plugin {
+  // Identity
+  name: string
+  version: string
+  description?: string
+  author?: { name: string; email?: string; url?: string }
+  dependencies?: string[]
+  compatibility?: string
+  license?: string
+
+  // Extension points
+  routes?: PluginRoutes[]
+  middleware?: PluginMiddleware[]
+  models?: PluginModel[]
+  services?: PluginService[]
+  adminPages?: PluginAdminPage[]
+  adminComponents?: PluginComponent[]
+  menuItems?: PluginMenuItem[]
+  hooks?: PluginHook[]
+
+  // Lifecycle hooks
+  install?: (context: PluginContext) => Promise<void>
+  uninstall?: (context: PluginContext) => Promise<void>
+  activate?: (context: PluginContext) => Promise<void>
+  deactivate?: (context: PluginContext) => Promise<void>
+  configure?: (config: PluginConfig) => Promise<void>
+}
+```
+
+A few things stand out. There's no class hierarchy, no decorators, no DI container — just an object literal. That's intentional: plain objects survive bundling well, are easy to test, and don't require any framework metadata.
+
+The `PluginContext` passed to lifecycle methods is the gateway to everything: D1 (`db`), KV (`kv`), R2 (`r2`), the auth/content/media services, the scoped hook bus, and a per-plugin logger. Plugins never reach into globals — every dependency is injected.
+
+## Three Tiers of Plugins
+
+SonicJS organizes plugins into three tiers, each living at a different point in the source tree:
+
+| Tier | Location | Examples | Loaded |
+|---|---|---|---|
+| **Core** | `packages/core/src/plugins/core-plugins/` | `auth`, `media`, `analytics`, `oauth-providers`, `otp-login-plugin`, `stripe-plugin`, `security-audit-plugin`, `user-profiles` | Always |
+| **Available** | `packages/core/src/plugins/available/` | `magic-link-auth`, `email-templates-plugin`, `easy-mdx`, `tinymce-plugin` | On demand |
+| **User** | Project-level `src/plugins/` | Anything you write | When configured |
+
+The current `CORE_PLUGIN_IDS` constant lists 21 entries — `core-auth`, `core-media`, `core-analytics`, `testimonials-plugin`, `code-examples-plugin`, `demo-login-plugin`, `workflow-plugin`, `seed-data`, `database-tools`, `hello-world`, `quill-editor`, `email`, `otp-login`, `turnstile`, `ai-search`, `oauth-providers`, `global-variables`, `shortcodes`, `security-audit`, `user-profiles`, and `stripe`.
+
+Available plugins are still shipped with the package, but they're only wired up when `createSonicJSApp()` chooses to instantiate them. Magic-link auth is the canonical example — `app.ts` calls `createMagicLinkAuthPlugin()` and mounts its routes only if the host application opts in.
+
+User plugins are everything you write. They follow the exact same `Plugin` interface and go through the exact same registry. There is no second-class API for "plugins you didn't write" — your code gets the full extension surface.
+
+## The Plugin Manager and Registry
+
+Two classes do most of the work: `PluginManager` (the orchestrator) and `PluginRegistryImpl` (the catalog). Their relationship looks like this:
+
+```
+                  ┌──────────────────────┐
+                  │   createSonicJSApp   │
+                  └──────────┬───────────┘
+                             │ initializes
+                  ┌──────────▼───────────┐
+                  │    PluginManager     │
+                  │  ┌───────────────┐   │
+                  │  │ HookSystem    │   │
+                  │  └───────────────┘   │
+                  │  ┌───────────────┐   │
+                  │  │ PluginRegistry│   │
+                  │  └───────────────┘   │
+                  │  ┌───────────────┐   │
+                  │  │ PluginValidator│  │
+                  │  └───────────────┘   │
+                  └──────────┬───────────┘
+                             │ install()
+                  ┌──────────▼───────────┐
+                  │      Plugin          │
+                  │  routes / hooks /    │
+                  │  middleware / models │
+                  └──────────────────────┘
+```
+
+The `PluginManager` constructor wires up a fresh registry, hook system, and validator. When `initialize(context)` is called by the bootstrap middleware, it stores the context and fires the `app:init` hook so any plugins already registered can react.
+
+`install(plugin, config)` does the heavy lifting:
+
+1. **Validate** the plugin against the schema (required fields, version format, etc.).
+2. **Register** it in the registry (which itself runs dependency validation against already-registered plugins).
+3. **Persist configuration** — the plugin's enabled status, install timestamp, and any options.
+4. **Create a scoped hook system** for the plugin so its hooks can be unregistered cleanly on uninstall.
+5. **Build a `PluginContext`** that combines the global services with the plugin's logger and scope.
+6. **Register extensions** — routes, middleware, models, services, hooks.
+7. **Run the plugin's own `install()`** lifecycle method.
+8. **Fire the global `plugin:install` hook** so other plugins can react.
+
+If any step throws, the manager records the error against the plugin's status entry but does not break the host app. Other plugins continue to load.
+
+## Lifecycle: install → activate → configure → deactivate → uninstall
+
+The five lifecycle methods are not interchangeable — they map to distinct moments in the plugin's life:
+
+| Method | When it fires | What it should do |
+|---|---|---|
+| `install` | First time the plugin is registered | Run migrations, seed default settings |
+| `activate` | Plugin is enabled (toggle on) | Open connections, warm caches |
+| `configure` | Settings are saved from admin UI | Validate options, rebuild indices |
+| `deactivate` | Plugin is disabled (toggle off) | Release connections, drain queues |
+| `uninstall` | Plugin is removed | Clean up tables, delete settings |
+
+`install` and `uninstall` are bookends — they fire once. `activate` and `deactivate` can fire many times as admins toggle the plugin on and off. `configure` fires on every settings save.
+
+Most plugins only implement `install` (to seed their settings row in the `plugins` table) and lean on the registry for everything else. The OTP login plugin is a good example: its install hook seeds default settings (`codeLength: 6`, `codeExpiryMinutes: 10`, `maxAttempts: 3`, `rateLimitPerHour: 5`) and registers POST `/auth/otp/request` and POST `/auth/otp/verify` routes.
+
+## Plugin Discovery and Load Order
+
+Plugins are discovered three ways:
+
+1. **Static imports** — core plugins are imported directly by `app.ts` at build time.
+2. **Manifest registry** — every plugin directory contains a `manifest.json` that describes its identity, category, and entry points. A code-generation step bundles these into the plugin registry so the runtime knows what's available without scanning the file system.
+3. **Database registry** — the `plugins` table tracks which plugins are installed and active, who installed them, and any error state.
+
+Once registered, the order in which they activate matters. The `PluginRegistry.resolveLoadOrder()` method does a topological sort over each plugin's `dependencies` array. A plugin that depends on `core-auth` is guaranteed to activate after auth is up. If a circular dependency is detected, the registry throws and the offending plugins are skipped.
+
+## Route Mounting Order
+
+Hono routes match in registration order, and SonicJS leans on that hard. In `app.ts`, the mounting sequence is deliberate:
+
+```typescript
+// Plugin routes - Security Audit (MUST be registered BEFORE admin/plugins
+// to avoid route conflict)
+if (securityAuditPlugin.routes && securityAuditPlugin.routes.length > 0) {
+  for (const route of securityAuditPlugin.routes) {
+    app.route(route.path, route.handler as any)
+  }
+}
+
+// Plugin routes - AI Search (MUST be registered BEFORE admin/plugins to
+// avoid route conflict)
+// Register AI Search routes first so they take precedence over the generic
+// /:id handler
+if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
+  for (const route of aiSearchPlugin.routes) {
+    app.route(route.path, route.handler)
+  }
+}
+
+// ... OAuth, OTP, User Profiles, Analytics, Stripe ...
+
+app.route('/admin/plugins', adminPluginRoutes)
+```
+
+The reason for that pattern: the `/admin/plugins` route includes a generic `/:id` handler that matches any plugin slug. If `oauthProvidersPlugin` mounted *after* `/admin/plugins`, the generic handler would steal its requests. By mounting plugin-owned admin routes first, each plugin's specific paths win, and only requests for actual plugin slugs fall through to the generic handler.
+
+This is enforced by convention rather than the type system — which is why every plugin route block in `app.ts` carries an explanatory comment. If you're adding new core plugin routes, that order is part of the contract.
+
+## The Hook System
+
+Hooks are SonicJS's answer to "I want to do X every time Y happens." The `HookSystemImpl` class exposes three primary methods:
+
+```typescript
+hooks.register('user:login', async (data, ctx) => {
+  await sendWelcomeEmail(data.userId)
+  return data
+}, 10)
+
+await hooks.execute('user:login', { userId: '123' })
+```
+
+A few details that aren't obvious from the surface:
+
+- **Priority is ascending.** Lower numbers run first. The default is 10. If you want to run before authentication-side-effects, register at priority 1.
+- **Handlers receive and return data.** The execution loop threads each handler's return value into the next handler. This makes hooks *transformative* by default, not just observational.
+- **Cancellation is opt-in.** `ctx.cancel()` halts the chain. Subsequent handlers don't run.
+- **Recursion is detected.** The system tracks an `executing` set to prevent infinite loops if a hook handler triggers the same hook.
+- **Errors are isolated.** A handler that throws is logged but doesn't abort the chain — unless its message contains `"CRITICAL"`, which short-circuits everything.
+
+The standard hook names live in the exported `HOOKS` constant:
+
+| Category | Hooks |
+|---|---|
+| **App lifecycle** | `app:init`, `app:ready`, `app:shutdown` |
+| **Request lifecycle** | `request:start`, `request:end`, `request:error` |
+| **Auth** | `auth:login`, `auth:logout`, `auth:register`, `user:login`, `user:logout` |
+| **Content** | `content:create`, `content:update`, `content:delete`, `content:publish`, `content:save` |
+| **Media** | `media:upload`, `media:delete`, `media:transform` |
+| **Plugin** | `plugin:install`, `plugin:uninstall`, `plugin:activate`, `plugin:deactivate` |
+| **Admin** | `admin:menu:render`, `admin:page:render` |
+| **Database** | `db:migrate`, `db:seed` |
+
+That's 25 named events spread across eight categories. Plugins can also define custom hook names — there's no enforced enum at runtime — but sticking to the standard names ensures interoperability.
+
+For an outbound integration story (Slack, Zapier, custom HTTP destinations), see [SonicJS webhooks](/webhooks). The [hooks reference](/hooks) lists every event with its data shape.
+
+## Scoped Hook Systems
+
+Each plugin gets its own `ScopedHookSystem`, which is a thin wrapper around the global hook bus that tracks which hooks were registered by which plugin. When the plugin uninstalls, `unregisterAll()` rips out every hook the plugin registered in one call.
+
+This solves a class of bug that haunts long-lived CMS installations: the "ghost handler." When a plugin is removed without unregistering its event listeners, the listeners stay in the global bus and silently process events forever — sometimes for a removed feature, sometimes for a feature that's been replaced. The scoped system makes that impossible.
+
+## Settings Persistence: Two Storage Models
+
+SonicJS uses two complementary storage models for plugin settings, and the choice between them is a deliberate design call.
+
+### 1. The `plugins.settings` JSON column
+
+The `plugins` table (defined in migration `006_plugin_system.sql`) has a `settings JSON` column that holds *plugin-owned* configuration. This is where plugins persist their structured options — OTP code length, OAuth client IDs, Stripe webhook secrets:
+
+```sql
+CREATE TABLE IF NOT EXISTS plugins (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    description TEXT,
+    version TEXT NOT NULL,
+    author TEXT NOT NULL,
+    category TEXT NOT NULL,
+    icon TEXT,
+    status TEXT DEFAULT 'inactive'
+        CHECK (status IN ('active', 'inactive', 'error')),
+    is_core BOOLEAN DEFAULT FALSE,
+    settings JSON,
+    permissions JSON,
+    dependencies JSON,
+    -- ...
+);
+```
+
+Each plugin's row holds a JSON blob keyed by the option names that plugin understands. The schema is enforced by the plugin itself (typically with Zod), not by the database — D1 stores it as opaque text.
+
+### 2. The relational `settings` table (via `SettingsService`)
+
+For *system-wide* configuration that may be shared across plugins (general site settings, security settings, JWT lifetimes), SonicJS uses a separate `settings` table with a category/key/value structure. The `SettingsService` wraps it:
+
+```typescript
+const settings = new SettingsService(db)
+const otpConfig = await settings.getCategorySettings('otp-login')
+// { codeLength: 6, codeExpiryMinutes: 10, maxAttempts: 3, ... }
+
+await settings.setSetting('otp-login', 'codeLength', 8)
+```
+
+This dual model keeps plugin-private state separate from the cross-cutting site settings without forcing plugins to invent their own tables. Most plugins use the `plugins.settings` blob for their own options and read from `SettingsService` only when they need a global value (e.g., site name for outbound emails).
+
+## Supporting Tables: hooks, routes, assets, activity
+
+The plugin system also creates four supporting tables in migration 006:
+
+- **`plugin_hooks`** — records every hook a plugin registers, with name, handler, and priority. Used by the admin UI to show "what's wired up."
+- **`plugin_routes`** — records every route a plugin mounts, with path, method, and middleware. Powers the API reference page.
+- **`plugin_assets`** — tracks CSS/JS/image/font files plugins ship to the admin UI, with load order and location.
+- **`plugin_activity_log`** — append-only log of every install/activate/deactivate/configure/uninstall event, with user ID and details.
+
+These tables are how the admin UI reflects plugin state without scanning code on every page load. They're also the foundation of any future audit/compliance feature — you can answer "who enabled which plugin and when" in one query.
+
+## Real Plugin Example: OAuth Providers
+
+The OAuth providers plugin (`packages/core/src/plugins/core-plugins/oauth-providers/`) is one of the more complex core plugins, and a good case study. It:
+
+- Defines a `BUILT_IN_PROVIDERS` map (GitHub, Google) with their authorize/token/userinfo endpoints
+- Exports an `OAuthService` class that handles the full OAuth 2.0 dance
+- Mounts admin routes at `/admin/plugins/oauth` for client-credential management
+- Mounts public auth routes at `/auth/oauth/:provider` and `/auth/oauth/:provider/callback`
+- Stores per-provider client IDs and secrets in its `plugins.settings` blob
+- Fires the `auth:login` hook after a successful OAuth callback so other plugins (like security audit) can react
+
+You can dig into the full setup in the [OAuth plugin docs](/plugins/oauth) and the [code examples plugin](/plugins/code-examples) which uses a similar pattern for content management.
+
+## What Plugins Can't Do
+
+A few hard limits worth being explicit about:
+
+- **No global mutation.** Plugins can't patch core middleware or rewrite the request pipeline. They mount in the slots the registry exposes.
+- **No synchronous I/O.** Every hook handler is async. Cloudflare Workers don't allow blocking calls.
+- **No process state.** A plugin can't store data in module-level variables and expect it to survive between requests. Use D1, KV, or R2.
+- **No cross-plugin imports of internals.** Plugins talk to each other through the hook bus and the public service interfaces, not by importing each other's modules.
+
+These constraints are how SonicJS keeps the plugin surface honest. Following the [coding standards](/coding-standards) for SonicJS plugins ensures your code passes review and won't be broken by the next core release.
+
+## Putting It All Together: A Request's Journey
+
+Here's what happens when a real request — say `POST /auth/login` — flows through a SonicJS app with three plugins enabled (auth, security-audit, otp-login):
+
+```
+1. Request hits Cloudflare Worker
+2. metricsMiddleware()        ─ records start time
+3. bootstrapMiddleware()      ─ ensures plugins are initialized
+4. Custom beforeAuth chain    ─ user-supplied middleware
+5. securityHeadersMiddleware  ─ sets CSP, HSTS, etc.
+6. csrfProtection             ─ validates CSRF token
+7. /auth/* matched            ─ routes into authRoutes
+8. securityAuditMiddleware    ─ logs login attempt
+9. authRoutes handler         ─ verifies password
+10. hooks.execute('auth:login', { userId })
+    ├─ otp-login handler      ─ priority 10 (no-op for password login)
+    ├─ security-audit handler ─ priority 20 (writes audit row)
+    └─ user plugin handler    ─ priority 30 (sends webhook)
+11. JWT issued                ─ via authService
+12. Response written
+13. metricsMiddleware()       ─ records duration
+```
+
+Every plugin contributes at exactly the moment its registration says it should. No plugin needs to know about the others — they all subscribe to the same hook bus, and the manager handles ordering and isolation.
+
+## Key Takeaways
+
+- SonicJS plugins are plain TypeScript objects implementing the `Plugin` interface — no framework metadata required.
+- Three tiers (core, available, user) share a single registration pipeline, validation system, and lifecycle.
+- Five lifecycle methods (`install`, `activate`, `configure`, `deactivate`, `uninstall`) cover every state transition.
+- The `HookSystemImpl` is a priority-ordered, scoped, transformative event bus with built-in recursion detection.
+- Settings persist in two places: per-plugin JSON blobs in `plugins.settings`, and shared key/value entries in the `settings` table.
+- Route mounting order is part of the contract — plugin routes register before generic `/admin/plugins/:id` to avoid being shadowed.
+- The plugin system has its own database tables (`plugins`, `plugin_hooks`, `plugin_routes`, `plugin_assets`, `plugin_activity_log`) for state, audit, and admin UI.
+
+This architecture is what lets SonicJS scale from "tiny edge CMS" to "full SaaS backend" without forking. Every commercial feature in the platform — Stripe billing, OAuth, audit logs, magic links — is built on the exact same plugin contract that's open to your team. There's no internal API that core uses but your code can't.
+
+If you're building on SonicJS and have questions about the plugin internals, drop into the [SonicJS Discord](https://discord.gg/sonicjs) or open a discussion on the [GitHub repository](https://github.com/lane711/sonicjs). And if you're ready to ship your own plugin, start with the [authentication overview](/authentication) and the [code examples plugin](/plugins/code-examples) as a working reference.

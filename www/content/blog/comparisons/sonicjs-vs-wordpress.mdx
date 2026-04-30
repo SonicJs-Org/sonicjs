@@ -1,0 +1,443 @@
+---
+title: "SonicJS vs WordPress: Modern Headless or Classic CMS?"
+description: "An honest comparison of SonicJS and WordPress — architecture, performance, hosting, security, and developer ergonomics — to help you pick the right CMS."
+keywords:
+  - "sonicjs vs wordpress"
+  - "headless cms vs wordpress"
+  - "modern cms vs wordpress"
+  - "wordpress alternative typescript"
+  - "edge cms vs wordpress"
+category: "comparisons"
+tags:
+  - "wordpress"
+  - "comparison"
+  - "headless-cms"
+  - "architecture"
+  - "performance"
+  - "edge-computing"
+  - "typescript"
+publishedAt: "2026-05-25"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/sonicjs-vs-wordpress/hero.png"
+  alt: "Side-by-side 3D isometric visualization comparing a distributed edge CMS architecture with a traditional monolithic WordPress server tower"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "SonicJS vs WordPress: Modern Headless or Classic CMS?"
+  description: "Compare SonicJS (edge-first, TypeScript, API-first) with WordPress (mature, PHP, plugin ecosystem) on architecture, performance, hosting, security, and DX."
+---
+
+# SonicJS vs WordPress: Modern Headless or Classic CMS?
+
+<TLDRBox>
+**TL;DR** — WordPress powers roughly 43% of the web for good reason: a deep plugin ecosystem, a friendly admin UI, and twenty years of momentum. SonicJS is a different kind of tool — an edge-first, TypeScript-native, API-first CMS purpose-built for developer-led projects on the JAMstack. If you need a content site a non-developer can run with thousands of off-the-shelf themes and plugins, WordPress wins. If you're building a typed, performant, globally distributed app with a custom frontend, SonicJS is the better fit.
+
+**Key Stats:**
+- WordPress runs ~43% of all websites (W3Techs, 2025) and ~62% of CMS-built sites
+- WordPress plugin directory: 60,000+ free plugins, 11,000+ themes
+- SonicJS: 0-5ms cold start on Cloudflare Workers (vs 200-2000ms typical PHP-FPM)
+- SonicJS: under 50ms global API response (300+ Cloudflare edge locations)
+- WordPress core uses PHP + MySQL/MariaDB; SonicJS uses TypeScript + Cloudflare D1
+</TLDRBox>
+
+WordPress and SonicJS sit at opposite ends of the CMS spectrum. WordPress is the mature, ecosystem-rich, "anyone can run a site" platform that has been refined over more than two decades. SonicJS is a modern, edge-first, code-first headless CMS designed for developers who want full control of their stack and sub-50ms responses worldwide.
+
+This post is not a takedown — WordPress is a serious, capable platform, and pretending otherwise would be silly. But the two tools are optimized for very different jobs. Below, we'll compare them honestly across architecture, performance, hosting cost, scalability, content modeling, security, and developer ergonomics, and give you a clear "when to choose which" at the end.
+
+---
+
+## Quick Comparison
+
+| Aspect | WordPress | SonicJS |
+|---|---|---|
+| **Architecture** | Monolithic PHP + MySQL | Edge-first, Cloudflare Workers + D1 |
+| **Language** | PHP (templates), JS (Gutenberg) | TypeScript end-to-end |
+| **Default style** | Coupled CMS + frontend | Headless, [API-first](/api) |
+| **Database** | MySQL / MariaDB | SQLite at the edge ([D1](/database)) |
+| **Cold start** | 200-2000ms (PHP-FPM warm-up) | 0-5ms (V8 isolates) |
+| **Global latency** | 100-500ms (single origin + CDN) | Under 50ms (300+ POPs) |
+| **Hosting cost (small)** | $5-30/mo shared / managed | $0-5/mo Cloudflare |
+| **Plugins** | 60,000+ in the directory | 15+ first-party + custom |
+| **Themes** | 11,000+ | Bring your own frontend |
+| **Admin UI** | Mature, non-developer friendly | HTMX-based, developer focused |
+| **License** | GPLv2 | MIT |
+| **Best fit** | Marketing sites, blogs, e-commerce | API-first apps, JAMstack, custom frontends |
+
+---
+
+## Architecture Deep Dive
+
+### WordPress: a battle-tested monolith
+
+WordPress is a coupled CMS: PHP renders pages on the same server that stores content in MySQL. Plugins extend that server-side runtime. It is, by design, a "one server can do everything" system — and that's a real strength. You install it, point a domain at it, and you have a website.
+
+```php
+// A typical WordPress request flow
+// 1. Web server (nginx/Apache) hands the request to PHP-FPM
+// 2. WordPress bootstraps (wp-config.php, wp-load.php)
+// 3. Plugins/theme run hooks, query MySQL, render HTML
+// 4. PHP-FPM returns the response
+
+add_action('rest_api_init', function () {
+  register_rest_route('myapp/v1', '/posts', [
+    'methods'  => 'GET',
+    'callback' => function () {
+      return get_posts(['post_type' => 'post', 'numberposts' => 10]);
+    },
+  ]);
+});
+```
+
+The WP REST API and headless WP setups are first-class today, but the runtime is still a PHP server backed by MySQL.
+
+### SonicJS: edge-first by design
+
+SonicJS runs on Cloudflare Workers using V8 isolates. There is no origin server to scale, no PHP-FPM pool to tune, and no separate database server to manage. Content lives in [Cloudflare D1](/database) (SQLite at the edge), with KV and R2 wired in for [caching](/caching) and media.
+
+```typescript
+// SonicJS: a Worker handles every request at the nearest POP
+import { createSonicJS } from '@sonicjs-cms/core'
+import { posts } from './collections/posts'
+
+const cms = createSonicJS({
+  collections: [posts],
+  plugins: [/* auth, cache, ai-search, ... */],
+})
+
+export default cms.app
+// Deploy with: npx wrangler deploy
+```
+
+The architectural punchline: WordPress assumes one (or a few) origin servers and uses a CDN for static assets. SonicJS *is* the CDN — your CMS runs in 300+ data centers, as close to your users as possible.
+
+---
+
+## Performance
+
+### Response times
+
+| Scenario | WordPress (well-tuned) | SonicJS |
+|---|---|---|
+| HTML page (cached at CDN) | 20-80ms | 5-20ms |
+| HTML page (origin hit) | 200-800ms | n/a — every request hits the edge |
+| REST API call (origin hit) | 150-600ms | 15-30ms (same region) |
+| API response, cross-region | 300-1000ms | 30-60ms |
+| Cold start (first request after idle) | 200-2000ms (PHP/opcache warm-up) | 0-5ms |
+| Logged-in / cache-bypass page | 400-1500ms | 20-50ms |
+
+WordPress is fast when its caches are warm — page caches, object caches, opcode caches, CDN caches. The catch is that anything dynamic (logged-in users, the WP REST API, WooCommerce checkout) tends to bypass the static cache and hit PHP and MySQL. That's where the latency shows up.
+
+SonicJS gets its consistency from never leaving the edge. Every read hits a three-tier cache (memory → KV → D1), so even uncached requests are fast.
+
+### Scaling
+
+**WordPress** scales horizontally, but the developer (or hosting provider) does the work: PHP workers, MySQL replication, object cache (Redis/Memcached), full-page cache, CDN, sometimes a separate file/media tier. Managed hosts (WP Engine, Kinsta, Pressable) bundle this for you, and they're great — but you're paying for that bundle.
+
+**SonicJS** scales automatically. There are no workers to size, no read replicas to provision, no object cache to warm. Cloudflare's network handles burst traffic transparently.
+
+---
+
+## Hosting & Cost
+
+### WordPress hosting options
+
+| Tier | Typical cost | What you get |
+|---|---|---|
+| Shared (Bluehost, Hostinger) | $3-10/mo | 1-5 sites, modest performance, manual updates |
+| Managed (WP Engine, Kinsta) | $25-100+/mo | Tuned stack, backups, staging, CDN |
+| Cloud (DigitalOcean, AWS) | $20-200+/mo | DIY — you tune everything |
+| Enterprise WP (VIP, Pantheon) | $1,000+/mo | SLAs, dedicated infra, compliance |
+
+### SonicJS on Cloudflare
+
+| Tier | Cost | Notes |
+|---|---|---|
+| Free | $0 | 100k requests/day, 5GB D1, 10GB R2 |
+| Workers Paid | $5/mo + usage | 10M requests included, then per-million pricing |
+| Typical small-medium site | $0-15/mo total | Often free for hobby/portfolio sites |
+
+For most sites under a few million page views per month, SonicJS on Cloudflare is materially cheaper. WordPress wins on flat-rate predictability for the "marketing brochure with 5k visitors a month" case if you don't want to think about anything — shared hosting is genuinely turnkey.
+
+---
+
+## Security
+
+This is one place WordPress's ecosystem cuts both ways.
+
+| Concern | WordPress | SonicJS |
+|---|---|---|
+| Core security | Solid, well-audited | Solid, smaller surface area |
+| Plugin/theme vulnerabilities | The #1 attack vector — 90%+ of WP exploits trace back to plugins/themes | No PHP plugin runtime; plugins run typed, sandboxed code |
+| Auto-updates | Yes (core), plugins optional | Deploy-driven (`wrangler deploy`) |
+| Admin brute-force | Common attack target | JWT + KV-cached verification, [rate-limited auth](/authentication) |
+| DDoS / WAF | Add-on (Cloudflare, Sucuri, Wordfence) | Cloudflare WAF + bot management built-in |
+| Default password hashing | phpass (legacy bcrypt-style) | PBKDF2 100k iterations, SHA-256 |
+| File uploads | PHP file system, often misconfigured | R2 bucket, signed URLs |
+
+WordPress core is genuinely well-maintained. The risk profile lives in *plugins*: a single abandoned plugin can introduce SQL injection, RCE, or XSS into a site that's otherwise clean. Sites with 30+ plugins are common and difficult to audit.
+
+SonicJS has a smaller surface area and a stricter execution model — Workers can't write to a local filesystem, can't shell out, and can't load arbitrary native code. Read more in our [security overview](/security).
+
+---
+
+## Content Modeling
+
+### WordPress: posts, pages, custom post types
+
+WordPress models content as posts with a single `post_content` blob, augmented by custom post types, custom fields (often via ACF), and taxonomies.
+
+```php
+// Custom post type registration
+register_post_type('product', [
+  'public' => true,
+  'supports' => ['title', 'editor', 'thumbnail'],
+  'show_in_rest' => true,
+]);
+
+// Custom fields via ACF or post meta
+update_post_meta($post_id, 'price', 4999);
+```
+
+It's flexible, and Gutenberg has made structured editing significantly better. But the underlying model — `wp_posts` + `wp_postmeta` — was not designed for typed content modeling, and querying postmeta at scale is famously slow.
+
+### SonicJS: typed collections
+
+SonicJS collections are TypeScript-native and strongly typed end-to-end. Schemas live in code, get type-checked at build time, and produce typed REST endpoints automatically.
+
+```typescript
+import { defineCollection } from '@sonicjs-cms/core'
+
+export const products = defineCollection({
+  name: 'products',
+  fields: {
+    title: { type: 'string', required: true },
+    slug:  { type: 'slug', source: 'title', unique: true },
+    price: { type: 'number', required: true },
+    body:  { type: 'richtext' },
+    images: { type: 'array', of: { type: 'media' } },
+    category: { type: 'reference', collection: 'categories' },
+  },
+})
+```
+
+See the full options in the [collections guide](/collections).
+
+---
+
+## Developer Experience
+
+### Setup
+
+**WordPress (local):**
+```bash
+# Local by Flywheel, Lando, or Docker
+git clone https://github.com/your/site.git
+docker compose up        # if you've set up wp-env
+# Or: download WordPress, configure wp-config.php, point Apache/nginx
+```
+
+You'll want PHP 8.x, Composer, Node (for Gutenberg blocks), and likely WP-CLI. Once it's running, plugin/theme development is straightforward.
+
+**SonicJS:**
+```bash
+npx create-sonicjs@latest my-cms
+cd my-cms
+npm run dev
+```
+
+That's it — TypeScript, hot reload, and a local D1 instance ready in about a minute.
+
+### Writing a REST endpoint
+
+The same "list the latest 10 published posts" endpoint:
+
+**WordPress (PHP, custom REST route):**
+```php
+add_action('rest_api_init', function () {
+  register_rest_route('myapp/v1', '/latest-posts', [
+    'methods'             => 'GET',
+    'permission_callback' => '__return_true',
+    'callback'            => function () {
+      $posts = get_posts([
+        'post_type'   => 'post',
+        'numberposts' => 10,
+        'post_status' => 'publish',
+      ]);
+      return array_map(function ($p) {
+        return [
+          'id'    => $p->ID,
+          'title' => $p->post_title,
+          'slug'  => $p->post_name,
+        ];
+      }, $posts);
+    },
+  ]);
+});
+```
+
+**SonicJS (TypeScript):**
+```typescript
+import { Hono } from 'hono'
+import { posts } from './collections/posts'
+
+const app = new Hono()
+
+app.get('/api/latest-posts', async (c) => {
+  const result = await c.var.cms.content.list('posts', {
+    where: { status: 'published' },
+    limit: 10,
+    orderBy: { publishedAt: 'desc' },
+  })
+  return c.json(result.items.map(p => ({
+    id: p.id, title: p.title, slug: p.slug,
+  })))
+})
+
+export default app
+```
+
+You also get the auto-generated `GET /api/content/posts` endpoint for free without writing any code. See the [API reference](/api).
+
+### TypeScript & types
+
+WordPress is PHP-first. There are TypeScript types for Gutenberg and the WP REST API client, but your content model is not typed at the database level.
+
+SonicJS is TypeScript end-to-end. Collection schemas, field types, API responses, and admin UI components are all checked by the compiler.
+
+---
+
+## Ecosystem & Plugins
+
+WordPress's ecosystem is the single biggest reason to pick it. The numbers are not subtle:
+
+- **60,000+** plugins in the WP.org directory
+- **11,000+** free themes
+- **WooCommerce** powers ~30% of all online stores
+- **Yoast / RankMath** for SEO, **WPML / Polylang** for i18n, **Elementor / Divi** for visual building
+- A massive professional services market (agencies, freelancers, consultants)
+
+If your problem is "we need a marketing site with a blog, contact form, lead capture, and SEO tooling, and we want a non-developer to maintain it," WordPress will get you there faster than almost anything else, and you'll find someone to maintain it for less than the cost of a custom build.
+
+SonicJS's ecosystem is smaller and developer-focused: 15+ core plugins (auth, OAuth, magic link, OTP, AI search, cache, audit log, etc.), a [plugin SDK](/collections), and direct access to the entire npm ecosystem from your TypeScript code. It scales by composing libraries, not by browsing a marketplace.
+
+---
+
+## Headless WordPress vs SonicJS
+
+You can run WordPress headlessly today: turn off the theme, hit `/wp-json/wp/v2/...` from your Next.js or Astro frontend. People do this and it works. But it has trade-offs:
+
+- You're still paying for a PHP origin server
+- Auth flows (logged-in users, previews) are awkward across origins
+- The REST API performance ceiling is the WordPress origin's
+- Half of WP's UX (Gutenberg block previews, plugin pages, theme settings) was designed for the coupled mode
+
+SonicJS was designed headless from day one. The admin UI, the API surface, the auth model, and the deployment story all assume your frontend is a separate app calling `/api/...` from a different origin. There's no PHP backend to keep alive while your Next.js frontend does the rendering.
+
+If you're already deeply invested in the WP plugin ecosystem (WooCommerce, ACF, Yoast) but want a modern frontend, headless WP is a real option. If you're starting fresh and want the simplest possible API-first stack, SonicJS is closer to the shape you'll end up wanting.
+
+---
+
+## When to Choose WordPress
+
+WordPress is the right call when:
+
+- You need a **content site a non-developer can run** day-to-day
+- You want **off-the-shelf themes** and don't need a custom frontend
+- You depend on a specific WP plugin (**WooCommerce, ACF Pro, Gravity Forms**, etc.)
+- Your team is **PHP-first** or has existing WordPress expertise
+- You want a huge pool of **agencies and freelancers** to hire from
+- You're building a **traditional blog, marketing site, or small e-commerce store**
+- You want **proven, mature workflows** for editorial, multilingual content, SEO
+
+There is genuine value in "boring." A WordPress site running on managed hosting with auto-updates and a CDN will serve millions of small-to-medium sites well for another decade.
+
+## When to Choose SonicJS
+
+SonicJS is the right call when:
+
+- You're building a **developer-led, API-first** application or JAMstack site
+- You want **sub-50ms global latency** without manually configuring CDNs
+- You prefer **TypeScript end-to-end** with typed schemas and APIs
+- You're deploying alongside a **Next.js, Astro, SvelteKit, or React Native** frontend
+- You want **edge-native auth, caching, and AI search** in the box (see [authentication](/authentication), [caching](/caching))
+- You want **predictable, low hosting costs** (often $0-15/mo on Cloudflare)
+- You'd rather **compose npm packages** than browse a plugin marketplace
+- You need **stateless, horizontally-scaled** infrastructure with no servers to babysit
+
+In short: WordPress optimizes for "non-developer can run a site." SonicJS optimizes for "developer can ship a typed, fast, global app."
+
+---
+
+## Migration Notes
+
+If you're considering a move from WordPress to SonicJS:
+
+1. **Map content types.** WP custom post types and ACF field groups become SonicJS [collections](/collections). Most ACF field types have direct equivalents (text, number, repeater → array, post_object → reference).
+2. **Export content.** Use the WP REST API (`/wp-json/wp/v2/posts?per_page=100&page=N`) or WP-CLI to export posts, pages, and media.
+3. **Re-host media.** Move uploads to R2 (or keep them on the original origin and let the URLs follow).
+4. **Rebuild the frontend.** Most teams take this opportunity to move from a WP theme to Next.js / Astro.
+5. **Set up redirects** so old `/category/foo/` URLs land on the new equivalents.
+6. **Cut over auth and forms.** WordPress's wp_users + wp_usermeta map to SonicJS's typed users + JWT auth model.
+
+Plan for a phased migration if your site is large — many teams run WordPress and SonicJS side-by-side for a few weeks during cutover.
+
+---
+
+## Verdict
+
+WordPress and SonicJS are both correct answers — to different questions.
+
+If the question is *"how do I get a content-managed website online with the least friction, the deepest plugin ecosystem, and the largest pool of help available?"* — the honest answer is still WordPress. Twenty years of momentum is hard to beat, and the ecosystem advantage is real.
+
+If the question is *"how do I build a typed, API-first product with sub-50ms global responses, edge-native auth, and a deployment story that's just `wrangler deploy`?"* — that's where SonicJS earns its place. The architecture is different all the way down: TypeScript instead of PHP, Workers instead of PHP-FPM, D1 instead of MySQL, MIT instead of GPL, edge-native instead of origin + CDN.
+
+You're not picking a winner; you're picking the tool whose defaults match your project.
+
+## Key Takeaways
+
+- WordPress is mature, ecosystem-rich, and unbeatable for non-developer-friendly content sites with off-the-shelf themes and plugins.
+- SonicJS is edge-first, TypeScript-native, and built for API-first applications that need global low latency.
+- Performance: WordPress is fast when caches are warm; SonicJS is consistently fast because every request runs at the edge.
+- Hosting: shared/managed WordPress is predictable; Cloudflare-hosted SonicJS is typically cheaper for low-to-mid traffic.
+- Security: WordPress core is solid, but plugin/theme sprawl is the historical attack surface; SonicJS has a smaller, stricter runtime.
+- Content modeling: WP relies on `wp_posts` + meta; SonicJS uses typed [collections](/collections) checked at compile time.
+- DX: WordPress is PHP-first with a huge agency market; SonicJS is TypeScript end-to-end with a code-first workflow.
+- Headless WP works but pays the price of running a PHP origin behind a JAM frontend; SonicJS was designed headless from day one.
+
+---
+
+## Get Started
+
+Ready to try edge-first content management?
+
+```bash
+npx create-sonicjs@latest my-cms
+cd my-cms
+npm run dev
+
+# When you're ready:
+npx wrangler deploy
+```
+
+You'll have a typed, edge-deployed CMS in about five minutes — REST API, admin UI, [auth](/authentication), and [caching](/caching) all wired up.
+
+Have questions or want to share what you're building? Join us on [Discord](https://discord.gg/sonicjs) or open an issue on [GitHub](https://github.com/lane711/sonicjs). We read everything.
+
+---
+
+## Sources & Further Reading
+
+- [W3Techs: Usage statistics of content management systems](https://w3techs.com/technologies/overview/content_management) — ~43% web share for WordPress
+- [WordPress.org plugin directory](https://wordpress.org/plugins/) — 60,000+ plugins
+- [WordPress.org theme directory](https://wordpress.org/themes/) — 11,000+ themes
+- [Cloudflare Workers documentation](https://developers.cloudflare.com/workers/)
+- [Cloudflare D1 documentation](https://developers.cloudflare.com/d1/)
+- [SonicJS architecture overview](/blog/why-edge-first-cms-is-the-future)
+- [SonicJS authentication guide](/blog/sonicjs-authentication-complete-guide)
+- [SonicJS caching strategy](/blog/sonicjs-caching-strategy)

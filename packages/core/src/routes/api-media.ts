@@ -14,6 +14,11 @@ async function emitEvent(eventName: string, data: any) {
   // TODO: Implement proper event system when plugin architecture is ready
 }
 
+function isRasterImageMimeType(mimeType: string): boolean {
+  const normalized = (mimeType.toLowerCase().split(';', 1)[0] ?? '').trim()
+  return normalized.startsWith('image/') && normalized !== 'image/svg+xml'
+}
+
 // File validation schema
 const fileValidationSchema = z.object({
   name: z.string().min(1).max(255),
@@ -102,7 +107,7 @@ apiMediaRoutes.post('/upload', async (c) => {
     let width: number | null = null
     let height: number | null = null
     
-    if (file.type.startsWith('image/') && !file.type.includes('svg')) {
+    if (isRasterImageMimeType(file.type)) {
       try {
         const dimensions = await getImageDimensions(arrayBuffer)
         width = dimensions.width
@@ -114,7 +119,7 @@ apiMediaRoutes.post('/upload', async (c) => {
 
     // Generate thumbnail URL for images
     let thumbnailUrl: string | null = null
-    if (file.type.startsWith('image/') && c.env.IMAGES_ACCOUNT_ID) {
+    if (isRasterImageMimeType(file.type) && c.env.IMAGES_ACCOUNT_ID) {
       thumbnailUrl = `https://imagedelivery.net/${c.env.IMAGES_ACCOUNT_ID}/${r2Key}/thumbnail`
     }
 
@@ -149,12 +154,12 @@ apiMediaRoutes.post('/upload', async (c) => {
       mediaRecord.original_name,
       mediaRecord.mime_type,
       mediaRecord.size,
-      mediaRecord.width,
-      mediaRecord.height,
+      mediaRecord.width ?? null,
+      mediaRecord.height ?? null,
       mediaRecord.folder,
       mediaRecord.r2_key,
       mediaRecord.public_url,
-      mediaRecord.thumbnail_url,
+      mediaRecord.thumbnail_url ?? null,
       mediaRecord.uploaded_by,
       mediaRecord.uploaded_at
     ).run()
@@ -261,7 +266,7 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
         let width: number | null = null
         let height: number | null = null
         
-        if (file.type.startsWith('image/') && !file.type.includes('svg')) {
+        if (isRasterImageMimeType(file.type)) {
           try {
             const dimensions = await getImageDimensions(arrayBuffer)
             width = dimensions.width
@@ -273,7 +278,7 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
 
         // Generate thumbnail URL for images
         let thumbnailUrl: string | null = null
-        if (file.type.startsWith('image/') && c.env.IMAGES_ACCOUNT_ID) {
+        if (isRasterImageMimeType(file.type) && c.env.IMAGES_ACCOUNT_ID) {
           thumbnailUrl = `https://imagedelivery.net/${c.env.IMAGES_ACCOUNT_ID}/${r2Key}/thumbnail`
         }
 
@@ -307,12 +312,12 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
           mediaRecord.original_name,
           mediaRecord.mime_type,
           mediaRecord.size,
-          mediaRecord.width,
-          mediaRecord.height,
+          mediaRecord.width ?? null,
+          mediaRecord.height ?? null,
           mediaRecord.folder,
           mediaRecord.r2_key,
           mediaRecord.public_url,
-          mediaRecord.thumbnail_url,
+          mediaRecord.thumbnail_url ?? null,
           mediaRecord.uploaded_by,
           mediaRecord.uploaded_at
         ).run()
@@ -696,15 +701,28 @@ apiMediaRoutes.patch('/:id', async (c) => {
     }
 
     // Update allowed fields
-    const allowedFields = ['alt', 'caption', 'tags', 'folder']
-    const updates = []
-    const values = []
-    
-    for (const [key, value] of Object.entries(body)) {
-      if (allowedFields.includes(key)) {
-        updates.push(`${key} = ?`)
-        values.push(key === 'tags' ? JSON.stringify(value) : value)
-      }
+    const updates: string[] = []
+    const values: Array<string | number | null> = []
+    const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(body, key)
+
+    if (hasOwn('alt') && body.alt !== undefined) {
+      updates.push('alt = ?')
+      values.push(body.alt ?? null)
+    }
+
+    if (hasOwn('caption') && body.caption !== undefined) {
+      updates.push('caption = ?')
+      values.push(body.caption ?? null)
+    }
+
+    if (hasOwn('tags') && body.tags !== undefined) {
+      updates.push('tags = ?')
+      values.push(body.tags === null ? null : JSON.stringify(body.tags))
+    }
+
+    if (hasOwn('folder') && body.folder !== undefined) {
+      updates.push('folder = ?')
+      values.push(body.folder)
     }
 
     if (updates.length === 0) {

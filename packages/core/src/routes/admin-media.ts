@@ -8,6 +8,11 @@ import { renderMediaFileDetails, MediaFileDetailsData } from '../templates/compo
 import { MediaFile, renderMediaFileCard } from '../templates/components/media-grid.template'
 import type { Bindings, Variables } from '../app'
 
+function isRasterImageMimeType(mimeType: string): boolean {
+  const normalized = (mimeType.toLowerCase().split(';', 1)[0] ?? '').trim()
+  return normalized.startsWith('image/') && normalized !== 'image/svg+xml'
+}
+
 // File validation schema
 const fileValidationSchema = z.object({
   name: z.string().min(1).max(255),
@@ -496,10 +501,10 @@ adminMediaRoutes.post('/upload', async (c) => {
         }
 
         // Extract image dimensions if it's an image
-        let width: number | undefined
-        let height: number | undefined
+        let width: number | null = null
+        let height: number | null = null
         
-        if (file.type.startsWith('image/') && !file.type.includes('svg')) {
+        if (isRasterImageMimeType(file.type)) {
           try {
             const dimensions = await getImageDimensions(arrayBuffer)
             width = dimensions.width
@@ -511,7 +516,7 @@ adminMediaRoutes.post('/upload', async (c) => {
 
         // Generate URLs - use public serving route
         const publicUrl = `/files/${r2Key}`
-        const thumbnailUrl = file.type.startsWith('image/') ? publicUrl : undefined
+        const thumbnailUrl: string | null = isRasterImageMimeType(file.type) ? publicUrl : null
 
         // Save to database
         const stmt = c.env.DB.prepare(`
@@ -527,12 +532,12 @@ adminMediaRoutes.post('/upload', async (c) => {
           file.name,
           file.type,
           file.size,
-          width,
-          height,
+          width ?? null,
+          height ?? null,
           folder,
           r2Key,
           publicUrl,
-          thumbnailUrl,
+          thumbnailUrl ?? null,
           user!.userId,
           Math.floor(Date.now() / 1000)
         ).run()
@@ -687,21 +692,47 @@ adminMediaRoutes.put('/:id', async (c) => {
     }
 
     // Extract form data
-    const alt = formData.get('alt') as string || null
-    const caption = formData.get('caption') as string || null
-    const tagsString = formData.get('tags') as string || ''
-    const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : []
+    const updates: string[] = []
+    const values: Array<string | number | null> = []
+
+    if (formData.has('alt')) {
+      const altEntry = formData.get('alt')
+      updates.push('alt = ?')
+      values.push(typeof altEntry === 'string' && altEntry !== '' ? altEntry : null)
+    }
+
+    if (formData.has('caption')) {
+      const captionEntry = formData.get('caption')
+      updates.push('caption = ?')
+      values.push(typeof captionEntry === 'string' && captionEntry !== '' ? captionEntry : null)
+    }
+
+    if (formData.has('tags')) {
+      const tagsEntry = formData.get('tags')
+      const tagsString = typeof tagsEntry === 'string' ? tagsEntry : ''
+      const tags = tagsString
+        ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag)
+        : []
+      updates.push('tags = ?')
+      values.push(JSON.stringify(tags))
+    }
+
+    if (updates.length === 0) {
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          No valid fields to update
+        </div>
+      `)
+    }
 
     // Update database
     const updateStmt = c.env.DB.prepare(`
-      UPDATE media 
-      SET alt = ?, caption = ?, tags = ?, updated_at = ?
+      UPDATE media
+      SET ${updates.join(', ')}, updated_at = ?
       WHERE id = ?
     `)
     await updateStmt.bind(
-      alt,
-      caption,
-      JSON.stringify(tags),
+      ...values,
       Math.floor(Date.now() / 1000),
       fileId
     ).run()

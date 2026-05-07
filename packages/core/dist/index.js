@@ -1,21 +1,21 @@
-import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-M2PKQJ6J.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-M2PKQJ6J.js';
-import { SettingsService, setAppInstance, schema_exports } from './chunk-GQEIPW3L.js';
-export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-GQEIPW3L.js';
-import { requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection, requireRole } from './chunk-5QK3FXKX.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-5QK3FXKX.js';
-import { PluginService, PLUGIN_REGISTRY } from './chunk-CJOLOONT.js';
-export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-CJOLOONT.js';
-export { MigrationService } from './chunk-CSQWOYGZ.js';
+import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-N2INVFFP.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-N2INVFFP.js';
+import { SettingsService, setAppInstance, schema_exports } from './chunk-QFWHAFEO.js';
+export { Logger, apiTokens, collections, content, contentVersions, getLogger, initLogger, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-QFWHAFEO.js';
+import { requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection, requireRole } from './chunk-2CB7SN3F.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-2CB7SN3F.js';
+import { PluginService, PLUGIN_REGISTRY } from './chunk-CTSYZDAT.js';
+export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-CTSYZDAT.js';
+export { MigrationService } from './chunk-XVQNG5YV.js';
 export { renderFilterBar } from './chunk-ON5ZMSU4.js';
 import { renderAdminLayout } from './chunk-XWIA3HVX.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-XWIA3HVX.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-55RDMDOP.js';
-export { HookSystemImpl, HookUtils, PluginManager as PluginManagerClass, PluginRegistryImpl, PluginValidator as PluginValidatorClass, ScopedHookSystem as ScopedHookSystemClass } from './chunk-NGTBJJXZ.js';
+export { HookSystemImpl, HookUtils, PluginManager as PluginManagerClass, PluginRegistryImpl, PluginValidator as PluginValidatorClass, ScopedHookSystem as ScopedHookSystemClass } from './chunk-TFNTM3OA.js';
 import { PluginBuilder, PluginHelpers } from './chunk-EXNEW5US.js';
 export { PluginBuilder, PluginHelpers } from './chunk-EXNEW5US.js';
-import { package_default, getCoreVersion } from './chunk-NDS4S4AG.js';
-export { QueryFilterBuilder, SONICJS_VERSION, TemplateRenderer, buildQuery, getCoreVersion, renderTemplate, templateRenderer } from './chunk-NDS4S4AG.js';
+import { package_default, getCoreVersion } from './chunk-MGFRZO24.js';
+export { QueryFilterBuilder, SONICJS_VERSION, TemplateRenderer, buildQuery, getCoreVersion, renderTemplate, templateRenderer } from './chunk-MGFRZO24.js';
 import './chunk-X7ZAEI5S.js';
 export { metricsTracker } from './chunk-FICTAGD4.js';
 export { escapeHtml, sanitizeInput, sanitizeObject } from './chunk-TQABQWOP.js';
@@ -1799,19 +1799,24 @@ function createOTPLoginPlugin() {
       const body = await c.req.json();
       const validation = otpRequestSchema.safeParse(body);
       if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
+        return c.json(
+          {
+            error: "Validation failed",
+            details: validation.error.issues
+          },
+          400
+        );
       }
       const { email } = validation.data;
       const normalizedEmail = email.toLowerCase();
       const db = c.env.DB;
       const otpService = new OTPService(db);
       let settings = { ...DEFAULT_SETTINGS };
-      const pluginRow = await db.prepare(`
+      const pluginRow = await db.prepare(
+        `
         SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first();
+      `
+      ).first();
       if (pluginRow?.settings) {
         try {
           const savedSettings = JSON.parse(pluginRow.settings);
@@ -1823,17 +1828,25 @@ function createOTPLoginPlugin() {
       const settingsService = new SettingsService(db);
       const generalSettings = await settingsService.getGeneralSettings();
       const siteName = generalSettings.siteName;
-      const canRequest = await otpService.checkRateLimit(normalizedEmail, settings);
+      const canRequest = await otpService.checkRateLimit(
+        normalizedEmail,
+        settings
+      );
       if (!canRequest) {
-        return c.json({
-          error: "Too many requests. Please try again in an hour."
-        }, 429);
+        return c.json(
+          {
+            error: "Too many requests. Please try again in an hour."
+          },
+          429
+        );
       }
-      const user = await db.prepare(`
+      const user = await db.prepare(
+        `
         SELECT id, email, role, is_active
         FROM users
         WHERE email = ?
-      `).bind(normalizedEmail).first();
+      `
+      ).bind(normalizedEmail).first();
       if (!user && !settings.allowNewUserRegistration) {
         return c.json({
           message: "If an account exists for this email, you will receive a verification code shortly.",
@@ -1841,9 +1854,12 @@ function createOTPLoginPlugin() {
         });
       }
       if (user && !user.is_active) {
-        return c.json({
-          error: "This account has been deactivated."
-        }, 403);
+        return c.json(
+          {
+            error: "This account has been deactivated."
+          },
+          403
+        );
       }
       const ipAddress = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "unknown";
       const userAgent = c.req.header("user-agent") || "unknown";
@@ -1874,16 +1890,18 @@ function createOTPLoginPlugin() {
           loginUrl: settings.loginUrl || "",
           loginButtonText: settings.loginButtonText || ""
         });
-        const emailPlugin2 = await db.prepare(`
+        const emailPlugin2 = await db.prepare(
+          `
           SELECT settings FROM plugins WHERE id = 'email'
-        `).first();
+        `
+        ).first();
         if (emailPlugin2?.settings) {
           const emailSettings = JSON.parse(emailPlugin2.settings);
           if (emailSettings.apiKey && emailSettings.fromEmail && emailSettings.fromName) {
             const emailResponse = await fetch("https://api.resend.com/emails", {
               method: "POST",
               headers: {
-                "Authorization": `Bearer ${emailSettings.apiKey}`,
+                Authorization: `Bearer ${emailSettings.apiKey}`,
                 "Content-Type": "application/json"
               },
               body: JSON.stringify({
@@ -1900,10 +1918,14 @@ function createOTPLoginPlugin() {
               console.error("Failed to send OTP email via Resend:", errorData);
             }
           } else {
-            console.warn("Email plugin is not fully configured (missing apiKey, fromEmail, or fromName)");
+            console.warn(
+              "Email plugin is not fully configured (missing apiKey, fromEmail, or fromName)"
+            );
           }
         } else {
-          console.warn("Email plugin is not active or has no settings configured");
+          console.warn(
+            "Email plugin is not active or has no settings configured"
+          );
         }
         const response = {
           message: "If an account exists for this email, you will receive a verification code shortly.",
@@ -1915,15 +1937,21 @@ function createOTPLoginPlugin() {
         return c.json(response);
       } catch (emailError) {
         console.error("Error sending OTP email:", emailError);
-        return c.json({
-          error: "Failed to send verification code. Please try again."
-        }, 500);
+        return c.json(
+          {
+            error: "Failed to send verification code. Please try again."
+          },
+          500
+        );
       }
     } catch (error) {
       console.error("OTP request error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
+      return c.json(
+        {
+          error: "An error occurred. Please try again."
+        },
+        500
+      );
     }
   });
   otpAPI.post("/verify", async (c) => {
@@ -1931,19 +1959,24 @@ function createOTPLoginPlugin() {
       const body = await c.req.json();
       const validation = otpVerifySchema.safeParse(body);
       if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
+        return c.json(
+          {
+            error: "Validation failed",
+            details: validation.error.issues
+          },
+          400
+        );
       }
       const { email, code } = validation.data;
       const normalizedEmail = email.toLowerCase();
       const db = c.env.DB;
       const otpService = new OTPService(db);
       let settings = { ...DEFAULT_SETTINGS };
-      const pluginRow = await db.prepare(`
+      const pluginRow = await db.prepare(
+        `
         SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first();
+      `
+      ).first();
       if (pluginRow?.settings) {
         try {
           const savedSettings = JSON.parse(pluginRow.settings);
@@ -1952,29 +1985,40 @@ function createOTPLoginPlugin() {
           console.warn("Failed to parse OTP plugin settings, using defaults");
         }
       }
-      const verification = await otpService.verifyCode(normalizedEmail, code, settings);
+      const verification = await otpService.verifyCode(
+        normalizedEmail,
+        code,
+        settings
+      );
       if (!verification.valid) {
         await otpService.incrementAttempts(normalizedEmail, code);
-        return c.json({
-          error: verification.error || "Invalid code",
-          attemptsRemaining: verification.attemptsRemaining
-        }, 401);
+        return c.json(
+          {
+            error: verification.error || "Invalid code",
+            attemptsRemaining: verification.attemptsRemaining
+          },
+          401
+        );
       }
-      let user = await db.prepare(`
+      let user = await db.prepare(
+        `
         SELECT id, email, username, first_name, last_name, role, is_active, created_at
         FROM users
         WHERE email = ?
-      `).bind(normalizedEmail).first();
+      `
+      ).bind(normalizedEmail).first();
       if (!user && settings.allowNewUserRegistration) {
         const userId = crypto.randomUUID();
         const now = Date.now();
         const username = normalizedEmail.split("@")[0] + "_" + userId.slice(0, 6);
-        await db.prepare(`
+        await db.prepare(
+          `
           INSERT INTO users (
             id, email, username, first_name, last_name,
             password_hash, role, is_active, email_verified, created_at, updated_at
           ) VALUES (?, ?, ?, '', '', NULL, 'viewer', 1, 1, ?, ?)
-        `).bind(userId, normalizedEmail, username, now, now).run();
+        `
+        ).bind(userId, normalizedEmail, username, now, now).run();
         user = {
           id: userId,
           email: normalizedEmail,
@@ -1987,17 +2031,29 @@ function createOTPLoginPlugin() {
         };
       }
       if (!user) {
-        return c.json({
-          error: "User not found"
-        }, 404);
+        return c.json(
+          {
+            error: "User not found"
+          },
+          404
+        );
       }
       if (!user.is_active) {
-        return c.json({
-          error: "Account is deactivated"
-        }, 403);
+        return c.json(
+          {
+            error: "Account is deactivated"
+          },
+          403
+        );
       }
       const tokenTtl = await getJwtExpirySecondsFromDb(db, c.env);
-      const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl);
+      const token = await AuthManager.generateToken(
+        user.id,
+        user.email,
+        user.role,
+        c.env.JWT_SECRET,
+        tokenTtl
+      );
       setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -2005,7 +2061,8 @@ function createOTPLoginPlugin() {
         maxAge: tokenTtl
       });
       const customData = await getCustomData(db, user.id);
-      const { is_active, ...publicUser } = user;
+      const publicUser = { ...user };
+      delete publicUser.is_active;
       return c.json({
         success: true,
         user: {
@@ -2017,9 +2074,12 @@ function createOTPLoginPlugin() {
       });
     } catch (error) {
       console.error("OTP verify error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
+      return c.json(
+        {
+          error: "An error occurred. Please try again."
+        },
+        500
+      );
     }
   });
   otpAPI.post("/resend", async (c) => {
@@ -2027,10 +2087,13 @@ function createOTPLoginPlugin() {
       const body = await c.req.json();
       const validation = otpRequestSchema.safeParse(body);
       if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
+        return c.json(
+          {
+            error: "Validation failed",
+            details: validation.error.issues
+          },
+          400
+        );
       }
       return otpAPI.fetch(
         new Request(c.req.url.replace("/resend", "/request"), {
@@ -2042,9 +2105,12 @@ function createOTPLoginPlugin() {
       );
     } catch (error) {
       console.error("OTP resend error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
+      return c.json(
+        {
+          error: "An error occurred. Please try again."
+        },
+        500
+      );
     }
   });
   builder.addRoute("/auth/otp", otpAPI, {

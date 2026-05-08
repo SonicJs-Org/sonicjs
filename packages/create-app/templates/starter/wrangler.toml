@@ -15,7 +15,7 @@ migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 
 # R2 Bucket for media storage
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media"
 
 # Environment variables

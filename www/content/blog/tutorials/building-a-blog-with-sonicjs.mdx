@@ -66,189 +66,170 @@ cd my-blog
 
 ## Step 2: Define Content Collections
 
+A SonicJS collection is a plain object that conforms to `CollectionConfig`. The `schema` is JSON-Schema-shaped (`type: 'object'`, `properties: {...}`, `required: [...]`), and `satisfies CollectionConfig` keeps your literal types intact while still type-checking. We'll define three collections and link them with `reference` fields.
+
 ### Authors Collection
 
-Create `src/collections/authors.ts`:
+Create `src/collections/authors.collection.ts`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export const authorsCollection = defineCollection({
+export default {
   name: 'authors',
-  slug: 'authors',
-  fields: {
-    name: {
-      type: 'string',
-      required: true,
-      maxLength: 100,
+  displayName: 'Authors',
+  description: 'Blog authors',
+  icon: '👤',
+
+  schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', title: 'Name', required: true, maxLength: 100 },
+      email: { type: 'email', title: 'Email', required: true },
+      bio: { type: 'textarea', title: 'Bio', maxLength: 500 },
+      avatar: { type: 'media', title: 'Avatar' },
+      twitter: { type: 'string', title: 'Twitter handle', maxLength: 50 },
+      github: { type: 'string', title: 'GitHub handle', maxLength: 50 },
     },
-    email: {
-      type: 'email',
-      required: true,
-      unique: true,
-    },
-    bio: {
-      type: 'text',
-      maxLength: 500,
-    },
-    avatar: {
-      type: 'media',
-    },
-    twitter: {
-      type: 'string',
-      maxLength: 50,
-    },
-    github: {
-      type: 'string',
-      maxLength: 50,
-    },
+    required: ['name', 'email'],
   },
-})
+
+  listFields: ['name', 'email', 'twitter'],
+  searchFields: ['name', 'email', 'bio'],
+  defaultSort: 'name',
+  defaultSortOrder: 'asc',
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
 ```
 
 ### Categories Collection
 
-Create `src/collections/categories.ts`:
+Create `src/collections/categories.collection.ts`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export const categoriesCollection = defineCollection({
+export default {
   name: 'categories',
-  slug: 'categories',
-  fields: {
-    name: {
-      type: 'string',
-      required: true,
-      maxLength: 50,
+  displayName: 'Categories',
+  icon: '🏷️',
+
+  schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', title: 'Name', required: true, maxLength: 50 },
+      slug: { type: 'slug', title: 'URL Slug', required: true, maxLength: 50 },
+      description: { type: 'textarea', title: 'Description', maxLength: 200 },
     },
-    slug: {
-      type: 'string',
-      required: true,
-      unique: true,
-    },
-    description: {
-      type: 'text',
-      maxLength: 200,
-    },
+    required: ['name', 'slug'],
   },
-})
+
+  listFields: ['name', 'slug', 'description'],
+  searchFields: ['name', 'description'],
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
 ```
 
 ### Posts Collection
 
-Create `src/collections/posts.ts`:
+Create `src/collections/posts.collection.ts`. Cross-collection links use `type: 'reference'` with a `collection:` pointer to the target collection's `name`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export const postsCollection = defineCollection({
+export default {
   name: 'posts',
-  slug: 'posts',
-  fields: {
-    title: {
-      type: 'string',
-      required: true,
-      maxLength: 200,
-    },
-    slug: {
-      type: 'string',
-      required: true,
-      unique: true,
-    },
-    excerpt: {
-      type: 'text',
-      maxLength: 300,
-    },
-    content: {
-      type: 'richtext',
-      required: true,
-    },
-    featuredImage: {
-      type: 'media',
-    },
-    author: {
-      type: 'relation',
-      collection: 'authors',
-      required: true,
-    },
-    category: {
-      type: 'relation',
-      collection: 'categories',
-    },
-    tags: {
-      type: 'array',
-      of: 'string',
-    },
-    status: {
-      type: 'select',
-      options: ['draft', 'published', 'archived'],
-      default: 'draft',
-    },
-    publishedAt: {
-      type: 'datetime',
-    },
-    seo: {
-      type: 'object',
-      fields: {
-        metaTitle: { type: 'string', maxLength: 60 },
-        metaDescription: { type: 'string', maxLength: 160 },
-        ogImage: { type: 'media' },
+  displayName: 'Posts',
+  icon: '📝',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', title: 'Title', required: true, maxLength: 200 },
+      slug: { type: 'slug', title: 'URL Slug', required: true, maxLength: 200 },
+      excerpt: { type: 'textarea', title: 'Excerpt', maxLength: 300 },
+      content: { type: 'quill', title: 'Content', required: true },
+      featuredImage: { type: 'media', title: 'Featured Image' },
+      author: {
+        type: 'reference',
+        title: 'Author',
+        collection: 'authors',
+        required: true,
+      },
+      category: {
+        type: 'reference',
+        title: 'Category',
+        collection: 'categories',
+      },
+      tags: {
+        type: 'array',
+        title: 'Tags',
+        items: { type: 'string' },
+      },
+      status: {
+        type: 'select',
+        title: 'Status',
+        enum: ['draft', 'published', 'archived'],
+        enumLabels: ['Draft', 'Published', 'Archived'],
+        default: 'draft',
+      },
+      publishedAt: { type: 'datetime', title: 'Published Date' },
+      seo: {
+        type: 'object',
+        title: 'SEO',
+        properties: {
+          metaTitle: { type: 'string', title: 'Meta title', maxLength: 60 },
+          metaDescription: { type: 'string', title: 'Meta description', maxLength: 160 },
+          ogImage: { type: 'media', title: 'Social share image' },
+        },
       },
     },
+    required: ['title', 'slug', 'content', 'author'],
   },
-})
+
+  listFields: ['title', 'author', 'category', 'status', 'publishedAt'],
+  searchFields: ['title', 'excerpt'],
+  defaultSort: 'publishedAt',
+  defaultSortOrder: 'desc',
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
 ```
 
 ## Step 3: Configure the CMS
 
-Update `src/index.ts`:
+Update `src/index.ts`. The app is created once at module top — not per request — and `createSonicJSApp` returns a Hono instance you can export directly. Cloudflare bindings (`DB`, `CACHE_KV`, `MEDIA_BUCKET`) are read from `c.env` at request time by the framework, so you don't pass them through config:
 
 ```typescript
-import { Hono } from 'hono'
-import { createSonicJS } from '@sonicjs-cms/core'
-import { authPlugin, mediaPlugin, cachePlugin } from '@sonicjs-cms/core/plugins'
-import { authorsCollection } from './collections/authors'
-import { categoriesCollection } from './collections/categories'
-import { postsCollection } from './collections/posts'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
 
-type Env = {
-  DB: D1Database
-  CACHE: KVNamespace
-  STORAGE: R2Bucket
+import authorsCollection from './collections/authors.collection'
+import categoriesCollection from './collections/categories.collection'
+import postsCollection from './collections/posts.collection'
+
+registerCollections([
+  authorsCollection,
+  categoriesCollection,
+  postsCollection,
+])
+
+const config: SonicJSConfig = {
+  collections: { autoSync: true },
+  plugins: {
+    // Add your own plugins here. Auth, media, caching, OAuth, OTP login,
+    // analytics, and other core plugins are mounted automatically by
+    // createSonicJSApp — you don't import or register them yourself.
+    register: [],
+  },
 }
 
-const app = new Hono<{ Bindings: Env }>()
-
-app.use('*', async (c, next) => {
-  const cms = createSonicJS({
-    database: c.env.DB,
-    cache: c.env.CACHE,
-    storage: c.env.STORAGE,
-    collections: [
-      authorsCollection,
-      categoriesCollection,
-      postsCollection,
-    ],
-    plugins: [
-      authPlugin(),
-      mediaPlugin(),
-      cachePlugin({
-        defaultTTL: 3600,
-        patterns: {
-          '/api/content/posts': { ttl: 300 },
-          '/api/content/posts/*': { ttl: 600 },
-        },
-      }),
-    ],
-  })
-
-  c.set('cms', cms)
-  return next()
-})
-
-export default app
+export default createSonicJSApp(config)
 ```
+
+That's the entire app entry point. The bootstrap middleware runs once per worker instance, applies any pending core migrations, and syncs your registered collections into the `collections` table.
 
 ## Step 4: Set Up Database
 
@@ -259,39 +240,45 @@ Create and configure D1:
 wrangler d1 create my-blog-db
 
 # Create KV namespace for caching
-wrangler kv:namespace create CACHE
+wrangler kv namespace create CACHE_KV
 
 # Create R2 bucket for media
-wrangler r2 bucket create my-blog-storage
+wrangler r2 bucket create my-blog-media
 ```
 
-Update `wrangler.toml` with your resource IDs:
+Update `wrangler.toml` with the resource IDs returned by each command. The binding names below match what SonicJS reads from `c.env` — don't rename them:
 
 ```toml
 name = "my-blog"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "my-blog-db"
 database_id = "your-database-id"
+migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 
 [[kv_namespaces]]
-binding = "CACHE"
+binding = "CACHE_KV"
 id = "your-kv-id"
 
 [[r2_buckets]]
-binding = "STORAGE"
-bucket_name = "my-blog-storage"
+binding = "MEDIA_BUCKET"
+bucket_name = "my-blog-media"
+
+[vars]
+ENVIRONMENT = "development"
 ```
 
-Run migrations:
+Apply the framework migrations to your local database:
 
 ```bash
-npm run db:generate
 npm run db:migrate:local
 ```
+
+You don't generate migrations from your collection definitions — SonicJS keeps collection metadata in a `collections` table that the bootstrap middleware syncs from your `registerCollections([...])` call when `collections.autoSync` is true.
 
 ## Step 5: Test Your API
 
@@ -301,10 +288,12 @@ Start the development server:
 npm run dev
 ```
 
+SonicJS exposes each collection at `/api/collections/<name>/content` for both reads and writes. Public reads are open by default; writes require a JWT (sign in via `POST /auth/login` and pass the returned token as `Authorization: Bearer <token>`).
+
 ### Create an Author
 
 ```bash
-curl -X POST http://localhost:8787/api/content/authors \
+curl -X POST http://localhost:8787/api/collections/authors/content \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -315,10 +304,12 @@ curl -X POST http://localhost:8787/api/content/authors \
   }'
 ```
 
+The response includes the generated `id` — capture it; you'll reference it from posts.
+
 ### Create a Category
 
 ```bash
-curl -X POST http://localhost:8787/api/content/categories \
+curl -X POST http://localhost:8787/api/collections/categories/content \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -330,8 +321,10 @@ curl -X POST http://localhost:8787/api/content/categories \
 
 ### Create a Post
 
+Reference the author and category by their `id`:
+
 ```bash
-curl -X POST http://localhost:8787/api/content/posts \
+curl -X POST http://localhost:8787/api/collections/posts/content \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -350,14 +343,11 @@ curl -X POST http://localhost:8787/api/content/posts \
 ### Query Published Posts
 
 ```bash
-# Get all published posts with author data
-curl "http://localhost:8787/api/content/posts?status=published&include=author,category"
+# Paginate published posts
+curl "http://localhost:8787/api/collections/posts/content?status=published&limit=10&offset=0"
 
-# Search posts
-curl "http://localhost:8787/api/content/posts?search=hello"
-
-# Filter by category
-curl "http://localhost:8787/api/content/posts?category=category-id"
+# Fetch a single post by id
+curl http://localhost:8787/api/content/abc123
 ```
 
 ## Step 6: Deploy to Production
@@ -365,8 +355,8 @@ curl "http://localhost:8787/api/content/posts?category=category-id"
 Deploy your blog to Cloudflare's global network:
 
 ```bash
-# Apply production migrations
-npm run db:migrate:prod
+# Apply migrations to your production D1 database
+npm run db:migrate
 
 # Deploy
 npm run deploy
@@ -382,34 +372,37 @@ Use any frontend framework to consume your blog API:
 
 ```typescript
 // lib/api.ts
-const API_URL = process.env.NEXT_PUBLIC_CMS_URL
+const API_URL = process.env.NEXT_PUBLIC_CMS_URL!
 
 export async function getPosts() {
-  const res = await fetch(`${API_URL}/api/content/posts?status=published&include=author`)
-  return res.json()
+  const res = await fetch(`${API_URL}/api/collections/posts/content?status=published`)
+  const json = await res.json()
+  return json.data ?? []
 }
 
 export async function getPost(slug: string) {
-  const res = await fetch(`${API_URL}/api/content/posts?slug=${slug}&include=author,category`)
-  const data = await res.json()
-  return data.data[0]
+  const res = await fetch(`${API_URL}/api/collections/posts/content?slug=${slug}`)
+  const json = await res.json()
+  return (json.data ?? [])[0]
 }
 ```
+
+If you need the full author or category record alongside each post, fetch the referenced collection by id in a follow-up request and join client-side. Edge response times mean the extra round-trip is cheap.
 
 ```tsx
 // app/blog/page.tsx
 import { getPosts } from '@/lib/api'
 
 export default async function BlogPage() {
-  const { data: posts } = await getPosts()
+  const posts = await getPosts()
 
   return (
     <div>
-      {posts.map((post) => (
+      {posts.map((post: any) => (
         <article key={post.id}>
           <h2>{post.title}</h2>
           <p>{post.excerpt}</p>
-          <span>By {post.author.name}</span>
+          {/* `post.author` is the author record's id; resolve it separately if needed */}
         </article>
       ))}
     </div>
@@ -419,17 +412,11 @@ export default async function BlogPage() {
 
 ## Performance Tips
 
-### Enable Aggressive Caching
+### Cache at the Edge
 
-```typescript
-cachePlugin({
-  defaultTTL: 3600,
-  patterns: {
-    '/api/content/posts': { ttl: 60 },      // List updates quickly
-    '/api/content/posts/*': { ttl: 3600 },  // Individual posts cache longer
-  },
-})
-```
+The core cache plugin is mounted automatically and uses `CACHE_KV` to memoize public reads. You don't import or configure it in code — the cache settings live in the admin UI under **Plugins → Cache** so non-developers can tune TTLs without redeploying.
+
+For very static lists, a Cache-Control header on the response is often enough; Cloudflare's edge cache handles the rest.
 
 ### Use ISR in Next.js
 
@@ -437,16 +424,9 @@ cachePlugin({
 export const revalidate = 60 // Revalidate every 60 seconds
 ```
 
-### Optimize Images
+### Serve Optimized Images
 
-SonicJS integrates with Cloudflare Images for automatic optimization:
-
-```typescript
-mediaPlugin({
-  imageOptimization: true,
-  variants: ['thumbnail', 'medium', 'large'],
-})
-```
+Uploaded media lives in your `MEDIA_BUCKET` (R2) and is served from `/files/<key>` with a long `Cache-Control` (one year). For automatic resizing and format conversion, hook up Cloudflare Images by setting the `IMAGES_ACCOUNT_ID` and `IMAGES_API_TOKEN` env vars; the media plugin will route through Cloudflare Images when they're present.
 
 ## Key Takeaways
 

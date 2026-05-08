@@ -333,7 +333,7 @@ export function createOTPLoginPlugin(): Plugin {
       })
 
       const customData = await getCustomData(db, user.id)
-      const { is_active, ...publicUser } = user
+      const { is_active: _isActive, ...publicUser } = user
 
       return c.json({
         success: true,

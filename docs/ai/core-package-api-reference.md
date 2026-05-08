@@ -242,11 +242,14 @@ const hash = await AuthManager.hashPassword('password123')
 // Verify password
 const valid = await AuthManager.verifyPassword('password123', hash)
 
-// Generate JWT
-const token = await AuthManager.generateToken({ userId, email, role })
+// Generate JWT (pass JWT_SECRET from c.env)
+const token = await AuthManager.generateToken(userId, email, role, c.env.JWT_SECRET)
 
-// Verify JWT
-const payload = await AuthManager.verifyToken(token)
+// Verify JWT — pass the secret, otherwise the dev fallback is used
+const payload = await AuthManager.verifyToken(token, c.env.JWT_SECRET)
+
+// Or, from a Hono handler, do header/cookie/secret extraction in one call:
+const payload = await AuthManager.verifyAuthRequest(c)
 ```
 
 ### Logging Middleware

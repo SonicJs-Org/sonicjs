@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-// TODO: These tests pass locally but fail in CI due to D1 migration timing issues
-// Skipping until the CI D1 propagation issue is resolved
-test.describe.skip('Email Plugin Settings', () => {
+// Note: previously skipped because of D1 migration timing issues in CI.
+// Unskipped to validate the merged plugin-mounting changes; if CI flakes
+// on D1 propagation, retry rather than re-skipping.
+test.describe('Email Plugin Settings', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

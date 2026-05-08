@@ -369,22 +369,38 @@ npm run test:e2e:ui
 
 ## 🔌 Plugin Development
 
-Create plugins for extending SonicJS functionality:
+Create a plugin with the fluent `PluginBuilder` SDK and register it via `plugins.register`:
 
 ```typescript
 // src/plugins/my-plugin/index.ts
-import { Plugin } from '@sonicjs-cms/core'
+import { Hono } from 'hono'
+import { PluginBuilder } from '@sonicjs-cms/core'
 
-export default {
+const routes = new Hono().get('/ping', (c) => c.json({ ok: true }))
+
+export default PluginBuilder.create({
   name: 'my-plugin',
-  hooks: {
-    'content:beforeCreate': async (content) => {
-      // Plugin logic here
-      return content
-    }
-  }
-} as Plugin
+  version: '1.0.0',
+  description: 'Example plugin',
+})
+  .addRoute('/api/my-plugin', routes)
+  .addHook('content:save', async (data) => data)
+  .build()
 ```
+
+```typescript
+// src/index.ts
+import { createSonicJSApp } from '@sonicjs-cms/core'
+import myPlugin from './plugins/my-plugin'
+
+export default createSonicJSApp({
+  plugins: { register: [myPlugin] },
+})
+```
+
+Plugin routes mount before the core `/admin/*` catch-alls, so plugin admin pages aren't shadowed. Core plugins (auth, media, cache, OAuth, OTP login, analytics, etc.) are mounted automatically — you don't import or register them yourself.
+
+See the [plugin development guide](https://sonicjs.com/plugins/development) for the full SDK reference.
 
 ## 📄 License
 

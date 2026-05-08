@@ -1,5 +1,5 @@
 import { EmailTemplate, EmailTheme } from '../schema';
-import { renderTemplate } from '@sonicjs-cms/core';
+import { renderTemplate } from '../../../../utils';
 import { marked, Renderer } from 'marked';
 
 export interface EmailRenderResult {

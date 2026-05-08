@@ -31,6 +31,7 @@ import { bootstrapMiddleware } from './middleware/bootstrap'
 import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
+import { isPluginActive } from './middleware/plugin-middleware'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
@@ -42,6 +43,7 @@ import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
+import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
 import { requireAuth, requireRole } from './middleware/auth'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
@@ -49,6 +51,10 @@ import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import cachePlugin from './plugins/cache'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
+import type { Plugin } from './plugins/types'
+import { mountPlugin } from './plugins/mount'
+import { PluginManager } from './plugins/plugin-manager'
+import { getPlugin } from './plugins/manifest-registry'
 
 // ============================================================================
 // Type Definitions
@@ -97,9 +103,29 @@ export interface SonicJSConfig {
 
   // Plugins configuration
   plugins?: {
+    /** User plugins to register. Each entry is the output of PluginBuilder.build(). */
+    register?: Plugin[]
+    /**
+     * When true, disables all non-core plugins (is_core === false in manifest).
+     * Core plugins (is_core === true) are always active regardless of this flag.
+     * Takes precedence over the `enabled` list and the per-request DB active check.
+     */
+    disableAll?: boolean
+    /**
+     * Explicit allowlist of plugin names to enable. Only used when no
+     * per-request DB active check is wired up. Core plugins (is_core === true)
+     * are always enabled regardless of this list.
+     */
+    enabled?: string[]
+    /**
+     * @deprecated No-op. Pass plugins explicitly via `register`.
+     * Filesystem autoload is incompatible with Cloudflare Workers (no runtime fs).
+     */
     directory?: string
+    /**
+     * @deprecated No-op. Pass plugins explicitly via `register`.
+     */
     autoLoad?: boolean
-    disableAll?: boolean  // Disable all plugins including core plugins
   }
 
   // Custom routes
@@ -125,9 +151,119 @@ export interface SonicJSConfig {
 
 export type SonicJSApp = Hono<{ Bindings: Bindings; Variables: Variables }>
 
+export interface PluginRouteMountOptions {
+  enabledPlugins?: Iterable<string>
+  isPluginEnabled?: (pluginName: string, c: Context<{ Bindings: Bindings; Variables: Variables }>) => boolean | Promise<boolean>
+  /** When true, all non-core plugins are disabled regardless of DB state or enabledPlugins list. */
+  disableAll?: boolean
+  /** Return true for plugins that should always be mounted (i.e. is_core === true in manifest). */
+  isCorePlugin?: (pluginName: string) => boolean
+}
+
+type RoutablePlugin = {
+  name: string
+  routes?: Array<{
+    path: string
+    handler: Hono
+  }>
+}
+
+export function mountPluginManagerRoutes(
+  app: SonicJSApp,
+  plugins: RoutablePlugin[],
+  options: PluginRouteMountOptions = {}
+): PluginManager {
+  const pluginManager = new PluginManager()
+  const enabledPlugins = new Set(options.enabledPlugins ?? [])
+  const isPluginEnabled = options.isPluginEnabled ?? (() => false)
+  const hasExplicitEnablement = options.enabledPlugins !== undefined || options.isPluginEnabled !== undefined
+  const shouldEnablePlugin = async (
+    pluginName: string,
+    c: Context<{ Bindings: Bindings; Variables: Variables }>
+  ): Promise<boolean> => {
+    // Core plugins (is_core === true in manifest) are always enabled.
+    if (options.isCorePlugin?.(pluginName)) {
+      return true
+    }
+
+    // disableAll gates all non-core plugins.
+    if (options.disableAll) {
+      return false
+    }
+
+    if (!hasExplicitEnablement) {
+      return true
+    }
+
+    if (options.isPluginEnabled !== undefined) {
+      return await isPluginEnabled(pluginName, c)
+    }
+
+    return enabledPlugins.has(pluginName)
+  }
+
+  for (const plugin of plugins) {
+    pluginManager.registerPluginRoutes(plugin)
+  }
+
+  for (const [pluginName, pluginApp] of pluginManager.getPluginRoutes()) {
+    const plugin = plugins.find(candidate => candidate.name === pluginName)
+    if (!plugin?.routes?.length) continue
+
+    for (const route of plugin.routes) {
+      const guard = async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) => {
+        if (await shouldEnablePlugin(pluginName, c)) {
+          await next()
+          return
+        }
+
+        return c.json({ error: 'Not Found', status: 404 }, 404)
+      }
+
+      for (const guardedPath of [route.path, `${route.path}/*`]) {
+        app.use(guardedPath, guard)
+      }
+    }
+
+    app.route('/', pluginApp)
+  }
+
+  return pluginManager
+}
+
 // ============================================================================
-// Application Factory
+// Plugin Active Status Cache
 // ============================================================================
+
+/**
+ * Module-level TTL cache for plugin active status.
+ *
+ * In Cloudflare Workers a module instance can handle many requests within its
+ * lifetime, so caching here avoids a D1 read on every hot-path request while
+ * still reflecting DB changes within a short window.
+ *
+ * **Invalidation**: status changes made via the admin UI take up to
+ * PLUGIN_STATUS_CACHE_TTL_MS (60 s) to propagate. For immediate effects
+ * (e.g. CI or integration tests) restart the Worker or reduce the TTL.
+ *
+ * **Memory**: the map is bounded by the number of distinct plugin names
+ * passed to mountPluginManagerRoutes (~10 core plugins), so unbounded growth
+ * is not a concern in practice.
+ */
+const PLUGIN_STATUS_CACHE_TTL_MS = 60_000
+const pluginStatusCache = new Map<string, { active: boolean; expiresAt: number }>()
+
+async function isPluginActiveWithCache(db: D1Database, pluginName: string): Promise<boolean> {
+  const now = Date.now()
+  const cached = pluginStatusCache.get(pluginName)
+  if (cached && now < cached.expiresAt) {
+    return cached.active
+  }
+
+  const active = await isPluginActive(db, pluginName)
+  pluginStatusCache.set(pluginName, { active, expiresAt: now + PLUGIN_STATUS_CACHE_TTL_MS })
+  return active
+}
 
 /**
  * Create a SonicJS application with core functionality
@@ -138,15 +274,12 @@ export type SonicJSApp = Hono<{ Bindings: Bindings; Variables: Variables }>
  * @example
  * ```typescript
  * import { createSonicJSApp } from '@sonicjs-cms/core'
+ * import myPlugin from './plugins/my-plugin'
  *
  * const app = createSonicJSApp({
- *   collections: {
- *     directory: './src/collections',
- *     autoSync: true
- *   },
+ *   collections: { autoSync: true },
  *   plugins: {
- *     directory: './src/plugins',
- *     autoLoad: true
+ *     register: [myPlugin]
  *   }
  * })
  *
@@ -155,6 +288,7 @@ export type SonicJSApp = Hono<{ Bindings: Bindings; Variables: Variables }>
  */
 export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+  const magicLinkPlugin = createMagicLinkAuthPlugin()
 
   // Set app metadata
   const appVersion = config.version || getCoreVersion()
@@ -206,6 +340,28 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())
 
+  mountPluginManagerRoutes(
+    app,
+    [
+      securityAuditPlugin,
+      aiSearchPlugin,
+      oauthProvidersPlugin,
+      userProfilesPlugin,
+      otpLoginPlugin,
+      analyticsPlugin,
+      stripePlugin,
+      emailPlugin,
+      magicLinkPlugin,
+      globalVariablesPlugin,
+    ],
+    {
+      enabledPlugins: config.plugins?.enabled,
+      disableAll: config.plugins?.disableAll,
+      isCorePlugin: (name) => getPlugin(name)?.is_core === true,
+      isPluginEnabled: async (pluginName, c) => isPluginActiveWithCache(c.env.DB, pluginName),
+    }
+  )
+
   // Core routes
   // Routes are being imported incrementally from routes/*
   // Each route is tested and migrated one-by-one
@@ -227,61 +383,23 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Security audit middleware - logs auth events (login, register, logout)
   app.use('/auth/*', securityAuditMiddleware())
 
-  // Plugin routes - Security Audit (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  if (securityAuditPlugin.routes && securityAuditPlugin.routes.length > 0) {
-    for (const route of securityAuditPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - AI Search (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  // Register AI Search routes first so they take precedence over the generic /:id handler
-  if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
-    for (const route of aiSearchPlugin.routes) {
-      app.route(route.path, route.handler)
-    }
-  }
-
-  // Plugin routes - Cache (dashboard and management API)
-  // Fixes GitHub Issue #461: Cache routes were not registered
+  // Cache plugin routes (dashboard + management API). The cache plugin is
+  // wired via its own helper because it returns a Hono sub-app from
+  // getRoutes() rather than declaring `routes` on a Plugin shape.
   app.route('/admin/cache', cachePlugin.getRoutes())
-
-  // Plugin routes - OAuth Providers (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
-    for (const route of oauthProvidersPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - User Profiles
-  if (userProfilesPlugin.routes && userProfilesPlugin.routes.length > 0) {
-    for (const route of userProfilesPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - OTP Login (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  // Register OTP Login routes first so they take precedence over the generic /:id handler
-  if (otpLoginPlugin.routes && otpLoginPlugin.routes.length > 0) {
-    for (const route of otpLoginPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - Analytics (must be before /admin/plugins catch-all)
-  if (analyticsPlugin.routes && analyticsPlugin.routes.length > 0) {
-    for (const route of analyticsPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
 
   // Public event tracking API — POST /api/events (open), GET /api/events (admin)
   app.route('/api/events', eventsApiRoutes)
 
-  // Plugin routes - Stripe (must be before /admin/plugins catch-all)
-  if (stripePlugin.routes && stripePlugin.routes.length > 0) {
-    for (const route of stripePlugin.routes) {
-      app.route(route.path, route.handler as any)
+  // User plugins - registered via config.plugins.register.
+  // Mount BEFORE /admin/plugins and /admin so user admin pages aren't
+  // shadowed by the core admin catch-alls below. User plugins are NOT
+  // gated through mountPluginManagerRoutes — if you imported and
+  // registered them, they're on. Route them through there in the
+  // future if we want the admin "disable" toggle to apply.
+  if (config.plugins?.register) {
+    for (const plugin of config.plugins.register) {
+      mountPlugin(app, plugin)
     }
   }
 
@@ -292,21 +410,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // Test cleanup routes (only for development/test environments)
   app.route('/', testCleanupRoutes)
-
-  // Plugin routes - Email
-  if (emailPlugin.routes && emailPlugin.routes.length > 0) {
-    for (const route of emailPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - Magic Link Auth (passwordless authentication via email links)
-  const magicLinkPlugin = createMagicLinkAuthPlugin()
-  if (magicLinkPlugin.routes && magicLinkPlugin.routes.length > 0) {
-    for (const route of magicLinkPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
 
   // Serve favicon
   app.get('/favicon.svg', (c) => {

@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono'
-import { Plugin, PluginManager as IPluginManager, PluginRegistry, PluginConfig, PluginContext, PluginStatus, HookSystem, PluginLogger, HOOKS } from '../types'
+import { Plugin, PluginManager as IPluginManager, PluginRegistry, PluginConfig, PluginContext, PluginStatus, HookSystem, PluginLogger, HOOKS, PluginRoutes } from '../types'
 import { PluginRegistryImpl } from './plugin-registry'
 import { HookSystemImpl, ScopedHookSystem } from './hook-system'
 import { PluginValidator } from './plugin-validator'
@@ -257,21 +257,25 @@ export class PluginManager implements IPluginManager {
     return Array.from(this.registry.getAllStatuses().values())
   }
 
+  registerPluginRoutes(plugin: { name: string; routes?: PluginRoutes[] }): void {
+    if (!plugin.routes) {
+      return
+    }
+
+    const pluginApp = new Hono()
+
+    for (const route of plugin.routes) {
+      pluginApp.route(route.path, route.handler)
+    }
+
+    this.pluginRoutes.set(plugin.name, pluginApp)
+  }
+
   /**
    * Register plugin extensions (routes, middleware, etc.)
    */
   private async registerPluginExtensions(plugin: Plugin, _context: PluginContext): Promise<void> {
-    // Register routes
-    if (plugin.routes) {
-      const pluginApp = new Hono()
-      
-      for (const route of plugin.routes) {
-        console.debug(`Registering plugin route: ${route.path}`)
-        pluginApp.route(route.path, route.handler)
-      }
-      
-      this.pluginRoutes.set(plugin.name, pluginApp)
-    }
+    this.registerPluginRoutes(plugin)
 
     // Register middleware
     if (plugin.middleware) {

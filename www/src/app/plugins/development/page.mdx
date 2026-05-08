@@ -201,13 +201,26 @@ export const myPlugin = createMyPlugin()
 
 ### Step 4: Register the Plugin
 
-Add your plugin to your app's plugin index at `src/plugins/index.ts`:
+Pass your plugin to `createSonicJSApp` via the `plugins.register` array in `src/index.ts`:
 
 ```typescript
-export { myPlugin } from './my-plugin'
+import { createSonicJSApp } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
+import { myPlugin } from './plugins/my-plugin'
+
+const config: SonicJSConfig = {
+  collections: { autoSync: true },
+  plugins: {
+    register: [myPlugin]
+  }
+}
+
+export default createSonicJSApp(config)
 ```
 
-Your plugin will be automatically loaded when the app starts.
+`createSonicJSApp` mounts each registered plugin's middleware (sorted by `priority`) and routes before the core `/admin/*` catch-all routes, so plugin admin pages are not shadowed.
+
+> **Why explicit registration?** SonicJS targets Cloudflare Workers, which has no runtime filesystem, so directory-based autoloading isn't possible. An explicit array is also type-safe, tree-shakeable, and lets you pass configuration to factory plugins (e.g. `register: [myPlugin({ apiKey })]`).
 
 ### Alternative: Plain Object Pattern
 

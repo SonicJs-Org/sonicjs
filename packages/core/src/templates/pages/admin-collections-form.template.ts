@@ -673,11 +673,14 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
       </div>
     </div>
 
+    <!-- Code Export Modal -->
     <div id="code-export-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden">
-      <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 w-full max-w-lg mx-4">
+      <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 w-full max-w-2xl mx-4">
         <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
           <div class="flex items-center justify-between">
-            <h3 id="modal-title" class="text-lg font-semibold text-zinc-950 dark:text-white">Add Field</h3>
+            <h3 id="code-export-modal-title" class="text-lg font-semibold text-zinc-950 dark:text-white">
+              Code-Based version of ${data.display_name || 'this collection'}
+            </h3>
             <button onclick="toggleCodeExportModal()" class="text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -686,22 +689,20 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
           </div>
         </div>
 
-        <form id="code-export-form" class="p-6 space-y-4"> 
+        <div id="code-export-form" class="p-6 space-y-4"> 
           <div id="code-export-options-container">
-            <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Field Options (JSON)</label>
             <div class="relative">
               <textarea
                 id="code-export-options"
                 name="code_export_options"
-                rows="5"
+                rows="8"
                 class="w-full rounded-lg bg-white dark:bg-zinc-800 px-4 py-3 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors font-mono"
-                placeholder='{"maxLength": 200, "placeholder": "Enter text..."}'
+                readonly
               ></textarea>
               <button
                 id="copy-options-btn"
                 type="button"
-                onclick="(function(btn){navigator.clipboard.writeText(document.getElementById('code-export-options').value).then(function(){btn.classList.add('text-green-600','dark:text-green-400');btn.classList.remove('text-zinc-500','dark:text-zinc-400');document.getElementById('copy-options-feedback').classList.remove('invisible');setTimeout(function(){btn.classList.remove('text-green-600','dark:text-green-400');btn.classList.add('text-zinc-500','dark:text-zinc-400');document.getElementById('copy-options-feedback').classList.add('invisible');},2000);})})(this)"
-                class="absolute top-2 right-2 p-1 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors cursor-copy"
+                class="absolute top-2 right-4 p-1 rounded bg-white/10 dark:bg-zinc-800/10 text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors cursor-copy"
                 title="Copy to clipboard"
               >
                 <svg class="w-5 h-5" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" fill="none">
@@ -709,8 +710,14 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
                 </svg>
               </button>
             </div>
-            <div class="flex items-center justify-between mt-1">
-              <p class="text-xs text-zinc-500 dark:text-zinc-400">JSON configuration for field-specific options</p>
+            <div class="flex items-center justify-between mt-1 gap-x-4">
+              <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                This is a code-based representation of ${data.display_name ? `the ${data.display_name}` : 'this'} collection.
+                Learn more about
+                <a href="https://sonicjs.com/collections" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">
+                  collections here.
+                </a> 
+              </p>
               <span id="copy-options-feedback" class="invisible text-xs text-green-600 dark:text-green-400">Copied!</span>
             </div>
           </div>
@@ -724,39 +731,92 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
               Close
             </button> 
           </div>
-        </form>
+        </div>
       </div>
     </div>
 
     <script>
       /**
        * Code Export Modal Logic
-       * - Handles opening/closing of the modal
-       * - Fetches collection data for export when triggered
-       * - Manages textarea state and copy feedback
        */
 
-      let collectionName = '${data.name || ''}';
-      let textareaIsDirty = false;
-      
-      // Get reference to the code export modal element
-      const codeExportElement = document.getElementById('code-export-modal');
-      
-      // Function to toggle the visibility of the code export modal
-      function toggleCodeExportModal() {
-        codeExportElement.classList.toggle('hidden');
-        if (textareaIsDirty && codeExportElement.classList.contains('hidden')) {
-          document.getElementById('code-export-options').value = '';
-          textareaIsDirty = false;
+      let collectionName = '${data.name || ''}'; 
+
+      /**
+       * Generate template for a code-based collection export
+       * @returns {object} The collection data formatted for export
+       */
+
+      function generateCollectionTemplate(data) {
+        try {
+          const normalizedData = normalizeCollectionObject(data);
+          let template = "import type { CollectionConfig } from '@sonicjs-cms/core';";
+          template += "\\n\\n";
+          template += \`export default \${JSON.stringify(normalizedData, null, 2)} satisfies CollectionConfig;\`
+          
+          return template;
+        } catch (error) {
+          console.error('Error generating collection template:', error);
+          alert('Failed to generate collection template. Please try again.');
         }
       }
 
-      // Check if the code export modal is currently open
+      /**
+       * Recursively converts object keys from snake_case to camelCase.
+       * @param {object} obj - The object to convert.
+       * @returns {object} A new object with camelCase keys and filtered out unknown fields.
+       */
+      const unwantedKeys = [
+        'source_type',
+        'source_id',
+        'created_at',
+        'updated_at'
+      ];
+      function normalizeCollectionObject(obj) {
+        if (Array.isArray(obj)) {
+          return obj.map(normalizeCollectionObject);
+        } else if (obj !== null && typeof obj === 'object') {
+          return Object.keys(obj).reduce((acc, key) => {
+            if (unwantedKeys.includes(key)) {
+              return acc; // skip unknown fields
+            }
+            const camelCaseKey = key.replace(/_([a-z])/g, g => g[1].toUpperCase());
+            acc[camelCaseKey] = normalizeCollectionObject(obj[key]);
+            return acc;
+          }, {});
+        }
+        return obj;
+      }
+
+      /**
+       * Modal container stored to avoid querying the DOM multiple times.
+       */
+      const codeExportModalContainer = document.getElementById('code-export-modal');
+      
+      /**
+       * Toggle the hidden class on the code export modal to show/hide it.
+       * If the textarea has unsaved changes and the modal is being closed, reset the textarea and dirty state.
+       */
+      function toggleCodeExportModal() {
+        codeExportModalContainer.classList.toggle('hidden');
+        if (!isCodeExportModalOpen()) {
+          codeExportModalContainer.querySelector('#code-export-options').value = '';
+        }
+      }
+
+      /**
+       * Check if the modal is currently open by checking the presence of the 'hidden' class.
+       * @returns {boolean} True if the modal is open, false otherwise.
+       */
       function isCodeExportModalOpen() {
-        return !codeExportElement.classList.contains('hidden');
+        return !codeExportModalContainer.classList.contains('hidden');
       }
  
-      // Fetch collection data by name for export
+      /**
+       * Fetch collection data by name from the API.
+       * @param {string} collectionName - The name of the collection to fetch.
+       * @returns {object} The collection data or an empty object if an error occurs.
+       */
       async function fetchCollectionByName(collectionName) {
         try { 
           const response = await fetch(\`/api/collections/\${collectionName}/content\`, {
@@ -775,16 +835,18 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
         }
       }
      
-      // Open export modal and load collection data on button click
-      document.getElementById('export-collection-btn')
+      /**
+       * Event listener for the export modal trigger button.
+       * Fetches the collection data and populates the textarea with a pretty-printed JSON string.
+       */
+      document.querySelector('#export-collection-btn')
         .addEventListener('click', async function() {
           if (collectionName.length > 0) {
-            const collectionData = await fetchCollectionByName(collectionName);
-            if (collectionData) {
-              try {
-                // Stringify with indentation for better readability in the textarea
-                document.getElementById('code-export-options').value = JSON.stringify(collectionData, null, 2);
-                textareaIsDirty = true;
+            const res = await fetchCollectionByName(collectionName);
+            if (res) {
+              try {    
+                codeExportModalContainer
+                  .querySelector('#code-export-options').value = generateCollectionTemplate(res);
                 toggleCodeExportModal();
               } catch (e) {
                 console.error('Error stringifying collection data:', e);
@@ -793,6 +855,31 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
             }
           }
       });
+
+      /**
+       * Event listener for the copy options button.
+       * Selects the textarea content and attempts to copy it to the clipboard, providing user feedback on success or failure.
+       */
+      codeExportModalContainer.querySelector('#copy-options-btn')
+        .addEventListener('click', function() {
+          const textarea = codeExportModalContainer.querySelector('#code-export-options');
+          textarea.select();
+          textarea.setSelectionRange(0, 99999); // For mobile devices
+
+          try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+              const feedback = codeExportModalContainer.querySelector('#copy-options-feedback');
+              feedback.classList.remove('invisible');
+              setTimeout(() => feedback.classList.add('invisible'), 2000);
+            } else {
+              throw new Error('Copy command was unsuccessful');
+            }
+          } catch (err) {
+            console.error('Error copying to clipboard:', err);
+            alert('Failed to copy to clipboard. Please try copying manually.');
+          }
+        });
  
       // Close modal on escape key
       document.addEventListener('keydown', function(e) {
@@ -802,7 +889,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
       });
 
       // Close modal on backdrop click
-      codeExportElement.addEventListener('click', function(e) {
+      codeExportModalContainer.addEventListener('click', function(e) {
         if (e.target === this) {
           toggleCodeExportModal();
         }

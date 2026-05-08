@@ -112,10 +112,10 @@ cd my-app
 ### 2. Create Cloudflare resources (if skipped)
 
 ```bash
-wrangler d1 create my-app-db --binder DB
+wrangler d1 create my-app-db --binding DB
 # Copy the database_id to wrangler.toml
 
-wrangler r2 bucket create my-app-media --binder MEDIA_BUCKET
+wrangler r2 bucket create my-app-media --binding MEDIA_BUCKET
 ```
 
 ### 3. Run database migrations

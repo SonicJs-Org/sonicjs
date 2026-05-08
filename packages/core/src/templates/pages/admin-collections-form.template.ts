@@ -201,6 +201,19 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
               <h2 class="text-base/7 font-semibold text-zinc-950 dark:text-white">Collection Details</h2>
               <p class="text-sm/6 text-zinc-500 dark:text-zinc-400">Configure your collection settings below</p>
             </div>
+
+            <!-- Export Button for Config-Managed Collections -->
+            <div class="ml-auto">
+              <button
+                type="button"
+                id="export-collection-btn"
+                class="inline-flex items-center gap-x-1.5 px-3.5 py-2.5 bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 font-semibold text-sm rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm"
+              >
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 8L3 11.6923L7 16M17 8L21 11.6923L17 16M14 4L10 20" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -660,6 +673,142 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
       </div>
     </div>
 
+    <div id="code-export-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+      <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 w-full max-w-lg mx-4">
+        <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+          <div class="flex items-center justify-between">
+            <h3 id="modal-title" class="text-lg font-semibold text-zinc-950 dark:text-white">Add Field</h3>
+            <button onclick="toggleCodeExportModal()" class="text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <form id="code-export-form" class="p-6 space-y-4"> 
+          <div id="code-export-options-container">
+            <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Field Options (JSON)</label>
+            <div class="relative">
+              <textarea
+                id="code-export-options"
+                name="code_export_options"
+                rows="5"
+                class="w-full rounded-lg bg-white dark:bg-zinc-800 px-4 py-3 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors font-mono"
+                placeholder='{"maxLength": 200, "placeholder": "Enter text..."}'
+              ></textarea>
+              <button
+                id="copy-options-btn"
+                type="button"
+                onclick="(function(btn){navigator.clipboard.writeText(document.getElementById('code-export-options').value).then(function(){btn.classList.add('text-green-600','dark:text-green-400');btn.classList.remove('text-zinc-500','dark:text-zinc-400');document.getElementById('copy-options-feedback').classList.remove('invisible');setTimeout(function(){btn.classList.remove('text-green-600','dark:text-green-400');btn.classList.add('text-zinc-500','dark:text-zinc-400');document.getElementById('copy-options-feedback').classList.add('invisible');},2000);})})(this)"
+                class="absolute top-2 right-2 p-1 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors cursor-copy"
+                title="Copy to clipboard"
+              >
+                <svg class="w-5 h-5" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" fill="none">
+                  <path fill="currentColor" fill-rule="evenodd" d="M4 2a2 2 0 00-2 2v9a2 2 0 002 2h2v2a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2h-2V4a2 2 0 00-2-2H4zm9 4V4H4v9h2V8a2 2 0 012-2h5zM8 8h9v9H8V8z"/>
+                </svg>
+              </button>
+            </div>
+            <div class="flex items-center justify-between mt-1">
+              <p class="text-xs text-zinc-500 dark:text-zinc-400">JSON configuration for field-specific options</p>
+              <span id="copy-options-feedback" class="invisible text-xs text-green-600 dark:text-green-400">Copied!</span>
+            </div>
+          </div>
+
+          <div class="flex justify-end space-x-3 pt-4 border-t border-zinc-950/5 dark:border-white/10">
+            <button
+              type="button"
+              onclick="toggleCodeExportModal()"
+              class="rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+            >
+              Close
+            </button> 
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * Code Export Modal Logic
+       * - Handles opening/closing of the modal
+       * - Fetches collection data for export when triggered
+       * - Manages textarea state and copy feedback
+       */
+
+      let collectionName = '${data.name || ''}';
+      let textareaIsDirty = false;
+      
+      // Get reference to the code export modal element
+      const codeExportElement = document.getElementById('code-export-modal');
+      
+      // Function to toggle the visibility of the code export modal
+      function toggleCodeExportModal() {
+        codeExportElement.classList.toggle('hidden');
+        if (textareaIsDirty && codeExportElement.classList.contains('hidden')) {
+          document.getElementById('code-export-options').value = '';
+          textareaIsDirty = false;
+        }
+      }
+
+      // Check if the code export modal is currently open
+      function isCodeExportModalOpen() {
+        return !codeExportElement.classList.contains('hidden');
+      }
+ 
+      // Fetch collection data by name for export
+      async function fetchCollectionByName(collectionName) {
+        try { 
+          const response = await fetch(\`/api/collections/\${collectionName}/content\`, {
+            headers: {
+              'Accept': 'application/json'
+            }
+          });
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+          const res = await response.json();
+          return res.meta.collection || {};
+        } catch (error) {
+          console.error('Error fetching collection data for export:', error);
+          alert('Failed to load collection data for export. Please try again.');
+        }
+      }
+     
+      // Open export modal and load collection data on button click
+      document.getElementById('export-collection-btn')
+        .addEventListener('click', async function() {
+          if (collectionName.length > 0) {
+            const collectionData = await fetchCollectionByName(collectionName);
+            if (collectionData) {
+              try {
+                // Stringify with indentation for better readability in the textarea
+                document.getElementById('code-export-options').value = JSON.stringify(collectionData, null, 2);
+                textareaIsDirty = true;
+                toggleCodeExportModal();
+              } catch (e) {
+                console.error('Error stringifying collection data:', e);
+                alert('Failed to prepare collection data for export. Please try again.');
+              }
+            }
+          }
+      });
+ 
+      // Close modal on escape key
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isCodeExportModalOpen()) {
+          toggleCodeExportModal();
+        }
+      });
+
+      // Close modal on backdrop click
+      codeExportElement.addEventListener('click', function(e) {
+        if (e.target === this) {
+          toggleCodeExportModal();
+        }
+      });
+
+    </script>
     <script>
       const collectionId = '${data.id || ''}';
       

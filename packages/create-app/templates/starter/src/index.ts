@@ -11,6 +11,10 @@ import type { SonicJSConfig } from '@sonicjs-cms/core'
 // Add new collections here after creating them in src/collections/
 import blogPostsCollection from './collections/blog-posts.collection'
 
+// Import your plugins (each is the default export from PluginBuilder.build())
+// Add new plugins here after creating them in src/plugins/
+// import myPlugin from './plugins/my-plugin'
+
 // Register collections BEFORE creating the app
 // This ensures they are synced to the database on startup
 registerCollections([
@@ -24,8 +28,9 @@ const config: SonicJSConfig = {
     autoSync: true
   },
   plugins: {
-    directory: './src/plugins',
-    autoLoad: false  // Set to true to auto-load custom plugins
+    register: [
+      // myPlugin,
+    ]
   }
 }
 

@@ -49,6 +49,8 @@ import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import cachePlugin from './plugins/cache'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
+import type { Plugin } from './plugins/types'
+import { mountPlugin } from './plugins/mount'
 
 // ============================================================================
 // Type Definitions
@@ -97,9 +99,19 @@ export interface SonicJSConfig {
 
   // Plugins configuration
   plugins?: {
+    /** User plugins to register. Each entry is the output of PluginBuilder.build(). */
+    register?: Plugin[]
+    /** Disable all core plugin bootstrap (advanced; mostly used by stats workers). */
+    disableAll?: boolean
+    /**
+     * @deprecated No-op. Pass plugins explicitly via `register`.
+     * Filesystem autoload is incompatible with Cloudflare Workers (no runtime fs).
+     */
     directory?: string
+    /**
+     * @deprecated No-op. Pass plugins explicitly via `register`.
+     */
     autoLoad?: boolean
-    disableAll?: boolean  // Disable all plugins including core plugins
   }
 
   // Custom routes
@@ -138,15 +150,12 @@ export type SonicJSApp = Hono<{ Bindings: Bindings; Variables: Variables }>
  * @example
  * ```typescript
  * import { createSonicJSApp } from '@sonicjs-cms/core'
+ * import myPlugin from './plugins/my-plugin'
  *
  * const app = createSonicJSApp({
- *   collections: {
- *     directory: './src/collections',
- *     autoSync: true
- *   },
+ *   collections: { autoSync: true },
  *   plugins: {
- *     directory: './src/plugins',
- *     autoLoad: true
+ *     register: [myPlugin]
  *   }
  * })
  *
@@ -282,6 +291,15 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   if (stripePlugin.routes && stripePlugin.routes.length > 0) {
     for (const route of stripePlugin.routes) {
       app.route(route.path, route.handler as any)
+    }
+  }
+
+  // User plugins - registered via config.plugins.register
+  // Mount BEFORE /admin/plugins and /admin so user admin pages aren't
+  // shadowed by the core admin catch-alls below.
+  if (config.plugins?.register) {
+    for (const plugin of config.plugins.register) {
+      mountPlugin(app, plugin)
     }
   }
 

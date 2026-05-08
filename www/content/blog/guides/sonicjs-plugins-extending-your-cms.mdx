@@ -53,7 +53,7 @@ This guide walks through the plugin system as it actually exists in `packages/co
 
 ## Why the Plugin Model Matters
 
-A plugin in SonicJS is a plain TypeScript object that conforms to the `Plugin` interface. There is no compiled DSL, no YAML, no separate runtime. You build a plugin, hand it to `createSonicJS({ plugins: [...] })`, and it gets wired into the same Hono app that serves the rest of the CMS.
+A plugin in SonicJS is a plain TypeScript object that conforms to the `Plugin` interface. There is no compiled DSL, no YAML, no separate runtime. You build a plugin, hand it to `createSonicJSApp({ plugins: { register: [...] } })`, and it gets wired into the same Hono app that serves the rest of the CMS.
 
 Three properties make the model worth using:
 
@@ -159,7 +159,7 @@ Five things are happening:
 4. **Permissions** — the `hello-world:view` permission is the contract; you'll declare it in `manifest.json` (next section).
 5. **Lifecycle hooks** — `activate` and `deactivate` run when an admin toggles the plugin in the UI.
 
-Drop this file into `src/plugins/hello-world/index.ts` and re-export it from `src/plugins/index.ts`. SonicJS picks it up at boot.
+Drop this file into `src/plugins/hello-world/index.ts`. The plugin then needs to be passed to `createSonicJSApp` via `plugins.register` — see the registration section below. (There's no filesystem auto-discovery: SonicJS targets Cloudflare Workers, which has no runtime `fs`, so plugins are registered explicitly in `src/index.ts`.)
 
 ## The Manifest: Single Source of Truth
 
@@ -196,46 +196,42 @@ A few notes that will save you time:
 - `defaultSettings` is what gets written into the `plugins.settings` JSON column on first install.
 - `is_core: true` flags a plugin as part of the platform (it cannot be uninstalled). For your code, leave it `false`.
 
-## Registering Plugins with `createSonicJS`
+## Registering Plugins with `createSonicJSApp`
 
-Plugins compose into a SonicJS app the way middleware composes into Express:
+Plugins are passed into `createSonicJSApp` via the `plugins.register` array:
 
 ```typescript
 // src/index.ts
-import { Hono } from 'hono'
-import {
-  createSonicJS,
-  authPlugin,
-  oauthProvidersPlugin,
-  otpLoginPlugin,
-  analyticsPlugin,
-  emailPlugin,
-} from '@sonicjs-cms/core'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
+
+import postsCollection from './collections/posts.collection'
 import { helloWorldPlugin } from './plugins/hello-world'
-import { postsCollection } from './collections/posts'
 
-const app = new Hono<{ Bindings: Env }>()
+registerCollections([postsCollection])
 
-const cms = createSonicJS({
-  collections: [postsCollection],
-  plugins: [
-    // First-party plugins
-    authPlugin(),
-    emailPlugin(),
-    oauthProvidersPlugin(),
-    otpLoginPlugin({ codeLength: 6, codeExpiryMinutes: 10 }),
-    analyticsPlugin(),
+const config: SonicJSConfig = {
+  collections: { autoSync: true },
+  plugins: {
+    register: [
+      // Your own plugins
+      helloWorldPlugin,
+    ],
+  },
+}
 
-    // Your own plugins
-    helloWorldPlugin,
-  ],
-})
-
-app.route('/', cms.app)
-export default app
+export default createSonicJSApp(config)
 ```
 
-Plugins load in order. If a plugin declares `dependencies: ['email-plugin']`, the registry resolves load order automatically — email is initialized first. Authentication-aware plugins like OTP login and magic link rely on this mechanism so they can refuse to start if the email plugin isn't configured.
+That's the entire entry point. **You don't import or register the core plugins** — auth, email, OAuth, OTP login, analytics, media, cache, magic-link, security audit, AI search, Stripe, user profiles, and global variables are all mounted automatically by `createSonicJSApp`. Each one is gated by the admin UI's enable/disable toggle (cached for 60 s to keep the hot path fast), so you can flip them at runtime without touching code.
+
+Two related fields on `plugins`:
+
+- `register: Plugin[]` — your own plugins. Mounted before the core `/admin/*` catch-alls so plugin admin pages aren't shadowed.
+- `disableAll: boolean` — turn off all non-core plugins (useful for stats workers and tests). Plugins with `is_core: true` in their manifest stay on regardless.
+- `enabled: string[]` — explicit allowlist when you don't want the per-request DB toggle to drive enable/disable.
+
+If a plugin declares `dependencies: ['email-plugin']`, the registry resolves load order so email is bootstrapped first. Authentication-aware plugins like OTP login and magic link rely on this so they can refuse to start when their dependency isn't configured.
 
 ## Plugin with Custom Routes
 
@@ -546,11 +542,11 @@ npm install @my-org/sonicjs-newsletter
 ```
 
 ```typescript
+import { createSonicJSApp } from '@sonicjs-cms/core'
 import { newsletterPlugin } from '@my-org/sonicjs-newsletter'
 
-const cms = createSonicJS({
-  collections: [...],
-  plugins: [authPlugin(), newsletterPlugin],
+export default createSonicJSApp({
+  plugins: { register: [newsletterPlugin] },
 })
 ```
 

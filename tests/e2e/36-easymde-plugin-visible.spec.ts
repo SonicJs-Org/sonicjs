@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe.skip('EasyMDE Plugin Visibility', () => {
+test.describe('EasyMDE Plugin Visibility', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

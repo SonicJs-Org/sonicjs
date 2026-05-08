@@ -7,7 +7,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787';
 // Expected version for all plugins (should match manifest.json files)
 const EXPECTED_VERSION = '1.0.0-beta.1';
 
-test.describe.skip('Plugin Version Display', () => {
+test.describe('Plugin Version Display', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page);
     await loginAsAdmin(page);

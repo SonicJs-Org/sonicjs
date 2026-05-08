@@ -164,6 +164,26 @@ describe('createSonicJSApp + plugins.register', () => {
     expect(body.status).toBe('running')
   })
 
+  it('plugin mounted at root path "/" resolves a sub-path (regression for /contact)', async () => {
+    // Mirrors the contact-form plugin: addRoute('/', publicRoutes) where
+    // publicRoutes has app.get('/contact', ...). The full URL is /contact
+    // and it must NOT be swallowed by the core 404 handler.
+    const publicRoutes = new Hono().get('/contact', (c) => c.text('hello contact'))
+    const plugin: Plugin = {
+      name: 'contact-form-style',
+      version: '1.0.0',
+      routes: [{ path: '/', handler: publicRoutes }],
+    }
+
+    const app = createSonicJSApp({
+      plugins: { register: [plugin] },
+    })
+
+    const res = await request(app, '/contact')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('hello contact')
+  })
+
   it('multiple registered plugins all mount', async () => {
     const a = new Hono().get('/', (c) => c.text('a'))
     const b = new Hono().get('/', (c) => c.text('b'))

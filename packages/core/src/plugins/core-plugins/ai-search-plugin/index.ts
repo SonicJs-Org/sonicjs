@@ -32,7 +32,10 @@ import manifest from './manifest.json'
  */
 
 export const aiSearchPlugin = new PluginBuilder({
-  name: manifest.name,
+  // Use manifest.id (not manifest.name) so the plugin's name matches its
+  // DB row id — mountPluginManagerRoutes' isPluginEnabled gate looks up
+  // `plugins.id`, and a mismatch returns 404 on every request.
+  name: manifest.id,
   version: manifest.version,
   description: manifest.description,
   author: { name: manifest.author },

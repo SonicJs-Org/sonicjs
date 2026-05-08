@@ -87,16 +87,21 @@ The authentication system uses JWT tokens stored in HTTP-only cookies.
 ```typescript
 import { AuthManager } from '../middleware/auth'
 
-// Generate JWT token
+// Generate JWT token (pass JWT_SECRET from c.env)
 const token = await AuthManager.generateToken(
   userId,
   email,
-  role
+  role,
+  c.env.JWT_SECRET
 )
 
-// Verify JWT token
-const payload = await AuthManager.verifyToken(token)
+// Verify JWT token — always pass the secret from c.env
+const payload = await AuthManager.verifyToken(token, c.env.JWT_SECRET)
 // Returns: { userId, email, role, exp, iat } or null
+
+// Or, from inside a Hono handler, let the helper extract the token
+// (Authorization header / auth_token cookie) and secret for you:
+const payload = await AuthManager.verifyAuthRequest(c)
 
 // Hash password
 const hash = await AuthManager.hashPassword(password)

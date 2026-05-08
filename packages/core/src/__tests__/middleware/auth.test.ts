@@ -132,6 +132,70 @@ describe('AuthManager', () => {
     })
   })
 
+  describe('verifyAuthRequest', () => {
+    const buildContext = (opts: {
+      authHeader?: string
+      cookieHeader?: string
+      env?: Record<string, any>
+    }) => {
+      const headers = new Headers()
+      if (opts.authHeader) headers.set('Authorization', opts.authHeader)
+      if (opts.cookieHeader) headers.set('Cookie', opts.cookieHeader)
+      return {
+        req: {
+          header: (name: string) => headers.get(name) ?? undefined,
+          raw: { headers }
+        },
+        env: opts.env ?? {}
+      } as unknown as Context
+    }
+
+    it('verifies a token from the Authorization header', async () => {
+      const secret = 'request-helper-secret'
+      const token = await AuthManager.generateToken('u-1', 'a@b.c', 'admin', secret, 60)
+
+      const c = buildContext({
+        authHeader: `Bearer ${token}`,
+        env: { JWT_SECRET: secret }
+      })
+
+      const payload = await AuthManager.verifyAuthRequest(c)
+      expect(payload?.userId).toBe('u-1')
+      expect(payload?.email).toBe('a@b.c')
+      expect(payload?.role).toBe('admin')
+    })
+
+    it('falls back to the auth_token cookie when no Authorization header is present', async () => {
+      const secret = 'request-helper-secret'
+      const token = await AuthManager.generateToken('u-2', 'c@d.e', 'editor', secret, 60)
+
+      const c = buildContext({
+        cookieHeader: `auth_token=${token}`,
+        env: { JWT_SECRET: secret }
+      })
+
+      const payload = await AuthManager.verifyAuthRequest(c)
+      expect(payload?.userId).toBe('u-2')
+    })
+
+    it('returns null when no token is provided', async () => {
+      const c = buildContext({ env: { JWT_SECRET: 'whatever' } })
+      const payload = await AuthManager.verifyAuthRequest(c)
+      expect(payload).toBeNull()
+    })
+
+    it('returns null when token is signed with a different secret than c.env.JWT_SECRET', async () => {
+      const token = await AuthManager.generateToken('u-3', 'e@f.g', 'admin', 'real-secret', 60)
+      const c = buildContext({
+        authHeader: `Bearer ${token}`,
+        env: { JWT_SECRET: 'wrong-secret' }
+      })
+
+      const payload = await AuthManager.verifyAuthRequest(c)
+      expect(payload).toBeNull()
+    })
+  })
+
   describe('getJwtExpirySeconds', () => {
     it('defaults to 30 days when env is empty', () => {
       expect(getJwtExpirySeconds({})).toBe(60 * 60 * 24 * 30)

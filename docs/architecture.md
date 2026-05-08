@@ -390,9 +390,9 @@ export const requireAuth = () => {
       }
     }
 
-    // Verify token if not cached
+    // Verify token if not cached (pass JWT_SECRET from the env binding)
     if (!payload) {
-      payload = await AuthManager.verifyToken(token)
+      payload = await AuthManager.verifyToken(token, c.env?.JWT_SECRET)
 
       // Cache for 5 minutes
       if (payload && kv) {

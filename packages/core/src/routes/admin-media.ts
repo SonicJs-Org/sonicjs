@@ -496,9 +496,9 @@ adminMediaRoutes.post('/upload', async (c) => {
         }
 
         // Extract image dimensions if it's an image
-        let width: number | undefined
-        let height: number | undefined
-        
+        let width: number | null = null
+        let height: number | null = null
+
         if (file.type.startsWith('image/') && !file.type.includes('svg')) {
           try {
             const dimensions = await getImageDimensions(arrayBuffer)
@@ -511,7 +511,7 @@ adminMediaRoutes.post('/upload', async (c) => {
 
         // Generate URLs - use public serving route
         const publicUrl = `/files/${r2Key}`
-        const thumbnailUrl = file.type.startsWith('image/') ? publicUrl : undefined
+        const thumbnailUrl = file.type.startsWith('image/') ? publicUrl : null
 
         // Save to database
         const stmt = c.env.DB.prepare(`

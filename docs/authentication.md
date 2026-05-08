@@ -177,38 +177,34 @@ fresh one via `POST /auth/refresh`.
 
 ### Token Verification
 
+The `JWT_SECRET` lives on the Cloudflare Workers binding (`c.env.JWT_SECRET`), so
+you must thread the secret through when verifying tokens. The easiest way from a
+Hono handler is `AuthManager.verifyAuthRequest(c)`, which extracts the token
+from the `Authorization` header (or `auth_token` cookie) and pulls the secret
+from `c.env` for you:
+
 ```typescript
-// Verify and decode token
-const payload = await AuthManager.verifyToken(token)
+// Inside a custom Hono route handler
+const payload = await AuthManager.verifyAuthRequest(c)
 
 if (!payload) {
-  // Token invalid or expired
   return c.json({ error: 'Invalid or expired token' }, 401)
 }
 
-// Token is valid, payload contains user info
 console.log(payload.userId, payload.email, payload.role)
 ```
 
-**Implementation:**
+If you already have the raw token, call `verifyToken` directly and pass the
+secret yourself:
 
 ```typescript
-static async verifyToken(token: string): Promise<JWTPayload | null> {
-  try {
-    const payload = await verify(token, JWT_SECRET, 'HS256') as JWTPayload
-
-    // Check if token is expired
-    if (payload.exp < Math.floor(Date.now() / 1000)) {
-      return null
-    }
-
-    return payload
-  } catch (error) {
-    console.error('Token verification failed:', error)
-    return null
-  }
-}
+const payload = await AuthManager.verifyToken(token, c.env.JWT_SECRET)
 ```
+
+> **Heads up:** `AuthManager.verifyToken(token)` (no secret argument) falls
+> back to a development-only placeholder secret. In production this will
+> silently fail to verify any real token. Always pass `c.env.JWT_SECRET`, or
+> use `verifyAuthRequest(c)` / the `requireAuth()` middleware.
 
 ### Token Configuration
 
@@ -256,9 +252,9 @@ export const requireAuth = () => {
       }
     }
 
-    // If not cached, verify token
+    // If not cached, verify token (passing the JWT_SECRET binding)
     if (!payload) {
-      payload = await AuthManager.verifyToken(token)
+      payload = await AuthManager.verifyToken(token, c.env?.JWT_SECRET)
 
       // Cache the verified payload for 5 minutes
       if (payload && kv) {
@@ -1093,6 +1089,59 @@ app.get('/content/:id',
   }
 )
 ```
+
+### Custom Routes Alongside SonicJS
+
+When you mount your own Hono routes next to a SonicJS app, you can authenticate
+requests with the same JWT that SonicJS issues. Three options, ordered by
+preference:
+
+**1. Use `requireAuth()` middleware** (recommended — matches what SonicJS uses
+internally, including the KV verification cache):
+
+```typescript
+import { Hono } from 'hono'
+import { requireAuth, createSonicJSApp } from '@sonicjs-cms/core'
+
+const app = new Hono()
+const adminRoutes = new Hono()
+
+adminRoutes.use('*', requireAuth())
+adminRoutes.get('/stats', (c) => {
+  const user = c.get('user') // { userId, email, role, ... }
+  return c.json({ user })
+})
+
+app.route('/api/admin', adminRoutes)
+app.route('/', createSonicJSApp(config))
+```
+
+**2. Use `AuthManager.verifyAuthRequest(c)`** when you need custom error
+handling but still want the helper to extract the token + secret for you:
+
+```typescript
+import { AuthManager } from '@sonicjs-cms/core'
+
+adminRoutes.use('*', async (c, next) => {
+  const payload = await AuthManager.verifyAuthRequest(c)
+  if (!payload) return c.json({ error: 'Invalid token' }, 401)
+  if (payload.role !== 'admin') return c.json({ error: 'Forbidden' }, 403)
+  c.set('user', payload)
+  await next()
+})
+```
+
+**3. Call `AuthManager.verifyToken(token, secret)` directly** when you've
+already extracted the token yourself. Always pass `c.env.JWT_SECRET`:
+
+```typescript
+const token = c.req.header('Authorization')?.replace('Bearer ', '')
+const payload = await AuthManager.verifyToken(token, c.env.JWT_SECRET)
+```
+
+> **Don't call `AuthManager.verifyToken(token)` without a secret.** It falls
+> back to a development-only placeholder, so any token signed with your real
+> `JWT_SECRET` will silently fail verification.
 
 ### Custom Authorization Logic
 

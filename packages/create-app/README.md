@@ -112,10 +112,10 @@ cd my-app
 ### 2. Create Cloudflare resources (if skipped)
 
 ```bash
-wrangler d1 create my-app-db --binding DB
+wrangler d1 create my-app-db
 # Copy the database_id to wrangler.toml
 
-wrangler r2 bucket create my-app-media --binding MEDIA_BUCKET
+wrangler r2 bucket create my-app-media
 ```
 
 ### 3. Run database migrations
@@ -172,7 +172,7 @@ If you create resources during setup, a D1 database is automatically created and
 
 **Manual creation:**
 ```bash
-wrangler d1 create my-app-db --binding DB
+wrangler d1 create my-app-db
 ```
 
 ### R2 Bucket
@@ -181,7 +181,7 @@ For media storage, an R2 bucket is created.
 
 **Manual creation:**
 ```bash
-wrangler r2 bucket create my-app-media --binding MEDIA_BUCKET
+wrangler r2 bucket create my-app-media
 ```
 
 ## Troubleshooting

@@ -19,14 +19,14 @@ A modern headless CMS built with [SonicJS](https://sonicjs.com) on Cloudflare's 
 
 2. **Create your D1 database:**
    ```bash
-   npx wrangler d1 create my-sonicjs-db
+   npx wrangler d1 create my-sonicjs-db --binding DB
    ```
 
    Copy the `database_id` from the output and update it in `wrangler.toml`.
 
 3. **Create your R2 bucket:**
    ```bash
-   npx wrangler r2 bucket create my-sonicjs-media
+   npx wrangler r2 bucket create my-sonicjs-media --binding MEDIA_BUCKET
    ```
 
 4. **Run migrations:**

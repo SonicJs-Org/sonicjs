@@ -2,8 +2,8 @@
  * Bootstrap Middleware Tests
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { Hono } from 'hono'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bootstrapMiddleware, resetBootstrap } from './bootstrap'
 
 // Mock the services that bootstrap depends on
@@ -11,10 +11,14 @@ vi.mock('../services/collection-sync', () => ({
   syncCollections: vi.fn().mockResolvedValue([])
 }))
 
+vi.mock('../services/form-collection-sync', () => ({
+  syncAllFormCollections: vi.fn().mockResolvedValue(undefined)
+}))
+
 vi.mock('../services/migrations', () => {
   const mockRunPendingMigrations = vi.fn().mockResolvedValue(undefined)
   return {
-    MigrationService: vi.fn().mockImplementation(function() {
+    MigrationService: vi.fn().mockImplementation(function () {
       this.runPendingMigrations = mockRunPendingMigrations
       return this
     })
@@ -25,7 +29,7 @@ vi.mock('../services/plugin-bootstrap', () => {
   const mockIsBootstrapNeeded = vi.fn().mockResolvedValue(true)
   const mockBootstrapCorePlugins = vi.fn().mockResolvedValue(undefined)
   return {
-    PluginBootstrapService: vi.fn().mockImplementation(function() {
+    PluginBootstrapService: vi.fn().mockImplementation(function () {
       this.isBootstrapNeeded = mockIsBootstrapNeeded
       this.bootstrapCorePlugins = mockBootstrapCorePlugins
       return this
@@ -35,6 +39,7 @@ vi.mock('../services/plugin-bootstrap', () => {
 
 // Import the mocked modules after mocking
 import { syncCollections } from '../services/collection-sync'
+import { syncAllFormCollections } from '../services/form-collection-sync'
 import { MigrationService } from '../services/migrations'
 import { PluginBootstrapService } from '../services/plugin-bootstrap'
 
@@ -64,8 +69,8 @@ describe('bootstrapMiddleware', () => {
     // Reset bootstrap state before each test
     resetBootstrap()
     vi.clearAllMocks()
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { })
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { })
   })
 
   afterEach(() => {
@@ -232,6 +237,58 @@ describe('bootstrapMiddleware', () => {
     expect(consoleSpy).toHaveBeenCalledWith('[Bootstrap] Plugin bootstrap skipped (disableAll is true)')
   })
 
+  it('should run bootstrap only once for concurrent cold-start requests', async () => {
+    const app = new Hono()
+    const env = createMockEnv()
+
+    let releaseMigration: (() => void) | undefined
+    let markMigrationStarted: (() => void) | undefined
+    const migrationGate = new Promise<void>((resolve) => {
+      releaseMigration = resolve
+    })
+    const migrationStarted = new Promise<void>((resolve) => {
+      markMigrationStarted = resolve
+    })
+
+    const migrationServiceMock = vi.mocked(MigrationService)
+    migrationServiceMock.mockImplementation(function () {
+      this.runPendingMigrations = vi.fn().mockImplementation(async () => {
+        markMigrationStarted?.()
+        await migrationGate
+      })
+      return this
+    })
+
+    app.use('*', async (c, next) => {
+      c.env = env as any
+      await next()
+    })
+    app.use('*', bootstrapMiddleware())
+    app.get('/test', (c) => c.json({ ok: true }))
+
+    const firstRequest = app.request('/test')
+    await migrationStarted
+    const secondRequest = app.request('/test')
+
+    expect(MigrationService).toHaveBeenCalledTimes(1)
+
+    releaseMigration?.()
+    const [firstResponse, secondResponse] = await Promise.all([firstRequest, secondRequest])
+
+    expect(firstResponse.status).toBe(200)
+    expect(secondResponse.status).toBe(200)
+    expect(MigrationService).toHaveBeenCalledTimes(1)
+    expect(syncCollections).toHaveBeenCalledTimes(1)
+    expect(syncAllFormCollections).toHaveBeenCalledTimes(1)
+    expect(PluginBootstrapService).toHaveBeenCalledTimes(1)
+
+    migrationServiceMock.mockReset()
+    migrationServiceMock.mockImplementation(function () {
+      this.runPendingMigrations = vi.fn().mockResolvedValue(undefined)
+      return this
+    })
+  })
+
   it('should continue on fatal bootstrap error', async () => {
     const app = new Hono()
     const env = createMockEnv()
@@ -258,6 +315,7 @@ describe('bootstrapMiddleware', () => {
 
 describe('resetBootstrap', () => {
   beforeEach(() => {
+    resetBootstrap()
     vi.clearAllMocks()
   })
 
@@ -266,7 +324,7 @@ describe('resetBootstrap', () => {
   })
 
   it('should allow bootstrap to run again after reset', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { })
     const app = new Hono()
     const env = createMockEnv()
 

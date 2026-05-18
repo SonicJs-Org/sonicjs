@@ -1,7 +1,142 @@
 import type { D1Database } from '@cloudflare/workers-types'
+import { z } from 'zod'
 // Note: PLUGIN_REGISTRY and CORE_PLUGIN_IDS are project-specific
 // They should be passed as parameters to the service in the consuming application
 // import { PLUGIN_REGISTRY, CORE_PLUGIN_IDS } from '../plugins/plugin-registry'
+
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+export type JsonObject = { [key: string]: JsonValue }
+export type PluginSettings = Record<string, unknown>
+
+export interface PluginActivityEntry {
+  id: string
+  action: string
+  userId: string | null
+  details: JsonValue | null
+  timestamp: number
+}
+
+export interface PluginHookRecord {
+  id: string
+  plugin_id: string
+  hook_name: string
+  handler_name: string
+  priority: number
+  is_active: boolean
+}
+
+export interface PluginRouteRecord {
+  id: string
+  plugin_id: string
+  path: string
+  method: string
+  handler_name: string
+  middleware: JsonValue[]
+  is_active: boolean
+}
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(jsonValueSchema),
+  z.record(z.string(), jsonValueSchema)
+]))
+
+const pluginSettingsSchema: z.ZodType<PluginSettings> = z.record(z.string(), z.unknown())
+const pluginStatusSchema = z.enum(['active', 'inactive', 'error'])
+const sqliteBooleanSchema = z.union([z.boolean(), z.number()])
+
+const pluginRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  display_name: z.string(),
+  description: z.string(),
+  version: z.string(),
+  author: z.string(),
+  category: z.string(),
+  icon: z.string(),
+  status: pluginStatusSchema,
+  is_core: sqliteBooleanSchema,
+  settings: z.string().nullable().optional(),
+  permissions: z.string().nullable().optional(),
+  dependencies: z.string().nullable().optional(),
+  download_count: z.coerce.number().optional().default(0),
+  rating: z.coerce.number().optional().default(0),
+  installed_at: z.coerce.number(),
+  activated_at: z.coerce.number().nullable().optional(),
+  last_updated: z.coerce.number(),
+  error_message: z.string().nullable().optional(),
+}).passthrough()
+
+const pluginStatsRowSchema = z.object({
+  total: z.coerce.number().optional().default(0),
+  active: z.coerce.number().optional().default(0),
+  inactive: z.coerce.number().optional().default(0),
+  errors: z.coerce.number().optional().default(0)
+}).passthrough()
+
+const pluginActivityRowSchema = z.object({
+  id: z.string(),
+  action: z.string(),
+  user_id: z.string().nullable().optional(),
+  details: z.string().nullable().optional(),
+  timestamp: z.coerce.number()
+}).passthrough()
+
+const pluginHookRowSchema = z.object({
+  id: z.string(),
+  plugin_id: z.string(),
+  hook_name: z.string(),
+  handler_name: z.string(),
+  priority: z.coerce.number().optional().default(10),
+  is_active: sqliteBooleanSchema.optional().default(true)
+}).passthrough()
+
+const pluginRouteRowSchema = z.object({
+  id: z.string(),
+  plugin_id: z.string(),
+  path: z.string(),
+  method: z.string(),
+  handler_name: z.string(),
+  middleware: z.string().nullable().optional(),
+  is_active: sqliteBooleanSchema.optional().default(true)
+}).passthrough()
+
+function toBoolean(value: boolean | number): boolean {
+  return value === true || value === 1
+}
+
+function parseJsonColumn<T>(value: string | null | undefined, schema: z.ZodType<T>, columnName: string): T | undefined {
+  if (value == null) {
+    return undefined
+  }
+
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(value) as unknown
+  } catch (error) {
+    throw new Error(`Invalid ${columnName}: ${(error as Error).message}`)
+  }
+
+  const result = schema.safeParse(parsed)
+  if (!result.success) {
+    throw new Error(`Invalid ${columnName}: ${result.error.issues.map(issue => issue.message).join(', ')}`)
+  }
+
+  return result.data
+}
+
+function parseJsonColumnOrNull<T>(value: string | null | undefined, schema: z.ZodType<T>, columnName: string): T | null {
+  if (value == null) {
+    return null
+  }
+
+  const parsed = parseJsonColumn(value, schema, columnName)
+  return parsed ?? null
+}
 
 export interface PluginData {
   id: string
@@ -14,7 +149,7 @@ export interface PluginData {
   icon: string
   status: 'active' | 'inactive' | 'error'
   is_core: boolean
-  settings?: any
+  settings?: PluginSettings
   permissions?: string[]
   dependencies?: string[]
   download_count: number
@@ -46,7 +181,7 @@ export class PluginService {
     `)
 
     const { results } = await stmt.all()
-    return (results || []).map(this.mapPluginFromDb)
+    return (results || []).map((row) => this.mapPluginFromDb(row))
   }
 
   /**
@@ -88,12 +223,12 @@ export class PluginService {
       FROM plugins
     `)
     
-    const stats = await stmt.first() as any
+    const stats = pluginStatsRowSchema.parse(await stmt.first() ?? {})
     return {
-      total: stats.total || 0,
-      active: stats.active || 0,
-      inactive: stats.inactive || 0,
-      errors: stats.errors || 0,
+      total: stats.total,
+      active: stats.active,
+      inactive: stats.inactive,
+      errors: stats.errors,
       uninstalled: 0
     }
   }
@@ -131,7 +266,7 @@ export class PluginService {
     ).run()
     
     // Log the installation
-    await this.logActivity(id, 'installed', null, { version: pluginData.version })
+    await this.logActivity(id, 'installed', null, { version: pluginData.version ?? null })
     
     const installed = await this.getPlugin(id)
     if (!installed) throw new Error('Failed to install plugin')
@@ -198,7 +333,7 @@ export class PluginService {
     await this.logActivity(pluginId, 'deactivated', null)
   }
 
-  async updatePluginSettings(pluginId: string, settings: any): Promise<void> {
+  async updatePluginSettings<T extends object>(pluginId: string, settings: T): Promise<void> {
     const plugin = await this.getPlugin(pluginId)
     if (!plugin) throw new Error('Plugin not found')
     
@@ -227,7 +362,7 @@ export class PluginService {
     await this.logActivity(pluginId, 'error', null, { error })
   }
 
-  async getPluginActivity(pluginId: string, limit: number = 10): Promise<any[]> {
+  async getPluginActivity(pluginId: string, limit: number = 10): Promise<PluginActivityEntry[]> {
     const stmt = this.db.prepare(`
       SELECT * FROM plugin_activity_log 
       WHERE plugin_id = ? 
@@ -236,13 +371,17 @@ export class PluginService {
     `)
     
     const { results } = await stmt.bind(pluginId, limit).all()
-    return (results || []).map((row: any) => ({
-      id: row.id,
-      action: row.action,
-      userId: row.user_id,
-      details: row.details ? JSON.parse(row.details) : null,
-      timestamp: row.timestamp
-    }))
+    return (results || []).map((row) => {
+      const activity = pluginActivityRowSchema.parse(row)
+
+      return {
+        id: activity.id,
+        action: activity.action,
+        userId: activity.user_id ?? null,
+        details: parseJsonColumnOrNull(activity.details, jsonValueSchema, 'plugin_activity_log.details'),
+        timestamp: activity.timestamp
+      }
+    })
   }
 
   async registerHook(pluginId: string, hookName: string, handlerName: string, priority: number = 10): Promise<void> {
@@ -255,7 +394,7 @@ export class PluginService {
     await stmt.bind(id, pluginId, hookName, handlerName, priority).run()
   }
 
-  async registerRoute(pluginId: string, path: string, method: string, handlerName: string, middleware?: any[]): Promise<void> {
+  async registerRoute(pluginId: string, path: string, method: string, handlerName: string, middleware?: JsonValue[]): Promise<void> {
     const id = `route-${Date.now()}`
     const stmt = this.db.prepare(`
       INSERT INTO plugin_routes (id, plugin_id, path, method, handler_name, middleware)
@@ -272,7 +411,7 @@ export class PluginService {
     ).run()
   }
 
-  async getPluginHooks(pluginId: string): Promise<any[]> {
+  async getPluginHooks(pluginId: string): Promise<PluginHookRecord[]> {
     const stmt = this.db.prepare(`
       SELECT * FROM plugin_hooks 
       WHERE plugin_id = ? AND is_active = TRUE
@@ -280,17 +419,40 @@ export class PluginService {
     `)
     
     const { results } = await stmt.bind(pluginId).all()
-    return results || []
+    return (results || []).map((row) => {
+      const hook = pluginHookRowSchema.parse(row)
+
+      return {
+        id: hook.id,
+        plugin_id: hook.plugin_id,
+        hook_name: hook.hook_name,
+        handler_name: hook.handler_name,
+        priority: hook.priority,
+        is_active: toBoolean(hook.is_active)
+      }
+    })
   }
 
-  async getPluginRoutes(pluginId: string): Promise<any[]> {
+  async getPluginRoutes(pluginId: string): Promise<PluginRouteRecord[]> {
     const stmt = this.db.prepare(`
       SELECT * FROM plugin_routes 
       WHERE plugin_id = ? AND is_active = TRUE
     `)
     
     const { results } = await stmt.bind(pluginId).all()
-    return results || []
+    return (results || []).map((row) => {
+      const route = pluginRouteRowSchema.parse(row)
+
+      return {
+        id: route.id,
+        plugin_id: route.plugin_id,
+        path: route.path,
+        method: route.method,
+        handler_name: route.handler_name,
+        middleware: parseJsonColumn(route.middleware, z.array(jsonValueSchema), 'plugin_routes.middleware') ?? [],
+        is_active: toBoolean(route.is_active)
+      }
+    })
   }
 
   private async checkDependencies(dependencies: string[]): Promise<void> {
@@ -311,12 +473,14 @@ export class PluginService {
     
     const { results } = await stmt.bind(`%"${pluginName}"%`).all()
     if (results && results.length > 0) {
-      const names = results.map((p: any) => p.display_name).join(', ')
+      const names = results
+        .map((plugin) => z.object({ display_name: z.string() }).parse(plugin).display_name)
+        .join(', ')
       throw new Error(`Cannot deactivate. The following plugins depend on this one: ${names}`)
     }
   }
 
-  private async logActivity(pluginId: string, action: string, userId: string | null, details?: any): Promise<void> {
+  private async logActivity(pluginId: string, action: string, userId: string | null, details?: JsonValue): Promise<void> {
     const id = `activity-${Date.now()}`
     const stmt = this.db.prepare(`
       INSERT INTO plugin_activity_log (id, plugin_id, action, user_id, details)
@@ -328,31 +492,33 @@ export class PluginService {
       pluginId,
       action,
       userId,
-      details ? JSON.stringify(details) : null
+      details === undefined ? null : JSON.stringify(details)
     ).run()
   }
 
-  private mapPluginFromDb(row: any): PluginData {
+  private mapPluginFromDb(row: unknown): PluginData {
+    const plugin = pluginRowSchema.parse(row)
+
     return {
-      id: row.id,
-      name: row.name,
-      display_name: row.display_name,
-      description: row.description,
-      version: row.version,
-      author: row.author,
-      category: row.category,
-      icon: row.icon,
-      status: row.status,
-      is_core: row.is_core === 1,
-      settings: row.settings ? JSON.parse(row.settings) : undefined,
-      permissions: row.permissions ? JSON.parse(row.permissions) : undefined,
-      dependencies: row.dependencies ? JSON.parse(row.dependencies) : undefined,
-      download_count: row.download_count || 0,
-      rating: row.rating || 0,
-      installed_at: row.installed_at,
-      activated_at: row.activated_at,
-      last_updated: row.last_updated,
-      error_message: row.error_message
+      id: plugin.id,
+      name: plugin.name,
+      display_name: plugin.display_name,
+      description: plugin.description,
+      version: plugin.version,
+      author: plugin.author,
+      category: plugin.category,
+      icon: plugin.icon,
+      status: plugin.status,
+      is_core: toBoolean(plugin.is_core),
+      settings: parseJsonColumn(plugin.settings, pluginSettingsSchema, 'plugins.settings'),
+      permissions: parseJsonColumn(plugin.permissions, z.array(z.string()), 'plugins.permissions'),
+      dependencies: parseJsonColumn(plugin.dependencies, z.array(z.string()), 'plugins.dependencies'),
+      download_count: plugin.download_count,
+      rating: plugin.rating,
+      installed_at: plugin.installed_at,
+      activated_at: plugin.activated_at ?? undefined,
+      last_updated: plugin.last_updated,
+      error_message: plugin.error_message ?? undefined
     }
   }
 }

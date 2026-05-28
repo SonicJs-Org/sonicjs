@@ -827,19 +827,22 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       const mediaValues =
         isMultiple && value
           ? Array.isArray(value)
-            ? value
+            ? value.filter((url) => typeof url === 'string' && url !== '')
             : String(value).split(',').filter(Boolean)
           : []
-      const singleValue = !isMultiple ? value : ''
+      const singleValue =
+        !isMultiple && typeof value === 'string' ? value : ''
 
       // Helper to detect if URL is a video
-      const isVideoUrl = (url: string) => {
+      const isVideoUrl = (url: unknown) => {
+        if (typeof url !== 'string') return false
         const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi']
         return videoExtensions.some((ext) => url.toLowerCase().endsWith(ext))
       }
 
       // Helper to render media element
-      const renderMediaPreview = (url: string, alt: string, classes: string) => {
+      const renderMediaPreview = (url: unknown, alt: string, classes: string) => {
+        if (typeof url !== 'string' || url === '') return ''
         if (isVideoUrl(url)) {
           return `<video src="${url}" class="${classes}" muted></video>`
         }
@@ -1325,7 +1328,17 @@ function renderStructuredItemFields(
   }
 
   const normalizedField = normalizeBlockField(itemConfig, 'Item')
-  const fieldValue = itemValue ?? normalizedField.defaultValue ?? ''
+  // The empty-item template is rendered with itemValue={} (see renderStructuredArrayField).
+  // For non-object item types, treat an empty plain object as "no value" so downstream
+  // renderers (e.g. media) don't receive `{}` and crash on string operations.
+  const isEmptyPlainObject =
+    itemValue !== null &&
+    typeof itemValue === 'object' &&
+    !Array.isArray(itemValue) &&
+    Object.keys(itemValue).length === 0
+  const fieldValue = isEmptyPlainObject
+    ? (normalizedField.defaultValue ?? '')
+    : (itemValue ?? normalizedField.defaultValue ?? '')
   const fieldDefinition: FieldDefinition = {
     id: `array-${field.field_name}-${index}-value`,
     field_name: `array-${field.field_name}-${index}-value`,

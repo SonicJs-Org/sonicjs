@@ -630,6 +630,22 @@ Extend the existing specs (`15-plugins`, `29-email-plugin-settings`, `43-cache-p
 
 ---
 
+## Appendix F — Phase 4 status (cron surface)
+
+Built on the stacked branch `lane711/plugin-system-cron` (PR base = the foundation branch / #841).
+
+**Landed (infrastructure; no consumer change yet):**
+- `plugins/cron.ts` — `CronDeclaration` (`{ schedule, hookFamily }`) + structural `CronablePlugin` (`crons[]` + async `onCronTick`). `collectCrons()` / `collectCronSchedules()` flatten declarations (for wrangler sync + diagnostics). `dispatchCronTick(plugins, cron, scheduledTime, ctx)` fans a fired expression out to matching plugins, tagging each `onCronTick` with the matched `hookFamily`, one call per matching declaration, error-isolated. `createScheduledHandler({ plugins, getHooks, disabled })` returns a Cloudflare `scheduled(controller, env, ctx)` handler that reaches services via the **env-independent singletons** (cron has no `c.env`), passes the Worker `env` into the cron context, and `waitUntil`s the work.
+- Exported from `plugins/index.ts`.
+
+**Design note (matches Payload jobs):** declaring a `schedule` runs nothing by itself — the execution mechanism is the Cloudflare Cron Trigger delivered to `scheduled()`. The consumer still lists the expressions in `wrangler.toml [triggers]`; the plugin `crons[]` are the source of truth for which plugin owns which expression (`collectCronSchedules()` can generate the wrangler list).
+
+**Tests:** `cron.test.ts` (12): collect/flatten + malformed-entry skipping, dispatch matches only the fired cron, well-formed event, unmatched reporting, multi-cron fan-out (one call per declaration), error isolation, and the `scheduled` handler (dispatch + `waitUntil` + env passthrough + lazy list + `disabled` no-op). Full core suite **1552 passed, 0 failed**; `tsc` clean.
+
+**Deferred:** wiring `scheduled` into the consumer Worker export (`export default { fetch, scheduled }`) + the starter template + `wrangler.toml` trigger generation — a DX change bundled with `definePlugin()`/docs (Phase 5/7), since it changes how consumers export their Worker.
+
+---
+
 ### Appendix A — Source references
 - **Infowall v3 Plugin Architecture · Progress Update, May 13 2026** (companion architecture overview) — two-phase boot, SmartRouter fix, capabilities, cron, email reference.
 - **Strapi v5** — docs.strapi.io (plugin-structure, server-api, admin-panel-api, configurations/plugins, document-service middlewares) + `strapi/strapi` `main` (`loaders/plugins/*`, `registries/plugins.ts`, `types/.../strapi-server/*`).

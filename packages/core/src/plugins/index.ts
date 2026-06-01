@@ -74,6 +74,25 @@ export type {
 export { createServiceSingleton } from './singletons/service-singleton'
 export type { ServiceSingleton } from './singletons/service-singleton'
 
+// Cron surface
+export {
+  collectCrons,
+  collectCronSchedules,
+  dispatchCronTick,
+  createScheduledHandler,
+} from './cron'
+export type {
+  CronDeclaration,
+  CronTickEvent,
+  CronContext,
+  CronablePlugin,
+  CollectedCron,
+  CronDispatchResult,
+  ScheduledControllerLike,
+  ExecutionContextLike,
+  CreateScheduledHandlerOptions,
+} from './cron'
+
 // Core Plugins
 export { 
   verifyTurnstile, 

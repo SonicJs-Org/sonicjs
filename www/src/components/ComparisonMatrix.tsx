@@ -296,7 +296,7 @@ function LegendItem({ swatch, label }: { swatch: React.ReactNode; label: string 
 
 export function ComparisonMatrix() {
   return (
-    <div className="not-prose my-10">
+    <div className="not-prose my-10 w-full lg:!mx-0 lg:!max-w-none">
       <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-xs">
         <LegendItem swatch={<span className="font-bold text-emerald-500">✓</span>} label="Built-in" />
         <LegendItem swatch={<span className="text-gray-300 dark:text-gray-600">✗</span>} label="Not supported" />
@@ -305,18 +305,21 @@ export function ComparisonMatrix() {
         <LegendItem swatch={<span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Paid</span>} label="Paid / enterprise tier" />
         <LegendItem swatch={<span className="text-xs font-semibold text-blue-600 dark:text-blue-400">Roadmap</span>} label="Planned, not shipped" />
       </div>
+      <p className="mb-2 text-right text-xs text-gray-400 dark:text-gray-500 xl:hidden">
+        6 products compared — scroll the table sideways to see Sanity &amp; Contentful →
+      </p>
       <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
-        <table className="w-full min-w-[1040px] border-collapse text-left">
+        <table className="w-full min-w-[920px] border-collapse text-left">
           <thead>
             <tr className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/30 dark:to-purple-900/30">
-              <th className="sticky left-0 z-10 bg-gradient-to-r from-blue-50 to-purple-50 p-3 text-sm font-bold text-gray-900 dark:from-blue-900/30 dark:to-purple-900/30 dark:text-white">
+              <th className="sticky left-0 z-10 bg-gradient-to-r from-blue-50 to-purple-50 px-2.5 py-2.5 text-sm font-bold text-gray-900 dark:from-blue-900/30 dark:to-purple-900/30 dark:text-white">
                 Capability
               </th>
               {PRODUCTS.map((p, i) => (
                 <th
                   key={p}
                   className={clsx(
-                    'p-3 text-center text-sm font-bold',
+                    'px-2.5 py-2.5 text-center text-sm font-bold',
                     i === 0
                       ? 'bg-blue-100/60 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
                       : 'text-gray-600 dark:text-gray-400',
@@ -343,13 +346,13 @@ export function ComparisonMatrix() {
                     key={section.title + row.label}
                     className="border-t border-gray-100 hover:bg-gray-50/70 dark:border-gray-800 dark:hover:bg-gray-800/40"
                   >
-                    <td className="sticky left-0 z-10 bg-white p-3 text-xs font-medium text-gray-900 dark:bg-gray-950 dark:text-white">
+                    <td className="sticky left-0 z-10 bg-white px-2.5 py-2.5 text-xs font-medium text-gray-900 dark:bg-gray-950 dark:text-white">
                       {row.label}
                     </td>
                     {row.cells.map((cell, i) => (
                       <td
                         key={i}
-                        className={clsx('p-3 text-center align-middle', i === 0 && 'bg-blue-50/40 dark:bg-blue-900/10')}
+                        className={clsx('px-2.5 py-2.5 text-center align-middle', i === 0 && 'bg-blue-50/40 dark:bg-blue-900/10')}
                       >
                         <CellContent cell={cell} highlight={i === 0} />
                       </td>

@@ -299,6 +299,7 @@ export const navigation: Array<NavGroup> = [
     title: 'Resources',
     links: [
       { title: 'Blog', href: '/blog' },
+      { title: 'Compare', href: '/compare' },
       { title: 'Roadmap', href: '/roadmap' },
       { title: 'Examples', href: '/examples' },
       { title: 'FAQ', href: '/faq' },

@@ -1,0 +1,104 @@
+import { ComparisonMatrix } from '@/components/ComparisonMatrix'
+
+# Headless CMS Comparison: SonicJS vs Payload, Strapi, Directus, Sanity & Contentful
+
+These six are among the most popular headless CMSs — but they make very different trade-offs. **SonicJS** runs on **Cloudflare Workers** with a **D1 (SQLite)** database. **Payload, Strapi, and Directus** are mature, self-hostable **Node.js** platforms. **Sanity and Contentful** are hosted **SaaS** content platforms with deep enterprise features but no self-hosting and significant plan-gating. The table below is a full inventory of 125+ capabilities across 13 categories — meant as an honest reference, including the many places where the others are still ahead of SonicJS.
+
+<ComparisonMatrix />
+
+## How to read this
+
+The matrix isn't scored or weighted — pick the rows that matter for *your* project. A few things worth knowing as context:
+
+### Architecture is the real fork in the road
+
+SonicJS compiles to Cloudflare Workers, so there's no server to keep warm — cold starts are effectively **0–5 ms** and reads are served from the global edge. Payload, Strapi, and Directus run as Node.js processes you host in a single region — flexible on database choice and battle-tested, but cold starts and global latency depend on your infrastructure. Directus is **database-first** (it layers onto an existing SQL database). **Sanity and Contentful** sidestep hosting entirely: their content lives in a managed cloud delivered over a global CDN, so you never run a server — but you also can't self-host, and you're billed per seat/usage.
+
+### Feature maturity: the incumbents lead in many areas
+
+This is the honest part. Compared to SonicJS, the older platforms ship a number of things SonicJS **doesn't have yet or only partially supports** — most notably **GraphQL**, **real-time/WebSockets**, **internationalization**, **soft-delete/trash**, **conditional fields**, an **official SDK**, **SSO/SAML**, and **richer relationship modeling**. Directus in particular is very deep (Flows automation, Insights dashboards, GraphQL subscriptions). Strapi and Directus also have far larger ecosystems and longer track records.
+
+### Where SonicJS is differentiated
+
+Its edge-native runtime (sub-50ms global reads, near-zero cold starts), built-in three-tier caching, and the fact that everything ships in the open-source core with no paywalls. Note the trade-offs that come with the edge model: a single database engine (D1/SQLite) and Cloudflare-only hosting rather than run-anywhere Docker.
+
+### Pricing & feature gating
+
+The self-hostable four are free to run (Directus requires a commercial license above $5M revenue). What's gated differs: **Strapi** puts version history, scheduled publishing, Live Preview, audit logs, advanced RBAC, and SSO behind paid Growth/Enterprise tiers; **Payload** is fully open-source (managed Cloud currently paused post-Figma-acquisition); **Directus** is source-available with a small-org grant; **SonicJS** has no feature paywalls and runs on Cloudflare's free tier. The two SaaS platforms gate more heavily: **Sanity** charges per seat and gates SSO, custom roles, comments, and content releases; **Contentful** has a usable free tier but reserves scheduled publishing, workflows, SSO, RBAC, and visual editing for plans starting around $300/mo.
+
+## Which should you pick?
+
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-8 not-prose">
+  <div className="p-5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20">
+    <h3 className="font-bold text-gray-900 dark:text-white mb-2">Choose SonicJS if…</h3>
+    <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-5">
+      <li>You want global edge performance with near-zero cold starts</li>
+      <li>You're already on (or moving to) Cloudflare</li>
+      <li>You want every feature free, with no per-seat or Enterprise gating</li>
+      <li>You value AI-agent-ready docs and a TypeScript-first codebase</li>
+    </ul>
+  </div>
+  <div className="p-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
+    <h3 className="font-bold text-gray-900 dark:text-white mb-2">Choose Payload / Strapi / Directus if…</h3>
+    <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-5">
+      <li>You need GraphQL or real-time today</li>
+      <li>You depend on Postgres, MySQL, or MongoDB specifically</li>
+      <li>You want a large ecosystem and the control of self-hosting</li>
+      <li>Your traffic is regional and edge latency isn't a priority</li>
+    </ul>
+  </div>
+  <div className="p-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
+    <h3 className="font-bold text-gray-900 dark:text-white mb-2">Choose Sanity / Contentful if…</h3>
+    <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-5">
+      <li>You'd rather not run any infrastructure at all</li>
+      <li>You need enterprise governance (audit, SSO, workflows) and have budget</li>
+      <li>Sanity: real-time multiplayer editing and GROQ matter to you</li>
+      <li>Contentful: you're standardizing a large org on a composable platform</li>
+    </ul>
+  </div>
+</div>
+
+<div className="flex flex-col sm:flex-row gap-4 my-8 not-prose">
+  <Button href="/quickstart" arrow="right">
+    <>Try SonicJS in 60 seconds</>
+  </Button>
+  <Button href="/architecture" variant="outline">
+    <>Read the architecture</>
+  </Button>
+</div>
+
+## Deep-dive comparisons
+
+Want a closer look at a specific matchup? These guides go beyond the matrix with benchmarks, migration notes, and real-world developer feedback:
+
+- [SonicJS vs Strapi](/blog/sonicjs-vs-strapi)
+- [Strapi vs Payload vs SonicJS](/blog/strapi-vs-payload-vs-sonicjs)
+- [Directus vs Payload vs SonicJS](/blog/directus-vs-payload-vs-sonicjs)
+- [Strapi vs Directus vs SonicJS](/blog/strapi-vs-directus-vs-sonicjs)
+- [Sanity vs Contentful vs SonicJS](/blog/sanity-vs-contentful-vs-sonicjs)
+- [Strapi vs Contentful vs SonicJS](/blog/strapi-vs-contentful-vs-sonicjs)
+- [Browse all CMS comparisons →](/blog/category/comparisons)
+
+## Frequently asked questions
+
+### Is SonicJS a good alternative to Strapi, Payload, or Directus?
+
+SonicJS is a strong fit when you want an edge-native CMS on Cloudflare Workers with near-zero cold starts and no feature paywalls. The Node.js incumbents (Payload, Strapi, Directus) are more mature and still lead in areas like GraphQL, internationalization, real-time, and database flexibility — several of which are on the SonicJS [roadmap](/roadmap). Pick based on whether edge performance or breadth of features matters more for your project.
+
+### Which headless CMS is the fastest?
+
+Architecturally, SonicJS has the lowest cold start (0–5 ms) because it runs on Cloudflare Workers at the edge rather than a single-region Node.js server, so reads are served close to users worldwide. Payload, Strapi, and Directus performance depends on your hosting and caching setup. Real-world numbers vary by workload, so benchmark for your own use case.
+
+### Which of these headless CMSs are free and open source?
+
+SonicJS, Payload, Strapi, and Directus are all self-hostable. SonicJS and Payload are MIT licensed. Strapi's Community edition is MIT but gates features like version history, scheduled publishing, Live Preview, audit logs, advanced RBAC, and SSO behind paid tiers. Directus uses the source-available MSCL license (free under $5M revenue). Sanity and Contentful are **hosted SaaS** — only Sanity's Studio editor is open source (MIT); their content backends are proprietary and can't be self-hosted, and Contentful is fully closed-source.
+
+### Does SonicJS support GraphQL and internationalization (i18n)?
+
+Not yet — GraphQL and i18n are on the SonicJS roadmap. Today SonicJS ships a REST API with an OpenAPI spec. Payload, Strapi, and Directus all offer GraphQL and i18n today (Directus also offers GraphQL subscriptions and real-time over WebSockets).
+
+### Which headless CMS should I choose?
+
+Choose SonicJS for global edge performance on Cloudflare with everything in the free core. Choose Payload for a Next.js-native, deeply typed developer experience. Choose Strapi for the largest plugin ecosystem and a mature admin. Choose Directus to layer a CMS and visual automation onto an existing SQL database. Choose Sanity for real-time multiplayer editing and the GROQ query language, or Contentful for an enterprise-grade composable platform you don't have to operate. The feature matrix above breaks down all six across 125+ capabilities.
+
+> Spot something out of date? Competitor pricing and features change fast. Open an issue or PR on [GitHub](https://github.com/lane711/sonicjs) and we'll correct it.

@@ -8,8 +8,8 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "predev": "node scripts/generate-sections.mjs",
-    "dev": "next dev -p 3010",
+    "predev": "kill -9 $(lsof -ti:3010) 2>/dev/null || true; node scripts/generate-sections.mjs",
+    "dev": "next dev --webpack -p 3010",
     "prebuild": "node scripts/generate-sections.mjs",
     "build": "next build --webpack",
     "start": "next start -p 3010",

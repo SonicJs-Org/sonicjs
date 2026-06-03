@@ -1,6 +1,10 @@
 import * as hono from 'hono';
 import { Context, Next, MiddlewareHandler } from 'hono';
-import { S as SonicJSConfig } from './app-C9esKLmh.cjs';
+import { S as SonicJSConfig } from './app-juwYAu3s.cjs';
+import 'zod';
+import 'better-call';
+import 'better-auth-cloudflare';
+import 'better-auth';
 import '@cloudflare/workers-types';
 
 type Bindings = {
@@ -62,12 +66,31 @@ declare class AuthManager {
     /**
      * Verify a token's signature and expiration.
      *
+     * IMPORTANT: pass the `JWT_SECRET` binding (e.g. `c.env.JWT_SECRET`) as the
+     * `secret` argument. If omitted, this falls back to a development-only
+     * placeholder secret — tokens signed with the real `JWT_SECRET` will then
+     * silently fail verification. From inside a Hono handler prefer
+     * `AuthManager.verifyAuthRequest(c)`, which handles header/cookie extraction
+     * and pulls the secret from `c.env` for you.
+     *
      * If `graceSeconds` > 0, tokens whose `exp` is within the grace window
      * (i.e. expired by no more than `graceSeconds`) are still returned. This
      * supports a sliding-session refresh endpoint that accepts recently-expired
      * tokens. Signature failures always return null.
      */
     static verifyToken(token: string, secret?: string, graceSeconds?: number): Promise<JWTPayload | null>;
+    /**
+     * Verify the JWT on an incoming Hono request using the `JWT_SECRET`
+     * binding from `c.env`. Reads the token from the `Authorization: Bearer …`
+     * header first, then falls back to the `auth_token` cookie. Returns the
+     * decoded payload, or null when the token is missing, malformed, expired,
+     * or signed with a different secret.
+     *
+     * Use this from custom Hono routes mounted alongside SonicJS — it
+     * resolves the secret the same way `requireAuth()` does, without forcing
+     * the caller to plumb it through manually.
+     */
+    static verifyAuthRequest(c: Context): Promise<JWTPayload | null>;
     static hashPassword(password: string): Promise<string>;
     static hashPasswordLegacy(password: string): Promise<string>;
     static verifyPassword(password: string, storedHash: string): Promise<boolean>;
@@ -93,7 +116,7 @@ declare const requireRole: (requiredRole: string | string[]) => (c: Context, nex
 }, 401, "json">) | (Response & hono.TypedResponse<{
     error: string;
 }, 403, "json">)>;
-declare const optionalAuth: () => (c: Context, next: Next) => Promise<void>;
+declare const optionalAuth: () => (_c: Context, next: Next) => Promise<void>;
 
 /**
  * Middleware to track all HTTP requests for real-time analytics

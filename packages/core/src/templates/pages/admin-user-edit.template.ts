@@ -33,6 +33,7 @@ export interface UserEditData {
 export interface UserEditPageData {
   userToEdit: UserEditData
   roles: Array<{ value: string; label: string }>
+  rbacRoles?: Array<{ id: string; name: string; displayName: string; checked: boolean }>
   error?: string
   success?: string
   customProfileFieldsHtml?: string
@@ -165,6 +166,20 @@ export function renderUserEditPage(data: UserEditPageData): string {
                       </svg>
                     </div>
                   </div>
+                  ${data.rbacRoles && data.rbacRoles.length ? `
+                  <div class="sm:col-span-2">
+                    <label class="block text-sm/6 font-medium text-zinc-950 dark:text-white">RBAC Roles</label>
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-2">Assign one or more roles. Manage roles &amp; permissions in <a href="/admin/rbac" class="text-cyan-600 dark:text-cyan-400 hover:underline">Roles &amp; Permissions</a>.</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      ${data.rbacRoles.map(r => `
+                        <label class="flex items-center gap-2 rounded-md bg-white/5 px-3 py-2 ring-1 ring-inset ring-zinc-500/20">
+                          <input type="checkbox" name="rbac_roles" value="${escapeHtml(r.id)}" ${r.checked ? 'checked' : ''} class="h-4 w-4 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
+                          <span class="text-sm text-zinc-950 dark:text-white">${escapeHtml(r.displayName)}</span>
+                        </label>
+                      `).join('')}
+                    </div>
+                  </div>
+                  ` : ''}
                 </div>
               </div>
 

@@ -26,6 +26,7 @@ import {
   publicFormsRoutes,
   adminApiReferenceRoutes
 } from './routes'
+import { adminRbacRoutes } from './routes/admin-rbac'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
 import { metricsMiddleware } from './middleware/metrics'
@@ -43,6 +44,7 @@ import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugi
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { requireAuth, requireRole } from './middleware/auth'
+import { createAuth } from './auth/config'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
@@ -71,6 +73,8 @@ export interface Bindings {
   JWT_REFRESH_GRACE_SECONDS?: string
   BUCKET_NAME?: string
   GOOGLE_MAPS_API_KEY?: string
+  BETTER_AUTH_SECRET?: string
+  BETTER_AUTH_URL?: string
 }
 
 export interface Variables {
@@ -80,6 +84,14 @@ export interface Variables {
     role: string
     exp: number
     iat: number
+  }
+  session?: {
+    id: string
+    userId: string
+    token: string
+    expiresAt: number
+    createdAt: number
+    updatedAt: number
   }
   requestId?: string
   startTime?: number
@@ -117,6 +129,12 @@ export interface SonicJSConfig {
   // Admin access control
   // Roles allowed to access the /admin panel. Defaults to ['admin'].
   adminAccessRoles?: string[]
+
+  // Auth (Better Auth) — extend the default config with social providers,
+  // magic link, 2FA, etc.
+  auth?: {
+    extendBetterAuth?: import('./auth/config').ExtendBetterAuth
+  }
 
   // App metadata
   version?: string
@@ -190,6 +208,42 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // CSRF protection middleware
   app.use('*', csrfProtection())
+
+  // Better Auth session middleware: populate c.set('user') (and 'session') from
+  // the Better Auth session so existing requireAuth/requireRole and every
+  // c.get('user') consumer keep working unchanged.
+  app.use('*', async (c, next) => {
+    try {
+      const auth = createAuth(c.env, config.auth?.extendBetterAuth)
+      const session = await auth.api.getSession({ headers: c.req.raw.headers })
+      if (session?.user) {
+        const u = session.user as { id: string; email: string; role?: string }
+        const s = session.session as {
+          id: string; userId: string; token: string
+          expiresAt: number | Date; createdAt: number | Date; updatedAt: number | Date
+        }
+        const ms = (v: number | Date) => (typeof v === 'number' ? v : new Date(v).getTime())
+        c.set('user', {
+          userId: u.id,
+          email: u.email,
+          role: u.role ?? 'viewer',
+          exp: ms(s.expiresAt),
+          iat: ms(s.createdAt),
+        })
+        c.set('session', {
+          id: s.id,
+          userId: s.userId,
+          token: s.token,
+          expiresAt: ms(s.expiresAt),
+          createdAt: ms(s.createdAt),
+          updatedAt: ms(s.updatedAt),
+        })
+      }
+    } catch {
+      // Not signed in / no valid session — leave c.get('user') undefined.
+    }
+    await next()
+  })
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {
@@ -287,8 +341,18 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   app.route('/admin/plugins', adminPluginRoutes)
   app.route('/admin/logs', adminLogsRoutes)
+  app.route('/admin/rbac', adminRbacRoutes)
   app.route('/admin', adminUsersRoutes)
   app.route('/auth', authRoutes)
+
+  // Better Auth handler — serves /auth/sign-in/*, /auth/sign-up/*, /auth/sign-out,
+  // /auth/get-session, /auth/callback/* etc. Registered AFTER authRoutes so the
+  // page-render routes (GET /auth/login, /auth/register) take precedence; only
+  // Better Auth's own API paths fall through to this catch-all.
+  app.on(['GET', 'POST'], '/auth/*', (c) => {
+    const auth = createAuth(c.env, config.auth?.extendBetterAuth)
+    return auth.handler(c.req.raw)
+  })
 
   // Test cleanup routes (only for development/test environments)
   app.route('/', testCleanupRoutes)

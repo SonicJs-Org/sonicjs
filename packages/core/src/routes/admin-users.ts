@@ -9,6 +9,7 @@ import { renderUserNewPage, type UserNewPageData } from '../templates/pages/admi
 import { renderUsersListPage, type UsersListPageData, type User } from '../templates/pages/admin-users-list.template'
 import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData } from '../plugins/core-plugins/user-profiles'
+import { RbacService } from '../services/rbac'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -886,9 +887,24 @@ userRoutes.get('/users/:id/edit', async (c) => {
       profile
     }
 
+    // Dynamic RBAC roles for this user (multi-role assignment).
+    const rbacSvc = new RbacService(c.env.DB)
+    const [allRbacRoles, userRbacRoles] = await Promise.all([
+      rbacSvc.getRoles(),
+      rbacSvc.getRolesForUser(userToEdit.id),
+    ])
+    const userRoleIds = new Set(userRbacRoles.map((r) => r.id))
+    const rbacRoles = allRbacRoles.map((r) => ({
+      id: r.id,
+      name: r.name,
+      displayName: r.display_name,
+      checked: userRoleIds.has(r.id),
+    }))
+
     const pageData: UserEditPageData = {
       userToEdit: editData,
       roles: ROLES,
+      rbacRoles,
       customProfileFieldsHtml,
       user: {
         name: user!.email.split('@')[0] || user!.email,
@@ -1042,6 +1058,13 @@ userRoutes.put('/users/:id', async (c) => {
       phone, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
       Date.now(), userId
     ).run()
+
+    // Sync dynamic RBAC role assignments (multi-role). The single `role` column
+    // above stays the primary role (used by Better Auth + admin gating).
+    const rbacRoleIds = formData.getAll('rbac_roles').map((v) => String(v)).filter(Boolean)
+    if (rbacRoleIds.length > 0) {
+      await new RbacService(db).setUserRoles(userId, rbacRoleIds)
+    }
 
     // Update password if provided
     if (newPassword) {

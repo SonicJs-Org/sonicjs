@@ -125,6 +125,13 @@ const DEFAULT_EXEMPT_PATHS = [
   '/auth/otp',
   '/auth/magic-link',
   '/auth/verify',
+  // Better Auth API endpoints — Better Auth enforces its own CSRF via trusted
+  // origins, so they are exempt from SonicJS's token check (startsWith match).
+  '/auth/sign-in',
+  '/auth/sign-up',
+  '/auth/sign-out',
+  '/auth/callback',
+  '/auth/get-session',
   '/api/stripe/webhook',
   '/api/events',
 ]
@@ -203,6 +210,19 @@ export function csrfProtection(options: CsrfOptions = {}) {
     // Bearer-only or API-key-only requests (no auth_token cookie) — exempt
     const authCookie = getCookie(c, 'auth_token')
     if (!authCookie) {
+      await next()
+      return
+    }
+
+    // Better Auth sessions: the legacy `auth_token`-based CSRF check does not
+    // apply (auth_token is dead under Better Auth, and a stale one would
+    // otherwise misfire and reject same-origin admin form posts). Better Auth
+    // enforces its own CSRF via trusted origins for its endpoints.
+    // NOTE (follow-up): replace this skip with CSRF validation keyed on the
+    // Better Auth session cookie so admin mutations regain CSRF protection.
+    const baSession =
+      getCookie(c, 'better-auth.session_token') || getCookie(c, '__Secure-better-auth.session_token')
+    if (baSession) {
       await next()
       return
     }

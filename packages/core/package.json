@@ -102,7 +102,10 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "1.6.13",
     "@cf-wasm/resvg": "^0.3.3",
+    "better-auth": "1.6.13",
+    "better-auth-cloudflare": "0.3.0",
     "csv-parse": "^6.2.1",
     "drizzle-zod": "^0.8.3",
     "highlight.js": "^11.11.1",

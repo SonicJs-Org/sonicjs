@@ -332,29 +332,32 @@ authRoutes.post('/login',
 })
 
 // Logout user (both GET and POST for convenience)
-authRoutes.post('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
+// Revoke the Better Auth session server-side and forward the clearing cookie(s).
+async function clearBetterAuthSession(c: any): Promise<void> {
+  try {
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env)
+    const res = (await auth.api.signOut({ headers: c.req.raw.headers, asResponse: true })) as Response
+    const setCookies =
+      typeof (res.headers as any).getSetCookie === 'function'
+        ? (res.headers as any).getSetCookie()
+        : [res.headers.get('set-cookie')].filter(Boolean)
+    for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
+  } catch {
+    /* best-effort */
+  }
+  // Also clear the legacy JWT cookie if present.
+  setCookie(c, 'auth_token', '', { httpOnly: true, secure: false, sameSite: 'Strict', maxAge: 0 })
   clearCsrfCookie(c)
+}
 
+authRoutes.post('/logout', async (c) => {
+  await clearBetterAuthSession(c)
   return c.json({ message: 'Logged out successfully' })
 })
 
-authRoutes.get('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
-  clearCsrfCookie(c)
-
+authRoutes.get('/logout', async (c) => {
+  await clearBetterAuthSession(c)
   return c.redirect('/auth/login?message=You have been logged out successfully')
 })
 
@@ -520,35 +523,54 @@ authRoutes.post('/register/form',
       `)
     }
     
-    // Hash password
-    const passwordHash = await AuthManager.hashPassword(password)
+    // Create the user + session via Better Auth (writes users + credential
+    // account + session; the create hooks gate registration and make the first
+    // user an admin).
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env)
+    let baRes: Response
+    try {
+      baRes = (await auth.api.signUpEmail({
+        body: {
+          email: normalizedEmail,
+          password,
+          name: `${firstName} ${lastName}`.trim() || username,
+          username,
+          firstName,
+          lastName,
+        } as any,
+        asResponse: true,
+      })) as Response
+    } catch {
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          Registration failed. Please try again.
+        </div>
+      `)
+    }
 
-    // Determine role: first user gets admin, others get viewer
-    const role = isFirstUser ? 'admin' : 'viewer'
+    if (!baRes.ok) {
+      let msg = 'Registration failed. Please try again.'
+      try {
+        const body = (await baRes.clone().json()) as { message?: string }
+        if (body?.message) msg = body.message
+      } catch { /* keep default */ }
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          ${msg}
+        </div>
+      `)
+    }
 
-    // Create user
-    const userId = crypto.randomUUID()
-    const now = new Date()
-
-    await db.prepare(`
-      INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      userId,
-      normalizedEmail,
-      username,
-      firstName,
-      lastName,
-      passwordHash,
-      role,
-      1, // is_active
-      now.getTime(),
-      now.getTime()
-    ).run()
+    // Resolve the created user id for custom profile fields.
+    const created = (await db.prepare('SELECT id FROM users WHERE email = ?')
+      .bind(normalizedEmail)
+      .first()) as { id: string } | null
+    const userId = created?.id
 
     // Save custom profile fields if configured
     const profileConfig = getUserProfileConfig()
-    if (profileConfig) {
+    if (userId && profileConfig) {
       const regFields = getRegistrationFields()
       if (regFields.length > 0) {
         const customData: Record<string, any> = { ...getProfileFieldDefaults() }
@@ -563,30 +585,22 @@ authRoutes.post('/register/form',
       }
     }
 
-    // Generate JWT token
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-    const token = await AuthManager.generateToken(userId, normalizedEmail, role, c.env.JWT_SECRET, tokenTtl)
-
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
+    // Forward Better Auth's session Set-Cookie header(s) to the browser.
+    const setCookies =
+      typeof (baRes.headers as any).getSetCookie === 'function'
+        ? (baRes.headers as any).getSetCookie()
+        : [baRes.headers.get('set-cookie')].filter(Boolean)
+    for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
 
     // Set CSRF cookie for browser sessions
     await setCsrfCookie(c)
-
-    // Redirect based on role
-    const redirectUrl = role === 'admin' ? '/admin/dashboard' : '/admin/dashboard'
 
     return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Account created successfully! Redirecting...
         <script>
           setTimeout(() => {
-            window.location.href = '${redirectUrl}';
+            window.location.href = '/admin/dashboard';
           }, 2000);
         </script>
       </div>
@@ -624,24 +638,26 @@ authRoutes.post('/login/form',
       `)
     }
 
-    const db = c.env.DB
-    
-    // Find user
-    const user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-      .bind(normalizedEmail)
-      .first() as any
-    
-    if (!user) {
+    // Authenticate via Better Auth (handles password verify, legacy PBKDF2
+    // upgrade, and session creation). Returns a Response carrying the session
+    // Set-Cookie which we forward to the browser.
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env)
+    let baRes: Response
+    try {
+      baRes = (await auth.api.signInEmail({
+        body: { email: normalizedEmail, password },
+        asResponse: true,
+      })) as Response
+    } catch {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `)
     }
-    
-    // Verify password
-    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-    if (!isValidPassword) {
+
+    if (!baRes.ok) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
@@ -649,37 +665,15 @@ authRoutes.post('/login/form',
       `)
     }
 
-    // Transparent password hash migration: re-hash legacy SHA-256 to PBKDF2
-    if (AuthManager.isLegacyHash(user.password_hash)) {
-      try {
-        const newHash = await AuthManager.hashPassword(password)
-        await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-          .bind(newHash, Date.now(), user.id)
-          .run()
-      } catch (rehashError) {
-        console.error('Password rehash failed (non-fatal):', rehashError)
-      }
-    }
-
-    // Generate JWT token
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-    const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl)
-
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
+    // Forward Better Auth's session Set-Cookie header(s) to the browser.
+    const setCookies =
+      typeof (baRes.headers as any).getSetCookie === 'function'
+        ? (baRes.headers as any).getSetCookie()
+        : [baRes.headers.get('set-cookie')].filter(Boolean)
+    for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
 
     // Set CSRF cookie for browser sessions
     await setCsrfCookie(c)
-
-    // Update last login
-    await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-      .bind(new Date().getTime(), user.id)
-      .run()
 
     return c.html(html`
       <div id="form-response">

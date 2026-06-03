@@ -196,6 +196,14 @@ export function renderUsersListPage(data: UsersListPageData): string {
         </div>
       </div>
 
+      <!-- Tabs -->
+      <div class="border-b border-zinc-950/10 dark:border-white/10 mb-6">
+        <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+          <a href="/admin/users" aria-current="page" class="whitespace-nowrap border-b-2 border-cyan-500 px-1 py-3 text-sm font-medium text-cyan-600 dark:text-cyan-400">Users</a>
+          <a href="/admin/rbac" class="whitespace-nowrap border-b-2 border-transparent px-1 py-3 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-200">Roles &amp; Permissions</a>
+        </nav>
+      </div>
+
       <!-- Alert Messages -->
       ${data.error ? renderAlert({ type: 'error', message: data.error, dismissible: true }) : ''}
       ${data.success ? renderAlert({ type: 'success', message: data.success, dismissible: true }) : ''}

@@ -392,128 +392,57 @@ export class AuthManager {
   }
 }
 
-// Middleware to require authentication
+// Middleware to require authentication.
+// The Better Auth session middleware (app.ts) has already populated c.get('user')
+// from the session cookie; here we just enforce its presence.
 export const requireAuth = () => {
   return async (c: Context, next: Next) => {
-    try {
-      // Try to get token from Authorization header
-      let token = c.req.header('Authorization')?.replace('Bearer ', '')
+    const user = c.get('user') as JWTPayload | undefined
 
-      // If no header token, try cookie
-      if (!token) {
-        token = getCookie(c, 'auth_token')
-      }
-
-      if (!token) {
-        // Check if this is a browser request (HTML accept header)
-        const acceptHeader = c.req.header('Accept') || ''
-        if (acceptHeader.includes('text/html')) {
-          return c.redirect('/auth/login?error=Please login to access the admin area')
-        }
-        return c.json({ error: 'Authentication required' }, 401)
-      }
-
-      // Try to get cached token verification from KV
-      const kv = c.env?.KV
-      let payload: JWTPayload | null = null
-
-      if (kv) {
-        const cacheKey = `auth:${token.substring(0, 20)}` // Use token prefix as key
-        const cached = await kv.get(cacheKey, 'json')
-        if (cached) {
-          payload = cached as JWTPayload
-        }
-      }
-
-      // If not cached, verify token
-      if (!payload) {
-        const jwtSecret = (c.env as any)?.JWT_SECRET
-        payload = await AuthManager.verifyToken(token, jwtSecret)
-
-        // Cache the verified payload for 5 minutes
-        if (payload && kv) {
-          const cacheKey = `auth:${token.substring(0, 20)}`
-          await kv.put(cacheKey, JSON.stringify(payload), { expirationTtl: 300 })
-        }
-      }
-
-      if (!payload) {
-        // Check if this is a browser request (HTML accept header)
-        const acceptHeader = c.req.header('Accept') || ''
-        if (acceptHeader.includes('text/html')) {
-          return c.redirect('/auth/login?error=Your session has expired, please login again')
-        }
-        return c.json({ error: 'Invalid or expired token' }, 401)
-      }
-
-      // Add user info to context
-      c.set('user', payload)
-
-      return await next()
-    } catch (error) {
-      console.error('Auth middleware error:', error)
-      // Check if this is a browser request (HTML accept header)
-      const acceptHeader = c.req.header('Accept') || ''
-      if (acceptHeader.includes('text/html')) {
-        return c.redirect('/auth/login?error=Authentication failed, please login again')
-      }
-      return c.json({ error: 'Authentication failed' }, 401)
-    }
-  }
-}
-
-// Middleware to require specific role
-export const requireRole = (requiredRole: string | string[]) => {
-  return async (c: Context, next: Next) => {
-    const user = c.get('user') as JWTPayload
-    
     if (!user) {
-      // Check if this is a browser request (HTML accept header)
       const acceptHeader = c.req.header('Accept') || ''
       if (acceptHeader.includes('text/html')) {
         return c.redirect('/auth/login?error=Please login to access the admin area')
       }
       return c.json({ error: 'Authentication required' }, 401)
     }
-    
+
+    return await next()
+  }
+}
+
+// Middleware to require specific role. Must run after requireAuth / the session
+// middleware so c.get('user') is set.
+export const requireRole = (requiredRole: string | string[]) => {
+  return async (c: Context, next: Next) => {
+    const user = c.get('user') as JWTPayload | undefined
+
+    if (!user) {
+      const acceptHeader = c.req.header('Accept') || ''
+      if (acceptHeader.includes('text/html')) {
+        return c.redirect('/auth/login?error=Please login to access the admin area')
+      }
+      return c.json({ error: 'Authentication required' }, 401)
+    }
+
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
-    
+
     if (!roles.includes(user.role)) {
-      // Check if this is a browser request (HTML accept header)
       const acceptHeader = c.req.header('Accept') || ''
       if (acceptHeader.includes('text/html')) {
         return c.redirect('/auth/login?error=You do not have permission to access this area')
       }
       return c.json({ error: 'Insufficient permissions' }, 403)
     }
-    
+
     return await next()
   }
 }
 
-// Optional auth middleware (doesn't block if no token)
+// Optional auth middleware. The session middleware already sets c.get('user')
+// when a valid session exists, so this is a no-op kept for API compatibility.
 export const optionalAuth = () => {
-  return async (c: Context, next: Next) => {
-    try {
-      let token = c.req.header('Authorization')?.replace('Bearer ', '')
-      
-      if (!token) {
-        token = getCookie(c, 'auth_token')
-      }
-      
-      if (token) {
-        const jwtSecret = (c.env as any)?.JWT_SECRET
-        const payload = await AuthManager.verifyToken(token, jwtSecret)
-        if (payload) {
-          c.set('user', payload)
-        }
-      }
-      
-      return await next()
-    } catch (error) {
-      // Don't block on auth errors in optional auth
-      console.error('Optional auth error:', error)
-      return await next()
-    }
+  return async (_c: Context, next: Next) => {
+    return await next()
   }
 }

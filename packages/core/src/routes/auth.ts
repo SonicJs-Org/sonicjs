@@ -648,23 +648,47 @@ authRoutes.post('/login/form',
     // Authenticate via Better Auth (handles password verify, legacy PBKDF2
     // upgrade, and session creation). Returns a Response carrying the session
     // Set-Cookie which we forward to the browser.
+    const db = c.env.DB
     const { createAuth } = await import('../auth/config')
     const auth = createAuth(c.env)
-    let baRes: Response
-    try {
-      baRes = (await auth.api.signInEmail({
-        body: { email: normalizedEmail, password },
-        asResponse: true,
-      })) as Response
-    } catch {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Invalid email or password
-        </div>
-      `)
+
+    const attemptSignIn = async (): Promise<Response | null> => {
+      try {
+        return (await auth.api.signInEmail({
+          body: { email: normalizedEmail, password },
+          asResponse: true,
+        })) as Response
+      } catch {
+        return null
+      }
     }
 
-    if (!baRes.ok) {
+    let baRes = await attemptSignIn()
+
+    // Self-heal: users created outside the Better Auth sign-up flow (legacy
+    // /auth/register, admin-created, or seeded users) have a users.password_hash
+    // but no Better Auth `account` credential row, so sign-in fails with
+    // "Credential account not found". Backfill the credential account from the
+    // stored hash and retry once; the password verify hook then upgrades the
+    // legacy pbkdf2 hash to scrypt on the successful login.
+    if (!baRes || !baRes.ok) {
+      const legacy = (await db
+        .prepare('SELECT id, password_hash FROM users WHERE email = ? AND is_active = 1')
+        .bind(normalizedEmail)
+        .first()) as { id: string; password_hash: string | null } | null
+      if (legacy?.password_hash) {
+        const hasAccount = await db
+          .prepare("SELECT 1 FROM account WHERE user_id = ? AND provider_id = 'credential'")
+          .bind(legacy.id)
+          .first()
+        if (!hasAccount) {
+          await ensureCredentialAccount(db, legacy.id, legacy.password_hash)
+          baRes = await attemptSignIn()
+        }
+      }
+    }
+
+    if (!baRes || !baRes.ok) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password

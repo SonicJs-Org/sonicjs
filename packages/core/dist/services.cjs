@@ -2,8 +2,8 @@
 
 var chunkQAHXKCFP_cjs = require('./chunk-QAHXKCFP.cjs');
 require('./chunk-3ZXNJZOP.cjs');
-var chunk4DEQTGFX_cjs = require('./chunk-4DEQTGFX.cjs');
-var chunkY7MHNKPZ_cjs = require('./chunk-Y7MHNKPZ.cjs');
+var chunkYBYWK2GY_cjs = require('./chunk-YBYWK2GY.cjs');
+var chunk367MQ5EK_cjs = require('./chunk-367MQ5EK.cjs');
 require('./chunk-P3XDZL6Q.cjs');
 require('./chunk-IGJUBJBW.cjs');
 
@@ -71,87 +71,87 @@ Object.defineProperty(exports, "setAppInstance", {
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.PluginBootstrapService; }
+  get: function () { return chunkYBYWK2GY_cjs.PluginBootstrapService; }
 });
 Object.defineProperty(exports, "PluginService", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.PluginService; }
+  get: function () { return chunkYBYWK2GY_cjs.PluginService; }
 });
 Object.defineProperty(exports, "backfillFormSubmissions", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.backfillFormSubmissions; }
+  get: function () { return chunkYBYWK2GY_cjs.backfillFormSubmissions; }
 });
 Object.defineProperty(exports, "cleanupRemovedCollections", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.cleanupRemovedCollections; }
+  get: function () { return chunkYBYWK2GY_cjs.cleanupRemovedCollections; }
 });
 Object.defineProperty(exports, "createContentFromSubmission", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.createContentFromSubmission; }
+  get: function () { return chunkYBYWK2GY_cjs.createContentFromSubmission; }
 });
 Object.defineProperty(exports, "deriveCollectionSchemaFromFormio", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.deriveCollectionSchemaFromFormio; }
+  get: function () { return chunkYBYWK2GY_cjs.deriveCollectionSchemaFromFormio; }
 });
 Object.defineProperty(exports, "deriveSubmissionTitle", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.deriveSubmissionTitle; }
+  get: function () { return chunkYBYWK2GY_cjs.deriveSubmissionTitle; }
 });
 Object.defineProperty(exports, "fullCollectionSync", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.fullCollectionSync; }
+  get: function () { return chunkYBYWK2GY_cjs.fullCollectionSync; }
 });
 Object.defineProperty(exports, "getAvailableCollectionNames", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.getAvailableCollectionNames; }
+  get: function () { return chunkYBYWK2GY_cjs.getAvailableCollectionNames; }
 });
 Object.defineProperty(exports, "getManagedCollections", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.getManagedCollections; }
+  get: function () { return chunkYBYWK2GY_cjs.getManagedCollections; }
 });
 Object.defineProperty(exports, "isCollectionManaged", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.isCollectionManaged; }
+  get: function () { return chunkYBYWK2GY_cjs.isCollectionManaged; }
 });
 Object.defineProperty(exports, "loadCollectionConfig", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.loadCollectionConfig; }
+  get: function () { return chunkYBYWK2GY_cjs.loadCollectionConfig; }
 });
 Object.defineProperty(exports, "loadCollectionConfigs", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.loadCollectionConfigs; }
+  get: function () { return chunkYBYWK2GY_cjs.loadCollectionConfigs; }
 });
 Object.defineProperty(exports, "mapFormStatusToContentStatus", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.mapFormStatusToContentStatus; }
+  get: function () { return chunkYBYWK2GY_cjs.mapFormStatusToContentStatus; }
 });
 Object.defineProperty(exports, "registerCollections", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.registerCollections; }
+  get: function () { return chunkYBYWK2GY_cjs.registerCollections; }
 });
 Object.defineProperty(exports, "syncAllFormCollections", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.syncAllFormCollections; }
+  get: function () { return chunkYBYWK2GY_cjs.syncAllFormCollections; }
 });
 Object.defineProperty(exports, "syncCollection", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.syncCollection; }
+  get: function () { return chunkYBYWK2GY_cjs.syncCollection; }
 });
 Object.defineProperty(exports, "syncCollections", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.syncCollections; }
+  get: function () { return chunkYBYWK2GY_cjs.syncCollections; }
 });
 Object.defineProperty(exports, "syncFormCollection", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.syncFormCollection; }
+  get: function () { return chunkYBYWK2GY_cjs.syncFormCollection; }
 });
 Object.defineProperty(exports, "validateCollectionConfig", {
   enumerable: true,
-  get: function () { return chunk4DEQTGFX_cjs.validateCollectionConfig; }
+  get: function () { return chunkYBYWK2GY_cjs.validateCollectionConfig; }
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunkY7MHNKPZ_cjs.MigrationService; }
+  get: function () { return chunk367MQ5EK_cjs.MigrationService; }
 });
 //# sourceMappingURL=services.cjs.map
 //# sourceMappingURL=services.cjs.map

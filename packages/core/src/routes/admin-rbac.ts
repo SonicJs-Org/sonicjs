@@ -40,11 +40,12 @@ adminRbacRoutes.get('/', async (c) => {
     rbac.getResources(),
     rbac.getGrants(),
   ])
-  // Multi-select roles for side-by-side comparison. First visit defaults to all
-  // roles, but an explicit selector submit with no roles selected stays empty.
+  // Multi-select roles for side-by-side comparison. First visit defaults to the
+  // first 3 roles to keep the matrix narrow; an explicit selector submit (incl.
+  // the Clear button) with no roles selected stays empty.
   const requested = c.req.queries('roles') || []
   const hasCompareSelection = c.req.query('compare') === '1'
-  const selectedIds = hasCompareSelection ? requested : roles.map((r) => r.id)
+  const selectedIds = hasCompareSelection ? requested : roles.slice(0, 3).map((r) => r.id)
   const selectedRoles = roles.filter((r) => selectedIds.includes(r.id))
   const isAdmin = (r: { name: string }) => r.name === 'admin'
   const grantsByRole = new Map<string, Map<string, Exclude<PermissionScope, 'none'>>>()
@@ -102,7 +103,7 @@ adminRbacRoutes.get('/', async (c) => {
     )}" data-res="${esc(resKey)}" data-verb="${esc(verbName)}" ${scope === val ? 'checked' : ''} ${
       disabled ? 'disabled' : ''
     }>
-      <span class="block rounded-full px-2 py-0.5 text-zinc-500 dark:text-zinc-400 peer-checked:bg-white dark:peer-checked:bg-zinc-700 peer-checked:text-zinc-900 dark:peer-checked:text-white peer-checked:shadow-sm transition-colors">${label}</span>
+      <span class="block rounded-lg px-2 py-0.5 text-center leading-tight text-zinc-500 dark:text-zinc-400 peer-checked:bg-white dark:peer-checked:bg-zinc-700 peer-checked:text-zinc-900 dark:peer-checked:text-white peer-checked:shadow-sm transition-colors">${label}</span>
     </label>`
   const scopeSwitch = (
     key: string,
@@ -113,7 +114,7 @@ adminRbacRoutes.get('/', async (c) => {
     resKey: string,
     verbName: string
   ) =>
-    `<div class="inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-white/10 p-0.5 text-[10px] font-medium ${
+    `<div class="inline-flex flex-col items-stretch gap-0.5 rounded-2xl bg-zinc-100 dark:bg-white/10 p-0.5 text-[10px] font-medium ${
       disabled ? 'opacity-60' : ''
     }" role="radiogroup">${seg(key, 'none', 'None', scope, disabled, roleId, resKey, verbName)}${
       ownSupported ? seg(key, 'own', 'Own', scope, disabled, roleId, resKey, verbName) : ''
@@ -133,14 +134,14 @@ adminRbacRoutes.get('/', async (c) => {
       selectedRoles
         .map(
           (r, i) =>
-            `<th class="px-2 py-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 ${
+            `<th class="px-1 py-2 align-bottom text-[11px] font-medium text-zinc-500 dark:text-zinc-400 ${
               i === 0 ? 'border-l border-zinc-950/10 dark:border-white/10' : ''
             }" ${roleStyle(
               r.id,
               'background:var(--role-bg);border-color:var(--role-border);box-shadow:inset 0 -2px 0 var(--role-color);'
-            )} title="${esc(v.name)} · ${esc(r.display_name)}"><span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full" style="background:var(--role-color)"></span>${esc(r.display_name)}</span>${
-              isAdmin(r) ? ' 🔒' : ''
-            }</th>`
+            )} title="${esc(v.name)} · ${esc(r.display_name)}"><div class="flex flex-col items-center gap-1"><span class="h-2 w-2 rounded-full" style="background:var(--role-color)"></span><span class="[writing-mode:vertical-rl] rotate-180 whitespace-nowrap">${esc(
+              r.display_name
+            )}${isAdmin(r) ? ' 🔒' : ''}</span></div></th>`
         )
         .join('')
     )
@@ -264,6 +265,7 @@ adminRbacRoutes.get('/', async (c) => {
   <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
     <input type="hidden" name="compare" value="1">
     <span class="text-xs text-zinc-500 dark:text-zinc-400 mr-1">Compare roles:</span>${roleTabs}
+    <a href="/admin/rbac?compare=1" class="ml-auto inline-flex items-center gap-1 rounded-md border border-zinc-300 dark:border-white/15 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10">Clear</a>
   </form>
 
   <form method="post" action="/admin/rbac/grants" class="${card} mb-8 overflow-x-auto">

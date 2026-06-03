@@ -1,8 +1,8 @@
 import { isFirstUserRegistration, isRegistrationEnabled, authValidationService } from './chunk-F2IDJF3K.js';
 import { getCacheService, CACHE_CONFIGS, SettingsService, getLogger, getAppInstance, buildRouteList, CATEGORY_INFO } from './chunk-HFKY2PR7.js';
-import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, logActivity, RbacService, generateCsrfToken } from './chunk-XYMYWHHO.js';
-import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-XACO4SUL.js';
-import { MigrationService } from './chunk-4UD2DDO4.js';
+import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, RbacService, logActivity, generateCsrfToken } from './chunk-L4MNJOET.js';
+import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-ML3OU36L.js';
+import { MigrationService } from './chunk-SR4PENQD.js';
 import { renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-XWIA3HVX.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-55RDMDOP.js';
 import { PluginBuilder, TurnstileService } from './chunk-EXNEW5US.js';
@@ -125,6 +125,24 @@ async function resolveContentVariables(contentData, db) {
 
 // src/routes/api-content-crud.ts
 var apiContentCrudRoutes = new Hono();
+var strongestScope = (...scopes) => {
+  if (scopes.includes("any")) return "any";
+  if (scopes.includes("own")) return "own";
+  return "none";
+};
+async function getCollectionPermissionScope(db, userId, collectionName, verb) {
+  const rbac = new RbacService(db);
+  const [contentScope, collectionScope] = await Promise.all([
+    rbac.getPermissionScope(userId, "content", verb),
+    rbac.getPermissionScope(userId, `collection:${collectionName}`, verb)
+  ]);
+  return strongestScope(contentScope, collectionScope);
+}
+async function canAccessContentRecord(db, user, content, collectionName, verb) {
+  if (!user) return false;
+  const scope = await getCollectionPermissionScope(db, user.userId, collectionName, verb);
+  return scope === "any" || scope === "own" && content.author_id === user.userId;
+}
 apiContentCrudRoutes.get("/check-slug", async (c) => {
   try {
     const db = c.env.DB;
@@ -200,6 +218,13 @@ apiContentCrudRoutes.post("/", requireAuth(), requireRbac("content", "create"), 
     if (!title) {
       return c.json({ error: "title is required" }, 400);
     }
+    const collection = await db.prepare("SELECT name FROM collections WHERE id = ?").bind(collectionId).first();
+    if (!collection) {
+      return c.json({ error: "Collection not found" }, 404);
+    }
+    if (!user || await getCollectionPermissionScope(db, user.userId, collection.name, "create") === "none") {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
     let finalSlug = slug || title;
     finalSlug = finalSlug.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").trim();
     const duplicateCheck = db.prepare(
@@ -258,11 +283,20 @@ apiContentCrudRoutes.put("/:id", requireAuth(), requireRbac("content", "update")
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
+    const user = c.get("user");
     const body = await c.req.json();
-    const existingStmt = db.prepare("SELECT * FROM content WHERE id = ?");
+    const existingStmt = db.prepare(`
+      SELECT c.*, col.name as collection_name
+      FROM content c
+      JOIN collections col ON col.id = c.collection_id
+      WHERE c.id = ?
+    `);
     const existing = await existingStmt.bind(id).first();
     if (!existing) {
       return c.json({ error: "Content not found" }, 404);
+    }
+    if (!await canAccessContentRecord(db, user, existing, existing.collection_name, "update")) {
+      return c.json({ error: "Insufficient permissions" }, 403);
     }
     const updates = [];
     const params = [];
@@ -322,10 +356,19 @@ apiContentCrudRoutes.delete("/:id", requireAuth(), requireRbac("content", "delet
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
-    const existingStmt = db.prepare("SELECT collection_id FROM content WHERE id = ?");
+    const user = c.get("user");
+    const existingStmt = db.prepare(`
+      SELECT c.collection_id, c.author_id, col.name as collection_name
+      FROM content c
+      JOIN collections col ON col.id = c.collection_id
+      WHERE c.id = ?
+    `);
     const existing = await existingStmt.bind(id).first();
     if (!existing) {
       return c.json({ error: "Content not found" }, 404);
+    }
+    if (!await canAccessContentRecord(db, user, existing, existing.collection_name, "delete")) {
+      return c.json({ error: "Insufficient permissions" }, 403);
     }
     const deleteStmt = db.prepare("DELETE FROM content WHERE id = ?");
     await deleteStmt.bind(id).run();
@@ -2352,7 +2395,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-NEB3OF2X.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-7W7U5GBA.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2377,7 +2420,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-NEB3OF2X.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-7W7U5GBA.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2399,7 +2442,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-NEB3OF2X.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-7W7U5GBA.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -9495,6 +9538,29 @@ function buildSchemaFieldOptions(fieldConfig) {
 
 // src/routes/admin-content.ts
 var adminContentRoutes = new Hono();
+var strongestScope2 = (...scopes) => {
+  if (scopes.includes("any")) return "any";
+  if (scopes.includes("own")) return "own";
+  return "none";
+};
+async function getCollectionPermissionScope2(db, userId, collectionName, verb) {
+  const rbac = new RbacService(db);
+  const [contentScope, collectionScope] = await Promise.all([
+    rbac.getPermissionScope(userId, "content", verb),
+    rbac.getPermissionScope(userId, `collection:${collectionName}`, verb)
+  ]);
+  return strongestScope2(contentScope, collectionScope);
+}
+async function canAccessContentRecord2(db, user, content, collectionName, verb) {
+  if (!user) return false;
+  const scope = await getCollectionPermissionScope2(db, user.userId, collectionName, verb);
+  return scope === "any" || scope === "own" && content.author_id === user.userId;
+}
+var forbiddenHtml = (message = "You do not have permission to access this content.") => html`
+  <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+    ${message}
+  </div>
+`;
 function parseFieldValue(field, formData, options = {}) {
   const { skipValidation = false } = options;
   const value = formData.get(field.field_name);
@@ -9716,6 +9782,48 @@ adminContentRoutes.get("/", async (c) => {
     } else if (status === "deleted") {
       conditions.push("c.status = 'deleted'");
     }
+    if (!user) {
+      conditions.push("1 = 0");
+    } else {
+      const rbac = new RbacService(db);
+      const globalReadScope = await rbac.getPermissionScope(user.userId, "content", "read");
+      if (modelName !== "all") {
+        const collectionReadScope = await rbac.getPermissionScope(user.userId, `collection:${modelName}`, "read");
+        const readScope = strongestScope2(globalReadScope, collectionReadScope);
+        if (readScope === "none") {
+          conditions.push("1 = 0");
+        } else if (readScope === "own") {
+          conditions.push("c.author_id = ?");
+          params.push(user.userId);
+        }
+      } else if (globalReadScope !== "any") {
+        const anyCollections = [];
+        const ownCollections = /* @__PURE__ */ new Set();
+        if (globalReadScope === "own") {
+          for (const row of collectionsResults || []) ownCollections.add(row.name);
+        }
+        await Promise.all((collectionsResults || []).map(async (row) => {
+          const scope = await rbac.getPermissionScope(user.userId, `collection:${row.name}`, "read");
+          if (scope === "any") {
+            anyCollections.push(row.name);
+            ownCollections.delete(row.name);
+          } else if (scope === "own") {
+            ownCollections.add(row.name);
+          }
+        }));
+        const scopedClauses = [];
+        if (anyCollections.length > 0) {
+          scopedClauses.push(`col.name IN (${anyCollections.map(() => "?").join(",")})`);
+          params.push(...anyCollections);
+        }
+        if (ownCollections.size > 0) {
+          const ownList = [...ownCollections];
+          scopedClauses.push(`(col.name IN (${ownList.map(() => "?").join(",")}) AND c.author_id = ?)`);
+          params.push(...ownList, user.userId);
+        }
+        conditions.push(scopedClauses.length > 0 ? `(${scopedClauses.join(" OR ")})` : "1 = 0");
+      }
+    }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const countStmt = db.prepare(`
       SELECT COUNT(*) as count 
@@ -9829,12 +9937,17 @@ adminContentRoutes.get("/new", async (c) => {
       const db2 = c.env.DB;
       const collectionsStmt = db2.prepare("SELECT id, name, display_name, description FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY display_name");
       const { results } = await collectionsStmt.all();
-      const collections = (results || []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        display_name: row.display_name,
-        description: row.description
-      }));
+      const collections = [];
+      for (const row of results || []) {
+        if (user && await getCollectionPermissionScope2(db2, user.userId, row.name, "create") !== "none") {
+          collections.push({
+            id: row.id,
+            name: row.name,
+            display_name: row.display_name,
+            description: row.description
+          });
+        }
+      }
       const selectionHTML = `
         <!DOCTYPE html>
         <html>
@@ -9882,6 +9995,9 @@ adminContentRoutes.get("/new", async (c) => {
         } : void 0
       };
       return c.html(renderContentFormPage(formData2));
+    }
+    if (!user || await getCollectionPermissionScope2(db, user.userId, collection.name, "create") === "none") {
+      return c.html(forbiddenHtml("You do not have permission to create content in this collection."), 403);
     }
     const fields = await getCollectionFields(db, collectionId);
     const workflowEnabled = await isPluginActive2(db, "workflow");
@@ -9987,6 +10103,9 @@ adminContentRoutes.get("/:id/edit", async (c) => {
       description: content.collection_description,
       schema: content.collection_schema ? JSON.parse(content.collection_schema) : {}
     };
+    if (!await canAccessContentRecord2(db, user, content, collection.name, "update")) {
+      return c.html(forbiddenHtml(), 403);
+    }
     const fields = await getCollectionFields(db, content.collection_id);
     const contentData = content.data ? JSON.parse(content.data) : {};
     const workflowEnabled = await isPluginActive2(db, "workflow");
@@ -10196,7 +10315,13 @@ adminContentRoutes.put("/:id", async (c) => {
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
-      `);
+          `);
+    }
+    if (!user || await getCollectionPermissionScope2(db, user.userId, collection.name, "create") === "none") {
+      return c.html(forbiddenHtml("You do not have permission to create content in this collection."), 403);
+    }
+    if (!await canAccessContentRecord2(db, user, existingContent, collection.name, "update")) {
+      return c.html(forbiddenHtml(), 403);
     }
     const fields = await getCollectionFields(db, existingContent.collection_id);
     const { data, errors } = extractFieldData(fields, formData);
@@ -10307,9 +10432,13 @@ adminContentRoutes.post("/preview", requireRbac("content", "read"), async (c) =>
     const formData = await c.req.formData();
     const collectionId = formData.get("collection_id");
     const db = c.env.DB;
+    const user = c.get("user");
     const collection = await getCollection(db, collectionId);
     if (!collection) {
       return c.html("<p>Collection not found</p>");
+    }
+    if (!user || await getCollectionPermissionScope2(db, user.userId, collection.name, "read") === "none") {
+      return c.html("<p>Insufficient permissions</p>", 403);
     }
     const fields = await getCollectionFields(db, collectionId);
     const { data } = extractFieldData(fields, formData, { skipValidation: true });
@@ -10374,6 +10503,15 @@ adminContentRoutes.post("/duplicate", async (c) => {
     const original = await contentStmt.bind(originalId).first();
     if (!original) {
       return c.json({ success: false, error: "Content not found" });
+    }
+    const collection = await getCollection(db, original.collection_id);
+    if (!collection) {
+      return c.json({ success: false, error: "Collection not found" });
+    }
+    const canReadOriginal = await canAccessContentRecord2(db, user, original, collection.name, "read");
+    const canCreateCopy = user ? await getCollectionPermissionScope2(db, user.userId, collection.name, "create") !== "none" : false;
+    if (!canReadOriginal || !canCreateCopy) {
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
     }
     const newId = crypto.randomUUID();
     const now = Date.now();
@@ -10504,32 +10642,49 @@ adminContentRoutes.post("/bulk-action", async (c) => {
     }
     const db = c.env.DB;
     const now = Date.now();
+    const verb = action === "delete" ? "delete" : "update";
+    const placeholders = ids.map(() => "?").join(",");
+    const { results: selectedRows } = await db.prepare(`
+          SELECT c.id, c.author_id, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id IN (${placeholders})
+        `).bind(...ids).all();
+    const allowedIds = [];
+    for (const row of selectedRows || []) {
+      if (await canAccessContentRecord2(db, user, row, row.collection_name, verb)) {
+        allowedIds.push(row.id);
+      }
+    }
+    if (allowedIds.length === 0) {
+      return c.json({ success: false, error: "No selected content is permitted for this action" }, 403);
+    }
     if (action === "delete") {
-      const placeholders = ids.map(() => "?").join(",");
+      const placeholders2 = allowedIds.map(() => "?").join(",");
       const stmt = db.prepare(`
-        UPDATE content
-        SET status = 'deleted', updated_at = ?
-        WHERE id IN (${placeholders})
-      `);
-      await stmt.bind(now, ...ids).run();
+            UPDATE content
+            SET status = 'deleted', updated_at = ?
+            WHERE id IN (${placeholders2})
+          `);
+      await stmt.bind(now, ...allowedIds).run();
     } else if (action === "publish" || action === "draft") {
-      const placeholders = ids.map(() => "?").join(",");
+      const placeholders2 = allowedIds.map(() => "?").join(",");
       const publishedAt = action === "publish" ? now : null;
       const stmt = db.prepare(`
-        UPDATE content
-        SET status = ?, published_at = ?, updated_at = ?
-        WHERE id IN (${placeholders})
-      `);
-      await stmt.bind(action, publishedAt, now, ...ids).run();
+            UPDATE content
+            SET status = ?, published_at = ?, updated_at = ?
+            WHERE id IN (${placeholders2})
+          `);
+      await stmt.bind(action, publishedAt, now, ...allowedIds).run();
     } else {
       return c.json({ success: false, error: "Invalid action" });
     }
     const cache = getCacheService(CACHE_CONFIGS.content);
-    for (const contentId of ids) {
+    for (const contentId of allowedIds) {
       await cache.delete(cache.generateKey("content", contentId));
     }
     await cache.invalidate("content:list:*");
-    return c.json({ success: true, count: ids.length });
+    return c.json({ success: true, count: allowedIds.length });
   } catch (error) {
     console.error("Bulk action error:", error);
     return c.json({ success: false, error: "Failed to perform bulk action" });
@@ -10540,10 +10695,18 @@ adminContentRoutes.delete("/:id", async (c) => {
     const id = c.req.param("id");
     const db = c.env.DB;
     const user = c.get("user");
-    const contentStmt = db.prepare("SELECT id, title FROM content WHERE id = ?");
+    const contentStmt = db.prepare(`
+          SELECT c.id, c.title, c.author_id, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id = ?
+        `);
     const content = await contentStmt.bind(id).first();
     if (!content) {
       return c.json({ success: false, error: "Content not found" }, 404);
+    }
+    if (!await canAccessContentRecord2(db, user, content, content.collection_name, "delete")) {
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
     }
     const now = Date.now();
     const deleteStmt = db.prepare(`
@@ -10576,10 +10739,19 @@ adminContentRoutes.get("/:id/versions", async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
-    const contentStmt = db.prepare("SELECT * FROM content WHERE id = ?");
+    const user = c.get("user");
+    const contentStmt = db.prepare(`
+          SELECT c.*, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id = ?
+        `);
     const content = await contentStmt.bind(id).first();
     if (!content) {
       return c.html("<p>Content not found</p>");
+    }
+    if (!await canAccessContentRecord2(db, user, content, content.collection_name, "read")) {
+      return c.html("<p>Insufficient permissions</p>", 403);
     }
     const versionsStmt = db.prepare(`
       SELECT cv.*, u.first_name, u.last_name, u.email
@@ -10627,10 +10799,18 @@ adminContentRoutes.post("/:id/restore/:version", async (c) => {
     if (!versionData) {
       return c.json({ success: false, error: "Version not found" });
     }
-    const contentStmt = db.prepare("SELECT * FROM content WHERE id = ?");
+    const contentStmt = db.prepare(`
+          SELECT c.*, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id = ?
+        `);
     const currentContent = await contentStmt.bind(id).first();
     if (!currentContent) {
       return c.json({ success: false, error: "Content not found" });
+    }
+    if (!await canAccessContentRecord2(db, user, currentContent, currentContent.collection_name, "update")) {
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
     }
     const restoredData = JSON.parse(versionData.data);
     const now = Date.now();
@@ -10685,16 +10865,20 @@ adminContentRoutes.get("/:id/version/:version/preview", requireRbac("content", "
     const id = c.req.param("id");
     const version = parseInt(c.req.param("version") || "0");
     const db = c.env.DB;
+    const user = c.get("user");
     const versionStmt = db.prepare(`
-      SELECT cv.*, c.collection_id, col.display_name as collection_name
-      FROM content_versions cv
-      JOIN content c ON cv.content_id = c.id
+          SELECT cv.*, c.collection_id, c.author_id, col.name as collection_key, col.display_name as collection_name
+          FROM content_versions cv
+          JOIN content c ON cv.content_id = c.id
       JOIN collections col ON c.collection_id = col.id
       WHERE cv.content_id = ? AND cv.version = ?
     `);
     const versionData = await versionStmt.bind(id, version).first();
     if (!versionData) {
       return c.html("<p>Version not found</p>");
+    }
+    if (!await canAccessContentRecord2(db, user, versionData, versionData.collection_key, "read")) {
+      return c.html("<p>Insufficient permissions</p>", 403);
     }
     const data = JSON.parse(versionData.data || "{}");
     const safeTitle = escapeHtml(data.title || "Untitled");
@@ -29403,5 +29587,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, createUserProfilesPlugin, defineUserProfile, getConfirmationDialogScript2 as getConfirmationDialogScript, getCustomData, getUserProfileConfig, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userProfilesPlugin, userRoutes };
-//# sourceMappingURL=chunk-4EUFSKZB.js.map
-//# sourceMappingURL=chunk-4EUFSKZB.js.map
+//# sourceMappingURL=chunk-QWBLFOYH.js.map
+//# sourceMappingURL=chunk-QWBLFOYH.js.map

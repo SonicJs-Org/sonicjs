@@ -4,11 +4,13 @@
  * Roles and verbs are stored and editable at runtime. Resources are computed:
  * a fixed set of system resources plus one `collection:<name>` per collection,
  * so new collections automatically get permissions. Grants are (role, resource,
- * verb) triples with wildcard support:
+ * verb, scope) rows with wildcard support:
  *   resource '*'            → all resources
  *   resource 'collection:*' → all collections
  *   verb '*'                → all verbs
  *   verb 'manage'           → implies every verb on that resource
+ *   scope 'any'             → any matching object
+ *   scope 'own'             → only objects owned by the current user
  */
 
 export interface RbacRole {
@@ -30,10 +32,12 @@ export interface RbacResource {
   label: string
   group: 'system' | 'collection'
 }
+export type PermissionScope = 'none' | 'own' | 'any'
 export interface Grant {
   role_id: string
   resource: string
   verb: string
+  scope: Exclude<PermissionScope, 'none'>
 }
 
 const SYSTEM_RESOURCES: RbacResource[] = [
@@ -45,7 +49,6 @@ const SYSTEM_RESOURCES: RbacResource[] = [
   { key: 'media', label: 'Media', group: 'system' },
   { key: 'email', label: 'Email Management', group: 'system' },
   { key: 'users', label: 'Users', group: 'system' },
-  { key: 'collections', label: 'Collections (schema)', group: 'system' },
   { key: 'settings', label: 'Settings', group: 'system' },
   { key: 'plugins', label: 'Plugins', group: 'system' },
 ]
@@ -84,7 +87,7 @@ export class RbacService {
   }
 
   async getGrants(): Promise<Grant[]> {
-    return this.all<Grant>('SELECT role_id, resource, verb FROM rbac_role_grants')
+    return this.all<Grant>("SELECT role_id, resource, verb, COALESCE(scope, 'any') as scope FROM rbac_role_grants")
   }
 
   async getRolesForUser(userId: string): Promise<RbacRole[]> {
@@ -104,23 +107,39 @@ export class RbacService {
     return g.verb === '*' || g.verb === verb || g.verb === 'manage'
   }
 
+  private strongestScope(scopes: PermissionScope[]): PermissionScope {
+    if (scopes.includes('any')) return 'any'
+    if (scopes.includes('own')) return 'own'
+    return 'none'
+  }
+
   /** Can the user perform `verb` on `resource`? Reads the live grant matrix. */
   async can(userId: string, resource: string, verb: string): Promise<boolean> {
-    const rows = await this.all<{ resource: string; verb: string }>(
-      `SELECT g.resource, g.verb FROM rbac_user_roles ur
+    return (await this.getPermissionScope(userId, resource, verb)) !== 'none'
+  }
+
+  /**
+   * Highest scope granted to the user for `resource:verb`.
+   * `any` beats `own`; no matching grant is `none`.
+   */
+  async getPermissionScope(userId: string, resource: string, verb: string): Promise<PermissionScope> {
+    const rows = await this.all<{ resource: string; verb: string; scope: PermissionScope }>(
+      `SELECT g.resource, g.verb, COALESCE(g.scope, 'any') as scope FROM rbac_user_roles ur
        JOIN rbac_role_grants g ON g.role_id = ur.role_id
        WHERE ur.user_id = ?`,
       userId
     )
-    return rows.some((g) => this.grantMatches(g, resource, verb))
+    return this.strongestScope(
+      rows.filter((g) => this.grantMatches(g, resource, verb)).map((g) => (g.scope === 'own' ? 'own' : 'any'))
+    )
   }
 
   /** Flattened, human-readable permission list for a user (expanded vs resources). */
   async permissionsForUser(userId: string): Promise<string[]> {
     const roles = await this.getRolesForUser(userId)
     if (roles.length === 0) return []
-    const grants = await this.all<{ resource: string; verb: string }>(
-      `SELECT g.resource, g.verb FROM rbac_user_roles ur
+    const grants = await this.all<{ resource: string; verb: string; scope: PermissionScope }>(
+      `SELECT g.resource, g.verb, COALESCE(g.scope, 'any') as scope FROM rbac_user_roles ur
        JOIN rbac_role_grants g ON g.role_id = ur.role_id WHERE ur.user_id = ?`,
       userId
     )
@@ -189,14 +208,18 @@ export class RbacService {
     await this.db.prepare("DELETE FROM rbac_verbs WHERE id = ? AND is_system = 0").bind(verbId).run()
   }
 
-  /** Replace all grants for one role with the supplied (resource, verb) pairs. */
-  async setRoleGrants(roleId: string, pairs: Array<{ resource: string; verb: string }>): Promise<void> {
+  /** Replace all grants for one role with the supplied (resource, verb, scope) rows. */
+  async setRoleGrants(
+    roleId: string,
+    pairs: Array<{ resource: string; verb: string; scope?: Exclude<PermissionScope, 'none'> }>
+  ): Promise<void> {
     const stmts = [this.db.prepare('DELETE FROM rbac_role_grants WHERE role_id = ?').bind(roleId)]
     for (const p of pairs) {
+      const scope = p.scope === 'own' ? 'own' : 'any'
       stmts.push(
         this.db
-          .prepare('INSERT OR IGNORE INTO rbac_role_grants (role_id, resource, verb) VALUES (?, ?, ?)')
-          .bind(roleId, p.resource, p.verb)
+          .prepare('INSERT OR IGNORE INTO rbac_role_grants (role_id, resource, verb, scope) VALUES (?, ?, ?, ?)')
+          .bind(roleId, p.resource, p.verb, scope)
       )
     }
     await this.db.batch(stmts)

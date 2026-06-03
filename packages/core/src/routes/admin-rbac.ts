@@ -12,7 +12,7 @@
  *   GET  /admin/rbac/check           → can(role|me, resource, verb)
  */
 import { Hono } from 'hono'
-import { RbacService } from '../services/rbac'
+import { RbacService, type PermissionScope } from '../services/rbac'
 import { renderAdminLayoutCatalyst } from '../templates/layouts/admin-layout-catalyst.template'
 import { getCoreVersion } from '../utils/version'
 import { requireRbac } from '../middleware/auth'
@@ -47,11 +47,13 @@ adminRbacRoutes.get('/', async (c) => {
   const selectedIds = hasCompareSelection ? requested : roles.map((r) => r.id)
   const selectedRoles = roles.filter((r) => selectedIds.includes(r.id))
   const isAdmin = (r: { name: string }) => r.name === 'admin'
-  const grantsByRole = new Map<string, Set<string>>()
-  for (const r of roles) grantsByRole.set(r.id, new Set())
-  for (const g of grants) grantsByRole.get(g.role_id)?.add(`${g.resource}|${g.verb}`)
-  const cellChecked = (role: { id: string; name: string }, res: string, verb: string) =>
-    isAdmin(role) || grantsByRole.get(role.id)?.has(`${res}|${verb}`)
+  const grantsByRole = new Map<string, Map<string, Exclude<PermissionScope, 'none'>>>()
+  for (const r of roles) grantsByRole.set(r.id, new Map())
+  for (const g of grants) grantsByRole.get(g.role_id)?.set(`${g.resource}|${g.verb}`, g.scope || 'any')
+  const cellScope = (role: { id: string; name: string }, res: string, verb: string): PermissionScope =>
+    isAdmin(role) ? 'any' : grantsByRole.get(role.id)?.get(`${res}|${verb}`) || 'none'
+  const supportsOwnScope = (res: string, verb: string) =>
+    (res === 'content' || res.startsWith('collection:')) && ['read', 'update', 'delete'].includes(verb)
 
   // System roles keep predictable colors. Custom roles get generated colors by
   // their current role order so they do not collide with each other.
@@ -81,7 +83,7 @@ adminRbacRoutes.get('/', async (c) => {
   }
   const roleStyle = (seed: string, extra = '') => `style="${roleTone(seed)};${extra}"`
 
-  const cellBox = 'h-4 w-4 rounded border-zinc-400 dark:border-white/20 bg-white dark:bg-white/5 focus:ring-2'
+  const scopeSelect = 'rounded-md bg-white dark:bg-white/5 px-1.5 py-1 text-[11px] text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15 focus:ring-2'
 
   // Two-level header: verb groups, each split into a sub-column per selected role.
   const headRow1 = verbs
@@ -117,18 +119,25 @@ adminRbacRoutes.get('/', async (c) => {
           selectedRoles
             .map((r, i) => {
               const key = `g|${r.id}|${res.key}|${v.name}`
-              const on = cellChecked(r, res.key, v.name) ? 'checked' : ''
+              const scope = cellScope(r, res.key, v.name)
               const dis = isAdmin(r) ? 'disabled' : ''
+              const ownOption = supportsOwnScope(res.key, v.name)
+                ? `<option value="own" ${scope === 'own' ? 'selected' : ''}>Own</option>`
+                : ''
               return `<td class="px-2 py-1.5 text-center ${
                 i === 0 ? 'border-l border-zinc-950/5 dark:border-white/5' : ''
               }" ${roleStyle(
                 r.id,
                 'background:var(--role-bg);border-color:var(--role-border);'
-              )}><input type="checkbox" class="${cellBox}" style="accent-color:var(--role-color);--tw-ring-color:var(--role-ring);" name="${esc(
+              )}><select class="${scopeSelect}" style="--tw-ring-color:var(--role-ring);" name="${esc(
                 key
               )}" data-role="${esc(r.id)}" data-res="${esc(res.key)}" data-verb="${esc(
                 v.name
-              )}" ${on} ${dis}></td>`
+              )}" ${dis}>
+                <option value="none" ${scope === 'none' ? 'selected' : ''}>None</option>
+                ${ownOption}
+                <option value="any" ${scope === 'any' ? 'selected' : ''}>Any</option>
+              </select></td>`
             })
             .join('')
         )
@@ -226,7 +235,7 @@ adminRbacRoutes.get('/', async (c) => {
 
   const content = `
   ${TABS}
-  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Tick roles to compare them side by side — each selected role becomes its own column under every verb. Every collection is a resource automatically. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
+  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
 
   <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
     <input type="hidden" name="compare" value="1">
@@ -293,19 +302,19 @@ adminRbacRoutes.get('/', async (c) => {
   </div>
 
   <script>
-    // "All resources" cascade — per role column: checking a verb on the '*' row
+    // "All resources" cascade — per role column: choosing Any on the '*' row
     // selects (and locks) that role's whole verb column.
     function applyCascade(master){
-      var sel='input[data-role="'+master.dataset.role+'"][data-verb="'+master.dataset.verb+'"]';
-      document.querySelectorAll(sel).forEach(function(cb){
-        if(cb===master) return;
-        if(master.checked){ cb.checked=true; cb.disabled=true; }
-        else { cb.disabled=false; }
+      var sel='select[data-role="'+master.dataset.role+'"][data-verb="'+master.dataset.verb+'"]';
+      document.querySelectorAll(sel).forEach(function(field){
+        if(field===master) return;
+        if(master.value !== 'none'){ field.value=master.value; field.disabled=true; }
+        else { field.disabled=false; }
       });
     }
-    document.querySelectorAll('input[data-res="*"]').forEach(function(master){
+    document.querySelectorAll('select[data-res="*"]').forEach(function(master){
       master.addEventListener('change', function(){ applyCascade(master); });
-      if(master.checked && !master.disabled) applyCascade(master);
+      if(master.value !== 'none' && !master.disabled) applyCascade(master);
     });
     var out=document.getElementById('out');
     function j(u){fetch(u,{credentials:'include'}).then(function(r){return r.text().then(function(t){out.textContent=r.status+' '+u+'\\n'+t;});});}
@@ -332,8 +341,8 @@ adminRbacRoutes.post('/grants', async (c) => {
   const saveRoleIds = String(form.get('save_roles') || '').split(',').filter(Boolean)
   const viewRoleIds = form.getAll('view_roles').map((v) => String(v))
 
-  // Collect checked cells per role: key = g|<roleId>|<resource>|<verb>
-  const pairsByRole = new Map<string, Array<{ resource: string; verb: string }>>()
+  // Collect scoped cells per role: key = g|<roleId>|<resource>|<verb>, value = none|own|any
+  const pairsByRole = new Map<string, Array<{ resource: string; verb: string; scope: Exclude<PermissionScope, 'none'> }>>()
   for (const id of saveRoleIds) pairsByRole.set(id, [])
   for (const key of form.keys()) {
     if (!key.startsWith('g|')) continue
@@ -342,8 +351,9 @@ adminRbacRoutes.post('/grants', async (c) => {
     const roleId = parts[1]!
     const verb = parts[parts.length - 1]!
     const resource = parts.slice(2, -1).join('|')
-    if (pairsByRole.has(roleId) && resource && verb) {
-      pairsByRole.get(roleId)!.push({ resource, verb })
+    const scope = String(form.get(key) || 'none')
+    if (pairsByRole.has(roleId) && resource && verb && (scope === 'own' || scope === 'any')) {
+      pairsByRole.get(roleId)!.push({ resource, verb, scope })
     }
   }
 
@@ -415,18 +425,20 @@ adminRbacRoutes.get('/check', async (c) => {
     // Check a specific role by testing a synthetic membership.
     const grants = await rbac.getGrants()
     const roleGrants = grants.filter((g) => g.role_id === roleId)
-    const allowed = roleGrants.some(
-      (g) =>
+    const matchingScopes = roleGrants
+      .filter((g) =>
         (g.resource === '*' ||
           g.resource === resource ||
           (g.resource === 'collection:*' && resource.startsWith('collection:'))) &&
         (g.verb === '*' || g.verb === verb || g.verb === 'manage')
-    )
-    return c.json({ role: roleId, resource, verb, allowed })
+      )
+      .map((g) => g.scope || 'any')
+    const scope = matchingScopes.includes('any') ? 'any' : matchingScopes.includes('own') ? 'own' : 'none'
+    return c.json({ role: roleId, resource, verb, allowed: scope !== 'none', scope })
   }
   const user = c.get('user') as { userId: string } | undefined
   if (!user) return c.json({ error: 'not signed in' }, 401)
-  const allowed = await rbac.can(user.userId, resource, verb)
+  const scope = await rbac.getPermissionScope(user.userId, resource, verb)
   const perms = await rbac.permissionsForUser(user.userId)
-  return c.json({ user: user.userId, resource, verb, allowed, permissions: perms })
+  return c.json({ user: user.userId, resource, verb, allowed: scope !== 'none', scope, permissions: perms })
 })

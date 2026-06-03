@@ -1770,6 +1770,13 @@ SELECT 1;
     filename: "039_portal_access.sql",
     description: "Migration 039: Portal Access",
     sql: "-- Portal access migrates backend entry from the legacy users.role string to\n-- dynamic RBAC. A user can enter /admin/* if any assigned RBAC role grants\n-- portal:access.\n\nINSERT OR IGNORE INTO rbac_verbs (id, name, description, is_system, sort_order) VALUES\n  ('verb-access','access','Enter or use a portal/resource',1,5);\n\n-- Admin already has *:manage, which implies portal:access. Keep an explicit\n-- grant too so the matrix makes backend entry easy to see and reason about.\nINSERT OR IGNORE INTO rbac_role_grants (role_id, resource, verb) VALUES\n  ('role-admin','portal','access'),\n  ('role-admin','rbac','manage'),\n  ('role-admin','collections','manage'),\n  ('role-admin','email','manage'),\n  ('role-admin','users','manage');\n"
+  },
+  {
+    id: "040",
+    name: "Rbac Permission Scopes",
+    filename: "040_rbac_permission_scopes.sql",
+    description: "Migration 040: Rbac Permission Scopes",
+    sql: "-- Add constrained permission scopes to RBAC grants.\n--\n-- Existing grants become `any`, preserving current behavior. New grants can use\n-- `own` for content/collection read, update, and delete checks where ownership\n-- is enforced against content.author_id.\n\nALTER TABLE rbac_role_grants ADD COLUMN scope TEXT NOT NULL DEFAULT 'any';\n\nUPDATE rbac_role_grants\nSET scope = 'any'\nWHERE scope IS NULL OR scope = '';\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2234,5 +2241,5 @@ var MigrationService = class {
 };
 
 export { MigrationService };
-//# sourceMappingURL=chunk-4UD2DDO4.js.map
-//# sourceMappingURL=chunk-4UD2DDO4.js.map
+//# sourceMappingURL=chunk-SR4PENQD.js.map
+//# sourceMappingURL=chunk-SR4PENQD.js.map

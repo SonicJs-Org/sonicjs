@@ -49,40 +49,30 @@ adminRbacRoutes.get('/', async (c) => {
   const cellChecked = (role: { id: string; name: string }, res: string, verb: string) =>
     isAdmin(role) || grantsByRole.get(role.id)?.has(`${res}|${verb}`)
 
-  // Deterministic per-role color used for that role's
-  // comparison column — pill, sub-header, and cell tint/checkbox accent.
-  const ROLE_PALETTE = [
-    '#f59e0b', '#38bdf8', '#a78bfa', '#f472b6', '#34d399',
-    '#fb7185', '#facc15', '#818cf8', '#2dd4bf', '#fb923c',
-  ]
-  const roleColorIndex = (seed: string) => {
-    let h = 0
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-    return h % ROLE_PALETTE.length
+  // System roles keep predictable colors. Custom roles get generated colors by
+  // their current role order so they do not collide with each other.
+  const SYSTEM_ROLE_COLORS: Record<string, string> = {
+    admin: 'hsl(45 94% 54%)',
+    editor: 'hsl(199 89% 60%)',
+    author: 'hsl(258 90% 76%)',
+    viewer: 'hsl(160 64% 52%)',
   }
+  const customRoleColor = (index: number) => `hsl(${Math.round((315 + index * 137.508) % 360)} 82% 58%)`
   const assignedRoleColors = new Map<string, string>()
-  roles.forEach((role, roleIndex) => {
-    let paletteIndex = roleColorIndex(role.id)
-    while (
-      assignedRoleColors.size < ROLE_PALETTE.length &&
-      [...assignedRoleColors.values()].includes(ROLE_PALETTE[paletteIndex]!)
-    ) {
-      paletteIndex = (paletteIndex + 1) % ROLE_PALETTE.length
-    }
-    assignedRoleColors.set(role.id, ROLE_PALETTE[paletteIndex] || ROLE_PALETTE[roleIndex % ROLE_PALETTE.length]!)
+  let customRoleIndex = 0
+  roles.forEach((role) => {
+    const color = SYSTEM_ROLE_COLORS[role.name] || customRoleColor(customRoleIndex++)
+    assignedRoleColors.set(role.id, color)
   })
-  const roleColor = (seed: string) => {
-    return assignedRoleColors.get(seed) || ROLE_PALETTE[roleColorIndex(seed)]!
-  }
+  const roleColor = (seed: string) => assignedRoleColors.get(seed) || customRoleColor(0)
   const roleTone = (seed: string) => {
-    const hex = roleColor(seed)
-    const rgb = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(', ')
+    const color = roleColor(seed)
     return [
-      `--role-color:${hex}`,
-      `--role-bg:rgba(${rgb},0.10)`,
-      `--role-bg-strong:rgba(${rgb},0.18)`,
-      `--role-border:rgba(${rgb},0.45)`,
-      `--role-ring:rgba(${rgb},0.28)`,
+      `--role-color:${color}`,
+      `--role-bg:${color.replace(')', ' / 0.10)')}`,
+      `--role-bg-strong:${color.replace(')', ' / 0.18)')}`,
+      `--role-border:${color.replace(')', ' / 0.45)')}`,
+      `--role-ring:${color.replace(')', ' / 0.28)')}`,
     ].join(';')
   }
   const roleStyle = (seed: string, extra = '') => `style="${roleTone(seed)};${extra}"`

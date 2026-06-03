@@ -1,16 +1,16 @@
 import { createAuth } from './chunk-FCOOEYJ2.js';
-import { RbacService, getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-E2YYDZ6Y.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-E2YYDZ6Y.js';
+import { RbacService, getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-DX3UOMQQ.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-DX3UOMQQ.js';
 import './chunk-F2IDJF3K.js';
 import { SettingsService, setAppInstance } from './chunk-HFKY2PR7.js';
 export { Logger, getLogger, initLogger } from './chunk-HFKY2PR7.js';
 import { schema_exports } from './chunk-4LLMM7J6.js';
 export { apiTokens, collections, content, contentVersions, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-4LLMM7J6.js';
-import { requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection, requireRole } from './chunk-J7VZ5MPN.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-J7VZ5MPN.js';
-import { PluginService, PLUGIN_REGISTRY } from './chunk-2HVVLO3K.js';
-export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-2HVVLO3K.js';
-export { MigrationService } from './chunk-WRN7FLF4.js';
+import { requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection, requireRole } from './chunk-YKWDUC4Z.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-YKWDUC4Z.js';
+import { PluginService, PLUGIN_REGISTRY } from './chunk-PKYWNF5S.js';
+export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-PKYWNF5S.js';
+export { MigrationService } from './chunk-SGBRLXFT.js';
 export { renderFilterBar } from './chunk-ON5ZMSU4.js';
 import { renderAdminLayout } from './chunk-XWIA3HVX.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-XWIA3HVX.js';
@@ -56,43 +56,28 @@ adminRbacRoutes.get("/", async (c) => {
   for (const r of roles) grantsByRole.set(r.id, /* @__PURE__ */ new Set());
   for (const g of grants) grantsByRole.get(g.role_id)?.add(`${g.resource}|${g.verb}`);
   const cellChecked = (role, res, verb) => isAdmin(role) || grantsByRole.get(role.id)?.has(`${res}|${verb}`);
-  const ROLE_PALETTE = [
-    "#f59e0b",
-    "#38bdf8",
-    "#a78bfa",
-    "#f472b6",
-    "#34d399",
-    "#fb7185",
-    "#facc15",
-    "#818cf8",
-    "#2dd4bf",
-    "#fb923c"
-  ];
-  const roleColorIndex = (seed) => {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) h = h * 31 + seed.charCodeAt(i) >>> 0;
-    return h % ROLE_PALETTE.length;
+  const SYSTEM_ROLE_COLORS = {
+    admin: "hsl(45 94% 54%)",
+    editor: "hsl(199 89% 60%)",
+    author: "hsl(258 90% 76%)",
+    viewer: "hsl(160 64% 52%)"
   };
+  const customRoleColor = (index) => `hsl(${Math.round((315 + index * 137.508) % 360)} 82% 58%)`;
   const assignedRoleColors = /* @__PURE__ */ new Map();
-  roles.forEach((role, roleIndex) => {
-    let paletteIndex = roleColorIndex(role.id);
-    while (assignedRoleColors.size < ROLE_PALETTE.length && [...assignedRoleColors.values()].includes(ROLE_PALETTE[paletteIndex])) {
-      paletteIndex = (paletteIndex + 1) % ROLE_PALETTE.length;
-    }
-    assignedRoleColors.set(role.id, ROLE_PALETTE[paletteIndex] || ROLE_PALETTE[roleIndex % ROLE_PALETTE.length]);
+  let customRoleIndex = 0;
+  roles.forEach((role) => {
+    const color = SYSTEM_ROLE_COLORS[role.name] || customRoleColor(customRoleIndex++);
+    assignedRoleColors.set(role.id, color);
   });
-  const roleColor = (seed) => {
-    return assignedRoleColors.get(seed) || ROLE_PALETTE[roleColorIndex(seed)];
-  };
+  const roleColor = (seed) => assignedRoleColors.get(seed) || customRoleColor(0);
   const roleTone = (seed) => {
-    const hex = roleColor(seed);
-    const rgb = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(", ");
+    const color = roleColor(seed);
     return [
-      `--role-color:${hex}`,
-      `--role-bg:rgba(${rgb},0.10)`,
-      `--role-bg-strong:rgba(${rgb},0.18)`,
-      `--role-border:rgba(${rgb},0.45)`,
-      `--role-ring:rgba(${rgb},0.28)`
+      `--role-color:${color}`,
+      `--role-bg:${color.replace(")", " / 0.10)")}`,
+      `--role-bg-strong:${color.replace(")", " / 0.18)")}`,
+      `--role-border:${color.replace(")", " / 0.45)")}`,
+      `--role-ring:${color.replace(")", " / 0.28)")}`
     ].join(";");
   };
   const roleStyle = (seed, extra = "") => `style="${roleTone(seed)};${extra}"`;

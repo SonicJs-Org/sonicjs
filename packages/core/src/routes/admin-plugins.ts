@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { requireAuth } from '../middleware'
+import { RbacService } from '../services/rbac'
 import { renderPluginsListPage, PluginsListPageData, Plugin } from '../templates/pages/admin-plugins-list.template'
 import { renderPluginSettingsPage, PluginSettingsPageData } from '../templates/pages/admin-plugin-settings.template'
 import { SettingsService } from '../services/settings'
@@ -37,7 +38,7 @@ adminPluginRoutes.get('/', async (c) => {
 
     // Temporarily skip permission check for admin users
     // TODO: Fix permission system
-    if (user?.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'plugins', 'manage'))) {
       return c.text('Access denied', 403)
     }
 
@@ -132,7 +133,7 @@ adminPluginRoutes.get('/:id', async (c) => {
     const pluginId = c.req.param('id')
 
     // Check authorization first
-    if (user?.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'plugins', 'manage'))) {
       return c.redirect('/admin/plugins')
     }
 
@@ -230,7 +231,7 @@ adminPluginRoutes.post('/:id/activate', async (c) => {
     const pluginId = c.req.param('id')
 
     // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'plugins', 'manage'))) {
       return c.json({ error: 'Access denied' }, 403)
     }
 
@@ -253,7 +254,7 @@ adminPluginRoutes.post('/:id/deactivate', async (c) => {
     const pluginId = c.req.param('id')
 
     // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'plugins', 'manage'))) {
       return c.json({ error: 'Access denied' }, 403)
     }
 
@@ -276,7 +277,7 @@ adminPluginRoutes.post('/install', async (c) => {
     const db = c.env.DB
 
     // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'plugins', 'manage'))) {
       return c.json({ error: 'Access denied' }, 403)
     }
 
@@ -324,7 +325,7 @@ adminPluginRoutes.post('/:id/uninstall', async (c) => {
     const pluginId = c.req.param('id')
 
     // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'plugins', 'manage'))) {
       return c.json({ error: 'Access denied' }, 403)
     }
 
@@ -347,7 +348,7 @@ adminPluginRoutes.post('/:id/settings', async (c) => {
     const pluginId = c.req.param('id')
 
     // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'plugins', 'manage'))) {
       return c.json({ error: 'Access denied' }, 403)
     }
 

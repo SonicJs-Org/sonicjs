@@ -1,7 +1,7 @@
 'use strict';
 
-var chunkZYSGMXTP_cjs = require('./chunk-ZYSGMXTP.cjs');
-var chunkQC75BHUL_cjs = require('./chunk-QC75BHUL.cjs');
+var chunk4DEQTGFX_cjs = require('./chunk-4DEQTGFX.cjs');
+var chunkOAP7DTE3_cjs = require('./chunk-OAP7DTE3.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var jwt = require('hono/jwt');
 var cookie = require('hono/cookie');
@@ -57,23 +57,23 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new chunkQC75BHUL_cjs.MigrationService(c.env.DB);
+      const migrationService = new chunkOAP7DTE3_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await chunkZYSGMXTP_cjs.syncCollections(c.env.DB);
+        await chunk4DEQTGFX_cjs.syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
       console.log("[Bootstrap] Syncing form collections...");
       try {
-        await chunkZYSGMXTP_cjs.syncAllFormCollections(c.env.DB);
+        await chunk4DEQTGFX_cjs.syncAllFormCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing form collections:", error);
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new chunkZYSGMXTP_cjs.PluginBootstrapService(c.env.DB);
+        const bootstrapService = new chunk4DEQTGFX_cjs.PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -884,5 +884,5 @@ exports.securityHeadersMiddleware = securityHeadersMiddleware;
 exports.securityLoggingMiddleware = securityLoggingMiddleware;
 exports.validateCsrfToken = validateCsrfToken;
 exports.verifySecurityConfig = verifySecurityConfig;
-//# sourceMappingURL=chunk-HEDYEDSN.cjs.map
-//# sourceMappingURL=chunk-HEDYEDSN.cjs.map
+//# sourceMappingURL=chunk-7I53TVU3.cjs.map
+//# sourceMappingURL=chunk-7I53TVU3.cjs.map

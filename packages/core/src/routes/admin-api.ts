@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 // import { zValidator } from '@hono/zod-validator'
 import { requireAuth, requireRbac } from '../middleware'
+import { RbacService } from '../services/rbac'
 import type { Bindings, Variables } from '../app'
 
 export const adminApiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -703,8 +704,8 @@ adminApiRoutes.post('/migrations/run', async (c) => {
   try {
     const user = c.get('user')
 
-    // Only allow admin users to run migrations
-    if (!user || user.role !== 'admin') {
+    // Only allow users with settings management permission to run migrations
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
       return c.json({
         success: false,
         error: 'Unauthorized. Admin access required.'

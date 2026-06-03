@@ -1,16 +1,16 @@
 import { createAuth } from './chunk-YJTW5F2Z.js';
-import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-QWBLFOYH.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-QWBLFOYH.js';
+import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-WI7WY555.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-WI7WY555.js';
 import './chunk-F2IDJF3K.js';
 import { SettingsService, setAppInstance } from './chunk-HFKY2PR7.js';
 export { Logger, getLogger, initLogger } from './chunk-HFKY2PR7.js';
 import { schema_exports } from './chunk-4LLMM7J6.js';
 export { apiTokens, collections, content, contentVersions, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-4LLMM7J6.js';
-import { requireRbac, RbacService, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-L4MNJOET.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-L4MNJOET.js';
-import { PluginService, PLUGIN_REGISTRY } from './chunk-ML3OU36L.js';
-export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-ML3OU36L.js';
-export { MigrationService } from './chunk-SR4PENQD.js';
+import { requireRbac, RbacService, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-S7MITJRU.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-S7MITJRU.js';
+import { PluginService, PLUGIN_REGISTRY } from './chunk-X66O7MT4.js';
+export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-X66O7MT4.js';
+export { MigrationService } from './chunk-A2KOHXF2.js';
 export { renderFilterBar } from './chunk-ON5ZMSU4.js';
 import { renderAdminLayout } from './chunk-XWIA3HVX.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-XWIA3HVX.js';
@@ -898,7 +898,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -922,7 +922,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.post("/api/truncate", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -959,7 +959,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.post("/api/backup", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -986,7 +986,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.get("/api/validate", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -1010,7 +1010,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.get("/api/tables/:tableName", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -1039,7 +1039,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.get("/tables/:tableName", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.redirect("/admin/login");
       }
       const tableName = c.req.param("tableName");
@@ -5965,7 +5965,7 @@ var adminRoutes2 = new Hono();
 adminRoutes2.use("*", requireAuth());
 adminRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.text("Access denied", 403);
   }
   return next();
@@ -6241,7 +6241,7 @@ var apiRoutes2 = new Hono();
 apiRoutes2.use("*", requireAuth());
 apiRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.json({ error: "Access denied" }, 403);
   }
   return next();
@@ -7409,7 +7409,7 @@ var adminRoutes3 = new Hono();
 adminRoutes3.use("*", requireAuth());
 adminRoutes3.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.text("Access denied", 403);
   }
   return next();
@@ -7943,7 +7943,7 @@ apiRoutes3.get("/subscription", requireAuth(), async (c) => {
 });
 apiRoutes3.get("/subscriptions", requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const subscriptionService = new SubscriptionService(db);
   await subscriptionService.ensureTable();
@@ -7959,7 +7959,7 @@ apiRoutes3.get("/subscriptions", requireAuth(), async (c) => {
 });
 apiRoutes3.get("/stats", requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const subscriptionService = new SubscriptionService(db);
   await subscriptionService.ensureTable();
@@ -7968,7 +7968,7 @@ apiRoutes3.get("/stats", requireAuth(), async (c) => {
 });
 apiRoutes3.post("/sync-subscriptions", requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const settings = await getSettings4(db);
   if (!settings.stripeSecretKey) {
@@ -8016,7 +8016,7 @@ apiRoutes3.post("/sync-subscriptions", requireAuth(), async (c) => {
 });
 apiRoutes3.get("/events", requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const eventService = new StripeEventService(db);
   await eventService.ensureTable();
@@ -8182,7 +8182,7 @@ var adminRoutes4 = new Hono();
 adminRoutes4.use("*", requireAuth());
 adminRoutes4.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.text("Access denied", 403);
   }
   return next();
@@ -8806,7 +8806,7 @@ apiRoutes4.post("/", async (c) => {
 });
 apiRoutes4.get("/", async (c) => {
   const user = c.get("user");
-  if (!user || user.role !== "admin") {
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.json({ error: "Admin access required" }, 403);
   }
   const db = c.env.DB;
@@ -8826,7 +8826,7 @@ apiRoutes4.get("/", async (c) => {
 });
 apiRoutes4.get("/stats", async (c) => {
   const user = c.get("user");
-  if (!user || user.role !== "admin") {
+  if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.json({ error: "Admin access required" }, 403);
   }
   const db = c.env.DB;

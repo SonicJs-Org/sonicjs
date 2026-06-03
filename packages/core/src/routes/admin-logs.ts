@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { html } from 'hono/html'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { requireAuth } from '../middleware'
+import { RbacService } from '../services/rbac'
 import { getLogger, type LogLevel, type LogCategory, type LogFilter } from '../services'
 import { renderLogsListPage, type LogsListPageData } from '../templates/pages/admin-logs-list.template'
 import { renderLogDetailsPage, type LogDetailsPageData } from '../templates/pages/admin-log-details.template'
@@ -308,7 +309,7 @@ adminLogsRoutes.post('/cleanup', async (c) => {
     const user = c.get('user')
     
     // Only allow admin users to run cleanup
-    if (!user || user.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
       return c.json({ 
         success: false, 
         error: 'Unauthorized. Admin access required.' 

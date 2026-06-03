@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { requireAuth } from '../../../../middleware'
+import { RbacService } from '../../../../services/rbac'
 import { renderAdminLayoutCatalyst } from '../../../../templates/layouts/admin-layout-catalyst.template'
 import type { Bindings, Variables } from '../../../../app'
 
@@ -9,7 +10,7 @@ adminRoutes.use('*', requireAuth())
 
 adminRoutes.use('*', async (c, next) => {
   const user = c.get('user')
-  if (user?.role !== 'admin') {
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
     return c.text('Access denied', 403)
   }
   return next()

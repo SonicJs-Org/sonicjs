@@ -712,6 +712,31 @@ authRoutes.post('/login/form',
 })
 
 // Test seeding endpoint (only for development/testing)
+/**
+ * Ensure a Better Auth `credential` account row exists for a user, holding the
+ * given password hash. Better Auth authenticates against `account.password`
+ * (not `users.password_hash`), so any user created outside the BA sign-up flow
+ * (e.g. the seed-admin endpoint) needs this row or sign-in fails. Idempotent:
+ * the row id mirrors migration 037's backfill (`cred-<userId>`), so this updates
+ * in place if the migration already created it. The legacy-PBKDF2 verify hook in
+ * auth/config.ts upgrades a pbkdf2 hash to scrypt on first successful login.
+ */
+async function ensureCredentialAccount(
+  db: D1Database,
+  userId: string,
+  passwordHash: string
+): Promise<void> {
+  const now = Date.now()
+  await db
+    .prepare(
+      `INSERT INTO account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+       VALUES (?, ?, ?, 'credential', ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET password = excluded.password, updated_at = excluded.updated_at`
+    )
+    .bind(`cred-${userId}`, userId, userId, passwordHash, now, now)
+    .run()
+}
+
 authRoutes.post('/seed-admin',
   rateLimit({ max: 10, windowMs: 60 * 1000, keyPrefix: 'seed-admin' }),
   async (c) => {
@@ -747,6 +772,11 @@ authRoutes.post('/seed-admin',
       await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
         .bind(passwordHash, Date.now(), existingAdmin.id)
         .run()
+      // Better Auth verifies credentials against the `account` table, not
+      // users.password_hash. Mirror migration 037's backfill so a runtime-seeded
+      // admin can actually sign in (the legacy-PBKDF2 verify hook in
+      // auth/config.ts upgrades this to scrypt on first login).
+      await ensureCredentialAccount(db, String(existingAdmin.id), passwordHash)
       await db.prepare(
         'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
       )
@@ -788,13 +818,16 @@ authRoutes.post('/seed-admin',
       now
     ).run()
 
+    // Create the Better Auth credential account so the seeded admin can sign in.
+    await ensureCredentialAccount(db, userId, passwordHash)
+
     await db.prepare(
       'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
     )
       .bind(userId, 'admin')
       .run()
-    
-    return c.json({ 
+
+    return c.json({
       message: 'Admin user created successfully',
       user: {
         id: userId,

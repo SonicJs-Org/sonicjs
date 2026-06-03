@@ -9,6 +9,14 @@ vi.mock('../middleware', () => ({
   }
 }))
 
+// Settings routes now gate on RBAC (`settings:manage`) rather than the legacy
+// `user.role === 'admin'` string. The mock user is an admin, so allow.
+vi.mock('../services/rbac', () => ({
+  RbacService: class {
+    can = async () => true
+  }
+}))
+
 // Mock dependencies that aren't relevant to the truncate test
 vi.mock('../templates/pages/admin-settings.template', () => ({
   renderSettingsPage: () => '<html></html>'

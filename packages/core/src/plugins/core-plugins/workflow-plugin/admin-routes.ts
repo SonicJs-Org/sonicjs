@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { WorkflowEngine } from './services/workflow-service'
 import { SchedulerService } from './services/scheduler'
+import { RbacService } from '../../../services/rbac'
 import { renderWorkflowDashboard } from './templates/workflow-dashboard'
 import { renderWorkflowContentDetail } from './templates/workflow-content'
 import { renderScheduledContent } from './templates/scheduled-content'
@@ -37,7 +38,7 @@ export function createWorkflowAdminRoutes() {
     }
 
     // Check permissions (simplified for now - assume admin has all permissions)
-    if (user.role !== 'admin') {
+    if (!(await new RbacService(c.env.DB).can(user.userId, 'content', 'manage'))) {
       return c.text('Forbidden', 403)
     }
 

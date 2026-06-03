@@ -3,6 +3,7 @@ import { html, raw } from 'hono/html'
 import { z } from 'zod'
 import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-types'
 import { requireAuth, requireRbac } from '../middleware'
+import { RbacService } from '../services/rbac'
 import { renderMediaLibraryPage, MediaLibraryPageData, FolderStats, TypeStats } from '../templates/pages/admin-media-library.template'
 import { renderMediaFileDetails, MediaFileDetailsData } from '../templates/components/media-file-details.template'
 import { MediaFile, renderMediaFileCard } from '../templates/components/media-grid.template'
@@ -677,8 +678,9 @@ adminMediaRoutes.put('/:id', async (c) => {
       `)
     }
 
-    // Check permissions (only allow updates by uploader or admin)
-    if (fileRecord.uploaded_by !== user!.userId && user!.role !== 'admin') {
+    // Check permissions: uploader can always update their own; otherwise
+    // requires media:update with 'any' scope (the RBAC successor to admin).
+    if (fileRecord.uploaded_by !== user!.userId && (await new RbacService(c.env.DB).getPermissionScope(user!.userId, 'media', 'update')) !== 'any') {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -851,8 +853,9 @@ adminMediaRoutes.delete('/:id', async (c) => {
       `)
     }
 
-    // Check permissions (only allow deletion by uploader or admin)
-    if (fileRecord.uploaded_by !== user!.userId && user!.role !== 'admin') {
+    // Check permissions: uploader can always delete their own; otherwise
+    // requires media:delete with 'any' scope (the RBAC successor to admin).
+    if (fileRecord.uploaded_by !== user!.userId && (await new RbacService(c.env.DB).getPermissionScope(user!.userId, 'media', 'delete')) !== 'any') {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied

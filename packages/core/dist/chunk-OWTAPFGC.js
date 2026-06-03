@@ -1,8 +1,8 @@
 import { isFirstUserRegistration, isRegistrationEnabled, authValidationService } from './chunk-F2IDJF3K.js';
 import { getCacheService, CACHE_CONFIGS, SettingsService, getLogger, getAppInstance, buildRouteList, CATEGORY_INFO } from './chunk-HFKY2PR7.js';
-import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, RbacService, logActivity, generateCsrfToken } from './chunk-L4MNJOET.js';
-import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-ML3OU36L.js';
-import { MigrationService } from './chunk-SR4PENQD.js';
+import { requireAuth, requireRbac, isPluginActive, optionalAuth, RbacService, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, logActivity, generateCsrfToken } from './chunk-YM4EQL3V.js';
+import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-X66O7MT4.js';
+import { MigrationService } from './chunk-M6HRDMUA.js';
 import { renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-XWIA3HVX.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-55RDMDOP.js';
 import { PluginBuilder, TurnstileService } from './chunk-EXNEW5US.js';
@@ -1433,7 +1433,7 @@ apiMediaRoutes.post("/bulk-delete", async (c) => {
           });
           continue;
         }
-        if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
+        if (fileRecord.uploaded_by !== user.userId && await new RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
           errors.push({ fileId, error: "Permission denied" });
           continue;
         }
@@ -1533,7 +1533,7 @@ apiMediaRoutes.post("/bulk-move", async (c) => {
           errors.push({ fileId, error: "File not found" });
           continue;
         }
-        if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
+        if (fileRecord.uploaded_by !== user.userId && await new RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
           errors.push({ fileId, error: "Permission denied" });
           continue;
         }
@@ -1624,7 +1624,7 @@ apiMediaRoutes.delete("/:id", async (c) => {
     if (!fileRecord) {
       return c.json({ error: "File not found" }, 404);
     }
-    if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
+    if (fileRecord.uploaded_by !== user.userId && await new RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
       return c.json({ error: "Permission denied" }, 403);
     }
     try {
@@ -1651,7 +1651,7 @@ apiMediaRoutes.patch("/:id", async (c) => {
     if (!fileRecord) {
       return c.json({ error: "File not found" }, 404);
     }
-    if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
+    if (fileRecord.uploaded_by !== user.userId && await new RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
       return c.json({ error: "Permission denied" }, 403);
     }
     const allowedFields = ["alt", "caption", "tags", "folder"];
@@ -2395,7 +2395,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-7W7U5GBA.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-XYY7OKUY.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2414,13 +2414,13 @@ adminApiRoutes.get("/migrations/status", async (c) => {
 adminApiRoutes.post("/migrations/run", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || user.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-7W7U5GBA.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-XYY7OKUY.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2442,7 +2442,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-7W7U5GBA.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-XYY7OKUY.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -5649,6 +5649,14 @@ authRoutes.post(
     }
   }
 );
+async function ensureCredentialAccount(db, userId, passwordHash) {
+  const now = Date.now();
+  await db.prepare(
+    `INSERT INTO account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+       VALUES (?, ?, ?, 'credential', ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET password = excluded.password, updated_at = excluded.updated_at`
+  ).bind(`cred-${userId}`, userId, userId, passwordHash, now, now).run();
+}
 authRoutes.post(
   "/seed-admin",
   rateLimit({ max: 10, windowMs: 60 * 1e3, keyPrefix: "seed-admin" }),
@@ -5675,6 +5683,7 @@ authRoutes.post(
       if (existingAdmin) {
         const passwordHash2 = await AuthManager.hashPassword("sonicjs!");
         await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
+        await ensureCredentialAccount(db, String(existingAdmin.id), passwordHash2);
         await db.prepare(
           "INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?"
         ).bind(existingAdmin.id, "admin").run();
@@ -5708,6 +5717,7 @@ authRoutes.post(
         now,
         now
       ).run();
+      await ensureCredentialAccount(db, userId, passwordHash);
       await db.prepare(
         "INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?"
       ).bind(userId, "admin").run();
@@ -16109,7 +16119,7 @@ adminMediaRoutes.put("/:id", async (c) => {
         </div>
       `);
     }
-    if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
+    if (fileRecord.uploaded_by !== user.userId && await new RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -16247,7 +16257,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
         </div>
       `);
     }
-    if (fileRecord.uploaded_by !== user.userId && user.role !== "admin") {
+    if (fileRecord.uploaded_by !== user.userId && await new RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -18513,7 +18523,7 @@ adminPluginRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
     const db = c.env.DB;
-    if (user?.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.text("Access denied", 403);
     }
     const pluginService = new PluginService(db);
@@ -18585,7 +18595,7 @@ adminPluginRoutes.get("/:id", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (user?.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.redirect("/admin/plugins");
     }
     const pluginService = new PluginService(db);
@@ -18661,7 +18671,7 @@ adminPluginRoutes.post("/:id/activate", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (user?.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
     const pluginService = new PluginService(db);
@@ -18678,7 +18688,7 @@ adminPluginRoutes.post("/:id/deactivate", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (user?.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
     const pluginService = new PluginService(db);
@@ -18694,7 +18704,7 @@ adminPluginRoutes.post("/install", async (c) => {
   try {
     const user = c.get("user");
     const db = c.env.DB;
-    if (user?.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
     const body = await c.req.json();
@@ -18729,7 +18739,7 @@ adminPluginRoutes.post("/:id/uninstall", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (user?.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
     const pluginService = new PluginService(db);
@@ -18746,7 +18756,7 @@ adminPluginRoutes.post("/:id/settings", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (user?.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
     const settings = await c.req.json();
@@ -19807,7 +19817,7 @@ adminLogsRoutes.get("/export", async (c) => {
 adminLogsRoutes.post("/cleanup", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || user.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26385,7 +26395,7 @@ adminSettingsRoutes.get("/api/migrations/status", async (c) => {
 adminSettingsRoutes.post("/api/migrations/run", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || user.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26497,7 +26507,7 @@ adminSettingsRoutes.get("/api/database-tools/validate", async (c) => {
 adminSettingsRoutes.post("/api/database-tools/backup", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || user.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26518,7 +26528,7 @@ adminSettingsRoutes.post("/api/database-tools/backup", async (c) => {
 adminSettingsRoutes.post("/api/database-tools/truncate", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || user.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26571,7 +26581,7 @@ adminSettingsRoutes.post("/api/database-tools/truncate", async (c) => {
 adminSettingsRoutes.post("/general", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || user.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26617,7 +26627,7 @@ adminSettingsRoutes.post("/general", async (c) => {
 adminSettingsRoutes.post("/security", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || user.role !== "admin") {
+    if (!user || !await new RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -29587,5 +29597,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, createUserProfilesPlugin, defineUserProfile, getConfirmationDialogScript2 as getConfirmationDialogScript, getCustomData, getUserProfileConfig, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userProfilesPlugin, userRoutes };
-//# sourceMappingURL=chunk-QWBLFOYH.js.map
-//# sourceMappingURL=chunk-QWBLFOYH.js.map
+//# sourceMappingURL=chunk-OWTAPFGC.js.map
+//# sourceMappingURL=chunk-OWTAPFGC.js.map

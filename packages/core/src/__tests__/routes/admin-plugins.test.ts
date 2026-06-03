@@ -73,6 +73,15 @@ vi.mock('../../middleware', () => ({
   }
 }))
 
+// Plugin access now gates on RBAC (`plugins:manage`) instead of the legacy
+// `user.role === 'admin'` string. Drive can() from the same mockUserRole the
+// tests already toggle, so admin → allowed and non-admin → denied.
+vi.mock('../../services/rbac', () => ({
+  RbacService: class {
+    can = async () => mockUserRole === 'admin'
+  }
+}))
+
 // Mock the manifest registry so test plugin names are recognized
 vi.mock('../../plugins/manifest-registry', () => {
   const makeEntry = (id: string, codeName?: string, adminMenu?: any) => ({

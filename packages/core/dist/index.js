@@ -1,16 +1,16 @@
 import { createAuth } from './chunk-YJTW5F2Z.js';
-import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-HHZ5BEFP.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-HHZ5BEFP.js';
+import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-HDCR4S56.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-HDCR4S56.js';
 import './chunk-F2IDJF3K.js';
 import { SettingsService, setAppInstance } from './chunk-HFKY2PR7.js';
 export { Logger, getLogger, initLogger } from './chunk-HFKY2PR7.js';
 import { schema_exports } from './chunk-4LLMM7J6.js';
 export { apiTokens, collections, content, contentVersions, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-4LLMM7J6.js';
-import { requireRbac, RbacService, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-OZYARFE5.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-OZYARFE5.js';
-import { PluginService, PLUGIN_REGISTRY } from './chunk-3GHT7QEB.js';
-export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-3GHT7QEB.js';
-export { MigrationService } from './chunk-NA6DQZY7.js';
+import { requireRbac, RbacService, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-EH4ZKMP6.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-EH4ZKMP6.js';
+import { PluginService, PLUGIN_REGISTRY } from './chunk-UERXK7R7.js';
+export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-UERXK7R7.js';
+export { MigrationService } from './chunk-XXQEQP7A.js';
 export { renderFilterBar } from './chunk-ON5ZMSU4.js';
 import { renderAdminLayout } from './chunk-XWIA3HVX.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-XWIA3HVX.js';
@@ -84,7 +84,13 @@ adminRbacRoutes.get("/", async (c) => {
     ].join(";");
   };
   const roleStyle = (seed, extra = "") => `style="${roleTone(seed)};${extra}"`;
-  const scopeSelect = "rounded-md bg-white dark:bg-white/5 px-1.5 py-1 text-[11px] text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15 focus:ring-2";
+  const seg = (key, val, label, scope, disabled, roleId, resKey, verbName) => `<label class="cursor-pointer ${disabled ? "pointer-events-none" : ""}">
+      <input type="radio" class="peer sr-only" name="${esc(key)}" value="${val}" data-role="${esc(
+    roleId
+  )}" data-res="${esc(resKey)}" data-verb="${esc(verbName)}" ${scope === val ? "checked" : ""} ${disabled ? "disabled" : ""}>
+      <span class="block rounded-full px-2 py-0.5 text-zinc-500 dark:text-zinc-400 peer-checked:bg-white dark:peer-checked:bg-zinc-700 peer-checked:text-zinc-900 dark:peer-checked:text-white peer-checked:shadow-sm transition-colors">${label}</span>
+    </label>`;
+  const scopeSwitch = (key, scope, ownSupported, disabled, roleId, resKey, verbName) => `<div class="inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-white/10 p-0.5 text-[10px] font-medium ${disabled ? "opacity-60" : ""}" role="radiogroup">${seg(key, "none", "None", scope, disabled, roleId, resKey, verbName)}${ownSupported ? seg(key, "own", "Own", scope, disabled, roleId, resKey, verbName) : ""}${seg(key, "any", "Any", scope, disabled, roleId, resKey, verbName)}</div>`;
   const headRow1 = verbs.map(
     (v) => `<th colspan="${selectedRoles.length}" class="px-2 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border-l border-zinc-950/10 dark:border-white/10" title="${esc(
       v.description || ""
@@ -103,20 +109,12 @@ adminRbacRoutes.get("/", async (c) => {
       (v) => selectedRoles.map((r, i) => {
         const key = `g|${r.id}|${res.key}|${v.name}`;
         const scope = cellScope(r, res.key, v.name);
-        const dis = isAdmin(r) ? "disabled" : "";
-        const ownOption = supportsOwnScope(res.key, v.name) ? `<option value="own" ${scope === "own" ? "selected" : ""}>Own</option>` : "";
+        const dis = isAdmin(r);
+        const ownSupported = supportsOwnScope(res.key, v.name);
         return `<td class="px-2 py-1.5 text-center ${i === 0 ? "border-l border-zinc-950/5 dark:border-white/5" : ""}" ${roleStyle(
           r.id,
           "background:var(--role-bg);border-color:var(--role-border);"
-        )}><select class="${scopeSelect}" style="--tw-ring-color:var(--role-ring);" name="${esc(
-          key
-        )}" data-role="${esc(r.id)}" data-res="${esc(res.key)}" data-verb="${esc(
-          v.name
-        )}" ${dis}>
-                <option value="none" ${scope === "none" ? "selected" : ""}>None</option>
-                ${ownOption}
-                <option value="any" ${scope === "any" ? "selected" : ""}>Any</option>
-              </select></td>`;
+        )}>${scopeSwitch(key, scope, ownSupported, dis, r.id, res.key, v.name)}</td>`;
       }).join("")
     ).join("");
     const isWild = res.key === "*" || res.key === "collection:*";
@@ -230,19 +228,22 @@ adminRbacRoutes.get("/", async (c) => {
   </div>
 
   <script>
-    // "All resources" cascade \u2014 per role column: choosing Any on the '*' row
-    // selects (and locks) that role's whole verb column.
-    function applyCascade(master){
-      var sel='select[data-role="'+master.dataset.role+'"][data-verb="'+master.dataset.verb+'"]';
-      document.querySelectorAll(sel).forEach(function(field){
-        if(field===master) return;
-        if(master.value !== 'none'){ field.value=master.value; field.disabled=true; }
-        else { field.disabled=false; }
+    // "All resources" cascade \u2014 per role column: choosing Own/Any on the '*'
+    // row selects (and locks) that role's whole verb column. Cells are radio
+    // segmented switches (each its own group by name); drive .checked here.
+    function cascade(role, verb){
+      var master=document.querySelector('input[type=radio][data-res="*"][data-role="'+role+'"][data-verb="'+verb+'"]:checked');
+      var val=master?master.value:'none';
+      document.querySelectorAll('input[type=radio][data-role="'+role+'"][data-verb="'+verb+'"]:not([data-res="*"])').forEach(function(radio){
+        if(val!=='none'){ radio.checked=(radio.value===val); radio.disabled=true; }
+        else { radio.disabled=false; }
       });
     }
-    document.querySelectorAll('select[data-res="*"]').forEach(function(master){
-      master.addEventListener('change', function(){ applyCascade(master); });
-      if(master.value !== 'none' && !master.disabled) applyCascade(master);
+    document.querySelectorAll('input[type=radio][data-res="*"]').forEach(function(radio){
+      radio.addEventListener('change', function(){ cascade(radio.dataset.role, radio.dataset.verb); });
+    });
+    document.querySelectorAll('input[type=radio][data-res="*"]:checked').forEach(function(radio){
+      if(radio.value !== 'none' && !radio.disabled) cascade(radio.dataset.role, radio.dataset.verb);
     });
     var out=document.getElementById('out');
     function j(u){fetch(u,{credentials:'include'}).then(function(r){return r.text().then(function(t){out.textContent=r.status+' '+u+'\\n'+t;});});}

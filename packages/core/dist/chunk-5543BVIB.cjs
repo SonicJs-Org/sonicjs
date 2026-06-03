@@ -2,9 +2,9 @@
 
 var chunkPQNVO5QM_cjs = require('./chunk-PQNVO5QM.cjs');
 var chunkQAHXKCFP_cjs = require('./chunk-QAHXKCFP.cjs');
-var chunk4B6YWEEA_cjs = require('./chunk-4B6YWEEA.cjs');
-var chunkYBYWK2GY_cjs = require('./chunk-YBYWK2GY.cjs');
-var chunkJCZJNYPB_cjs = require('./chunk-JCZJNYPB.cjs');
+var chunkK3ARF4FP_cjs = require('./chunk-K3ARF4FP.cjs');
+var chunkGGTXUMLW_cjs = require('./chunk-GGTXUMLW.cjs');
+var chunkOTRCY34G_cjs = require('./chunk-OTRCY34G.cjs');
 var chunkOHYBNCVL_cjs = require('./chunk-OHYBNCVL.cjs');
 var chunkUYJ6TJHX_cjs = require('./chunk-UYJ6TJHX.cjs');
 var chunk635JAMSE_cjs = require('./chunk-635JAMSE.cjs');
@@ -133,7 +133,7 @@ var strongestScope = (...scopes) => {
   return "none";
 };
 async function getCollectionPermissionScope(db, userId, collectionName, verb) {
-  const rbac = new chunk4B6YWEEA_cjs.RbacService(db);
+  const rbac = new chunkK3ARF4FP_cjs.RbacService(db);
   const [contentScope, collectionScope] = await Promise.all([
     rbac.getPermissionScope(userId, "content", verb),
     rbac.getPermissionScope(userId, `collection:${collectionName}`, verb)
@@ -208,7 +208,7 @@ apiContentCrudRoutes.get("/:id", async (c) => {
     }, 500);
   }
 });
-apiContentCrudRoutes.post("/", chunk4B6YWEEA_cjs.requireAuth(), chunk4B6YWEEA_cjs.requireRbac("content", "create"), async (c) => {
+apiContentCrudRoutes.post("/", chunkK3ARF4FP_cjs.requireAuth(), chunkK3ARF4FP_cjs.requireRbac("content", "create"), async (c) => {
   try {
     const db = c.env.DB;
     const user = c.get("user");
@@ -281,7 +281,7 @@ apiContentCrudRoutes.post("/", chunk4B6YWEEA_cjs.requireAuth(), chunk4B6YWEEA_cj
     }, 500);
   }
 });
-apiContentCrudRoutes.put("/:id", chunk4B6YWEEA_cjs.requireAuth(), chunk4B6YWEEA_cjs.requireRbac("content", "update"), async (c) => {
+apiContentCrudRoutes.put("/:id", chunkK3ARF4FP_cjs.requireAuth(), chunkK3ARF4FP_cjs.requireRbac("content", "update"), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -354,7 +354,7 @@ apiContentCrudRoutes.put("/:id", chunk4B6YWEEA_cjs.requireAuth(), chunk4B6YWEEA_
     }, 500);
   }
 });
-apiContentCrudRoutes.delete("/:id", chunk4B6YWEEA_cjs.requireAuth(), chunk4B6YWEEA_cjs.requireRbac("content", "delete"), async (c) => {
+apiContentCrudRoutes.delete("/:id", chunkK3ARF4FP_cjs.requireAuth(), chunkK3ARF4FP_cjs.requireRbac("content", "delete"), async (c) => {
   try {
     const id = c.req.param("id");
     const db = c.env.DB;
@@ -399,7 +399,7 @@ apiRoutes.use("*", async (c, next) => {
   c.header("X-Response-Time", `${totalTime}ms`);
 });
 apiRoutes.use("*", async (c, next) => {
-  const cacheEnabled = await chunk4B6YWEEA_cjs.isPluginActive(c.env.DB, "core-cache");
+  const cacheEnabled = await chunkK3ARF4FP_cjs.isPluginActive(c.env.DB, "core-cache");
   c.set("cacheEnabled", cacheEnabled);
   await next();
 });
@@ -890,7 +890,7 @@ apiRoutes.get("/collections", async (c) => {
     return c.json({ error: "Failed to fetch collections" }, 500);
   }
 });
-apiRoutes.get("/content", chunk4B6YWEEA_cjs.optionalAuth(), async (c) => {
+apiRoutes.get("/content", chunkK3ARF4FP_cjs.optionalAuth(), async (c) => {
   const executionStart = Date.now();
   try {
     const db = c.env.DB;
@@ -991,7 +991,7 @@ apiRoutes.get("/content", chunk4B6YWEEA_cjs.optionalAuth(), async (c) => {
     }, 500);
   }
 });
-apiRoutes.get("/collections/:collection/content", chunk4B6YWEEA_cjs.optionalAuth(), async (c) => {
+apiRoutes.get("/collections/:collection/content", chunkK3ARF4FP_cjs.optionalAuth(), async (c) => {
   const executionStart = Date.now();
   try {
     const collection = c.req.param("collection");
@@ -1140,7 +1140,7 @@ var fileValidationSchema = zod.z.object({
   // 50MB max
 });
 var apiMediaRoutes = new hono.Hono();
-apiMediaRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
+apiMediaRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
 apiMediaRoutes.post("/upload", async (c) => {
   try {
     const user = c.get("user");
@@ -1435,7 +1435,7 @@ apiMediaRoutes.post("/bulk-delete", async (c) => {
           });
           continue;
         }
-        if (fileRecord.uploaded_by !== user.userId && await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
+        if (fileRecord.uploaded_by !== user.userId && await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
           errors.push({ fileId, error: "Permission denied" });
           continue;
         }
@@ -1535,7 +1535,7 @@ apiMediaRoutes.post("/bulk-move", async (c) => {
           errors.push({ fileId, error: "File not found" });
           continue;
         }
-        if (fileRecord.uploaded_by !== user.userId && await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
+        if (fileRecord.uploaded_by !== user.userId && await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
           errors.push({ fileId, error: "Permission denied" });
           continue;
         }
@@ -1626,7 +1626,7 @@ apiMediaRoutes.delete("/:id", async (c) => {
     if (!fileRecord) {
       return c.json({ error: "File not found" }, 404);
     }
-    if (fileRecord.uploaded_by !== user.userId && await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
+    if (fileRecord.uploaded_by !== user.userId && await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
       return c.json({ error: "Permission denied" }, 403);
     }
     try {
@@ -1653,7 +1653,7 @@ apiMediaRoutes.patch("/:id", async (c) => {
     if (!fileRecord) {
       return c.json({ error: "File not found" }, 404);
     }
-    if (fileRecord.uploaded_by !== user.userId && await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
+    if (fileRecord.uploaded_by !== user.userId && await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
       return c.json({ error: "Permission denied" }, 403);
     }
     const allowedFields = ["alt", "caption", "tags", "folder"];
@@ -1884,8 +1884,8 @@ apiSystemRoutes.get("/env", (c) => {
 });
 var api_system_default = apiSystemRoutes;
 var adminApiRoutes = new hono.Hono();
-adminApiRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
-adminApiRoutes.use("*", chunk4B6YWEEA_cjs.requireRbac("portal", "access"));
+adminApiRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
+adminApiRoutes.use("*", chunkK3ARF4FP_cjs.requireRbac("portal", "access"));
 adminApiRoutes.get("/stats", async (c) => {
   try {
     const db = c.env.DB;
@@ -2397,7 +2397,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-H7K57P5H.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-MIAOWJBH.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2416,13 +2416,13 @@ adminApiRoutes.get("/migrations/status", async (c) => {
 adminApiRoutes.post("/migrations/run", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-H7K57P5H.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-MIAOWJBH.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2444,7 +2444,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-H7K57P5H.cjs');
+    const { MigrationService: MigrationService2 } = await import('./migrations-MIAOWJBH.cjs');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -5148,8 +5148,8 @@ var JWT_SECRET_FALLBACK = "your-super-secret-jwt-key-change-in-production";
 async function setCsrfCookie(c, maxAge) {
   const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK;
   const isDev = c.env?.ENVIRONMENT === "development" || !c.env?.ENVIRONMENT;
-  const csrfToken = await chunk4B6YWEEA_cjs.generateCsrfToken(secret);
-  const cookieMaxAge = await chunk4B6YWEEA_cjs.getJwtExpirySecondsFromDb(c.env?.DB, c.env);
+  const csrfToken = await chunkK3ARF4FP_cjs.generateCsrfToken(secret);
+  const cookieMaxAge = await chunkK3ARF4FP_cjs.getJwtExpirySecondsFromDb(c.env?.DB, c.env);
   cookie.setCookie(c, "csrf_token", csrfToken, {
     httpOnly: false,
     secure: !isDev,
@@ -5206,7 +5206,7 @@ var loginSchema = zod.z.object({
 });
 authRoutes.post(
   "/register",
-  chunk4B6YWEEA_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "register" }),
+  chunkK3ARF4FP_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "register" }),
   async (c) => {
     try {
       const db = c.env.DB;
@@ -5243,7 +5243,7 @@ authRoutes.post(
       if (existingUser) {
         return c.json({ error: "User with this email or username already exists" }, 400);
       }
-      const passwordHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword(password);
+      const passwordHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword(password);
       const userId = crypto.randomUUID();
       const now = /* @__PURE__ */ new Date();
       const roleName = isFirstUser ? "admin" : "viewer";
@@ -5281,8 +5281,8 @@ authRoutes.post(
           await saveCustomData(db, userId, sanitized);
         }
       }
-      const tokenTtl = await chunk4B6YWEEA_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const token = await chunk4B6YWEEA_cjs.AuthManager.generateToken(userId, normalizedEmail, roleName, c.env.JWT_SECRET, tokenTtl);
+      const tokenTtl = await chunkK3ARF4FP_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+      const token = await chunkK3ARF4FP_cjs.AuthManager.generateToken(userId, normalizedEmail, roleName, c.env.JWT_SECRET, tokenTtl);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -5315,7 +5315,7 @@ authRoutes.post(
 );
 authRoutes.post(
   "/login",
-  chunk4B6YWEEA_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "login" }),
+  chunkK3ARF4FP_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "login" }),
   async (c) => {
     try {
       const body = await c.req.json();
@@ -5338,20 +5338,20 @@ authRoutes.post(
       if (!user) {
         return c.json({ error: "Invalid email or password" }, 401);
       }
-      const isValidPassword = await chunk4B6YWEEA_cjs.AuthManager.verifyPassword(password, user.password_hash);
+      const isValidPassword = await chunkK3ARF4FP_cjs.AuthManager.verifyPassword(password, user.password_hash);
       if (!isValidPassword) {
         return c.json({ error: "Invalid email or password" }, 401);
       }
-      if (chunk4B6YWEEA_cjs.AuthManager.isLegacyHash(user.password_hash)) {
+      if (chunkK3ARF4FP_cjs.AuthManager.isLegacyHash(user.password_hash)) {
         try {
-          const newHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword(password);
+          const newHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword(password);
           await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(newHash, Date.now(), user.id).run();
         } catch (rehashError) {
           console.error("Password rehash failed (non-fatal):", rehashError);
         }
       }
-      const tokenTtl = await chunk4B6YWEEA_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const token = await chunk4B6YWEEA_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl);
+      const tokenTtl = await chunkK3ARF4FP_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+      const token = await chunkK3ARF4FP_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl);
       cookie.setCookie(c, "auth_token", token, {
         httpOnly: true,
         secure: true,
@@ -5399,7 +5399,7 @@ authRoutes.get("/logout", async (c) => {
   await clearBetterAuthSession(c);
   return c.redirect("/auth/login?message=You have been logged out successfully");
 });
-authRoutes.get("/me", chunk4B6YWEEA_cjs.requireAuth(), async (c) => {
+authRoutes.get("/me", chunkK3ARF4FP_cjs.requireAuth(), async (c) => {
   try {
     const user = c.get("user");
     if (!user) {
@@ -5419,7 +5419,7 @@ authRoutes.get("/me", chunk4B6YWEEA_cjs.requireAuth(), async (c) => {
 });
 authRoutes.post(
   "/refresh",
-  chunk4B6YWEEA_cjs.rateLimit({ max: 60, windowMs: 60 * 1e3, keyPrefix: "refresh" }),
+  chunkK3ARF4FP_cjs.rateLimit({ max: 60, windowMs: 60 * 1e3, keyPrefix: "refresh" }),
   async (c) => {
     try {
       let token = c.req.header("Authorization")?.replace("Bearer ", "");
@@ -5428,8 +5428,8 @@ authRoutes.post(
         return c.json({ error: "Authentication required" }, 401);
       }
       const db = c.env.DB;
-      const grace = await chunk4B6YWEEA_cjs.getJwtRefreshGraceSecondsFromDb(db, c.env);
-      const payload = await chunk4B6YWEEA_cjs.AuthManager.verifyToken(token, c.env.JWT_SECRET, grace);
+      const grace = await chunkK3ARF4FP_cjs.getJwtRefreshGraceSecondsFromDb(db, c.env);
+      const payload = await chunkK3ARF4FP_cjs.AuthManager.verifyToken(token, c.env.JWT_SECRET, grace);
       if (!payload) {
         return c.json({ error: "Invalid or expired token" }, 401);
       }
@@ -5437,8 +5437,8 @@ authRoutes.post(
       if (!row || !row.is_active) {
         return c.json({ error: "User is not active" }, 401);
       }
-      const tokenTtl = await chunk4B6YWEEA_cjs.getJwtExpirySecondsFromDb(db, c.env);
-      const newToken = await chunk4B6YWEEA_cjs.AuthManager.generateToken(row.id, row.email, row.role, c.env.JWT_SECRET, tokenTtl);
+      const tokenTtl = await chunkK3ARF4FP_cjs.getJwtExpirySecondsFromDb(db, c.env);
+      const newToken = await chunkK3ARF4FP_cjs.AuthManager.generateToken(row.id, row.email, row.role, c.env.JWT_SECRET, tokenTtl);
       cookie.setCookie(c, "auth_token", newToken, {
         httpOnly: true,
         secure: true,
@@ -5458,7 +5458,7 @@ authRoutes.post(
 );
 authRoutes.post(
   "/register/form",
-  chunk4B6YWEEA_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "register" }),
+  chunkK3ARF4FP_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "register" }),
   async (c) => {
     try {
       const db = c.env.DB;
@@ -5582,7 +5582,7 @@ authRoutes.post(
 );
 authRoutes.post(
   "/login/form",
-  chunk4B6YWEEA_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "login" }),
+  chunkK3ARF4FP_cjs.rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "login" }),
   async (c) => {
     try {
       const formData = await c.req.formData();
@@ -5670,7 +5670,7 @@ async function ensureCredentialAccount(db, userId, passwordHash) {
 }
 authRoutes.post(
   "/seed-admin",
-  chunk4B6YWEEA_cjs.rateLimit({ max: 10, windowMs: 60 * 1e3, keyPrefix: "seed-admin" }),
+  chunkK3ARF4FP_cjs.rateLimit({ max: 10, windowMs: 60 * 1e3, keyPrefix: "seed-admin" }),
   async (c) => {
     try {
       const db = c.env.DB;
@@ -5692,7 +5692,7 @@ authRoutes.post(
     `).run();
       const existingAdmin = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind("admin@sonicjs.com", "admin").first();
       if (existingAdmin) {
-        const passwordHash2 = await chunk4B6YWEEA_cjs.AuthManager.hashPassword("sonicjs!");
+        const passwordHash2 = await chunkK3ARF4FP_cjs.AuthManager.hashPassword("sonicjs!");
         await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(passwordHash2, Date.now(), existingAdmin.id).run();
         await ensureCredentialAccount(db, String(existingAdmin.id), passwordHash2);
         await db.prepare(
@@ -5708,7 +5708,7 @@ authRoutes.post(
           }
         });
       }
-      const passwordHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword("sonicjs!");
+      const passwordHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword("sonicjs!");
       const userId = "admin-user-id";
       const now = Date.now();
       const adminEmail = "admin@sonicjs.com".toLowerCase();
@@ -5933,7 +5933,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     if (existingUsername) {
       return c.json({ error: "Username is already taken" }, 400);
     }
-    const passwordHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword(password);
     const updateStmt = db.prepare(`
       UPDATE users SET 
         username = ?,
@@ -5952,8 +5952,8 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
-    const tokenTtl = await chunk4B6YWEEA_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-    const authToken = await chunk4B6YWEEA_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET, tokenTtl);
+    const tokenTtl = await chunkK3ARF4FP_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+    const authToken = await chunkK3ARF4FP_cjs.AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET, tokenTtl);
     cookie.setCookie(c, "auth_token", authToken, {
       httpOnly: true,
       secure: true,
@@ -5969,7 +5969,7 @@ authRoutes.post("/accept-invitation", async (c) => {
 });
 authRoutes.post(
   "/request-password-reset",
-  chunk4B6YWEEA_cjs.rateLimit({ max: 3, windowMs: 15 * 60 * 1e3, keyPrefix: "password-reset" }),
+  chunkK3ARF4FP_cjs.rateLimit({ max: 3, windowMs: 15 * 60 * 1e3, keyPrefix: "password-reset" }),
   async (c) => {
     try {
       const formData = await c.req.formData();
@@ -6187,7 +6187,7 @@ authRoutes.post("/reset-password", async (c) => {
     if (Date.now() > user.password_reset_expires) {
       return c.json({ error: "Reset token has expired" }, 400);
     }
-    const newPasswordHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword(password);
+    const newPasswordHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword(password);
     try {
       const historyStmt = db.prepare(`
         INSERT INTO password_history (id, user_id, password_hash, created_at)
@@ -9565,7 +9565,7 @@ var strongestScope2 = (...scopes) => {
   return "none";
 };
 async function getCollectionPermissionScope2(db, userId, collectionName, verb) {
-  const rbac = new chunk4B6YWEEA_cjs.RbacService(db);
+  const rbac = new chunkK3ARF4FP_cjs.RbacService(db);
   const [contentScope, collectionScope] = await Promise.all([
     rbac.getPermissionScope(userId, "content", verb),
     rbac.getPermissionScope(userId, `collection:${collectionName}`, verb)
@@ -9698,7 +9698,7 @@ function extractFieldData(fields, formData, options = {}) {
   }
   return { data, errors };
 }
-adminContentRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
+adminContentRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
 async function getCollectionFields(db, collectionId) {
   const cache = chunkQAHXKCFP_cjs.getCacheService(chunkQAHXKCFP_cjs.CACHE_CONFIGS.collection);
   return cache.getOrSet(
@@ -9806,7 +9806,7 @@ adminContentRoutes.get("/", async (c) => {
     if (!user) {
       conditions.push("1 = 0");
     } else {
-      const rbac = new chunk4B6YWEEA_cjs.RbacService(db);
+      const rbac = new chunkK3ARF4FP_cjs.RbacService(db);
       const globalReadScope = await rbac.getPermissionScope(user.userId, "content", "read");
       if (modelName !== "all") {
         const collectionReadScope = await rbac.getPermissionScope(user.userId, `collection:${modelName}`, "read");
@@ -10025,21 +10025,21 @@ adminContentRoutes.get("/new", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+      const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+      const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+      const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -10133,21 +10133,21 @@ adminContentRoutes.get("/:id/edit", async (c) => {
     const tinymceEnabled = await isPluginActive2(db, "tinymce-plugin");
     let tinymceSettings;
     if (tinymceEnabled) {
-      const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+      const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
       const tinymcePlugin2 = await pluginService.getPlugin("tinymce-plugin");
       tinymceSettings = tinymcePlugin2?.settings;
     }
     const quillEnabled = await isPluginActive2(db, "quill-editor");
     let quillSettings;
     if (quillEnabled) {
-      const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+      const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
       const quillPlugin = await pluginService.getPlugin("quill-editor");
       quillSettings = quillPlugin?.settings;
     }
     const mdxeditorEnabled = await isPluginActive2(db, "easy-mdx");
     let mdxeditorSettings;
     if (mdxeditorEnabled) {
-      const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+      const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
       const mdxeditorPlugin = await pluginService.getPlugin("easy-mdx");
       mdxeditorSettings = mdxeditorPlugin?.settings;
     }
@@ -10448,7 +10448,7 @@ adminContentRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminContentRoutes.post("/preview", chunk4B6YWEEA_cjs.requireRbac("content", "read"), async (c) => {
+adminContentRoutes.post("/preview", chunkK3ARF4FP_cjs.requireRbac("content", "read"), async (c) => {
   try {
     const formData = await c.req.formData();
     const collectionId = formData.get("collection_id");
@@ -10881,7 +10881,7 @@ adminContentRoutes.post("/:id/restore/:version", async (c) => {
     return c.json({ success: false, error: "Failed to restore version" });
   }
 });
-adminContentRoutes.get("/:id/version/:version/preview", chunk4B6YWEEA_cjs.requireRbac("content", "read"), async (c) => {
+adminContentRoutes.get("/:id/version/:version/preview", chunkK3ARF4FP_cjs.requireRbac("content", "read"), async (c) => {
   try {
     const id = c.req.param("id");
     const version = parseInt(c.req.param("version") || "0");
@@ -12866,14 +12866,14 @@ function renderUsersListPage(data) {
 
 // src/routes/admin-users.ts
 var userRoutes = new hono.Hono();
-userRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
-userRoutes.use("/users/*", chunk4B6YWEEA_cjs.requireRbac("users", "manage"));
-userRoutes.use("/users", chunk4B6YWEEA_cjs.requireRbac("users", "manage"));
-userRoutes.use("/invite-user", chunk4B6YWEEA_cjs.requireRbac("users", "manage"));
-userRoutes.use("/resend-invitation/*", chunk4B6YWEEA_cjs.requireRbac("users", "manage"));
-userRoutes.use("/cancel-invitation/*", chunk4B6YWEEA_cjs.requireRbac("users", "manage"));
-userRoutes.use("/activity-logs", chunk4B6YWEEA_cjs.requireRbac("users", "manage"));
-userRoutes.use("/activity-logs/*", chunk4B6YWEEA_cjs.requireRbac("users", "manage"));
+userRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
+userRoutes.use("/users/*", chunkK3ARF4FP_cjs.requireRbac("users", "manage"));
+userRoutes.use("/users", chunkK3ARF4FP_cjs.requireRbac("users", "manage"));
+userRoutes.use("/invite-user", chunkK3ARF4FP_cjs.requireRbac("users", "manage"));
+userRoutes.use("/resend-invitation/*", chunkK3ARF4FP_cjs.requireRbac("users", "manage"));
+userRoutes.use("/cancel-invitation/*", chunkK3ARF4FP_cjs.requireRbac("users", "manage"));
+userRoutes.use("/activity-logs", chunkK3ARF4FP_cjs.requireRbac("users", "manage"));
+userRoutes.use("/activity-logs/*", chunkK3ARF4FP_cjs.requireRbac("users", "manage"));
 userRoutes.get("/", (c) => {
   return c.redirect("/admin/dashboard");
 });
@@ -13037,7 +13037,7 @@ userRoutes.put("/profile", async (c) => {
       }
       await saveCustomData(db, user.userId, sanitized);
     }
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "profile.update",
@@ -13100,7 +13100,7 @@ userRoutes.post("/profile/avatar", async (c) => {
       SELECT first_name, last_name FROM users WHERE id = ?
     `);
     const userData = await userStmt.bind(user.userId).first();
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "profile.avatar_update",
@@ -13171,7 +13171,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const validPassword = await chunk4B6YWEEA_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
+    const validPassword = await chunkK3ARF4FP_cjs.AuthManager.verifyPassword(currentPassword, userData.password_hash);
     if (!validPassword) {
       return c.html(renderAlert2({
         type: "error",
@@ -13179,7 +13179,7 @@ userRoutes.post("/profile/password", async (c) => {
         dismissible: true
       }));
     }
-    const newPasswordHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword(newPassword);
+    const newPasswordHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword(newPassword);
     const historyStmt = db.prepare(`
       INSERT INTO password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
@@ -13195,7 +13195,7 @@ userRoutes.post("/profile/password", async (c) => {
       WHERE id = ?
     `);
     await updateStmt.bind(newPasswordHash, Date.now(), user.userId).run();
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "profile.password_change",
@@ -13278,7 +13278,7 @@ userRoutes.get("/users", async (c) => {
     `);
     const countResult = await countStmt.bind(...params).first();
     const totalUsers = countResult?.total || 0;
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "users.list_view",
@@ -13358,7 +13358,7 @@ userRoutes.get("/users", async (c) => {
 userRoutes.get("/users/new", async (c) => {
   const user = c.get("user");
   try {
-    const rbacRoles = (await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).getRoles()).map((r) => ({
+    const rbacRoles = (await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).getRoles()).map((r) => ({
       id: r.id,
       name: r.name,
       displayName: r.display_name,
@@ -13439,7 +13439,7 @@ userRoutes.post("/users/new", async (c) => {
         dismissible: true
       }));
     }
-    const passwordHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword(password);
+    const passwordHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword(password);
     const userId = crypto.randomUUID();
     const createStmt = db.prepare(`
       INSERT INTO users (
@@ -13462,8 +13462,8 @@ userRoutes.post("/users/new", async (c) => {
       Date.now(),
       Date.now()
     ).run();
-    await new chunk4B6YWEEA_cjs.RbacService(db).setUserRoles(userId, rbacRoleIds);
-    await chunk4B6YWEEA_cjs.logActivity(
+    await new chunkK3ARF4FP_cjs.RbacService(db).setUserRoles(userId, rbacRoleIds);
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "user!.create",
@@ -13502,7 +13502,7 @@ userRoutes.get("/users/:id", async (c) => {
     if (!userRecord) {
       return c.json({ error: "User not found" }, 404);
     }
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "user!.view",
@@ -13593,7 +13593,7 @@ userRoutes.get("/users/:id/edit", async (c) => {
       lastLoginAt: userToEdit.last_login_at,
       profile
     };
-    const rbacSvc = new chunk4B6YWEEA_cjs.RbacService(c.env.DB);
+    const rbacSvc = new chunkK3ARF4FP_cjs.RbacService(c.env.DB);
     const [allRbacRoles, userRbacRoles] = await Promise.all([
       rbacSvc.getRoles(),
       rbacSvc.getRolesForUser(userToEdit.id)
@@ -13735,9 +13735,9 @@ userRoutes.put("/users/:id", async (c) => {
       userId
     ).run();
     const rbacRoleIds = formData.getAll("rbac_roles").map((v) => String(v)).filter(Boolean);
-    await new chunk4B6YWEEA_cjs.RbacService(db).setUserRoles(userId, rbacRoleIds);
+    await new chunkK3ARF4FP_cjs.RbacService(db).setUserRoles(userId, rbacRoleIds);
     if (newPassword) {
-      const passwordHash = await chunk4B6YWEEA_cjs.AuthManager.hashPassword(newPassword);
+      const passwordHash = await chunkK3ARF4FP_cjs.AuthManager.hashPassword(newPassword);
       const updatePasswordStmt = db.prepare(`
         UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
       `);
@@ -13791,7 +13791,7 @@ userRoutes.put("/users/:id", async (c) => {
         ).run();
       }
     }
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "user.update",
@@ -13836,7 +13836,7 @@ userRoutes.post("/users/:id/toggle", async (c) => {
       UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
     `);
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run();
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       active ? "user.activate" : "user.deactivate",
@@ -13877,7 +13877,7 @@ userRoutes.delete("/users/:id", async (c) => {
         DELETE FROM users WHERE id = ?
       `);
       await deleteStmt.bind(userId).run();
-      await chunk4B6YWEEA_cjs.logActivity(
+      await chunkK3ARF4FP_cjs.logActivity(
         db,
         user.userId,
         "user!.hard_delete",
@@ -13896,7 +13896,7 @@ userRoutes.delete("/users/:id", async (c) => {
         UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
       `);
       await deleteStmt.bind(Date.now(), userId).run();
-      await chunk4B6YWEEA_cjs.logActivity(
+      await chunkK3ARF4FP_cjs.logActivity(
         db,
         user.userId,
         "user!.soft_delete",
@@ -13965,7 +13965,7 @@ userRoutes.post("/invite-user", async (c) => {
     await db.prepare(
       "INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?"
     ).bind(userId, defaultRoleName).run();
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "user!.invite_sent",
@@ -14022,7 +14022,7 @@ userRoutes.post("/resend-invitation/:id", async (c) => {
       Date.now(),
       userId
     ).run();
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_resent",
@@ -14058,7 +14058,7 @@ userRoutes.delete("/cancel-invitation/:id", async (c) => {
     }
     const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
     await deleteStmt.bind(userId).run();
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "user!.invitation_cancelled",
@@ -14141,7 +14141,7 @@ userRoutes.get("/activity-logs", async (c) => {
       ...log,
       details: log.details ? JSON.parse(log.details) : null
     }));
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_viewed",
@@ -14248,7 +14248,7 @@ userRoutes.get("/activity-logs/export", async (c) => {
       csvRows.push(row.join(","));
     }
     const csvContent = csvRows.join("\n");
-    await chunk4B6YWEEA_cjs.logActivity(
+    await chunkK3ARF4FP_cjs.logActivity(
       db,
       user.userId,
       "activity.logs_exported",
@@ -15587,7 +15587,7 @@ var fileValidationSchema2 = zod.z.object({
   // 50MB max
 });
 var adminMediaRoutes = new hono.Hono();
-adminMediaRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
+adminMediaRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
 adminMediaRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -16130,7 +16130,7 @@ adminMediaRoutes.put("/:id", async (c) => {
         </div>
       `);
     }
-    if (fileRecord.uploaded_by !== user.userId && await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
+    if (fileRecord.uploaded_by !== user.userId && await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "update") !== "any") {
       return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -16173,7 +16173,7 @@ adminMediaRoutes.put("/:id", async (c) => {
     `);
   }
 });
-adminMediaRoutes.delete("/cleanup", chunk4B6YWEEA_cjs.requireRbac("media", "delete"), async (c) => {
+adminMediaRoutes.delete("/cleanup", chunkK3ARF4FP_cjs.requireRbac("media", "delete"), async (c) => {
   try {
     const db = c.env.DB;
     const allMediaStmt = db.prepare("SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL");
@@ -16268,7 +16268,7 @@ adminMediaRoutes.delete("/:id", async (c) => {
         </div>
       `);
     }
-    if (fileRecord.uploaded_by !== user.userId && await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
+    if (fileRecord.uploaded_by !== user.userId && await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).getPermissionScope(user.userId, "media", "delete") !== "any") {
       return c.html(html.html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -18516,8 +18516,8 @@ function renderEmailSettingsContent(plugin, settings) {
 
 // src/routes/admin-plugins.ts
 var adminPluginRoutes = new hono.Hono();
-adminPluginRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
-var AVAILABLE_PLUGINS = Object.values(chunkYBYWK2GY_cjs.PLUGIN_REGISTRY).map((p) => ({
+adminPluginRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
+var AVAILABLE_PLUGINS = Object.values(chunkGGTXUMLW_cjs.PLUGIN_REGISTRY).map((p) => ({
   id: p.id,
   name: p.codeName,
   display_name: p.displayName,
@@ -18534,10 +18534,10 @@ adminPluginRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
     const db = c.env.DB;
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.text("Access denied", 403);
     }
-    const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+    const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
     let installedPlugins = [];
     let stats = { total: 0, active: 0, inactive: 0, errors: 0, uninstalled: 0 };
     try {
@@ -18606,10 +18606,10 @@ adminPluginRoutes.get("/:id", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.redirect("/admin/plugins");
     }
-    const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+    const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
     const plugin = await pluginService.getPlugin(pluginId);
     if (!plugin) {
       return c.text("Plugin not found", 404);
@@ -18682,10 +18682,10 @@ adminPluginRoutes.post("/:id/activate", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+    const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
     await pluginService.activatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18699,10 +18699,10 @@ adminPluginRoutes.post("/:id/deactivate", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+    const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
     await pluginService.deactivatePlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18715,12 +18715,12 @@ adminPluginRoutes.post("/install", async (c) => {
   try {
     const user = c.get("user");
     const db = c.env.DB;
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
     const body = await c.req.json();
-    const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
-    const registryEntry = chunkYBYWK2GY_cjs.findPluginByCodeName(body.name) || chunkYBYWK2GY_cjs.PLUGIN_REGISTRY[body.name] || chunkYBYWK2GY_cjs.PLUGIN_REGISTRY[body.id];
+    const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
+    const registryEntry = chunkGGTXUMLW_cjs.findPluginByCodeName(body.name) || chunkGGTXUMLW_cjs.PLUGIN_REGISTRY[body.name] || chunkGGTXUMLW_cjs.PLUGIN_REGISTRY[body.id];
     if (!registryEntry) {
       return c.json({ error: "Plugin not found in registry" }, 404);
     }
@@ -18750,10 +18750,10 @@ adminPluginRoutes.post("/:id/uninstall", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
-    const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+    const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
     await pluginService.uninstallPlugin(pluginId);
     return c.json({ success: true });
   } catch (error) {
@@ -18767,11 +18767,11 @@ adminPluginRoutes.post("/:id/settings", async (c) => {
     const user = c.get("user");
     const db = c.env.DB;
     const pluginId = c.req.param("id");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "plugins", "manage")) {
       return c.json({ error: "Access denied" }, 403);
     }
     const settings = await c.req.json();
-    const pluginService = new chunkYBYWK2GY_cjs.PluginService(db);
+    const pluginService = new chunkGGTXUMLW_cjs.PluginService(db);
     await pluginService.updatePluginSettings(pluginId, settings);
     if (pluginId === "core-auth") {
       try {
@@ -19579,7 +19579,7 @@ function renderLogConfigPage(data) {
 
 // src/routes/admin-logs.ts
 var adminLogsRoutes = new hono.Hono();
-adminLogsRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
+adminLogsRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
 adminLogsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -19828,7 +19828,7 @@ adminLogsRoutes.get("/export", async (c) => {
 adminLogsRoutes.post("/cleanup", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -21909,7 +21909,7 @@ function renderStorageUsage(databaseSizeBytes, mediaSizeBytes) {
 // src/routes/admin-dashboard.ts
 var VERSION = chunk2HWICA5J_cjs.getCoreVersion();
 var router = new hono.Hono();
-router.use("*", chunk4B6YWEEA_cjs.requireAuth());
+router.use("*", chunkK3ARF4FP_cjs.requireAuth());
 router.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -23914,10 +23914,10 @@ function renderCollectionFormPage(data) {
 
 // src/routes/admin-collections.ts
 var adminCollectionsRoutes = new hono.Hono();
-adminCollectionsRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
-adminCollectionsRoutes.post("*", chunk4B6YWEEA_cjs.requireRbac("collections", "manage"));
-adminCollectionsRoutes.put("*", chunk4B6YWEEA_cjs.requireRbac("collections", "manage"));
-adminCollectionsRoutes.delete("*", chunk4B6YWEEA_cjs.requireRbac("collections", "manage"));
+adminCollectionsRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
+adminCollectionsRoutes.post("*", chunkK3ARF4FP_cjs.requireRbac("collections", "manage"));
+adminCollectionsRoutes.put("*", chunkK3ARF4FP_cjs.requireRbac("collections", "manage"));
+adminCollectionsRoutes.delete("*", chunkK3ARF4FP_cjs.requireRbac("collections", "manage"));
 adminCollectionsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -26212,7 +26212,7 @@ function renderDatabaseToolsSettings(settings) {
 
 // src/routes/admin-settings.ts
 var adminSettingsRoutes = new hono.Hono();
-adminSettingsRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
+adminSettingsRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
 function getMockSettings(user) {
   return {
     general: {
@@ -26389,7 +26389,7 @@ adminSettingsRoutes.get("/database-tools", (c) => {
 adminSettingsRoutes.get("/api/migrations/status", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkJCZJNYPB_cjs.MigrationService(db);
+    const migrationService = new chunkOTRCY34G_cjs.MigrationService(db);
     const status = await migrationService.getMigrationStatus();
     return c.json({
       success: true,
@@ -26406,14 +26406,14 @@ adminSettingsRoutes.get("/api/migrations/status", async (c) => {
 adminSettingsRoutes.post("/api/migrations/run", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
       }, 403);
     }
     const db = c.env.DB;
-    const migrationService = new chunkJCZJNYPB_cjs.MigrationService(db);
+    const migrationService = new chunkOTRCY34G_cjs.MigrationService(db);
     const result = await migrationService.runPendingMigrations();
     return c.json({
       success: result.success,
@@ -26431,7 +26431,7 @@ adminSettingsRoutes.post("/api/migrations/run", async (c) => {
 adminSettingsRoutes.get("/api/migrations/validate", async (c) => {
   try {
     const db = c.env.DB;
-    const migrationService = new chunkJCZJNYPB_cjs.MigrationService(db);
+    const migrationService = new chunkOTRCY34G_cjs.MigrationService(db);
     const validation = await migrationService.validateSchema();
     return c.json({
       success: true,
@@ -26518,7 +26518,7 @@ adminSettingsRoutes.get("/api/database-tools/validate", async (c) => {
 adminSettingsRoutes.post("/api/database-tools/backup", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26539,7 +26539,7 @@ adminSettingsRoutes.post("/api/database-tools/backup", async (c) => {
 adminSettingsRoutes.post("/api/database-tools/truncate", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26592,7 +26592,7 @@ adminSettingsRoutes.post("/api/database-tools/truncate", async (c) => {
 adminSettingsRoutes.post("/general", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -26638,7 +26638,7 @@ adminSettingsRoutes.post("/general", async (c) => {
 adminSettingsRoutes.post("/security", async (c) => {
   try {
     const user = c.get("user");
-    if (!user || !await new chunk4B6YWEEA_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
+    if (!user || !await new chunkK3ARF4FP_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
       return c.json({
         success: false,
         error: "Unauthorized. Admin access required."
@@ -28370,7 +28370,7 @@ function renderFormCreatePage(data) {
 
 // src/routes/admin-forms.ts
 var adminFormsRoutes = new hono.Hono();
-adminFormsRoutes.use("*", chunk4B6YWEEA_cjs.requireAuth());
+adminFormsRoutes.use("*", chunkK3ARF4FP_cjs.requireAuth());
 adminFormsRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -29175,7 +29175,7 @@ publicFormsRoutes.post("/:identifier/submit", async (c) => {
     `).bind(now, form.id).run();
     let contentId = null;
     try {
-      contentId = await chunkYBYWK2GY_cjs.createContentFromSubmission(
+      contentId = await chunkGGTXUMLW_cjs.createContentFromSubmission(
         db,
         sanitizedData,
         { id: form.id, name: form.name, display_name: form.display_name },
@@ -29545,7 +29545,7 @@ function renderAPIReferencePage(data) {
 // src/routes/admin-api-reference.ts
 var VERSION2 = chunk2HWICA5J_cjs.getCoreVersion();
 var router2 = new hono.Hono();
-router2.use("*", chunk4B6YWEEA_cjs.requireAuth());
+router2.use("*", chunkK3ARF4FP_cjs.requireAuth());
 router2.get("/", async (c) => {
   const user = c.get("user");
   try {
@@ -29637,5 +29637,5 @@ exports.router2 = router2;
 exports.test_cleanup_default = test_cleanup_default;
 exports.userProfilesPlugin = userProfilesPlugin;
 exports.userRoutes = userRoutes;
-//# sourceMappingURL=chunk-Q7HO7ZLF.cjs.map
-//# sourceMappingURL=chunk-Q7HO7ZLF.cjs.map
+//# sourceMappingURL=chunk-5543BVIB.cjs.map
+//# sourceMappingURL=chunk-5543BVIB.cjs.map

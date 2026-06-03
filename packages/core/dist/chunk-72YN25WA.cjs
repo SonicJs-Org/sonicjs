@@ -1,7 +1,7 @@
 'use strict';
 
-var chunkVST7O33Q_cjs = require('./chunk-VST7O33Q.cjs');
-var chunkBW42CJOY_cjs = require('./chunk-BW42CJOY.cjs');
+var chunkHKRPSE6L_cjs = require('./chunk-HKRPSE6L.cjs');
+var chunkBSNAZGZD_cjs = require('./chunk-BSNAZGZD.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var jwt = require('hono/jwt');
 var cookie = require('hono/cookie');
@@ -57,23 +57,23 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new chunkBW42CJOY_cjs.MigrationService(c.env.DB);
+      const migrationService = new chunkBSNAZGZD_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await chunkVST7O33Q_cjs.syncCollections(c.env.DB);
+        await chunkHKRPSE6L_cjs.syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
       console.log("[Bootstrap] Syncing form collections...");
       try {
-        await chunkVST7O33Q_cjs.syncAllFormCollections(c.env.DB);
+        await chunkHKRPSE6L_cjs.syncAllFormCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing form collections:", error);
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new chunkVST7O33Q_cjs.PluginBootstrapService(c.env.DB);
+        const bootstrapService = new chunkHKRPSE6L_cjs.PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -90,6 +90,149 @@ function bootstrapMiddleware(config = {}) {
     return next();
   };
 }
+
+// src/services/rbac.ts
+var SYSTEM_RESOURCES = [
+  { key: "*", label: "All resources", group: "system" },
+  { key: "portal", label: "Admin Portal", group: "system" },
+  { key: "rbac", label: "Roles & Permissions", group: "system" },
+  { key: "content", label: "Content", group: "system" },
+  { key: "collections", label: "Collection Schemas", group: "system" },
+  { key: "media", label: "Media", group: "system" },
+  { key: "email", label: "Email Management", group: "system" },
+  { key: "users", label: "Users", group: "system" },
+  { key: "collections", label: "Collections (schema)", group: "system" },
+  { key: "settings", label: "Settings", group: "system" },
+  { key: "plugins", label: "Plugins", group: "system" }
+];
+var RbacService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  async all(sql, ...binds) {
+    const stmt = binds.length ? this.db.prepare(sql).bind(...binds) : this.db.prepare(sql);
+    return (await stmt.all()).results;
+  }
+  async getRoles() {
+    return this.all("SELECT * FROM rbac_roles ORDER BY is_system DESC, name");
+  }
+  async getVerbs() {
+    return this.all("SELECT * FROM rbac_verbs ORDER BY sort_order, name");
+  }
+  /** System resources + one `collection:<name>` per active collection, plus a
+   *  `collection:*` row representing "all collections". */
+  async getResources() {
+    const cols = await this.all(
+      "SELECT name, display_name FROM collections WHERE is_active = 1 ORDER BY name"
+    );
+    const collectionResources = [
+      { key: "collection:*", label: "All collections", group: "collection" },
+      ...cols.map((c) => ({
+        key: `collection:${c.name}`,
+        label: c.display_name || c.name,
+        group: "collection"
+      }))
+    ];
+    return [...SYSTEM_RESOURCES, ...collectionResources];
+  }
+  async getGrants() {
+    return this.all("SELECT role_id, resource, verb FROM rbac_role_grants");
+  }
+  async getRolesForUser(userId) {
+    return this.all(
+      `SELECT r.* FROM rbac_user_roles ur JOIN rbac_roles r ON r.id = ur.role_id WHERE ur.user_id = ?`,
+      userId
+    );
+  }
+  /** Does a single grant row satisfy the requested (resource, verb)? */
+  grantMatches(g, resource, verb) {
+    const resourceOk = g.resource === "*" || g.resource === resource || g.resource === "collection:*" && resource.startsWith("collection:");
+    if (!resourceOk) return false;
+    return g.verb === "*" || g.verb === verb || g.verb === "manage";
+  }
+  /** Can the user perform `verb` on `resource`? Reads the live grant matrix. */
+  async can(userId, resource, verb) {
+    const rows = await this.all(
+      `SELECT g.resource, g.verb FROM rbac_user_roles ur
+       JOIN rbac_role_grants g ON g.role_id = ur.role_id
+       WHERE ur.user_id = ?`,
+      userId
+    );
+    return rows.some((g) => this.grantMatches(g, resource, verb));
+  }
+  /** Flattened, human-readable permission list for a user (expanded vs resources). */
+  async permissionsForUser(userId) {
+    const roles = await this.getRolesForUser(userId);
+    if (roles.length === 0) return [];
+    const grants = await this.all(
+      `SELECT g.resource, g.verb FROM rbac_user_roles ur
+       JOIN rbac_role_grants g ON g.role_id = ur.role_id WHERE ur.user_id = ?`,
+      userId
+    );
+    const resources = await this.getResources();
+    const verbs = await this.getVerbs();
+    const out = /* @__PURE__ */ new Set();
+    for (const r of resources) {
+      for (const v of verbs) {
+        if (grants.some((g) => this.grantMatches(g, r.key, v.name))) out.add(`${r.key}:${v.name}`);
+      }
+    }
+    return [...out].sort();
+  }
+  // ── Mutations ──────────────────────────────────────────────────────────────
+  async createRole(name, displayName, description = "") {
+    const id = `role-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    await this.db.prepare(
+      "INSERT INTO rbac_roles (id, name, display_name, description, is_system) VALUES (?, ?, ?, ?, 0)"
+    ).bind(id, name.toLowerCase(), displayName, description).run();
+  }
+  async deleteRole(roleId) {
+    await this.db.prepare("DELETE FROM rbac_roles WHERE id = ? AND is_system = 0").bind(roleId).run();
+  }
+  /**
+   * Update a role's display name and description. The `name` (slug) can only be
+   * changed for custom roles — system role names are referenced by users.role
+   * and the legacy mapping, so they stay fixed.
+   */
+  async updateRole(roleId, displayName, description = "", name) {
+    const role = await this.db.prepare("SELECT is_system FROM rbac_roles WHERE id = ?").bind(roleId).first();
+    if (!role) return;
+    if (role.is_system === 0 && name) {
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      await this.db.prepare("UPDATE rbac_roles SET display_name = ?, description = ?, name = ?, updated_at = ? WHERE id = ?").bind(displayName, description, slug, Date.now(), roleId).run();
+    } else {
+      await this.db.prepare("UPDATE rbac_roles SET display_name = ?, description = ?, updated_at = ? WHERE id = ?").bind(displayName, description, Date.now(), roleId).run();
+    }
+  }
+  async createVerb(name, description = "") {
+    const id = `verb-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    await this.db.prepare("INSERT INTO rbac_verbs (id, name, description, is_system, sort_order) VALUES (?, ?, ?, 0, 100)").bind(id, name.toLowerCase(), description).run();
+  }
+  async deleteVerb(verbId) {
+    await this.db.prepare("DELETE FROM rbac_verbs WHERE id = ? AND is_system = 0").bind(verbId).run();
+  }
+  /** Replace all grants for one role with the supplied (resource, verb) pairs. */
+  async setRoleGrants(roleId, pairs) {
+    const stmts = [this.db.prepare("DELETE FROM rbac_role_grants WHERE role_id = ?").bind(roleId)];
+    for (const p of pairs) {
+      stmts.push(
+        this.db.prepare("INSERT OR IGNORE INTO rbac_role_grants (role_id, resource, verb) VALUES (?, ?, ?)").bind(roleId, p.resource, p.verb)
+      );
+    }
+    await this.db.batch(stmts);
+  }
+  async setUserRoles(userId, roleIds) {
+    const stmts = [this.db.prepare("DELETE FROM rbac_user_roles WHERE user_id = ?").bind(userId)];
+    for (const rid of roleIds) {
+      stmts.push(
+        this.db.prepare("INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) VALUES (?, ?)").bind(userId, rid)
+      );
+    }
+    await this.db.batch(stmts);
+  }
+};
+
+// src/middleware/auth.ts
 var JWT_SECRET_FALLBACK = "your-super-secret-jwt-key-change-in-production";
 var DEFAULT_JWT_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 30;
 function parseDuration(input) {
@@ -408,6 +551,27 @@ var requireRole = (requiredRole) => {
     return await next();
   };
 };
+var requireRbac = (resource, verb) => {
+  return async (c, next) => {
+    const user = c.get("user");
+    if (!user) {
+      const acceptHeader = c.req.header("Accept") || "";
+      if (acceptHeader.includes("text/html")) {
+        return c.redirect("/auth/login?error=Please login to access the admin area");
+      }
+      return c.json({ error: "Authentication required" }, 401);
+    }
+    const allowed = await new RbacService(c.env.DB).can(user.userId, resource, verb);
+    if (!allowed) {
+      const acceptHeader = c.req.header("Accept") || "";
+      if (acceptHeader.includes("text/html")) {
+        return c.redirect("/auth/login?error=You do not have permission to access this area");
+      }
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
+    return await next();
+  };
+};
 var optionalAuth = () => {
   return async (_c, next) => {
     return await next();
@@ -677,6 +841,7 @@ var isPluginActive = () => false;
 
 exports.AuthManager = AuthManager;
 exports.PermissionManager = PermissionManager;
+exports.RbacService = RbacService;
 exports.bootstrapMiddleware = bootstrapMiddleware;
 exports.cacheHeaders = cacheHeaders;
 exports.compressionMiddleware = compressionMiddleware;
@@ -699,10 +864,11 @@ exports.requireActivePlugins = requireActivePlugins;
 exports.requireAnyPermission = requireAnyPermission;
 exports.requireAuth = requireAuth;
 exports.requirePermission = requirePermission;
+exports.requireRbac = requireRbac;
 exports.requireRole = requireRole;
 exports.securityHeadersMiddleware = securityHeadersMiddleware;
 exports.securityLoggingMiddleware = securityLoggingMiddleware;
 exports.validateCsrfToken = validateCsrfToken;
 exports.verifySecurityConfig = verifySecurityConfig;
-//# sourceMappingURL=chunk-W4NR4NT5.cjs.map
-//# sourceMappingURL=chunk-W4NR4NT5.cjs.map
+//# sourceMappingURL=chunk-72YN25WA.cjs.map
+//# sourceMappingURL=chunk-72YN25WA.cjs.map

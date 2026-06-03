@@ -1,6 +1,7 @@
 import { sign, verify } from 'hono/jwt'
 import { Context, Next } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
+import { RbacService } from '../services/rbac'
 
 type JWTPayload = {
   userId: string
@@ -428,6 +429,33 @@ export const requireRole = (requiredRole: string | string[]) => {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
 
     if (!roles.includes(user.role)) {
+      const acceptHeader = c.req.header('Accept') || ''
+      if (acceptHeader.includes('text/html')) {
+        return c.redirect('/auth/login?error=You do not have permission to access this area')
+      }
+      return c.json({ error: 'Insufficient permissions' }, 403)
+    }
+
+    return await next()
+  }
+}
+
+// Middleware to require a live RBAC grant for the signed-in user. This is the
+// dynamic replacement for legacy `users.role` checks on admin routes.
+export const requireRbac = (resource: string, verb: string) => {
+  return async (c: Context, next: Next) => {
+    const user = c.get('user') as JWTPayload | undefined
+
+    if (!user) {
+      const acceptHeader = c.req.header('Accept') || ''
+      if (acceptHeader.includes('text/html')) {
+        return c.redirect('/auth/login?error=Please login to access the admin area')
+      }
+      return c.json({ error: 'Authentication required' }, 401)
+    }
+
+    const allowed = await new RbacService(c.env.DB).can(user.userId, resource, verb)
+    if (!allowed) {
       const acceptHeader = c.req.header('Accept') || ''
       if (acceptHeader.includes('text/html')) {
         return c.redirect('/auth/login?error=You do not have permission to access this area')

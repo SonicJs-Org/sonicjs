@@ -163,6 +163,7 @@ authRoutes.post('/register',
       // Create user
       const userId = crypto.randomUUID()
       const now = new Date()
+      const roleName = isFirstUser ? 'admin' : 'viewer'
       
       await db.prepare(`
         INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
@@ -174,11 +175,17 @@ authRoutes.post('/register',
         firstName,
         lastName,
         passwordHash,
-        'viewer', // Default role
+        roleName, // Compatibility role; portal access is RBAC-backed.
         1, // is_active
         now.getTime(),
         now.getTime()
       ).run()
+
+      await db.prepare(
+        'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
+      )
+        .bind(userId, roleName)
+        .run()
       
       // Save custom profile fields if configured
       const profileConfig = getUserProfileConfig()
@@ -198,7 +205,7 @@ authRoutes.post('/register',
 
       // Generate JWT token
       const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-      const token = await AuthManager.generateToken(userId, normalizedEmail, 'viewer', c.env.JWT_SECRET, tokenTtl)
+      const token = await AuthManager.generateToken(userId, normalizedEmail, roleName, c.env.JWT_SECRET, tokenTtl)
 
       // Set HTTP-only cookie
       setCookie(c, 'auth_token', token, {
@@ -218,7 +225,7 @@ authRoutes.post('/register',
           username,
           firstName,
           lastName,
-          role: 'viewer'
+          role: roleName
         },
         token
       }, 201)
@@ -740,6 +747,11 @@ authRoutes.post('/seed-admin',
       await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
         .bind(passwordHash, Date.now(), existingAdmin.id)
         .run()
+      await db.prepare(
+        'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
+      )
+        .bind(existingAdmin.id, 'admin')
+        .run()
 
       return c.json({
         message: 'Admin user already exists (password updated)',
@@ -775,6 +787,12 @@ authRoutes.post('/seed-admin',
       now,
       now
     ).run()
+
+    await db.prepare(
+      'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
+    )
+      .bind(userId, 'admin')
+      .run()
     
     return c.json({ 
       message: 'Admin user created successfully',

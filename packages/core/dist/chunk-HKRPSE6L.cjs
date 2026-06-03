@@ -1,3 +1,5 @@
+'use strict';
+
 // src/services/collection-loader.ts
 var registeredCollections = [];
 function registerCollections(collections) {
@@ -25,7 +27,7 @@ async function loadCollectionConfigs() {
     console.log(`            registerCollections([myCollection])`);
   }
   try {
-    const modules = import.meta.glob?.("../collections/*.collection.ts", { eager: true }) || {};
+    const modules = undefined?.("../collections/*.collection.ts", { eager: true }) || {};
     let coreCollectionCount = 0;
     for (const [path, module] of Object.entries(modules)) {
       try {
@@ -69,7 +71,7 @@ async function loadCollectionConfig(name) {
 }
 async function getAvailableCollectionNames() {
   try {
-    const modules = import.meta.glob?.("../collections/*.collection.ts") || {};
+    const modules = undefined?.("../collections/*.collection.ts") || {};
     const names = [];
     for (const path of Object.keys(modules)) {
       const match = path.match(/\/([^/]+)\.collection\.ts$/);
@@ -1778,6 +1780,27 @@ var PluginBootstrapService = class {
   }
 };
 
-export { PLUGIN_REGISTRY, PluginBootstrapService, PluginService, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, findPluginByCodeName, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig };
-//# sourceMappingURL=chunk-P6WG35TO.js.map
-//# sourceMappingURL=chunk-P6WG35TO.js.map
+exports.PLUGIN_REGISTRY = PLUGIN_REGISTRY;
+exports.PluginBootstrapService = PluginBootstrapService;
+exports.PluginService = PluginService;
+exports.backfillFormSubmissions = backfillFormSubmissions;
+exports.cleanupRemovedCollections = cleanupRemovedCollections;
+exports.createContentFromSubmission = createContentFromSubmission;
+exports.deriveCollectionSchemaFromFormio = deriveCollectionSchemaFromFormio;
+exports.deriveSubmissionTitle = deriveSubmissionTitle;
+exports.findPluginByCodeName = findPluginByCodeName;
+exports.fullCollectionSync = fullCollectionSync;
+exports.getAvailableCollectionNames = getAvailableCollectionNames;
+exports.getManagedCollections = getManagedCollections;
+exports.isCollectionManaged = isCollectionManaged;
+exports.loadCollectionConfig = loadCollectionConfig;
+exports.loadCollectionConfigs = loadCollectionConfigs;
+exports.mapFormStatusToContentStatus = mapFormStatusToContentStatus;
+exports.registerCollections = registerCollections;
+exports.syncAllFormCollections = syncAllFormCollections;
+exports.syncCollection = syncCollection;
+exports.syncCollections = syncCollections;
+exports.syncFormCollection = syncFormCollection;
+exports.validateCollectionConfig = validateCollectionConfig;
+//# sourceMappingURL=chunk-HKRPSE6L.cjs.map
+//# sourceMappingURL=chunk-HKRPSE6L.cjs.map

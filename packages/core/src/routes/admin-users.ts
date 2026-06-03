@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { requireAuth, requireRole, logActivity, AuthManager } from '../middleware'
+import { requireAuth, requireRbac, logActivity, AuthManager } from '../middleware'
 import { sanitizeInput } from '../utils/sanitize'
 import { renderProfilePage, renderAvatarImage, type UserProfile, type ProfilePageData } from '../templates/pages/admin-profile.template'
 import { renderAlert } from '../templates/components/alert.template'
@@ -16,14 +16,14 @@ const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 // Apply authentication middleware to all routes
 userRoutes.use('*', requireAuth())
 
-// Enforce admin-only access on user management routes
-userRoutes.use('/users/*', requireRole(['admin']))
-userRoutes.use('/users', requireRole(['admin']))
-userRoutes.use('/invite-user', requireRole(['admin']))
-userRoutes.use('/resend-invitation/*', requireRole(['admin']))
-userRoutes.use('/cancel-invitation/*', requireRole(['admin']))
-userRoutes.use('/activity-logs', requireRole(['admin']))
-userRoutes.use('/activity-logs/*', requireRole(['admin']))
+// Enforce dynamic RBAC access on user management routes.
+userRoutes.use('/users/*', requireRbac('users', 'manage'))
+userRoutes.use('/users', requireRbac('users', 'manage'))
+userRoutes.use('/invite-user', requireRbac('users', 'manage'))
+userRoutes.use('/resend-invitation/*', requireRbac('users', 'manage'))
+userRoutes.use('/cancel-invitation/*', requireRbac('users', 'manage'))
+userRoutes.use('/activity-logs', requireRbac('users', 'manage'))
+userRoutes.use('/activity-logs/*', requireRbac('users', 'manage'))
 
 // Redirect /admin to /admin/dashboard
 userRoutes.get('/', (c) => {
@@ -56,14 +56,6 @@ const LANGUAGES = [
   { value: 'ja', label: 'Japanese' },
   { value: 'ko', label: 'Korean' },
   { value: 'zh', label: 'Chinese' }
-]
-
-// Role options for user form
-const ROLES = [
-  { value: 'admin', label: 'Administrator' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'author', label: 'Author' },
-  { value: 'viewer', label: 'Viewer' }
 ]
 
 /**
@@ -460,7 +452,7 @@ userRoutes.post('/profile/password', async (c) => {
 /**
  * GET /admin/users - List all users
  * Returns HTML for browser requests and JSON for API requests
- * Note: Already protected by requireAuth() and requireRole(['admin', 'editor'])
+ * Note: Already protected by requireAuth() and requireRbac('users', 'manage')
  */
 userRoutes.get('/users', async (c) => {
   const db = c.env.DB
@@ -471,7 +463,6 @@ userRoutes.get('/users', async (c) => {
     const page = parseInt(c.req.query('page') || '1')
     const limit = parseInt(c.req.query('limit') || '20')
     const search = c.req.query('search') || ''
-    const roleFilter = c.req.query('role') || ''
     const statusFilter = c.req.query('status') || 'active'
     const offset = (page - 1) * limit
 
@@ -495,15 +486,10 @@ userRoutes.get('/users', async (c) => {
       params.push(searchParam, searchParam, searchParam, searchParam)
     }
 
-    if (roleFilter) {
-      whereClause += ' AND u.role = ?'
-      params.push(roleFilter)
-    }
-
     // Get users
     const usersStmt = db.prepare(`
       SELECT u.id, u.email, u.username, u.first_name, u.last_name,
-             u.role, u.avatar_url, u.created_at, u.last_login_at, u.updated_at,
+             u.avatar_url, u.created_at, u.last_login_at, u.updated_at,
              u.email_verified, u.two_factor_enabled, u.is_active
       FROM users u
       ${whereClause}
@@ -512,6 +498,31 @@ userRoutes.get('/users', async (c) => {
     `)
 
     const { results: usersData } = await usersStmt.bind(...params, limit, offset).all()
+
+    const userIds = (usersData || []).map((u: any) => u.id).filter(Boolean)
+    const rolesByUser = new Map<string, string[]>()
+
+    if (userIds.length > 0) {
+      const placeholders = userIds.map(() => '?').join(', ')
+      const { results: roleRows } = await db.prepare(`
+        SELECT ur.user_id, r.display_name
+        FROM rbac_user_roles ur
+        JOIN rbac_roles r ON r.id = ur.role_id
+        WHERE ur.user_id IN (${placeholders})
+        ORDER BY r.is_system DESC, r.display_name ASC
+      `).bind(...userIds).all()
+
+      for (const row of (roleRows || []) as any[]) {
+        const existing = rolesByUser.get(row.user_id) || []
+        existing.push(row.display_name)
+        rolesByUser.set(row.user_id, existing)
+      }
+    }
+
+    const usersWithRbac = (usersData || []).map((u: any) => ({
+      ...u,
+      rbac_roles: (rolesByUser.get(u.id) || []).join(',')
+    }))
 
     // Get total count
     const countStmt = db.prepare(`
@@ -535,7 +546,7 @@ userRoutes.get('/users', async (c) => {
     if (isApiRequest) {
       // Return JSON for API requests
       return c.json({
-        users: usersData || [],
+        users: usersWithRbac,
         pagination: {
           page,
           limit,
@@ -546,13 +557,13 @@ userRoutes.get('/users', async (c) => {
     }
 
     // Return HTML for browser requests
-    const users: User[] = (usersData || []).map((u: any) => ({
+    const users: User[] = usersWithRbac.map((u: any) => ({
       id: u.id,
       email: u.email,
       username: u.username || '',
       firstName: u.first_name || '',
       lastName: u.last_name || '',
-      role: u.role,
+      rbacRoles: u.rbac_roles,
       avatar: u.avatar_url,
       isActive: Boolean(u.is_active),
       lastLoginAt: u.last_login_at,
@@ -570,7 +581,6 @@ userRoutes.get('/users', async (c) => {
       totalPages: Math.ceil(totalUsers / limit),
       totalUsers,
       searchFilter: search,
-      roleFilter,
       statusFilter,
       success: successMessage,
       pagination: {
@@ -616,8 +626,14 @@ userRoutes.get('/users/new', async (c) => {
   const user = c.get('user')
 
   try {
+    const rbacRoles = (await new RbacService(c.env.DB).getRoles()).map((r) => ({
+      id: r.id,
+      name: r.name,
+      displayName: r.display_name,
+      checked: r.name === 'viewer',
+    }))
     const pageData: UserNewPageData = {
-      roles: ROLES,
+      rbacRoles,
       user: {
         name: user!.email.split('@')[0] || user!.email,
         email: user!.email,
@@ -654,9 +670,7 @@ userRoutes.post('/users/new', async (c) => {
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     const bio = sanitizeInput(formData.get('bio')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || 'viewer'
-    const validRoles = ['admin', 'editor', 'author', 'viewer']
-    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
+    const rbacRoleIds = formData.getAll('rbac_roles').map((v) => String(v)).filter(Boolean)
     const password = formData.get('password')?.toString() || ''
     const confirmPassword = formData.get('confirm_password')?.toString() || ''
     const isActive = formData.get('is_active') === '1'
@@ -727,14 +741,16 @@ userRoutes.post('/users/new', async (c) => {
 
     await createStmt.bind(
       userId, email, username, firstName, lastName, phone, bio,
-      passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
+      passwordHash, 'viewer', isActive ? 1 : 0, emailVerified ? 1 : 0,
       Date.now(), Date.now()
     ).run()
+
+    await new RbacService(db).setUserRoles(userId, rbacRoleIds)
 
     // Log the activity
     await logActivity(
       db, user!.userId, 'user!.create', 'users', userId,
-      { email, username, role },
+      { email, username, rbac_roles: rbacRoleIds },
       c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
       c.req.header('user-agent')
     )
@@ -878,7 +894,6 @@ userRoutes.get('/users/:id/edit', async (c) => {
       lastName: userToEdit.last_name || '',
       phone: userToEdit.phone,
       avatarUrl: userToEdit.avatar_url,
-      role: userToEdit.role,
       isActive: Boolean(userToEdit.is_active),
       emailVerified: Boolean(userToEdit.email_verified),
       twoFactorEnabled: Boolean(userToEdit.two_factor_enabled),
@@ -903,7 +918,6 @@ userRoutes.get('/users/:id/edit', async (c) => {
 
     const pageData: UserEditPageData = {
       userToEdit: editData,
-      roles: ROLES,
       rbacRoles,
       customProfileFieldsHtml,
       user: {
@@ -942,9 +956,6 @@ userRoutes.put('/users/:id', async (c) => {
     const username = sanitizeInput(formData.get('username')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || 'viewer'
-    const validRoles = ['admin', 'editor', 'author', 'viewer']
-    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
     const isActive = formData.get('is_active') === '1'
     const emailVerified = formData.get('email_verified') === '1'
 
@@ -1048,23 +1059,21 @@ userRoutes.put('/users/:id', async (c) => {
     const updateStmt = db.prepare(`
       UPDATE users SET
         first_name = ?, last_name = ?, username = ?, email = ?,
-        phone = ?, role = ?, is_active = ?, email_verified = ?,
+        phone = ?, is_active = ?, email_verified = ?,
         updated_at = ?
       WHERE id = ?
     `)
 
     await updateStmt.bind(
       firstName, lastName, username, email,
-      phone, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
+      phone, isActive ? 1 : 0, emailVerified ? 1 : 0,
       Date.now(), userId
     ).run()
 
-    // Sync dynamic RBAC role assignments (multi-role). The single `role` column
-    // above stays the primary role (used by Better Auth + admin gating).
+    // Sync dynamic RBAC role assignments (multi-role). Empty selection means
+    // the user has no roles and therefore no portal access.
     const rbacRoleIds = formData.getAll('rbac_roles').map((v) => String(v)).filter(Boolean)
-    if (rbacRoleIds.length > 0) {
-      await new RbacService(db).setUserRoles(userId, rbacRoleIds)
-    }
+    await new RbacService(db).setUserRoles(userId, rbacRoleIds)
 
     // Update password if provided
     if (newPassword) {
@@ -1119,7 +1128,7 @@ userRoutes.put('/users/:id', async (c) => {
     // Log the activity
     await logActivity(
       db, user!.userId, 'user.update', 'users', userId,
-      { fields: ['first_name', 'last_name', 'username', 'email', 'phone', 'role', 'is_active', 'email_verified', 'profile', ...(newPassword ? ['password'] : [])] },
+      { fields: ['first_name', 'last_name', 'username', 'email', 'phone', 'rbac_roles', 'is_active', 'email_verified', 'profile', ...(newPassword ? ['password'] : [])] },
       c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
       c.req.header('user-agent')
     )
@@ -1278,7 +1287,7 @@ userRoutes.post('/invite-user', async (c) => {
 
     // Sanitize all user inputs to prevent XSS attacks
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
-    const role = formData.get('role')?.toString()?.trim() || 'viewer'
+    const defaultRoleName = 'viewer'
     const firstName = sanitizeInput(formData.get('first_name')?.toString())
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
 
@@ -1318,15 +1327,19 @@ userRoutes.post('/invite-user', async (c) => {
     `)
 
     await createUserStmt.bind(
-      userId, email, firstName, lastName, role,
+      userId, email, firstName, lastName, defaultRoleName,
       invitationToken, user!.userId, Date.now(),
       0, 0, Date.now(), Date.now()
     ).run()
 
+    await db.prepare(
+      'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
+    ).bind(userId, defaultRoleName).run()
+
     // Log the activity
     await logActivity(
       db, user!.userId, 'user!.invite_sent', 'users', userId,
-      { email, role, invited_user_id: userId },
+      { email, rbac_roles: [defaultRoleName], invited_user_id: userId },
       c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
       c.req.header('user-agent')
     )
@@ -1343,7 +1356,7 @@ userRoutes.post('/invite-user', async (c) => {
         email,
         first_name: firstName,
         last_name: lastName,
-        role
+        rbac_roles: [defaultRoleName]
       },
       invitation_link: invitationLink // In production, this would be sent via email
     })

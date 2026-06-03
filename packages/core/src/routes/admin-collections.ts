@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { html } from 'hono/html'
-import { requireAuth, requireRole } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { isPluginActive } from '../middleware/plugin-middleware'
 import { normalizeFieldType } from './admin-collections-field-types'
 import { renderCollectionsListPage } from '../templates/pages/admin-collections-list.template'
@@ -95,9 +95,9 @@ export const adminCollectionsRoutes = new Hono<{ Bindings: Bindings; Variables: 
 adminCollectionsRoutes.use('*', requireAuth())
 
 // Enforce admin-only access on collection modification routes
-adminCollectionsRoutes.post('*', requireRole(['admin']))
-adminCollectionsRoutes.put('*', requireRole(['admin']))
-adminCollectionsRoutes.delete('*', requireRole(['admin']))
+adminCollectionsRoutes.post('*', requireRbac('collections', 'manage'))
+adminCollectionsRoutes.put('*', requireRbac('collections', 'manage'))
+adminCollectionsRoutes.delete('*', requireRbac('collections', 'manage'))
 
 // Collections management - List all collections
 adminCollectionsRoutes.get('/', async (c) => {

@@ -8,7 +8,7 @@ const createMockUser = (role: string = 'admin') => ({
   role
 })
 
-// Mock the requireAuth middleware to bypass authentication in tests
+// Mock auth/RBAC middleware to bypass authentication and authorization in tests
 vi.mock('../../middleware', () => ({
   requireAuth: () => {
     return async (c: any, next: any) => {
@@ -17,6 +17,11 @@ vi.mock('../../middleware', () => ({
     }
   },
   requireRole: () => {
+    return async (_c: any, next: any) => {
+      await next()
+    }
+  },
+  requireRbac: () => {
     return async (_c: any, next: any) => {
       await next()
     }
@@ -32,6 +37,20 @@ vi.mock('../../middleware', () => ({
 // Mock sanitizeInput to pass through (tested elsewhere)
 vi.mock('../../utils/sanitize', () => ({
   sanitizeInput: (val: any) => val
+}))
+
+vi.mock('../../services/rbac', () => ({
+  RbacService: vi.fn().mockImplementation(function () {
+    return {
+      getRoles: vi.fn().mockResolvedValue([
+        { id: 'role-viewer', name: 'viewer', display_name: 'Viewer' }
+      ]),
+      getRolesForUser: vi.fn().mockResolvedValue([
+        { id: 'role-viewer', name: 'viewer', display_name: 'Viewer' }
+      ]),
+      setUserRoles: vi.fn().mockResolvedValue(undefined)
+    }
+  })
 }))
 
 // Mock template modules — return JSON-stringified data for inspection

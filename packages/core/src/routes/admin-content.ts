@@ -2,7 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 import { Hono } from 'hono'
 import { html } from 'hono/html'
 import type { Bindings, Variables } from '../app'
-import { requireAuth, requireRole } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { isPluginActive } from '../middleware/plugin-middleware'
 import { CACHE_CONFIGS, getCacheService } from '../services/cache'
 import { PluginService } from '../services/plugin-service'
@@ -1052,7 +1052,7 @@ adminContentRoutes.put('/:id', async (c) => {
 })
 
 // Content preview
-adminContentRoutes.post('/preview', requireRole(['admin', 'editor', 'author']), async (c) => {
+adminContentRoutes.post('/preview', requireRbac('content', 'read'), async (c) => {
   try {
     const formData = await c.req.formData()
     const collectionId = formData.get('collection_id') as string
@@ -1511,7 +1511,7 @@ adminContentRoutes.post('/:id/restore/:version', async (c) => {
 })
 
 // Preview specific version
-adminContentRoutes.get('/:id/version/:version/preview', requireRole(['admin', 'editor', 'author']), async (c) => {
+adminContentRoutes.get('/:id/version/:version/preview', requireRbac('content', 'read'), async (c) => {
   try {
     const id = c.req.param('id')
     const version = parseInt(c.req.param('version') || '0')

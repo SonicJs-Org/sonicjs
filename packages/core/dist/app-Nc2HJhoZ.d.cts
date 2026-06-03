@@ -325,7 +325,6 @@ interface SonicJSConfig {
         beforeAuth?: Array<(c: Context, next: () => Promise<void>) => Promise<void>>;
         afterAuth?: Array<(c: Context, next: () => Promise<void>) => Promise<void>>;
     };
-    adminAccessRoles?: string[];
     auth?: {
         extendBetterAuth?: ExtendBetterAuth;
     };

@@ -141,24 +141,21 @@ export function getDefaultAuthOptions(env: Bindings) {
                 return { data: { ...userData, name, firstName, lastName, username, role: 'viewer' } }
               },
               after: async (user: { id: string }) => {
-                // Promote to admin when no admin exists yet (the first real user).
-                // Counting admins (rather than all users) ignores internal seed
-                // users like `system-forms`.
-                const result = (await env.DB.prepare(
-                  "SELECT COUNT(*) as count FROM users WHERE role = 'admin' AND id != ?"
-                )
-                  .bind(user.id)
-                  .first()) as { count: number } | null
-                if ((result?.count ?? 0) === 0) {
-                  await env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(user.id).run()
-                }
-                // Mirror the primary role into the dynamic RBAC membership table
-                // so the user shows up with a role in the RBAC matrix immediately.
+                // Assign dynamic RBAC membership. The first real user receives
+                // Administrator so fresh installs can enter the portal; later
+                // self-registered users receive Viewer.
                 try {
-                  const row = (await env.DB.prepare('SELECT role FROM users WHERE id = ?')
+                  const result = (await env.DB.prepare(
+                    `SELECT COUNT(*) as count FROM rbac_user_roles ur
+                     JOIN rbac_roles r ON r.id = ur.role_id
+                     WHERE r.name = 'admin' AND ur.user_id != ?`
+                  )
                     .bind(user.id)
-                    .first()) as { role: string } | null
-                  const roleName = row?.role ?? 'viewer'
+                    .first()) as { count: number } | null
+                  const roleName = (result?.count ?? 0) === 0 ? 'admin' : 'viewer'
+                  // Keep the legacy column populated for older code paths, but
+                  // portal access is now decided by rbac_user_roles.
+                  await env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(roleName, user.id).run()
                   await env.DB.prepare(
                     'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
                   )

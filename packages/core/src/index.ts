@@ -68,6 +68,7 @@ export {
   AuthManager,
   requireAuth,
   requireRole,
+  requireRbac,
   optionalAuth,
   // Logging
   loggingMiddleware,

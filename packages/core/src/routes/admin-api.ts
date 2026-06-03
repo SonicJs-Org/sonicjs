@@ -8,14 +8,14 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 // import { zValidator } from '@hono/zod-validator'
-import { requireAuth, requireRole } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import type { Bindings, Variables } from '../app'
 
 export const adminApiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Apply auth middleware to all admin routes
 adminApiRoutes.use('*', requireAuth())
-adminApiRoutes.use('*', requireRole(['admin', 'editor']))
+adminApiRoutes.use('*', requireRbac('portal', 'access'))
 
 /**
  * Get dashboard statistics

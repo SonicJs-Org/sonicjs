@@ -116,15 +116,14 @@ function getDefaultAuthOptions(env) {
                 return { data: { ...userData, name, firstName, lastName, username, role: "viewer" } };
               },
               after: async (user) => {
-                const result = await env.DB.prepare(
-                  "SELECT COUNT(*) as count FROM users WHERE role = 'admin' AND id != ?"
-                ).bind(user.id).first();
-                if ((result?.count ?? 0) === 0) {
-                  await env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(user.id).run();
-                }
                 try {
-                  const row = await env.DB.prepare("SELECT role FROM users WHERE id = ?").bind(user.id).first();
-                  const roleName = row?.role ?? "viewer";
+                  const result = await env.DB.prepare(
+                    `SELECT COUNT(*) as count FROM rbac_user_roles ur
+                     JOIN rbac_roles r ON r.id = ur.role_id
+                     WHERE r.name = 'admin' AND ur.user_id != ?`
+                  ).bind(user.id).first();
+                  const roleName = (result?.count ?? 0) === 0 ? "admin" : "viewer";
+                  await env.DB.prepare("UPDATE users SET role = ? WHERE id = ?").bind(roleName, user.id).run();
                   await env.DB.prepare(
                     "INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?"
                   ).bind(user.id, roleName).run();
@@ -146,5 +145,5 @@ function createAuth(env, extendBetterAuth) {
 
 exports.createAuth = createAuth;
 exports.getDefaultAuthOptions = getDefaultAuthOptions;
-//# sourceMappingURL=chunk-QQONVIFK.cjs.map
-//# sourceMappingURL=chunk-QQONVIFK.cjs.map
+//# sourceMappingURL=chunk-GAX3TDKX.cjs.map
+//# sourceMappingURL=chunk-GAX3TDKX.cjs.map

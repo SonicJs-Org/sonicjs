@@ -1,6 +1,6 @@
 /**
- * Admin RBAC management UI + routes (mounted under /admin/rbac, so the global
- * /admin/* requireAuth + requireRole('admin') gating already applies).
+ * Admin RBAC management UI + routes. Global /admin/* middleware requires
+ * portal access; this route also requires rbac:manage.
  *
  *   GET  /admin/rbac                 → matrix UI (per-role resource×verb grid),
  *                                       role/verb management, live check
@@ -15,9 +15,11 @@ import { Hono } from 'hono'
 import { RbacService } from '../services/rbac'
 import { renderAdminLayoutCatalyst } from '../templates/layouts/admin-layout-catalyst.template'
 import { getCoreVersion } from '../utils/version'
+import { requireRbac } from '../middleware/auth'
 import type { Bindings, Variables } from '../app'
 
 export const adminRbacRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+adminRbacRoutes.use('*', requireRbac('rbac', 'manage'))
 
 const esc = (s: string) =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

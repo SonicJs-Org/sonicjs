@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { html, raw } from 'hono/html'
 import { z } from 'zod'
 import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-types'
-import { requireAuth, requireRole } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { renderMediaLibraryPage, MediaLibraryPageData, FolderStats, TypeStats } from '../templates/pages/admin-media-library.template'
 import { renderMediaFileDetails, MediaFileDetailsData } from '../templates/components/media-file-details.template'
 import { MediaFile, renderMediaFileCard } from '../templates/components/media-grid.template'
@@ -730,7 +730,7 @@ adminMediaRoutes.put('/:id', async (c) => {
 })
 
 // Cleanup unused media files (HTMX compatible)
-adminMediaRoutes.delete('/cleanup', requireRole('admin'), async (c) => {
+adminMediaRoutes.delete('/cleanup', requireRbac('media', 'delete'), async (c) => {
   try {
     const db = c.env.DB
 

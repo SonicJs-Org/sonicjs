@@ -38,9 +38,11 @@ adminRbacRoutes.get('/', async (c) => {
     rbac.getResources(),
     rbac.getGrants(),
   ])
-  // Multi-select roles for side-by-side comparison. Default: all roles.
+  // Multi-select roles for side-by-side comparison. First visit defaults to all
+  // roles, but an explicit selector submit with no roles selected stays empty.
   const requested = c.req.queries('roles') || []
-  const selectedIds = requested.length ? requested : roles.map((r) => r.id)
+  const hasCompareSelection = c.req.query('compare') === '1'
+  const selectedIds = hasCompareSelection ? requested : roles.map((r) => r.id)
   const selectedRoles = roles.filter((r) => selectedIds.includes(r.id))
   const isAdmin = (r: { name: string }) => r.name === 'admin'
   const grantsByRole = new Map<string, Set<string>>()
@@ -225,11 +227,13 @@ adminRbacRoutes.get('/', async (c) => {
   <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Tick roles to compare them side by side — each selected role becomes its own column under every verb. Every collection is a resource automatically. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
 
   <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
+    <input type="hidden" name="compare" value="1">
     <span class="text-xs text-zinc-500 dark:text-zinc-400 mr-1">Compare roles:</span>${roleTabs}
   </form>
 
   <form method="post" action="/admin/rbac/grants" class="${card} mb-8 overflow-x-auto">
     <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
+    <input type="hidden" name="compare" value="1">
     ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join('')}
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? '' : 's'})</span></h3>
@@ -346,9 +350,11 @@ adminRbacRoutes.post('/grants', async (c) => {
     await rbac.setRoleGrants(id, pairsByRole.get(id) || [])
   }
 
-  const qs = (viewRoleIds.length ? viewRoleIds : saveRoleIds)
-    .map((id) => `roles=${encodeURIComponent(id)}`)
-    .join('&')
+  const redirectRoleIds = viewRoleIds.length ? viewRoleIds : saveRoleIds
+  const qs = [
+    form.get('compare') === '1' ? 'compare=1' : '',
+    ...redirectRoleIds.map((id) => `roles=${encodeURIComponent(id)}`),
+  ].filter(Boolean).join('&')
   return c.redirect(`/admin/rbac${qs ? `?${qs}` : ''}`)
 })
 

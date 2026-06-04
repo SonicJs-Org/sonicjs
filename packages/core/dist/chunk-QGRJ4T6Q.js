@@ -1,9 +1,9 @@
 import { isFirstUserRegistration, isRegistrationEnabled, authValidationService } from './chunk-F2IDJF3K.js';
 import { getCacheService, CACHE_CONFIGS, SettingsService, getLogger, getAppInstance, buildRouteList, CATEGORY_INFO } from './chunk-HFKY2PR7.js';
-import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, logActivity, generateCsrfToken } from './chunk-UERRHTDU.js';
+import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, logActivity, generateCsrfToken } from './chunk-K3XVIZH7.js';
 import { RbacService } from './chunk-JWJUS6B7.js';
-import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-6LT4JUOS.js';
-import { MigrationService } from './chunk-UZDKTXU6.js';
+import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-ZFYJEZAX.js';
+import { MigrationService } from './chunk-2HKFX2TF.js';
 import { renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-VAO3B7DJ.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-ZRDPUJYQ.js';
 import { PluginBuilder, TurnstileService } from './chunk-EXNEW5US.js';
@@ -2396,7 +2396,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-BU33N372.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KOQPYWYY.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2421,7 +2421,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-BU33N372.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KOQPYWYY.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2443,7 +2443,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-BU33N372.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-KOQPYWYY.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -29607,5 +29607,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, createUserProfilesPlugin, defineUserProfile, getConfirmationDialogScript2 as getConfirmationDialogScript, getCustomData, getUserProfileConfig, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userProfilesPlugin, userRoutes };
-//# sourceMappingURL=chunk-IKJMP5W4.js.map
-//# sourceMappingURL=chunk-IKJMP5W4.js.map
+//# sourceMappingURL=chunk-QGRJ4T6Q.js.map
+//# sourceMappingURL=chunk-QGRJ4T6Q.js.map

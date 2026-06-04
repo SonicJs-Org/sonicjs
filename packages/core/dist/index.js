@@ -1,17 +1,17 @@
 import { createAuth } from './chunk-YJTW5F2Z.js';
-import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-SQ7PORIO.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-SQ7PORIO.js';
+import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-QGRJ4T6Q.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-QGRJ4T6Q.js';
 import './chunk-F2IDJF3K.js';
 import { SettingsService, setAppInstance } from './chunk-HFKY2PR7.js';
 export { Logger, getLogger, initLogger } from './chunk-HFKY2PR7.js';
 import { schema_exports } from './chunk-4LLMM7J6.js';
 export { apiTokens, collections, content, contentVersions, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-4LLMM7J6.js';
-import { requireRbac, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-ZSZILBQQ.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-ZSZILBQQ.js';
+import { requireRbac, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-K3XVIZH7.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-K3XVIZH7.js';
 import { RbacService } from './chunk-JWJUS6B7.js';
-import { PluginService, PLUGIN_REGISTRY } from './chunk-6LT4JUOS.js';
-export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-6LT4JUOS.js';
-export { MigrationService } from './chunk-GD75BFXO.js';
+import { PluginService, PLUGIN_REGISTRY } from './chunk-ZFYJEZAX.js';
+export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-ZFYJEZAX.js';
+export { MigrationService } from './chunk-2HKFX2TF.js';
 export { renderFilterBar } from './chunk-EJBRB3XQ.js';
 import { renderAdminLayout } from './chunk-VAO3B7DJ.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-VAO3B7DJ.js';
@@ -85,13 +85,11 @@ adminRbacRoutes.get("/", async (c) => {
     ].join(";");
   };
   const roleStyle = (seed, extra = "") => `style="${roleTone(seed)};${extra}"`;
-  const seg = (key, val, label, scope, disabled, roleId, resKey, verbName) => `<label class="cursor-pointer ${disabled ? "pointer-events-none" : ""}">
-      <input type="radio" class="peer sr-only" name="${esc(key)}" value="${val}" data-role="${esc(
+  const SCOPE_HEX = { none: "#9ca3af", own: "#f59e0b", any: "#10b981" };
+  const seg = (key, val, scope, disabled, roleId, resKey, verbName) => `<label class="scope ${disabled ? "pointer-events-none" : "cursor-pointer"}" title="${val.charAt(0).toUpperCase() + val.slice(1)}" style="--sc:${SCOPE_HEX[val]}"><input type="radio" name="${esc(key)}" value="${val}" data-role="${esc(
     roleId
-  )}" data-res="${esc(resKey)}" data-verb="${esc(verbName)}" ${scope === val ? "checked" : ""} ${disabled ? "disabled" : ""}>
-      <span class="block rounded-lg px-2 py-0.5 text-center leading-tight text-zinc-500 dark:text-zinc-400 peer-checked:bg-white dark:peer-checked:bg-zinc-700 peer-checked:text-zinc-900 dark:peer-checked:text-white peer-checked:shadow-sm transition-colors">${label}</span>
-    </label>`;
-  const scopeSwitch = (key, scope, ownSupported, disabled, roleId, resKey, verbName) => `<div class="inline-flex flex-col items-stretch gap-0.5 rounded-2xl bg-zinc-100 dark:bg-white/10 p-0.5 text-[10px] font-medium ${disabled ? "opacity-60" : ""}" role="radiogroup">${seg(key, "none", "None", scope, disabled, roleId, resKey, verbName)}${ownSupported ? seg(key, "own", "Own", scope, disabled, roleId, resKey, verbName) : ""}${seg(key, "any", "Any", scope, disabled, roleId, resKey, verbName)}</div>`;
+  )}" data-res="${esc(resKey)}" data-verb="${esc(verbName)}" ${scope === val ? "checked" : ""} ${disabled ? "disabled" : ""}><span></span></label>`;
+  const scopeSwitch = (key, scope, ownSupported, disabled, roleId, resKey, verbName) => `<div class="inline-flex flex-col items-center gap-[3px] ${disabled ? "opacity-60" : ""}" role="radiogroup">${seg(key, "any", scope, disabled, roleId, resKey, verbName)}${ownSupported ? seg(key, "own", scope, disabled, roleId, resKey, verbName) : ""}${seg(key, "none", scope, disabled, roleId, resKey, verbName)}</div>`;
   const headRow1 = verbs.map(
     (v) => `<th colspan="${selectedRoles.length}" class="px-2 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border-l border-zinc-950/10 dark:border-white/10" title="${esc(
       v.description || ""
@@ -170,7 +168,21 @@ adminRbacRoutes.get("/", async (c) => {
   const btn = "inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100";
   const inp = "rounded-md bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15";
   const card = "rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-5";
+  const scopeStyles = `<style>
+    .scope{display:block;line-height:0}
+    .scope > input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+    .scope > span{display:block;height:9px;width:26px;border-radius:9999px;background:rgba(140,140,150,.22);transition:background .15s,box-shadow .15s}
+    .scope > input:checked + span{background:var(--sc);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+    .scope > input:disabled + span{opacity:.55}
+    .scope:hover > span{outline:2px solid var(--sc);outline-offset:1px}
+  </style>`;
+  const swatch = (hex, label) => `<span class="inline-flex items-center gap-1.5"><span class="inline-block h-2.5 w-5 rounded-full" style="background:${hex}"></span>${label}</span>`;
+  const scopeLegend = `<div class="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+    <span class="font-medium text-zinc-700 dark:text-zinc-300">Scope (top\u2192bottom):</span>
+    ${swatch("#10b981", "Any")}${swatch("#f59e0b", "Own")}${swatch("#9ca3af", "None")}
+  </div>`;
   const content2 = `
+  ${scopeStyles}
   ${TABS}
   <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">\u{1F512} Administrator</span> is full-access and read-only.</p>
 
@@ -184,8 +196,9 @@ adminRbacRoutes.get("/", async (c) => {
     <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
     <input type="hidden" name="compare" value="1">
     ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join("")}
-    <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
       <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? "" : "s"})</span></h3>
+      ${scopeLegend}
       <button type="submit" class="${btn}">Save changes</button>
     </div>
     ${selectedRoles.length === 0 ? '<p class="text-sm text-zinc-500">Select one or more roles above to compare.</p>' : `<table class="w-full text-sm border-collapse">

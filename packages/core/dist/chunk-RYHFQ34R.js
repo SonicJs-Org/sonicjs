@@ -1,5 +1,5 @@
 import { RbacService } from './chunk-JWJUS6B7.js';
-import { syncCollections, syncAllFormCollections, PluginBootstrapService } from './chunk-6LT4JUOS.js';
+import { syncCollections, syncAllFormCollections, PluginBootstrapService } from './chunk-ZFYJEZAX.js';
 import { MigrationService } from './chunk-GD75BFXO.js';
 import { metricsTracker } from './chunk-FICTAGD4.js';
 import { sign, verify } from 'hono/jwt';
@@ -696,5 +696,5 @@ var getActivePlugins = () => [];
 var isPluginActive = () => false;
 
 export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, csrfProtection, detailedLoggingMiddleware, generateCsrfToken, getActivePlugins, getJwtExpirySeconds, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, rateLimit, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware, securityLoggingMiddleware, validateCsrfToken, verifySecurityConfig };
-//# sourceMappingURL=chunk-ZSZILBQQ.js.map
-//# sourceMappingURL=chunk-ZSZILBQQ.js.map
+//# sourceMappingURL=chunk-RYHFQ34R.js.map
+//# sourceMappingURL=chunk-RYHFQ34R.js.map

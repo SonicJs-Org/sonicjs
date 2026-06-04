@@ -1,8 +1,8 @@
 'use strict';
 
 var chunkMK3ELO6L_cjs = require('./chunk-MK3ELO6L.cjs');
-var chunk245W6L7T_cjs = require('./chunk-245W6L7T.cjs');
-var chunkK5PUZNKE_cjs = require('./chunk-K5PUZNKE.cjs');
+var chunkHA3ACESH_cjs = require('./chunk-HA3ACESH.cjs');
+var chunkOS4I55T2_cjs = require('./chunk-OS4I55T2.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var jwt = require('hono/jwt');
 var cookie = require('hono/cookie');
@@ -58,23 +58,23 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new chunkK5PUZNKE_cjs.MigrationService(c.env.DB);
+      const migrationService = new chunkOS4I55T2_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await chunk245W6L7T_cjs.syncCollections(c.env.DB);
+        await chunkHA3ACESH_cjs.syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
       console.log("[Bootstrap] Syncing form collections...");
       try {
-        await chunk245W6L7T_cjs.syncAllFormCollections(c.env.DB);
+        await chunkHA3ACESH_cjs.syncAllFormCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing form collections:", error);
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new chunk245W6L7T_cjs.PluginBootstrapService(c.env.DB);
+        const bootstrapService = new chunkHA3ACESH_cjs.PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -727,5 +727,5 @@ exports.securityHeadersMiddleware = securityHeadersMiddleware;
 exports.securityLoggingMiddleware = securityLoggingMiddleware;
 exports.validateCsrfToken = validateCsrfToken;
 exports.verifySecurityConfig = verifySecurityConfig;
-//# sourceMappingURL=chunk-2OLU6AGV.cjs.map
-//# sourceMappingURL=chunk-2OLU6AGV.cjs.map
+//# sourceMappingURL=chunk-RWNSMBDP.cjs.map
+//# sourceMappingURL=chunk-RWNSMBDP.cjs.map

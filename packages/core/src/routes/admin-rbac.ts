@@ -84,27 +84,29 @@ adminRbacRoutes.get('/', async (c) => {
   }
   const roleStyle = (seed: string, extra = '') => `style="${roleTone(seed)};${extra}"`
 
-  // 3-way (None/Own/Any) segmented switch. Hidden radios drive it so form
-  // submission, the "All resources" cascade, and the POST parser all keep
-  // working exactly as before; the checked segment gets a white "thumb".
+  // Vertical 3-position scope "range": each option is a colored stop (Any=green,
+  // Own=amber, None=gray) stacked top→bottom (most→least access). No per-cell
+  // labels — the legend at the top of the matrix explains the colors. Hidden
+  // radios still drive form submission, the cascade, and the POST parser; the
+  // colors are applied via the .scope CSS block (see `scopeStyles`) since
+  // inline styles can't target :checked.
+  const SCOPE_HEX: Record<string, string> = { none: '#9ca3af', own: '#f59e0b', any: '#10b981' }
   const seg = (
     key: string,
     val: string,
-    label: string,
     scope: string,
     disabled: boolean,
     roleId: string,
     resKey: string,
     verbName: string
   ) =>
-    `<label class="cursor-pointer ${disabled ? 'pointer-events-none' : ''}">
-      <input type="radio" class="peer sr-only" name="${esc(key)}" value="${val}" data-role="${esc(
+    `<label class="scope ${disabled ? 'pointer-events-none' : 'cursor-pointer'}" title="${
+      val.charAt(0).toUpperCase() + val.slice(1)
+    }" style="--sc:${SCOPE_HEX[val]}"><input type="radio" name="${esc(key)}" value="${val}" data-role="${esc(
       roleId
     )}" data-res="${esc(resKey)}" data-verb="${esc(verbName)}" ${scope === val ? 'checked' : ''} ${
       disabled ? 'disabled' : ''
-    }>
-      <span class="block rounded-lg px-2 py-0.5 text-center leading-tight text-zinc-500 dark:text-zinc-400 peer-checked:bg-white dark:peer-checked:bg-zinc-700 peer-checked:text-zinc-900 dark:peer-checked:text-white peer-checked:shadow-sm transition-colors">${label}</span>
-    </label>`
+    }><span></span></label>`
   const scopeSwitch = (
     key: string,
     scope: string,
@@ -114,11 +116,11 @@ adminRbacRoutes.get('/', async (c) => {
     resKey: string,
     verbName: string
   ) =>
-    `<div class="inline-flex flex-col items-stretch gap-0.5 rounded-2xl bg-zinc-100 dark:bg-white/10 p-0.5 text-[10px] font-medium ${
+    `<div class="inline-flex flex-col items-center gap-[3px] ${
       disabled ? 'opacity-60' : ''
-    }" role="radiogroup">${seg(key, 'none', 'None', scope, disabled, roleId, resKey, verbName)}${
-      ownSupported ? seg(key, 'own', 'Own', scope, disabled, roleId, resKey, verbName) : ''
-    }${seg(key, 'any', 'Any', scope, disabled, roleId, resKey, verbName)}</div>`
+    }" role="radiogroup">${seg(key, 'any', scope, disabled, roleId, resKey, verbName)}${
+      ownSupported ? seg(key, 'own', scope, disabled, roleId, resKey, verbName) : ''
+    }${seg(key, 'none', scope, disabled, roleId, resKey, verbName)}</div>`
 
   // Two-level header: verb groups, each split into a sub-column per selected role.
   const headRow1 = verbs
@@ -258,7 +260,25 @@ adminRbacRoutes.get('/', async (c) => {
   const inp = 'rounded-md bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15'
   const card = 'rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-5'
 
+  // Scoped styles for the vertical colored scope range (colors come from each
+  // segment's --sc var; :checked can't be done via inline style).
+  const scopeStyles = `<style>
+    .scope{display:block;line-height:0}
+    .scope > input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+    .scope > span{display:block;height:9px;width:26px;border-radius:9999px;background:rgba(140,140,150,.22);transition:background .15s,box-shadow .15s}
+    .scope > input:checked + span{background:var(--sc);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+    .scope > input:disabled + span{opacity:.55}
+    .scope:hover > span{outline:2px solid var(--sc);outline-offset:1px}
+  </style>`
+  const swatch = (hex: string, label: string) =>
+    `<span class="inline-flex items-center gap-1.5"><span class="inline-block h-2.5 w-5 rounded-full" style="background:${hex}"></span>${label}</span>`
+  const scopeLegend = `<div class="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+    <span class="font-medium text-zinc-700 dark:text-zinc-300">Scope (top→bottom):</span>
+    ${swatch('#10b981', 'Any')}${swatch('#f59e0b', 'Own')}${swatch('#9ca3af', 'None')}
+  </div>`
+
   const content = `
+  ${scopeStyles}
   ${TABS}
   <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
 
@@ -272,8 +292,9 @@ adminRbacRoutes.get('/', async (c) => {
     <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
     <input type="hidden" name="compare" value="1">
     ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join('')}
-    <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
       <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? '' : 's'})</span></h3>
+      ${scopeLegend}
       <button type="submit" class="${btn}">Save changes</button>
     </div>
     ${

@@ -1,13 +1,13 @@
 'use strict';
 
-var chunkZKSFCCB5_cjs = require('./chunk-ZKSFCCB5.cjs');
+var chunk5KIYZ4QS_cjs = require('./chunk-5KIYZ4QS.cjs');
 require('./chunk-PQNVO5QM.cjs');
 require('./chunk-QAHXKCFP.cjs');
 require('./chunk-3ZXNJZOP.cjs');
-require('./chunk-2OLU6AGV.cjs');
+require('./chunk-RWNSMBDP.cjs');
 require('./chunk-MK3ELO6L.cjs');
-require('./chunk-245W6L7T.cjs');
-require('./chunk-K5PUZNKE.cjs');
+require('./chunk-HA3ACESH.cjs');
+require('./chunk-OS4I55T2.cjs');
 require('./chunk-4EKUMFZS.cjs');
 require('./chunk-QWSCAYYC.cjs');
 require('./chunk-635JAMSE.cjs');
@@ -21,95 +21,95 @@ require('./chunk-IGJUBJBW.cjs');
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.ROUTES_INFO; }
+  get: function () { return chunk5KIYZ4QS_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiReferenceRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.router2; }
+  get: function () { return chunk5KIYZ4QS_cjs.router2; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.admin_api_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminCheckboxRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.admin_code_examples_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminCollectionsRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.admin_content_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.router; }
+  get: function () { return chunk5KIYZ4QS_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminDesignRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminFormsRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminFormsRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminFormsRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminLogsRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminMediaRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminPluginRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.adminSettingsRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.admin_testimonials_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.userRoutes; }
+  get: function () { return chunk5KIYZ4QS_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.api_content_crud_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.api_media_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.api_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.api_system_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.auth_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.auth_default; }
 });
 Object.defineProperty(exports, "publicFormsRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.public_forms_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.public_forms_default; }
 });
 Object.defineProperty(exports, "testCleanupRoutes", {
   enumerable: true,
-  get: function () { return chunkZKSFCCB5_cjs.test_cleanup_default; }
+  get: function () { return chunk5KIYZ4QS_cjs.test_cleanup_default; }
 });
 //# sourceMappingURL=routes.cjs.map
 //# sourceMappingURL=routes.cjs.map

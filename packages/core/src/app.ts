@@ -256,29 +256,63 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())
 
-  // RBAC-aware sidebar: inject the signed-in user's effective permission set so
-  // the admin layout can hide nav items the user can't use. The routes stay
-  // gated by requireRbac; this only trims the menu. Non-fatal on any error.
+  // RBAC-aware admin shell. Computes the signed-in user's effective permission
+  // set once, then (1) redirects the dashboard landing to the first section the
+  // user can actually reach when they lack `dashboard:read`, and (2) strips nav
+  // items the user can't access from the rendered HTML *server-side* (via the
+  // <!--nav:perm--> markers in the layout) so nothing inaccessible reaches the
+  // browser. Routes remain independently gated by requireRbac.
+  const NAV_LANDING: Array<{ path: string; perm: string }> = [
+    { path: '/admin/content', perm: 'content:read' },
+    { path: '/admin/media', perm: 'media:read' },
+    { path: '/admin/collections', perm: 'collections:manage' },
+    { path: '/admin/forms', perm: 'content:read' },
+    { path: '/admin/users', perm: 'users:manage' },
+    { path: '/admin/plugins', perm: 'plugins:manage' },
+    { path: '/admin/settings', perm: 'settings:manage' },
+    { path: '/admin/rbac', perm: 'rbac:manage' },
+  ]
   app.use('/admin/*', async (c, next) => {
-    await next()
+    const user = c.get('user') as { userId?: string } | undefined
+    if (!user?.userId) return next()
+
+    let perms: string[] = []
     try {
-      const user = c.get('user') as { userId?: string } | undefined
-      const contentType = c.res.headers.get('content-type') || ''
-      if (!user?.userId || !contentType.includes('text/html')) return
       const { RbacService } = await import('./services/rbac')
-      const perms = await new RbacService(c.env.DB).permissionsForUser(user.userId)
+      perms = await new RbacService(c.env.DB).permissionsForUser(user.userId)
+    } catch {
+      return next() // fail open to the route's own requireRbac gate
+    }
+
+    // Dashboard landing: if the user can't view the dashboard, send them to the
+    // first section they do have access to (instead of an empty/forbidden page).
+    const path = new URL(c.req.url).pathname
+    if (
+      (path === '/admin' || path === '/admin/' || path === '/admin/dashboard') &&
+      !perms.includes('dashboard:read')
+    ) {
+      const dest = NAV_LANDING.find((n) => perms.includes(n.perm))
+      if (dest) return c.redirect(dest.path)
+      return c.redirect('/auth/login?error=Your account has no accessible sections')
+    }
+
+    await next()
+
+    // Strip nav items the user lacks, server-side.
+    try {
+      const contentType = c.res.headers.get('content-type') || ''
+      if (!contentType.includes('text/html')) return
       const body = await c.res.text()
-      const marker = '</head>'
-      if (!body.includes(marker)) return
-      const html = body.replace(
-        marker,
-        `<script>window.__sonicNavPerms=${JSON.stringify(perms)}</script>${marker}`
+      if (!body.includes('<!--nav:')) return
+      const filtered = body.replace(
+        /<!--nav:([^>]+?)-->([\s\S]*?)<!--\/nav-->/g,
+        (_m, perm: string, inner: string) => (perms.includes(perm) ? inner : '')
       )
       const headers = new Headers(c.res.headers)
       headers.delete('content-length')
-      c.res = new Response(html, { status: c.res.status, headers })
+      c.res = new Response(filtered, { status: c.res.status, headers })
     } catch {
-      /* nav just shows all items if this fails */
+      /* leave response as-is on any failure */
     }
   })
 

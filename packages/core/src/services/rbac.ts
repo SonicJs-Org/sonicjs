@@ -43,6 +43,7 @@ export interface Grant {
 const SYSTEM_RESOURCES: RbacResource[] = [
   { key: '*', label: 'All resources', group: 'system' },
   { key: 'portal', label: 'Admin Portal', group: 'system' },
+  { key: 'dashboard', label: 'Dashboard', group: 'system' },
   { key: 'rbac', label: 'Roles & Permissions', group: 'system' },
   { key: 'content', label: 'Content', group: 'system' },
   { key: 'collections', label: 'Collection Schemas', group: 'system' },

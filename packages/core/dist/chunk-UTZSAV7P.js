@@ -1,9 +1,9 @@
 import { isFirstUserRegistration, isRegistrationEnabled, authValidationService } from './chunk-F2IDJF3K.js';
 import { getCacheService, CACHE_CONFIGS, SettingsService, getLogger, getAppInstance, buildRouteList, CATEGORY_INFO } from './chunk-HFKY2PR7.js';
-import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, logActivity, generateCsrfToken } from './chunk-EUSFXT6K.js';
+import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, logActivity, generateCsrfToken } from './chunk-NJDPJEYI.js';
 import { RbacService } from './chunk-5HI6RCMB.js';
-import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-LHEDIQ6K.js';
-import { MigrationService } from './chunk-BAZDPEKO.js';
+import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-I5NAHB26.js';
+import { MigrationService } from './chunk-DU6PTKB5.js';
 import { renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-FTYNSPNP.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-DUEQN2JO.js';
 import { PluginBuilder, TurnstileService } from './chunk-EXNEW5US.js';
@@ -2396,7 +2396,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-SDPGTKI2.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-XYFUGMJQ.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2421,7 +2421,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-SDPGTKI2.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-XYFUGMJQ.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2443,7 +2443,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-SDPGTKI2.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-XYFUGMJQ.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -5380,7 +5380,7 @@ authRoutes.post(
 );
 async function clearBetterAuthSession(c) {
   try {
-    const { createAuth } = await import('./config-7XLAOVLL.js');
+    const { createAuth } = await import('./config-PYR6KYWW.js');
     const auth = createAuth(c.env);
     const res = await auth.api.signOut({ headers: c.req.raw.headers, asResponse: true });
     const setCookies = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [res.headers.get("set-cookie")].filter(Boolean);
@@ -5504,7 +5504,7 @@ authRoutes.post(
         </div>
       `);
       }
-      const { createAuth } = await import('./config-7XLAOVLL.js');
+      const { createAuth } = await import('./config-PYR6KYWW.js');
       const auth = createAuth(c.env);
       let baRes;
       try {
@@ -5597,7 +5597,7 @@ authRoutes.post(
       `);
       }
       const db = c.env.DB;
-      const { createAuth } = await import('./config-7XLAOVLL.js');
+      const { createAuth } = await import('./config-PYR6KYWW.js');
       const auth = createAuth(c.env);
       const attemptSignIn = async () => {
         try {
@@ -5673,6 +5673,9 @@ authRoutes.post(
   async (c) => {
     try {
       const db = c.env.DB;
+      if (c.env.ENVIRONMENT === "production") {
+        return c.json({ error: "Not found" }, 404);
+      }
       await db.prepare(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -5738,9 +5741,7 @@ authRoutes.post(
           email: adminEmail,
           username: "admin",
           role: "admin"
-        },
-        passwordHash
-        // For debugging
+        }
       });
     } catch (error) {
       console.error("Seed admin error:", error);
@@ -5951,6 +5952,7 @@ authRoutes.post("/accept-invitation", async (c) => {
       Date.now(),
       invitedUser.id
     ).run();
+    await ensureCredentialAccount(db, invitedUser.id, passwordHash);
     const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env);
     const authToken = await AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET, tokenTtl);
     setCookie(c, "auth_token", authToken, {
@@ -6214,6 +6216,7 @@ authRoutes.post("/reset-password", async (c) => {
       Date.now(),
       user.id
     ).run();
+    await ensureCredentialAccount(db, user.id, newPasswordHash);
     return c.redirect("/auth/login?message=Password reset successfully. Please log in with your new password.");
   } catch (error) {
     console.error("Password reset error:", error);
@@ -29607,5 +29610,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, createUserProfilesPlugin, defineUserProfile, getConfirmationDialogScript2 as getConfirmationDialogScript, getCustomData, getUserProfileConfig, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userProfilesPlugin, userRoutes };
-//# sourceMappingURL=chunk-YGBGL7HL.js.map
-//# sourceMappingURL=chunk-YGBGL7HL.js.map
+//# sourceMappingURL=chunk-UTZSAV7P.js.map
+//# sourceMappingURL=chunk-UTZSAV7P.js.map

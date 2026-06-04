@@ -766,7 +766,13 @@ authRoutes.post('/seed-admin',
   async (c) => {
   try {
     const db = c.env.DB
-    
+
+    // Dev/test bootstrap endpoint only. Never allow it to run (or leak a known
+    // admin credential) in production.
+    if ((c.env as { ENVIRONMENT?: string }).ENVIRONMENT === 'production') {
+      return c.json({ error: 'Not found' }, 404)
+    }
+
     // First ensure the users table exists
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS users (
@@ -858,8 +864,7 @@ authRoutes.post('/seed-admin',
         email: adminEmail,
         username: 'admin',
         role: 'admin'
-      },
-      passwordHash: passwordHash // For debugging
+      }
     })
   } catch (error) {
     console.error('Seed admin error:', error)
@@ -1103,6 +1108,11 @@ authRoutes.post('/accept-invitation', async (c) => {
       Date.now(),
       invitedUser.id
     ).run()
+
+    // Sync the Better Auth credential account so the invited user can sign in
+    // with the password they just set (BA verifies account.password, not
+    // users.password_hash). Without this the first login would fail.
+    await ensureCredentialAccount(db, invitedUser.id, passwordHash)
 
     // Generate JWT token for auto-login
     const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
@@ -1429,6 +1439,13 @@ authRoutes.post('/reset-password', async (c) => {
       Date.now(),
       user.id
     ).run()
+
+    // Better Auth verifies against account.password, NOT users.password_hash.
+    // Without this write-through the new password would never validate (and the
+    // login self-heal only fires when no account row exists), so a reset would
+    // hard-lock the user out. Sync the credential account; the legacy-PBKDF2
+    // verify hook upgrades it to scrypt on first login.
+    await ensureCredentialAccount(db, user.id, newPasswordHash)
 
     // Log the activity (TODO: implement activity logging)
     // Activity logging is deferred until utils/log-activity is implemented

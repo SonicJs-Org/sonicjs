@@ -34,10 +34,12 @@ binding = "CACHE_KV"
 id = "a16f8246fc294d809c90b0fb2df6d363"
 
 # Environment variables
+# NOTE: BETTER_AUTH_SECRET is a SECRET — never commit it here. Local dev reads it
+# from a gitignored .dev.vars file; preview/prod set it via `wrangler secret put
+# BETTER_AUTH_SECRET`. (The previously-committed value must be rotated.)
 [vars]
 ENVIRONMENT = "development"
 CORS_ORIGINS = "http://localhost:8787"
-BETTER_AUTH_SECRET = "4d4a13a2353e72e96dae7bb985648341f7c2e3ab14c3871594e51c9a1f199dbc"
 
 # Observability
 [observability]
@@ -65,7 +67,7 @@ id = "db875b69dc704e83ad6fd4aad9c023cd"
 
 [env.preview.vars]
 ENVIRONMENT = "preview"
-BETTER_AUTH_SECRET = "4d4a13a2353e72e96dae7bb985648341f7c2e3ab14c3871594e51c9a1f199dbc"
+# BETTER_AUTH_SECRET for preview is set via: wrangler secret put BETTER_AUTH_SECRET --env preview
 BETTER_AUTH_URL = "https://sonicjs-ba-preview.ldc0618847.workers.dev"
 CORS_ORIGINS = "https://sonicjs-ba-preview.ldc0618847.workers.dev"
 

@@ -1,9 +1,11 @@
-import { RbacService } from './chunk-5HI6RCMB.js';
-import { syncCollections, syncAllFormCollections, PluginBootstrapService } from './chunk-LHEDIQ6K.js';
-import { MigrationService } from './chunk-BAZDPEKO.js';
-import { metricsTracker } from './chunk-FICTAGD4.js';
-import { sign, verify } from 'hono/jwt';
-import { getCookie, setCookie } from 'hono/cookie';
+'use strict';
+
+var chunkBI3XUVJ7_cjs = require('./chunk-BI3XUVJ7.cjs');
+var chunkLYRRV5HB_cjs = require('./chunk-LYRRV5HB.cjs');
+var chunkOCVYREFQ_cjs = require('./chunk-OCVYREFQ.cjs');
+var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
+var jwt = require('hono/jwt');
+var cookie = require('hono/cookie');
 
 // src/middleware/bootstrap.ts
 var bootstrapComplete = false;
@@ -56,23 +58,23 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new MigrationService(c.env.DB);
+      const migrationService = new chunkOCVYREFQ_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
-        await syncCollections(c.env.DB);
+        await chunkLYRRV5HB_cjs.syncCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing collections:", error);
       }
       console.log("[Bootstrap] Syncing form collections...");
       try {
-        await syncAllFormCollections(c.env.DB);
+        await chunkLYRRV5HB_cjs.syncAllFormCollections(c.env.DB);
       } catch (error) {
         console.error("[Bootstrap] Error syncing form collections:", error);
       }
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new PluginBootstrapService(c.env.DB);
+        const bootstrapService = new chunkLYRRV5HB_cjs.PluginBootstrapService(c.env.DB);
         const needsBootstrap = await bootstrapService.isBootstrapNeeded();
         if (needsBootstrap) {
           await bootstrapService.bootstrapCorePlugins();
@@ -210,7 +212,7 @@ var AuthManager = class _AuthManager {
       exp: now + ttl,
       iat: now
     };
-    return await sign(payload, secret || JWT_SECRET_FALLBACK, "HS256");
+    return await jwt.sign(payload, secret || JWT_SECRET_FALLBACK, "HS256");
   }
   /**
    * Verify a token's signature and expiration.
@@ -232,7 +234,7 @@ var AuthManager = class _AuthManager {
     try {
       let payload = null;
       try {
-        payload = await verify(token, effectiveSecret, "HS256");
+        payload = await jwt.verify(token, effectiveSecret, "HS256");
       } catch (verifyError) {
         const name = verifyError?.name || "";
         const message = String(verifyError?.message || "");
@@ -271,7 +273,7 @@ var AuthManager = class _AuthManager {
   static async verifyAuthRequest(c) {
     let token = c.req.header("Authorization")?.replace("Bearer ", "");
     if (!token) {
-      token = getCookie(c, "auth_token");
+      token = cookie.getCookie(c, "auth_token");
     }
     if (!token) return null;
     const secret = c.env?.JWT_SECRET;
@@ -365,7 +367,7 @@ var AuthManager = class _AuthManager {
    * @param options - Optional cookie configuration
    */
   static setAuthCookie(c, token, options) {
-    setCookie(c, "auth_token", token, {
+    cookie.setCookie(c, "auth_token", token, {
       httpOnly: options?.httpOnly ?? true,
       secure: options?.secure ?? true,
       sameSite: options?.sameSite ?? "Strict",
@@ -417,7 +419,7 @@ var requireRbac = (resource, verb) => {
       }
       return c.json({ error: "Authentication required" }, 401);
     }
-    const allowed = await new RbacService(c.env.DB).can(user.userId, resource, verb);
+    const allowed = await new chunkBI3XUVJ7_cjs.RbacService(c.env.DB).can(user.userId, resource, verb);
     if (!allowed) {
       const acceptHeader = c.req.header("Accept") || "";
       if (acceptHeader.includes("text/html")) {
@@ -439,7 +441,7 @@ var metricsMiddleware = () => {
   return async (c, next) => {
     const path = new URL(c.req.url).pathname;
     if (path !== "/admin/dashboard/api/metrics") {
-      metricsTracker.recordRequest();
+      chunkRCQ2HIQD_cjs.metricsTracker.recordRequest();
     }
     await next();
   };
@@ -548,12 +550,12 @@ function csrfProtection(options = {}) {
       await next();
       return;
     }
-    const authCookie = getCookie(c, "auth_token");
+    const authCookie = cookie.getCookie(c, "auth_token");
     if (!authCookie) {
       await next();
       return;
     }
-    const baSession = getCookie(c, "better-auth.session_token") || getCookie(c, "__Secure-better-auth.session_token");
+    const baSession = cookie.getCookie(c, "better-auth.session_token") || cookie.getCookie(c, "__Secure-better-auth.session_token");
     if (baSession) {
       await next();
       return;
@@ -563,7 +565,7 @@ function csrfProtection(options = {}) {
       await next();
       return;
     }
-    const cookieToken = getCookie(c, "csrf_token");
+    const cookieToken = cookie.getCookie(c, "csrf_token");
     let headerToken = c.req.header("X-CSRF-Token");
     if (!headerToken) {
       const contentType = c.req.header("Content-Type") || "";
@@ -589,7 +591,7 @@ function csrfProtection(options = {}) {
   };
 }
 async function ensureCsrfCookie(c, secret) {
-  const existing = getCookie(c, "csrf_token");
+  const existing = cookie.getCookie(c, "csrf_token");
   if (existing) {
     const isValid = await validateCsrfToken(existing, secret);
     if (isValid) {
@@ -600,7 +602,7 @@ async function ensureCsrfCookie(c, secret) {
   const token = await generateCsrfToken(secret);
   c.set("csrfToken", token);
   const isDev = c.env?.ENVIRONMENT === "development" || !c.env?.ENVIRONMENT;
-  setCookie(c, "csrf_token", token, {
+  cookie.setCookie(c, "csrf_token", token, {
     httpOnly: false,
     // JS must read this cookie
     secure: !isDev,
@@ -695,6 +697,35 @@ var requireActivePlugins = () => async (_c, next) => await next();
 var getActivePlugins = () => [];
 var isPluginActive = () => false;
 
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, csrfProtection, detailedLoggingMiddleware, generateCsrfToken, getActivePlugins, getJwtExpirySeconds, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, rateLimit, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware, securityLoggingMiddleware, validateCsrfToken, verifySecurityConfig };
-//# sourceMappingURL=chunk-EUSFXT6K.js.map
-//# sourceMappingURL=chunk-EUSFXT6K.js.map
+exports.AuthManager = AuthManager;
+exports.PermissionManager = PermissionManager;
+exports.bootstrapMiddleware = bootstrapMiddleware;
+exports.cacheHeaders = cacheHeaders;
+exports.compressionMiddleware = compressionMiddleware;
+exports.csrfProtection = csrfProtection;
+exports.detailedLoggingMiddleware = detailedLoggingMiddleware;
+exports.generateCsrfToken = generateCsrfToken;
+exports.getActivePlugins = getActivePlugins;
+exports.getJwtExpirySeconds = getJwtExpirySeconds;
+exports.getJwtExpirySecondsFromDb = getJwtExpirySecondsFromDb;
+exports.getJwtRefreshGraceSecondsFromDb = getJwtRefreshGraceSecondsFromDb;
+exports.isPluginActive = isPluginActive;
+exports.logActivity = logActivity;
+exports.loggingMiddleware = loggingMiddleware;
+exports.metricsMiddleware = metricsMiddleware;
+exports.optionalAuth = optionalAuth;
+exports.performanceLoggingMiddleware = performanceLoggingMiddleware;
+exports.rateLimit = rateLimit;
+exports.requireActivePlugin = requireActivePlugin;
+exports.requireActivePlugins = requireActivePlugins;
+exports.requireAnyPermission = requireAnyPermission;
+exports.requireAuth = requireAuth;
+exports.requirePermission = requirePermission;
+exports.requireRbac = requireRbac;
+exports.requireRole = requireRole;
+exports.securityHeadersMiddleware = securityHeadersMiddleware;
+exports.securityLoggingMiddleware = securityLoggingMiddleware;
+exports.validateCsrfToken = validateCsrfToken;
+exports.verifySecurityConfig = verifySecurityConfig;
+//# sourceMappingURL=chunk-MY4C4XLU.cjs.map
+//# sourceMappingURL=chunk-MY4C4XLU.cjs.map

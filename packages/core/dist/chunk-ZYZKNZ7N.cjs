@@ -61,7 +61,9 @@ function getDefaultAuthOptions(env) {
                 const ok = await verifyLegacyPbkdf2(password, hash);
                 if (ok) {
                   const upgraded = await crypto$1.hashPassword(password);
-                  await env.DB.prepare("UPDATE account SET password = ?, updated_at = ? WHERE password = ?").bind(upgraded, Math.floor(Date.now() / 1e3), hash).run();
+                  await env.DB.prepare(
+                    "UPDATE account SET password = ?, updated_at = ? WHERE password = ? AND provider_id = 'credential'"
+                  ).bind(upgraded, Math.floor(Date.now() / 1e3), hash).run();
                 }
                 return ok;
               }
@@ -138,6 +140,11 @@ function getDefaultAuthOptions(env) {
   };
 }
 function createAuth(env, extendBetterAuth) {
+  if (!env.BETTER_AUTH_SECRET || env.BETTER_AUTH_SECRET.length < 16) {
+    throw new Error(
+      "BETTER_AUTH_SECRET is missing or too short. Set it as a Wrangler secret (wrangler secret put BETTER_AUTH_SECRET) or in a gitignored .dev.vars for local dev. Refusing to initialize auth without a strong signing secret."
+    );
+  }
   const defaults = getDefaultAuthOptions(env);
   const options = extendBetterAuth ? extendBetterAuth(defaults) : defaults;
   return betterAuth.betterAuth(options);
@@ -145,5 +152,5 @@ function createAuth(env, extendBetterAuth) {
 
 exports.createAuth = createAuth;
 exports.getDefaultAuthOptions = getDefaultAuthOptions;
-//# sourceMappingURL=chunk-GAX3TDKX.cjs.map
-//# sourceMappingURL=chunk-GAX3TDKX.cjs.map
+//# sourceMappingURL=chunk-ZYZKNZ7N.cjs.map
+//# sourceMappingURL=chunk-ZYZKNZ7N.cjs.map

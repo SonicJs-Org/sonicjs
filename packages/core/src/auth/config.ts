@@ -82,7 +82,17 @@ export function getDefaultAuthOptions(env: Bindings) {
                 const ok = await verifyLegacyPbkdf2(password, hash)
                 if (ok) {
                   const upgraded = await baHashPassword(password)
-                  await env.DB.prepare('UPDATE account SET password = ?, updated_at = ? WHERE password = ?')
+                  // Better Auth's password.verify hook does not expose the
+                  // user/account id, so the rehash can only be keyed on the
+                  // legacy hash value. Scope to credential rows; each pbkdf2
+                  // hash embeds a 16-byte random salt, so the stored value is
+                  // unique per account in practice (a cross-account collision
+                  // would require an identical salt AND password). Follow-up:
+                  // move the upgrade to an identity-aware hook so it keys on
+                  // cred-<userId> rather than the hash value.
+                  await env.DB.prepare(
+                    "UPDATE account SET password = ?, updated_at = ? WHERE password = ? AND provider_id = 'credential'"
+                  )
                     .bind(upgraded, Math.floor(Date.now() / 1000), hash)
                     .run()
                 }
@@ -178,6 +188,16 @@ export type ExtendBetterAuth = (opts: BetterAuthDefaultOptions) => BetterAuthDef
 
 /** Create a Better Auth instance for this request. */
 export function createAuth(env: Bindings, extendBetterAuth?: ExtendBetterAuth) {
+  // Hard-fail rather than sign sessions with an undefined/blank secret. The
+  // secret must be provided via `wrangler secret put BETTER_AUTH_SECRET`
+  // (prod/preview) or a gitignored `.dev.vars` (local) — never committed.
+  if (!env.BETTER_AUTH_SECRET || env.BETTER_AUTH_SECRET.length < 16) {
+    throw new Error(
+      'BETTER_AUTH_SECRET is missing or too short. Set it as a Wrangler secret ' +
+        '(wrangler secret put BETTER_AUTH_SECRET) or in a gitignored .dev.vars for local dev. ' +
+        'Refusing to initialize auth without a strong signing secret.'
+    )
+  }
   const defaults = getDefaultAuthOptions(env)
   const options = extendBetterAuth ? extendBetterAuth(defaults) : defaults
   return betterAuth(options as Parameters<typeof betterAuth>[0])

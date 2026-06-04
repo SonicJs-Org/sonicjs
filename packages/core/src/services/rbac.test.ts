@@ -277,3 +277,54 @@ describe('RbacService mutations — slugging and system protection', () => {
     expect(statements[1]?.params).toEqual(['role-editor', 'portal', 'access'])
   })
 })
+
+describe('RbacService.setUserRoles — legacy users.role projection', () => {
+  // Mock that resolves role names for the SELECT and captures batched statements.
+  function captureDb(roleNamesById: Record<string, string>) {
+    const statements: Array<{ sql: string; params: unknown[] }> = []
+    const prepare = vi.fn((sql: string) => ({
+      bind: vi.fn((...params: unknown[]) => {
+        const stmt = {
+          sql,
+          params,
+          all: async () => ({
+            results: params
+              .map((id) => ({ name: roleNamesById[String(id)] }))
+              .filter((r) => r.name),
+          }),
+        }
+        statements.push(stmt)
+        return stmt
+      }),
+    }))
+    const batch = vi.fn().mockResolvedValue([])
+    return { db: { prepare, batch } as any, statements }
+  }
+
+  it('projects users.role to the highest-precedence assigned system role', async () => {
+    const { db, statements } = captureDb({ 'role-editor': 'editor', 'role-viewer': 'viewer' })
+    await new RbacService(db).setUserRoles('user-1', ['role-viewer', 'role-editor'])
+
+    const upd = statements.find((s) => s.sql.includes('UPDATE users SET role'))
+    expect(upd).toBeTruthy()
+    expect(upd!.params[0]).toBe('editor') // editor outranks viewer
+    expect(upd!.params[2]).toBe('user-1')
+  })
+
+  it("projects to 'viewer' when the user holds only custom roles", async () => {
+    const { db, statements } = captureDb({ 'role-moderator': 'moderator' })
+    await new RbacService(db).setUserRoles('user-2', ['role-moderator'])
+
+    const upd = statements.find((s) => s.sql.includes('UPDATE users SET role'))
+    expect(upd!.params[0]).toBe('viewer') // custom roles never become the projection
+  })
+
+  it("projects to 'viewer' and clears roles when assigned none", async () => {
+    const { db, statements } = captureDb({})
+    await new RbacService(db).setUserRoles('user-3', [])
+
+    expect(statements.some((s) => s.sql.includes('DELETE FROM rbac_user_roles'))).toBe(true)
+    const upd = statements.find((s) => s.sql.includes('UPDATE users SET role'))
+    expect(upd!.params[0]).toBe('viewer')
+  })
+})

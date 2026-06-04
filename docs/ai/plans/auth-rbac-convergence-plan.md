@@ -99,11 +99,23 @@ unbuilt CI drift checks (`drizzle-kit check`, bundle staleness, fresh-DB boot).
    round-trip, revocation on logout/role-change — and delete stale `auth.test.ts`
    assertions.
 
-### Phase 2 — Single source of truth for roles
-Collapse the live `users.role` double-write (still present on branch: `schema.ts`,
-the BA create hook, and `seed-admin` all write it while authz reads only
-`rbac_user_roles`). Backfill once, then make `users.role` read-through or drop it
-(mark's migration-117 model). Stop the session carrying a stale role string.
+### Phase 2 — Single source of truth for roles  *(DONE — projection approach)*
+`rbac_user_roles` is now the single source of truth for authorization; the legacy
+`users.role` column is a **derived projection** that can no longer diverge:
+- `RbacService.setUserRoles()` (the one mutation chokepoint, called by the admin
+  user create/edit routes) now recomputes `users.role` in the same batch as a
+  precedence-ordered projection (`admin > editor > author > viewer`; custom-only →
+  `viewer`; none → `viewer`). Creation paths (register/seed/BA-hook/invite) already
+  write both consistently, so no divergence path remains.
+- The edit route's direct `UPDATE users` no longer writes `role`.
+- Role deletion can't invalidate the projection (custom roles never become it, and
+  system roles can't be deleted).
+- Tests: 3 unit tests in `services/rbac.test.ts` (highest-precedence, custom→viewer,
+  empty→viewer + role-clear).
+
+Deferred to a later phase: physically dropping `users.role` (mark's mig-117 model)
+once the remaining read sites (`/auth/me`, `/auth/refresh`, the session role string)
+are migrated; for now the column stays as a safe read-through projection.
 
 ### Phase 3 — Close authz gaps + add caching
 - Apply `requireRbac(resource, verb)` to every un-gated admin handler (settings,

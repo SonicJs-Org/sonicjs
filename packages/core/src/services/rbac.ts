@@ -55,6 +55,11 @@ const SYSTEM_RESOURCES: RbacResource[] = [
 ]
 
 export class RbacService {
+  // Precedence for projecting the user's RBAC roles back onto the legacy
+  // users.role compat column (highest privilege first). System roles only;
+  // custom roles never become the projection.
+  private static readonly LEGACY_ROLE_PRECEDENCE = ['admin', 'editor', 'author', 'viewer']
+
   constructor(private db: D1Database) {}
 
   private async all<T>(sql: string, ...binds: unknown[]): Promise<T[]> {
@@ -226,7 +231,25 @@ export class RbacService {
     await this.db.batch(stmts)
   }
 
+  /**
+   * Replace a user's RBAC role assignments. `rbac_user_roles` is the single
+   * source of truth for authorization; the legacy `users.role` column is kept
+   * only as a derived *projection* of those roles (compat for older queries and
+   * the session shape) so the two can never diverge. The projected value is the
+   * highest-precedence system role the user holds, or 'viewer' if they hold none
+   * (custom roles never become the projection — authorization uses RBAC, not
+   * this string). Done in one batch so the projection is always consistent.
+   */
   async setUserRoles(userId: string, roleIds: string[]): Promise<void> {
+    let names: string[] = []
+    if (roleIds.length) {
+      const placeholders = roleIds.map(() => '?').join(',')
+      names = (
+        await this.all<{ name: string }>(`SELECT name FROM rbac_roles WHERE id IN (${placeholders})`, ...roleIds)
+      ).map((r) => r.name)
+    }
+    const primaryRole = RbacService.LEGACY_ROLE_PRECEDENCE.find((r) => names.includes(r)) || 'viewer'
+
     const stmts = [this.db.prepare('DELETE FROM rbac_user_roles WHERE user_id = ?').bind(userId)]
     for (const rid of roleIds) {
       stmts.push(
@@ -235,6 +258,10 @@ export class RbacService {
           .bind(userId, rid)
       )
     }
+    // Keep the legacy users.role column in lockstep as a projection of RBAC.
+    stmts.push(
+      this.db.prepare('UPDATE users SET role = ?, updated_at = ? WHERE id = ?').bind(primaryRole, Date.now(), userId)
+    )
     await this.db.batch(stmts)
   }
 

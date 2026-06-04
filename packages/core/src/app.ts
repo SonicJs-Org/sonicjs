@@ -256,6 +256,32 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())
 
+  // RBAC-aware sidebar: inject the signed-in user's effective permission set so
+  // the admin layout can hide nav items the user can't use. The routes stay
+  // gated by requireRbac; this only trims the menu. Non-fatal on any error.
+  app.use('/admin/*', async (c, next) => {
+    await next()
+    try {
+      const user = c.get('user') as { userId?: string } | undefined
+      const contentType = c.res.headers.get('content-type') || ''
+      if (!user?.userId || !contentType.includes('text/html')) return
+      const { RbacService } = await import('./services/rbac')
+      const perms = await new RbacService(c.env.DB).permissionsForUser(user.userId)
+      const body = await c.res.text()
+      const marker = '</head>'
+      if (!body.includes(marker)) return
+      const html = body.replace(
+        marker,
+        `<script>window.__sonicNavPerms=${JSON.stringify(perms)}</script>${marker}`
+      )
+      const headers = new Headers(c.res.headers)
+      headers.delete('content-length')
+      c.res = new Response(html, { status: c.res.status, headers })
+    } catch {
+      /* nav just shows all items if this fails */
+    }
+  })
+
   // Core routes
   // Routes are being imported incrementally from routes/*
   // Each route is tested and migrated one-by-one

@@ -263,4 +263,17 @@ describe('RbacService mutations — slugging and system protection', () => {
     const del = statements.find((s) => s.sql.includes('DELETE FROM rbac_verbs'))!
     expect(del.sql).toContain('is_system = 0')
   })
+
+  it('setRolePortalAccess toggles only the portal access grant', async () => {
+    const { db, statements } = captureDb()
+    const rbac = new RbacService(db)
+
+    await rbac.setRolePortalAccess('role-editor', true)
+    await rbac.setRolePortalAccess('role-editor', false)
+
+    expect(statements[0]?.sql).toContain('INSERT OR IGNORE INTO rbac_role_grants')
+    expect(statements[0]?.params).toEqual(['role-editor', 'portal', 'access', 'any'])
+    expect(statements[1]?.sql).toContain('DELETE FROM rbac_role_grants')
+    expect(statements[1]?.params).toEqual(['role-editor', 'portal', 'access'])
+  })
 })

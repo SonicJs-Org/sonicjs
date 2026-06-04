@@ -3,7 +3,8 @@
  * portal access; this route also requires rbac:manage.
  *
  *   GET  /admin/rbac                 → matrix UI (per-role resource×verb grid),
- *                                       role/verb management, live check
+ *                                       role/portal access/verb management,
+ *                                       live check
  *   POST /admin/rbac/grants          → save the matrix for one role
  *   POST /admin/rbac/roles           → create a custom role
  *   POST /admin/rbac/roles/:id/delete
@@ -40,6 +41,8 @@ adminRbacRoutes.get('/', async (c) => {
     rbac.getResources(),
     rbac.getGrants(),
   ])
+  const matrixVerbs = verbs.filter((v) => v.name !== 'access')
+  const matrixResources = resources.filter((r) => r.key !== 'portal')
   // Multi-select roles for side-by-side comparison. First visit defaults to the
   // first 3 roles to keep the matrix narrow; an explicit selector submit (incl.
   // the Clear button) with no roles selected stays empty.
@@ -53,6 +56,25 @@ adminRbacRoutes.get('/', async (c) => {
   for (const g of grants) grantsByRole.get(g.role_id)?.set(`${g.resource}|${g.verb}`, g.scope || 'any')
   const cellScope = (role: { id: string; name: string }, res: string, verb: string): PermissionScope =>
     isAdmin(role) ? 'any' : grantsByRole.get(role.id)?.get(`${res}|${verb}`) || 'none'
+  const grantMatches = (grantResource: string, grantVerb: string, resource: string, verb: string): boolean => {
+    const resourceOk =
+      grantResource === '*' ||
+      grantResource === resource ||
+      (grantResource === 'collection:*' && resource.startsWith('collection:'))
+    return resourceOk && (grantVerb === '*' || grantVerb === verb || grantVerb === 'manage')
+  }
+  const roleHasPortalAccess = (role: { id: string; name: string }): boolean => {
+    if (isAdmin(role)) return true
+    const roleGrants = grantsByRole.get(role.id)
+    if (!roleGrants) return false
+    return [...roleGrants.keys()].some((key) => {
+      const idx = key.lastIndexOf('|')
+      if (idx === -1) return false
+      return grantMatches(key.slice(0, idx), key.slice(idx + 1), 'portal', 'access')
+    })
+  }
+  const roleHasExplicitPortalAccess = (role: { id: string; name: string }): boolean =>
+    isAdmin(role) || grantsByRole.get(role.id)?.has('portal|access') || false
   const supportsOwnScope = (res: string, verb: string) =>
     (res === 'content' || res.startsWith('collection:')) && ['read', 'update', 'delete'].includes(verb)
 
@@ -123,7 +145,7 @@ adminRbacRoutes.get('/', async (c) => {
     }${seg(key, 'none', scope, disabled, roleId, resKey, verbName)}</div>`
 
   // Two-level header: verb groups, each split into a sub-column per selected role.
-  const headRow1 = verbs
+  const headRow1 = matrixVerbs
     .map(
       (v) =>
         `<th colspan="${selectedRoles.length}" class="px-2 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border-l border-zinc-950/10 dark:border-white/10" title="${esc(
@@ -131,7 +153,7 @@ adminRbacRoutes.get('/', async (c) => {
         )}">${esc(v.name)}${v.is_system ? '' : ' <span class="text-cyan-500">✦</span>'}</th>`
     )
     .join('')
-  const headRow2 = verbs
+  const headRow2 = matrixVerbs
     .map((v) =>
       selectedRoles
         .map(
@@ -149,9 +171,9 @@ adminRbacRoutes.get('/', async (c) => {
     )
     .join('')
 
-  const rows = resources
+  const rows = matrixResources
     .map((res) => {
-      const cells = verbs
+      const cells = matrixVerbs
         .map((v) =>
           selectedRoles
             .map((r, i) => {
@@ -211,8 +233,10 @@ adminRbacRoutes.get('/', async (c) => {
 
   const inpSm = 'rounded-md bg-white dark:bg-white/5 px-2 py-1 text-sm text-zinc-900 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15'
   const roleList = roles
-    .map(
-      (r) =>
+    .map((r) => {
+      const portalChecked = roleHasPortalAccess(r)
+      const portalDisabled = isAdmin(r)
+      return (
         `<li class="py-2 border-b border-zinc-950/5 dark:border-white/5">
           <form method="post" action="/admin/rbac/roles/${esc(r.id)}" class="flex items-center gap-2 flex-wrap">
             <input class="${inpSm} flex-1 min-w-[120px]" name="display_name" value="${esc(
@@ -235,12 +259,19 @@ adminRbacRoutes.get('/', async (c) => {
                     r.name
                   )}?')" class="text-xs text-red-600 dark:text-red-400 hover:underline">delete</button>`
             }
+            <label class="ml-auto inline-flex items-center gap-2 rounded-md bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-500/20">
+              <input type="checkbox" name="portal_access" value="1" ${portalChecked ? 'checked' : ''} ${
+                portalDisabled ? 'disabled' : ''
+              } class="h-3.5 w-3.5 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
+              Access portal
+            </label>
           </form>
         </li>`
-    )
+      )
+    })
     .join('')
 
-  const verbList = verbs
+  const verbList = matrixVerbs
     .map(
       (v) =>
         `<li class="flex items-center justify-between py-1.5 border-b border-zinc-950/5 dark:border-white/5">
@@ -280,7 +311,7 @@ adminRbacRoutes.get('/', async (c) => {
   const content = `
   ${scopeStyles}
   ${TABS}
-  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
+  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. Backend entry is controlled by the <strong>Access portal</strong> checkbox in the Roles section. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
 
   <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
     <input type="hidden" name="compare" value="1">
@@ -292,6 +323,10 @@ adminRbacRoutes.get('/', async (c) => {
     <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
     <input type="hidden" name="compare" value="1">
     ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join('')}
+    ${selectedRoles
+      .filter((r) => !isAdmin(r) && roleHasExplicitPortalAccess(r))
+      .map((r) => `<input type="hidden" name="g|${esc(r.id)}|portal|access" value="any">`)
+      .join('')}
     <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
       <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? '' : 's'})</span></h3>
       ${scopeLegend}
@@ -316,6 +351,7 @@ adminRbacRoutes.get('/', async (c) => {
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
     <div class="${card}">
       <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
+      <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions stay in the matrix above.</p>
       <ul class="mb-4">${roleList}</ul>
       <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2">
         <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
@@ -437,12 +473,18 @@ adminRbacRoutes.post('/roles/:id', async (c) => {
   const displayName = String(form.get('display_name') || '').trim()
   const name = form.get('name') ? String(form.get('name')).trim() : undefined
   const description = String(form.get('description') || '').trim()
+  const roleId = c.req.param('id')
+  const portalAccess = form.get('portal_access') === '1'
   if (displayName) {
     try {
-      await new RbacService(c.env.DB).updateRole(c.req.param('id'), displayName, description, name)
+      const rbac = new RbacService(c.env.DB)
+      await rbac.updateRole(roleId, displayName, description, name)
+      if (roleId !== 'role-admin') {
+        await rbac.setRolePortalAccess(roleId, portalAccess)
+      }
     } catch { /* duplicate name */ }
   }
-  return c.redirect(`/admin/rbac?role=${encodeURIComponent(c.req.param('id'))}`)
+  return c.redirect(`/admin/rbac?compare=1&roles=${encodeURIComponent(roleId)}`)
 })
 
 adminRbacRoutes.post('/roles/:id/delete', async (c) => {

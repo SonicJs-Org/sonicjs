@@ -1,17 +1,17 @@
 import { createAuth } from './chunk-YJTW5F2Z.js';
-import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-WRHGEOMW.js';
-export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-WRHGEOMW.js';
+import { getCustomData, renderConfirmationDialog, getConfirmationDialogScript, api_default, api_media_default, api_system_default, admin_api_default, router, adminCollectionsRoutes, adminFormsRoutes, adminSettingsRoutes, public_forms_default, router2, admin_content_default, adminMediaRoutes, userProfilesPlugin, adminPluginRoutes, adminLogsRoutes, userRoutes, auth_default, test_cleanup_default } from './chunk-YGBGL7HL.js';
+export { ROUTES_INFO, admin_api_default as adminApiRoutes, adminCheckboxRoutes, admin_code_examples_default as adminCodeExamplesRoutes, adminCollectionsRoutes, admin_content_default as adminContentRoutes, router as adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_testimonials_default as adminTestimonialsRoutes, userRoutes as adminUsersRoutes, api_content_crud_default as apiContentCrudRoutes, api_media_default as apiMediaRoutes, api_default as apiRoutes, api_system_default as apiSystemRoutes, auth_default as authRoutes, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig, userProfilesPlugin } from './chunk-YGBGL7HL.js';
 import './chunk-F2IDJF3K.js';
 import { SettingsService, setAppInstance } from './chunk-HFKY2PR7.js';
 export { Logger, getLogger, initLogger } from './chunk-HFKY2PR7.js';
 import { schema_exports } from './chunk-4LLMM7J6.js';
 export { apiTokens, collections, content, contentVersions, insertCollectionSchema, insertContentSchema, insertLogConfigSchema, insertMediaSchema, insertPluginActivityLogSchema, insertPluginAssetSchema, insertPluginHookSchema, insertPluginRouteSchema, insertPluginSchema, insertSystemLogSchema, insertUserSchema, insertWorkflowHistorySchema, logConfig, media, pluginActivityLog, pluginAssets, pluginHooks, pluginRoutes, plugins, selectCollectionSchema, selectContentSchema, selectLogConfigSchema, selectMediaSchema, selectPluginActivityLogSchema, selectPluginAssetSchema, selectPluginHookSchema, selectPluginRouteSchema, selectPluginSchema, selectSystemLogSchema, selectUserSchema, selectWorkflowHistorySchema, systemLogs, users, workflowHistory } from './chunk-4LLMM7J6.js';
-import { requireRbac, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-RADP5WVZ.js';
-export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-RADP5WVZ.js';
-import { RbacService } from './chunk-DVSSUZPX.js';
-import { PluginService, PLUGIN_REGISTRY } from './chunk-EBPAJS2W.js';
-export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-EBPAJS2W.js';
-export { MigrationService } from './chunk-XEM7UFKI.js';
+import { requireRbac, requireAuth, getJwtExpirySecondsFromDb, AuthManager, metricsMiddleware, bootstrapMiddleware, securityHeadersMiddleware, csrfProtection } from './chunk-EUSFXT6K.js';
+export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware } from './chunk-EUSFXT6K.js';
+import { RbacService } from './chunk-5HI6RCMB.js';
+import { PluginService, PLUGIN_REGISTRY } from './chunk-LHEDIQ6K.js';
+export { PluginBootstrapService, PluginService as PluginServiceClass, backfillFormSubmissions, cleanupRemovedCollections, createContentFromSubmission, deriveCollectionSchemaFromFormio, deriveSubmissionTitle, fullCollectionSync, getAvailableCollectionNames, getManagedCollections, isCollectionManaged, loadCollectionConfig, loadCollectionConfigs, mapFormStatusToContentStatus, registerCollections, syncAllFormCollections, syncCollection, syncCollections, syncFormCollection, validateCollectionConfig } from './chunk-LHEDIQ6K.js';
+export { MigrationService } from './chunk-BAZDPEKO.js';
 export { renderFilterBar } from './chunk-DLIOVVIQ.js';
 import { renderAdminLayout } from './chunk-FTYNSPNP.js';
 export { getConfirmationDialogScript, renderAlert, renderConfirmationDialog, renderForm, renderFormField, renderPagination, renderTable } from './chunk-FTYNSPNP.js';
@@ -50,6 +50,8 @@ adminRbacRoutes.get("/", async (c) => {
     rbac.getResources(),
     rbac.getGrants()
   ]);
+  const matrixVerbs = verbs.filter((v) => v.name !== "access");
+  const matrixResources = resources.filter((r) => r.key !== "portal");
   const requested = c.req.queries("roles") || [];
   const hasCompareSelection = c.req.query("compare") === "1";
   const selectedIds = hasCompareSelection ? requested : roles.slice(0, 3).map((r) => r.id);
@@ -59,6 +61,21 @@ adminRbacRoutes.get("/", async (c) => {
   for (const r of roles) grantsByRole.set(r.id, /* @__PURE__ */ new Map());
   for (const g of grants) grantsByRole.get(g.role_id)?.set(`${g.resource}|${g.verb}`, g.scope || "any");
   const cellScope = (role, res, verb) => isAdmin(role) ? "any" : grantsByRole.get(role.id)?.get(`${res}|${verb}`) || "none";
+  const grantMatches = (grantResource, grantVerb, resource, verb) => {
+    const resourceOk = grantResource === "*" || grantResource === resource || grantResource === "collection:*" && resource.startsWith("collection:");
+    return resourceOk && (grantVerb === "*" || grantVerb === verb || grantVerb === "manage");
+  };
+  const roleHasPortalAccess = (role) => {
+    if (isAdmin(role)) return true;
+    const roleGrants = grantsByRole.get(role.id);
+    if (!roleGrants) return false;
+    return [...roleGrants.keys()].some((key) => {
+      const idx = key.lastIndexOf("|");
+      if (idx === -1) return false;
+      return grantMatches(key.slice(0, idx), key.slice(idx + 1), "portal", "access");
+    });
+  };
+  const roleHasExplicitPortalAccess = (role) => isAdmin(role) || grantsByRole.get(role.id)?.has("portal|access") || false;
   const supportsOwnScope = (res, verb) => (res === "content" || res.startsWith("collection:")) && ["read", "update", "delete"].includes(verb);
   const SYSTEM_ROLE_COLORS = {
     admin: "hsl(45 94% 54%)",
@@ -90,12 +107,12 @@ adminRbacRoutes.get("/", async (c) => {
     roleId
   )}" data-res="${esc(resKey)}" data-verb="${esc(verbName)}" ${scope === val ? "checked" : ""} ${disabled ? "disabled" : ""}><span></span></label>`;
   const scopeSwitch = (key, scope, ownSupported, disabled, roleId, resKey, verbName) => `<div class="inline-flex flex-col items-center gap-[3px] ${disabled ? "opacity-60" : ""}" role="radiogroup">${seg(key, "any", scope, disabled, roleId, resKey, verbName)}${ownSupported ? seg(key, "own", scope, disabled, roleId, resKey, verbName) : ""}${seg(key, "none", scope, disabled, roleId, resKey, verbName)}</div>`;
-  const headRow1 = verbs.map(
+  const headRow1 = matrixVerbs.map(
     (v) => `<th colspan="${selectedRoles.length}" class="px-2 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border-l border-zinc-950/10 dark:border-white/10" title="${esc(
       v.description || ""
     )}">${esc(v.name)}${v.is_system ? "" : ' <span class="text-cyan-500">\u2726</span>'}</th>`
   ).join("");
-  const headRow2 = verbs.map(
+  const headRow2 = matrixVerbs.map(
     (v) => selectedRoles.map(
       (r, i) => `<th class="px-1 py-2 align-bottom text-[11px] font-medium text-zinc-500 dark:text-zinc-400 ${i === 0 ? "border-l border-zinc-950/10 dark:border-white/10" : ""}" ${roleStyle(
         r.id,
@@ -105,8 +122,8 @@ adminRbacRoutes.get("/", async (c) => {
       )}${isAdmin(r) ? " \u{1F512}" : ""}</span></div></th>`
     ).join("")
   ).join("");
-  const rows = resources.map((res) => {
-    const cells = verbs.map(
+  const rows = matrixResources.map((res) => {
+    const cells = matrixVerbs.map(
       (v) => selectedRoles.map((r, i) => {
         const key = `g|${r.id}|${res.key}|${v.name}`;
         const scope = cellScope(r, res.key, v.name);
@@ -139,8 +156,10 @@ adminRbacRoutes.get("/", async (c) => {
   const saveRoleIds = selectedRoles.filter((r) => !isAdmin(r)).map((r) => r.id).join(",");
   const firstSelected = selectedRoles[0];
   const inpSm = "rounded-md bg-white dark:bg-white/5 px-2 py-1 text-sm text-zinc-900 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15";
-  const roleList = roles.map(
-    (r) => `<li class="py-2 border-b border-zinc-950/5 dark:border-white/5">
+  const roleList = roles.map((r) => {
+    const portalChecked = roleHasPortalAccess(r);
+    const portalDisabled = isAdmin(r);
+    return `<li class="py-2 border-b border-zinc-950/5 dark:border-white/5">
           <form method="post" action="/admin/rbac/roles/${esc(r.id)}" class="flex items-center gap-2 flex-wrap">
             <input class="${inpSm} flex-1 min-w-[120px]" name="display_name" value="${esc(
       r.display_name
@@ -154,10 +173,14 @@ adminRbacRoutes.get("/", async (c) => {
     )}/delete" formnovalidate onclick="return confirm('Delete role ${esc(
       r.name
     )}?')" class="text-xs text-red-600 dark:text-red-400 hover:underline">delete</button>`}
+            <label class="ml-auto inline-flex items-center gap-2 rounded-md bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-500/20">
+              <input type="checkbox" name="portal_access" value="1" ${portalChecked ? "checked" : ""} ${portalDisabled ? "disabled" : ""} class="h-3.5 w-3.5 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
+              Access portal
+            </label>
           </form>
-        </li>`
-  ).join("");
-  const verbList = verbs.map(
+        </li>`;
+  }).join("");
+  const verbList = matrixVerbs.map(
     (v) => `<li class="flex items-center justify-between py-1.5 border-b border-zinc-950/5 dark:border-white/5">
           <code class="text-sm text-zinc-900 dark:text-white">${esc(v.name)}</code>
           ${v.is_system ? '<span class="rounded-full bg-zinc-100 dark:bg-white/10 px-2 py-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">system</span>' : `<form method="post" action="/admin/rbac/verbs/${esc(
@@ -184,7 +207,7 @@ adminRbacRoutes.get("/", async (c) => {
   const content2 = `
   ${scopeStyles}
   ${TABS}
-  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">\u{1F512} Administrator</span> is full-access and read-only.</p>
+  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. Backend entry is controlled by the <strong>Access portal</strong> checkbox in the Roles section. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">\u{1F512} Administrator</span> is full-access and read-only.</p>
 
   <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
     <input type="hidden" name="compare" value="1">
@@ -196,6 +219,7 @@ adminRbacRoutes.get("/", async (c) => {
     <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
     <input type="hidden" name="compare" value="1">
     ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join("")}
+    ${selectedRoles.filter((r) => !isAdmin(r) && roleHasExplicitPortalAccess(r)).map((r) => `<input type="hidden" name="g|${esc(r.id)}|portal|access" value="any">`).join("")}
     <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
       <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? "" : "s"})</span></h3>
       ${scopeLegend}
@@ -216,6 +240,7 @@ adminRbacRoutes.get("/", async (c) => {
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
     <div class="${card}">
       <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
+      <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions stay in the matrix above.</p>
       <ul class="mb-4">${roleList}</ul>
       <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2">
         <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
@@ -325,13 +350,19 @@ adminRbacRoutes.post("/roles/:id", async (c) => {
   const displayName = String(form.get("display_name") || "").trim();
   const name = form.get("name") ? String(form.get("name")).trim() : void 0;
   const description = String(form.get("description") || "").trim();
+  const roleId = c.req.param("id");
+  const portalAccess = form.get("portal_access") === "1";
   if (displayName) {
     try {
-      await new RbacService(c.env.DB).updateRole(c.req.param("id"), displayName, description, name);
+      const rbac = new RbacService(c.env.DB);
+      await rbac.updateRole(roleId, displayName, description, name);
+      if (roleId !== "role-admin") {
+        await rbac.setRolePortalAccess(roleId, portalAccess);
+      }
     } catch {
     }
   }
-  return c.redirect(`/admin/rbac?role=${encodeURIComponent(c.req.param("id"))}`);
+  return c.redirect(`/admin/rbac?compare=1&roles=${encodeURIComponent(roleId)}`);
 });
 adminRbacRoutes.post("/roles/:id/delete", async (c) => {
   await new RbacService(c.env.DB).deleteRole(c.req.param("id"));
@@ -10773,7 +10804,7 @@ function createSonicJSApp(config = {}) {
     if (!user?.userId) return next();
     let perms = [];
     try {
-      const { RbacService: RbacService2 } = await import('./rbac-EJ7SO7CN.js');
+      const { RbacService: RbacService2 } = await import('./rbac-FYI3IEGY.js');
       perms = await new RbacService2(c.env.DB).permissionsForUser(user.userId);
     } catch {
       return next();
@@ -10789,11 +10820,10 @@ function createSonicJSApp(config = {}) {
       const contentType = c.res.headers.get("content-type") || "";
       if (!contentType.includes("text/html")) return;
       const body = await c.res.text();
-      if (!body.includes("<!--nav:")) return;
-      const filtered = body.replace(
+      const filtered = body.includes("<!--nav:") ? body.replace(
         /<!--nav:([^>]+?)-->([\s\S]*?)<!--\/nav-->/g,
         (_m, perm, inner) => perms.includes(perm) ? inner : ""
-      );
+      ) : body;
       const headers = new Headers(c.res.headers);
       headers.delete("content-length");
       c.res = new Response(filtered, { status: c.res.status, headers });

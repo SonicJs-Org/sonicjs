@@ -237,4 +237,19 @@ export class RbacService {
     }
     await this.db.batch(stmts)
   }
+
+  async setRolePortalAccess(roleId: string, enabled: boolean): Promise<void> {
+    if (enabled) {
+      await this.db
+        .prepare('INSERT OR IGNORE INTO rbac_role_grants (role_id, resource, verb, scope) VALUES (?, ?, ?, ?)')
+        .bind(roleId, 'portal', 'access', 'any')
+        .run()
+      return
+    }
+
+    await this.db
+      .prepare('DELETE FROM rbac_role_grants WHERE role_id = ? AND resource = ? AND verb = ?')
+      .bind(roleId, 'portal', 'access')
+      .run()
+  }
 }

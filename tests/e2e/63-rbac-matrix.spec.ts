@@ -26,8 +26,12 @@ test.describe('Admin RBAC matrix', () => {
     await expect(page.locator('text=Permission matrix')).toBeVisible();
     // The Users <-> Roles & Permissions tab bar is present.
     await expect(page.locator('a[href="/admin/rbac"][aria-current="page"]')).toBeVisible();
-    // At least one permission cell (a scope <select>) is rendered.
-    await expect(page.locator('select[data-verb]').first()).toBeVisible();
+    const matrix = page.locator('form[action="/admin/rbac/grants"]');
+    // `access` is only used for portal entry and should not be a generic matrix column.
+    await expect(matrix.locator('th', { hasText: /^access$/i })).toHaveCount(0);
+    await expect(page.locator('label', { hasText: /Access portal/i }).first()).toBeVisible();
+    // At least one permission cell is rendered.
+    await expect(matrix.locator('input[type="radio"][data-verb]').first()).toBeVisible();
   });
 
   test('saving a permission cell persists across reload', async ({ page }) => {
@@ -48,13 +52,21 @@ test.describe('Admin RBAC matrix', () => {
     await page.waitForLoadState('networkidle');
 
     // Target a single, stable cell: content : delete (a cell that supports None/Own/Any).
-    const cell = page.locator('select[data-res="content"][data-verb="delete"]').first();
-    await expect(cell).toBeVisible();
+    const cellRadios = page.locator(`input[type="radio"][data-role="${viewerId}"][data-res="content"][data-verb="delete"]`);
+    const cellRadio = (value: string) =>
+      page.locator(`input[type="radio"][data-role="${viewerId}"][data-res="content"][data-verb="delete"][value="${value}"]`);
+    await expect(cellRadios.first()).toBeVisible();
 
-    const original = await cell.inputValue();
+    let original = 'none';
+    for (const value of ['any', 'own', 'none']) {
+      if (await cellRadio(value).isChecked()) {
+        original = value;
+        break;
+      }
+    }
     const next = original === 'any' ? 'none' : 'any';
 
-    await cell.selectOption(next);
+    await cellRadio(next).check({ force: true });
     await page.locator('button:has-text("Save changes")').click();
 
     // Save redirects back to the same compare view; confirm the change stuck.
@@ -62,18 +74,17 @@ test.describe('Admin RBAC matrix', () => {
     await page.goto(compareUrl);
     await page.waitForLoadState('networkidle');
 
-    const afterSave = page.locator('select[data-res="content"][data-verb="delete"]').first();
-    await expect(afterSave).toHaveValue(next);
+    await expect(cellRadio(next)).toBeChecked();
 
     // Restore the original grant so the test is idempotent.
-    await afterSave.selectOption(original);
+    await cellRadio(original).check({ force: true });
     await page.locator('button:has-text("Save changes")').click();
     await page.waitForURL(/\/admin\/rbac/);
     await page.goto(compareUrl);
     await page.waitForLoadState('networkidle');
     await expect(
-      page.locator('select[data-res="content"][data-verb="delete"]').first()
-    ).toHaveValue(original);
+      page.locator(`input[type="radio"][data-role="${viewerId}"][data-res="content"][data-verb="delete"][value="${original}"]`)
+    ).toBeChecked();
   });
 
   test('admin column is locked (full access, read-only)', async ({ page }) => {
@@ -91,7 +102,7 @@ test.describe('Admin RBAC matrix', () => {
     await page.goto(`/admin/rbac?compare=1&roles=${encodeURIComponent(adminId!)}`);
     await page.waitForLoadState('networkidle');
 
-    const adminCell = page.locator('select[data-verb]').first();
+    const adminCell = page.locator('input[type="radio"][data-verb]').first();
     await expect(adminCell).toBeVisible();
     await expect(adminCell).toBeDisabled();
   });

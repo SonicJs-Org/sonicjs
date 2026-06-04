@@ -303,11 +303,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       const contentType = c.res.headers.get('content-type') || ''
       if (!contentType.includes('text/html')) return
       const body = await c.res.text()
-      if (!body.includes('<!--nav:')) return
-      const filtered = body.replace(
-        /<!--nav:([^>]+?)-->([\s\S]*?)<!--\/nav-->/g,
-        (_m, perm: string, inner: string) => (perms.includes(perm) ? inner : '')
-      )
+      const filtered = body.includes('<!--nav:')
+        ? body.replace(
+            /<!--nav:([^>]+?)-->([\s\S]*?)<!--\/nav-->/g,
+            (_m, perm: string, inner: string) => (perms.includes(perm) ? inner : '')
+          )
+        : body
       const headers = new Headers(c.res.headers)
       headers.delete('content-length')
       c.res = new Response(filtered, { status: c.res.status, headers })

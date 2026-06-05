@@ -17,6 +17,7 @@ import type { HookSystemLike } from './hooks/typed-hooks'
 import type { HookEventName } from './hooks/catalog'
 import { isKnownHookEvent } from './hooks/catalog'
 import { HOOK_CAPABILITY_MAP, SonicCapabilityError } from './capabilities'
+import { topoSort } from './topo-sort'
 
 /** A hook subscription declared by a plugin (the legacy `hooks[]` shape). */
 export interface WirableHook {
@@ -31,7 +32,11 @@ export interface WirableHook {
  * identities and user-supplied plugins all satisfy it without casts.
  */
 export interface WirablePlugin {
+  /** Stable unique id (used by topo-sort). Falls back to `name`. */
+  id?: string
   name?: string
+  /** IDs of plugins that must be wired before this one. */
+  dependencies?: string[]
   /**
    * Capabilities declared by the plugin. When present (even as an empty array),
    * the wire phase enforces that each declarative hook subscription is covered by
@@ -53,9 +58,15 @@ export interface WireOptions {
   /**
    * Strict mode: capability violations are captured as errors in `WireResult`
    * (and the hook is skipped) instead of only logging a warning.
+   * Also makes unknown dependency ids hard errors instead of warnings.
    * Enable in CI or development; leave off in production for resilience.
    */
   strict?: boolean
+  /**
+   * When false, skip dependency-aware ordering. Defaults to true (plugins with
+   * `dependencies` are wired after their declared dependencies).
+   */
+  sortByDependencies?: boolean
 }
 
 /** Context handed to `onBoot`. Kept loose; concrete bindings are filled by the host. */
@@ -91,7 +102,12 @@ export async function wireRegisteredPlugins(
   options: WireOptions = {}
 ): Promise<WireResult> {
   const result: WireResult = { subscribed: 0, booted: [], errors: [] }
-  const valid = plugins.filter((p): p is WirablePlugin => !!p && typeof p === 'object')
+
+  // Sort by dependencies (default on). Plugins with no `dependencies` keep their
+  // original position; v3 plugins that declare deps are moved after them.
+  const sortByDeps = options.sortByDependencies ?? true
+  const raw = plugins.filter((p): p is WirablePlugin => !!p && typeof p === 'object')
+  const valid = sortByDeps ? topoSort(raw, { strict: options.strict }) : raw
 
   // Phase A: subscribe all hooks first.
   for (const plugin of valid) {

@@ -21,7 +21,28 @@
 // ============================================================================
 
 export { createSonicJSApp, setupCoreMiddleware, setupCoreRoutes } from './app'
-export type { SonicJSConfig, SonicJSApp, Bindings, Variables } from './app'
+export type { SonicJSConfig, SonicJSApp, Bindings, Variables, BootIsolateFn } from './app'
+
+// Plugin cron surface + trigger codegen
+export {
+  createScheduledHandler,
+  dispatchCronTick,
+  collectCrons,
+  collectCronSchedules,
+} from './plugins/cron'
+export type { CronDeclaration, CronTickEvent, CronContext, CronablePlugin, CronDispatchResult } from './plugins/cron'
+export { parseCronTriggers, updateWranglerTriggers, generateTriggersComment } from './plugins/generate-triggers'
+
+// Hook system singleton (needed by Worker entries)
+export { getHookSystem, hasHookSystem, setHookSystem, resetHookSystem, getTypedHooks } from './plugins/hooks/hook-system-singleton'
+
+// Plugin topo-sort
+export { topoSort, PluginDependencyCycleError } from './plugins/topo-sort'
+export type { SortablePlugin, TopoSortOptions } from './plugins/topo-sort'
+
+// Cloudflare email provider
+export { CloudflareEmailProvider } from './services/email/providers/cloudflare'
+export type { CloudflareEmailProviderOptions, CFSendEmailBinding } from './services/email/providers/cloudflare'
 
 // ============================================================================
 // Placeholders - To be populated in Phase 2

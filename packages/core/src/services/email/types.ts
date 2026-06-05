@@ -59,6 +59,18 @@ export interface SendResult {
  * `resolveEmailProvider`) decide whether a provider is usable before attempting a
  * send — e.g. a Resend provider with no API key reports `false`.
  */
+/**
+ * A row from `email_log` as seen by the reconciliation method.
+ * Contains the fields a provider needs to check delivery status.
+ */
+export interface EmailLogRow {
+  id: string
+  provider_id?: string | null
+  provider: string
+  status: 'sent' | 'failed' | string
+  delivery_state?: string | null
+}
+
 export interface EmailProvider {
   /** Stable identifier recorded in `email_log.provider` (e.g. `'resend'`). */
   readonly name: string
@@ -66,4 +78,17 @@ export interface EmailProvider {
   isConfigured(): boolean
   /** Attempt delivery. Must not throw for ordinary failures — return `ok: false`. */
   send(message: NormalizedEmailMessage): Promise<SendResult>
+  /**
+   * Optional: reconcile delivery state for a batch of recently-sent messages.
+   *
+   * Called by the core `email-reconciliation` cron. Providers that expose a
+   * delivery/event API (e.g. Cloudflare Email with delivery webhooks) implement
+   * this to backfill `delivery_state`. Providers without delivery status APIs
+   * (e.g. Resend, SendGrid at the current integration level) leave this undefined
+   * — those rows stay with `delivery_state = null`.
+   *
+   * Returning an array of `{ id, delivery_state }` updates the matching rows in
+   * `email_log`. Errors do not propagate (cron is fire-and-log).
+   */
+  reconcile?(rows: EmailLogRow[]): Promise<Array<{ id: string; delivery_state: string }>>
 }

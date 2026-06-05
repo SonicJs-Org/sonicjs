@@ -175,7 +175,24 @@ export interface SonicJSConfig {
   name?: string
 }
 
-export type SonicJSApp = Hono<{ Bindings: Bindings; Variables: Variables }>
+/**
+ * A function that boots the plugin infrastructure from env bindings.
+ *
+ * Runs email init + plugin wiring, both promise-memoized so calling it multiple
+ * times per isolate is a no-op. Pass it to `createScheduledHandler` as the
+ * `boot` option so cron-first cold isolates wire up before dispatching.
+ */
+export type BootIsolateFn = (env: Record<string, unknown>) => Promise<void>
+
+/**
+ * The app returned by {@link createSonicJSApp}. Extends the Hono app with a
+ * `boot` function that wires plugins from env bindings, suitable for use in a
+ * Worker `scheduled()` handler.
+ */
+export type SonicJSApp = Hono<{ Bindings: Bindings; Variables: Variables }> & {
+  /** Boot the plugin infrastructure from Cloudflare env bindings (once-guarded). */
+  readonly boot: BootIsolateFn
+}
 
 // ============================================================================
 // Application Factory
@@ -314,23 +331,29 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Bootstrap middleware - runs migrations, syncs collections, and initializes plugins
   app.use('*', bootstrapMiddleware(config))
 
-  // Plugin wiring middleware - lazily subscribes plugin hooks and runs onBoot
-  // exactly once, after bootstrap. Skipped entirely when plugins are disabled.
-  app.use('*', async (c, next) => {
-    if (!config.plugins?.disableAll) {
-      firstRequestEnv = c.env as unknown as Record<string, unknown>
-      // EmailService init is isolated so it can never block plugin wiring.
-      try {
-        await initEmailService(firstRequestEnv)
-      } catch (err) {
-        console.error('[email] init failed:', err)
-      }
-      try {
-        await wirePlugins()
-      } catch (err) {
-        console.error('[plugins] wiring failed:', err)
-      }
+  // bootIsolate — extracted from the wiring middleware so it can be called from
+  // both HTTP requests AND cron-first cold isolates (scheduled() handlers) that
+  // never receive an HTTP request. Idempotent: initEmailService + wirePlugins are
+  // both once-guarded per isolate.
+  const boot: BootIsolateFn = async (env: Record<string, unknown>) => {
+    if (config.plugins?.disableAll) return
+    firstRequestEnv = env
+    try {
+      await initEmailService(env)
+    } catch (err) {
+      console.error('[email] init failed:', err)
     }
+    try {
+      await wirePlugins()
+    } catch (err) {
+      console.error('[plugins] wiring failed:', err)
+    }
+  }
+
+  // Plugin wiring middleware - calls boot() on the first request so it runs after
+  // bootstrap. Subsequent requests return the cached once-guard result instantly.
+  app.use('*', async (c, next) => {
+    await boot(c.env as unknown as Record<string, unknown>)
     return next()
   })
 
@@ -513,7 +536,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     return c.json({ error: 'Internal Server Error', status: 500 }, 500)
   })
 
-  return app
+  // Attach boot to the app object so Worker entries can pass it to
+  // createScheduledHandler without having to recreate the boot logic.
+  return Object.assign(app, { boot }) as SonicJSApp
 }
 
 /**

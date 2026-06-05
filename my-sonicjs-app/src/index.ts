@@ -1,11 +1,13 @@
 /**
  * My SonicJS Application
  *
- * Entry point for your SonicJS headless CMS application
+ * Entry point for your SonicJS headless CMS application.
+ * Exports both `fetch` (HTTP) and `scheduled` (cron) so the Worker handles both
+ * cold-start paths. The `boot` function from `createSonicJSApp` ensures a
+ * cron-first cold isolate still gets the hook bus wired before dispatching.
  */
 
-import { Hono } from 'hono'
-import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import { createSonicJSApp, registerCollections, createScheduledHandler, getHookSystem } from '@sonicjs-cms/core'
 import type { SonicJSConfig } from '@sonicjs-cms/core'
 
 // Import custom collections
@@ -29,28 +31,23 @@ const config: SonicJSConfig = {
     autoSync: true
   },
   plugins: {
-    directory: './src/plugins',
-    autoLoad: false,  // Set to true to auto-load custom plugins
-    disableAll: false,  // Enable plugins
-    enabled: ['email', 'contact-form']  // Enable specific plugins
+    register: [contactFormPlugin],
+    disableAll: false,
   }
 }
 
-// Create the core application
-const coreApp = createSonicJSApp(config)
+// Create the core application (includes boot() for cron cold-start wiring)
+const app = createSonicJSApp(config)
 
-// Create main app and mount plugin routes manually
-// (Plugin auto-mounting not yet implemented in core)
-const app = new Hono()
-
-// Mount plugin routes
-if (contactFormPlugin.routes) {
-  for (const route of contactFormPlugin.routes) {
-    app.route(route.path, route.handler)
-  }
+// Export both HTTP fetch and the cron scheduled handler.
+// The scheduled handler calls app.boot(env) before dispatching so a
+// cron-first cold isolate gets the same plugin wiring as an HTTP request.
+export default {
+  fetch: app.fetch,
+  scheduled: createScheduledHandler({
+    // Pass the same plugins the HTTP app uses so cron handlers see the same state.
+    plugins: () => config.plugins?.register ?? [],
+    getHooks: getHookSystem,
+    boot: app.boot,
+  }),
 }
-
-// Mount core app last (catch-all)
-app.route('/', coreApp)
-
-export default app

@@ -153,6 +153,13 @@ export interface CreateScheduledHandlerOptions {
   getHooks: () => HookSystemLike
   /** Optional: when true, skip dispatch entirely (mirrors plugins.disableAll). */
   disabled?: boolean
+  /**
+   * Boot function from {@link SonicJSApp.boot}. Called before the first cron
+   * dispatch so a cron-first cold isolate (one that never handled an HTTP
+   * request) still has a wired hook bus and reachable email service.
+   * Without this, `getHookSystem()` may throw in cron handlers.
+   */
+  boot?: (env: Record<string, unknown>) => Promise<void>
 }
 
 /**
@@ -172,6 +179,19 @@ export function createScheduledHandler(
     if (options.disabled) {
       return { invoked: [], errors: [], unmatched: true }
     }
+
+    // Boot the isolate before dispatching so a cron-first cold isolate (which
+    // may never have handled an HTTP request) still has a populated hook bus and
+    // reachable email service. The boot function is once-guarded, so warm
+    // isolates return immediately.
+    if (options.boot) {
+      try {
+        await options.boot(env)
+      } catch (err) {
+        console.error('[cron] boot failed:', err)
+      }
+    }
+
     const plugins = typeof options.plugins === 'function' ? options.plugins() : options.plugins
     const work = dispatchCronTick(plugins, controller.cron, controller.scheduledTime, {
       hooks: options.getHooks(),

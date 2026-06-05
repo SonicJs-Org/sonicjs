@@ -306,6 +306,7 @@ interface Variables {
         path: string;
         icon: string;
     }>;
+    rbacPerms?: string[];
 }
 interface SonicJSConfig {
     collections?: {

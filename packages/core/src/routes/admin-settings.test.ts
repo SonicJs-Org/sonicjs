@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Hono } from 'hono'
 
-// Mock requireAuth to pass through with admin user
+// Mock requireAuth/requireRbac to pass through with admin user
 vi.mock('../middleware', () => ({
   requireAuth: () => async (c: any, next: any) => {
     c.set('user', { userId: 'test-admin', email: 'admin@test.com', role: 'admin', exp: 0, iat: 0 })
     await next()
-  }
+  },
+  requireRbac: () => async (_c: any, next: any) => { await next() },
 }))
 
 // Settings routes now gate on RBAC (`settings:manage`) rather than the legacy

@@ -448,6 +448,14 @@ adminRbacRoutes.post('/grants', async (c) => {
     await rbac.setRoleGrants(id, pairsByRole.get(id) || [])
   }
 
+  // Bust per-user perms KV cache: all users holding any of these roles are affected.
+  if (c.env.CACHE_KV) {
+    try {
+      const listed = await c.env.CACHE_KV.list({ prefix: 'rbac:perms:' })
+      await Promise.all(listed.keys.map((k: { name: string }) => c.env.CACHE_KV.delete(k.name)))
+    } catch { /* non-fatal */ }
+  }
+
   const redirectRoleIds = viewRoleIds.length ? viewRoleIds : saveRoleIds
   const qs = [
     form.get('compare') === '1' ? 'compare=1' : '',

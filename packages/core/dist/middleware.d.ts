@@ -1,6 +1,6 @@
 import * as hono from 'hono';
 import { Context, Next, MiddlewareHandler } from 'hono';
-import { S as SonicJSConfig } from './app-Nc2HJhoZ.js';
+import { S as SonicJSConfig } from './app-fROCPOVY.js';
 import 'zod';
 import 'better-call';
 import 'better-auth-cloudflare';

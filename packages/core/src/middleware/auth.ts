@@ -479,7 +479,15 @@ export const requireRbac = (resource: string, verb: string) => {
       return c.json({ error: 'Authentication required' }, 401)
     }
 
-    const allowed = await new RbacService(c.env.DB).can(user.userId, resource, verb)
+    // Fast path: use pre-computed perms from the /admin/* middleware (avoids DB hit).
+    const cachedPerms = (c as any).get('rbacPerms') as string[] | undefined
+    let allowed: boolean
+    if (cachedPerms !== undefined) {
+      allowed = cachedPerms.includes(`${resource}:${verb}`)
+    } else {
+      allowed = await new RbacService((c.env as any).DB).can(user.userId, resource, verb)
+    }
+
     if (!allowed) {
       const acceptHeader = c.req.header('Accept') || ''
       if (acceptHeader.includes('text/html')) {

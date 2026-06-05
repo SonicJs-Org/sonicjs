@@ -94,7 +94,8 @@ export const adminCollectionsRoutes = new Hono<{ Bindings: Bindings; Variables: 
 // Apply authentication middleware
 adminCollectionsRoutes.use('*', requireAuth())
 
-// Enforce admin-only access on collection modification routes
+// Read gate for viewing; manage gate for mutations
+adminCollectionsRoutes.get('*', requireRbac('collections', 'read'))
 adminCollectionsRoutes.post('*', requireRbac('collections', 'manage'))
 adminCollectionsRoutes.put('*', requireRbac('collections', 'manage'))
 adminCollectionsRoutes.delete('*', requireRbac('collections', 'manage'))

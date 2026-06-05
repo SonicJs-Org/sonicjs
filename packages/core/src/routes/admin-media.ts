@@ -36,6 +36,7 @@ const adminMediaRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>(
 
 // Apply authentication middleware
 adminMediaRoutes.use('*', requireAuth())
+adminMediaRoutes.get('*', requireRbac('media', 'read'))
 
 // Media library main page
 adminMediaRoutes.get('/', async (c) => {
@@ -411,7 +412,7 @@ adminMediaRoutes.get('/:id/details', async (c) => {
 })
 
 // Upload files endpoint (HTMX compatible)
-adminMediaRoutes.post('/upload', async (c) => {
+adminMediaRoutes.post('/upload', requireRbac('media', 'create'), async (c) => {
   try {
     const user = c.get('user')
     const formData = await c.req.formData()

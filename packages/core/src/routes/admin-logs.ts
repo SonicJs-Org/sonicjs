@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { html } from 'hono/html'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
-import { requireAuth } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { RbacService } from '../services/rbac'
 import { getLogger, type LogLevel, type LogCategory, type LogFilter } from '../services'
 import { renderLogsListPage, type LogsListPageData } from '../templates/pages/admin-logs-list.template'
@@ -13,6 +13,7 @@ const adminLogsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Apply authentication middleware
 adminLogsRoutes.use('*', requireAuth())
+adminLogsRoutes.use('*', requireRbac('logs', 'read'))
 
 // Main logs listing page
 adminLogsRoutes.get('/', async (c) => {

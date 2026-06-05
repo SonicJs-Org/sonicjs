@@ -12,11 +12,13 @@ var SYSTEM_RESOURCES = [
   { key: "email", label: "Email Management", group: "system" },
   { key: "users", label: "Users", group: "system" },
   { key: "settings", label: "Settings", group: "system" },
-  { key: "plugins", label: "Plugins", group: "system" }
+  { key: "plugins", label: "Plugins", group: "system" },
+  { key: "logs", label: "Logs", group: "system" }
 ];
 var RbacService = class _RbacService {
-  constructor(db) {
+  constructor(db, kv) {
     this.db = db;
+    this.kv = kv;
   }
   // Precedence for projecting the user's RBAC roles back onto the legacy
   // users.role compat column (highest privilege first). System roles only;
@@ -87,8 +89,13 @@ var RbacService = class _RbacService {
       rows.filter((g) => this.grantMatches(g, resource, verb)).map((g) => g.scope === "own" ? "own" : "any")
     );
   }
-  /** Flattened, human-readable permission list for a user (expanded vs resources). */
+  /** Flattened, human-readable permission list for a user (expanded vs resources).
+   *  Result is cached in KV for 60 s when a KVNamespace is provided. */
   async permissionsForUser(userId) {
+    if (this.kv) {
+      const cached = await this.kv.get(`rbac:perms:${userId}`);
+      if (cached !== null) return JSON.parse(cached);
+    }
     const roles = await this.getRolesForUser(userId);
     if (roles.length === 0) return [];
     const grants = await this.all(
@@ -104,7 +111,11 @@ var RbacService = class _RbacService {
         if (grants.some((g) => this.grantMatches(g, r.key, v.name))) out.add(`${r.key}:${v.name}`);
       }
     }
-    return [...out].sort();
+    const result = [...out].sort();
+    if (this.kv) {
+      await this.kv.put(`rbac:perms:${userId}`, JSON.stringify(result), { expirationTtl: 60 });
+    }
+    return result;
   }
   // ── Mutations ──────────────────────────────────────────────────────────────
   async createRole(name, displayName, description = "") {
@@ -212,6 +223,7 @@ var RbacService = class _RbacService {
       this.db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").bind(primaryRole, Date.now(), userId)
     );
     await this.db.batch(stmts);
+    if (this.kv) await this.kv.delete(`rbac:perms:${userId}`);
   }
   async setRolePortalAccess(roleId, enabled) {
     if (enabled) {
@@ -223,5 +235,5 @@ var RbacService = class _RbacService {
 };
 
 exports.RbacService = RbacService;
-//# sourceMappingURL=chunk-INCD27QJ.cjs.map
-//# sourceMappingURL=chunk-INCD27QJ.cjs.map
+//# sourceMappingURL=chunk-323GE63K.cjs.map
+//# sourceMappingURL=chunk-323GE63K.cjs.map

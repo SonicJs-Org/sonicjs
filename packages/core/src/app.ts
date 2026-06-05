@@ -98,6 +98,7 @@ export interface Variables {
   appVersion?: string
   csrfToken?: string
   pluginMenuItems?: Array<{ label: string; path: string; icon: string }>
+  rbacPerms?: string[]
 }
 
 export interface SonicJSConfig {
@@ -279,10 +280,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     let perms: string[] = []
     try {
       const { RbacService } = await import('./services/rbac')
-      perms = await new RbacService(c.env.DB).permissionsForUser(user.userId)
+      perms = await new RbacService(c.env.DB, c.env.CACHE_KV).permissionsForUser(user.userId)
     } catch {
       return next() // fail open to the route's own requireRbac gate
     }
+
+    // Cache for requireRbac fast-path — avoids a DB hit per middleware call.
+    c.set('rbacPerms', perms)
 
     // Dashboard landing: if the user can't view the dashboard, send them to the
     // first section they do have access to (instead of an empty/forbidden page).

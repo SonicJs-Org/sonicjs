@@ -3,6 +3,8 @@ import { requireAuth, requireRole } from '../middleware'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import type { Bindings, Variables } from '../app'
 import { resolveContentVariables } from '../plugins/core-plugins/global-variables-plugin/variable-resolver'
+import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
+import type { HookActor } from '../plugins/hooks/catalog'
 
 const apiContentCrudRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -78,6 +80,14 @@ apiContentCrudRoutes.get('/:id', async (c) => {
       transformedContent.data = await resolveContentVariables(transformedContent.data, db)
     }
 
+    // Fire content:read for observability plugins (fire-and-forget).
+    dispatchHookEvent(
+      c,
+      'content:read',
+      { collection: (content as any).collection_id, id: (content as any).id, data: transformedContent.data },
+      'fire-and-forget'
+    )
+
     return c.json({ data: transformedContent })
   } catch (error) {
     console.error('Error fetching content:', error)
@@ -124,6 +134,28 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
       return c.json({ error: 'A content item with this slug already exists in this collection' }, 409)
     }
 
+    const actor: HookActor | undefined = user
+      ? { id: user.userId, email: user.email ?? '', role: user.role }
+      : undefined
+
+    // Fire content:before:create (in-band) — handlers may mutate payload.data or
+    // throw to cancel the write. The returned payload carries any mutations.
+    let beforePayload
+    try {
+      beforePayload = await dispatchHookEvent(
+        c,
+        'content:before:create',
+        { collection: collectionId, data: { title, slug: finalSlug, status: status || 'draft', ...data }, user: actor },
+        'in-band'
+      )
+    } catch (err) {
+      return c.json({ error: 'Write cancelled by plugin', details: String(err) }, 400)
+    }
+
+    // Use (possibly mutated) data from the before-hook payload.
+    const finalData = typeof beforePayload?.data === 'object' ? beforePayload.data : (data || {})
+    const { title: hookTitle = title, slug: hookSlug = finalSlug, status: hookStatus = status || 'draft', ...hookData } = finalData as any
+
     // Create new content
     const contentId = crypto.randomUUID()
     const now = Date.now()
@@ -139,10 +171,10 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
     await insertStmt.bind(
       contentId,
       collectionId,
-      finalSlug,
-      title,
-      JSON.stringify(data || {}),
-      status || 'draft',
+      hookSlug,
+      hookTitle,
+      JSON.stringify(hookData),
+      hookStatus,
       user?.userId || 'system',
       now,
       now
@@ -156,6 +188,19 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
     // Get the created content
     const getStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const createdContent = await getStmt.bind(contentId).first() as any
+
+    // Fire content:after:create for side-effect plugins (fire-and-forget).
+    dispatchHookEvent(
+      c,
+      'content:after:create',
+      {
+        collection: collectionId,
+        id: contentId,
+        data: createdContent?.data ? JSON.parse(createdContent.data) : {},
+        user: actor,
+      },
+      'fire-and-forget'
+    )
 
     return c.json({
       data: {
@@ -183,6 +228,7 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
   try {
     const id = c.req.param('id')
     const db = c.env.DB
+    const user = c.get('user')
     const body = await c.req.json()
 
     // Check if content exists
@@ -193,17 +239,50 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
       return c.json({ error: 'Content not found' }, 404)
     }
 
+    const actor: HookActor | undefined = user
+      ? { id: user.userId, email: user.email ?? '', role: user.role }
+      : undefined
+
+    // Fire content:before:update (in-band) — handlers may mutate payload.data or
+    // throw to cancel the write.
+    let beforePayload
+    try {
+      beforePayload = await dispatchHookEvent(
+        c,
+        'content:before:update',
+        {
+          collection: existing.collection_id,
+          id,
+          data: { title: body.title, slug: body.slug, status: body.status, ...(body.data || {}) },
+          user: actor,
+        },
+        'in-band'
+      )
+    } catch (err) {
+      return c.json({ error: 'Write cancelled by plugin', details: String(err) }, 400)
+    }
+
+    // Apply any mutations from the before-hook.
+    const mutated = beforePayload?.data as any
+
     // Build update fields dynamically
     const updates: string[] = []
     const params: any[] = []
 
-    if (body.title !== undefined) {
+    const updTitle = mutated?.title ?? body.title
+    const updSlug = mutated?.slug ?? body.slug
+    const updStatus = mutated?.status ?? body.status
+    const updData = body.data !== undefined
+      ? (mutated ? { ...body.data, ...mutated } : body.data)
+      : undefined
+
+    if (updTitle !== undefined) {
       updates.push('title = ?')
-      params.push(body.title)
+      params.push(updTitle)
     }
 
-    if (body.slug !== undefined) {
-      let finalSlug = body.slug.toLowerCase()
+    if (updSlug !== undefined) {
+      let finalSlug = updSlug.toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '-')
         .replace(/-+/g, '-')
@@ -212,14 +291,14 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
       params.push(finalSlug)
     }
 
-    if (body.status !== undefined) {
+    if (updStatus !== undefined) {
       updates.push('status = ?')
-      params.push(body.status)
+      params.push(updStatus)
     }
 
-    if (body.data !== undefined) {
+    if (updData !== undefined) {
       updates.push('data = ?')
-      params.push(JSON.stringify(body.data))
+      params.push(JSON.stringify(updData))
     }
 
     // Always update updated_at
@@ -248,6 +327,26 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
     const getStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const updatedContent = await getStmt.bind(id).first() as any
 
+    const afterData = updatedContent?.data ? JSON.parse(updatedContent.data) : {}
+
+    // Fire content:after:update (fire-and-forget).
+    dispatchHookEvent(
+      c,
+      'content:after:update',
+      { collection: existing.collection_id, id, data: afterData, user: actor },
+      'fire-and-forget'
+    )
+
+    // Fire content:after:publish when status transitions to 'published'.
+    if (updStatus === 'published' && existing.status !== 'published') {
+      dispatchHookEvent(
+        c,
+        'content:after:publish',
+        { collection: existing.collection_id, id, data: afterData, user: actor },
+        'fire-and-forget'
+      )
+    }
+
     return c.json({
       data: {
         id: updatedContent.id,
@@ -255,7 +354,7 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
         slug: updatedContent.slug,
         status: updatedContent.status,
         collectionId: updatedContent.collection_id,
-        data: updatedContent.data ? JSON.parse(updatedContent.data) : {},
+        data: afterData,
         created_at: updatedContent.created_at,
         updated_at: updatedContent.updated_at
       }
@@ -274,6 +373,7 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor
   try {
     const id = c.req.param('id')
     const db = c.env.DB
+    const user = c.get('user')
 
     // Check if content exists
     const existingStmt = db.prepare('SELECT collection_id FROM content WHERE id = ?')
@@ -281,6 +381,22 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor
 
     if (!existing) {
       return c.json({ error: 'Content not found' }, 404)
+    }
+
+    const actor: HookActor | undefined = user
+      ? { id: user.userId, email: user.email ?? '', role: user.role }
+      : undefined
+
+    // Fire content:before:delete (in-band) — handlers may throw to cancel the delete.
+    try {
+      await dispatchHookEvent(
+        c,
+        'content:before:delete',
+        { collection: existing.collection_id, id, data: {}, user: actor },
+        'in-band'
+      )
+    } catch (err) {
+      return c.json({ error: 'Delete cancelled by plugin', details: String(err) }, 400)
     }
 
     // Delete the content (hard delete for API, soft delete happens in admin routes)
@@ -292,6 +408,14 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor
     await cache.delete(cache.generateKey('content', id))
     await cache.invalidate(`content:list:${existing.collection_id}:*`)
     await cache.invalidate('content-filtered:*')
+
+    // Fire content:after:delete (fire-and-forget).
+    dispatchHookEvent(
+      c,
+      'content:after:delete',
+      { collection: existing.collection_id, id, data: {}, user: actor },
+      'fire-and-forget'
+    )
 
     return c.json({ success: true })
   } catch (error) {

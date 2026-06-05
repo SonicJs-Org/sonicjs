@@ -452,9 +452,10 @@ Each phase is independently shippable and test-gated. **No phase merges without 
 - **Exit:** a plugin's `onCronTick` fires on schedule in a Miniflare/integration test; graceful skip when credentials/bindings absent.
 
 ### Phase 5 — `definePlugin()` + Email reference migration (PR-E equivalent)
-- Ship `definePlugin()`.
-- Migrate the **email plugin** as the reference (it touches capabilities, hooks, cron, singleton, routes — if it holds for email it holds for all). Close the `reset_link` leak; add `email_log` observability.
-- Fix **magic-link** (`c.env.plugins?.get('email')` → `getEmailService().send()`).
+- **5a — `definePlugin()` ✅ DONE** (stacked branch `lane711/plugin-system-define`). See Appendix G.
+- 5b — Migrate the **email plugin** as the reference (it touches capabilities, hooks, cron, singleton, routes — if it holds for email it holds for all). Close the `reset_link` leak; add `email_log` observability.
+- 5c — Fix **magic-link** (`c.env.plugins?.get('email')` → `getEmailService().send()`).
+- 5d — Add real `dispatch()` sites in content/auth routes (this *activates* the now-subscribed core plugin hooks; behavior-changing — needs dedicated integration tests).
 - **Exit:** email plugin runs fully on v3; documented as the template for the rest.
 
 ### Phase 6 — Migrate remaining core plugins (~20)
@@ -651,3 +652,42 @@ Built on the stacked branch `lane711/plugin-system-cron` (PR base = the foundati
 - **Strapi v5** — docs.strapi.io (plugin-structure, server-api, admin-panel-api, configurations/plugins, document-service middlewares) + `strapi/strapi` `main` (`loaders/plugins/*`, `registries/plugins.ts`, `types/.../strapi-server/*`).
 - **Payload v3** — payloadcms.com/docs (plugins/overview, build-your-own, hooks/*, jobs-queue/*, admin/components, database/migrations) + `payloadcms/payload` `main` (`config/types.ts`, `templates/plugin/src/index.ts`).
 - **SonicJS current source** — `packages/core/src/plugins/*`, `services/plugin-service.ts`, `app.ts`, `db/schema.ts`, `routes/admin-plugins.ts`, `tests/e2e/*plugin*`.
+
+---
+
+## Appendix G — Phase 5a status (`definePlugin()`)
+
+Built on the stacked branch `lane711/plugin-system-define` (PR base = the cron branch). Purely additive authoring API — no behavior change; nothing yet *uses* it in core.
+
+**Landed:**
+- `plugins/sdk/define-plugin.ts` — `definePlugin(input)` returns a unified `DefinedPlugin` that structurally satisfies `MountablePlugin` (routes/register), `WirablePlugin` (onBoot), and `CronablePlugin` (crons/onCronTick), plus the legacy metadata fields the admin/registry read. Normalizes `id → name`; validates declared `capabilities` (warns on unknown); tags output with `__sonicV3` (+ `isDefinedPlugin()` guard).
+- **Enriched context:** the author's `onBoot`/`onCronTick` receive `{ hooks, cap, env, raw }` — a *typed* hook facade (`ctx.hooks.on('auth:registration:completed', …)` with narrowed payloads) and the *capability-gated* service context (`ctx.cap.email` throws `SonicCapabilityError` without `email:send`). `definePlugin` wraps the author functions so the runtime keeps passing the plain `PluginBootContext`/`CronContext`; providers ride on `raw.providers` (host-supplied).
+- Exported from `plugins/index.ts`.
+
+**Tests:** `define-plugin.test.ts` (13: shape/normalization, id/version required, unknown-capability warning, mounts via `registerPluginRoutes`, typed-hook subscription fires through the live system, capability gating throws, provider resolution, env exposure, cron enriched context) + `define-plugin-integration.test.ts` (3: mounts through `createSonicJSApp`, honors `disableAll`, `onBoot` runs exactly once on first request via live wiring). Full core suite **1565 passed, 0 failed**; `tsc` clean.
+
+**Next (5b–5d):** migrate the email plugin onto `definePlugin` (capabilities + `onBoot` hook subscriptions + `email_log` + reconciliation cron, closing the `reset_link` leak), fix magic-link, and add the content/auth `dispatch()` sites — all behavior-changing, each with its own integration coverage.
+
+---
+
+## Appendix H — Phase 5b status (provider-agnostic email + leak fix)
+
+Same stacked branch. **Decision (from product):** developers must be able to use *any* email provider, and every send must be recorded.
+
+**5b-1 — EmailService core (additive):**
+- `services/email`: `EmailProvider` interface + built-in **Resend / SendGrid / Console** providers; a dev can pass any `EmailProvider`. `EmailService.send()` normalizes → sends → records to `email_log` (best-effort; logging never fails a send; a throwing provider becomes a structured failure).
+- `resolveEmailProvider` precedence: explicit instance > named built-in > env auto-detect (`RESEND_API_KEY`, then `SENDGRID_API_KEY`) > Console. An unconfigured choice **degrades to Console with a warning** — a missing key becomes "logged, not delivered", never a silent token leak.
+- `email-service` singleton (env-independent, for cron reconciliation). Core `email_log` table: Drizzle schema + **migration 037** (bundled), with `failed_at_send` / `delivery_state` / `delivery_synced_at` for reconciliation.
+- Tests: `email-service.test.ts` (19).
+
+**5b-2 — wiring + call-site migration (behavior-changing):**
+- `app.ts`: `email` config (`{ provider | providerName | from }`); first request resolves the provider and publishes the EmailService singleton (isolated init — can't block plugin wiring); `ctx.cap.email` now resolves to it.
+- **SECURITY FIX:** `POST /auth/request-password-reset` no longer returns `reset_link` in the JSON response (it leaked a valid reset token to any caller). It now **emails** the link (`flow: 'password-reset'`) and returns only the generic enumeration-safe message.
+- magic-link: replaced the broken `c.env.plugins?.get('email')` registry lookup (links were only console-logged) with `getEmailService().send({ flow: 'magic-link' })`.
+- Tests: `email-wiring-integration.test.ts` (3) through the real app — provider initialized on first request; reset omits `reset_link` + the token and sends instead; unknown email stays generic and sends nothing.
+
+Full core suite **1587 passed, 0 failed**; `tsc` clean.
+
+**Verified findings (from the requested audit):** transport was fractured (Resend hardcoded in OTP, SendGrid in email-templates, broken registry in magic-link); `email_log` existed only in the optional email-templates-plugin; the reset link **was** leaked in the API response. All three are now addressed except the OTP migration (works today via Resend; deferred to limit blast radius).
+
+**Still deferred (5c/5d):** migrate the email *plugin* itself onto `definePlugin` with a reconciliation cron; OTP → shared EmailService; content/auth `dispatch()` sites that activate the now-subscribed hooks; an `email_log` admin browser.

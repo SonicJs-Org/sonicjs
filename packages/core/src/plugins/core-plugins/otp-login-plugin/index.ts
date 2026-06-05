@@ -13,9 +13,11 @@ import type { Plugin } from '@sonicjs-cms/core'
 import { OTPService, type OTPSettings } from './otp-service'
 import { renderOTPEmail } from './email-templates'
 import { AuthManager } from '../../../middleware'
+import { getEmailService, hasEmailService } from '../../../services/email/email-service-singleton'
 import { getJwtExpirySecondsFromDb } from '../../../middleware/auth'
 import { SettingsService } from '../../../services/settings'
 import { getCustomData } from '../user-profiles'
+import { dispatchHookEvent } from '../../hooks/dispatch-event'
 
 // Validation schemas
 const otpRequestSchema = z.object({
@@ -166,44 +168,26 @@ export function createOTPLoginPlugin(): Plugin {
           loginButtonText: settings.loginButtonText || ''
         })
 
-        // Load email plugin settings from database
-        // Note: We don't check status='active' because the email plugin's
-        // settings UI works regardless of status, so we follow the same pattern
-        const emailPlugin = await db.prepare(`
-          SELECT settings FROM plugins WHERE id = 'email'
-        `).first() as { settings: string | null } | null
-
-        if (emailPlugin?.settings) {
-          const emailSettings = JSON.parse(emailPlugin.settings)
-
-          if (emailSettings.apiKey && emailSettings.fromEmail && emailSettings.fromName) {
-            // Send email via Resend API
-            const emailResponse = await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${emailSettings.apiKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                from: `${emailSettings.fromName} <${emailSettings.fromEmail}>`,
-                to: [normalizedEmail],
-                subject: `Your login code for ${siteName}`,
-                html: emailContent.html,
-                text: emailContent.text,
-                reply_to: emailSettings.replyTo || emailSettings.fromEmail
-              })
-            })
-
-            if (!emailResponse.ok) {
-              const errorData = await emailResponse.json() as { message?: string }
-              console.error('Failed to send OTP email via Resend:', errorData)
-              // Don't expose error to user for security - just log it
-            }
-          } else {
-            console.warn('Email plugin is not fully configured (missing apiKey, fromEmail, or fromName)')
+        // Send via the shared, provider-agnostic EmailService. This stays
+        // synchronous (caller-direct): the user can't proceed without the code,
+        // so a fire-and-forget send would silently fail them. The send is logged
+        // to email_log like every other flow. (Previously this read plugins.settings
+        // and called Resend directly; the EmailService now owns provider selection,
+        // including honoring those same admin-UI settings.)
+        if (hasEmailService()) {
+          const sent = await getEmailService().send({
+            to: normalizedEmail,
+            subject: `Your login code for ${siteName}`,
+            flow: 'otp',
+            html: emailContent.html,
+            text: emailContent.text,
+          })
+          if (!sent.ok) {
+            // Don't expose delivery errors to the user for security - just log it.
+            console.error('Failed to send OTP email:', sent.error)
           }
         } else {
-          console.warn('Email plugin is not active or has no settings configured')
+          console.warn('EmailService not initialized; OTP email not sent')
         }
 
         const response: any = {
@@ -331,6 +315,14 @@ export function createOTPLoginPlugin(): Plugin {
         sameSite: 'Strict',
         maxAge: tokenTtl
       })
+
+      // Fire auth:otp:verified for audit/analytics plugins (fire-and-forget).
+      dispatchHookEvent(
+        c,
+        'auth:otp:verified',
+        { user: { id: user.id, email: user.email, role: user.role } },
+        'fire-and-forget'
+      )
 
       const customData = await getCustomData(db, user.id)
       const { is_active: _isActive, ...publicUser } = user

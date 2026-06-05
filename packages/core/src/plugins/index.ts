@@ -28,18 +28,33 @@ export type { MountResult, MountedRoute, RegisterPluginRoutesOptions } from './m
 export {
   HOOK_EVENT_NAMES,
   isKnownHookEvent,
+  isLegacyHookEvent,
+  resolveHookEventName,
+  LEGACY_EVENT_ALIASES,
 } from './hooks/catalog'
 export type {
   HookEventName,
   HookEventPayloads,
   HookPayload,
+  HookActor,
   ContentEventPayload,
   AuthRegistrationCompletedPayload,
   AuthPasswordResetRequestedPayload,
   AuthPasswordResetCompletedPayload,
+  AuthMagicLinkConsumedPayload,
+  AuthOtpVerifiedPayload,
+  LegacyHookEventName,
+  LegacyHookEventPayloads,
 } from './hooks/catalog'
 export { createTypedHooks } from './hooks/typed-hooks'
-export type { TypedHooks, TypedHookHandler, TypedHookContext, HookSystemLike } from './hooks/typed-hooks'
+export type {
+  TypedHooks,
+  TypedHookHandler,
+  TypedHookContext,
+  HookSystemLike,
+  SubscribableEvent,
+  PayloadForEvent,
+} from './hooks/typed-hooks'
 export {
   setHookSystem,
   getHookSystem,
@@ -60,6 +75,9 @@ export {
   hasCapability,
   assertCapability,
   validateCapabilities,
+  normalizeCapability,
+  normalizeCapabilities,
+  CAPABILITY_RENAMES,
   createCapabilityContext,
 } from './capabilities'
 export type {
@@ -67,12 +85,17 @@ export type {
   FixedCapability,
   DbCapability,
   CapabilityProviders,
+  CapabilityContext,
   PluginCapabilityContext,
 } from './capabilities'
 
 // Service singletons
 export { createServiceSingleton } from './singletons/service-singleton'
 export type { ServiceSingleton } from './singletons/service-singleton'
+
+// v3 authoring API
+export { definePlugin, isDefinedPlugin } from './sdk/define-plugin'
+export type { DefinePluginInput, DefinedPlugin, DefinedPluginContext, DeclarativeHooks } from './sdk/define-plugin'
 
 // Cron surface
 export {

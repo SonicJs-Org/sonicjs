@@ -54,6 +54,11 @@ import { registerPluginRoutes } from './plugins/mount'
 import { HookSystemImpl } from './plugins/hook-system'
 import { setHookSystem } from './plugins/hooks/hook-system-singleton'
 import { createPluginWirer } from './plugins/wire'
+import { EmailService } from './services/email/email-service'
+import { resolveEmailProvider, type BuiltInProviderName } from './services/email/resolve-provider'
+import { loadDbEmailSettings, dbSettingsFrom } from './services/email/db-settings'
+import { setEmailService, getEmailService, hasEmailService } from './services/email/email-service-singleton'
+import type { EmailProvider } from './services/email/types'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
 
@@ -130,6 +135,23 @@ export interface SonicJSConfig {
      * bare core app.
      */
     disableAll?: boolean
+  }
+
+  /**
+   * Email configuration. Controls the app-wide EmailService that backs password
+   * reset, magic-link, OTP, and any plugin that declares `email:send`.
+   *
+   * Bring your own provider, name a built-in, or let env auto-detect:
+   * - `provider`: a custom `EmailProvider` instance (highest precedence).
+   * - `providerName`: `'resend' | 'sendgrid' | 'console'`, credentialed from env.
+   * - neither: auto-detect from env (RESEND_API_KEY, then SENDGRID_API_KEY),
+   *   falling back to the console provider (logs instead of delivering).
+   */
+  email?: {
+    provider?: EmailProvider
+    providerName?: BuiltInProviderName
+    /** Default from-address. Falls back to env DEFAULT_FROM_EMAIL, then a placeholder. */
+    from?: string
   }
 
   // Custom routes
@@ -227,9 +249,58 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // break a request.
   const wirePlugins = createPluginWirer(
     () => [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])],
-    () => ({ hooks: hookSystem, env: firstRequestEnv })
+    // The capability-gated `ctx.cap.email` resolves to the app EmailService, which
+    // is initialized (below) just before wiring on the first request.
+    () => ({
+      hooks: hookSystem,
+      env: firstRequestEnv,
+      providers: { email: () => getEmailService() },
+    })
   )
   let firstRequestEnv: Record<string, unknown> | undefined
+
+  // Initialize the app-wide EmailService from config + env on first request (env
+  // bindings — provider keys, DB for email_log — are only available per-request).
+  // Idempotent: built once per worker.
+  // Provider precedence: explicit config > named built-in > env keys > admin-UI
+  // DB settings (Resend, the historical configuration path) > console fallback.
+  const initEmailService = async (env: Record<string, unknown> = {}) => {
+    if (hasEmailService()) return
+    let provider: EmailProvider
+    let defaultFrom = config.email?.from
+    let defaultReplyTo: string | undefined
+
+    if (
+      config.email?.provider ||
+      config.email?.providerName ||
+      env.RESEND_API_KEY ||
+      env.SENDGRID_API_KEY
+    ) {
+      provider = resolveEmailProvider({
+        provider: config.email?.provider,
+        providerName: config.email?.providerName,
+        env,
+      })
+    } else {
+      // No config/env provider — fall back to admin-UI email settings if present.
+      const dbSettings = await loadDbEmailSettings(env.DB as never)
+      if (dbSettings?.apiKey) {
+        // Route the admin-UI key through resolveEmailProvider (consistent provider
+        // selection + degrade-to-console safety) instead of hardcoding Resend.
+        provider = resolveEmailProvider({
+          providerName: 'resend',
+          env: { ...env, RESEND_API_KEY: dbSettings.apiKey },
+        })
+        defaultFrom = defaultFrom || dbSettingsFrom(dbSettings)
+        defaultReplyTo = dbSettings.replyTo
+      } else {
+        provider = resolveEmailProvider({ env }) // → console fallback, with its warning
+      }
+    }
+
+    defaultFrom = defaultFrom || (env.DEFAULT_FROM_EMAIL as string | undefined) || 'noreply@sonicjs.local'
+    setEmailService(new EmailService({ provider, defaultFrom, defaultReplyTo, db: env.DB as never }))
+  }
 
   // App version middleware
   app.use('*', async (c, next) => {
@@ -248,6 +319,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', async (c, next) => {
     if (!config.plugins?.disableAll) {
       firstRequestEnv = c.env as unknown as Record<string, unknown>
+      // EmailService init is isolated so it can never block plugin wiring.
+      try {
+        await initEmailService(firstRequestEnv)
+      } catch (err) {
+        console.error('[email] init failed:', err)
+      }
       try {
         await wirePlugins()
       } catch (err) {

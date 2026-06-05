@@ -306,6 +306,30 @@ export const insertLogConfigSchema = createInsertSchema(logConfig, {
 
 export const selectLogConfigSchema = createSelectSchema(logConfig);
 
+// Email log: one row per send attempt through the core EmailService.
+// Timestamps are plain epoch-ms integers (not Drizzle `timestamp` mode) because
+// the EmailService writes them via raw SQL; keeping the column type plain avoids
+// a seconds/ms mismatch between the raw insert and Drizzle reads.
+export const emailLog = sqliteTable('email_log', {
+  id: text('id').primaryKey(),
+  toEmail: text('to_email').notNull(), // comma-joined recipients
+  fromEmail: text('from_email').notNull(),
+  subject: text('subject').notNull(),
+  status: text('status').notNull().default('pending'), // 'pending' | 'sent' | 'failed'
+  provider: text('provider'), // 'resend' | 'sendgrid' | 'console' | custom
+  providerId: text('provider_id'), // provider-side message id
+  error: text('error'),
+  flow: text('flow'), // 'password-reset' | 'otp' | 'magic-link' | 'welcome' | 'test' | ...
+  metadata: text('metadata', { mode: 'json' }),
+  failedAtSend: integer('failed_at_send'), // epoch ms; set when the send failed immediately
+  deliveryState: text('delivery_state'), // populated by the reconciliation cron
+  deliverySyncedAt: integer('delivery_synced_at'), // epoch ms; reconciliation sync marker
+  createdAt: integer('created_at').notNull(), // epoch ms
+});
+
+export const insertEmailLogSchema = createInsertSchema(emailLog);
+export const selectEmailLogSchema = createSelectSchema(emailLog);
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

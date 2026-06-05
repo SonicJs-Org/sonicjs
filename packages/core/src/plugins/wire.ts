@@ -14,6 +14,9 @@
  */
 
 import type { HookSystemLike } from './hooks/typed-hooks'
+import type { HookEventName } from './hooks/catalog'
+import { isKnownHookEvent } from './hooks/catalog'
+import { HOOK_CAPABILITY_MAP, SonicCapabilityError } from './capabilities'
 
 /** A hook subscription declared by a plugin (the legacy `hooks[]` shape). */
 export interface WirableHook {
@@ -29,6 +32,13 @@ export interface WirableHook {
  */
 export interface WirablePlugin {
   name?: string
+  /**
+   * Capabilities declared by the plugin. When present (even as an empty array),
+   * the wire phase enforces that each declarative hook subscription is covered by
+   * a matching capability in {@link HOOK_CAPABILITY_MAP}. Absent on old-style
+   * `PluginBuilder` plugins — the gate is skipped for backwards compatibility.
+   */
+  capabilities?: readonly string[]
   hooks?: WirableHook[]
   /**
    * Async lifecycle hook run once, after all plugins have registered and their
@@ -36,6 +46,16 @@ export interface WirablePlugin {
    * cron registration). Errors are isolated per-plugin.
    */
   onBoot?: (context: PluginBootContext) => void | Promise<void>
+}
+
+/** Options forwarded to {@link wireRegisteredPlugins}. */
+export interface WireOptions {
+  /**
+   * Strict mode: capability violations are captured as errors in `WireResult`
+   * (and the hook is skipped) instead of only logging a warning.
+   * Enable in CI or development; leave off in production for resilience.
+   */
+  strict?: boolean
 }
 
 /** Context handed to `onBoot`. Kept loose; concrete bindings are filled by the host. */
@@ -67,7 +87,8 @@ export interface WireResult {
  */
 export async function wireRegisteredPlugins(
   plugins: Array<WirablePlugin | undefined | null>,
-  context: PluginBootContext
+  context: PluginBootContext,
+  options: WireOptions = {}
 ): Promise<WireResult> {
   const result: WireResult = { subscribed: 0, booted: [], errors: [] }
   const valid = plugins.filter((p): p is WirablePlugin => !!p && typeof p === 'object')
@@ -81,6 +102,23 @@ export async function wireRegisteredPlugins(
         result.errors.push({ plugin: name, phase: 'subscribe', error: new Error('invalid hook entry') })
         continue
       }
+
+      // Capability gate: only applies to v3 plugins that declare capabilities.
+      // Old-style PluginBuilder plugins (capabilities === undefined) are exempt
+      // for backwards compatibility.
+      if (plugin.capabilities !== undefined && isKnownHookEvent(hook.name)) {
+        const requiredCap = HOOK_CAPABILITY_MAP[hook.name as HookEventName]
+        if (requiredCap && !plugin.capabilities.includes(requiredCap)) {
+          const capErr = new SonicCapabilityError(requiredCap, name)
+          if (options.strict) {
+            result.errors.push({ plugin: name, phase: 'subscribe', error: capErr })
+          } else {
+            console.warn(`[plugins] ${capErr.message} Hook "${hook.name}" will not be registered.`)
+          }
+          continue
+        }
+      }
+
       try {
         context.hooks.register(hook.name, hook.handler, hook.priority)
         result.subscribed++

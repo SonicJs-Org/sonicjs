@@ -6,6 +6,9 @@ import {
   hasCapability,
   assertCapability,
   validateCapabilities,
+  normalizeCapability,
+  normalizeCapabilities,
+  CAPABILITY_RENAMES,
   createCapabilityContext,
 } from '../../plugins/capabilities'
 import { createServiceSingleton } from '../../plugins/singletons/service-singleton'
@@ -31,6 +34,51 @@ describe('capability vocabulary', () => {
   it('validateCapabilities returns only the unknown entries', () => {
     expect(validateCapabilities(['email:send', 'db:logs'])).toEqual([])
     expect(validateCapabilities(['email:send', 'nope', 'also:bad'])).toEqual(['nope', 'also:bad'])
+  })
+
+  it('reserves hooks.email:subscribe in the canonical vocabulary', () => {
+    expect(FIXED_CAPABILITIES).toContain('hooks.email:subscribe')
+  })
+})
+
+describe('normalizeCapability (cross-fork / deprecated spellings)', () => {
+  it('is identity for an already-canonical capability', () => {
+    expect(normalizeCapability('media:write')).toBe('media:write')
+    expect(normalizeCapability('db:email_log')).toBe('db:email_log')
+  })
+
+  it('resolves deprecated/sibling-fork spellings to canonical names', () => {
+    expect(normalizeCapability('storage:read')).toBe('media:read')
+    expect(normalizeCapability('storage:write')).toBe('media:write')
+    expect(normalizeCapability('hooks.cron:register')).toBe('cron:register')
+    expect(normalizeCapability('hooks.auth:register')).toBe('hooks.auth:subscribe')
+    expect(normalizeCapability('hooks.content-read:register')).toBe('hooks.content:subscribe')
+    expect(normalizeCapability('hooks.content-write:register')).toBe('hooks.content:subscribe')
+    expect(normalizeCapability('hooks.email-events:register')).toBe('hooks.email:subscribe')
+  })
+
+  it('returns null for an unknown capability', () => {
+    expect(normalizeCapability('totally:made-up')).toBeNull()
+    // request:intercept has no canonical target — surfaces as unknown, not silent
+    expect(normalizeCapability('request:intercept')).toBeNull()
+  })
+
+  it('every rename target is itself a known capability', () => {
+    for (const target of Object.values(CAPABILITY_RENAMES)) {
+      expect(isKnownCapability(target)).toBe(true)
+    }
+  })
+
+  it('normalizeCapabilities dedupes canonical results and collects unknowns', () => {
+    const { capabilities, unknown } = normalizeCapabilities([
+      'storage:write',
+      'media:write', // dupe of the normalized storage:write
+      'hooks.content-read:register',
+      'hooks.content-write:register', // both collapse to hooks.content:subscribe
+      'bogus:cap',
+    ])
+    expect(capabilities).toEqual(['media:write', 'hooks.content:subscribe'])
+    expect(unknown).toEqual(['bogus:cap'])
   })
 })
 

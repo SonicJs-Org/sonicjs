@@ -8,12 +8,32 @@ import { getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb } from '../m
 import { renderLoginPage, LoginPageData } from '../templates/pages/auth-login.template'
 import { renderRegisterPage, RegisterPageData } from '../templates/pages/auth-register.template'
 import { getCacheService, CACHE_CONFIGS } from '../services'
+import { getEmailService, hasEmailService } from '../services/email/email-service-singleton'
 import { authValidationService, isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
 import type { RegistrationData } from '../services/auth-validation'
 import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
+import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
+
+/** Minimal, dependency-free HTML body for the password-reset email. */
+function renderPasswordResetEmail(resetLink: string, firstName?: string): string {
+  const greeting = firstName ? `Hi ${firstName},` : 'Hello,'
+  return `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #1f2937; line-height: 1.6;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 24px;">
+    <h2 style="margin: 0 0 16px;">Reset your password</h2>
+    <p>${greeting}</p>
+    <p>We received a request to reset your password. Click the button below to choose a new one. This link is valid for 1 hour.</p>
+    <p style="margin: 24px 0;">
+      <a href="${resetLink}" style="background: #2563eb; color: #fff; padding: 12px 20px; border-radius: 6px; text-decoration: none; display: inline-block;">Reset password</a>
+    </p>
+    <p style="font-size: 13px; color: #6b7280;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
+    <p style="font-size: 13px; color: #6b7280;">Or paste this link into your browser:<br><a href="${resetLink}">${resetLink}</a></p>
+  </div>
+</body></html>`
+}
 
 /** Set a signed CSRF cookie alongside the auth cookie on login/register. */
 async function setCsrfCookie(c: any, maxAge?: number): Promise<void> {
@@ -195,6 +215,14 @@ authRoutes.post('/register',
           await saveCustomData(db, userId, sanitized)
         }
       }
+
+      // Fire auth:registration:completed (fire-and-forget — does not block the response)
+      dispatchHookEvent(
+        c,
+        'auth:registration:completed',
+        { user: { id: userId, email: normalizedEmail, role: 'viewer' } },
+        'fire-and-forget'
+      )
 
       // Generate JWT token
       const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
@@ -562,6 +590,14 @@ authRoutes.post('/register/form',
         await saveCustomData(db, userId, sanitized)
       }
     }
+
+    // Fire auth:registration:completed (fire-and-forget — does not block the response)
+    dispatchHookEvent(
+      c,
+      'auth:registration:completed',
+      { user: { id: userId, email: normalizedEmail, role } },
+      'fire-and-forget'
+    )
 
     // Generate JWT token
     const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
@@ -1117,17 +1153,40 @@ authRoutes.post('/request-password-reset',
       user.id
     ).run()
 
-    // Log the activity (TODO: implement activity logging)
-    // Activity logging is deferred until utils/log-activity is implemented
+    // Fire auth:password-reset:requested so plugins can audit or send custom emails.
+    // The resetToken is included in the payload for plugins that implement their own
+    // delivery — it MUST NOT be returned in the API response.
+    dispatchHookEvent(
+      c,
+      'auth:password-reset:requested',
+      { user: { id: user.id, email: user.email }, resetToken },
+      'fire-and-forget'
+    )
 
-    // In a real implementation, you would send an email here
-    // For now, we'll return the reset link for development
+    // Send the reset link via email. The link is NEVER returned in the API
+    // response — doing so previously leaked a valid reset token to any caller.
     const resetLink = `${c.req.header('origin') || 'http://localhost:8787'}/auth/reset-password?token=${resetToken}`
+
+    if (hasEmailService()) {
+      try {
+        await getEmailService().send({
+          to: user.email,
+          subject: 'Reset your password',
+          flow: 'password-reset',
+          html: renderPasswordResetEmail(resetLink, user.first_name),
+          text: `Reset your password using this link (valid for 1 hour): ${resetLink}`,
+        })
+      } catch (err) {
+        // Delivery failure must not change the response (no enumeration signal).
+        console.error('Failed to send password reset email:', err)
+      }
+    } else {
+      console.warn('[auth] EmailService not initialized; password reset email not sent')
+    }
 
     return c.json({
       success: true,
-      message: 'If an account with this email exists, a password reset link has been sent.',
-      reset_link: resetLink // In production, this would be sent via email
+      message: 'If an account with this email exists, a password reset link has been sent.'
     })
 
   } catch (error) {
@@ -1361,8 +1420,13 @@ authRoutes.post('/reset-password', async (c) => {
       user.id
     ).run()
 
-    // Log the activity (TODO: implement activity logging)
-    // Activity logging is deferred until utils/log-activity is implemented
+    // Fire auth:password-reset:completed for audit/notification plugins.
+    dispatchHookEvent(
+      c,
+      'auth:password-reset:completed',
+      { user: { id: user.id, email: user.email } },
+      'fire-and-forget'
+    )
 
     // Redirect to login with success message
     return c.redirect('/auth/login?message=Password reset successfully. Please log in with your new password.')

@@ -1,9 +1,9 @@
 import { isFirstUserRegistration, isRegistrationEnabled, authValidationService } from './chunk-F2IDJF3K.js';
 import { getCacheService, CACHE_CONFIGS, SettingsService, getLogger, getAppInstance, buildRouteList, CATEGORY_INFO } from './chunk-HFKY2PR7.js';
-import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, logActivity, generateCsrfToken } from './chunk-ZGXWP7ND.js';
+import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, logActivity, generateCsrfToken, getJwtExpirySecondsFromDb } from './chunk-LOOYI6LN.js';
 import { RbacService } from './chunk-WXJT2BCV.js';
 import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-VM7C2EGU.js';
-import { MigrationService } from './chunk-JWO5VPVX.js';
+import { MigrationService } from './chunk-I5Z6UZUI.js';
 import { renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-FTYNSPNP.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-DUEQN2JO.js';
 import { PluginBuilder, TurnstileService } from './chunk-EXNEW5US.js';
@@ -13,7 +13,7 @@ import { escapeHtml, sanitizeRichText, sanitizeInput } from './chunk-TQABQWOP.js
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
-import { setCookie, getCookie } from 'hono/cookie';
+import { setCookie } from 'hono/cookie';
 import { html, raw } from 'hono/html';
 
 // src/schemas/index.ts
@@ -2396,7 +2396,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-3L7K6FQJ.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-AWVY3674.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2421,7 +2421,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-3L7K6FQJ.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-AWVY3674.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2443,7 +2443,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-3L7K6FQJ.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-AWVY3674.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -5203,181 +5203,6 @@ var loginSchema = z.object({
   email: z.string().email("Valid email is required"),
   password: z.string().min(1, "Password is required")
 });
-authRoutes.post(
-  "/register",
-  rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "register" }),
-  async (c) => {
-    try {
-      const db = c.env.DB;
-      const isFirstUser = await isFirstUserRegistration(db);
-      if (!isFirstUser) {
-        const registrationEnabled = await isRegistrationEnabled(db);
-        if (!registrationEnabled) {
-          return c.json({ error: "Registration is currently disabled" }, 403);
-        }
-      }
-      let requestData;
-      try {
-        requestData = await c.req.json();
-      } catch (parseError) {
-        return c.json({ error: "Invalid JSON in request body" }, 400);
-      }
-      const validationSchema = await authValidationService.buildRegistrationSchema(db);
-      let validatedData;
-      try {
-        validatedData = await validationSchema.parseAsync(requestData);
-      } catch (validationError) {
-        return c.json({
-          error: "Validation failed",
-          details: validationError.issues?.map((e) => e.message) || [validationError.message || "Invalid request data"]
-        }, 400);
-      }
-      const email = validatedData.email;
-      const password = validatedData.password;
-      const username = validatedData.username || authValidationService.generateDefaultValue("username", validatedData);
-      const firstName = validatedData.firstName || authValidationService.generateDefaultValue("firstName", validatedData);
-      const lastName = validatedData.lastName || authValidationService.generateDefaultValue("lastName", validatedData);
-      const normalizedEmail = email.toLowerCase();
-      const existingUser = await db.prepare("SELECT id FROM users WHERE email = ? OR username = ?").bind(normalizedEmail, username).first();
-      if (existingUser) {
-        return c.json({ error: "User with this email or username already exists" }, 400);
-      }
-      const passwordHash = await AuthManager.hashPassword(password);
-      const userId = crypto.randomUUID();
-      const now = /* @__PURE__ */ new Date();
-      const roleName = isFirstUser ? "admin" : "viewer";
-      await db.prepare(`
-        INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        userId,
-        normalizedEmail,
-        username,
-        firstName,
-        lastName,
-        passwordHash,
-        roleName,
-        // Compatibility role; portal access is RBAC-backed.
-        1,
-        // is_active
-        now.getTime(),
-        now.getTime()
-      ).run();
-      await db.prepare(
-        "INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?"
-      ).bind(userId, roleName).run();
-      const profileConfig = getUserProfileConfig();
-      if (profileConfig) {
-        const regFields = getRegistrationFields();
-        if (regFields.length > 0) {
-          const customData = { ...getProfileFieldDefaults() };
-          for (const field of regFields) {
-            if (requestData[field.name] !== void 0) {
-              customData[field.name] = requestData[field.name];
-            }
-          }
-          const sanitized = sanitizeCustomData(customData, profileConfig);
-          await saveCustomData(db, userId, sanitized);
-        }
-      }
-      const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const token = await AuthManager.generateToken(userId, normalizedEmail, roleName, c.env.JWT_SECRET, tokenTtl);
-      setCookie(c, "auth_token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-        maxAge: tokenTtl
-      });
-      await setCsrfCookie(c);
-      return c.json({
-        user: {
-          id: userId,
-          email: normalizedEmail,
-          username,
-          firstName,
-          lastName,
-          role: roleName
-        },
-        token
-      }, 201);
-    } catch (error) {
-      console.error("Registration error:", error);
-      if (error instanceof Error && error.message.includes("validation")) {
-        return c.json({ error: error.message }, 400);
-      }
-      return c.json({
-        error: "Registration failed",
-        details: error instanceof Error ? error.message : String(error)
-      }, 500);
-    }
-  }
-);
-authRoutes.post(
-  "/login",
-  rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "login" }),
-  async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = loginSchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({ error: "Validation failed", details: validation.error.issues }, 400);
-      }
-      const { email, password } = validation.data;
-      const db = c.env.DB;
-      const normalizedEmail = email.toLowerCase();
-      const cache = getCacheService(CACHE_CONFIGS.user);
-      let user = await cache.get(cache.generateKey("user", `email:${normalizedEmail}`));
-      if (!user) {
-        user = await db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1").bind(normalizedEmail).first();
-        if (user) {
-          await cache.set(cache.generateKey("user", `email:${normalizedEmail}`), user);
-          await cache.set(cache.generateKey("user", user.id), user);
-        }
-      }
-      if (!user) {
-        return c.json({ error: "Invalid email or password" }, 401);
-      }
-      const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash);
-      if (!isValidPassword) {
-        return c.json({ error: "Invalid email or password" }, 401);
-      }
-      if (AuthManager.isLegacyHash(user.password_hash)) {
-        try {
-          const newHash = await AuthManager.hashPassword(password);
-          await db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").bind(newHash, Date.now(), user.id).run();
-        } catch (rehashError) {
-          console.error("Password rehash failed (non-fatal):", rehashError);
-        }
-      }
-      const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl);
-      setCookie(c, "auth_token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-        maxAge: tokenTtl
-      });
-      await setCsrfCookie(c);
-      await db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").bind((/* @__PURE__ */ new Date()).getTime(), user.id).run();
-      await cache.delete(cache.generateKey("user", user.id));
-      await cache.delete(cache.generateKey("user", `email:${normalizedEmail}`));
-      return c.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role
-        },
-        token
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      return c.json({ error: "Login failed" }, 500);
-    }
-  }
-);
 async function clearBetterAuthSession(c) {
   try {
     const { createAuth } = await import('./config-PYR6KYWW.js');
@@ -5416,45 +5241,6 @@ authRoutes.get("/me", requireAuth(), async (c) => {
     return c.json({ error: "Failed to get user" }, 500);
   }
 });
-authRoutes.post(
-  "/refresh",
-  rateLimit({ max: 60, windowMs: 60 * 1e3, keyPrefix: "refresh" }),
-  async (c) => {
-    try {
-      let token = c.req.header("Authorization")?.replace("Bearer ", "");
-      if (!token) token = getCookie(c, "auth_token");
-      if (!token) {
-        return c.json({ error: "Authentication required" }, 401);
-      }
-      const db = c.env.DB;
-      const grace = await getJwtRefreshGraceSecondsFromDb(db, c.env);
-      const payload = await AuthManager.verifyToken(token, c.env.JWT_SECRET, grace);
-      if (!payload) {
-        return c.json({ error: "Invalid or expired token" }, 401);
-      }
-      const row = await db.prepare("SELECT id, email, role, is_active FROM users WHERE id = ?").bind(payload.userId).first();
-      if (!row || !row.is_active) {
-        return c.json({ error: "User is not active" }, 401);
-      }
-      const tokenTtl = await getJwtExpirySecondsFromDb(db, c.env);
-      const newToken = await AuthManager.generateToken(row.id, row.email, row.role, c.env.JWT_SECRET, tokenTtl);
-      setCookie(c, "auth_token", newToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-        maxAge: tokenTtl
-      });
-      await setCsrfCookie(c);
-      return c.json({
-        token: newToken,
-        expiresIn: tokenTtl
-      });
-    } catch (error) {
-      console.error("Token refresh error:", error);
-      return c.json({ error: "Token refresh failed" }, 500);
-    }
-  }
-);
 authRoutes.post(
   "/register/form",
   rateLimit({ max: 30, windowMs: 60 * 1e3, keyPrefix: "register" }),
@@ -5948,15 +5734,20 @@ authRoutes.post("/accept-invitation", async (c) => {
       invitedUser.id
     ).run();
     await ensureCredentialAccount(db, invitedUser.id, passwordHash);
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env);
-    const authToken = await AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET, tokenTtl);
-    setCookie(c, "auth_token", authToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "Strict",
-      maxAge: tokenTtl
-    });
-    await setCsrfCookie(c);
+    try {
+      const { createAuth } = await import('./config-PYR6KYWW.js');
+      const auth = createAuth(c.env);
+      const baRes = await auth.api.signInEmail({
+        body: { email: invitedUser.email, password },
+        asResponse: true
+      });
+      if (baRes.ok) {
+        const setCookies = typeof baRes.headers.getSetCookie === "function" ? baRes.headers.getSetCookie() : [baRes.headers.get("set-cookie")].filter(Boolean);
+        for (const sc of setCookies) c.header("Set-Cookie", sc, { append: true });
+        await setCsrfCookie(c);
+      }
+    } catch {
+    }
     return c.redirect("/admin/dashboard?welcome=true");
   } catch (error) {
     console.error("Accept invitation error:", error);
@@ -29568,5 +29359,5 @@ var ROUTES_INFO = {
 };
 
 export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, createUserProfilesPlugin, defineUserProfile, getConfirmationDialogScript2 as getConfirmationDialogScript, getCustomData, getUserProfileConfig, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userProfilesPlugin, userRoutes };
-//# sourceMappingURL=chunk-NMEVSZOJ.js.map
-//# sourceMappingURL=chunk-NMEVSZOJ.js.map
+//# sourceMappingURL=chunk-M7RWHM2X.js.map
+//# sourceMappingURL=chunk-M7RWHM2X.js.map

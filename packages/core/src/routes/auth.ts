@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { getCookie, setCookie } from 'hono/cookie'
 import { html } from 'hono/html'
 import { AuthManager, requireAuth, generateCsrfToken, rateLimit } from '../middleware'
-import { getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb } from '../middleware/auth'
+import { getJwtExpirySecondsFromDb } from '../middleware/auth'
 import { renderLoginPage, LoginPageData } from '../templates/pages/auth-login.template'
 import { renderRegisterPage, RegisterPageData } from '../templates/pages/auth-register.template'
 import { getCacheService, CACHE_CONFIGS } from '../services'
@@ -99,244 +99,9 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required')
 })
 
-// Register new user
-authRoutes.post('/register',
-  rateLimit({ max: 30, windowMs: 60 * 1000, keyPrefix: 'register' }),
-  async (c) => {
-    try {
-      const db = c.env.DB
-
-      // Check if this is the first user (bootstrap scenario) - always allow
-      const isFirstUser = await isFirstUserRegistration(db)
-
-      // If not first user, check if registration is enabled
-      if (!isFirstUser) {
-        const registrationEnabled = await isRegistrationEnabled(db)
-        if (!registrationEnabled) {
-          return c.json({ error: 'Registration is currently disabled' }, 403)
-        }
-      }
-
-      // Parse JSON with error handling
-      let requestData
-      try {
-        requestData = await c.req.json()
-      } catch (parseError) {
-        return c.json({ error: 'Invalid JSON in request body' }, 400)
-      }
-
-      // Build and validate using dynamic schema
-      const validationSchema = await authValidationService.buildRegistrationSchema(db)
-
-      let validatedData: RegistrationData
-      try {
-        validatedData = await validationSchema.parseAsync(requestData)
-      } catch (validationError: any) {
-        return c.json({
-          error: 'Validation failed',
-          details: validationError.issues?.map((e: any) => e.message) || [validationError.message || 'Invalid request data']
-        }, 400)
-      }
-
-      // Extract fields with defaults for optional ones
-      const email = validatedData.email
-      const password = validatedData.password
-      const username = validatedData.username || authValidationService.generateDefaultValue('username', validatedData)
-      const firstName = validatedData.firstName || authValidationService.generateDefaultValue('firstName', validatedData)
-      const lastName = validatedData.lastName || authValidationService.generateDefaultValue('lastName', validatedData)
-
-      // Normalize email to lowercase
-      const normalizedEmail = email.toLowerCase()
-      
-      // Check if user already exists
-      const existingUser = await db.prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-        .bind(normalizedEmail, username)
-        .first()
-      
-      if (existingUser) {
-        return c.json({ error: 'User with this email or username already exists' }, 400)
-      }
-      
-      // Hash password
-      const passwordHash = await AuthManager.hashPassword(password)
-      
-      // Create user
-      const userId = crypto.randomUUID()
-      const now = new Date()
-      const roleName = isFirstUser ? 'admin' : 'viewer'
-      
-      await db.prepare(`
-        INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        userId,
-        normalizedEmail,
-        username,
-        firstName,
-        lastName,
-        passwordHash,
-        roleName, // Compatibility role; portal access is RBAC-backed.
-        1, // is_active
-        now.getTime(),
-        now.getTime()
-      ).run()
-
-      await db.prepare(
-        'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
-      )
-        .bind(userId, roleName)
-        .run()
-      
-      // Save custom profile fields if configured
-      const profileConfig = getUserProfileConfig()
-      if (profileConfig) {
-        const regFields = getRegistrationFields()
-        if (regFields.length > 0) {
-          const customData: Record<string, any> = { ...getProfileFieldDefaults() }
-          for (const field of regFields) {
-            if (requestData[field.name] !== undefined) {
-              customData[field.name] = requestData[field.name]
-            }
-          }
-          const sanitized = sanitizeCustomData(customData, profileConfig)
-          await saveCustomData(db, userId, sanitized)
-        }
-      }
-
-      // Generate JWT token
-      const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-      const token = await AuthManager.generateToken(userId, normalizedEmail, roleName, c.env.JWT_SECRET, tokenTtl)
-
-      // Set HTTP-only cookie
-      setCookie(c, 'auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: tokenTtl
-      })
-
-      // Set CSRF cookie for browser sessions
-      await setCsrfCookie(c)
-
-      return c.json({
-        user: {
-          id: userId,
-          email: normalizedEmail,
-          username,
-          firstName,
-          lastName,
-          role: roleName
-        },
-        token
-      }, 201)
-    } catch (error) {
-      console.error('Registration error:', error)
-      // Return validation errors as 400, other errors as 500
-      if (error instanceof Error && error.message.includes('validation')) {
-        return c.json({ error: error.message }, 400)
-      }
-      return c.json({
-        error: 'Registration failed',
-        details: error instanceof Error ? error.message : String(error)
-      }, 500)
-    }
-  }
-)
-
-// Login user
-authRoutes.post('/login',
-  rateLimit({ max: 30, windowMs: 60 * 1000, keyPrefix: 'login' }),
-  async (c) => {
-    try {
-      const body = await c.req.json()
-      const validation = loginSchema.safeParse(body)
-      if (!validation.success) {
-        return c.json({ error: 'Validation failed', details: validation.error.issues }, 400)
-      }
-      const { email, password } = validation.data
-      const db = c.env.DB
-      
-      // Normalize email to lowercase
-      const normalizedEmail = email.toLowerCase()
-      
-      // Find user with caching
-      const cache = getCacheService(CACHE_CONFIGS.user!)
-      let user = await cache.get<any>(cache.generateKey('user', `email:${normalizedEmail}`))
-
-      if (!user) {
-        user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-          .bind(normalizedEmail)
-          .first() as any
-
-        if (user) {
-          // Cache the user for faster subsequent lookups
-          await cache.set(cache.generateKey('user', `email:${normalizedEmail}`), user)
-          await cache.set(cache.generateKey('user', user.id), user)
-        }
-      }
-
-      if (!user) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-      
-      // Verify password
-      const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-      if (!isValidPassword) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-
-      // Transparent password hash migration: re-hash legacy SHA-256 to PBKDF2
-      if (AuthManager.isLegacyHash(user.password_hash)) {
-        try {
-          const newHash = await AuthManager.hashPassword(password)
-          await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-            .bind(newHash, Date.now(), user.id)
-            .run()
-        } catch (rehashError) {
-          console.error('Password rehash failed (non-fatal):', rehashError)
-        }
-      }
-
-      // Generate JWT token
-      const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-      const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl)
-
-      // Set HTTP-only cookie
-      setCookie(c, 'auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: tokenTtl
-      })
-
-      // Set CSRF cookie for browser sessions
-      await setCsrfCookie(c)
-
-      // Update last login
-      await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-        .bind(new Date().getTime(), user.id)
-        .run()
-
-      // Invalidate user cache on login
-      await cache.delete(cache.generateKey('user', user.id))
-      await cache.delete(cache.generateKey('user', `email:${normalizedEmail}`))
-
-      return c.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role
-        },
-        token
-      })
-    } catch (error) {
-      console.error('Login error:', error)
-      return c.json({ error: 'Login failed' }, 500)
-    }
-})
+// POST /register (JSON/JWT) removed — use POST /register/form (Better Auth).
+// POST /login (JSON/JWT) removed — use POST /login/form (Better Auth).
+// POST /refresh (JWT) removed — Better Auth handles session renewal automatically.
 
 // Logout user (both GET and POST for convenience)
 // Revoke the Better Auth session server-side and forward the clearing cookie(s).
@@ -402,62 +167,6 @@ authRoutes.get('/me', requireAuth(), async (c) => {
 // with a new `exp`. This lets a long-lived session cookie keep a user
 // logged in across JWT expirations without forcing a full re-login.
 //
-// Security: the caller must still present a valid-signature token that
-// recently belonged to an active user. Fully forged or long-expired tokens
-// are rejected.
-authRoutes.post('/refresh',
-  rateLimit({ max: 60, windowMs: 60 * 1000, keyPrefix: 'refresh' }),
-  async (c) => {
-  try {
-    // Accept token from Authorization header or cookie
-    let token = c.req.header('Authorization')?.replace('Bearer ', '')
-    if (!token) token = getCookie(c, 'auth_token')
-
-    if (!token) {
-      return c.json({ error: 'Authentication required' }, 401)
-    }
-
-    const db = c.env.DB
-    const grace = await getJwtRefreshGraceSecondsFromDb(db, c.env)
-
-    const payload = await AuthManager.verifyToken(token, c.env.JWT_SECRET, grace)
-    if (!payload) {
-      return c.json({ error: 'Invalid or expired token' }, 401)
-    }
-
-    // Re-validate the user is still active, and pick up any role changes.
-    const row = await db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?')
-      .bind(payload.userId)
-      .first() as any
-
-    if (!row || !row.is_active) {
-      return c.json({ error: 'User is not active' }, 401)
-    }
-
-    // Generate new token with a fresh exp
-    const tokenTtl = await getJwtExpirySecondsFromDb(db, c.env)
-    const newToken = await AuthManager.generateToken(row.id, row.email, row.role, c.env.JWT_SECRET, tokenTtl)
-
-    // Set new cookie
-    setCookie(c, 'auth_token', newToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
-
-    // Set CSRF cookie for browser sessions
-    await setCsrfCookie(c)
-
-    return c.json({
-      token: newToken,
-      expiresIn: tokenTtl
-    })
-  } catch (error) {
-    console.error('Token refresh error:', error)
-    return c.json({ error: 'Token refresh failed' }, 500)
-  }
-})
 
 // Form-based registration handler (for HTML forms)
 authRoutes.post('/register/form',
@@ -1108,25 +817,27 @@ authRoutes.post('/accept-invitation', async (c) => {
     // users.password_hash). Without this the first login would fail.
     await ensureCredentialAccount(db, invitedUser.id, passwordHash)
 
-    // Generate JWT token for auto-login
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-    const authToken = await AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET, tokenTtl)
+    // Sign in via Better Auth so the browser gets a proper BA session cookie.
+    // The credential account was just created, so sign-in should succeed.
+    try {
+      const { createAuth } = await import('../auth/config')
+      const auth = createAuth(c.env)
+      const baRes = (await auth.api.signInEmail({
+        body: { email: invitedUser.email, password },
+        asResponse: true,
+      })) as Response
+      if (baRes.ok) {
+        const setCookies =
+          typeof (baRes.headers as any).getSetCookie === 'function'
+            ? (baRes.headers as any).getSetCookie()
+            : [baRes.headers.get('set-cookie')].filter(Boolean)
+        for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
+        await setCsrfCookie(c)
+      }
+    } catch {
+      // Non-fatal: user can sign in manually at /auth/login
+    }
 
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', authToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
-
-    // Set CSRF cookie for browser sessions
-    await setCsrfCookie(c)
-
-    // Log the activity (TODO: implement activity logging)
-    // Activity logging is deferred until utils/log-activity is implemented
-
-    // Redirect to admin dashboard
     return c.redirect('/admin/dashboard?welcome=true')
 
   } catch (error) {

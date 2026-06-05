@@ -92,6 +92,16 @@ declare class AuthManager {
      */
     static verifyAuthRequest(c: Context): Promise<JWTPayload | null>;
     static hashPassword(password: string): Promise<string>;
+    /**
+     * Ensure a Better Auth `credential` account row exists for a user, holding the
+     * given password hash. Better Auth authenticates against `account.password`,
+     * NOT `users.password_hash`, so every flow that writes a password outside the
+     * BA sign-up path (admin set-password, reset, invitation, seed) MUST call this
+     * or the user is locked out. Idempotent — the row id mirrors migration 037's
+     * backfill (`cred-<userId>`). The legacy-PBKDF2 verify hook upgrades it to
+     * scrypt on first successful login.
+     */
+    static ensureCredentialAccount(db: D1Database, userId: string, passwordHash: string): Promise<void>;
     static hashPasswordLegacy(password: string): Promise<string>;
     static verifyPassword(password: string, storedHash: string): Promise<boolean>;
     static isLegacyHash(storedHash: string): boolean;

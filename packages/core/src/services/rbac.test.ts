@@ -280,18 +280,30 @@ describe('RbacService mutations — slugging and system protection', () => {
 
 describe('RbacService.setUserRoles — legacy users.role projection', () => {
   // Mock that resolves role names for the SELECT and captures batched statements.
+  // It is query-aware so it also satisfies setUserRoles' self-lockout guard:
+  // the role-grants lookup returns no admin grants (so the edited user is not
+  // treated as an admin) while the countPortalAdmins query returns one existing
+  // admin (so the guard passes and we can assert the users.role projection).
   function captureDb(roleNamesById: Record<string, string>) {
     const statements: Array<{ sql: string; params: unknown[] }> = []
+    const resultFor = (sql: string, params: unknown[]): any[] => {
+      if (sql.includes('SELECT name FROM rbac_roles')) {
+        return params.map((id) => ({ name: roleNamesById[String(id)] })).filter((r) => r.name)
+      }
+      if (sql.includes('FROM rbac_role_grants WHERE role_id IN')) return []
+      if (sql.includes('JOIN users u ON u.id = ur.user_id')) {
+        return [{ user_id: 'existing-admin', resource: '*', verb: 'manage' }]
+      }
+      return []
+    }
     const prepare = vi.fn((sql: string) => ({
+      all: async () => ({ results: resultFor(sql, []) }),
       bind: vi.fn((...params: unknown[]) => {
         const stmt = {
           sql,
           params,
-          all: async () => ({
-            results: params
-              .map((id) => ({ name: roleNamesById[String(id)] }))
-              .filter((r) => r.name),
-          }),
+          all: async () => ({ results: resultFor(sql, params) }),
+          run: vi.fn().mockResolvedValue({}),
         }
         statements.push(stmt)
         return stmt
@@ -326,5 +338,56 @@ describe('RbacService.setUserRoles — legacy users.role projection', () => {
     expect(statements.some((s) => s.sql.includes('DELETE FROM rbac_user_roles'))).toBe(true)
     const upd = statements.find((s) => s.sql.includes('UPDATE users SET role'))
     expect(upd!.params[0]).toBe('viewer')
+  })
+})
+
+describe('RbacService.setUserRoles — self-lockout guard', () => {
+  function makeGuardDb(opts: {
+    roleNames?: Record<string, string>
+    newRoleGrants?: Array<{ resource: string; verb: string }>
+    allUserGrants?: Array<{ user_id: string; resource: string; verb: string }>
+  }) {
+    const { roleNames = {}, newRoleGrants = [], allUserGrants = [] } = opts
+    const resultFor = (sql: string, params: unknown[]): any[] => {
+      if (sql.includes('SELECT name FROM rbac_roles')) {
+        return params.map((id) => ({ name: roleNames[String(id)] })).filter((r) => r.name)
+      }
+      if (sql.includes('FROM rbac_role_grants WHERE role_id IN')) return newRoleGrants
+      if (sql.includes('JOIN users u ON u.id = ur.user_id')) return allUserGrants
+      return []
+    }
+    const batch = vi.fn().mockResolvedValue([])
+    const prepare = vi.fn((sql: string) => ({
+      all: async () => ({ results: resultFor(sql, []) }),
+      bind: (...params: unknown[]) => ({
+        all: async () => ({ results: resultFor(sql, params) }),
+        run: async () => ({}),
+      }),
+    }))
+    return { db: { prepare, batch } as any, batch }
+  }
+
+  it('blocks the change when it would leave no portal-admin (last admin)', async () => {
+    const { db, batch } = makeGuardDb({ allUserGrants: [] }) // no other admins
+    await expect(new RbacService(db).setUserRoles('u1', [])).rejects.toThrow(/no user able to manage Roles/i)
+    expect(batch).not.toHaveBeenCalled()
+  })
+
+  it('allows the change when another active user is still a portal-admin', async () => {
+    const { db, batch } = makeGuardDb({
+      allUserGrants: [{ user_id: 'other', resource: '*', verb: 'manage' }], // *:manage qualifies
+    })
+    await new RbacService(db).setUserRoles('u1', [])
+    expect(batch).toHaveBeenCalledOnce()
+  })
+
+  it('allows the change when the new roles still grant portal:access + rbac:manage', async () => {
+    const { db, batch } = makeGuardDb({
+      roleNames: { 'role-x': 'admin' },
+      newRoleGrants: [{ resource: '*', verb: 'manage' }],
+      allUserGrants: [], // no others, but the user keeps admin grants
+    })
+    await new RbacService(db).setUserRoles('u1', ['role-x'])
+    expect(batch).toHaveBeenCalledOnce()
   })
 })

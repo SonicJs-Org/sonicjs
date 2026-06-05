@@ -232,6 +232,34 @@ export class RbacService {
   }
 
   /**
+   * Count active users (optionally excluding one) who hold BOTH an effective
+   * portal:access grant and an effective rbac:manage grant — i.e. the users who
+   * could recover the system from a permission lockout. Powers the self-lockout
+   * guard in setUserRoles. Resolves wildcards via grantMatches (so a renamed
+   * Administrator role with *:manage still counts).
+   */
+  async countPortalAdmins(excludeUserId?: string): Promise<number> {
+    const rows = await this.all<{ user_id: string; resource: string; verb: string }>(
+      `SELECT ur.user_id as user_id, g.resource as resource, g.verb as verb
+       FROM rbac_user_roles ur
+       JOIN rbac_role_grants g ON g.role_id = ur.role_id
+       JOIN users u ON u.id = ur.user_id
+       WHERE u.is_active = 1`
+    )
+    const byUser = new Map<string, { portal: boolean; rbac: boolean }>()
+    for (const r of rows) {
+      if (excludeUserId && r.user_id === excludeUserId) continue
+      const e = byUser.get(r.user_id) || { portal: false, rbac: false }
+      if (this.grantMatches(r, 'portal', 'access')) e.portal = true
+      if (this.grantMatches(r, 'rbac', 'manage')) e.rbac = true
+      byUser.set(r.user_id, e)
+    }
+    let count = 0
+    for (const e of byUser.values()) if (e.portal && e.rbac) count++
+    return count
+  }
+
+  /**
    * Replace a user's RBAC role assignments. `rbac_user_roles` is the single
    * source of truth for authorization; the legacy `users.role` column is kept
    * only as a derived *projection* of those roles (compat for older queries and
@@ -249,6 +277,23 @@ export class RbacService {
       ).map((r) => r.name)
     }
     const primaryRole = RbacService.LEGACY_ROLE_PRECEDENCE.find((r) => names.includes(r)) || 'viewer'
+
+    // Self-lockout guard: never let a role change leave zero active users who can
+    // BOTH enter the portal and manage RBAC (the minimum needed to recover).
+    const newGrants = roleIds.length
+      ? await this.all<{ resource: string; verb: string }>(
+          `SELECT resource, verb FROM rbac_role_grants WHERE role_id IN (${roleIds.map(() => '?').join(',')})`,
+          ...roleIds
+        )
+      : []
+    const userWillBeAdmin =
+      newGrants.some((g) => this.grantMatches(g, 'portal', 'access')) &&
+      newGrants.some((g) => this.grantMatches(g, 'rbac', 'manage'))
+    if (!userWillBeAdmin && (await this.countPortalAdmins(userId)) === 0) {
+      throw new Error(
+        'Refusing to update roles: this would leave no user able to manage Roles & Permissions and access the portal. Grant another user portal access + Roles & Permissions first.'
+      )
+    }
 
     const stmts = [this.db.prepare('DELETE FROM rbac_user_roles WHERE user_id = ?').bind(userId)]
     for (const rid of roleIds) {

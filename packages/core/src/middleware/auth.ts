@@ -303,6 +303,31 @@ export class AuthManager {
     return `pbkdf2:${iterations}:${saltHex}:${hashHex}`
   }
 
+  /**
+   * Ensure a Better Auth `credential` account row exists for a user, holding the
+   * given password hash. Better Auth authenticates against `account.password`,
+   * NOT `users.password_hash`, so every flow that writes a password outside the
+   * BA sign-up path (admin set-password, reset, invitation, seed) MUST call this
+   * or the user is locked out. Idempotent — the row id mirrors migration 037's
+   * backfill (`cred-<userId>`). The legacy-PBKDF2 verify hook upgrades it to
+   * scrypt on first successful login.
+   */
+  static async ensureCredentialAccount(
+    db: D1Database,
+    userId: string,
+    passwordHash: string
+  ): Promise<void> {
+    const now = Date.now()
+    await db
+      .prepare(
+        `INSERT INTO account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+         VALUES (?, ?, ?, 'credential', ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET password = excluded.password, updated_at = excluded.updated_at`
+      )
+      .bind(`cred-${userId}`, userId, userId, passwordHash, now, now)
+      .run()
+  }
+
   static async hashPasswordLegacy(password: string): Promise<string> {
     const encoder = new TextEncoder()
     const data = encoder.encode(password + 'salt-change-in-production')

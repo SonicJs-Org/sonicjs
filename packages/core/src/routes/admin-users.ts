@@ -747,6 +747,10 @@ userRoutes.post('/users/new', async (c) => {
 
     await new RbacService(db).setUserRoles(userId, rbacRoleIds)
 
+    // Create the Better Auth credential account so the new user can sign in
+    // immediately (BA verifies account.password, not users.password_hash).
+    await AuthManager.ensureCredentialAccount(db, userId, passwordHash)
+
     // Log the activity
     await logActivity(
       db, user!.userId, 'user!.create', 'users', userId,
@@ -1071,9 +1075,18 @@ userRoutes.put('/users/:id', async (c) => {
     ).run()
 
     // Sync dynamic RBAC role assignments (multi-role). Empty selection means
-    // the user has no roles and therefore no portal access.
+    // the user has no roles and therefore no portal access. setUserRoles enforces
+    // the self-lockout guard and throws if this change would leave no admin.
     const rbacRoleIds = formData.getAll('rbac_roles').map((v) => String(v)).filter(Boolean)
-    await new RbacService(db).setUserRoles(userId, rbacRoleIds)
+    try {
+      await new RbacService(db).setUserRoles(userId, rbacRoleIds)
+    } catch (roleErr) {
+      return c.html(renderAlert({
+        type: 'error',
+        message: roleErr instanceof Error ? roleErr.message : 'Failed to update roles.',
+        dismissible: true,
+      }))
+    }
 
     // Update password if provided
     if (newPassword) {
@@ -1082,6 +1095,10 @@ userRoutes.put('/users/:id', async (c) => {
         UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
       `)
       await updatePasswordStmt.bind(passwordHash, Date.now(), userId).run()
+      // Keep the BA credential account in sync — otherwise an admin-set password
+      // would lock the user out (BA verifies account.password, and the login
+      // self-heal only fires when no account row exists).
+      await AuthManager.ensureCredentialAccount(db, userId, passwordHash)
     }
 
     // Check if any profile field has data

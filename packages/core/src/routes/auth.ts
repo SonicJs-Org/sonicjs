@@ -750,15 +750,9 @@ async function ensureCredentialAccount(
   userId: string,
   passwordHash: string
 ): Promise<void> {
-  const now = Date.now()
-  await db
-    .prepare(
-      `INSERT INTO account (id, user_id, account_id, provider_id, password, created_at, updated_at)
-       VALUES (?, ?, ?, 'credential', ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET password = excluded.password, updated_at = excluded.updated_at`
-    )
-    .bind(`cred-${userId}`, userId, userId, passwordHash, now, now)
-    .run()
+  // Single implementation lives on AuthManager so every password-writing flow
+  // (reset, invite, admin set-password, seed) syncs the BA credential identically.
+  return AuthManager.ensureCredentialAccount(db, userId, passwordHash)
 }
 
 authRoutes.post('/seed-admin',

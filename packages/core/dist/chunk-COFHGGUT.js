@@ -1,6 +1,6 @@
 import { RbacService } from './chunk-WXJT2BCV.js';
 import { syncCollections, syncAllFormCollections, PluginBootstrapService } from './chunk-VM7C2EGU.js';
-import { MigrationService } from './chunk-I5Z6UZUI.js';
+import { MigrationService } from './chunk-CSU7ZH5Z.js';
 import { metricsTracker } from './chunk-FICTAGD4.js';
 import { sign, verify } from 'hono/jwt';
 import { getCookie, setCookie } from 'hono/cookie';
@@ -556,10 +556,10 @@ function csrfProtection(options = {}) {
   return async (c, next) => {
     const method = c.req.method.toUpperCase();
     const path = new URL(c.req.url).pathname;
-    const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK2;
-    if (c.env?.ENVIRONMENT === "production" && !c.env?.JWT_SECRET) {
+    const secret = c.env?.BETTER_AUTH_SECRET || c.env?.JWT_SECRET || JWT_SECRET_FALLBACK2;
+    if (c.env?.ENVIRONMENT === "production" && !c.env?.BETTER_AUTH_SECRET && !c.env?.JWT_SECRET) {
       console.warn(
-        "[CSRF] WARNING: JWT_SECRET is not set in production. CSRF tokens are signed with the fallback key, which is insecure."
+        "[CSRF] WARNING: Neither BETTER_AUTH_SECRET nor JWT_SECRET is set in production. CSRF tokens are signed with the fallback key, which is insecure."
       );
     }
     if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
@@ -719,5 +719,5 @@ var getActivePlugins = () => [];
 var isPluginActive = () => false;
 
 export { AuthManager, PermissionManager, bootstrapMiddleware, cacheHeaders, compressionMiddleware, csrfProtection, detailedLoggingMiddleware, generateCsrfToken, getActivePlugins, getJwtExpirySeconds, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, rateLimit, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware, securityLoggingMiddleware, validateCsrfToken, verifySecurityConfig };
-//# sourceMappingURL=chunk-LOOYI6LN.js.map
-//# sourceMappingURL=chunk-LOOYI6LN.js.map
+//# sourceMappingURL=chunk-COFHGGUT.js.map
+//# sourceMappingURL=chunk-COFHGGUT.js.map

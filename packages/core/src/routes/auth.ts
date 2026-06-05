@@ -17,7 +17,7 @@ const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
 
 /** Set a signed CSRF cookie alongside the auth cookie on login/register. */
 async function setCsrfCookie(c: any, maxAge?: number): Promise<void> {
-  const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
+  const secret = c.env?.BETTER_AUTH_SECRET || c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
   const isDev = c.env?.ENVIRONMENT === 'development' || !c.env?.ENVIRONMENT
   const csrfToken = await generateCsrfToken(secret)
   const cookieMaxAge = maxAge ?? (await getJwtExpirySecondsFromDb(c.env?.DB, c.env))
@@ -354,10 +354,30 @@ authRoutes.post('/login/form',
       `)
     }
 
+    const db = c.env.DB
+    const now = Date.now()
+
+    // Account lockout check. Fail with the same message as invalid credentials
+    // to prevent distinguishing locked vs wrong-password (anti-enumeration).
+    const LOCKOUT_THRESHOLD = 5                     // failures before lock
+    const LOCKOUT_DURATION_MS = 15 * 60 * 1000     // 15 minutes
+
+    const userForLock = (await db
+      .prepare('SELECT id, failed_login_count, locked_until FROM users WHERE email = ? AND is_active = 1')
+      .bind(normalizedEmail)
+      .first()) as { id: string; failed_login_count: number; locked_until: number | null } | null
+
+    if (userForLock?.locked_until && userForLock.locked_until > now) {
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          Invalid email or password
+        </div>
+      `)
+    }
+
     // Authenticate via Better Auth (handles password verify, legacy PBKDF2
     // upgrade, and session creation). Returns a Response carrying the session
     // Set-Cookie which we forward to the browser.
-    const db = c.env.DB
     const { createAuth } = await import('../auth/config')
     const auth = createAuth(c.env)
 
@@ -398,11 +418,26 @@ authRoutes.post('/login/form',
     }
 
     if (!baRes || !baRes.ok) {
+      // Increment failed login counter; lock account if threshold reached.
+      if (userForLock) {
+        const newCount = (userForLock.failed_login_count || 0) + 1
+        const newLock = newCount >= LOCKOUT_THRESHOLD ? now + LOCKOUT_DURATION_MS : null
+        await db.prepare(
+          'UPDATE users SET failed_login_count = ?, locked_until = ?, updated_at = ? WHERE id = ?'
+        ).bind(newCount, newLock, now, userForLock.id).run()
+      }
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
         </div>
       `)
+    }
+
+    // Success — reset lockout counters.
+    if (userForLock) {
+      await db.prepare(
+        'UPDATE users SET failed_login_count = 0, locked_until = NULL, updated_at = ? WHERE id = ?'
+      ).bind(now, userForLock.id).run()
     }
 
     // Forward Better Auth's session Set-Cookie header(s) to the browser.
@@ -1091,8 +1126,9 @@ authRoutes.post('/reset-password', async (c) => {
     }
 
     const db = c.env.DB
+    const now = Date.now()
 
-    // Check if reset token is valid and not expired
+    // Fetch the user before atomic consume so we can check password history.
     const userStmt = db.prepare(`
       SELECT id, email, password_hash, password_reset_expires
       FROM users
@@ -1100,60 +1136,55 @@ authRoutes.post('/reset-password', async (c) => {
     `)
     const user = await userStmt.bind(token).first() as any
 
-    if (!user) {
+    if (!user || now > user.password_reset_expires) {
+      // Same error message for both invalid + expired — prevents token existence enumeration.
       return c.json({ error: 'Invalid or expired reset token' }, 400)
     }
 
-    // Check if token is expired
-    if (Date.now() > user.password_reset_expires) {
-      return c.json({ error: 'Reset token has expired' }, 400)
-    }
+    // Password history: reject if the new password matches any of the last 5.
+    try {
+      const history = await db.prepare(`
+        SELECT password_hash FROM password_history
+        WHERE user_id = ? ORDER BY created_at DESC LIMIT 5
+      `).bind(user.id).all()
+      for (const row of (history.results as any[])) {
+        if (await AuthManager.verifyPassword(password, row.password_hash)) {
+          return c.json({ error: 'Password was used recently. Please choose a different password.' }, 400)
+        }
+      }
+    } catch { /* table may not exist on older schemas */ }
 
-    // Hash new password
+    // Hash new password.
     const newPasswordHash = await AuthManager.hashPassword(password)
 
-    // Store old password in history (skip if table doesn't exist)
-    try {
-      const historyStmt = db.prepare(`
-        INSERT INTO password_history (id, user_id, password_hash, created_at)
-        VALUES (?, ?, ?, ?)
-      `)
-      await historyStmt.bind(
-        crypto.randomUUID(),
-        user.id,
-        user.password_hash,
-        Date.now()
-      ).run()
-    } catch (historyError) {
-      // Password history table may not exist yet
-      console.warn('Could not store password history:', historyError)
-    }
-
-    // Update user password and clear reset token
-    const updateStmt = db.prepare(`
+    // Atomic single-consume: update password and NULL the reset token in one
+    // statement keyed on the token value. D1's meta.changes === 0 means another
+    // concurrent request consumed the token first — treat as invalid.
+    const consumeResult = await db.prepare(`
       UPDATE users SET
         password_hash = ?,
         password_reset_token = NULL,
         password_reset_expires = NULL,
+        failed_login_count = 0,
+        locked_until = NULL,
         updated_at = ?
-      WHERE id = ?
-    `)
+      WHERE password_reset_token = ? AND password_reset_expires > ? AND is_active = 1
+    `).bind(newPasswordHash, now, token, now).run()
 
-    await updateStmt.bind(
-      newPasswordHash,
-      Date.now(),
-      user.id
-    ).run()
+    if ((consumeResult.meta as any)?.changes === 0) {
+      return c.json({ error: 'Invalid or expired reset token' }, 400)
+    }
 
-    // Better Auth verifies against account.password, NOT users.password_hash.
-    // Without this write-through the new password would never validate (and the
-    // login self-heal only fires when no account row exists), so a reset would
-    // hard-lock the user out. Sync the credential account; the legacy-PBKDF2
-    // verify hook upgrades it to scrypt on first login.
+    // Archive the old hash in password history.
+    try {
+      await db.prepare(`
+        INSERT INTO password_history (id, user_id, password_hash, created_at)
+        VALUES (?, ?, ?, ?)
+      `).bind(crypto.randomUUID(), user.id, user.password_hash, now).run()
+    } catch { /* non-fatal if history table is absent */ }
+
+    // Sync the BA credential account so the new password validates on sign-in.
     await ensureCredentialAccount(db, user.id, newPasswordHash)
-
-    // Log the activity (TODO: implement activity logging)
-    // Activity logging is deferred until utils/log-activity is implemented
 
     // Redirect to login with success message
     return c.redirect('/auth/login?message=Password reset successfully. Please log in with your new password.')

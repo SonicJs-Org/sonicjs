@@ -2,7 +2,7 @@
 
 var chunk323GE63K_cjs = require('./chunk-323GE63K.cjs');
 var chunk3ADEYHN2_cjs = require('./chunk-3ADEYHN2.cjs');
-var chunkGFO3WASR_cjs = require('./chunk-GFO3WASR.cjs');
+var chunkWCH7MZS2_cjs = require('./chunk-WCH7MZS2.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var jwt = require('hono/jwt');
 var cookie = require('hono/cookie');
@@ -58,7 +58,7 @@ function bootstrapMiddleware(config = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
       console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new chunkGFO3WASR_cjs.MigrationService(c.env.DB);
+      const migrationService = new chunkWCH7MZS2_cjs.MigrationService(c.env.DB);
       await migrationService.runPendingMigrations();
       console.log("[Bootstrap] Syncing collection configurations...");
       try {
@@ -558,10 +558,10 @@ function csrfProtection(options = {}) {
   return async (c, next) => {
     const method = c.req.method.toUpperCase();
     const path = new URL(c.req.url).pathname;
-    const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK2;
-    if (c.env?.ENVIRONMENT === "production" && !c.env?.JWT_SECRET) {
+    const secret = c.env?.BETTER_AUTH_SECRET || c.env?.JWT_SECRET || JWT_SECRET_FALLBACK2;
+    if (c.env?.ENVIRONMENT === "production" && !c.env?.BETTER_AUTH_SECRET && !c.env?.JWT_SECRET) {
       console.warn(
-        "[CSRF] WARNING: JWT_SECRET is not set in production. CSRF tokens are signed with the fallback key, which is insecure."
+        "[CSRF] WARNING: Neither BETTER_AUTH_SECRET nor JWT_SECRET is set in production. CSRF tokens are signed with the fallback key, which is insecure."
       );
     }
     if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
@@ -750,5 +750,5 @@ exports.securityHeadersMiddleware = securityHeadersMiddleware;
 exports.securityLoggingMiddleware = securityLoggingMiddleware;
 exports.validateCsrfToken = validateCsrfToken;
 exports.verifySecurityConfig = verifySecurityConfig;
-//# sourceMappingURL=chunk-C46OWN7N.cjs.map
-//# sourceMappingURL=chunk-C46OWN7N.cjs.map
+//# sourceMappingURL=chunk-55IYAOGN.cjs.map
+//# sourceMappingURL=chunk-55IYAOGN.cjs.map

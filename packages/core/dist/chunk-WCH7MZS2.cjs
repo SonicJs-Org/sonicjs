@@ -1,3 +1,5 @@
+'use strict';
+
 // src/db/migrations-bundle.ts
 var bundledMigrations = [
   {
@@ -1777,6 +1779,20 @@ SELECT 1;
     filename: "040_rbac_permission_scopes.sql",
     description: "Migration 040: Rbac Permission Scopes",
     sql: "-- Add constrained permission scopes to RBAC grants.\n--\n-- Existing grants become `any`, preserving current behavior. New grants can use\n-- `own` for content/collection read, update, and delete checks where ownership\n-- is enforced against content.author_id.\n\nALTER TABLE rbac_role_grants ADD COLUMN scope TEXT NOT NULL DEFAULT 'any';\n\nUPDATE rbac_role_grants\nSET scope = 'any'\nWHERE scope IS NULL OR scope = '';\n"
+  },
+  {
+    id: "041",
+    name: "Account Lockout",
+    filename: "041_account_lockout.sql",
+    description: "Migration 041: Account Lockout",
+    sql: "-- Account lockout: track failed login attempts on the users row.\n-- After a configurable threshold (default 5), the account is locked for a\n-- rolling window (default 15 minutes).  The login handler checks\n-- `locked_until > now()` before attempting credential verification.  A\n-- successful login resets both counters.\n--\n-- Separate from the `security_events` audit log (mig-034) which records\n-- *what* happened; these columns drive *whether* a login is permitted.\n\nALTER TABLE users ADD COLUMN failed_login_count INTEGER NOT NULL DEFAULT 0;\nALTER TABLE users ADD COLUMN locked_until       INTEGER;\n\n-- Index for the lockout check (login handler filters by email then checks these).\nCREATE INDEX IF NOT EXISTS idx_users_locked_until ON users(locked_until) WHERE locked_until IS NOT NULL;\n"
+  },
+  {
+    id: "042",
+    name: "Better Auth Plugins",
+    filename: "042_better_auth_plugins.sql",
+    description: "Migration 042: Better Auth Plugins",
+    sql: "-- Better Auth plugin tables for twoFactor and organization (Phase 6).\n--\n-- twoFactor: stores the TOTP secret, encrypted backup codes, and enrollment\n--   status for each user. Added to users with two_factor_enabled (Phase 6).\n--   Better Auth manages the records; we only need the DDL.\n--\n-- organization: multi-tenant teams \u2014 organization + member + invitation + team.\n--   Activated when the organization plugin is enabled in auth/config.ts.\n--   Schema mirrors Better Auth's own expected table structure for D1.\n\n-- \u2500\u2500\u2500 twoFactor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nCREATE TABLE IF NOT EXISTS twoFactor (\n  id          TEXT    PRIMARY KEY,\n  secret      TEXT    NOT NULL,\n  backup_codes TEXT   NOT NULL,\n  user_id     TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n  verified    INTEGER NOT NULL DEFAULT 1,\n  created_at  INTEGER NOT NULL,\n  updated_at  INTEGER NOT NULL\n);\n\nCREATE INDEX IF NOT EXISTS idx_two_factor_user_id ON twoFactor(user_id);\n\n-- Column on users to track whether 2FA is enforced for the account.\n-- Better Auth reads this to decide if a second factor is required after\n-- password verification.\nALTER TABLE users ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0;\n\n-- \u2500\u2500\u2500 organization \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nCREATE TABLE IF NOT EXISTS organization (\n  id           TEXT    PRIMARY KEY,\n  name         TEXT    NOT NULL,\n  slug         TEXT    NOT NULL UNIQUE,\n  logo         TEXT,\n  metadata     TEXT,\n  created_at   INTEGER NOT NULL,\n  updated_at   INTEGER NOT NULL\n);\n\nCREATE TABLE IF NOT EXISTS member (\n  id              TEXT    PRIMARY KEY,\n  organization_id TEXT    NOT NULL REFERENCES organization(id) ON DELETE CASCADE,\n  user_id         TEXT    NOT NULL REFERENCES users(id)         ON DELETE CASCADE,\n  role            TEXT    NOT NULL DEFAULT 'member',\n  email           TEXT,\n  created_at      INTEGER NOT NULL,\n  updated_at      INTEGER NOT NULL,\n  UNIQUE(organization_id, user_id)\n);\n\nCREATE TABLE IF NOT EXISTS invitation (\n  id              TEXT    PRIMARY KEY,\n  organization_id TEXT    NOT NULL REFERENCES organization(id) ON DELETE CASCADE,\n  email           TEXT    NOT NULL,\n  role            TEXT    NOT NULL DEFAULT 'member',\n  status          TEXT    NOT NULL DEFAULT 'pending',\n  expires_at      INTEGER NOT NULL,\n  inviter_id      TEXT    REFERENCES users(id) ON DELETE SET NULL,\n  created_at      INTEGER NOT NULL,\n  updated_at      INTEGER NOT NULL\n);\n\nCREATE TABLE IF NOT EXISTS team (\n  id              TEXT    PRIMARY KEY,\n  name            TEXT    NOT NULL,\n  organization_id TEXT    NOT NULL REFERENCES organization(id) ON DELETE CASCADE,\n  created_at      INTEGER NOT NULL,\n  updated_at      INTEGER NOT NULL\n);\n\nCREATE INDEX IF NOT EXISTS idx_member_org   ON member(organization_id);\nCREATE INDEX IF NOT EXISTS idx_member_user  ON member(user_id);\nCREATE INDEX IF NOT EXISTS idx_invite_org   ON invitation(organization_id);\nCREATE INDEX IF NOT EXISTS idx_invite_email ON invitation(email);\n"
   }
 ];
 var migrationsByIdMap = new Map(
@@ -2240,6 +2256,6 @@ var MigrationService = class {
   }
 };
 
-export { MigrationService };
-//# sourceMappingURL=chunk-I5Z6UZUI.js.map
-//# sourceMappingURL=chunk-I5Z6UZUI.js.map
+exports.MigrationService = MigrationService;
+//# sourceMappingURL=chunk-WCH7MZS2.cjs.map
+//# sourceMappingURL=chunk-WCH7MZS2.cjs.map

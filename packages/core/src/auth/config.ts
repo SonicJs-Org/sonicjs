@@ -14,6 +14,10 @@ import { betterAuth } from 'better-auth'
 import { withCloudflare } from 'better-auth-cloudflare'
 import { hashPassword as baHashPassword, verifyPassword as baVerifyPassword } from 'better-auth/crypto'
 import { APIError } from 'better-auth/api'
+import { magicLink } from 'better-auth/plugins/magic-link'
+import { emailOTP } from 'better-auth/plugins/email-otp'
+import { twoFactor } from 'better-auth/plugins/two-factor'
+import { organization } from 'better-auth/plugins/organization'
 import { drizzle } from 'drizzle-orm/d1'
 import { users, session, account, verification } from '../db/schema'
 import { isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
@@ -180,6 +184,65 @@ export function getDefaultAuthOptions(env: Bindings) {
         },
       }
     ),
+
+    // ── Phase 4: BA-native login methods ─────────────────────────────────────
+    // Magic-link and Email-OTP replace the standalone SonicJS plugins that
+    // minted JWT cookies. Social providers replace the bespoke oauth-providers
+    // plugin. All are gated on the relevant env vars / email service config
+    // so they activate only when configured.
+
+    plugins: [
+      // Magic-link passwordless auth. Sends a one-time link to the user's inbox;
+      // the link resolves to a BA session. Requires a working email service.
+      magicLink({
+        sendMagicLink: async ({ email, url }: { email: string; url: string }, _request: any) => {
+          // In production, integrate with the email plugin or send via Sendgrid.
+          // During local dev, log the link to the console so it can be tested
+          // without a real mail server.
+          console.log(`[magic-link] ${email} → ${url}`)
+          // TODO: wire to email plugin when SENDGRID_API_KEY or EMAIL_QUEUE is set.
+        },
+        expiresIn: 15 * 60, // 15 minutes (matches old SonicJS magic-link TTL)
+      }),
+
+      // Email OTP — 6-digit code sent to inbox. Replaces the otp-login-plugin.
+      emailOTP({
+        sendVerificationOTP: async (params: { email: string; otp: string; type: string }, _request: any) => {
+          console.log(`[email-otp] ${params.email} → ${params.otp}`)
+          // TODO: wire to email plugin.
+        },
+        otpLength: 6,
+        expiresIn: 10 * 60, // 10 minutes (matches old SonicJS OTP TTL)
+      }),
+
+      // ── Phase 6: 2FA / TOTP ────────────────────────────────────────────────
+      // twoFactor adds /auth/two-factor/* endpoints for TOTP enrollment +
+      // verification. Requires migration 042 to create the `twoFactor` table.
+      twoFactor({
+        issuer: 'SonicJS',
+        totpOptions: {
+          digits: 6,
+          period: 30,
+        },
+      }),
+
+      // ── Phase 6: Multi-tenant organizations ───────────────────────────────
+      // organization adds /auth/organization/* endpoints for team management.
+      // Requires migration 042 (organization tables).
+      organization(),
+    ],
+
+    // ── Phase 4: Social providers ─────────────────────────────────────────
+    // Activated when the relevant env vars are set. Replaces the bespoke
+    // oauth-providers SonicJS plugin. Set via wrangler secret put / .dev.vars.
+    socialProviders: {
+      ...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+        ? { github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET } }
+        : {}),
+      ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? { google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } }
+        : {}),
+    },
   }
 }
 

@@ -1,11 +1,15 @@
 import * as hono_types from 'hono/types';
 import { Hono } from 'hono';
-import { B as Bindings$a, V as Variables$b } from './app-fROCPOVY.js';
+import { B as Bindings$a, V as Variables$b } from './app-BkKXUqNy.js';
 import { D1Database as D1Database$1, KVNamespace as KVNamespace$1, R2Bucket as R2Bucket$1 } from '@cloudflare/workers-types';
-import 'zod';
-import 'better-call';
-import 'better-auth-cloudflare';
+import 'better-auth/client';
+import 'better-auth/plugins/two-factor';
+import 'better-auth/plugins/email-otp';
 import 'better-auth';
+import 'better-auth/plugins/magic-link';
+import 'better-call';
+import 'zod/v4/core';
+import 'zod';
 
 interface Variables$a extends Variables$b {
     startTime: number;

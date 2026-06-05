@@ -1,10 +1,14 @@
 import * as hono from 'hono';
 import { Context, Next, MiddlewareHandler } from 'hono';
-import { S as SonicJSConfig } from './app-fROCPOVY.cjs';
-import 'zod';
-import 'better-call';
-import 'better-auth-cloudflare';
+import { S as SonicJSConfig } from './app-BkKXUqNy.cjs';
+import 'better-auth/client';
+import 'better-auth/plugins/two-factor';
+import 'better-auth/plugins/email-otp';
 import 'better-auth';
+import 'better-auth/plugins/magic-link';
+import 'better-call';
+import 'zod/v4/core';
+import 'zod';
 import '@cloudflare/workers-types';
 
 type Bindings = {
@@ -143,7 +147,8 @@ declare const metricsMiddleware: () => MiddlewareHandler;
  * CSRF Protection Middleware — Signed Double-Submit Cookie
  *
  * Stateless CSRF protection for Cloudflare Workers (no session store needed).
- * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with JWT_SECRET.
+ * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with BETTER_AUTH_SECRET
+ * (preferred) or JWT_SECRET (legacy fallback).
  *
  * Flow:
  *   GET  — ensureCsrfCookie(): reuse existing valid cookie or set a new one

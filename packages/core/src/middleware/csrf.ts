@@ -2,7 +2,8 @@
  * CSRF Protection Middleware — Signed Double-Submit Cookie
  *
  * Stateless CSRF protection for Cloudflare Workers (no session store needed).
- * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with JWT_SECRET.
+ * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with BETTER_AUTH_SECRET
+ * (preferred) or JWT_SECRET (legacy fallback).
  *
  * Flow:
  *   GET  — ensureCsrfCookie(): reuse existing valid cookie or set a new one
@@ -184,12 +185,14 @@ export function csrfProtection(options: CsrfOptions = {}) {
   return async (c: Context, next: Next): Promise<Response | void> => {
     const method = c.req.method.toUpperCase()
     const path = new URL(c.req.url).pathname
-    const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
+    // Prefer BETTER_AUTH_SECRET (the canonical SonicJS secret going forward);
+    // fall back to JWT_SECRET for deployments still rotating, then the dev fallback.
+    const secret = c.env?.BETTER_AUTH_SECRET || c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
 
     // Warn if using fallback secret in production
-    if (c.env?.ENVIRONMENT === 'production' && !c.env?.JWT_SECRET) {
+    if (c.env?.ENVIRONMENT === 'production' && !c.env?.BETTER_AUTH_SECRET && !c.env?.JWT_SECRET) {
       console.warn(
-        '[CSRF] WARNING: JWT_SECRET is not set in production. ' +
+        '[CSRF] WARNING: Neither BETTER_AUTH_SECRET nor JWT_SECRET is set in production. ' +
         'CSRF tokens are signed with the fallback key, which is insecure.'
       )
     }

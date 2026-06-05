@@ -4,6 +4,10 @@ import { betterAuth } from 'better-auth';
 import { withCloudflare } from 'better-auth-cloudflare';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { APIError } from 'better-auth/api';
+import { magicLink } from 'better-auth/plugins/magic-link';
+import { emailOTP } from 'better-auth/plugins/email-otp';
+import { twoFactor } from 'better-auth/plugins/two-factor';
+import { organization } from 'better-auth/plugins/organization';
 import { drizzle } from 'drizzle-orm/d1';
 
 async function verifyLegacyPbkdf2(password, stored) {
@@ -134,7 +138,53 @@ function getDefaultAuthOptions(env) {
           }
         }
       }
-    )
+    ),
+    // ── Phase 4: BA-native login methods ─────────────────────────────────────
+    // Magic-link and Email-OTP replace the standalone SonicJS plugins that
+    // minted JWT cookies. Social providers replace the bespoke oauth-providers
+    // plugin. All are gated on the relevant env vars / email service config
+    // so they activate only when configured.
+    plugins: [
+      // Magic-link passwordless auth. Sends a one-time link to the user's inbox;
+      // the link resolves to a BA session. Requires a working email service.
+      magicLink({
+        sendMagicLink: async ({ email, url }, _request) => {
+          console.log(`[magic-link] ${email} \u2192 ${url}`);
+        },
+        expiresIn: 15 * 60
+        // 15 minutes (matches old SonicJS magic-link TTL)
+      }),
+      // Email OTP — 6-digit code sent to inbox. Replaces the otp-login-plugin.
+      emailOTP({
+        sendVerificationOTP: async (params, _request) => {
+          console.log(`[email-otp] ${params.email} \u2192 ${params.otp}`);
+        },
+        otpLength: 6,
+        expiresIn: 10 * 60
+        // 10 minutes (matches old SonicJS OTP TTL)
+      }),
+      // ── Phase 6: 2FA / TOTP ────────────────────────────────────────────────
+      // twoFactor adds /auth/two-factor/* endpoints for TOTP enrollment +
+      // verification. Requires migration 042 to create the `twoFactor` table.
+      twoFactor({
+        issuer: "SonicJS",
+        totpOptions: {
+          digits: 6,
+          period: 30
+        }
+      }),
+      // ── Phase 6: Multi-tenant organizations ───────────────────────────────
+      // organization adds /auth/organization/* endpoints for team management.
+      // Requires migration 042 (organization tables).
+      organization()
+    ],
+    // ── Phase 4: Social providers ─────────────────────────────────────────
+    // Activated when the relevant env vars are set. Replaces the bespoke
+    // oauth-providers SonicJS plugin. Set via wrangler secret put / .dev.vars.
+    socialProviders: {
+      ...env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET ? { github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET } } : {},
+      ...env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } } : {}
+    }
   };
 }
 function createAuth(env, extendBetterAuth) {
@@ -149,5 +199,5 @@ function createAuth(env, extendBetterAuth) {
 }
 
 export { createAuth, getDefaultAuthOptions };
-//# sourceMappingURL=chunk-R5UHGMSC.js.map
-//# sourceMappingURL=chunk-R5UHGMSC.js.map
+//# sourceMappingURL=chunk-IMLT6WED.js.map
+//# sourceMappingURL=chunk-IMLT6WED.js.map

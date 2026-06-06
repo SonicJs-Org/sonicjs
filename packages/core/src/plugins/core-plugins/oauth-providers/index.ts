@@ -1,15 +1,14 @@
 /**
- * OAuth Providers Plugin
+ * @deprecated oauth-providers plugin (Phase 4)
  *
- * OAuth2/OIDC social login support for SonicJS.
- * Phase 1: Core OAuth2 authorization code flow with GitHub and Google providers.
+ * This plugin mints legacy JWT auth_token cookies which SonicJS no longer reads.
+ * It is superseded by Better Auth's built-in social providers (github, google,
+ * and any other BA socialProvider). Configure them via GITHUB_CLIENT_ID /
+ * GITHUB_CLIENT_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET environment
+ * variables — no plugin code required; BA handles the OAuth dance natively.
  *
- * Routes:
- *   GET  /auth/oauth/:provider          → Redirect to provider authorization
- *   GET  /auth/oauth/:provider/callback → Handle OAuth callback
- *   POST /auth/oauth/link               → Link OAuth provider to logged-in account
- *   POST /auth/oauth/unlink             → Unlink OAuth provider from account
- *   GET  /auth/oauth/accounts           → List linked OAuth accounts for current user
+ * This file is kept for historical reference. Disable/uninstall it from
+ * /admin/plugins and set the env vars instead.
  */
 
 import { Hono } from 'hono'

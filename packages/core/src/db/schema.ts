@@ -15,6 +15,18 @@ export const users = sqliteTable('users', {
   avatar: text('avatar'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   lastLoginAt: integer('last_login_at'),
+  // Password reset (routes/auth.ts)
+  passwordResetToken: text('password_reset_token'),
+  passwordResetExpires: integer('password_reset_expires'),
+  // Invitation flow (routes/auth.ts accept-invitation)
+  invitationToken: text('invitation_token'),
+  invitedAt: integer('invited_at'),
+  acceptedInvitationAt: integer('accepted_invitation_at'),
+  // Account lockout (migration 041): reset on success; set on threshold failures
+  failedLoginCount: integer('failed_login_count').notNull().default(0),
+  lockedUntil: integer('locked_until'),
+  // 2FA enrollment flag (migration 042, twoFactor BA plugin)
+  twoFactorEnabled: integer('two_factor_enabled').notNull().default(0),
   // timestamp_ms so Better Auth's Date values round-trip; matches SonicJS's
   // existing Date.now() (ms) convention for these columns.
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),

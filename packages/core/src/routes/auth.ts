@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { getCookie, setCookie } from 'hono/cookie'
 import { html } from 'hono/html'
 import { AuthManager, requireAuth, generateCsrfToken, rateLimit } from '../middleware'
-import { getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb } from '../middleware/auth'
+import { getJwtExpirySecondsFromDb } from '../middleware/auth'
 import { renderLoginPage, LoginPageData } from '../templates/pages/auth-login.template'
 import { renderRegisterPage, RegisterPageData } from '../templates/pages/auth-register.template'
 import { getCacheService, CACHE_CONFIGS } from '../services'
@@ -17,7 +17,7 @@ const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
 
 /** Set a signed CSRF cookie alongside the auth cookie on login/register. */
 async function setCsrfCookie(c: any, maxAge?: number): Promise<void> {
-  const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
+  const secret = c.env?.BETTER_AUTH_SECRET || c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
   const isDev = c.env?.ENVIRONMENT === 'development' || !c.env?.ENVIRONMENT
   const csrfToken = await generateCsrfToken(secret)
   const cookieMaxAge = maxAge ?? (await getJwtExpirySecondsFromDb(c.env?.DB, c.env))
@@ -99,262 +99,37 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required')
 })
 
-// Register new user
-authRoutes.post('/register',
-  rateLimit({ max: 30, windowMs: 60 * 1000, keyPrefix: 'register' }),
-  async (c) => {
-    try {
-      const db = c.env.DB
-
-      // Check if this is the first user (bootstrap scenario) - always allow
-      const isFirstUser = await isFirstUserRegistration(db)
-
-      // If not first user, check if registration is enabled
-      if (!isFirstUser) {
-        const registrationEnabled = await isRegistrationEnabled(db)
-        if (!registrationEnabled) {
-          return c.json({ error: 'Registration is currently disabled' }, 403)
-        }
-      }
-
-      // Parse JSON with error handling
-      let requestData
-      try {
-        requestData = await c.req.json()
-      } catch (parseError) {
-        return c.json({ error: 'Invalid JSON in request body' }, 400)
-      }
-
-      // Build and validate using dynamic schema
-      const validationSchema = await authValidationService.buildRegistrationSchema(db)
-
-      let validatedData: RegistrationData
-      try {
-        validatedData = await validationSchema.parseAsync(requestData)
-      } catch (validationError: any) {
-        return c.json({
-          error: 'Validation failed',
-          details: validationError.issues?.map((e: any) => e.message) || [validationError.message || 'Invalid request data']
-        }, 400)
-      }
-
-      // Extract fields with defaults for optional ones
-      const email = validatedData.email
-      const password = validatedData.password
-      const username = validatedData.username || authValidationService.generateDefaultValue('username', validatedData)
-      const firstName = validatedData.firstName || authValidationService.generateDefaultValue('firstName', validatedData)
-      const lastName = validatedData.lastName || authValidationService.generateDefaultValue('lastName', validatedData)
-
-      // Normalize email to lowercase
-      const normalizedEmail = email.toLowerCase()
-      
-      // Check if user already exists
-      const existingUser = await db.prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-        .bind(normalizedEmail, username)
-        .first()
-      
-      if (existingUser) {
-        return c.json({ error: 'User with this email or username already exists' }, 400)
-      }
-      
-      // Hash password
-      const passwordHash = await AuthManager.hashPassword(password)
-      
-      // Create user
-      const userId = crypto.randomUUID()
-      const now = new Date()
-      
-      await db.prepare(`
-        INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        userId,
-        normalizedEmail,
-        username,
-        firstName,
-        lastName,
-        passwordHash,
-        'viewer', // Default role
-        1, // is_active
-        now.getTime(),
-        now.getTime()
-      ).run()
-      
-      // Save custom profile fields if configured
-      const profileConfig = getUserProfileConfig()
-      if (profileConfig) {
-        const regFields = getRegistrationFields()
-        if (regFields.length > 0) {
-          const customData: Record<string, any> = { ...getProfileFieldDefaults() }
-          for (const field of regFields) {
-            if (requestData[field.name] !== undefined) {
-              customData[field.name] = requestData[field.name]
-            }
-          }
-          const sanitized = sanitizeCustomData(customData, profileConfig)
-          await saveCustomData(db, userId, sanitized)
-        }
-      }
-
-      // Generate JWT token
-      const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-      const token = await AuthManager.generateToken(userId, normalizedEmail, 'viewer', c.env.JWT_SECRET, tokenTtl)
-
-      // Set HTTP-only cookie
-      setCookie(c, 'auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: tokenTtl
-      })
-
-      // Set CSRF cookie for browser sessions
-      await setCsrfCookie(c)
-
-      return c.json({
-        user: {
-          id: userId,
-          email: normalizedEmail,
-          username,
-          firstName,
-          lastName,
-          role: 'viewer'
-        },
-        token
-      }, 201)
-    } catch (error) {
-      console.error('Registration error:', error)
-      // Return validation errors as 400, other errors as 500
-      if (error instanceof Error && error.message.includes('validation')) {
-        return c.json({ error: error.message }, 400)
-      }
-      return c.json({
-        error: 'Registration failed',
-        details: error instanceof Error ? error.message : String(error)
-      }, 500)
-    }
-  }
-)
-
-// Login user
-authRoutes.post('/login',
-  rateLimit({ max: 30, windowMs: 60 * 1000, keyPrefix: 'login' }),
-  async (c) => {
-    try {
-      const body = await c.req.json()
-      const validation = loginSchema.safeParse(body)
-      if (!validation.success) {
-        return c.json({ error: 'Validation failed', details: validation.error.issues }, 400)
-      }
-      const { email, password } = validation.data
-      const db = c.env.DB
-      
-      // Normalize email to lowercase
-      const normalizedEmail = email.toLowerCase()
-      
-      // Find user with caching
-      const cache = getCacheService(CACHE_CONFIGS.user!)
-      let user = await cache.get<any>(cache.generateKey('user', `email:${normalizedEmail}`))
-
-      if (!user) {
-        user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-          .bind(normalizedEmail)
-          .first() as any
-
-        if (user) {
-          // Cache the user for faster subsequent lookups
-          await cache.set(cache.generateKey('user', `email:${normalizedEmail}`), user)
-          await cache.set(cache.generateKey('user', user.id), user)
-        }
-      }
-
-      if (!user) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-      
-      // Verify password
-      const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-      if (!isValidPassword) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-
-      // Transparent password hash migration: re-hash legacy SHA-256 to PBKDF2
-      if (AuthManager.isLegacyHash(user.password_hash)) {
-        try {
-          const newHash = await AuthManager.hashPassword(password)
-          await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-            .bind(newHash, Date.now(), user.id)
-            .run()
-        } catch (rehashError) {
-          console.error('Password rehash failed (non-fatal):', rehashError)
-        }
-      }
-
-      // Generate JWT token
-      const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-      const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl)
-
-      // Set HTTP-only cookie
-      setCookie(c, 'auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: tokenTtl
-      })
-
-      // Set CSRF cookie for browser sessions
-      await setCsrfCookie(c)
-
-      // Update last login
-      await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-        .bind(new Date().getTime(), user.id)
-        .run()
-
-      // Invalidate user cache on login
-      await cache.delete(cache.generateKey('user', user.id))
-      await cache.delete(cache.generateKey('user', `email:${normalizedEmail}`))
-
-      return c.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role
-        },
-        token
-      })
-    } catch (error) {
-      console.error('Login error:', error)
-      return c.json({ error: 'Login failed' }, 500)
-    }
-})
+// POST /register (JSON/JWT) removed — use POST /register/form (Better Auth).
+// POST /login (JSON/JWT) removed — use POST /login/form (Better Auth).
+// POST /refresh (JWT) removed — Better Auth handles session renewal automatically.
 
 // Logout user (both GET and POST for convenience)
-authRoutes.post('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
+// Revoke the Better Auth session server-side and forward the clearing cookie(s).
+async function clearBetterAuthSession(c: any): Promise<void> {
+  try {
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env)
+    const res = (await auth.api.signOut({ headers: c.req.raw.headers, asResponse: true })) as Response
+    const setCookies =
+      typeof (res.headers as any).getSetCookie === 'function'
+        ? (res.headers as any).getSetCookie()
+        : [res.headers.get('set-cookie')].filter(Boolean)
+    for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
+  } catch {
+    /* best-effort */
+  }
+  // Also clear the legacy JWT cookie if present.
+  setCookie(c, 'auth_token', '', { httpOnly: true, secure: false, sameSite: 'Strict', maxAge: 0 })
   clearCsrfCookie(c)
+}
 
+authRoutes.post('/logout', async (c) => {
+  await clearBetterAuthSession(c)
   return c.json({ message: 'Logged out successfully' })
 })
 
-authRoutes.get('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
-  clearCsrfCookie(c)
-
+authRoutes.get('/logout', async (c) => {
+  await clearBetterAuthSession(c)
   return c.redirect('/auth/login?message=You have been logged out successfully')
 })
 
@@ -392,62 +167,6 @@ authRoutes.get('/me', requireAuth(), async (c) => {
 // with a new `exp`. This lets a long-lived session cookie keep a user
 // logged in across JWT expirations without forcing a full re-login.
 //
-// Security: the caller must still present a valid-signature token that
-// recently belonged to an active user. Fully forged or long-expired tokens
-// are rejected.
-authRoutes.post('/refresh',
-  rateLimit({ max: 60, windowMs: 60 * 1000, keyPrefix: 'refresh' }),
-  async (c) => {
-  try {
-    // Accept token from Authorization header or cookie
-    let token = c.req.header('Authorization')?.replace('Bearer ', '')
-    if (!token) token = getCookie(c, 'auth_token')
-
-    if (!token) {
-      return c.json({ error: 'Authentication required' }, 401)
-    }
-
-    const db = c.env.DB
-    const grace = await getJwtRefreshGraceSecondsFromDb(db, c.env)
-
-    const payload = await AuthManager.verifyToken(token, c.env.JWT_SECRET, grace)
-    if (!payload) {
-      return c.json({ error: 'Invalid or expired token' }, 401)
-    }
-
-    // Re-validate the user is still active, and pick up any role changes.
-    const row = await db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?')
-      .bind(payload.userId)
-      .first() as any
-
-    if (!row || !row.is_active) {
-      return c.json({ error: 'User is not active' }, 401)
-    }
-
-    // Generate new token with a fresh exp
-    const tokenTtl = await getJwtExpirySecondsFromDb(db, c.env)
-    const newToken = await AuthManager.generateToken(row.id, row.email, row.role, c.env.JWT_SECRET, tokenTtl)
-
-    // Set new cookie
-    setCookie(c, 'auth_token', newToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
-
-    // Set CSRF cookie for browser sessions
-    await setCsrfCookie(c)
-
-    return c.json({
-      token: newToken,
-      expiresIn: tokenTtl
-    })
-  } catch (error) {
-    console.error('Token refresh error:', error)
-    return c.json({ error: 'Token refresh failed' }, 500)
-  }
-})
 
 // Form-based registration handler (for HTML forms)
 authRoutes.post('/register/form',
@@ -520,35 +239,54 @@ authRoutes.post('/register/form',
       `)
     }
     
-    // Hash password
-    const passwordHash = await AuthManager.hashPassword(password)
+    // Create the user + session via Better Auth (writes users + credential
+    // account + session; the create hooks gate registration and make the first
+    // user an admin).
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env)
+    let baRes: Response
+    try {
+      baRes = (await auth.api.signUpEmail({
+        body: {
+          email: normalizedEmail,
+          password,
+          name: `${firstName} ${lastName}`.trim() || username,
+          username,
+          firstName,
+          lastName,
+        } as any,
+        asResponse: true,
+      })) as Response
+    } catch {
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          Registration failed. Please try again.
+        </div>
+      `)
+    }
 
-    // Determine role: first user gets admin, others get viewer
-    const role = isFirstUser ? 'admin' : 'viewer'
+    if (!baRes.ok) {
+      let msg = 'Registration failed. Please try again.'
+      try {
+        const body = (await baRes.clone().json()) as { message?: string }
+        if (body?.message) msg = body.message
+      } catch { /* keep default */ }
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          ${msg}
+        </div>
+      `)
+    }
 
-    // Create user
-    const userId = crypto.randomUUID()
-    const now = new Date()
-
-    await db.prepare(`
-      INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      userId,
-      normalizedEmail,
-      username,
-      firstName,
-      lastName,
-      passwordHash,
-      role,
-      1, // is_active
-      now.getTime(),
-      now.getTime()
-    ).run()
+    // Resolve the created user id for custom profile fields.
+    const created = (await db.prepare('SELECT id FROM users WHERE email = ?')
+      .bind(normalizedEmail)
+      .first()) as { id: string } | null
+    const userId = created?.id
 
     // Save custom profile fields if configured
     const profileConfig = getUserProfileConfig()
-    if (profileConfig) {
+    if (userId && profileConfig) {
       const regFields = getRegistrationFields()
       if (regFields.length > 0) {
         const customData: Record<string, any> = { ...getProfileFieldDefaults() }
@@ -563,30 +301,22 @@ authRoutes.post('/register/form',
       }
     }
 
-    // Generate JWT token
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-    const token = await AuthManager.generateToken(userId, normalizedEmail, role, c.env.JWT_SECRET, tokenTtl)
-
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
+    // Forward Better Auth's session Set-Cookie header(s) to the browser.
+    const setCookies =
+      typeof (baRes.headers as any).getSetCookie === 'function'
+        ? (baRes.headers as any).getSetCookie()
+        : [baRes.headers.get('set-cookie')].filter(Boolean)
+    for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
 
     // Set CSRF cookie for browser sessions
     await setCsrfCookie(c)
-
-    // Redirect based on role
-    const redirectUrl = role === 'admin' ? '/admin/dashboard' : '/admin/dashboard'
 
     return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
         Account created successfully! Redirecting...
         <script>
           setTimeout(() => {
-            window.location.href = '${redirectUrl}';
+            window.location.href = '/admin/dashboard';
           }, 2000);
         </script>
       </div>
@@ -625,23 +355,19 @@ authRoutes.post('/login/form',
     }
 
     const db = c.env.DB
-    
-    // Find user
-    const user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
+    const now = Date.now()
+
+    // Account lockout check. Fail with the same message as invalid credentials
+    // to prevent distinguishing locked vs wrong-password (anti-enumeration).
+    const LOCKOUT_THRESHOLD = 5                     // failures before lock
+    const LOCKOUT_DURATION_MS = 15 * 60 * 1000     // 15 minutes
+
+    const userForLock = (await db
+      .prepare('SELECT id, failed_login_count, locked_until FROM users WHERE email = ? AND is_active = 1')
       .bind(normalizedEmail)
-      .first() as any
-    
-    if (!user) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Invalid email or password
-        </div>
-      `)
-    }
-    
-    // Verify password
-    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-    if (!isValidPassword) {
+      .first()) as { id: string; failed_login_count: number; locked_until: number | null } | null
+
+    if (userForLock?.locked_until && userForLock.locked_until > now) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
@@ -649,37 +375,80 @@ authRoutes.post('/login/form',
       `)
     }
 
-    // Transparent password hash migration: re-hash legacy SHA-256 to PBKDF2
-    if (AuthManager.isLegacyHash(user.password_hash)) {
+    // Authenticate via Better Auth (handles password verify, legacy PBKDF2
+    // upgrade, and session creation). Returns a Response carrying the session
+    // Set-Cookie which we forward to the browser.
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env)
+
+    const attemptSignIn = async (): Promise<Response | null> => {
       try {
-        const newHash = await AuthManager.hashPassword(password)
-        await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-          .bind(newHash, Date.now(), user.id)
-          .run()
-      } catch (rehashError) {
-        console.error('Password rehash failed (non-fatal):', rehashError)
+        return (await auth.api.signInEmail({
+          body: { email: normalizedEmail, password },
+          asResponse: true,
+        })) as Response
+      } catch {
+        return null
       }
     }
 
-    // Generate JWT token
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-    const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl)
+    let baRes = await attemptSignIn()
 
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
+    // Self-heal: users created outside the Better Auth sign-up flow (legacy
+    // /auth/register, admin-created, or seeded users) have a users.password_hash
+    // but no Better Auth `account` credential row, so sign-in fails with
+    // "Credential account not found". Backfill the credential account from the
+    // stored hash and retry once; the password verify hook then upgrades the
+    // legacy pbkdf2 hash to scrypt on the successful login.
+    if (!baRes || !baRes.ok) {
+      const legacy = (await db
+        .prepare('SELECT id, password_hash FROM users WHERE email = ? AND is_active = 1')
+        .bind(normalizedEmail)
+        .first()) as { id: string; password_hash: string | null } | null
+      if (legacy?.password_hash) {
+        const hasAccount = await db
+          .prepare("SELECT 1 FROM account WHERE user_id = ? AND provider_id = 'credential'")
+          .bind(legacy.id)
+          .first()
+        if (!hasAccount) {
+          await ensureCredentialAccount(db, legacy.id, legacy.password_hash)
+          baRes = await attemptSignIn()
+        }
+      }
+    }
+
+    if (!baRes || !baRes.ok) {
+      // Increment failed login counter; lock account if threshold reached.
+      if (userForLock) {
+        const newCount = (userForLock.failed_login_count || 0) + 1
+        const newLock = newCount >= LOCKOUT_THRESHOLD ? now + LOCKOUT_DURATION_MS : null
+        await db.prepare(
+          'UPDATE users SET failed_login_count = ?, locked_until = ?, updated_at = ? WHERE id = ?'
+        ).bind(newCount, newLock, now, userForLock.id).run()
+      }
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          Invalid email or password
+        </div>
+      `)
+    }
+
+    // Success — reset lockout counters.
+    if (userForLock) {
+      await db.prepare(
+        'UPDATE users SET failed_login_count = 0, locked_until = NULL, updated_at = ? WHERE id = ?'
+      ).bind(now, userForLock.id).run()
+    }
+
+    // Forward Better Auth's session Set-Cookie header(s) to the browser.
+    const setCookies =
+      typeof (baRes.headers as any).getSetCookie === 'function'
+        ? (baRes.headers as any).getSetCookie()
+        : [baRes.headers.get('set-cookie')].filter(Boolean)
+    for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
 
     // Set CSRF cookie for browser sessions
     await setCsrfCookie(c)
-
-    // Update last login
-    await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-      .bind(new Date().getTime(), user.id)
-      .run()
 
     return c.html(html`
       <div id="form-response">
@@ -711,12 +480,37 @@ authRoutes.post('/login/form',
 })
 
 // Test seeding endpoint (only for development/testing)
+/**
+ * Ensure a Better Auth `credential` account row exists for a user, holding the
+ * given password hash. Better Auth authenticates against `account.password`
+ * (not `users.password_hash`), so any user created outside the BA sign-up flow
+ * (e.g. the seed-admin endpoint) needs this row or sign-in fails. Idempotent:
+ * the row id mirrors migration 037's backfill (`cred-<userId>`), so this updates
+ * in place if the migration already created it. The legacy-PBKDF2 verify hook in
+ * auth/config.ts upgrades a pbkdf2 hash to scrypt on first successful login.
+ */
+async function ensureCredentialAccount(
+  db: D1Database,
+  userId: string,
+  passwordHash: string
+): Promise<void> {
+  // Single implementation lives on AuthManager so every password-writing flow
+  // (reset, invite, admin set-password, seed) syncs the BA credential identically.
+  return AuthManager.ensureCredentialAccount(db, userId, passwordHash)
+}
+
 authRoutes.post('/seed-admin',
   rateLimit({ max: 10, windowMs: 60 * 1000, keyPrefix: 'seed-admin' }),
   async (c) => {
   try {
     const db = c.env.DB
-    
+
+    // Dev/test bootstrap endpoint only. Never allow it to run (or leak a known
+    // admin credential) in production.
+    if ((c.env as { ENVIRONMENT?: string }).ENVIRONMENT === 'production') {
+      return c.json({ error: 'Not found' }, 404)
+    }
+
     // First ensure the users table exists
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS users (
@@ -745,6 +539,16 @@ authRoutes.post('/seed-admin',
       const passwordHash = await AuthManager.hashPassword('sonicjs!')
       await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
         .bind(passwordHash, Date.now(), existingAdmin.id)
+        .run()
+      // Better Auth verifies credentials against the `account` table, not
+      // users.password_hash. Mirror migration 037's backfill so a runtime-seeded
+      // admin can actually sign in (the legacy-PBKDF2 verify hook in
+      // auth/config.ts upgrades this to scrypt on first login).
+      await ensureCredentialAccount(db, String(existingAdmin.id), passwordHash)
+      await db.prepare(
+        'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
+      )
+        .bind(existingAdmin.id, 'admin')
         .run()
 
       return c.json({
@@ -781,16 +585,24 @@ authRoutes.post('/seed-admin',
       now,
       now
     ).run()
-    
-    return c.json({ 
+
+    // Create the Better Auth credential account so the seeded admin can sign in.
+    await ensureCredentialAccount(db, userId, passwordHash)
+
+    await db.prepare(
+      'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id) SELECT ?, id FROM rbac_roles WHERE name = ?'
+    )
+      .bind(userId, 'admin')
+      .run()
+
+    return c.json({
       message: 'Admin user created successfully',
       user: {
         id: userId,
         email: adminEmail,
         username: 'admin',
         role: 'admin'
-      },
-      passwordHash: passwordHash // For debugging
+      }
     })
   } catch (error) {
     console.error('Seed admin error:', error)
@@ -1035,25 +847,32 @@ authRoutes.post('/accept-invitation', async (c) => {
       invitedUser.id
     ).run()
 
-    // Generate JWT token for auto-login
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-    const authToken = await AuthManager.generateToken(invitedUser.id, invitedUser.email, invitedUser.role, c.env.JWT_SECRET, tokenTtl)
+    // Sync the Better Auth credential account so the invited user can sign in
+    // with the password they just set (BA verifies account.password, not
+    // users.password_hash). Without this the first login would fail.
+    await ensureCredentialAccount(db, invitedUser.id, passwordHash)
 
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', authToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
+    // Sign in via Better Auth so the browser gets a proper BA session cookie.
+    // The credential account was just created, so sign-in should succeed.
+    try {
+      const { createAuth } = await import('../auth/config')
+      const auth = createAuth(c.env)
+      const baRes = (await auth.api.signInEmail({
+        body: { email: invitedUser.email, password },
+        asResponse: true,
+      })) as Response
+      if (baRes.ok) {
+        const setCookies =
+          typeof (baRes.headers as any).getSetCookie === 'function'
+            ? (baRes.headers as any).getSetCookie()
+            : [baRes.headers.get('set-cookie')].filter(Boolean)
+        for (const sc of setCookies) c.header('Set-Cookie', sc as string, { append: true })
+        await setCsrfCookie(c)
+      }
+    } catch {
+      // Non-fatal: user can sign in manually at /auth/login
+    }
 
-    // Set CSRF cookie for browser sessions
-    await setCsrfCookie(c)
-
-    // Log the activity (TODO: implement activity logging)
-    // Activity logging is deferred until utils/log-activity is implemented
-
-    // Redirect to admin dashboard
     return c.redirect('/admin/dashboard?welcome=true')
 
   } catch (error) {
@@ -1307,8 +1126,9 @@ authRoutes.post('/reset-password', async (c) => {
     }
 
     const db = c.env.DB
+    const now = Date.now()
 
-    // Check if reset token is valid and not expired
+    // Fetch the user before atomic consume so we can check password history.
     const userStmt = db.prepare(`
       SELECT id, email, password_hash, password_reset_expires
       FROM users
@@ -1316,53 +1136,55 @@ authRoutes.post('/reset-password', async (c) => {
     `)
     const user = await userStmt.bind(token).first() as any
 
-    if (!user) {
+    if (!user || now > user.password_reset_expires) {
+      // Same error message for both invalid + expired — prevents token existence enumeration.
       return c.json({ error: 'Invalid or expired reset token' }, 400)
     }
 
-    // Check if token is expired
-    if (Date.now() > user.password_reset_expires) {
-      return c.json({ error: 'Reset token has expired' }, 400)
-    }
+    // Password history: reject if the new password matches any of the last 5.
+    try {
+      const history = await db.prepare(`
+        SELECT password_hash FROM password_history
+        WHERE user_id = ? ORDER BY created_at DESC LIMIT 5
+      `).bind(user.id).all()
+      for (const row of (history.results as any[])) {
+        if (await AuthManager.verifyPassword(password, row.password_hash)) {
+          return c.json({ error: 'Password was used recently. Please choose a different password.' }, 400)
+        }
+      }
+    } catch { /* table may not exist on older schemas */ }
 
-    // Hash new password
+    // Hash new password.
     const newPasswordHash = await AuthManager.hashPassword(password)
 
-    // Store old password in history (skip if table doesn't exist)
-    try {
-      const historyStmt = db.prepare(`
-        INSERT INTO password_history (id, user_id, password_hash, created_at)
-        VALUES (?, ?, ?, ?)
-      `)
-      await historyStmt.bind(
-        crypto.randomUUID(),
-        user.id,
-        user.password_hash,
-        Date.now()
-      ).run()
-    } catch (historyError) {
-      // Password history table may not exist yet
-      console.warn('Could not store password history:', historyError)
-    }
-
-    // Update user password and clear reset token
-    const updateStmt = db.prepare(`
+    // Atomic single-consume: update password and NULL the reset token in one
+    // statement keyed on the token value. D1's meta.changes === 0 means another
+    // concurrent request consumed the token first — treat as invalid.
+    const consumeResult = await db.prepare(`
       UPDATE users SET
         password_hash = ?,
         password_reset_token = NULL,
         password_reset_expires = NULL,
+        failed_login_count = 0,
+        locked_until = NULL,
         updated_at = ?
-      WHERE id = ?
-    `)
+      WHERE password_reset_token = ? AND password_reset_expires > ? AND is_active = 1
+    `).bind(newPasswordHash, now, token, now).run()
 
-    await updateStmt.bind(
-      newPasswordHash,
-      Date.now(),
-      user.id
-    ).run()
+    if ((consumeResult.meta as any)?.changes === 0) {
+      return c.json({ error: 'Invalid or expired reset token' }, 400)
+    }
 
-    // Log the activity (TODO: implement activity logging)
-    // Activity logging is deferred until utils/log-activity is implemented
+    // Archive the old hash in password history.
+    try {
+      await db.prepare(`
+        INSERT INTO password_history (id, user_id, password_hash, created_at)
+        VALUES (?, ?, ?, ?)
+      `).bind(crypto.randomUUID(), user.id, user.password_hash, now).run()
+    } catch { /* non-fatal if history table is absent */ }
+
+    // Sync the BA credential account so the new password validates on sign-in.
+    await ensureCredentialAccount(db, user.id, newPasswordHash)
 
     // Redirect to login with success message
     return c.redirect('/auth/login?message=Password reset successfully. Please log in with your new password.')

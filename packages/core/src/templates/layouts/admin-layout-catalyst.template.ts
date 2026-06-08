@@ -513,6 +513,10 @@ export function renderAdminLayoutCatalyst(
     // Check for pending migrations when the page loads
     document.addEventListener('DOMContentLoaded', checkPendingMigrations);
   </script>
+
+  <!-- RBAC-aware sidebar: nav items the user lacks are stripped server-side by
+       the /admin/* middleware (see app.ts), so nothing inaccessible ever
+       reaches the browser. Routes remain independently gated by requireRbac. -->
 </body>
 </html>`;
 }
@@ -592,6 +596,22 @@ function renderCatalystSidebar(
     </svg>`,
   };
 
+  // Maps each nav item to the RBAC permission that lets a user actually use
+  // that section. The sidebar tags anchors with data-perm; a script (and the
+  // injected window.__sonicNavPerms set) hides items the user lacks. Routes
+  // stay independently gated by requireRbac — this is presentation only.
+  const NAV_PERMS: Record<string, string> = {
+    "/admin": "dashboard:read",
+    "/admin/collections": "collections:manage",
+    "/admin/content": "content:read",
+    "/admin/forms": "content:read",
+    "/admin/media": "media:read",
+    "/admin/users": "users:manage",
+    "/admin/plugins": "plugins:manage",
+    "/admin/cache": "settings:manage",
+    "/admin/settings": "settings:manage",
+  };
+
   // Combine base menu items with dynamic menu items
   const allMenuItems = [...baseMenuItems];
   if (dynamicMenuItems && dynamicMenuItems.length > 0) {
@@ -641,7 +661,8 @@ function renderCatalystSidebar(
               const isActive =
                 currentPath === item.path ||
                 (item.path !== "/admin" && currentPath?.startsWith(item.path));
-              return `
+              const navPerm = NAV_PERMS[item.path];
+              const block = `
               <span class="relative">
                 ${
                   isActive
@@ -658,6 +679,7 @@ function renderCatalystSidebar(
                       : "text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5"
                   }"
                   ${isActive ? 'data-current="true"' : ""}
+                  ${NAV_PERMS[item.path] ? `data-perm="${NAV_PERMS[item.path]}"` : ""}
                 >
                   <span class="shrink-0 ${
                     isActive
@@ -670,6 +692,9 @@ function renderCatalystSidebar(
                 </a>
               </span>
             `;
+              // Wrap in nav-permission markers so the /admin/* middleware can
+              // strip items the user lacks server-side (no client flash).
+              return navPerm ? `<!--nav:${navPerm}-->${block}<!--/nav-->` : block;
             })
             .join("")}
           ${pluginMenuMarker}
@@ -682,7 +707,8 @@ function renderCatalystSidebar(
           const isActive =
             currentPath === settingsMenuItem.path ||
             currentPath?.startsWith(settingsMenuItem.path);
-          return `
+          const navPerm = NAV_PERMS[settingsMenuItem.path];
+          const block = `
             <span class="relative">
               ${
                 isActive
@@ -699,6 +725,7 @@ function renderCatalystSidebar(
                     : "text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5"
                 }"
                 ${isActive ? 'data-current="true"' : ""}
+                ${NAV_PERMS[settingsMenuItem.path] ? `data-perm="${NAV_PERMS[settingsMenuItem.path]}"` : ""}
               >
                 <span class="shrink-0 ${
                   isActive
@@ -711,6 +738,7 @@ function renderCatalystSidebar(
               </a>
             </span>
           `;
+          return navPerm ? `<!--nav:${navPerm}-->${block}<!--/nav-->` : block;
         })()}
       </div>
 

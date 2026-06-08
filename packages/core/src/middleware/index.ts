@@ -15,6 +15,7 @@ export {
   AuthManager,
   requireAuth,
   requireRole,
+  requireRbac,
   optionalAuth,
   getJwtExpirySeconds,
   getJwtExpirySecondsFromDb,

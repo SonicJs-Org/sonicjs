@@ -1,8 +1,14 @@
 /**
- * OTP Login Plugin
+ * @deprecated otp-login-plugin (Phase 4)
  *
- * Passwordless authentication via email one-time codes
- * Users receive a secure 6-digit code to sign in without passwords
+ * This plugin mints legacy JWT auth_token cookies which SonicJS no longer reads.
+ * It is superseded by Better Auth's built-in emailOTP() plugin, which is enabled
+ * by default in auth/config.ts. BA email-OTP routes are at:
+ *   POST /auth/email-otp/send-verification-otp
+ *   POST /auth/email-otp/verify-email
+ *
+ * This file is kept for historical reference. Disable/uninstall it from
+ * /admin/plugins to avoid route conflicts with the BA equivalent.
  */
 
 import { Hono } from 'hono'

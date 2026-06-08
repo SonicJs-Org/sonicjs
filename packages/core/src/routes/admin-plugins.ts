@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { requireAuth } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { renderPluginsListPage, PluginsListPageData, Plugin } from '../templates/pages/admin-plugins-list.template'
 import { renderPluginSettingsPage, PluginSettingsPageData } from '../templates/pages/admin-plugin-settings.template'
 import { SettingsService } from '../services/settings'
@@ -11,6 +11,8 @@ const adminPluginRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>
 
 // Apply authentication middleware
 adminPluginRoutes.use('*', requireAuth())
+adminPluginRoutes.get('*', requireRbac('plugins', 'manage'))
+adminPluginRoutes.post('*', requireRbac('plugins', 'manage'))
 
 // Build available plugins list from the auto-generated registry.
 // To add a new plugin to this list, create a manifest.json in the plugin directory
@@ -34,13 +36,6 @@ adminPluginRoutes.get('/', async (c) => {
   try {
     const user = c.get('user')
     const db = c.env.DB
-
-    // Temporarily skip permission check for admin users
-    // TODO: Fix permission system
-    if (user?.role !== 'admin') {
-      return c.text('Access denied', 403)
-    }
-
     const pluginService = new PluginService(db)
 
     // Get all installed plugins with error handling
@@ -130,12 +125,6 @@ adminPluginRoutes.get('/:id', async (c) => {
     const user = c.get('user')
     const db = c.env.DB
     const pluginId = c.req.param('id')
-
-    // Check authorization first
-    if (user?.role !== 'admin') {
-      return c.redirect('/admin/plugins')
-    }
-
     const pluginService = new PluginService(db)
     const plugin = await pluginService.getPlugin(pluginId)
 
@@ -229,11 +218,6 @@ adminPluginRoutes.post('/:id/activate', async (c) => {
     const db = c.env.DB
     const pluginId = c.req.param('id')
 
-    // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
-      return c.json({ error: 'Access denied' }, 403)
-    }
-
     const pluginService = new PluginService(db)
     await pluginService.activatePlugin(pluginId)
 
@@ -252,11 +236,6 @@ adminPluginRoutes.post('/:id/deactivate', async (c) => {
     const db = c.env.DB
     const pluginId = c.req.param('id')
 
-    // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
-      return c.json({ error: 'Access denied' }, 403)
-    }
-
     const pluginService = new PluginService(db)
     await pluginService.deactivatePlugin(pluginId)
 
@@ -272,14 +251,7 @@ adminPluginRoutes.post('/:id/deactivate', async (c) => {
 // No per-plugin switch/case needed. Adding a manifest.json is enough.
 adminPluginRoutes.post('/install', async (c) => {
   try {
-    const user = c.get('user')
     const db = c.env.DB
-
-    // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
-      return c.json({ error: 'Access denied' }, 403)
-    }
-
     const body = await c.req.json()
     const pluginService = new PluginService(db)
 
@@ -323,11 +295,6 @@ adminPluginRoutes.post('/:id/uninstall', async (c) => {
     const db = c.env.DB
     const pluginId = c.req.param('id')
 
-    // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
-      return c.json({ error: 'Access denied' }, 403)
-    }
-
     const pluginService = new PluginService(db)
     await pluginService.uninstallPlugin(pluginId)
 
@@ -342,15 +309,8 @@ adminPluginRoutes.post('/:id/uninstall', async (c) => {
 // Update plugin settings
 adminPluginRoutes.post('/:id/settings', async (c) => {
   try {
-    const user = c.get('user')
     const db = c.env.DB
     const pluginId = c.req.param('id')
-
-    // Temporarily skip permission check for admin users
-    if (user?.role !== 'admin') {
-      return c.json({ error: 'Access denied' }, 403)
-    }
-
     const settings = await c.req.json()
 
     const pluginService = new PluginService(db)

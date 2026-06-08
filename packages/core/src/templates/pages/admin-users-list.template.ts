@@ -10,7 +10,7 @@ export interface User {
   username: string
   firstName: string
   lastName: string
-  role: string
+  rbacRoles: string
   avatar?: string
   isActive: boolean
   lastLoginAt?: number
@@ -27,7 +27,6 @@ export interface UsersListPageData {
   totalPages: number
   totalUsers: number
   statusFilter?: string
-  roleFilter?: string
   searchFilter?: string
   error?: string
   success?: string
@@ -106,19 +105,25 @@ export function renderUsersListPage(data: UsersListPageData): string {
       }
     },
     {
-      key: 'role',
-      label: 'Role',
+      key: 'rbacRoles',
+      label: 'RBAC Roles',
       sortable: true,
       sortType: 'string',
       render: (value: string) => {
-        const roleColors = {
-          admin: 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-700/10 dark:ring-red-500/20',
-          editor: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 ring-1 ring-inset ring-blue-700/10 dark:ring-blue-500/20',
-          author: 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 ring-1 ring-inset ring-cyan-700/10 dark:ring-cyan-500/20',
-          viewer: 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 ring-1 ring-inset ring-zinc-500/10 dark:ring-zinc-400/20'
+        const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        }[char] || char))
+        const roles = value ? value.split(',').filter(Boolean) : []
+        if (roles.length === 0) {
+          return '<span class="text-xs text-zinc-500 dark:text-zinc-400">No roles</span>'
         }
-        const colorClass = roleColors[value as keyof typeof roleColors] || 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 ring-1 ring-inset ring-zinc-500/10 dark:ring-zinc-400/20'
-        return `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${colorClass}">${value.charAt(0).toUpperCase() + value.slice(1)}</span>`
+        return `<div class="flex flex-wrap gap-1">${roles.map(role =>
+          `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 ring-1 ring-inset ring-cyan-700/10 dark:ring-cyan-500/20">${escapeHtml(role)}</span>`
+        ).join('')}</div>`
       }
     },
     {
@@ -196,6 +201,14 @@ export function renderUsersListPage(data: UsersListPageData): string {
         </div>
       </div>
 
+      <!-- Tabs -->
+      <div class="border-b border-zinc-950/10 dark:border-white/10 mb-6">
+        <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+          <a href="/admin/users" aria-current="page" class="whitespace-nowrap border-b-2 border-cyan-500 px-1 py-3 text-sm font-medium text-cyan-600 dark:text-cyan-400">Users</a>
+          <a href="/admin/rbac" class="whitespace-nowrap border-b-2 border-transparent px-1 py-3 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-200">Roles &amp; Permissions</a>
+        </nav>
+      </div>
+
       <!-- Alert Messages -->
       ${data.error ? renderAlert({ type: 'error', message: data.error, dismissible: true }) : ''}
       ${data.success ? renderAlert({ type: 'success', message: data.success, dismissible: true }) : ''}
@@ -235,10 +248,10 @@ export function renderUsersListPage(data: UsersListPageData): string {
             </dd>
           </div>
           <div class="px-4 py-5 sm:p-6">
-            <dt class="text-base font-normal text-zinc-700 dark:text-zinc-100">Administrators</dt>
+            <dt class="text-base font-normal text-zinc-700 dark:text-zinc-100">Users With Roles</dt>
             <dd class="mt-1 flex items-baseline justify-between md:block lg:flex">
               <div class="flex items-baseline text-2xl font-semibold text-pink-400">
-                ${data.users.filter(u => u.role === 'admin').length}
+                ${data.users.filter(u => u.rbacRoles.length > 0).length}
               </div>
               <div class="inline-flex items-baseline rounded-full bg-lime-400/10 text-lime-600 dark:text-lime-400 px-2.5 py-0.5 text-sm font-medium md:mt-2 lg:mt-0">
                 <svg viewBox="0 0 20 20" fill="currentColor" class="-ml-1 mr-0.5 size-5 shrink-0 self-center">
@@ -275,7 +288,7 @@ export function renderUsersListPage(data: UsersListPageData): string {
         <!-- Content Layer with backdrop blur -->
         <div class="relative bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10">
           <div class="px-6 py-5">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <!-- Modern Search Input -->
               <div>
                 <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Search</label>
@@ -290,7 +303,7 @@ export function renderUsersListPage(data: UsersListPageData): string {
                     hx-get="/admin/users"
                     hx-trigger="keyup changed delay:300ms"
                     hx-target="body"
-                    hx-include="[name='role'], [name='status']"
+                    hx-include="[name='status']"
                     hx-on::after-request="
                       const input = document.getElementById('user-search-input');
                       if (input && document.activeElement === input) {
@@ -312,29 +325,6 @@ export function renderUsersListPage(data: UsersListPageData): string {
               </div>
 
               <div>
-                <label class="block text-sm/6 font-medium text-zinc-950 dark:text-white">Role</label>
-                <div class="mt-2 grid grid-cols-1">
-                  <select
-                    name="role"
-                    hx-get="/admin/users"
-                    hx-trigger="change"
-                    hx-target="body"
-                    hx-include="[name='search'], [name='status']"
-                    class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white/5 dark:bg-white/5 py-1.5 pl-3 pr-8 text-base text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-purple-500/30 dark:outline-purple-400/30 *:bg-white dark:*:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-purple-500 dark:focus-visible:outline-purple-400 sm:text-sm/6"
-                  >
-                    <option value="" ${!data.roleFilter ? 'selected' : ''}>All Roles</option>
-                    <option value="admin" ${data.roleFilter === 'admin' ? 'selected' : ''}>Admin</option>
-                    <option value="editor" ${data.roleFilter === 'editor' ? 'selected' : ''}>Editor</option>
-                    <option value="author" ${data.roleFilter === 'author' ? 'selected' : ''}>Author</option>
-                    <option value="viewer" ${data.roleFilter === 'viewer' ? 'selected' : ''}>Viewer</option>
-                  </select>
-                  <svg viewBox="0 0 16 16" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-purple-600 dark:text-purple-400 sm:size-4">
-                    <path d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-
-              <div>
                 <label class="block text-sm/6 font-medium text-zinc-950 dark:text-white">Status</label>
                 <div class="mt-2 grid grid-cols-1">
                   <select
@@ -342,7 +332,7 @@ export function renderUsersListPage(data: UsersListPageData): string {
                     hx-get="/admin/users"
                     hx-trigger="change"
                     hx-target="body"
-                    hx-include="[name='search'], [name='role']"
+                    hx-include="[name='search']"
                     class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white/5 dark:bg-white/5 py-1.5 pl-3 pr-8 text-base text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-purple-500/30 dark:outline-purple-400/30 *:bg-white dark:*:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-purple-500 dark:focus-visible:outline-purple-400 sm:text-sm/6"
                   >
                     <option value="active" ${!data.statusFilter || data.statusFilter === 'active' ? 'selected' : ''}>Active</option>

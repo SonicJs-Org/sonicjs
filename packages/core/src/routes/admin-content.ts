@@ -2,10 +2,11 @@ import type { D1Database } from '@cloudflare/workers-types'
 import { Hono } from 'hono'
 import { html } from 'hono/html'
 import type { Bindings, Variables } from '../app'
-import { requireAuth, requireRole } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { isPluginActive } from '../middleware/plugin-middleware'
 import { CACHE_CONFIGS, getCacheService } from '../services/cache'
 import { PluginService } from '../services/plugin-service'
+import { RbacService, type PermissionScope } from '../services/rbac'
 import { ContentVersion, renderVersionHistory, VersionHistoryData } from '../templates/components/version-history.template'
 import { ContentFormData, renderContentFormPage } from '../templates/pages/admin-content-form.template'
 import { ContentListPageData, renderContentListPage } from '../templates/pages/admin-content-list.template'
@@ -14,6 +15,46 @@ import { escapeHtml, sanitizeRichText } from '../utils/sanitize'
 import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+
+type AuthUser = { userId: string; email: string; role: string }
+
+const strongestScope = (...scopes: PermissionScope[]): PermissionScope => {
+  if (scopes.includes('any')) return 'any'
+  if (scopes.includes('own')) return 'own'
+  return 'none'
+}
+
+async function getCollectionPermissionScope(
+  db: D1Database,
+  userId: string,
+  collectionName: string,
+  verb: string
+): Promise<PermissionScope> {
+  const rbac = new RbacService(db)
+  const [contentScope, collectionScope] = await Promise.all([
+    rbac.getPermissionScope(userId, 'content', verb),
+    rbac.getPermissionScope(userId, `collection:${collectionName}`, verb),
+  ])
+  return strongestScope(contentScope, collectionScope)
+}
+
+async function canAccessContentRecord(
+  db: D1Database,
+  user: AuthUser | undefined,
+  content: { author_id?: string | null },
+  collectionName: string,
+  verb: string
+): Promise<boolean> {
+  if (!user) return false
+  const scope = await getCollectionPermissionScope(db, user.userId, collectionName, verb)
+  return scope === 'any' || (scope === 'own' && content.author_id === user.userId)
+}
+
+const forbiddenHtml = (message = 'You do not have permission to access this content.') => html`
+  <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+    ${message}
+  </div>
+`
 
 // Field definition type for form processing
 interface FieldDefinition {
@@ -266,7 +307,7 @@ async function getCollection(db: D1Database, collectionId: string) {
 // Content list (main page)
 adminContentRoutes.get('/', async (c) => {
   try {
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const url = new URL(c.req.url)
     const db = c.env.DB
 
@@ -308,14 +349,61 @@ adminContentRoutes.get('/', async (c) => {
       params.push(modelName)
     }
 
-    if (status !== 'all' && status !== 'deleted') {
-      conditions.push('c.status = ?')
-      params.push(status)
-    } else if (status === 'deleted') {
-      conditions.push("c.status = 'deleted'")
-    }
+        if (status !== 'all' && status !== 'deleted') {
+          conditions.push('c.status = ?')
+          params.push(status)
+        } else if (status === 'deleted') {
+          conditions.push("c.status = 'deleted'")
+        }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+        if (!user) {
+          conditions.push('1 = 0')
+        } else {
+          const rbac = new RbacService(db)
+          const globalReadScope = await rbac.getPermissionScope(user.userId, 'content', 'read')
+
+          if (modelName !== 'all') {
+            const collectionReadScope = await rbac.getPermissionScope(user.userId, `collection:${modelName}`, 'read')
+            const readScope = strongestScope(globalReadScope, collectionReadScope)
+            if (readScope === 'none') {
+              conditions.push('1 = 0')
+            } else if (readScope === 'own') {
+              conditions.push('c.author_id = ?')
+              params.push(user.userId)
+            }
+          } else if (globalReadScope !== 'any') {
+            const anyCollections: string[] = []
+            const ownCollections = new Set<string>()
+
+            if (globalReadScope === 'own') {
+              for (const row of collectionsResults || []) ownCollections.add((row as any).name)
+            }
+
+            await Promise.all((collectionsResults || []).map(async (row: any) => {
+              const scope = await rbac.getPermissionScope(user.userId, `collection:${row.name}`, 'read')
+              if (scope === 'any') {
+                anyCollections.push(row.name)
+                ownCollections.delete(row.name)
+              } else if (scope === 'own') {
+                ownCollections.add(row.name)
+              }
+            }))
+
+            const scopedClauses: string[] = []
+            if (anyCollections.length > 0) {
+              scopedClauses.push(`col.name IN (${anyCollections.map(() => '?').join(',')})`)
+              params.push(...anyCollections)
+            }
+            if (ownCollections.size > 0) {
+              const ownList = [...ownCollections]
+              scopedClauses.push(`(col.name IN (${ownList.map(() => '?').join(',')}) AND c.author_id = ?)`)
+              params.push(...ownList, user.userId)
+            }
+            conditions.push(scopedClauses.length > 0 ? `(${scopedClauses.join(' OR ')})` : '1 = 0')
+          }
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     // Get total count
     const countStmt = db.prepare(`
@@ -439,7 +527,7 @@ adminContentRoutes.get('/', async (c) => {
 // New content form
 adminContentRoutes.get('/new', async (c) => {
   try {
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const url = new URL(c.req.url)
     const collectionId = url.searchParams.get('collection')
 
@@ -450,12 +538,17 @@ adminContentRoutes.get('/new', async (c) => {
       const collectionsStmt = db.prepare("SELECT id, name, display_name, description FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY display_name")
       const { results } = await collectionsStmt.all()
 
-      const collections = (results || []).map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        display_name: row.display_name,
-        description: row.description
-      }))
+          const collections = []
+          for (const row of (results || []) as any[]) {
+            if (user && (await getCollectionPermissionScope(db, user.userId, row.name, 'create')) !== 'none') {
+              collections.push({
+                id: row.id,
+                name: row.name,
+                display_name: row.display_name,
+                description: row.description
+              })
+            }
+          }
 
       // Render collection selection page
       const selectionHTML = `
@@ -496,7 +589,7 @@ adminContentRoutes.get('/new', async (c) => {
     const db = c.env.DB
     const collection = await getCollection(db, collectionId)
 
-    if (!collection) {
+        if (!collection) {
       const formData: ContentFormData = {
         collection: { id: '', name: '', display_name: 'Unknown', schema: {} },
         fields: [],
@@ -507,8 +600,12 @@ adminContentRoutes.get('/new', async (c) => {
           role: user.role
         } : undefined
       }
-      return c.html(renderContentFormPage(formData))
-    }
+          return c.html(renderContentFormPage(formData))
+        }
+
+        if (!user || (await getCollectionPermissionScope(db, user.userId, collection.name, 'create')) === 'none') {
+          return c.html(forbiddenHtml('You do not have permission to create content in this collection.'), 403)
+        }
 
     const fields = await getCollectionFields(db, collectionId)
 
@@ -588,7 +685,7 @@ adminContentRoutes.get('/new', async (c) => {
 adminContentRoutes.get('/:id/edit', async (c) => {
   try {
     const id = c.req.param('id')
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const db = c.env.DB
     const url = new URL(c.req.url)
 
@@ -626,13 +723,17 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       return c.html(renderContentFormPage(formData))
     }
 
-    const collection = {
-      id: content.collection_id,
+        const collection = {
+          id: content.collection_id,
       name: content.collection_name,
       display_name: content.collection_display_name,
       description: content.collection_description,
-      schema: content.collection_schema ? JSON.parse(content.collection_schema) : {}
-    }
+          schema: content.collection_schema ? JSON.parse(content.collection_schema) : {}
+        }
+
+        if (!(await canAccessContentRecord(db, user, content, collection.name, 'update'))) {
+          return c.html(forbiddenHtml(), 403)
+        }
 
     const fields = await getCollectionFields(db, content.collection_id)
     const contentData = content.data ? JSON.parse(content.data) : {}
@@ -720,7 +821,7 @@ adminContentRoutes.get('/:id/edit', async (c) => {
 // Create content
 adminContentRoutes.post('/', async (c) => {
   try {
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const formData = await c.req.formData()
     const collectionId = formData.get('collection_id') as string
     const action = formData.get('action') as string
@@ -880,7 +981,7 @@ adminContentRoutes.post('/', async (c) => {
 adminContentRoutes.put('/:id', async (c) => {
   try {
     const id = c.req.param('id')
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const formData = await c.req.formData()
     const action = formData.get('action') as string
 
@@ -898,14 +999,22 @@ adminContentRoutes.put('/:id', async (c) => {
       `)
     }
 
-    const collection = await getCollection(db, existingContent.collection_id)
-    if (!collection) {
-      return c.html(html`
+        const collection = await getCollection(db, existingContent.collection_id)
+        if (!collection) {
+          return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Collection not found.
         </div>
-      `)
-    }
+          `)
+        }
+
+        if (!user || (await getCollectionPermissionScope(db, user.userId, collection.name, 'create')) === 'none') {
+          return c.html(forbiddenHtml('You do not have permission to create content in this collection.'), 403)
+        }
+
+        if (!(await canAccessContentRecord(db, user, existingContent, collection.name, 'update'))) {
+          return c.html(forbiddenHtml(), 403)
+        }
 
     const fields = await getCollectionFields(db, existingContent.collection_id)
 
@@ -1052,17 +1161,22 @@ adminContentRoutes.put('/:id', async (c) => {
 })
 
 // Content preview
-adminContentRoutes.post('/preview', requireRole(['admin', 'editor', 'author']), async (c) => {
+adminContentRoutes.post('/preview', requireRbac('content', 'read'), async (c) => {
   try {
-    const formData = await c.req.formData()
-    const collectionId = formData.get('collection_id') as string
+        const formData = await c.req.formData()
+        const collectionId = formData.get('collection_id') as string
 
-    const db = c.env.DB
-    const collection = await getCollection(db, collectionId)
+        const db = c.env.DB
+        const user = c.get('user') as AuthUser | undefined
+        const collection = await getCollection(db, collectionId)
 
-    if (!collection) {
-      return c.html('<p>Collection not found</p>')
-    }
+        if (!collection) {
+          return c.html('<p>Collection not found</p>')
+        }
+
+        if (!user || (await getCollectionPermissionScope(db, user.userId, collection.name, 'read')) === 'none') {
+          return c.html('<p>Insufficient permissions</p>', 403)
+        }
 
     const fields = await getCollectionFields(db, collectionId)
 
@@ -1125,7 +1239,7 @@ adminContentRoutes.post('/preview', requireRole(['admin', 'editor', 'author']), 
 // Duplicate content
 adminContentRoutes.post('/duplicate', async (c) => {
   try {
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const formData = await c.req.formData()
     const originalId = formData.get('id') as string
 
@@ -1139,9 +1253,22 @@ adminContentRoutes.post('/duplicate', async (c) => {
     const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const original = await contentStmt.bind(originalId).first() as any
 
-    if (!original) {
-      return c.json({ success: false, error: 'Content not found' })
-    }
+        if (!original) {
+          return c.json({ success: false, error: 'Content not found' })
+        }
+
+        const collection = await getCollection(db, original.collection_id)
+        if (!collection) {
+          return c.json({ success: false, error: 'Collection not found' })
+        }
+
+        const canReadOriginal = await canAccessContentRecord(db, user, original, collection.name, 'read')
+        const canCreateCopy = user
+          ? (await getCollectionPermissionScope(db, user.userId, collection.name, 'create')) !== 'none'
+          : false
+        if (!canReadOriginal || !canCreateCopy) {
+          return c.json({ success: false, error: 'Insufficient permissions' }, 403)
+        }
 
     // Create duplicate
     const newId = crypto.randomUUID()
@@ -1274,7 +1401,7 @@ adminContentRoutes.get('/bulk-actions', async (c) => {
 // Perform bulk action
 adminContentRoutes.post('/bulk-action', async (c) => {
   try {
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const body = await c.req.json()
     const { action, ids } = body
 
@@ -1282,41 +1409,60 @@ adminContentRoutes.post('/bulk-action', async (c) => {
       return c.json({ success: false, error: 'Action and IDs required' })
     }
 
-    const db = c.env.DB
-    const now = Date.now()
+        const db = c.env.DB
+        const now = Date.now()
+        const verb = action === 'delete' ? 'delete' : 'update'
+        const placeholders = ids.map(() => '?').join(',')
+        const { results: selectedRows } = await db.prepare(`
+          SELECT c.id, c.author_id, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id IN (${placeholders})
+        `).bind(...ids).all()
 
-    if (action === 'delete') {
-      // Soft delete by setting status to 'deleted'
-      const placeholders = ids.map(() => '?').join(',')
-      const stmt = db.prepare(`
-        UPDATE content
-        SET status = 'deleted', updated_at = ?
-        WHERE id IN (${placeholders})
-      `)
-      await stmt.bind(now, ...ids).run()
-    } else if (action === 'publish' || action === 'draft') {
-      // Update status
-      const placeholders = ids.map(() => '?').join(',')
-      const publishedAt = action === 'publish' ? now : null
-      const stmt = db.prepare(`
-        UPDATE content
-        SET status = ?, published_at = ?, updated_at = ?
-        WHERE id IN (${placeholders})
-      `)
-      await stmt.bind(action, publishedAt, now, ...ids).run()
+        const allowedIds: string[] = []
+        for (const row of (selectedRows || []) as any[]) {
+          if (await canAccessContentRecord(db, user, row, row.collection_name, verb)) {
+            allowedIds.push(row.id)
+          }
+        }
+
+        if (allowedIds.length === 0) {
+          return c.json({ success: false, error: 'No selected content is permitted for this action' }, 403)
+        }
+
+        if (action === 'delete') {
+          // Soft delete by setting status to 'deleted'
+          const placeholders = allowedIds.map(() => '?').join(',')
+          const stmt = db.prepare(`
+            UPDATE content
+            SET status = 'deleted', updated_at = ?
+            WHERE id IN (${placeholders})
+          `)
+          await stmt.bind(now, ...allowedIds).run()
+        } else if (action === 'publish' || action === 'draft') {
+          // Update status
+          const placeholders = allowedIds.map(() => '?').join(',')
+          const publishedAt = action === 'publish' ? now : null
+          const stmt = db.prepare(`
+            UPDATE content
+            SET status = ?, published_at = ?, updated_at = ?
+            WHERE id IN (${placeholders})
+          `)
+          await stmt.bind(action, publishedAt, now, ...allowedIds).run()
     } else {
       return c.json({ success: false, error: 'Invalid action' })
     }
 
     // Invalidate cache for all affected content items
     const cache = getCacheService(CACHE_CONFIGS.content!)
-    for (const contentId of ids) {
-      await cache.delete(cache.generateKey('content', contentId))
-    }
+        for (const contentId of allowedIds) {
+          await cache.delete(cache.generateKey('content', contentId))
+        }
     // Also invalidate list caches (they contain content from potentially multiple collections)
     await cache.invalidate('content:list:*')
 
-    return c.json({ success: true, count: ids.length })
+        return c.json({ success: true, count: allowedIds.length })
   } catch (error) {
     console.error('Bulk action error:', error)
     return c.json({ success: false, error: 'Failed to perform bulk action' })
@@ -1328,15 +1474,24 @@ adminContentRoutes.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id')
     const db = c.env.DB
-    const user = c.get('user')
+    const user = c.get('user') as AuthUser | undefined
 
     // Check if content exists
-    const contentStmt = db.prepare('SELECT id, title FROM content WHERE id = ?')
-    const content = await contentStmt.bind(id).first() as any
+        const contentStmt = db.prepare(`
+          SELECT c.id, c.title, c.author_id, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id = ?
+        `)
+        const content = await contentStmt.bind(id).first() as any
 
     if (!content) {
-      return c.json({ success: false, error: 'Content not found' }, 404)
-    }
+          return c.json({ success: false, error: 'Content not found' }, 404)
+        }
+
+        if (!(await canAccessContentRecord(db, user as AuthUser | undefined, content, content.collection_name, 'delete'))) {
+          return c.json({ success: false, error: 'Insufficient permissions' }, 403)
+        }
 
     // Soft delete by setting status to 'deleted'
     const now = Date.now()
@@ -1374,16 +1529,26 @@ adminContentRoutes.delete('/:id', async (c) => {
 // Get version history
 adminContentRoutes.get('/:id/versions', async (c) => {
   try {
-    const id = c.req.param('id')
-    const db = c.env.DB
+        const id = c.req.param('id')
+        const db = c.env.DB
+        const user = c.get('user') as AuthUser | undefined
 
-    // Get current content
-    const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
-    const content = await contentStmt.bind(id).first() as any
+        // Get current content
+        const contentStmt = db.prepare(`
+          SELECT c.*, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id = ?
+        `)
+        const content = await contentStmt.bind(id).first() as any
 
-    if (!content) {
-      return c.html('<p>Content not found</p>')
-    }
+        if (!content) {
+          return c.html('<p>Content not found</p>')
+        }
+
+        if (!(await canAccessContentRecord(db, user, content, content.collection_name, 'read'))) {
+          return c.html('<p>Insufficient permissions</p>', 403)
+        }
 
     // Get all versions with author info
     const versionsStmt = db.prepare(`
@@ -1428,7 +1593,7 @@ adminContentRoutes.post('/:id/restore/:version', async (c) => {
   try {
     const id = c.req.param('id')
     const version = parseInt(c.req.param('version') || '0')
-    const user = c.get('user')
+        const user = c.get('user') as AuthUser | undefined
     const db = c.env.DB
 
     // Get the specific version
@@ -1443,12 +1608,21 @@ adminContentRoutes.post('/:id/restore/:version', async (c) => {
     }
 
     // Get current content
-    const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
+        const contentStmt = db.prepare(`
+          SELECT c.*, col.name as collection_name
+          FROM content c
+          JOIN collections col ON col.id = c.collection_id
+          WHERE c.id = ?
+        `)
     const currentContent = await contentStmt.bind(id).first() as any
 
-    if (!currentContent) {
-      return c.json({ success: false, error: 'Content not found' })
-    }
+        if (!currentContent) {
+          return c.json({ success: false, error: 'Content not found' })
+        }
+
+        if (!(await canAccessContentRecord(db, user, currentContent, currentContent.collection_name, 'update'))) {
+          return c.json({ success: false, error: 'Insufficient permissions' }, 403)
+        }
 
     const restoredData = JSON.parse(versionData.data)
     const now = Date.now()
@@ -1511,25 +1685,30 @@ adminContentRoutes.post('/:id/restore/:version', async (c) => {
 })
 
 // Preview specific version
-adminContentRoutes.get('/:id/version/:version/preview', requireRole(['admin', 'editor', 'author']), async (c) => {
+adminContentRoutes.get('/:id/version/:version/preview', requireRbac('content', 'read'), async (c) => {
   try {
-    const id = c.req.param('id')
-    const version = parseInt(c.req.param('version') || '0')
-    const db = c.env.DB
+        const id = c.req.param('id')
+        const version = parseInt(c.req.param('version') || '0')
+        const db = c.env.DB
+        const user = c.get('user') as AuthUser | undefined
 
-    // Get the specific version
-    const versionStmt = db.prepare(`
-      SELECT cv.*, c.collection_id, col.display_name as collection_name
-      FROM content_versions cv
-      JOIN content c ON cv.content_id = c.id
+        // Get the specific version
+        const versionStmt = db.prepare(`
+          SELECT cv.*, c.collection_id, c.author_id, col.name as collection_key, col.display_name as collection_name
+          FROM content_versions cv
+          JOIN content c ON cv.content_id = c.id
       JOIN collections col ON c.collection_id = col.id
       WHERE cv.content_id = ? AND cv.version = ?
     `)
     const versionData = await versionStmt.bind(id, version).first() as any
 
-    if (!versionData) {
-      return c.html('<p>Version not found</p>')
-    }
+        if (!versionData) {
+          return c.html('<p>Version not found</p>')
+        }
+
+        if (!(await canAccessContentRecord(db, user, versionData, versionData.collection_key, 'read'))) {
+          return c.html('<p>Insufficient permissions</p>', 403)
+        }
 
     const data = JSON.parse(versionData.data || '{}')
 

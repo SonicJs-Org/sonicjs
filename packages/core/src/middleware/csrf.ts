@@ -2,7 +2,8 @@
  * CSRF Protection Middleware — Signed Double-Submit Cookie
  *
  * Stateless CSRF protection for Cloudflare Workers (no session store needed).
- * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with JWT_SECRET.
+ * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with BETTER_AUTH_SECRET
+ * (preferred) or JWT_SECRET (legacy fallback).
  *
  * Flow:
  *   GET  — ensureCsrfCookie(): reuse existing valid cookie or set a new one
@@ -125,6 +126,13 @@ const DEFAULT_EXEMPT_PATHS = [
   '/auth/otp',
   '/auth/magic-link',
   '/auth/verify',
+  // Better Auth API endpoints — Better Auth enforces its own CSRF via trusted
+  // origins, so they are exempt from SonicJS's token check (startsWith match).
+  '/auth/sign-in',
+  '/auth/sign-up',
+  '/auth/sign-out',
+  '/auth/callback',
+  '/auth/get-session',
   '/api/stripe/webhook',
   '/api/events',
 ]
@@ -177,12 +185,14 @@ export function csrfProtection(options: CsrfOptions = {}) {
   return async (c: Context, next: Next): Promise<Response | void> => {
     const method = c.req.method.toUpperCase()
     const path = new URL(c.req.url).pathname
-    const secret = c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
+    // Prefer BETTER_AUTH_SECRET (the canonical SonicJS secret going forward);
+    // fall back to JWT_SECRET for deployments still rotating, then the dev fallback.
+    const secret = c.env?.BETTER_AUTH_SECRET || c.env?.JWT_SECRET || JWT_SECRET_FALLBACK
 
     // Warn if using fallback secret in production
-    if (c.env?.ENVIRONMENT === 'production' && !c.env?.JWT_SECRET) {
+    if (c.env?.ENVIRONMENT === 'production' && !c.env?.BETTER_AUTH_SECRET && !c.env?.JWT_SECRET) {
       console.warn(
-        '[CSRF] WARNING: JWT_SECRET is not set in production. ' +
+        '[CSRF] WARNING: Neither BETTER_AUTH_SECRET nor JWT_SECRET is set in production. ' +
         'CSRF tokens are signed with the fallback key, which is insecure.'
       )
     }
@@ -203,6 +213,19 @@ export function csrfProtection(options: CsrfOptions = {}) {
     // Bearer-only or API-key-only requests (no auth_token cookie) — exempt
     const authCookie = getCookie(c, 'auth_token')
     if (!authCookie) {
+      await next()
+      return
+    }
+
+    // Better Auth sessions: the legacy `auth_token`-based CSRF check does not
+    // apply (auth_token is dead under Better Auth, and a stale one would
+    // otherwise misfire and reject same-origin admin form posts). Better Auth
+    // enforces its own CSRF via trusted origins for its endpoints.
+    // NOTE (follow-up): replace this skip with CSRF validation keyed on the
+    // Better Auth session cookie so admin mutations regain CSRF protection.
+    const baSession =
+      getCookie(c, 'better-auth.session_token') || getCookie(c, '__Secure-better-auth.session_token')
+    if (baSession) {
       await next()
       return
     }

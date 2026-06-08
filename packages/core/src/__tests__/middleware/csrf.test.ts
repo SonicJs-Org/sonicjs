@@ -497,15 +497,15 @@ describe('csrfProtection middleware', () => {
     })
   })
 
-  describe('JWT_SECRET fallback warning', () => {
-    it('should warn when JWT_SECRET is missing in production', async () => {
+  describe('secret fallback warning', () => {
+    it('should warn when neither BETTER_AUTH_SECRET nor JWT_SECRET is set in production', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const app = createApp()
 
       await app.request('/admin/dashboard', {}, { ENVIRONMENT: 'production' })
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('JWT_SECRET is not set in production')
+        expect.stringContaining('BETTER_AUTH_SECRET nor JWT_SECRET is set in production')
       )
       consoleSpy.mockRestore()
     })
@@ -517,7 +517,7 @@ describe('csrfProtection middleware', () => {
       await app.request('/admin/dashboard', {}, { ENVIRONMENT: 'development' })
 
       expect(consoleSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('JWT_SECRET is not set in production')
+        expect.stringContaining('BETTER_AUTH_SECRET nor JWT_SECRET is set in production')
       )
       consoleSpy.mockRestore()
     })

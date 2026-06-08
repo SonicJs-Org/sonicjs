@@ -1,6 +1,7 @@
 import { sign, verify } from 'hono/jwt'
 import { Context, Next } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
+import { RbacService } from '../services/rbac'
 
 type JWTPayload = {
   userId: string
@@ -302,6 +303,31 @@ export class AuthManager {
     return `pbkdf2:${iterations}:${saltHex}:${hashHex}`
   }
 
+  /**
+   * Ensure a Better Auth `credential` account row exists for a user, holding the
+   * given password hash. Better Auth authenticates against `account.password`,
+   * NOT `users.password_hash`, so every flow that writes a password outside the
+   * BA sign-up path (admin set-password, reset, invitation, seed) MUST call this
+   * or the user is locked out. Idempotent — the row id mirrors migration 037's
+   * backfill (`cred-<userId>`). The legacy-PBKDF2 verify hook upgrades it to
+   * scrypt on first successful login.
+   */
+  static async ensureCredentialAccount(
+    db: D1Database,
+    userId: string,
+    passwordHash: string
+  ): Promise<void> {
+    const now = Date.now()
+    await db
+      .prepare(
+        `INSERT INTO account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+         VALUES (?, ?, ?, 'credential', ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET password = excluded.password, updated_at = excluded.updated_at`
+      )
+      .bind(`cred-${userId}`, userId, userId, passwordHash, now, now)
+      .run()
+  }
+
   static async hashPasswordLegacy(password: string): Promise<string> {
     const encoder = new TextEncoder()
     const data = encoder.encode(password + 'salt-change-in-production')
@@ -392,128 +418,92 @@ export class AuthManager {
   }
 }
 
-// Middleware to require authentication
+// Middleware to require authentication.
+// The Better Auth session middleware (app.ts) has already populated c.get('user')
+// from the session cookie; here we just enforce its presence.
 export const requireAuth = () => {
   return async (c: Context, next: Next) => {
-    try {
-      // Try to get token from Authorization header
-      let token = c.req.header('Authorization')?.replace('Bearer ', '')
+    const user = c.get('user') as JWTPayload | undefined
 
-      // If no header token, try cookie
-      if (!token) {
-        token = getCookie(c, 'auth_token')
-      }
-
-      if (!token) {
-        // Check if this is a browser request (HTML accept header)
-        const acceptHeader = c.req.header('Accept') || ''
-        if (acceptHeader.includes('text/html')) {
-          return c.redirect('/auth/login?error=Please login to access the admin area')
-        }
-        return c.json({ error: 'Authentication required' }, 401)
-      }
-
-      // Try to get cached token verification from KV
-      const kv = c.env?.KV
-      let payload: JWTPayload | null = null
-
-      if (kv) {
-        const cacheKey = `auth:${token.substring(0, 20)}` // Use token prefix as key
-        const cached = await kv.get(cacheKey, 'json')
-        if (cached) {
-          payload = cached as JWTPayload
-        }
-      }
-
-      // If not cached, verify token
-      if (!payload) {
-        const jwtSecret = (c.env as any)?.JWT_SECRET
-        payload = await AuthManager.verifyToken(token, jwtSecret)
-
-        // Cache the verified payload for 5 minutes
-        if (payload && kv) {
-          const cacheKey = `auth:${token.substring(0, 20)}`
-          await kv.put(cacheKey, JSON.stringify(payload), { expirationTtl: 300 })
-        }
-      }
-
-      if (!payload) {
-        // Check if this is a browser request (HTML accept header)
-        const acceptHeader = c.req.header('Accept') || ''
-        if (acceptHeader.includes('text/html')) {
-          return c.redirect('/auth/login?error=Your session has expired, please login again')
-        }
-        return c.json({ error: 'Invalid or expired token' }, 401)
-      }
-
-      // Add user info to context
-      c.set('user', payload)
-
-      return await next()
-    } catch (error) {
-      console.error('Auth middleware error:', error)
-      // Check if this is a browser request (HTML accept header)
-      const acceptHeader = c.req.header('Accept') || ''
-      if (acceptHeader.includes('text/html')) {
-        return c.redirect('/auth/login?error=Authentication failed, please login again')
-      }
-      return c.json({ error: 'Authentication failed' }, 401)
-    }
-  }
-}
-
-// Middleware to require specific role
-export const requireRole = (requiredRole: string | string[]) => {
-  return async (c: Context, next: Next) => {
-    const user = c.get('user') as JWTPayload
-    
     if (!user) {
-      // Check if this is a browser request (HTML accept header)
       const acceptHeader = c.req.header('Accept') || ''
       if (acceptHeader.includes('text/html')) {
         return c.redirect('/auth/login?error=Please login to access the admin area')
       }
       return c.json({ error: 'Authentication required' }, 401)
     }
-    
+
+    return await next()
+  }
+}
+
+// Middleware to require specific role. Must run after requireAuth / the session
+// middleware so c.get('user') is set.
+export const requireRole = (requiredRole: string | string[]) => {
+  return async (c: Context, next: Next) => {
+    const user = c.get('user') as JWTPayload | undefined
+
+    if (!user) {
+      const acceptHeader = c.req.header('Accept') || ''
+      if (acceptHeader.includes('text/html')) {
+        return c.redirect('/auth/login?error=Please login to access the admin area')
+      }
+      return c.json({ error: 'Authentication required' }, 401)
+    }
+
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
-    
+
     if (!roles.includes(user.role)) {
-      // Check if this is a browser request (HTML accept header)
       const acceptHeader = c.req.header('Accept') || ''
       if (acceptHeader.includes('text/html')) {
         return c.redirect('/auth/login?error=You do not have permission to access this area')
       }
       return c.json({ error: 'Insufficient permissions' }, 403)
     }
-    
+
     return await next()
   }
 }
 
-// Optional auth middleware (doesn't block if no token)
-export const optionalAuth = () => {
+// Middleware to require a live RBAC grant for the signed-in user. This is the
+// dynamic replacement for legacy `users.role` checks on admin routes.
+export const requireRbac = (resource: string, verb: string) => {
   return async (c: Context, next: Next) => {
-    try {
-      let token = c.req.header('Authorization')?.replace('Bearer ', '')
-      
-      if (!token) {
-        token = getCookie(c, 'auth_token')
+    const user = c.get('user') as JWTPayload | undefined
+
+    if (!user) {
+      const acceptHeader = c.req.header('Accept') || ''
+      if (acceptHeader.includes('text/html')) {
+        return c.redirect('/auth/login?error=Please login to access the admin area')
       }
-      
-      if (token) {
-        const jwtSecret = (c.env as any)?.JWT_SECRET
-        const payload = await AuthManager.verifyToken(token, jwtSecret)
-        if (payload) {
-          c.set('user', payload)
-        }
-      }
-      
-      return await next()
-    } catch (error) {
-      // Don't block on auth errors in optional auth
-      console.error('Optional auth error:', error)
-      return await next()
+      return c.json({ error: 'Authentication required' }, 401)
     }
+
+    // Fast path: use pre-computed perms from the /admin/* middleware (avoids DB hit).
+    const cachedPerms = (c as any).get('rbacPerms') as string[] | undefined
+    let allowed: boolean
+    if (cachedPerms !== undefined) {
+      allowed = cachedPerms.includes(`${resource}:${verb}`)
+    } else {
+      allowed = await new RbacService((c.env as any).DB).can(user.userId, resource, verb)
+    }
+
+    if (!allowed) {
+      const acceptHeader = c.req.header('Accept') || ''
+      if (acceptHeader.includes('text/html')) {
+        return c.redirect('/auth/login?error=You do not have permission to access this area')
+      }
+      return c.json({ error: 'Insufficient permissions' }, 403)
+    }
+
+    return await next()
+  }
+}
+
+// Optional auth middleware. The session middleware already sets c.get('user')
+// when a valid session exists, so this is a no-op kept for API compatibility.
+export const optionalAuth = () => {
+  return async (_c: Context, next: Next) => {
+    return await next()
   }
 }

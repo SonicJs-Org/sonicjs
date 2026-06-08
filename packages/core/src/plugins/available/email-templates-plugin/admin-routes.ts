@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { requireAuth, requireRole } from '@sonicjs-cms/core';
+import { requireAuth, requireRbac } from '@sonicjs-cms/core';
 import { createEmailManagementService } from './services/email-management';
 // import { createEmailService } from './services/email';
 import { EmailTemplateRenderer } from './services/email-renderer';
@@ -30,9 +30,9 @@ type Variables = {
 
 const emailRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Middleware to require admin role for all email management routes
+// Middleware to require email management permission for all email management routes
 emailRoutes.use('/*', requireAuth());
-emailRoutes.use('/*', requireRole(['admin']));
+emailRoutes.use('/*', requireRbac('email', 'manage'));
 
 // Email management dashboard
 emailRoutes.get('/', async (c) => {

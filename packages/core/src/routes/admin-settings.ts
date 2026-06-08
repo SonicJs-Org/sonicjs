@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 // import { html } from 'hono/html'
-import { requireAuth } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { renderSettingsPage, SettingsPageData } from '../templates/pages/admin-settings.template'
 import { MigrationService } from '../services/migrations'
 import { SettingsService } from '../services/settings'
@@ -35,6 +35,8 @@ export const adminSettingsRoutes = new Hono<{ Bindings: Bindings; Variables: Var
 
 // Apply authentication middleware
 adminSettingsRoutes.use('*', requireAuth())
+adminSettingsRoutes.get('*', requireRbac('settings', 'read'))
+adminSettingsRoutes.post('*', requireRbac('settings', 'manage'))
 
 // Helper function to get mock settings data
 function getMockSettings(user: any) {
@@ -258,16 +260,6 @@ adminSettingsRoutes.get('/api/migrations/status', async (c) => {
 // Run pending migrations
 adminSettingsRoutes.post('/api/migrations/run', async (c) => {
   try {
-    const user = c.get('user')
-
-    // Only allow admin users to run migrations
-    if (!user || user.role !== 'admin') {
-      return c.json({
-        success: false,
-        error: 'Unauthorized. Admin access required.'
-      }, 403)
-    }
-
     const db = c.env.DB
     const migrationService = new MigrationService(db)
     const result = await migrationService.runPendingMigrations()
@@ -395,16 +387,6 @@ adminSettingsRoutes.get('/api/database-tools/validate', async (c) => {
 // Backup database
 adminSettingsRoutes.post('/api/database-tools/backup', async (c) => {
   try {
-    const user = c.get('user')
-
-    // Only allow admin users
-    if (!user || user.role !== 'admin') {
-      return c.json({
-        success: false,
-        error: 'Unauthorized. Admin access required.'
-      }, 403)
-    }
-
     // TODO: Implement actual backup functionality
     // For now, return success message
     return c.json({
@@ -423,16 +405,6 @@ adminSettingsRoutes.post('/api/database-tools/backup', async (c) => {
 // Truncate tables
 adminSettingsRoutes.post('/api/database-tools/truncate', async (c) => {
   try {
-    const user = c.get('user')
-
-    // Only allow admin users
-    if (!user || user.role !== 'admin') {
-      return c.json({
-        success: false,
-        error: 'Unauthorized. Admin access required.'
-      }, 403)
-    }
-
     const body = await c.req.json()
     const tablesToTruncate = body.tables || []
 
@@ -487,15 +459,6 @@ adminSettingsRoutes.post('/api/database-tools/truncate', async (c) => {
 // Save general settings
 adminSettingsRoutes.post('/general', async (c) => {
   try {
-    const user = c.get('user')
-
-    if (!user || user.role !== 'admin') {
-      return c.json({
-        success: false,
-        error: 'Unauthorized. Admin access required.'
-      }, 403)
-    }
-
     const formData = await c.req.formData()
     const db = c.env.DB
     const settingsService = new SettingsService(db)
@@ -544,15 +507,6 @@ adminSettingsRoutes.post('/general', async (c) => {
 // Save security settings (JWT TTL + refresh grace)
 adminSettingsRoutes.post('/security', async (c) => {
   try {
-    const user = c.get('user')
-
-    if (!user || user.role !== 'admin') {
-      return c.json({
-        success: false,
-        error: 'Unauthorized. Admin access required.'
-      }, 403)
-    }
-
     const formData = await c.req.formData()
     const db = c.env.DB
     const settingsService = new SettingsService(db)

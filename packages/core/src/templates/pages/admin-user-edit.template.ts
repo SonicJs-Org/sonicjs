@@ -21,7 +21,6 @@ export interface UserEditData {
   lastName: string
   phone?: string
   avatarUrl?: string
-  role: string
   isActive: boolean
   emailVerified: boolean
   twoFactorEnabled: boolean
@@ -32,7 +31,7 @@ export interface UserEditData {
 
 export interface UserEditPageData {
   userToEdit: UserEditData
-  roles: Array<{ value: string; label: string }>
+  rbacRoles?: Array<{ id: string; name: string; displayName: string; checked: boolean }>
   error?: string
   success?: string
   customProfileFieldsHtml?: string
@@ -148,23 +147,20 @@ export function renderUserEditPage(data: UserEditPageData): string {
                     />
                   </div>
 
-                  <div>
-                    <label for="role" class="block text-sm/6 font-medium text-zinc-950 dark:text-white">Role</label>
-                    <div class="mt-2 grid grid-cols-1">
-                      <select
-                        id="role"
-                        name="role"
-                        class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white/5 dark:bg-white/5 py-1.5 pl-3 pr-8 text-base text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-500/30 dark:outline-zinc-400/30 *:bg-white dark:*:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-zinc-500 dark:focus-visible:outline-zinc-400 sm:text-sm/6"
-                      >
-                        ${data.roles.map(role => `
-                          <option value="${escapeHtml(role.value)}" ${data.userToEdit.role === role.value ? 'selected' : ''}>${escapeHtml(role.label)}</option>
-                        `).join('')}
-                      </select>
-                      <svg viewBox="0 0 16 16" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-zinc-600 dark:text-zinc-400 sm:size-4">
-                        <path d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
-                      </svg>
+                  ${data.rbacRoles && data.rbacRoles.length ? `
+                  <div class="sm:col-span-2">
+                    <label class="block text-sm/6 font-medium text-zinc-950 dark:text-white">RBAC Roles</label>
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-2">Assign one or more roles. Roles with <code>portal:access</code> can enter the admin portal. Manage permissions in <a href="/admin/rbac" class="text-cyan-600 dark:text-cyan-400 hover:underline">Roles &amp; Permissions</a>.</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      ${data.rbacRoles.map(r => `
+                        <label class="flex items-center gap-2 rounded-md bg-white/5 px-3 py-2 ring-1 ring-inset ring-zinc-500/20">
+                          <input type="checkbox" name="rbac_roles" value="${escapeHtml(r.id)}" ${r.checked ? 'checked' : ''} class="h-4 w-4 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
+                          <span class="text-sm text-zinc-950 dark:text-white">${escapeHtml(r.displayName)}</span>
+                        </label>
+                      `).join('')}
                     </div>
                   </div>
+                  ` : ''}
                 </div>
               </div>
 

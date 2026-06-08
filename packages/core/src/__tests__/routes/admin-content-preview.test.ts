@@ -91,19 +91,9 @@ describe('Content Preview XSS Prevention', () => {
     })
   })
 
-  describe('Role-based access control pattern', () => {
-    it('requireRole middleware should reject viewers from preview', async () => {
-      // Simulate requireRole(['admin', 'editor', 'author']) rejecting a viewer
-      const allowedRoles = ['admin', 'editor', 'author']
-      const viewerRole = 'viewer'
-      expect(allowedRoles.includes(viewerRole)).toBe(false)
-    })
-
-    it('requireRole middleware should accept admin, editor, and author roles', () => {
-      const allowedRoles = ['admin', 'editor', 'author']
-      expect(allowedRoles.includes('admin')).toBe(true)
-      expect(allowedRoles.includes('editor')).toBe(true)
-      expect(allowedRoles.includes('author')).toBe(true)
-    })
-  })
+  // NOTE: Preview access control is no longer the legacy `requireRole(...)` gate.
+  // The preview routes are now protected by `requireRbac('content', 'read')`
+  // (see routes/admin-content.ts). That middleware is covered directly in
+  // __tests__/middleware/require-rbac.test.ts, so the previous vacuous
+  // `Array.includes` "simulation" assertions were removed here.
 })

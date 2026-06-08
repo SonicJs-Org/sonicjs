@@ -9,12 +9,18 @@ account_id = "f9d6328dc3115e621758a741dda3d5c4"
 # Cloudflare Workers settings
 workers_dev = true
 
-# D1 Database
+# Better Auth / kysely bundling workaround: @better-auth/kysely-adapter imports
+# migration constants from "kysely" that kysely 0.29 moved to "kysely/migration".
+# Alias to a compat module that re-exports them. Remove when better-auth patches.
+[alias]
+kysely = "./kysely-compat.mjs"
+
+# D1 Database (default / local dev)
 # Note: database_name and database_id are automatically updated by GitHub Actions
 [[d1_databases]]
 binding = "DB"
-database_name = "sonicjs-worktree-main"
-database_id = "b14707c3-a1c5-4565-8ffc-4f22f930d289"
+database_name = "sonicjs-worktree-feature-better-auth-poc"
+database_id = "3540ffd0-8cc2-43c1-a2ec-c77293a2fedb"
 migrations_dir = "./migrations"
 
 # R2 Bucket for media storage (using CI bucket)
@@ -28,10 +34,42 @@ binding = "CACHE_KV"
 id = "a16f8246fc294d809c90b0fb2df6d363"
 
 # Environment variables
+# NOTE: BETTER_AUTH_SECRET is a SECRET — never commit it here. Local dev reads it
+# from a gitignored .dev.vars file; preview/prod set it via `wrangler secret put
+# BETTER_AUTH_SECRET`. (The previously-committed value must be rotated.)
 [vars]
 ENVIRONMENT = "development"
 CORS_ORIGINS = "http://localhost:8787"
 
 # Observability
 [observability]
+enabled = true
+
+# ── Preview environment (Better Auth POC) ───────────────────────────────────
+# Deploy with: wrangler deploy --env preview
+[env.preview]
+name = "sonicjs-ba-preview"
+workers_dev = true
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "sonicjs-worktree-feature-better-auth-poc"
+database_id = "3540ffd0-8cc2-43c1-a2ec-c77293a2fedb"
+migrations_dir = "./migrations"
+
+[[env.preview.r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "sonicjs-ci-media"
+
+[[env.preview.kv_namespaces]]
+binding = "CACHE_KV"
+id = "db875b69dc704e83ad6fd4aad9c023cd"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+# BETTER_AUTH_SECRET for preview is set via: wrangler secret put BETTER_AUTH_SECRET --env preview
+BETTER_AUTH_URL = "https://sonicjs-ba-preview.ldc0618847.workers.dev"
+CORS_ORIGINS = "https://sonicjs-ba-preview.ldc0618847.workers.dev"
+
+[env.preview.observability]
 enabled = true

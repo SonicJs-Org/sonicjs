@@ -1,10 +1,45 @@
 import { Hono } from 'hono'
-import { requireAuth, requireRole } from '../middleware'
+import { requireAuth, requireRbac } from '../middleware'
 import { getCacheService, CACHE_CONFIGS } from '../services'
+import { RbacService, type PermissionScope } from '../services/rbac'
 import type { Bindings, Variables } from '../app'
 import { resolveContentVariables } from '../plugins/core-plugins/global-variables-plugin/variable-resolver'
 
 const apiContentCrudRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+
+type AuthUser = { userId: string; email: string; role: string }
+
+const strongestScope = (...scopes: PermissionScope[]): PermissionScope => {
+  if (scopes.includes('any')) return 'any'
+  if (scopes.includes('own')) return 'own'
+  return 'none'
+}
+
+async function getCollectionPermissionScope(
+  db: D1Database,
+  userId: string,
+  collectionName: string,
+  verb: string
+): Promise<PermissionScope> {
+  const rbac = new RbacService(db)
+  const [contentScope, collectionScope] = await Promise.all([
+    rbac.getPermissionScope(userId, 'content', verb),
+    rbac.getPermissionScope(userId, `collection:${collectionName}`, verb),
+  ])
+  return strongestScope(contentScope, collectionScope)
+}
+
+async function canAccessContentRecord(
+  db: D1Database,
+  user: AuthUser | undefined,
+  content: { author_id?: string | null },
+  collectionName: string,
+  verb: string
+): Promise<boolean> {
+  if (!user) return false
+  const scope = await getCollectionPermissionScope(db, user.userId, collectionName, verb)
+  return scope === 'any' || (scope === 'own' && content.author_id === user.userId)
+}
 
 // GET /api/content/check-slug - Check if slug is available in collection
 // Query params: collectionId, slug, excludeId (optional - when editing)
@@ -89,10 +124,10 @@ apiContentCrudRoutes.get('/:id', async (c) => {
 })
 
 // POST /api/content - Create new content (requires authentication)
-apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
+apiContentCrudRoutes.post('/', requireAuth(), requireRbac('content', 'create'), async (c) => {
   try {
     const db = c.env.DB
-    const user = c.get('user')
+    const user = c.get('user') as AuthUser | undefined
     const body = await c.req.json()
 
     const { collectionId, title, slug, status, data } = body
@@ -104,6 +139,15 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
 
     if (!title) {
       return c.json({ error: 'title is required' }, 400)
+    }
+
+    const collection = await db.prepare('SELECT name FROM collections WHERE id = ?').bind(collectionId).first() as any
+    if (!collection) {
+      return c.json({ error: 'Collection not found' }, 404)
+    }
+
+    if (!user || (await getCollectionPermissionScope(db, user.userId, collection.name, 'create')) === 'none') {
+      return c.json({ error: 'Insufficient permissions' }, 403)
     }
 
     // Generate slug from title if not provided
@@ -179,18 +223,28 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
 })
 
 // PUT /api/content/:id - Update content (requires authentication)
-apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
+apiContentCrudRoutes.put('/:id', requireAuth(), requireRbac('content', 'update'), async (c) => {
   try {
     const id = c.req.param('id')
     const db = c.env.DB
+    const user = c.get('user') as AuthUser | undefined
     const body = await c.req.json()
 
     // Check if content exists
-    const existingStmt = db.prepare('SELECT * FROM content WHERE id = ?')
+    const existingStmt = db.prepare(`
+      SELECT c.*, col.name as collection_name
+      FROM content c
+      JOIN collections col ON col.id = c.collection_id
+      WHERE c.id = ?
+    `)
     const existing = await existingStmt.bind(id).first() as any
 
     if (!existing) {
       return c.json({ error: 'Content not found' }, 404)
+    }
+
+    if (!(await canAccessContentRecord(db, user, existing, existing.collection_name, 'update'))) {
+      return c.json({ error: 'Insufficient permissions' }, 403)
     }
 
     // Build update fields dynamically
@@ -270,17 +324,27 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
 })
 
 // DELETE /api/content/:id - Delete content (requires authentication)
-apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
+apiContentCrudRoutes.delete('/:id', requireAuth(), requireRbac('content', 'delete'), async (c) => {
   try {
     const id = c.req.param('id')
     const db = c.env.DB
+    const user = c.get('user') as AuthUser | undefined
 
     // Check if content exists
-    const existingStmt = db.prepare('SELECT collection_id FROM content WHERE id = ?')
+    const existingStmt = db.prepare(`
+      SELECT c.collection_id, c.author_id, col.name as collection_name
+      FROM content c
+      JOIN collections col ON col.id = c.collection_id
+      WHERE c.id = ?
+    `)
     const existing = await existingStmt.bind(id).first() as any
 
     if (!existing) {
       return c.json({ error: 'Content not found' }, 404)
+    }
+
+    if (!(await canAccessContentRecord(db, user, existing, existing.collection_name, 'delete'))) {
+      return c.json({ error: 'Insufficient permissions' }, 403)
     }
 
     // Delete the content (hard delete for API, soft delete happens in admin routes)

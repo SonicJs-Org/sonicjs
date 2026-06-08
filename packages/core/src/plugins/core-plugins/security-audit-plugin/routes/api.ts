@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { requireAuth } from '../../../../middleware'
+import { RbacService } from '../../../../services/rbac'
 import { SecurityAuditService } from '../services/security-audit-service'
 import { BruteForceDetector } from '../services/brute-force-detector'
 import { PluginService } from '../../../../services'
@@ -14,7 +15,7 @@ apiRoutes.use('*', requireAuth())
 // Check admin role
 apiRoutes.use('*', async (c, next) => {
   const user = c.get('user')
-  if (user?.role !== 'admin') {
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
     return c.json({ error: 'Access denied' }, 403)
   }
   return next()

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { EventTrackingService } from '../services/event-tracking-service'
+import { RbacService } from '../../../../services/rbac'
 import type { Bindings, Variables } from '../../../../app'
 
 const apiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -71,7 +72,7 @@ apiRoutes.post('/', async (c) => {
 // GET /api/events - Query events (admin only)
 apiRoutes.get('/', async (c) => {
   const user = c.get('user')
-  if (!user || user.role !== 'admin') {
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
     return c.json({ error: 'Admin access required' }, 403)
   }
 
@@ -96,7 +97,7 @@ apiRoutes.get('/', async (c) => {
 // GET /api/events/stats - Aggregated event stats (admin only)
 apiRoutes.get('/stats', async (c) => {
   const user = c.get('user')
-  if (!user || user.role !== 'admin') {
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
     return c.json({ error: 'Admin access required' }, 403)
   }
 

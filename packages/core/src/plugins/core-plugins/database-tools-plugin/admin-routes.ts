@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { DatabaseToolsService } from './services/database-service'
 import { renderDatabaseTablePage, DatabaseTablePageData } from '../../../templates/pages/admin-database-table.template'
 import { requireAuth } from '../../../middleware'
+import { RbacService } from '../../../services/rbac'
 
 type Bindings = {
   DB: D1Database
@@ -26,7 +27,7 @@ export function createDatabaseToolsAdminRoutes() {
     try {
       const user = c.get('user')
       
-      if (!user || user.role !== 'admin') {
+      if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
         return c.json({ 
           success: false, 
           error: 'Unauthorized. Admin access required.' 
@@ -55,7 +56,7 @@ export function createDatabaseToolsAdminRoutes() {
     try {
       const user = c.get('user')
       
-      if (!user || user.role !== 'admin') {
+      if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
         return c.json({ 
           success: false, 
           error: 'Unauthorized. Admin access required.' 
@@ -100,7 +101,7 @@ export function createDatabaseToolsAdminRoutes() {
     try {
       const user = c.get('user')
       
-      if (!user || user.role !== 'admin') {
+      if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
         return c.json({ 
           success: false, 
           error: 'Unauthorized. Admin access required.' 
@@ -132,7 +133,7 @@ export function createDatabaseToolsAdminRoutes() {
     try {
       const user = c.get('user')
 
-      if (!user || user.role !== 'admin') {
+      if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
         return c.json({
           success: false,
           error: 'Unauthorized. Admin access required.'
@@ -161,7 +162,7 @@ export function createDatabaseToolsAdminRoutes() {
     try {
       const user = c.get('user')
 
-      if (!user || user.role !== 'admin') {
+      if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
         return c.json({
           success: false,
           error: 'Unauthorized. Admin access required.'
@@ -196,7 +197,7 @@ export function createDatabaseToolsAdminRoutes() {
     try {
       const user = c.get('user')
 
-      if (!user || user.role !== 'admin') {
+      if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) {
         return c.redirect('/admin/login')
       }
 

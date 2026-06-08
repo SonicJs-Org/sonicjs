@@ -1,8 +1,14 @@
 /**
- * Magic Link Authentication Plugin
+ * @deprecated magic-link-auth plugin (Phase 4)
  *
- * Provides passwordless authentication via email magic links
- * Users receive a secure one-time link to sign in without passwords
+ * This plugin mints legacy JWT auth_token cookies which SonicJS no longer reads.
+ * It is superseded by Better Auth's built-in magicLink() plugin, which is enabled
+ * by default in auth/config.ts. BA magic-link routes are at:
+ *   POST /auth/magic-link/send-magic-link
+ *   GET  /auth/magic-link/verify
+ *
+ * This file is kept for historical reference. Disable/uninstall it from
+ * /admin/plugins to avoid route conflicts with the BA equivalent.
  */
 
 import { Hono } from 'hono'

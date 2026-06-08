@@ -63,13 +63,27 @@ const createDefaultPlugins = () => [
   }
 ]
 
-// Mock the requireAuth middleware to bypass authentication in tests
+// Mock the requireAuth/requireRbac middleware to bypass authentication in tests
 vi.mock('../../middleware', () => ({
   requireAuth: () => {
     return async (c: any, next: any) => {
       c.set('user', createMockUser(mockUserRole))
       await next()
     }
+  },
+  requireRbac: () => async (c: any, next: any) => {
+    const user = c.get('user')
+    if (!user || user.role !== 'admin') return c.json({ error: 'Insufficient permissions' }, 403)
+    await next()
+  },
+}))
+
+// Plugin access now gates on RBAC (`plugins:manage`) instead of the legacy
+// `user.role === 'admin'` string. Drive can() from the same mockUserRole the
+// tests already toggle, so admin → allowed and non-admin → denied.
+vi.mock('../../services/rbac', () => ({
+  RbacService: class {
+    can = async () => mockUserRole === 'admin'
   }
 }))
 
@@ -269,8 +283,8 @@ describe('Admin Plugins Routes', () => {
       })
 
       expect(res.status).toBe(403)
-      const text = await res.text()
-      expect(text).toBe('Access denied')
+      const json = await res.json()
+      expect(json.error).toBe('Insufficient permissions')
     })
 
     it('should handle errors when loading plugins gracefully', async () => {
@@ -301,15 +315,16 @@ describe('Admin Plugins Routes', () => {
       expect(text).toBe('Plugin not found')
     })
 
-    it('should redirect non-admin users', async () => {
+    it('should deny access to non-admin users', async () => {
       mockUserRole = 'user'
 
       const res = await app.request('/admin/plugins/email', {
         method: 'GET'
       })
 
-      expect(res.status).toBe(302)
-      expect(res.headers.get('location')).toBe('/admin/plugins')
+      expect(res.status).toBe(403)
+      const json = await res.json()
+      expect(json.error).toBe('Insufficient permissions')
     })
   })
 
@@ -334,7 +349,7 @@ describe('Admin Plugins Routes', () => {
 
       expect(res.status).toBe(403)
       const json = await res.json()
-      expect(json.error).toBe('Access denied')
+      expect(json.error).toBe('Insufficient permissions')
     })
 
     it('should handle activation errors', async () => {
@@ -371,7 +386,7 @@ describe('Admin Plugins Routes', () => {
 
       expect(res.status).toBe(403)
       const json = await res.json()
-      expect(json.error).toBe('Access denied')
+      expect(json.error).toBe('Insufficient permissions')
     })
 
     it('should handle deactivation errors', async () => {
@@ -544,7 +559,7 @@ describe('Admin Plugins Routes', () => {
 
       expect(res.status).toBe(403)
       const json = await res.json()
-      expect(json.error).toBe('Access denied')
+      expect(json.error).toBe('Insufficient permissions')
     })
 
     it('should handle installation errors', async () => {
@@ -583,7 +598,7 @@ describe('Admin Plugins Routes', () => {
 
       expect(res.status).toBe(403)
       const json = await res.json()
-      expect(json.error).toBe('Access denied')
+      expect(json.error).toBe('Insufficient permissions')
     })
 
     it('should handle uninstall errors', async () => {
@@ -627,7 +642,7 @@ describe('Admin Plugins Routes', () => {
 
       expect(res.status).toBe(403)
       const json = await res.json()
-      expect(json.error).toBe('Access denied')
+      expect(json.error).toBe('Insufficient permissions')
     })
 
     it('should handle settings update errors', async () => {

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { WorkflowEngine } from './services/workflow-service'
 import { SchedulerService } from './services/scheduler'
 import { NotificationService } from './services/notifications'
+import { RbacService } from '../../../services/rbac'
 
 type Bindings = {
   DB: D1Database
@@ -30,7 +31,7 @@ export function createWorkflowRoutes() {
   // Debug endpoint to check workflow functionality
   workflowRoutes.get('/debug', async (c) => {
     const user = c.get('user')
-    if (!user || user.role !== 'admin') {
+    if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'content', 'manage'))) {
       return c.json({ error: 'Unauthorized' }, 403)
     }
 
@@ -201,7 +202,7 @@ export function createWorkflowRoutes() {
       return c.json({ error: 'Unauthorized' }, 401)
     }
 
-    if (user.role !== 'admin') {
+    if (!(await new RbacService(c.env.DB).can(user.userId, 'content', 'manage'))) {
       return c.json({ error: 'Forbidden' }, 403)
     }
 
@@ -241,7 +242,7 @@ export function createWorkflowRoutes() {
       return c.json({ error: 'Unauthorized' }, 401)
     }
 
-    if (user.role !== 'admin') {
+    if (!(await new RbacService(c.env.DB).can(user.userId, 'content', 'manage'))) {
       return c.json({ error: 'Forbidden' }, 403)
     }
 
@@ -298,7 +299,7 @@ export function createWorkflowRoutes() {
       return c.json({ error: 'Unauthorized' }, 401)
     }
 
-    if (user.role !== 'admin') {
+    if (!(await new RbacService(c.env.DB).can(user.userId, 'content', 'manage'))) {
       return c.json({ error: 'Forbidden' }, 403)
     }
 

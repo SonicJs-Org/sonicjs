@@ -1,7 +1,7 @@
-export { B as Bindings, a as SonicJSApp, S as SonicJSConfig, V as Variables, c as createSonicJSApp, s as setupCoreMiddleware, b as setupCoreRoutes } from './app-C9esKLmh.js';
-import { B as schema } from './plugin-bootstrap-P_ciLp_C.js';
-export { D as Collection, E as Content, C as CorePlugin, F as DbPlugin, G as DbPluginHook, L as LogCategory, H as LogConfig, a as LogEntry, b as LogFilter, c as LogLevel, d as Logger, I as Media, M as Migration, e as MigrationService, f as MigrationStatus, N as NewCollection, J as NewContent, K as NewLogConfig, O as NewMedia, Q as NewPlugin, R as NewPluginActivityLog, S as NewPluginAsset, T as NewPluginHook, U as NewPluginRoute, V as NewSystemLog, W as NewUser, X as NewWorkflowHistory, Y as PluginActivityLog, Z as PluginAsset, P as PluginBootstrapService, _ as PluginRoute, g as PluginServiceClass, $ as SystemLog, a0 as User, a1 as WorkflowHistory, a2 as apiTokens, h as backfillFormSubmissions, i as cleanupRemovedCollections, a3 as collections, a4 as content, a5 as contentVersions, j as createContentFromSubmission, k as deriveCollectionSchemaFromFormio, l as deriveSubmissionTitle, m as fullCollectionSync, n as getAvailableCollectionNames, o as getLogger, p as getManagedCollections, q as initLogger, a6 as insertCollectionSchema, a7 as insertContentSchema, a8 as insertLogConfigSchema, a9 as insertMediaSchema, aa as insertPluginActivityLogSchema, ab as insertPluginAssetSchema, ac as insertPluginHookSchema, ad as insertPluginRouteSchema, ae as insertPluginSchema, af as insertSystemLogSchema, ag as insertUserSchema, ah as insertWorkflowHistorySchema, r as isCollectionManaged, s as loadCollectionConfig, t as loadCollectionConfigs, ai as logConfig, u as mapFormStatusToContentStatus, aj as media, ak as pluginActivityLog, al as pluginAssets, am as pluginHooks, an as pluginRoutes, ao as plugins, v as registerCollections, ap as selectCollectionSchema, aq as selectContentSchema, ar as selectLogConfigSchema, as as selectMediaSchema, at as selectPluginActivityLogSchema, au as selectPluginAssetSchema, av as selectPluginHookSchema, aw as selectPluginRouteSchema, ax as selectPluginSchema, ay as selectSystemLogSchema, az as selectUserSchema, aA as selectWorkflowHistorySchema, w as syncAllFormCollections, x as syncCollection, y as syncCollections, z as syncFormCollection, aB as systemLogs, aC as users, A as validateCollectionConfig, aD as workflowHistory } from './plugin-bootstrap-P_ciLp_C.js';
-export { AuthManager, Permission, PermissionManager, UserPermissions, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeaders, securityLoggingMiddleware } from './middleware.js';
+export { B as Bindings, a as SonicJSApp, S as SonicJSConfig, V as Variables, c as createSonicJSApp, s as setupCoreMiddleware, b as setupCoreRoutes } from './app-BkKXUqNy.js';
+import { B as schema } from './plugin-bootstrap-DrtkCRyo.js';
+export { D as Collection, E as Content, C as CorePlugin, F as DbPlugin, G as DbPluginHook, L as LogCategory, H as LogConfig, a as LogEntry, b as LogFilter, c as LogLevel, d as Logger, I as Media, M as Migration, e as MigrationService, f as MigrationStatus, N as NewCollection, J as NewContent, K as NewLogConfig, O as NewMedia, Q as NewPlugin, R as NewPluginActivityLog, S as NewPluginAsset, T as NewPluginHook, U as NewPluginRoute, V as NewSystemLog, W as NewUser, X as NewWorkflowHistory, Y as PluginActivityLog, Z as PluginAsset, P as PluginBootstrapService, _ as PluginRoute, g as PluginServiceClass, $ as SystemLog, a0 as User, a1 as WorkflowHistory, a2 as apiTokens, h as backfillFormSubmissions, i as cleanupRemovedCollections, a3 as collections, a4 as content, a5 as contentVersions, j as createContentFromSubmission, k as deriveCollectionSchemaFromFormio, l as deriveSubmissionTitle, m as fullCollectionSync, n as getAvailableCollectionNames, o as getLogger, p as getManagedCollections, q as initLogger, a6 as insertCollectionSchema, a7 as insertContentSchema, a8 as insertLogConfigSchema, a9 as insertMediaSchema, aa as insertPluginActivityLogSchema, ab as insertPluginAssetSchema, ac as insertPluginHookSchema, ad as insertPluginRouteSchema, ae as insertPluginSchema, af as insertSystemLogSchema, ag as insertUserSchema, ah as insertWorkflowHistorySchema, r as isCollectionManaged, s as loadCollectionConfig, t as loadCollectionConfigs, ai as logConfig, u as mapFormStatusToContentStatus, aj as media, ak as pluginActivityLog, al as pluginAssets, am as pluginHooks, an as pluginRoutes, ao as plugins, v as registerCollections, ap as selectCollectionSchema, aq as selectContentSchema, ar as selectLogConfigSchema, as as selectMediaSchema, at as selectPluginActivityLogSchema, au as selectPluginAssetSchema, av as selectPluginHookSchema, aw as selectPluginRouteSchema, ax as selectPluginSchema, ay as selectSystemLogSchema, az as selectUserSchema, aA as selectWorkflowHistorySchema, w as syncAllFormCollections, x as syncCollection, y as syncCollections, z as syncFormCollection, aB as systemLogs, aC as users, A as validateCollectionConfig, aD as workflowHistory } from './plugin-bootstrap-DrtkCRyo.js';
+export { AuthManager, Permission, PermissionManager, UserPermissions, bootstrapMiddleware, cacheHeaders, compressionMiddleware, detailedLoggingMiddleware, getActivePlugins, isPluginActive, logActivity, loggingMiddleware, optionalAuth, performanceLoggingMiddleware, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeaders, securityLoggingMiddleware } from './middleware.js';
 export { H as HookSystemImpl, a as HookUtils, P as PluginManagerClass, b as PluginRegistryImpl, c as PluginValidatorClass, S as ScopedHookSystemClass } from './plugin-manager-Efx9RyDX.js';
 export { ROUTES_INFO, adminApiRoutes, adminCheckboxRoutes, adminCodeExamplesRoutes, adminCollectionsRoutes, adminContentRoutes, adminDashboardRoutes, adminDesignRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, adminTestimonialsRoutes, adminUsersRoutes, apiContentCrudRoutes, apiMediaRoutes, apiRoutes, apiSystemRoutes, authRoutes } from './routes.js';
 export { A as AlertData, C as ConfirmationDialogOptions, F as Filter, a as FilterBarData, b as FilterOption, c as FormData, d as FormField, P as PaginationData, T as TableColumn, e as TableData, g as getConfirmationDialogScript, r as renderAlert, f as renderConfirmationDialog, h as renderFilterBar, i as renderForm, j as renderFormField, k as renderPagination, l as renderTable } from './filter-bar.template-DlVYMk-T.js';
@@ -14,6 +14,13 @@ import * as drizzle_orm_d1 from 'drizzle-orm/d1';
 import { Hono, MiddlewareHandler, Context } from 'hono';
 import { z } from 'zod';
 import { D1Database as D1Database$1, KVNamespace, R2Bucket } from '@cloudflare/workers-types';
+import 'better-auth/client';
+import 'better-auth/plugins/two-factor';
+import 'better-auth/plugins/email-otp';
+import 'better-auth';
+import 'better-auth/plugins/magic-link';
+import 'better-call';
+import 'zod/v4/core';
 import 'drizzle-zod';
 import 'drizzle-orm/sqlite-core';
 import 'hono/types';
@@ -518,17 +525,16 @@ declare class PluginHelpers {
 }
 
 /**
- * OAuth Providers Plugin
+ * @deprecated oauth-providers plugin (Phase 4)
  *
- * OAuth2/OIDC social login support for SonicJS.
- * Phase 1: Core OAuth2 authorization code flow with GitHub and Google providers.
+ * This plugin mints legacy JWT auth_token cookies which SonicJS no longer reads.
+ * It is superseded by Better Auth's built-in social providers (github, google,
+ * and any other BA socialProvider). Configure them via GITHUB_CLIENT_ID /
+ * GITHUB_CLIENT_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET environment
+ * variables — no plugin code required; BA handles the OAuth dance natively.
  *
- * Routes:
- *   GET  /auth/oauth/:provider          → Redirect to provider authorization
- *   GET  /auth/oauth/:provider/callback → Handle OAuth callback
- *   POST /auth/oauth/link               → Link OAuth provider to logged-in account
- *   POST /auth/oauth/unlink             → Unlink OAuth provider from account
- *   GET  /auth/oauth/accounts           → List linked OAuth accounts for current user
+ * This file is kept for historical reference. Disable/uninstall it from
+ * /admin/plugins and set the env vars instead.
  */
 
 declare function createOAuthProvidersPlugin(): Plugin;

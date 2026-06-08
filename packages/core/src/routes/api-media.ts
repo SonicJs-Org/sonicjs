@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAuth } from '../middleware'
+import { RbacService } from '../services/rbac'
 import type { Bindings, Variables } from '../app'
 
 // Helper function to generate short IDs (replacement for nanoid)
@@ -402,8 +403,9 @@ apiMediaRoutes.post('/bulk-delete', async (c) => {
           continue
         }
 
-        // Check permissions (only allow deletion by uploader or admin)
-        if (fileRecord.uploaded_by !== user.userId && user.role !== 'admin') {
+        // Check permissions: uploader can always delete their own; otherwise
+        // requires media:delete with 'any' scope (the RBAC successor to admin).
+        if (fileRecord.uploaded_by !== user.userId && (await new RbacService(c.env.DB).getPermissionScope(user.userId, 'media', 'delete')) !== 'any') {
           errors.push({ fileId, error: 'Permission denied' })
           continue
         }
@@ -534,8 +536,9 @@ apiMediaRoutes.post('/bulk-move', async (c) => {
           continue
         }
 
-        // Check permissions (only allow move by uploader or admin)
-        if (fileRecord.uploaded_by !== user.userId && user.role !== 'admin') {
+        // Check permissions: uploader can always move their own; otherwise
+        // requires media:update with 'any' scope (the RBAC successor to admin).
+        if (fileRecord.uploaded_by !== user.userId && (await new RbacService(c.env.DB).getPermissionScope(user.userId, 'media', 'update')) !== 'any') {
           errors.push({ fileId, error: 'Permission denied' })
           continue
         }
@@ -648,8 +651,9 @@ apiMediaRoutes.delete('/:id', async (c) => {
       return c.json({ error: 'File not found' }, 404)
     }
 
-    // Check permissions (only allow deletion by uploader or admin)
-    if (fileRecord.uploaded_by !== user.userId && user.role !== 'admin') {
+    // Check permissions: uploader can always delete their own; otherwise
+    // requires media:delete with 'any' scope (the RBAC successor to admin).
+    if (fileRecord.uploaded_by !== user.userId && (await new RbacService(c.env.DB).getPermissionScope(user.userId, 'media', 'delete')) !== 'any') {
       return c.json({ error: 'Permission denied' }, 403)
     }
 
@@ -690,8 +694,9 @@ apiMediaRoutes.patch('/:id', async (c) => {
       return c.json({ error: 'File not found' }, 404)
     }
 
-    // Check permissions (only allow updates by uploader or admin)
-    if (fileRecord.uploaded_by !== user.userId && user.role !== 'admin') {
+    // Check permissions: uploader can always update their own; otherwise
+    // requires media:update with 'any' scope (the RBAC successor to admin).
+    if (fileRecord.uploaded_by !== user.userId && (await new RbacService(c.env.DB).getPermissionScope(user.userId, 'media', 'update')) !== 'any') {
       return c.json({ error: 'Permission denied' }, 403)
     }
 

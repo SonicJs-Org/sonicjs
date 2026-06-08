@@ -1,25 +1,408 @@
 'use strict';
 
-var chunkBX75LZES_cjs = require('./chunk-BX75LZES.cjs');
-var chunkXWQVFWPW_cjs = require('./chunk-XWQVFWPW.cjs');
-var chunkV4V54BY3_cjs = require('./chunk-V4V54BY3.cjs');
-var chunkQOZZJZ76_cjs = require('./chunk-QOZZJZ76.cjs');
-var chunk7KR6GOY3_cjs = require('./chunk-7KR6GOY3.cjs');
-var chunk4ZSNJDLS_cjs = require('./chunk-4ZSNJDLS.cjs');
-var chunkOHYBNCVL_cjs = require('./chunk-OHYBNCVL.cjs');
-var chunkUYJ6TJHX_cjs = require('./chunk-UYJ6TJHX.cjs');
-var chunkZUXOAZWZ_cjs = require('./chunk-ZUXOAZWZ.cjs');
+var chunkZHVJ3NSY_cjs = require('./chunk-ZHVJ3NSY.cjs');
+var chunkN5LGKCE3_cjs = require('./chunk-N5LGKCE3.cjs');
+require('./chunk-PQNVO5QM.cjs');
+var chunkRGJ4RQ3Z_cjs = require('./chunk-RGJ4RQ3Z.cjs');
+var chunk4RVMY6FI_cjs = require('./chunk-4RVMY6FI.cjs');
+var chunkQ2NTBJYS_cjs = require('./chunk-Q2NTBJYS.cjs');
+var chunk323GE63K_cjs = require('./chunk-323GE63K.cjs');
+var chunk3ADEYHN2_cjs = require('./chunk-3ADEYHN2.cjs');
+var chunkV4LDNRTP_cjs = require('./chunk-V4LDNRTP.cjs');
+var chunkYMWCPRVW_cjs = require('./chunk-YMWCPRVW.cjs');
+var chunkOZDZSWW7_cjs = require('./chunk-OZDZSWW7.cjs');
+var chunkNIUAH5PZ_cjs = require('./chunk-NIUAH5PZ.cjs');
+var chunkABB34XUS_cjs = require('./chunk-ABB34XUS.cjs');
 var chunk635JAMSE_cjs = require('./chunk-635JAMSE.cjs');
-var chunk74BFRAQS_cjs = require('./chunk-74BFRAQS.cjs');
+var chunk2HWICA5J_cjs = require('./chunk-2HWICA5J.cjs');
 require('./chunk-P3XDZL6Q.cjs');
 var chunkRCQ2HIQD_cjs = require('./chunk-RCQ2HIQD.cjs');
 var chunkMNWKYY5E_cjs = require('./chunk-MNWKYY5E.cjs');
 var chunkQTFKZBLC_cjs = require('./chunk-QTFKZBLC.cjs');
 require('./chunk-IGJUBJBW.cjs');
 var hono = require('hono');
-var cookie = require('hono/cookie');
-var zod = require('zod');
 var d1 = require('drizzle-orm/d1');
+var cookie = require('hono/cookie');
+
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
+var adminRbacRoutes = new hono.Hono();
+adminRbacRoutes.use("*", chunkQ2NTBJYS_cjs.requireRbac("rbac", "manage"));
+var esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+var TABS = `
+  <div class="border-b border-zinc-950/10 dark:border-white/10 mb-6">
+    <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+      <a href="/admin/users" class="whitespace-nowrap border-b-2 border-transparent px-1 py-3 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-200">Users</a>
+      <a href="/admin/rbac" aria-current="page" class="whitespace-nowrap border-b-2 border-cyan-500 px-1 py-3 text-sm font-medium text-cyan-600 dark:text-cyan-400">Roles &amp; Permissions</a>
+    </nav>
+  </div>`;
+adminRbacRoutes.get("/", async (c) => {
+  const rbac = new chunk323GE63K_cjs.RbacService(c.env.DB);
+  const [roles, verbs, resources, grants] = await Promise.all([
+    rbac.getRoles(),
+    rbac.getVerbs(),
+    rbac.getResources(),
+    rbac.getGrants()
+  ]);
+  const matrixVerbs = verbs.filter((v) => v.name !== "access");
+  const matrixResources = resources.filter((r) => r.key !== "portal");
+  const requested = c.req.queries("roles") || [];
+  const hasCompareSelection = c.req.query("compare") === "1";
+  const selectedIds = hasCompareSelection ? requested : roles.slice(0, 3).map((r) => r.id);
+  const selectedRoles = roles.filter((r) => selectedIds.includes(r.id));
+  const isAdmin = (r) => r.name === "admin";
+  const grantsByRole = /* @__PURE__ */ new Map();
+  for (const r of roles) grantsByRole.set(r.id, /* @__PURE__ */ new Map());
+  for (const g of grants) grantsByRole.get(g.role_id)?.set(`${g.resource}|${g.verb}`, g.scope || "any");
+  const cellScope = (role, res, verb) => isAdmin(role) ? "any" : grantsByRole.get(role.id)?.get(`${res}|${verb}`) || "none";
+  const grantMatches = (grantResource, grantVerb, resource, verb) => {
+    const resourceOk = grantResource === "*" || grantResource === resource || grantResource === "collection:*" && resource.startsWith("collection:");
+    return resourceOk && (grantVerb === "*" || grantVerb === verb || grantVerb === "manage");
+  };
+  const roleHasPortalAccess = (role) => {
+    if (isAdmin(role)) return true;
+    const roleGrants = grantsByRole.get(role.id);
+    if (!roleGrants) return false;
+    return [...roleGrants.keys()].some((key) => {
+      const idx = key.lastIndexOf("|");
+      if (idx === -1) return false;
+      return grantMatches(key.slice(0, idx), key.slice(idx + 1), "portal", "access");
+    });
+  };
+  const roleHasExplicitPortalAccess = (role) => isAdmin(role) || grantsByRole.get(role.id)?.has("portal|access") || false;
+  const supportsOwnScope = (res, verb) => (res === "content" || res.startsWith("collection:")) && ["read", "update", "delete"].includes(verb);
+  const SYSTEM_ROLE_COLORS = {
+    admin: "hsl(45 94% 54%)",
+    editor: "hsl(199 89% 60%)",
+    author: "hsl(258 90% 76%)",
+    viewer: "hsl(160 64% 52%)"
+  };
+  const customRoleColor = (index) => `hsl(${Math.round((315 + index * 137.508) % 360)} 82% 58%)`;
+  const assignedRoleColors = /* @__PURE__ */ new Map();
+  let customRoleIndex = 0;
+  roles.forEach((role) => {
+    const color = SYSTEM_ROLE_COLORS[role.name] || customRoleColor(customRoleIndex++);
+    assignedRoleColors.set(role.id, color);
+  });
+  const roleColor = (seed) => assignedRoleColors.get(seed) || customRoleColor(0);
+  const roleTone = (seed) => {
+    const color = roleColor(seed);
+    return [
+      `--role-color:${color}`,
+      `--role-bg:${color.replace(")", " / 0.10)")}`,
+      `--role-bg-strong:${color.replace(")", " / 0.18)")}`,
+      `--role-border:${color.replace(")", " / 0.45)")}`,
+      `--role-ring:${color.replace(")", " / 0.28)")}`
+    ].join(";");
+  };
+  const roleStyle = (seed, extra = "") => `style="${roleTone(seed)};${extra}"`;
+  const SCOPE_HEX = { none: "#9ca3af", own: "#f59e0b", any: "#10b981" };
+  const seg = (key, val, scope, disabled, roleId, resKey, verbName) => `<label class="scope ${disabled ? "pointer-events-none" : "cursor-pointer"}" title="${val.charAt(0).toUpperCase() + val.slice(1)}" style="--sc:${SCOPE_HEX[val]}"><input type="radio" name="${esc(key)}" value="${val}" data-role="${esc(
+    roleId
+  )}" data-res="${esc(resKey)}" data-verb="${esc(verbName)}" ${scope === val ? "checked" : ""} ${disabled ? "disabled" : ""}><span></span></label>`;
+  const scopeSwitch = (key, scope, ownSupported, disabled, roleId, resKey, verbName) => `<div class="inline-flex flex-col items-center gap-[3px] ${disabled ? "opacity-60" : ""}" role="radiogroup">${seg(key, "any", scope, disabled, roleId, resKey, verbName)}${ownSupported ? seg(key, "own", scope, disabled, roleId, resKey, verbName) : ""}${seg(key, "none", scope, disabled, roleId, resKey, verbName)}</div>`;
+  const headRow1 = matrixVerbs.map(
+    (v) => `<th colspan="${selectedRoles.length}" class="px-2 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border-l border-zinc-950/10 dark:border-white/10" title="${esc(
+      v.description || ""
+    )}">${esc(v.name)}${v.is_system ? "" : ' <span class="text-cyan-500">\u2726</span>'}</th>`
+  ).join("");
+  const headRow2 = matrixVerbs.map(
+    (v) => selectedRoles.map(
+      (r, i) => `<th class="px-1 py-2 align-bottom text-[11px] font-medium text-zinc-500 dark:text-zinc-400 ${i === 0 ? "border-l border-zinc-950/10 dark:border-white/10" : ""}" ${roleStyle(
+        r.id,
+        "background:var(--role-bg);border-color:var(--role-border);box-shadow:inset 0 -2px 0 var(--role-color);"
+      )} title="${esc(v.name)} \xB7 ${esc(r.display_name)}"><div class="flex flex-col items-center gap-1"><span class="h-2 w-2 rounded-full" style="background:var(--role-color)"></span><span class="[writing-mode:vertical-rl] rotate-180 whitespace-nowrap">${esc(
+        r.display_name
+      )}${isAdmin(r) ? " \u{1F512}" : ""}</span></div></th>`
+    ).join("")
+  ).join("");
+  const rows = matrixResources.map((res) => {
+    const cells = matrixVerbs.map(
+      (v) => selectedRoles.map((r, i) => {
+        const key = `g|${r.id}|${res.key}|${v.name}`;
+        const scope = cellScope(r, res.key, v.name);
+        const dis = isAdmin(r);
+        const ownSupported = supportsOwnScope(res.key, v.name);
+        return `<td class="px-2 py-1.5 text-center ${i === 0 ? "border-l border-zinc-950/5 dark:border-white/5" : ""}" ${roleStyle(
+          r.id,
+          "background:var(--role-bg);border-color:var(--role-border);"
+        )}>${scopeSwitch(key, scope, ownSupported, dis, r.id, res.key, v.name)}</td>`;
+      }).join("")
+    ).join("");
+    const isWild = res.key === "*" || res.key === "collection:*";
+    const resColor = isWild ? "text-amber-600 dark:text-amber-400 font-medium" : res.group === "collection" ? "text-lime-600 dark:text-lime-400" : "text-zinc-800 dark:text-zinc-200";
+    return `<tr class="border-t border-zinc-950/5 dark:border-white/5">
+        <td class="px-3 py-1.5 text-left whitespace-nowrap sticky left-0 bg-white dark:bg-zinc-900 ${resColor}">${esc(
+      res.label
+    )}<div class="text-[11px] text-zinc-400 dark:text-zinc-500">${esc(res.key)}</div></td>${cells}</tr>`;
+  }).join("");
+  const roleTabs = roles.map((r) => {
+    const sel = selectedIds.includes(r.id);
+    return `<label class="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium cursor-pointer select-none ${sel ? "text-zinc-950 dark:text-white" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10"}" ${roleStyle(
+      r.id,
+      sel ? "background:var(--role-bg-strong);border-color:var(--role-border);box-shadow:0 0 0 1px var(--role-ring);" : "background:var(--role-bg);border-color:var(--role-border);"
+    )}>
+        <span class="h-2.5 w-2.5 rounded-full" style="background:var(--role-color)"></span>
+        <input type="checkbox" name="roles" value="${esc(r.id)}" ${sel ? "checked" : ""} onchange="this.form.submit()" class="h-3.5 w-3.5 rounded border-white/40" style="accent-color:var(--role-color)">
+        ${esc(r.display_name)}${r.is_system ? "" : " \u2726"}
+      </label>`;
+  }).join("");
+  const saveRoleIds = selectedRoles.filter((r) => !isAdmin(r)).map((r) => r.id).join(",");
+  const firstSelected = selectedRoles[0];
+  const inpSm = "rounded-md bg-white dark:bg-white/5 px-2 py-1 text-sm text-zinc-900 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15";
+  const roleList = roles.map((r) => {
+    const portalChecked = roleHasPortalAccess(r);
+    const portalDisabled = isAdmin(r);
+    return `<li class="py-2 border-b border-zinc-950/5 dark:border-white/5">
+          <form method="post" action="/admin/rbac/roles/${esc(r.id)}" class="flex items-center gap-2 flex-wrap">
+            <input class="${inpSm} flex-1 min-w-[120px]" name="display_name" value="${esc(
+      r.display_name
+    )}" required>
+            ${r.is_system ? `<code class="text-xs text-zinc-500 dark:text-zinc-400">${esc(
+      r.name
+    )}</code><span class="rounded-full bg-zinc-100 dark:bg-white/10 px-2 py-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">system</span>` : `<input class="${inpSm} w-28" name="name" value="${esc(r.name)}" required>`}
+            <button class="rounded-md bg-zinc-200 dark:bg-white/10 px-2.5 py-1 text-xs font-medium text-zinc-900 dark:text-white hover:bg-zinc-300 dark:hover:bg-white/20">Save</button>
+            ${r.is_system ? "" : `<button formaction="/admin/rbac/roles/${esc(
+      r.id
+    )}/delete" formnovalidate onclick="return confirm('Delete role ${esc(
+      r.name
+    )}?')" class="text-xs text-red-600 dark:text-red-400 hover:underline">delete</button>`}
+            <label class="ml-auto inline-flex items-center gap-2 rounded-md bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-500/20">
+              <input type="checkbox" name="portal_access" value="1" ${portalChecked ? "checked" : ""} ${portalDisabled ? "disabled" : ""} class="h-3.5 w-3.5 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
+              Access portal
+            </label>
+          </form>
+        </li>`;
+  }).join("");
+  const verbList = matrixVerbs.map(
+    (v) => `<li class="flex items-center justify-between py-1.5 border-b border-zinc-950/5 dark:border-white/5">
+          <code class="text-sm text-zinc-900 dark:text-white">${esc(v.name)}</code>
+          ${v.is_system ? '<span class="rounded-full bg-zinc-100 dark:bg-white/10 px-2 py-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">system</span>' : `<form method="post" action="/admin/rbac/verbs/${esc(
+      v.id
+    )}/delete"><button class="text-xs text-red-600 dark:text-red-400 hover:underline">delete</button></form>`}
+        </li>`
+  ).join("");
+  const btn = "inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100";
+  const inp = "rounded-md bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15";
+  const card = "rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-5";
+  const scopeStyles = `<style>
+    .scope{display:block;line-height:0}
+    .scope > input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+    .scope > span{display:block;height:9px;width:26px;border-radius:9999px;background:rgba(140,140,150,.22);transition:background .15s,box-shadow .15s}
+    .scope > input:checked + span{background:var(--sc);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+    .scope > input:disabled + span{opacity:.55}
+    .scope:hover > span{outline:2px solid var(--sc);outline-offset:1px}
+  </style>`;
+  const swatch = (hex, label) => `<span class="inline-flex items-center gap-1.5"><span class="inline-block h-2.5 w-5 rounded-full" style="background:${hex}"></span>${label}</span>`;
+  const scopeLegend = `<div class="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+    <span class="font-medium text-zinc-700 dark:text-zinc-300">Scope (top\u2192bottom):</span>
+    ${swatch("#10b981", "Any")}${swatch("#f59e0b", "Own")}${swatch("#9ca3af", "None")}
+  </div>`;
+  const content2 = `
+  ${scopeStyles}
+  ${TABS}
+  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. Backend entry is controlled by the <strong>Access portal</strong> checkbox in the Roles section. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">\u{1F512} Administrator</span> is full-access and read-only.</p>
+
+  <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
+    <input type="hidden" name="compare" value="1">
+    <span class="text-xs text-zinc-500 dark:text-zinc-400 mr-1">Compare roles:</span>${roleTabs}
+    <a href="/admin/rbac?compare=1" class="ml-auto inline-flex items-center gap-1 rounded-md border border-zinc-300 dark:border-white/15 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10">Clear</a>
+  </form>
+
+  <form method="post" action="/admin/rbac/grants" class="${card} mb-8 overflow-x-auto">
+    <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
+    <input type="hidden" name="compare" value="1">
+    ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join("")}
+    ${selectedRoles.filter((r) => !isAdmin(r) && roleHasExplicitPortalAccess(r)).map((r) => `<input type="hidden" name="g|${esc(r.id)}|portal|access" value="any">`).join("")}
+    <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
+      <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? "" : "s"})</span></h3>
+      ${scopeLegend}
+      <button type="submit" class="${btn}">Save changes</button>
+    </div>
+    ${selectedRoles.length === 0 ? '<p class="text-sm text-zinc-500">Select one or more roles above to compare.</p>' : `<table class="w-full text-sm border-collapse">
+      <thead>
+        <tr class="border-b border-zinc-950/10 dark:border-white/10">
+          <th rowspan="2" class="px-3 py-2 text-left text-xs font-semibold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-900">Resource</th>
+          ${headRow1}
+        </tr>
+        <tr class="border-b border-zinc-950/10 dark:border-white/10">${headRow2}</tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`}
+  </form>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="${card}">
+      <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
+      <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions stay in the matrix above.</p>
+      <ul class="mb-4">${roleList}</ul>
+      <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2">
+        <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
+        <input class="${inp}" type="text" name="display_name" placeholder="Display name" required>
+        <button class="${btn}">Add role</button>
+      </form>
+    </div>
+    <div class="${card}">
+      <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Verbs</h3>
+      <ul class="mb-4">${verbList}</ul>
+      <form method="post" action="/admin/rbac/verbs" class="flex flex-wrap gap-2">
+        <input class="${inp}" type="text" name="name" placeholder="custom verb (e.g. publish)" required>
+        <button class="${btn}">Add verb</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="${card}">
+    <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Live permission check</h3>
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-sm text-zinc-500">resource</span><input class="${inp}" type="text" id="ck_res" value="collection:blog_posts">
+      <span class="text-sm text-zinc-500">verb</span><input class="${inp}" type="text" id="ck_verb" value="update">
+      <button type="button" class="${btn}" onclick="ckme()">Can I?</button>
+      ${firstSelected ? `<button type="button" class="${btn}" onclick="ckrole()">Can "${esc(firstSelected.name)}"?</button>` : ""}
+    </div>
+    <pre id="out" class="mt-3 rounded-lg bg-zinc-950 text-lime-400 p-3 text-xs whitespace-pre-wrap">(results here)</pre>
+  </div>
+
+  <script>
+    // "All resources" cascade \u2014 per role column: choosing Own/Any on the '*'
+    // row selects (and locks) that role's whole verb column. Cells are radio
+    // segmented switches (each its own group by name); drive .checked here.
+    function cascade(role, verb){
+      var master=document.querySelector('input[type=radio][data-res="*"][data-role="'+role+'"][data-verb="'+verb+'"]:checked');
+      var val=master?master.value:'none';
+      document.querySelectorAll('input[type=radio][data-role="'+role+'"][data-verb="'+verb+'"]:not([data-res="*"])').forEach(function(radio){
+        if(val!=='none'){ radio.checked=(radio.value===val); radio.disabled=true; }
+        else { radio.disabled=false; }
+      });
+    }
+    document.querySelectorAll('input[type=radio][data-res="*"]').forEach(function(radio){
+      radio.addEventListener('change', function(){ cascade(radio.dataset.role, radio.dataset.verb); });
+    });
+    document.querySelectorAll('input[type=radio][data-res="*"]:checked').forEach(function(radio){
+      if(radio.value !== 'none' && !radio.disabled) cascade(radio.dataset.role, radio.dataset.verb);
+    });
+    var out=document.getElementById('out');
+    function j(u){fetch(u,{credentials:'include'}).then(function(r){return r.text().then(function(t){out.textContent=r.status+' '+u+'\\n'+t;});});}
+    function ckme(){j('/admin/rbac/check?resource='+encodeURIComponent(ck_res.value)+'&verb='+encodeURIComponent(ck_verb.value));}
+    function ckrole(){j('/admin/rbac/check?role=${esc(firstSelected?.id || "")}&resource='+encodeURIComponent(ck_res.value)+'&verb='+encodeURIComponent(ck_verb.value));}
+  </script>`;
+  const u = c.get("user");
+  return c.html(
+    chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst({
+      title: "Roles & Permissions",
+      pageTitle: "Roles & Permissions",
+      currentPath: "/admin/users",
+      version: chunk2HWICA5J_cjs.getCoreVersion(),
+      user: u ? { name: u.email || "Admin", email: u.email || "", role: u.role || "admin" } : void 0,
+      content: content2
+    })
+  );
+});
+adminRbacRoutes.post("/grants", async (c) => {
+  const form = await c.req.formData();
+  const saveRoleIds = String(form.get("save_roles") || "").split(",").filter(Boolean);
+  const viewRoleIds = form.getAll("view_roles").map((v) => String(v));
+  const pairsByRole = /* @__PURE__ */ new Map();
+  for (const id of saveRoleIds) pairsByRole.set(id, []);
+  for (const key of form.keys()) {
+    if (!key.startsWith("g|")) continue;
+    const parts = key.split("|");
+    if (parts.length < 4) continue;
+    const roleId = parts[1];
+    const verb = parts[parts.length - 1];
+    const resource = parts.slice(2, -1).join("|");
+    const scope = String(form.get(key) || "none");
+    if (pairsByRole.has(roleId) && resource && verb && (scope === "own" || scope === "any")) {
+      pairsByRole.get(roleId).push({ resource, verb, scope });
+    }
+  }
+  const rbac = new chunk323GE63K_cjs.RbacService(c.env.DB);
+  for (const id of saveRoleIds) {
+    await rbac.setRoleGrants(id, pairsByRole.get(id) || []);
+  }
+  if (c.env.CACHE_KV) {
+    try {
+      const listed = await c.env.CACHE_KV.list({ prefix: "rbac:perms:" });
+      await Promise.all(listed.keys.map((k) => c.env.CACHE_KV.delete(k.name)));
+    } catch {
+    }
+  }
+  const redirectRoleIds = viewRoleIds.length ? viewRoleIds : saveRoleIds;
+  const qs = [
+    form.get("compare") === "1" ? "compare=1" : "",
+    ...redirectRoleIds.map((id) => `roles=${encodeURIComponent(id)}`)
+  ].filter(Boolean).join("&");
+  return c.redirect(`/admin/rbac${qs ? `?${qs}` : ""}`);
+});
+adminRbacRoutes.post("/roles", async (c) => {
+  const form = await c.req.formData();
+  const name = String(form.get("name") || "").trim();
+  const displayName = String(form.get("display_name") || "").trim();
+  if (name && displayName) {
+    try {
+      await new chunk323GE63K_cjs.RbacService(c.env.DB).createRole(name, displayName);
+    } catch {
+    }
+  }
+  return c.redirect("/admin/rbac");
+});
+adminRbacRoutes.post("/roles/:id", async (c) => {
+  const form = await c.req.formData();
+  const displayName = String(form.get("display_name") || "").trim();
+  const name = form.get("name") ? String(form.get("name")).trim() : void 0;
+  const description = String(form.get("description") || "").trim();
+  const roleId = c.req.param("id");
+  const portalAccess = form.get("portal_access") === "1";
+  if (displayName) {
+    try {
+      const rbac = new chunk323GE63K_cjs.RbacService(c.env.DB);
+      await rbac.updateRole(roleId, displayName, description, name);
+      if (roleId !== "role-admin") {
+        await rbac.setRolePortalAccess(roleId, portalAccess);
+      }
+    } catch {
+    }
+  }
+  return c.redirect(`/admin/rbac?compare=1&roles=${encodeURIComponent(roleId)}`);
+});
+adminRbacRoutes.post("/roles/:id/delete", async (c) => {
+  await new chunk323GE63K_cjs.RbacService(c.env.DB).deleteRole(c.req.param("id"));
+  return c.redirect("/admin/rbac");
+});
+adminRbacRoutes.post("/verbs", async (c) => {
+  const form = await c.req.formData();
+  const name = String(form.get("name") || "").trim();
+  if (name) {
+    try {
+      await new chunk323GE63K_cjs.RbacService(c.env.DB).createVerb(name);
+    } catch {
+    }
+  }
+  return c.redirect("/admin/rbac");
+});
+adminRbacRoutes.post("/verbs/:id/delete", async (c) => {
+  await new chunk323GE63K_cjs.RbacService(c.env.DB).deleteVerb(c.req.param("id"));
+  return c.redirect("/admin/rbac");
+});
+adminRbacRoutes.get("/check", async (c) => {
+  const rbac = new chunk323GE63K_cjs.RbacService(c.env.DB);
+  const resource = c.req.query("resource") || "";
+  const verb = c.req.query("verb") || "";
+  const roleId = c.req.query("role");
+  if (roleId) {
+    const grants = await rbac.getGrants();
+    const roleGrants = grants.filter((g) => g.role_id === roleId);
+    const matchingScopes = roleGrants.filter(
+      (g) => (g.resource === "*" || g.resource === resource || g.resource === "collection:*" && resource.startsWith("collection:")) && (g.verb === "*" || g.verb === verb || g.verb === "manage")
+    ).map((g) => g.scope || "any");
+    const scope2 = matchingScopes.includes("any") ? "any" : matchingScopes.includes("own") ? "own" : "none";
+    return c.json({ role: roleId, resource, verb, allowed: scope2 !== "none", scope: scope2 });
+  }
+  const user = c.get("user");
+  if (!user) return c.json({ error: "not signed in" }, 401);
+  const scope = await rbac.getPermissionScope(user.userId, resource, verb);
+  const perms = await rbac.permissionsForUser(user.userId);
+  return c.json({ user: user.userId, resource, verb, allowed: scope !== "none", scope, permissions: perms });
+});
 
 // src/plugins/core-plugins/database-tools-plugin/services/database-service.ts
 var DatabaseToolsService = class {
@@ -236,7 +619,7 @@ var DatabaseToolsService = class {
 };
 
 // src/templates/pages/admin-database-table.template.ts
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 function renderDatabaseTablePage(data) {
   const totalPages = Math.ceil(data.totalRows / data.pageSize);
   const startRow = (data.currentPage - 1) * data.pageSize + 1;
@@ -485,7 +868,7 @@ function renderDatabaseTablePage(data) {
     user: data.user,
     content: pageContent
   };
-  return chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function generatePageNumbers(currentPage, totalPages) {
   const pages = [];
@@ -560,11 +943,11 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkV4V54BY3_cjs.requireAuth());
+  router3.use("*", chunkQ2NTBJYS_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -588,7 +971,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.post("/api/truncate", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -625,7 +1008,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.post("/api/backup", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -652,7 +1035,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.get("/api/validate", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -676,7 +1059,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.get("/api/tables/:tableName", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.json({
           success: false,
           error: "Unauthorized. Admin access required."
@@ -705,7 +1088,7 @@ function createDatabaseToolsAdminRoutes() {
   router3.get("/tables/:tableName", async (c) => {
     try {
       const user = c.get("user");
-      if (!user || user.role !== "admin") {
+      if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
         return c.redirect("/admin/login");
       }
       const tableName = c.req.param("tableName");
@@ -1433,1203 +1816,6 @@ function createEmailPlugin() {
   return builder.build();
 }
 var emailPlugin = createEmailPlugin();
-
-// src/plugins/core-plugins/otp-login-plugin/otp-service.ts
-var OTPService = class {
-  constructor(db) {
-    this.db = db;
-  }
-  /**
-   * Generate a secure random OTP code
-   */
-  generateCode(length = 6) {
-    const digits = "0123456789";
-    let code = "";
-    for (let i = 0; i < length; i++) {
-      const randomValues = new Uint8Array(1);
-      crypto.getRandomValues(randomValues);
-      const randomValue = randomValues[0] ?? 0;
-      code += digits[randomValue % digits.length];
-    }
-    return code;
-  }
-  /**
-   * Create and store a new OTP code
-   */
-  async createOTPCode(email, settings, ipAddress, userAgent) {
-    const code = this.generateCode(settings.codeLength);
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    const expiresAt = now + settings.codeExpiryMinutes * 60 * 1e3;
-    const otpCode = {
-      id,
-      user_email: email.toLowerCase(),
-      code,
-      expires_at: expiresAt,
-      used: 0,
-      used_at: null,
-      ip_address: ipAddress || null,
-      user_agent: userAgent || null,
-      attempts: 0,
-      created_at: now
-    };
-    await this.db.prepare(`
-      INSERT INTO otp_codes (
-        id, user_email, code, expires_at, used, used_at,
-        ip_address, user_agent, attempts, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      otpCode.id,
-      otpCode.user_email,
-      otpCode.code,
-      otpCode.expires_at,
-      otpCode.used,
-      otpCode.used_at,
-      otpCode.ip_address,
-      otpCode.user_agent,
-      otpCode.attempts,
-      otpCode.created_at
-    ).run();
-    return otpCode;
-  }
-  /**
-   * Verify an OTP code
-   */
-  async verifyCode(email, code, settings) {
-    const normalizedEmail = email.toLowerCase();
-    const now = Date.now();
-    const otpCode = await this.db.prepare(`
-      SELECT * FROM otp_codes
-      WHERE user_email = ? AND code = ? AND used = 0
-      ORDER BY created_at DESC
-      LIMIT 1
-    `).bind(normalizedEmail, code).first();
-    if (!otpCode) {
-      return { valid: false, error: "Invalid or expired code" };
-    }
-    if (now > otpCode.expires_at) {
-      return { valid: false, error: "Code has expired" };
-    }
-    if (otpCode.attempts >= settings.maxAttempts) {
-      return { valid: false, error: "Maximum attempts exceeded" };
-    }
-    await this.db.prepare(`
-      UPDATE otp_codes
-      SET used = 1, used_at = ?, attempts = attempts + 1
-      WHERE id = ?
-    `).bind(now, otpCode.id).run();
-    return { valid: true };
-  }
-  /**
-   * Increment failed attempt count
-   */
-  async incrementAttempts(email, code) {
-    const normalizedEmail = email.toLowerCase();
-    const result = await this.db.prepare(`
-      UPDATE otp_codes
-      SET attempts = attempts + 1
-      WHERE user_email = ? AND code = ? AND used = 0
-      RETURNING attempts
-    `).bind(normalizedEmail, code).first();
-    return result?.attempts || 0;
-  }
-  /**
-   * Check rate limiting
-   */
-  async checkRateLimit(email, settings) {
-    const normalizedEmail = email.toLowerCase();
-    const oneHourAgo = Date.now() - 60 * 60 * 1e3;
-    const result = await this.db.prepare(`
-      SELECT COUNT(*) as count
-      FROM otp_codes
-      WHERE user_email = ? AND created_at > ?
-    `).bind(normalizedEmail, oneHourAgo).first();
-    const count = result?.count || 0;
-    return count < settings.rateLimitPerHour;
-  }
-  /**
-   * Get recent OTP requests for activity log
-   */
-  async getRecentRequests(limit = 50) {
-    const result = await this.db.prepare(`
-      SELECT * FROM otp_codes
-      ORDER BY created_at DESC
-      LIMIT ?
-    `).bind(limit).all();
-    const rows = result.results || [];
-    return rows.map((row) => this.mapRowToOTP(row));
-  }
-  /**
-   * Clean up expired codes (for maintenance)
-   */
-  async cleanupExpiredCodes() {
-    const now = Date.now();
-    const result = await this.db.prepare(`
-      DELETE FROM otp_codes
-      WHERE expires_at < ? OR (used = 1 AND used_at < ?)
-    `).bind(now, now - 30 * 24 * 60 * 60 * 1e3).run();
-    return result.meta.changes || 0;
-  }
-  mapRowToOTP(row) {
-    return {
-      id: String(row.id),
-      user_email: String(row.user_email),
-      code: String(row.code),
-      expires_at: Number(row.expires_at ?? Date.now()),
-      used: Number(row.used ?? 0),
-      used_at: row.used_at === null || row.used_at === void 0 ? null : Number(row.used_at),
-      ip_address: typeof row.ip_address === "string" ? row.ip_address : null,
-      user_agent: typeof row.user_agent === "string" ? row.user_agent : null,
-      attempts: Number(row.attempts ?? 0),
-      created_at: Number(row.created_at ?? Date.now())
-    };
-  }
-  /**
-   * Get OTP statistics
-   */
-  async getStats(days = 7) {
-    const since = Date.now() - days * 24 * 60 * 60 * 1e3;
-    const stats = await this.db.prepare(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN used = 1 THEN 1 ELSE 0 END) as successful,
-        SUM(CASE WHEN attempts >= 3 AND used = 0 THEN 1 ELSE 0 END) as failed,
-        SUM(CASE WHEN expires_at < ? AND used = 0 THEN 1 ELSE 0 END) as expired
-      FROM otp_codes
-      WHERE created_at > ?
-    `).bind(Date.now(), since).first();
-    return {
-      total: stats?.total || 0,
-      successful: stats?.successful || 0,
-      failed: stats?.failed || 0,
-      expired: stats?.expired || 0
-    };
-  }
-};
-
-// src/plugins/core-plugins/otp-login-plugin/email-templates.ts
-function sanitizeColor(value) {
-  if (!value) return "";
-  if (/^#[0-9a-fA-F]{3,8}$/.test(value)) return value;
-  if (/^[a-zA-Z]+$/.test(value)) return value;
-  if (/^(rgb|rgba|hsl|hsla)\([0-9.,\s%]+\)$/.test(value)) return value;
-  return "";
-}
-function escapeHtml3(value) {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function renderOTPEmailHTML(data) {
-  const logoUrl = data.logoUrl ? escapeHtml3(data.logoUrl) : "";
-  const loginUrl = data.loginUrl ? escapeHtml3(data.loginUrl) : "";
-  const appName = escapeHtml3(data.appName);
-  const loginButtonText = escapeHtml3(
-    data.loginButtonText && data.loginButtonText.trim() || `Sign in to ${data.appName}`
-  );
-  const logoWidth = Math.max(20, Math.min(600, Number(data.logoWidth) || 150));
-  const logoBorderWidth = Math.max(0, Math.min(20, Number(data.logoBorderWidth) || 0));
-  const logoBorderColor = sanitizeColor(data.logoBorderColor);
-  const logoBorderStyle = logoBorderWidth > 0 && logoBorderColor ? `border: ${logoBorderWidth}px solid ${logoBorderColor}; border-radius: 8px;` : "";
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Login Code</title>
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-
-  <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-
-    ${logoUrl ? `
-    <div style="text-align: center; padding: 30px 20px 20px;">
-      <img src="${logoUrl}" alt="${appName}" style="max-width: ${logoWidth}px; width: 100%; height: auto; ${logoBorderStyle}">
-    </div>
-    ` : ""}
-
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0 0 10px 0; font-size: 32px; font-weight: 600;">Your Login Code</h1>
-      <p style="margin: 0; opacity: 0.95; font-size: 16px;">Enter this code to sign in to ${appName}</p>
-    </div>
-
-    <div style="padding: 40px 30px;">
-      <div style="background: #f8f9fa; border: 2px dashed #667eea; border-radius: 12px; padding: 30px; text-align: center; margin: 0 0 30px 0;">
-        <div style="font-size: 56px; font-weight: bold; letter-spacing: 12px; color: #667eea; font-family: 'Courier New', Courier, monospace; line-height: 1;">
-          ${data.code}
-        </div>
-      </div>
-
-      ${loginUrl ? `
-      <div style="text-align: center; margin: 0 0 30px 0;">
-        <a href="${loginUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          ${loginButtonText}
-        </a>
-      </div>
-      ` : ""}
-
-      <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px 20px; margin: 0 0 30px 0; border-radius: 6px;">
-        <p style="margin: 0; font-size: 14px; color: #856404;">
-          <strong>\u26A0\uFE0F This code expires in ${data.expiryMinutes} minutes</strong>
-        </p>
-      </div>
-
-      <div style="margin: 0 0 30px 0;">
-        <h3 style="color: #333; margin: 0 0 15px 0; font-size: 18px;">Quick Tips:</h3>
-        <ul style="color: #666; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;">
-          <li>Enter the code exactly as shown (${data.codeLength} digits)</li>
-          <li>The code can only be used once</li>
-          <li>You have ${data.maxAttempts} attempts to enter the correct code</li>
-          <li>Request a new code if this one expires</li>
-        </ul>
-      </div>
-
-      <div style="background: #e8f4ff; border-radius: 8px; padding: 20px; margin: 0 0 30px 0;">
-        <p style="margin: 0 0 10px 0; font-size: 14px; color: #0066cc; font-weight: 600;">
-          \u{1F512} Security Notice
-        </p>
-        <p style="margin: 0; font-size: 13px; color: #004080; line-height: 1.6;">
-          Never share this code with anyone. ${appName} will never ask you for this code via phone, email, or social media.
-        </p>
-      </div>
-    </div>
-
-    <div style="border-top: 1px solid #eee; padding: 30px; background: #f8f9fa;">
-      <p style="margin: 0 0 15px 0; font-size: 14px; color: #666; text-align: center;">
-        <strong>Didn't request this code?</strong><br>
-        Someone may have entered your email by mistake. You can safely ignore this email.
-      </p>
-
-      <div style="text-align: center; color: #999; font-size: 12px; line-height: 1.6;">
-        <p style="margin: 5px 0;">This email was sent to ${escapeHtml3(data.email)}</p>
-        ${data.ipAddress ? `<p style="margin: 5px 0;">IP Address: ${escapeHtml3(data.ipAddress)}</p>` : ""}
-        <p style="margin: 5px 0;">Time: ${escapeHtml3(data.timestamp)}</p>
-      </div>
-    </div>
-
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-    <p style="margin: 0;">&copy; ${(/* @__PURE__ */ new Date()).getFullYear()} ${appName}. All rights reserved.</p>
-  </div>
-
-</body>
-</html>`;
-}
-function renderOTPEmailText(data) {
-  const ctaLabel = data.loginButtonText && data.loginButtonText.trim() || `Sign in to ${data.appName}`;
-  return `Your Login Code for ${data.appName}
-
-Your one-time verification code is:
-
-${data.code}
-
-This code expires in ${data.expiryMinutes} minutes.
-${data.loginUrl ? `
-${ctaLabel}: ${data.loginUrl}
-` : ""}
-
-Quick Tips:
-\u2022 Enter the code exactly as shown (${data.codeLength} digits)
-\u2022 The code can only be used once
-\u2022 You have ${data.maxAttempts} attempts to enter the correct code
-\u2022 Request a new code if this one expires
-
-Security Notice:
-Never share this code with anyone. ${data.appName} will never ask you for this code via phone, email, or social media.
-
-Didn't request this code?
-Someone may have entered your email by mistake. You can safely ignore this email.
-
----
-This email was sent to ${data.email}
-${data.ipAddress ? `IP Address: ${data.ipAddress}` : ""}
-Time: ${data.timestamp}
-
-\xA9 ${(/* @__PURE__ */ new Date()).getFullYear()} ${data.appName}. All rights reserved.`;
-}
-function renderOTPEmail(data) {
-  return {
-    html: renderOTPEmailHTML(data),
-    text: renderOTPEmailText(data)
-  };
-}
-
-// src/plugins/core-plugins/otp-login-plugin/index.ts
-var otpRequestSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required")
-});
-var otpVerifySchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required"),
-  code: zod.z.string().min(4).max(8)
-});
-var DEFAULT_SETTINGS = {
-  codeLength: 6,
-  codeExpiryMinutes: 10,
-  maxAttempts: 3,
-  rateLimitPerHour: 5,
-  allowNewUserRegistration: false,
-  logoUrl: "",
-  logoWidth: 150,
-  logoBorderWidth: 0,
-  logoBorderColor: "#ffffff",
-  loginUrl: "",
-  loginButtonText: ""
-};
-function createOTPLoginPlugin() {
-  const builder = chunk635JAMSE_cjs.PluginBuilder.create({
-    name: "otp-login",
-    version: "1.0.0-beta.1",
-    description: "Passwordless authentication via email one-time codes"
-  });
-  builder.metadata({
-    author: {
-      name: "SonicJS Team",
-      email: "team@sonicjs.com"
-    },
-    license: "MIT",
-    compatibility: "^2.0.0"
-  });
-  const otpAPI = new hono.Hono();
-  otpAPI.post("/request", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = otpRequestSchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      const { email } = validation.data;
-      const normalizedEmail = email.toLowerCase();
-      const db = c.env.DB;
-      const otpService = new OTPService(db);
-      let settings = { ...DEFAULT_SETTINGS };
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first();
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings);
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings };
-        } catch (e) {
-          console.warn("Failed to parse OTP plugin settings, using defaults");
-        }
-      }
-      const settingsService = new chunkXWQVFWPW_cjs.SettingsService(db);
-      const generalSettings = await settingsService.getGeneralSettings();
-      const siteName = generalSettings.siteName;
-      const canRequest = await otpService.checkRateLimit(normalizedEmail, settings);
-      if (!canRequest) {
-        return c.json({
-          error: "Too many requests. Please try again in an hour."
-        }, 429);
-      }
-      const user = await db.prepare(`
-        SELECT id, email, role, is_active
-        FROM users
-        WHERE email = ?
-      `).bind(normalizedEmail).first();
-      if (!user && !settings.allowNewUserRegistration) {
-        return c.json({
-          message: "If an account exists for this email, you will receive a verification code shortly.",
-          expiresIn: settings.codeExpiryMinutes * 60
-        });
-      }
-      if (user && !user.is_active) {
-        return c.json({
-          error: "This account has been deactivated."
-        }, 403);
-      }
-      const ipAddress = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "unknown";
-      const userAgent = c.req.header("user-agent") || "unknown";
-      const otpCode = await otpService.createOTPCode(
-        normalizedEmail,
-        settings,
-        ipAddress,
-        userAgent
-      );
-      try {
-        const isDevMode = c.env.ENVIRONMENT === "development";
-        if (isDevMode) {
-          console.log(`[DEV] OTP Code for ${normalizedEmail}: ${otpCode.code}`);
-        }
-        const emailContent = renderOTPEmail({
-          code: otpCode.code,
-          expiryMinutes: settings.codeExpiryMinutes,
-          codeLength: settings.codeLength,
-          maxAttempts: settings.maxAttempts,
-          email: normalizedEmail,
-          ipAddress,
-          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-          appName: siteName,
-          logoUrl: settings.logoUrl || "",
-          logoWidth: settings.logoWidth,
-          logoBorderWidth: settings.logoBorderWidth,
-          logoBorderColor: settings.logoBorderColor || "",
-          loginUrl: settings.loginUrl || "",
-          loginButtonText: settings.loginButtonText || ""
-        });
-        const emailPlugin2 = await db.prepare(`
-          SELECT settings FROM plugins WHERE id = 'email'
-        `).first();
-        if (emailPlugin2?.settings) {
-          const emailSettings = JSON.parse(emailPlugin2.settings);
-          if (emailSettings.apiKey && emailSettings.fromEmail && emailSettings.fromName) {
-            const emailResponse = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${emailSettings.apiKey}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                from: `${emailSettings.fromName} <${emailSettings.fromEmail}>`,
-                to: [normalizedEmail],
-                subject: `Your login code for ${siteName}`,
-                html: emailContent.html,
-                text: emailContent.text,
-                reply_to: emailSettings.replyTo || emailSettings.fromEmail
-              })
-            });
-            if (!emailResponse.ok) {
-              const errorData = await emailResponse.json();
-              console.error("Failed to send OTP email via Resend:", errorData);
-            }
-          } else {
-            console.warn("Email plugin is not fully configured (missing apiKey, fromEmail, or fromName)");
-          }
-        } else {
-          console.warn("Email plugin is not active or has no settings configured");
-        }
-        const response = {
-          message: "If an account exists for this email, you will receive a verification code shortly.",
-          expiresIn: settings.codeExpiryMinutes * 60
-        };
-        if (isDevMode) {
-          response.dev_code = otpCode.code;
-        }
-        return c.json(response);
-      } catch (emailError) {
-        console.error("Error sending OTP email:", emailError);
-        return c.json({
-          error: "Failed to send verification code. Please try again."
-        }, 500);
-      }
-    } catch (error) {
-      console.error("OTP request error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
-    }
-  });
-  otpAPI.post("/verify", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = otpVerifySchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      const { email, code } = validation.data;
-      const normalizedEmail = email.toLowerCase();
-      const db = c.env.DB;
-      const otpService = new OTPService(db);
-      let settings = { ...DEFAULT_SETTINGS };
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first();
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings);
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings };
-        } catch (e) {
-          console.warn("Failed to parse OTP plugin settings, using defaults");
-        }
-      }
-      const verification = await otpService.verifyCode(normalizedEmail, code, settings);
-      if (!verification.valid) {
-        await otpService.incrementAttempts(normalizedEmail, code);
-        return c.json({
-          error: verification.error || "Invalid code",
-          attemptsRemaining: verification.attemptsRemaining
-        }, 401);
-      }
-      let user = await db.prepare(`
-        SELECT id, email, username, first_name, last_name, role, is_active, created_at
-        FROM users
-        WHERE email = ?
-      `).bind(normalizedEmail).first();
-      if (!user && settings.allowNewUserRegistration) {
-        const userId = crypto.randomUUID();
-        const now = Date.now();
-        const username = normalizedEmail.split("@")[0] + "_" + userId.slice(0, 6);
-        await db.prepare(`
-          INSERT INTO users (
-            id, email, username, first_name, last_name,
-            password_hash, role, is_active, email_verified, created_at, updated_at
-          ) VALUES (?, ?, ?, '', '', NULL, 'viewer', 1, 1, ?, ?)
-        `).bind(userId, normalizedEmail, username, now, now).run();
-        user = {
-          id: userId,
-          email: normalizedEmail,
-          username,
-          first_name: "",
-          last_name: "",
-          role: "viewer",
-          is_active: 1,
-          created_at: now
-        };
-      }
-      if (!user) {
-        return c.json({
-          error: "User not found"
-        }, 404);
-      }
-      if (!user.is_active) {
-        return c.json({
-          error: "Account is deactivated"
-        }, 403);
-      }
-      const tokenTtl = await chunkV4V54BY3_cjs.getJwtExpirySecondsFromDb(db, c.env);
-      const token = await chunkV4V54BY3_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl);
-      cookie.setCookie(c, "auth_token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-        maxAge: tokenTtl
-      });
-      const customData = await chunkBX75LZES_cjs.getCustomData(db, user.id);
-      const { is_active, ...publicUser } = user;
-      return c.json({
-        success: true,
-        user: {
-          ...publicUser,
-          ...customData
-        },
-        token,
-        message: "Authentication successful"
-      });
-    } catch (error) {
-      console.error("OTP verify error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
-    }
-  });
-  otpAPI.post("/resend", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = otpRequestSchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      return otpAPI.fetch(
-        new Request(c.req.url.replace("/resend", "/request"), {
-          method: "POST",
-          headers: c.req.raw.headers,
-          body: JSON.stringify({ email: validation.data.email })
-        }),
-        c.env
-      );
-    } catch (error) {
-      console.error("OTP resend error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
-    }
-  });
-  builder.addRoute("/auth/otp", otpAPI, {
-    description: "OTP authentication endpoints",
-    requiresAuth: false,
-    priority: 100
-  });
-  builder.addMenuItem("OTP Login", "/admin/plugins/otp-login", {
-    icon: "key",
-    order: 85,
-    permissions: ["otp:manage"]
-  });
-  builder.lifecycle({
-    activate: async () => {
-      console.info("\u2705 OTP Login plugin activated");
-    },
-    deactivate: async () => {
-      console.info("\u274C OTP Login plugin deactivated");
-    }
-  });
-  return builder.build();
-}
-var otpLoginPlugin = createOTPLoginPlugin();
-
-// src/plugins/core-plugins/oauth-providers/oauth-service.ts
-var GITHUB_PROVIDER = {
-  id: "github",
-  name: "GitHub",
-  authorizeUrl: "https://github.com/login/oauth/authorize",
-  tokenUrl: "https://github.com/login/oauth/access_token",
-  userInfoUrl: "https://api.github.com/user",
-  scopes: ["read:user", "user:email"],
-  mapProfile: (profile) => ({
-    providerAccountId: String(profile.id),
-    email: profile.email || "",
-    name: profile.name || profile.login || "",
-    avatar: profile.avatar_url || void 0
-  })
-};
-var GOOGLE_PROVIDER = {
-  id: "google",
-  name: "Google",
-  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenUrl: "https://oauth2.googleapis.com/token",
-  userInfoUrl: "https://www.googleapis.com/oauth2/v2/userinfo",
-  scopes: ["openid", "email", "profile"],
-  mapProfile: (profile) => ({
-    providerAccountId: String(profile.id),
-    email: profile.email || "",
-    name: profile.name || "",
-    avatar: profile.picture || void 0
-  })
-};
-var BUILT_IN_PROVIDERS = {
-  github: GITHUB_PROVIDER,
-  google: GOOGLE_PROVIDER
-};
-var OAuthService = class {
-  constructor(db) {
-    this.db = db;
-  }
-  /**
-   * Build the authorization redirect URL for a provider.
-   */
-  buildAuthorizeUrl(provider, clientId, redirectUri, state) {
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: provider.scopes.join(" "),
-      state
-    });
-    if (provider.id === "google") {
-      params.set("access_type", "offline");
-      params.set("prompt", "consent");
-    }
-    return `${provider.authorizeUrl}?${params.toString()}`;
-  }
-  /**
-   * Exchange authorization code for tokens using native fetch.
-   */
-  async exchangeCode(provider, clientId, clientSecret, code, redirectUri) {
-    const body = {
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code"
-    };
-    const response = await fetch(provider.tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json"
-      },
-      body: new URLSearchParams(body).toString()
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Token exchange failed (${response.status}): ${errorText}`);
-    }
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(`Token exchange error: ${data.error_description || data.error}`);
-    }
-    return {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_in: data.expires_in ? Number(data.expires_in) : void 0
-    };
-  }
-  /**
-   * Fetch user profile from the provider's userinfo endpoint.
-   */
-  async fetchUserProfile(provider, accessToken) {
-    const headers = {
-      "Authorization": `Bearer ${accessToken}`,
-      "Accept": "application/json"
-    };
-    if (provider.id === "github") {
-      headers["Authorization"] = `token ${accessToken}`;
-    }
-    const response = await fetch(provider.userInfoUrl, { headers });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch user profile (${response.status})`);
-    }
-    const profile = await response.json();
-    if (provider.id === "github" && !profile.email) {
-      const emailResponse = await fetch("https://api.github.com/user/emails", {
-        headers: {
-          "Authorization": `token ${accessToken}`,
-          "Accept": "application/json"
-        }
-      });
-      if (emailResponse.ok) {
-        const emails = await emailResponse.json();
-        const primaryEmail = emails.find((e) => e.primary && e.verified);
-        if (primaryEmail) {
-          profile.email = primaryEmail.email;
-        }
-      }
-    }
-    return provider.mapProfile(profile);
-  }
-  // ─── Database Operations ────────────────────────────────────────────────
-  /**
-   * Find an existing OAuth account link.
-   */
-  async findOAuthAccount(provider, providerAccountId) {
-    return await this.db.prepare(`
-      SELECT * FROM oauth_accounts
-      WHERE provider = ? AND provider_account_id = ?
-    `).bind(provider, providerAccountId).first();
-  }
-  /**
-   * Find all OAuth accounts for a user.
-   */
-  async findUserOAuthAccounts(userId) {
-    const result = await this.db.prepare(`
-      SELECT * FROM oauth_accounts WHERE user_id = ?
-    `).bind(userId).all();
-    return result.results || [];
-  }
-  /**
-   * Create a new OAuth account link.
-   */
-  async createOAuthAccount(params) {
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    await this.db.prepare(`
-      INSERT INTO oauth_accounts (
-        id, user_id, provider, provider_account_id,
-        access_token, refresh_token, token_expires_at,
-        profile_data, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      id,
-      params.userId,
-      params.provider,
-      params.providerAccountId,
-      params.accessToken,
-      params.refreshToken || null,
-      params.tokenExpiresAt || null,
-      params.profileData || null,
-      now,
-      now
-    ).run();
-    return {
-      id,
-      user_id: params.userId,
-      provider: params.provider,
-      provider_account_id: params.providerAccountId,
-      access_token: params.accessToken,
-      refresh_token: params.refreshToken || null,
-      token_expires_at: params.tokenExpiresAt || null,
-      profile_data: params.profileData || null,
-      created_at: now,
-      updated_at: now
-    };
-  }
-  /**
-   * Update tokens for an existing OAuth account.
-   */
-  async updateOAuthTokens(id, accessToken, refreshToken, tokenExpiresAt) {
-    await this.db.prepare(`
-      UPDATE oauth_accounts
-      SET access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = ?
-      WHERE id = ?
-    `).bind(accessToken, refreshToken || null, tokenExpiresAt || null, Date.now(), id).run();
-  }
-  /**
-   * Unlink an OAuth account from a user (only if they have another auth method).
-   */
-  async unlinkOAuthAccount(userId, provider) {
-    const user = await this.db.prepare(`
-      SELECT password_hash FROM users WHERE id = ?
-    `).bind(userId).first();
-    const otherLinks = await this.db.prepare(`
-      SELECT COUNT(*) as count FROM oauth_accounts
-      WHERE user_id = ? AND provider != ?
-    `).bind(userId, provider).first();
-    const hasPassword = !!user?.password_hash;
-    const hasOtherLinks = (otherLinks?.count || 0) > 0;
-    if (!hasPassword && !hasOtherLinks) {
-      return false;
-    }
-    await this.db.prepare(`
-      DELETE FROM oauth_accounts WHERE user_id = ? AND provider = ?
-    `).bind(userId, provider).run();
-    return true;
-  }
-  /**
-   * Find a user by email.
-   */
-  async findUserByEmail(email) {
-    return await this.db.prepare(`
-      SELECT id, email, role, is_active, first_name, last_name
-      FROM users WHERE email = ?
-    `).bind(email.toLowerCase()).first();
-  }
-  /**
-   * Create a new user from an OAuth profile.
-   */
-  async createUserFromOAuth(profile) {
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    const email = profile.email.toLowerCase();
-    const nameParts = (profile.name || email.split("@")[0] || "User").split(" ");
-    const firstName = nameParts[0] || "User";
-    const lastName = nameParts.slice(1).join(" ") || "";
-    const username = email.split("@")[0] || id.substring(0, 8);
-    const existing = await this.db.prepare(
-      "SELECT id FROM users WHERE username = ?"
-    ).bind(username).first();
-    const finalUsername = existing ? `${username}-${id.substring(0, 6)}` : username;
-    await this.db.prepare(`
-      INSERT INTO users (
-        id, email, username, first_name, last_name,
-        password_hash, role, avatar, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, 'viewer', ?, 1, ?, ?)
-    `).bind(
-      id,
-      email,
-      finalUsername,
-      firstName,
-      lastName,
-      profile.avatar || null,
-      now,
-      now
-    ).run();
-    return id;
-  }
-  /**
-   * Generate a cryptographically random state parameter for CSRF protection.
-   */
-  generateState() {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-};
-
-// src/plugins/core-plugins/oauth-providers/index.ts
-var STATE_COOKIE_NAME = "oauth_state";
-var STATE_COOKIE_MAX_AGE = 600;
-function createOAuthProvidersPlugin() {
-  const builder = chunk635JAMSE_cjs.PluginBuilder.create({
-    name: "oauth-providers",
-    version: "1.0.0-beta.1",
-    description: "OAuth2/OIDC social login with GitHub, Google, and more"
-  });
-  builder.metadata({
-    author: {
-      name: "SonicJS Team",
-      email: "team@sonicjs.com"
-    },
-    license: "MIT",
-    compatibility: "^2.0.0"
-  });
-  function getCallbackUrl(c, provider) {
-    const proto = c.req.header("x-forwarded-proto") || "https";
-    const host = c.req.header("host") || "localhost";
-    return `${proto}://${host}/auth/oauth/${provider}/callback`;
-  }
-  async function loadSettings(db) {
-    const row = await db.prepare(
-      `SELECT settings FROM plugins WHERE id = 'oauth-providers'`
-    ).first();
-    if (!row?.settings) return null;
-    try {
-      return JSON.parse(row.settings);
-    } catch {
-      return null;
-    }
-  }
-  function getProviderCredentials(settings, providerId) {
-    if (!settings?.providers?.[providerId]) return null;
-    const p = settings.providers[providerId];
-    if (!p.enabled || !p.clientId || !p.clientSecret) return null;
-    return { clientId: p.clientId, clientSecret: p.clientSecret };
-  }
-  const oauthAPI = new hono.Hono();
-  oauthAPI.get("/:provider", async (c) => {
-    try {
-      const providerId = c.req.param("provider");
-      const providerConfig = BUILT_IN_PROVIDERS[providerId];
-      if (!providerConfig) {
-        return c.json({ error: `Unknown OAuth provider: ${providerId}` }, 400);
-      }
-      const db = c.env.DB;
-      const settings = await loadSettings(db);
-      const creds = getProviderCredentials(settings, providerId);
-      if (!creds) {
-        return c.json({
-          error: `OAuth provider "${providerId}" is not configured or not enabled`
-        }, 400);
-      }
-      const oauthService = new OAuthService(db);
-      const state = oauthService.generateState();
-      const redirectUri = getCallbackUrl(c, providerId);
-      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        // Lax required for OAuth redirect flow
-        maxAge: STATE_COOKIE_MAX_AGE,
-        path: "/auth/oauth"
-      });
-      const authorizeUrl = oauthService.buildAuthorizeUrl(
-        providerConfig,
-        creds.clientId,
-        redirectUri,
-        state
-      );
-      return c.redirect(authorizeUrl);
-    } catch (error) {
-      console.error("OAuth authorize error:", error);
-      return c.json({ error: "Failed to initiate OAuth flow" }, 500);
-    }
-  });
-  oauthAPI.get("/:provider/callback", async (c) => {
-    try {
-      const providerId = c.req.param("provider");
-      const providerConfig = BUILT_IN_PROVIDERS[providerId];
-      if (!providerConfig) {
-        return c.redirect("/auth/login?error=Unknown OAuth provider");
-      }
-      const stateParam = c.req.query("state");
-      const stateCookie = cookie.getCookie(c, STATE_COOKIE_NAME);
-      if (!stateParam || !stateCookie || stateParam !== stateCookie) {
-        return c.redirect("/auth/login?error=Invalid OAuth state. Please try again.");
-      }
-      cookie.setCookie(c, STATE_COOKIE_NAME, "", {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        maxAge: 0,
-        path: "/auth/oauth"
-      });
-      const errorParam = c.req.query("error");
-      if (errorParam) {
-        const errorDesc = c.req.query("error_description") || errorParam;
-        return c.redirect(`/auth/login?error=${encodeURIComponent(errorDesc)}`);
-      }
-      const code = c.req.query("code");
-      if (!code) {
-        return c.redirect("/auth/login?error=No authorization code received");
-      }
-      const db = c.env.DB;
-      const settings = await loadSettings(db);
-      const creds = getProviderCredentials(settings, providerId);
-      if (!creds) {
-        return c.redirect("/auth/login?error=OAuth provider not configured");
-      }
-      const oauthService = new OAuthService(db);
-      const redirectUri = getCallbackUrl(c, providerId);
-      const tokens = await oauthService.exchangeCode(
-        providerConfig,
-        creds.clientId,
-        creds.clientSecret,
-        code,
-        redirectUri
-      );
-      const profile = await oauthService.fetchUserProfile(providerConfig, tokens.access_token);
-      if (!profile.email) {
-        return c.redirect("/auth/login?error=Could not retrieve email from OAuth provider. Please ensure your email is public or grant email permission.");
-      }
-      const tokenExpiresAt = tokens.expires_in ? Date.now() + tokens.expires_in * 1e3 : null;
-      const existingOAuth = await oauthService.findOAuthAccount(providerId, profile.providerAccountId);
-      if (existingOAuth) {
-        await oauthService.updateOAuthTokens(
-          existingOAuth.id,
-          tokens.access_token,
-          tokens.refresh_token,
-          tokenExpiresAt ?? void 0
-        );
-        const user = await db.prepare(
-          "SELECT id, email, role, is_active FROM users WHERE id = ?"
-        ).bind(existingOAuth.user_id).first();
-        if (!user || !user.is_active) {
-          return c.redirect("/auth/login?error=Account is deactivated");
-        }
-        const tokenTtl2 = await chunkV4V54BY3_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-        const jwt2 = await chunkV4V54BY3_cjs.AuthManager.generateToken(
-          user.id,
-          user.email,
-          user.role,
-          c.env.JWT_SECRET,
-          tokenTtl2
-        );
-        chunkV4V54BY3_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
-        return c.redirect("/admin");
-      }
-      const existingUser = await oauthService.findUserByEmail(profile.email);
-      if (existingUser) {
-        if (!existingUser.is_active) {
-          return c.redirect("/auth/login?error=Account is deactivated");
-        }
-        await oauthService.createOAuthAccount({
-          userId: existingUser.id,
-          provider: providerId,
-          providerAccountId: profile.providerAccountId,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          tokenExpiresAt: tokenExpiresAt ?? void 0,
-          profileData: JSON.stringify(profile)
-        });
-        const tokenTtl2 = await chunkV4V54BY3_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-        const jwt2 = await chunkV4V54BY3_cjs.AuthManager.generateToken(
-          existingUser.id,
-          existingUser.email,
-          existingUser.role,
-          c.env.JWT_SECRET,
-          tokenTtl2
-        );
-        chunkV4V54BY3_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
-        return c.redirect("/admin");
-      }
-      const newUserId = await oauthService.createUserFromOAuth(profile);
-      await oauthService.createOAuthAccount({
-        userId: newUserId,
-        provider: providerId,
-        providerAccountId: profile.providerAccountId,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        tokenExpiresAt: tokenExpiresAt ?? void 0,
-        profileData: JSON.stringify(profile)
-      });
-      const tokenTtl = await chunkV4V54BY3_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const jwt = await chunkV4V54BY3_cjs.AuthManager.generateToken(
-        newUserId,
-        profile.email.toLowerCase(),
-        "viewer",
-        c.env.JWT_SECRET,
-        tokenTtl
-      );
-      chunkV4V54BY3_cjs.AuthManager.setAuthCookie(c, jwt, { sameSite: "Lax", maxAge: tokenTtl });
-      return c.redirect("/admin");
-    } catch (error) {
-      console.error("OAuth callback error:", error);
-      const message = error instanceof Error ? error.message : "OAuth authentication failed";
-      return c.redirect(`/auth/login?error=${encodeURIComponent(message)}`);
-    }
-  });
-  oauthAPI.post("/link", async (c) => {
-    try {
-      const user = c.get("user");
-      if (!user) {
-        return c.json({ error: "Authentication required" }, 401);
-      }
-      const body = await c.req.json();
-      const { provider } = body;
-      if (!provider || !BUILT_IN_PROVIDERS[provider]) {
-        return c.json({ error: "Invalid provider" }, 400);
-      }
-      const db = c.env.DB;
-      const settings = await loadSettings(db);
-      const creds = getProviderCredentials(settings, provider);
-      if (!creds) {
-        return c.json({ error: `OAuth provider "${provider}" is not configured` }, 400);
-      }
-      const oauthService = new OAuthService(db);
-      const state = oauthService.generateState();
-      const redirectUri = getCallbackUrl(c, provider);
-      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        maxAge: STATE_COOKIE_MAX_AGE,
-        path: "/auth/oauth"
-      });
-      const authorizeUrl = oauthService.buildAuthorizeUrl(
-        BUILT_IN_PROVIDERS[provider],
-        creds.clientId,
-        redirectUri,
-        state
-      );
-      return c.json({ redirectUrl: authorizeUrl });
-    } catch (error) {
-      console.error("OAuth link error:", error);
-      return c.json({ error: "Failed to initiate account linking" }, 500);
-    }
-  });
-  oauthAPI.post("/unlink", async (c) => {
-    try {
-      const user = c.get("user");
-      if (!user) {
-        return c.json({ error: "Authentication required" }, 401);
-      }
-      const body = await c.req.json();
-      const { provider } = body;
-      if (!provider) {
-        return c.json({ error: "Provider is required" }, 400);
-      }
-      const db = c.env.DB;
-      const oauthService = new OAuthService(db);
-      const success = await oauthService.unlinkOAuthAccount(user.userId, provider);
-      if (!success) {
-        return c.json({
-          error: "Cannot unlink the only authentication method. Set a password first."
-        }, 400);
-      }
-      return c.json({ success: true, message: `${provider} account unlinked` });
-    } catch (error) {
-      console.error("OAuth unlink error:", error);
-      return c.json({ error: "Failed to unlink account" }, 500);
-    }
-  });
-  oauthAPI.get("/accounts", async (c) => {
-    try {
-      const user = c.get("user");
-      if (!user) {
-        return c.json({ error: "Authentication required" }, 401);
-      }
-      const db = c.env.DB;
-      const oauthService = new OAuthService(db);
-      const accounts = await oauthService.findUserOAuthAccounts(user.userId);
-      return c.json({
-        accounts: accounts.map((a) => ({
-          provider: a.provider,
-          providerAccountId: a.provider_account_id,
-          linkedAt: a.created_at
-        }))
-      });
-    } catch (error) {
-      console.error("OAuth accounts error:", error);
-      return c.json({ error: "Failed to fetch linked accounts" }, 500);
-    }
-  });
-  builder.addRoute("/auth/oauth", oauthAPI, {
-    description: "OAuth2 social login endpoints",
-    requiresAuth: false,
-    priority: 100
-  });
-  builder.addMenuItem("OAuth Providers", "/admin/plugins/oauth-providers", {
-    icon: "shield",
-    order: 86,
-    permissions: ["oauth:manage"]
-  });
-  builder.lifecycle({
-    activate: async () => {
-      console.info("\u2705 OAuth Providers plugin activated");
-    },
-    deactivate: async () => {
-      console.info("\u274C OAuth Providers plugin deactivated");
-    }
-  });
-  return builder.build();
-}
-var oauthProvidersPlugin = createOAuthProvidersPlugin();
 
 // src/plugins/core-plugins/ai-search-plugin/services/embedding.service.ts
 var EmbeddingService = class {
@@ -4198,7 +3384,7 @@ function renderSettingsPage(data) {
       }, 30000);
     </script>
   `;
-  return chunkOHYBNCVL_cjs.renderAdminLayout({
+  return chunkOZDZSWW7_cjs.renderAdminLayout({
     title: "AI Search Settings",
     pageTitle: "AI Search Settings",
     currentPath: "/admin/plugins/ai-search/settings",
@@ -4209,7 +3395,7 @@ function renderSettingsPage(data) {
 
 // src/plugins/core-plugins/ai-search-plugin/routes/admin.ts
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkV4V54BY3_cjs.requireAuth());
+adminRoutes.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -4464,307 +3650,9 @@ var aiSearchPlugin = new chunk635JAMSE_cjs.PluginBuilder({
   description: manifest_default.description,
   author: { name: manifest_default.author }
 }).addService("aiSearch", AISearchService).addService("indexManager", IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).build();
-var magicLinkRequestSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required")
-});
-function createMagicLinkAuthPlugin() {
-  const magicLinkRoutes = new hono.Hono();
-  magicLinkRoutes.post("/request", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = magicLinkRequestSchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      const { email } = validation.data;
-      const normalizedEmail = email.toLowerCase();
-      const db = c.env.DB;
-      const oneHourAgo = Date.now() - 60 * 60 * 1e3;
-      const recentLinks = await db.prepare(`
-        SELECT COUNT(*) as count
-        FROM magic_links
-        WHERE user_email = ? AND created_at > ?
-      `).bind(normalizedEmail, oneHourAgo).first();
-      const rateLimitPerHour = 5;
-      if (recentLinks && recentLinks.count >= rateLimitPerHour) {
-        return c.json({
-          error: "Too many requests. Please try again later."
-        }, 429);
-      }
-      const user = await db.prepare(`
-        SELECT id, email, role, is_active
-        FROM users
-        WHERE email = ?
-      `).bind(normalizedEmail).first();
-      const allowNewUsers = false;
-      if (!user && !allowNewUsers) {
-        return c.json({
-          message: "If an account exists for this email, you will receive a magic link shortly."
-        });
-      }
-      if (user && !user.is_active) {
-        return c.json({
-          error: "This account has been deactivated."
-        }, 403);
-      }
-      const token = crypto.randomUUID() + "-" + crypto.randomUUID();
-      const tokenId = crypto.randomUUID();
-      const linkExpiryMinutes = 15;
-      const expiresAt = Date.now() + linkExpiryMinutes * 60 * 1e3;
-      await db.prepare(`
-        INSERT INTO magic_links (
-          id, user_email, token, expires_at, used, created_at, ip_address, user_agent
-        ) VALUES (?, ?, ?, ?, 0, ?, ?, ?)
-      `).bind(
-        tokenId,
-        normalizedEmail,
-        token,
-        expiresAt,
-        Date.now(),
-        c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "unknown",
-        c.req.header("user-agent") || "unknown"
-      ).run();
-      const baseUrl = new URL(c.req.url).origin;
-      const magicLink = `${baseUrl}/auth/magic-link/verify?token=${token}`;
-      try {
-        const emailPlugin2 = c.env.plugins?.get("email");
-        if (emailPlugin2 && emailPlugin2.sendEmail) {
-          await emailPlugin2.sendEmail({
-            to: normalizedEmail,
-            subject: "Your Magic Link to Sign In",
-            html: renderMagicLinkEmail(magicLink, linkExpiryMinutes)
-          });
-        } else {
-          console.error("Email plugin not available");
-          console.log(`Magic link for ${normalizedEmail}: ${magicLink}`);
-        }
-      } catch (error) {
-        console.error("Failed to send magic link email:", error);
-        return c.json({
-          error: "Failed to send email. Please try again later."
-        }, 500);
-      }
-      return c.json({
-        message: "If an account exists for this email, you will receive a magic link shortly.",
-        // For development only - remove in production
-        ...c.env.ENVIRONMENT === "development" && { dev_link: magicLink }
-      });
-    } catch (error) {
-      console.error("Magic link request error:", error);
-      return c.json({ error: "Failed to process request" }, 500);
-    }
-  });
-  magicLinkRoutes.get("/verify", async (c) => {
-    try {
-      const token = c.req.query("token");
-      if (!token) {
-        return c.redirect("/auth/login?error=Invalid magic link");
-      }
-      const db = c.env.DB;
-      const magicLink = await db.prepare(`
-        SELECT * FROM magic_links
-        WHERE token = ? AND used = 0
-      `).bind(token).first();
-      if (!magicLink) {
-        return c.redirect("/auth/login?error=Invalid or expired magic link");
-      }
-      if (magicLink.expires_at < Date.now()) {
-        return c.redirect("/auth/login?error=This magic link has expired");
-      }
-      let user = await db.prepare(`
-        SELECT * FROM users WHERE email = ? AND is_active = 1
-      `).bind(magicLink.user_email).first();
-      const allowNewUsers = false;
-      if (!user && allowNewUsers) {
-        const userId = crypto.randomUUID();
-        const username = magicLink.user_email.split("@")[0];
-        const now = Date.now();
-        await db.prepare(`
-          INSERT INTO users (
-            id, email, username, first_name, last_name,
-            password_hash, role, is_active, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, NULL, 'viewer', 1, ?, ?)
-        `).bind(
-          userId,
-          magicLink.user_email,
-          username,
-          username,
-          "",
-          now,
-          now
-        ).run();
-        user = {
-          id: userId,
-          email: magicLink.user_email,
-          username,
-          role: "viewer"
-        };
-      } else if (!user) {
-        return c.redirect("/auth/login?error=No account found for this email");
-      }
-      await db.prepare(`
-        UPDATE magic_links
-        SET used = 1, used_at = ?
-        WHERE id = ?
-      `).bind(Date.now(), magicLink.id).run();
-      const tokenTtl = await chunkV4V54BY3_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const jwtToken = await chunkV4V54BY3_cjs.AuthManager.generateToken(
-        user.id,
-        user.email,
-        user.role,
-        c.env.JWT_SECRET,
-        tokenTtl
-      );
-      chunkV4V54BY3_cjs.AuthManager.setAuthCookie(c, jwtToken, { maxAge: tokenTtl });
-      await db.prepare(`
-        UPDATE users SET last_login_at = ? WHERE id = ?
-      `).bind(Date.now(), user.id).run();
-      return c.redirect("/admin/dashboard?message=Successfully signed in");
-    } catch (error) {
-      console.error("Magic link verification error:", error);
-      return c.redirect("/auth/login?error=Authentication failed");
-    }
-  });
-  return {
-    name: "magic-link-auth",
-    version: "1.0.0",
-    description: "Passwordless authentication via email magic links",
-    author: {
-      name: "SonicJS Team",
-      email: "team@sonicjs.com"
-    },
-    dependencies: ["email"],
-    routes: [{
-      path: "/auth/magic-link",
-      handler: magicLinkRoutes,
-      description: "Magic link authentication endpoints",
-      requiresAuth: false
-    }],
-    async install(context) {
-      console.log("Installing magic-link-auth plugin...");
-    },
-    async activate(context) {
-      console.log("Magic link authentication activated");
-      console.log("Users can now sign in via /auth/magic-link/request");
-    },
-    async deactivate(context) {
-      console.log("Magic link authentication deactivated");
-    },
-    async uninstall(context) {
-      console.log("Uninstalling magic-link-auth plugin...");
-    }
-  };
-}
-function renderMagicLinkEmail(magicLink, expiryMinutes) {
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Your Magic Link</title>
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: #333;
-          max-width: 600px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-        .container {
-          background: #ffffff;
-          border-radius: 8px;
-          padding: 40px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .header {
-          text-align: center;
-          margin-bottom: 30px;
-        }
-        .header h1 {
-          color: #0ea5e9;
-          margin: 0;
-          font-size: 24px;
-        }
-        .content {
-          margin-bottom: 30px;
-        }
-        .button {
-          display: inline-block;
-          padding: 14px 32px;
-          background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-          color: #ffffff !important;
-          text-decoration: none;
-          border-radius: 6px;
-          font-weight: 600;
-          text-align: center;
-          margin: 20px 0;
-        }
-        .button:hover {
-          opacity: 0.9;
-        }
-        .expiry {
-          color: #ef4444;
-          font-size: 14px;
-          margin-top: 20px;
-        }
-        .footer {
-          margin-top: 40px;
-          padding-top: 20px;
-          border-top: 1px solid #e5e7eb;
-          font-size: 12px;
-          color: #6b7280;
-          text-align: center;
-        }
-        .security-note {
-          background: #fef3c7;
-          border-left: 4px solid #f59e0b;
-          padding: 12px 16px;
-          margin-top: 20px;
-          border-radius: 4px;
-          font-size: 14px;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>\u{1F517} Your Magic Link</h1>
-        </div>
-
-        <div class="content">
-          <p>Hello!</p>
-          <p>You requested a magic link to sign in to your account. Click the button below to continue:</p>
-
-          <div style="text-align: center;">
-            <a href="${magicLink}" class="button">Sign In</a>
-          </div>
-
-          <p class="expiry">\u23F0 This link expires in ${expiryMinutes} minutes</p>
-
-          <div class="security-note">
-            <strong>Security Notice:</strong> If you didn't request this link, you can safely ignore this email.
-            Someone may have entered your email address by mistake.
-          </div>
-        </div>
-
-        <div class="footer">
-          <p>This is an automated email from SonicJS.</p>
-          <p>For security, this link can only be used once.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-}
-createMagicLinkAuthPlugin();
 
 // src/plugins/core-plugins/security-audit-plugin/types.ts
-var DEFAULT_SETTINGS2 = {
+var DEFAULT_SETTINGS = {
   retention: {
     daysToKeep: 90,
     maxEvents: 1e5,
@@ -4789,7 +3677,7 @@ var DEFAULT_SETTINGS2 = {
 
 // src/plugins/core-plugins/security-audit-plugin/services/security-audit-service.ts
 var SecurityAuditService = class {
-  constructor(db, settings = DEFAULT_SETTINGS2) {
+  constructor(db, settings = DEFAULT_SETTINGS) {
     this.db = db;
     this.settings = settings;
   }
@@ -5056,7 +3944,7 @@ var SecurityAuditService = class {
 };
 
 // src/plugins/core-plugins/security-audit-plugin/components/dashboard-page.ts
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 function formatTimestamp(ts) {
   const date = new Date(ts);
   const now = Date.now();
@@ -5255,11 +4143,11 @@ function renderSecurityDashboard(data) {
     version,
     dynamicMenuItems
   };
-  return chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/plugins/core-plugins/security-audit-plugin/components/event-log-page.ts
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 function formatTimestamp2(ts) {
   const date = new Date(ts);
   return date.toLocaleDateString("en-US", {
@@ -5466,11 +4354,11 @@ function renderEventLogPage(data) {
     version,
     dynamicMenuItems
   };
-  return chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/plugins/core-plugins/security-audit-plugin/components/settings-page.ts
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 function renderSecuritySettingsPage(data) {
   const { settings, user, version, message, dynamicMenuItems } = data;
   const content2 = `
@@ -5623,30 +4511,30 @@ function renderSecuritySettingsPage(data) {
     version,
     dynamicMenuItems
   };
-  return chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 
 // src/plugins/core-plugins/security-audit-plugin/routes/admin.ts
 var adminRoutes2 = new hono.Hono();
-adminRoutes2.use("*", chunkV4V54BY3_cjs.requireAuth());
+adminRoutes2.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.text("Access denied", 403);
   }
   return next();
 });
 async function getSettings(db) {
   try {
-    const pluginService = new chunkQOZZJZ76_cjs.PluginService(db);
+    const pluginService = new chunk3ADEYHN2_cjs.PluginService(db);
     const plugin2 = await pluginService.getPlugin("security-audit");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS2, ...settings };
+      return { ...DEFAULT_SETTINGS, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS2;
+  return DEFAULT_SETTINGS;
 }
 adminRoutes2.get("/", async (c) => {
   const db = c.env.DB;
@@ -5743,7 +4631,7 @@ adminRoutes2.post("/settings", async (c) => {
       autoPurge: body["retention.autoPurge"] === "true"
     }
   };
-  const pluginService = new chunkQOZZJZ76_cjs.PluginService(db);
+  const pluginService = new chunk3ADEYHN2_cjs.PluginService(db);
   await pluginService.updatePluginSettings("security-audit", settings);
   if (c.req.header("HX-Request")) {
     return c.json({ success: true });
@@ -5757,7 +4645,7 @@ var LOCK_PREFIX = "security:locked:";
 var BruteForceDetector = class {
   constructor(kv, settings) {
     this.kv = kv;
-    this.settings = settings || DEFAULT_SETTINGS2.bruteForce;
+    this.settings = settings || DEFAULT_SETTINGS.bruteForce;
   }
   settings;
   async recordFailedAttempt(ip, email) {
@@ -5904,25 +4792,25 @@ var BruteForceDetector = class {
 
 // src/plugins/core-plugins/security-audit-plugin/routes/api.ts
 var apiRoutes2 = new hono.Hono();
-apiRoutes2.use("*", chunkV4V54BY3_cjs.requireAuth());
+apiRoutes2.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 apiRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.json({ error: "Access denied" }, 403);
   }
   return next();
 });
 async function getSettings2(db) {
   try {
-    const pluginService = new chunkQOZZJZ76_cjs.PluginService(db);
+    const pluginService = new chunk3ADEYHN2_cjs.PluginService(db);
     const plugin2 = await pluginService.getPlugin("security-audit");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS2, ...settings };
+      return { ...DEFAULT_SETTINGS, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS2;
+  return DEFAULT_SETTINGS;
 }
 apiRoutes2.get("/events", async (c) => {
   const db = c.env.DB;
@@ -6062,15 +4950,15 @@ function generateFingerprint(ip, userAgent) {
 }
 async function getPluginSettings(db) {
   try {
-    const pluginService = new chunkQOZZJZ76_cjs.PluginService(db);
+    const pluginService = new chunk3ADEYHN2_cjs.PluginService(db);
     const plugin2 = await pluginService.getPlugin("security-audit");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS2, ...settings };
+      return { ...DEFAULT_SETTINGS, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS2;
+  return DEFAULT_SETTINGS;
 }
 async function isPluginActive2(db) {
   try {
@@ -6687,16 +5575,16 @@ var StripeEventService = class {
 };
 
 // src/plugins/core-plugins/stripe-plugin/components/subscriptions-page.ts
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 
 // src/plugins/core-plugins/stripe-plugin/components/tab-bar.ts
-var TABS = [
+var TABS2 = [
   { label: "Subscriptions", path: "/admin/plugins/stripe" },
   { label: "Events", path: "/admin/plugins/stripe/events" },
   { label: "Settings", path: "/admin/plugins/stripe/settings" }
 ];
 function renderStripeTabBar(currentPath) {
-  const tabs = TABS.map((tab) => {
+  const tabs = TABS2.map((tab) => {
     const isActive = currentPath === tab.path || tab.path === "/admin/plugins/stripe" && currentPath === "/admin/plugins/stripe/";
     return `
       <a href="${tab.path}"
@@ -6820,7 +5708,7 @@ function renderSubscriptionsPage(data) {
     version,
     dynamicMenuItems
   };
-  return chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function statsCard(label, value, colorClass) {
   return `
@@ -6900,7 +5788,7 @@ function renderPagination2(page, totalPages, status) {
 }
 
 // src/plugins/core-plugins/stripe-plugin/components/events-page.ts
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 function renderEventsPage(data) {
   const { events, stats, types, filters, user, version, dynamicMenuItems } = data;
   const content2 = `
@@ -6973,7 +5861,7 @@ function renderEventsPage(data) {
     version,
     dynamicMenuItems
   };
-  return chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function eventStatsCard(label, value, colorClass) {
   return `
@@ -7061,7 +5949,7 @@ function renderEventPagination(page, totalPages, type, status) {
 }
 
 // src/plugins/core-plugins/stripe-plugin/types.ts
-var DEFAULT_SETTINGS3 = {
+var DEFAULT_SETTINGS2 = {
   stripePublishableKey: "",
   stripeSecretKey: "",
   stripeWebhookSecret: "",
@@ -7072,25 +5960,25 @@ var DEFAULT_SETTINGS3 = {
 
 // src/plugins/core-plugins/stripe-plugin/routes/admin.ts
 var adminRoutes3 = new hono.Hono();
-adminRoutes3.use("*", chunkV4V54BY3_cjs.requireAuth());
+adminRoutes3.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes3.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.text("Access denied", 403);
   }
   return next();
 });
 async function getSettings3(db) {
   try {
-    const pluginService = new chunkQOZZJZ76_cjs.PluginService(db);
+    const pluginService = new chunk3ADEYHN2_cjs.PluginService(db);
     const plugin2 = await pluginService.getPlugin("stripe");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS3, ...settings };
+      return { ...DEFAULT_SETTINGS2, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS3;
+  return DEFAULT_SETTINGS2;
 }
 adminRoutes3.get("/", async (c) => {
   const db = c.env.DB;
@@ -7145,7 +6033,7 @@ adminRoutes3.get("/settings", async (c) => {
   const db = c.env.DB;
   const user = c.get("user");
   const settings = await getSettings3(db);
-  const { renderAdminLayoutCatalyst: renderAdminLayoutCatalyst2 } = await import('./admin-layout-catalyst.template-HFD37TY5.cjs');
+  const { renderAdminLayoutCatalyst: renderAdminLayoutCatalyst2 } = await import('./admin-layout-catalyst.template-RIFJ4GFM.cjs');
   const content2 = `
     <div>
       <div class="mb-6">
@@ -7404,15 +6292,15 @@ function timingSafeEqual(a, b) {
 var apiRoutes3 = new hono.Hono();
 async function getSettings4(db) {
   try {
-    const pluginService = new chunkQOZZJZ76_cjs.PluginService(db);
+    const pluginService = new chunk3ADEYHN2_cjs.PluginService(db);
     const plugin2 = await pluginService.getPlugin("stripe");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS3, ...settings };
+      return { ...DEFAULT_SETTINGS2, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS3;
+  return DEFAULT_SETTINGS2;
 }
 function mapStripeStatus(status) {
   const map = {
@@ -7555,7 +6443,7 @@ apiRoutes3.post("/webhook", async (c) => {
   }
   return c.json({ received: true });
 });
-apiRoutes3.post("/create-checkout-session", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
+apiRoutes3.post("/create-checkout-session", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const db = c.env.DB;
   const user = c.get("user");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
@@ -7595,7 +6483,7 @@ apiRoutes3.post("/create-checkout-session", chunkV4V54BY3_cjs.requireAuth(), asy
   });
   return c.json({ sessionId: session.id, url: session.url });
 });
-apiRoutes3.get("/subscription", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/subscription", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const db = c.env.DB;
@@ -7607,9 +6495,9 @@ apiRoutes3.get("/subscription", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
   }
   return c.json({ subscription });
 });
-apiRoutes3.get("/subscriptions", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/subscriptions", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const subscriptionService = new SubscriptionService(db);
   await subscriptionService.ensureTable();
@@ -7623,18 +6511,18 @@ apiRoutes3.get("/subscriptions", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
   const result = await subscriptionService.list(filters);
   return c.json(result);
 });
-apiRoutes3.get("/stats", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/stats", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const subscriptionService = new SubscriptionService(db);
   await subscriptionService.ensureTable();
   const stats = await subscriptionService.getStats();
   return c.json(stats);
 });
-apiRoutes3.post("/sync-subscriptions", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
+apiRoutes3.post("/sync-subscriptions", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const settings = await getSettings4(db);
   if (!settings.stripeSecretKey) {
@@ -7680,9 +6568,9 @@ apiRoutes3.post("/sync-subscriptions", chunkV4V54BY3_cjs.requireAuth(), async (c
     }, 500);
   }
 });
-apiRoutes3.get("/events", chunkV4V54BY3_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/events", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
-  if (user?.role !== "admin") return c.json({ error: "Access denied" }, 403);
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
   const eventService = new StripeEventService(db);
   await eventService.ensureTable();
@@ -7746,7 +6634,7 @@ function createStripePlugin() {
 var stripePlugin = createStripePlugin();
 
 // src/middleware/plugin-menu.ts
-var REGISTRY_MENU_PLUGINS = Object.values(chunkQOZZJZ76_cjs.PLUGIN_REGISTRY).filter((p) => p.adminMenu !== null).map((p) => ({
+var REGISTRY_MENU_PLUGINS = Object.values(chunk3ADEYHN2_cjs.PLUGIN_REGISTRY).filter((p) => p.adminMenu !== null).map((p) => ({
   codeName: p.codeName,
   label: p.adminMenu.label,
   path: p.adminMenu.path,
@@ -7843,12 +6731,12 @@ var HOOKS2 = {
   REQUEST_START: "request:start",
   REQUEST_END: "request:end",
   USER_LOGIN: "user:login"};
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 var adminRoutes4 = new hono.Hono();
-adminRoutes4.use("*", chunkV4V54BY3_cjs.requireAuth());
+adminRoutes4.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes4.use("*", async (c, next) => {
   const user = c.get("user");
-  if (user?.role !== "admin") {
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.text("Access denied", 403);
   }
   return next();
@@ -7916,7 +6804,7 @@ adminRoutes4.get("/", async (c) => {
         <div class="divide-y divide-zinc-950/5 dark:divide-white/10">
           ${topPages.length > 0 ? topPages.map((p) => `
             <div class="flex items-center justify-between px-6 py-3">
-              <span class="text-sm text-zinc-700 dark:text-zinc-300 font-mono truncate">${escapeHtml4(p.path)}</span>
+              <span class="text-sm text-zinc-700 dark:text-zinc-300 font-mono truncate">${escapeHtml3(p.path)}</span>
               <span class="text-sm font-medium text-zinc-500 dark:text-zinc-400">${p.views}</span>
             </div>
           `).join("") : `
@@ -7945,7 +6833,7 @@ adminRoutes4.get("/", async (c) => {
             <tbody class="divide-y divide-zinc-950/5 dark:divide-white/10">
               ${recentActivity.length > 0 ? recentActivity.map((a) => `
                 <tr>
-                  <td class="px-6 py-2 font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-xs">${escapeHtml4(a.url || "")}</td>
+                  <td class="px-6 py-2 font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-xs">${escapeHtml3(a.url || "")}</td>
                   <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${a.method === "GET" ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}">${a.method || ""}</span></td>
                   <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${(a.status_code || 0) >= 400 ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"}">${a.status_code || ""}</span></td>
                   <td class="px-6 py-2 text-zinc-500 dark:text-zinc-400">${a.duration || 0}ms</td>
@@ -7961,7 +6849,7 @@ adminRoutes4.get("/", async (c) => {
       </div>
     </div>
   `;
-  return c.html(chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst({
+  return c.html(chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst({
     title: "Analytics",
     pageTitle: "Analytics Dashboard",
     currentPath: "/admin/analytics",
@@ -7975,7 +6863,7 @@ adminRoutes4.get("/", async (c) => {
     dynamicMenuItems: c.get("pluginMenuItems")
   }));
 });
-function escapeHtml4(str) {
+function escapeHtml3(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
@@ -8472,7 +7360,7 @@ apiRoutes4.post("/", async (c) => {
 });
 apiRoutes4.get("/", async (c) => {
   const user = c.get("user");
-  if (!user || user.role !== "admin") {
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.json({ error: "Admin access required" }, 403);
   }
   const db = c.env.DB;
@@ -8492,7 +7380,7 @@ apiRoutes4.get("/", async (c) => {
 });
 apiRoutes4.get("/stats", async (c) => {
   const user = c.get("user");
-  if (!user || user.role !== "admin") {
+  if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
     return c.json({ error: "Admin access required" }, 403);
   }
   const db = c.env.DB;
@@ -9465,7 +8353,7 @@ async function warmNamespace(namespace, entries) {
 }
 
 // src/templates/pages/admin-cache.template.ts
-chunkUYJ6TJHX_cjs.init_admin_layout_catalyst_template();
+chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 function renderCacheDashboard(data) {
   const pageContent = `
     <div class="space-y-6">
@@ -9644,7 +8532,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunkBX75LZES_cjs.renderConfirmationDialog({
+    ${chunkN5LGKCE3_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -9655,7 +8543,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunkBX75LZES_cjs.renderConfirmationDialog({
+    ${chunkN5LGKCE3_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -9666,7 +8554,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunkBX75LZES_cjs.getConfirmationDialogScript()}
+    ${chunkN5LGKCE3_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -9676,7 +8564,7 @@ function renderCacheDashboard(data) {
     version: data.version,
     content: pageContent
   };
-  return chunkUYJ6TJHX_cjs.renderAdminLayoutCatalyst(layoutData);
+  return chunkNIUAH5PZ_cjs.renderAdminLayoutCatalyst(layoutData);
 }
 function renderStatCard(label, value, color, icon, colorOverride) {
   const finalColor = colorOverride || color;
@@ -10352,14 +9240,14 @@ var faviconSvg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 // src/app.ts
 function createSonicJSApp(config = {}) {
   const app2 = new hono.Hono();
-  const appVersion = config.version || chunk74BFRAQS_cjs.getCoreVersion();
+  const appVersion = config.version || chunk2HWICA5J_cjs.getCoreVersion();
   const appName = config.name || "SonicJS AI";
   app2.use("*", async (c, next) => {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkV4V54BY3_cjs.metricsMiddleware());
-  app2.use("*", chunkV4V54BY3_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkQ2NTBJYS_cjs.metricsMiddleware());
+  app2.use("*", chunkQ2NTBJYS_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -10368,32 +9256,101 @@ function createSonicJSApp(config = {}) {
   app2.use("*", async (_c, next) => {
     await next();
   });
-  app2.use("*", chunkV4V54BY3_cjs.securityHeadersMiddleware());
-  app2.use("*", chunkV4V54BY3_cjs.csrfProtection());
+  app2.use("*", chunkQ2NTBJYS_cjs.securityHeadersMiddleware());
+  app2.use("*", chunkQ2NTBJYS_cjs.csrfProtection());
+  app2.use("*", async (c, next) => {
+    try {
+      const auth = chunkZHVJ3NSY_cjs.createAuth(c.env, config.auth?.extendBetterAuth);
+      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      if (session?.user) {
+        const u = session.user;
+        const s = session.session;
+        const ms = (v) => typeof v === "number" ? v : new Date(v).getTime();
+        c.set("user", {
+          userId: u.id,
+          email: u.email,
+          role: u.role ?? "viewer",
+          exp: ms(s.expiresAt),
+          iat: ms(s.createdAt)
+        });
+        c.set("session", {
+          id: s.id,
+          userId: s.userId,
+          token: s.token,
+          expiresAt: ms(s.expiresAt),
+          createdAt: ms(s.createdAt),
+          updatedAt: ms(s.updatedAt)
+        });
+      }
+    } catch {
+    }
+    await next();
+  });
   if (config.middleware?.afterAuth) {
     for (const middleware of config.middleware.afterAuth) {
       app2.use("*", middleware);
     }
   }
-  const adminRoles = config.adminAccessRoles || ["admin"];
-  app2.use("/admin/*", chunkV4V54BY3_cjs.requireAuth());
-  app2.use("/admin/*", chunkV4V54BY3_cjs.requireRole(adminRoles));
+  app2.use("/admin/*", chunkQ2NTBJYS_cjs.requireAuth());
+  app2.use("/admin/*", chunkQ2NTBJYS_cjs.requireRbac("portal", "access"));
   app2.use("/admin/*", pluginMenuMiddleware());
-  app2.route("/api", chunkBX75LZES_cjs.api_default);
-  app2.route("/api/media", chunkBX75LZES_cjs.api_media_default);
-  app2.route("/api/system", chunkBX75LZES_cjs.api_system_default);
-  app2.route("/admin/api", chunkBX75LZES_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunkBX75LZES_cjs.router);
-  app2.route("/admin/collections", chunkBX75LZES_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunkBX75LZES_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunkBX75LZES_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunkBX75LZES_cjs.public_forms_default);
-  app2.route("/api/forms", chunkBX75LZES_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunkBX75LZES_cjs.router2);
+  const NAV_LANDING = [
+    { path: "/admin/content", perm: "content:read" },
+    { path: "/admin/media", perm: "media:read" },
+    { path: "/admin/collections", perm: "collections:manage" },
+    { path: "/admin/forms", perm: "content:read" },
+    { path: "/admin/users", perm: "users:manage" },
+    { path: "/admin/plugins", perm: "plugins:manage" },
+    { path: "/admin/settings", perm: "settings:manage" },
+    { path: "/admin/rbac", perm: "rbac:manage" }
+  ];
+  app2.use("/admin/*", async (c, next) => {
+    const user = c.get("user");
+    if (!user?.userId) return next();
+    let perms = [];
+    try {
+      const { RbacService: RbacService2 } = await import('./rbac-2Q43PCIJ.cjs');
+      perms = await new RbacService2(c.env.DB, c.env.CACHE_KV).permissionsForUser(user.userId);
+    } catch {
+      return next();
+    }
+    c.set("rbacPerms", perms);
+    const path = new URL(c.req.url).pathname;
+    if ((path === "/admin" || path === "/admin/" || path === "/admin/dashboard") && !perms.includes("dashboard:read")) {
+      const dest = NAV_LANDING.find((n) => perms.includes(n.perm));
+      if (dest) return c.redirect(dest.path);
+      return c.redirect("/auth/login?error=Your account has no accessible sections");
+    }
+    await next();
+    try {
+      const contentType = c.res.headers.get("content-type") || "";
+      if (!contentType.includes("text/html")) return;
+      const body = await c.res.text();
+      const filtered = body.includes("<!--nav:") ? body.replace(
+        /<!--nav:([^>]+?)-->([\s\S]*?)<!--\/nav-->/g,
+        (_m, perm, inner) => perms.includes(perm) ? inner : ""
+      ) : body;
+      const headers = new Headers(c.res.headers);
+      headers.delete("content-length");
+      c.res = new Response(filtered, { status: c.res.status, headers });
+    } catch {
+    }
+  });
+  app2.route("/api", chunkN5LGKCE3_cjs.api_default);
+  app2.route("/api/media", chunkN5LGKCE3_cjs.api_media_default);
+  app2.route("/api/system", chunkN5LGKCE3_cjs.api_system_default);
+  app2.route("/admin/api", chunkN5LGKCE3_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunkN5LGKCE3_cjs.router);
+  app2.route("/admin/collections", chunkN5LGKCE3_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunkN5LGKCE3_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunkN5LGKCE3_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunkN5LGKCE3_cjs.public_forms_default);
+  app2.route("/api/forms", chunkN5LGKCE3_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunkN5LGKCE3_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunkBX75LZES_cjs.admin_content_default);
-  app2.route("/admin/media", chunkBX75LZES_cjs.adminMediaRoutes);
+  app2.route("/admin/content", chunkN5LGKCE3_cjs.admin_content_default);
+  app2.route("/admin/media", chunkN5LGKCE3_cjs.adminMediaRoutes);
   app2.use("/auth/*", securityAuditMiddleware());
   if (securityAuditPlugin.routes && securityAuditPlugin.routes.length > 0) {
     for (const route of securityAuditPlugin.routes) {
@@ -10406,18 +9363,8 @@ function createSonicJSApp(config = {}) {
     }
   }
   app2.route("/admin/cache", cache_default.getRoutes());
-  if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
-    for (const route of oauthProvidersPlugin.routes) {
-      app2.route(route.path, route.handler);
-    }
-  }
-  if (chunkBX75LZES_cjs.userProfilesPlugin.routes && chunkBX75LZES_cjs.userProfilesPlugin.routes.length > 0) {
-    for (const route of chunkBX75LZES_cjs.userProfilesPlugin.routes) {
-      app2.route(route.path, route.handler);
-    }
-  }
-  if (otpLoginPlugin.routes && otpLoginPlugin.routes.length > 0) {
-    for (const route of otpLoginPlugin.routes) {
+  if (chunkN5LGKCE3_cjs.userProfilesPlugin.routes && chunkN5LGKCE3_cjs.userProfilesPlugin.routes.length > 0) {
+    for (const route of chunkN5LGKCE3_cjs.userProfilesPlugin.routes) {
       app2.route(route.path, route.handler);
     }
   }
@@ -10432,19 +9379,18 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunkBX75LZES_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunkBX75LZES_cjs.adminLogsRoutes);
-  app2.route("/admin", chunkBX75LZES_cjs.userRoutes);
-  app2.route("/auth", chunkBX75LZES_cjs.auth_default);
-  app2.route("/", chunkBX75LZES_cjs.test_cleanup_default);
+  app2.route("/admin/plugins", chunkN5LGKCE3_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunkN5LGKCE3_cjs.adminLogsRoutes);
+  app2.route("/admin/rbac", adminRbacRoutes);
+  app2.route("/admin", chunkN5LGKCE3_cjs.userRoutes);
+  app2.route("/auth", chunkN5LGKCE3_cjs.auth_default);
+  app2.on(["GET", "POST"], "/auth/*", (c) => {
+    const auth = chunkZHVJ3NSY_cjs.createAuth(c.env, config.auth?.extendBetterAuth);
+    return auth.handler(c.req.raw);
+  });
+  app2.route("/", chunkN5LGKCE3_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
-      app2.route(route.path, route.handler);
-    }
-  }
-  const magicLinkPlugin = createMagicLinkAuthPlugin();
-  if (magicLinkPlugin.routes && magicLinkPlugin.routes.length > 0) {
-    for (const route of magicLinkPlugin.routes) {
       app2.route(route.path, route.handler);
     }
   }
@@ -10499,7 +9445,7 @@ function createSonicJSApp(config = {}) {
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
   });
-  chunkXWQVFWPW_cjs.setAppInstance(app2);
+  chunkRGJ4RQ3Z_cjs.setAppInstance(app2);
   app2.notFound((c) => {
     return c.json({ error: "Not Found", status: 404 }, 404);
   });
@@ -10516,487 +9462,1058 @@ function setupCoreRoutes(_app) {
   console.warn("setupCoreRoutes is deprecated. Use createSonicJSApp() instead.");
 }
 function createDb(d1$1) {
-  return d1.drizzle(d1$1, { schema: chunkXWQVFWPW_cjs.schema_exports });
+  return d1.drizzle(d1$1, { schema: chunk4RVMY6FI_cjs.schema_exports });
 }
 
+// src/plugins/core-plugins/oauth-providers/oauth-service.ts
+var GITHUB_PROVIDER = {
+  id: "github",
+  name: "GitHub",
+  authorizeUrl: "https://github.com/login/oauth/authorize",
+  tokenUrl: "https://github.com/login/oauth/access_token",
+  userInfoUrl: "https://api.github.com/user",
+  scopes: ["read:user", "user:email"],
+  mapProfile: (profile) => ({
+    providerAccountId: String(profile.id),
+    email: profile.email || "",
+    name: profile.name || profile.login || "",
+    avatar: profile.avatar_url || void 0
+  })
+};
+var GOOGLE_PROVIDER = {
+  id: "google",
+  name: "Google",
+  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenUrl: "https://oauth2.googleapis.com/token",
+  userInfoUrl: "https://www.googleapis.com/oauth2/v2/userinfo",
+  scopes: ["openid", "email", "profile"],
+  mapProfile: (profile) => ({
+    providerAccountId: String(profile.id),
+    email: profile.email || "",
+    name: profile.name || "",
+    avatar: profile.picture || void 0
+  })
+};
+var BUILT_IN_PROVIDERS = {
+  github: GITHUB_PROVIDER,
+  google: GOOGLE_PROVIDER
+};
+var OAuthService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  /**
+   * Build the authorization redirect URL for a provider.
+   */
+  buildAuthorizeUrl(provider, clientId, redirectUri, state) {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: provider.scopes.join(" "),
+      state
+    });
+    if (provider.id === "google") {
+      params.set("access_type", "offline");
+      params.set("prompt", "consent");
+    }
+    return `${provider.authorizeUrl}?${params.toString()}`;
+  }
+  /**
+   * Exchange authorization code for tokens using native fetch.
+   */
+  async exchangeCode(provider, clientId, clientSecret, code, redirectUri) {
+    const body = {
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code"
+    };
+    const response = await fetch(provider.tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      body: new URLSearchParams(body).toString()
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Token exchange failed (${response.status}): ${errorText}`);
+    }
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(`Token exchange error: ${data.error_description || data.error}`);
+    }
+    return {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in ? Number(data.expires_in) : void 0
+    };
+  }
+  /**
+   * Fetch user profile from the provider's userinfo endpoint.
+   */
+  async fetchUserProfile(provider, accessToken) {
+    const headers = {
+      "Authorization": `Bearer ${accessToken}`,
+      "Accept": "application/json"
+    };
+    if (provider.id === "github") {
+      headers["Authorization"] = `token ${accessToken}`;
+    }
+    const response = await fetch(provider.userInfoUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user profile (${response.status})`);
+    }
+    const profile = await response.json();
+    if (provider.id === "github" && !profile.email) {
+      const emailResponse = await fetch("https://api.github.com/user/emails", {
+        headers: {
+          "Authorization": `token ${accessToken}`,
+          "Accept": "application/json"
+        }
+      });
+      if (emailResponse.ok) {
+        const emails = await emailResponse.json();
+        const primaryEmail = emails.find((e) => e.primary && e.verified);
+        if (primaryEmail) {
+          profile.email = primaryEmail.email;
+        }
+      }
+    }
+    return provider.mapProfile(profile);
+  }
+  // ─── Database Operations ────────────────────────────────────────────────
+  /**
+   * Find an existing OAuth account link.
+   */
+  async findOAuthAccount(provider, providerAccountId) {
+    return await this.db.prepare(`
+      SELECT * FROM oauth_accounts
+      WHERE provider = ? AND provider_account_id = ?
+    `).bind(provider, providerAccountId).first();
+  }
+  /**
+   * Find all OAuth accounts for a user.
+   */
+  async findUserOAuthAccounts(userId) {
+    const result = await this.db.prepare(`
+      SELECT * FROM oauth_accounts WHERE user_id = ?
+    `).bind(userId).all();
+    return result.results || [];
+  }
+  /**
+   * Create a new OAuth account link.
+   */
+  async createOAuthAccount(params) {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    await this.db.prepare(`
+      INSERT INTO oauth_accounts (
+        id, user_id, provider, provider_account_id,
+        access_token, refresh_token, token_expires_at,
+        profile_data, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      params.userId,
+      params.provider,
+      params.providerAccountId,
+      params.accessToken,
+      params.refreshToken || null,
+      params.tokenExpiresAt || null,
+      params.profileData || null,
+      now,
+      now
+    ).run();
+    return {
+      id,
+      user_id: params.userId,
+      provider: params.provider,
+      provider_account_id: params.providerAccountId,
+      access_token: params.accessToken,
+      refresh_token: params.refreshToken || null,
+      token_expires_at: params.tokenExpiresAt || null,
+      profile_data: params.profileData || null,
+      created_at: now,
+      updated_at: now
+    };
+  }
+  /**
+   * Update tokens for an existing OAuth account.
+   */
+  async updateOAuthTokens(id, accessToken, refreshToken, tokenExpiresAt) {
+    await this.db.prepare(`
+      UPDATE oauth_accounts
+      SET access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(accessToken, refreshToken || null, tokenExpiresAt || null, Date.now(), id).run();
+  }
+  /**
+   * Unlink an OAuth account from a user (only if they have another auth method).
+   */
+  async unlinkOAuthAccount(userId, provider) {
+    const user = await this.db.prepare(`
+      SELECT password_hash FROM users WHERE id = ?
+    `).bind(userId).first();
+    const otherLinks = await this.db.prepare(`
+      SELECT COUNT(*) as count FROM oauth_accounts
+      WHERE user_id = ? AND provider != ?
+    `).bind(userId, provider).first();
+    const hasPassword = !!user?.password_hash;
+    const hasOtherLinks = (otherLinks?.count || 0) > 0;
+    if (!hasPassword && !hasOtherLinks) {
+      return false;
+    }
+    await this.db.prepare(`
+      DELETE FROM oauth_accounts WHERE user_id = ? AND provider = ?
+    `).bind(userId, provider).run();
+    return true;
+  }
+  /**
+   * Find a user by email.
+   */
+  async findUserByEmail(email) {
+    return await this.db.prepare(`
+      SELECT id, email, role, is_active, first_name, last_name
+      FROM users WHERE email = ?
+    `).bind(email.toLowerCase()).first();
+  }
+  /**
+   * Create a new user from an OAuth profile.
+   */
+  async createUserFromOAuth(profile) {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const email = profile.email.toLowerCase();
+    const nameParts = (profile.name || email.split("@")[0] || "User").split(" ");
+    const firstName = nameParts[0] || "User";
+    const lastName = nameParts.slice(1).join(" ") || "";
+    const username = email.split("@")[0] || id.substring(0, 8);
+    const existing = await this.db.prepare(
+      "SELECT id FROM users WHERE username = ?"
+    ).bind(username).first();
+    const finalUsername = existing ? `${username}-${id.substring(0, 6)}` : username;
+    await this.db.prepare(`
+      INSERT INTO users (
+        id, email, username, first_name, last_name,
+        password_hash, role, avatar, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, 'viewer', ?, 1, ?, ?)
+    `).bind(
+      id,
+      email,
+      finalUsername,
+      firstName,
+      lastName,
+      profile.avatar || null,
+      now,
+      now
+    ).run();
+    return id;
+  }
+  /**
+   * Generate a cryptographically random state parameter for CSRF protection.
+   */
+  generateState() {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+};
+
+// src/plugins/core-plugins/oauth-providers/index.ts
+var STATE_COOKIE_NAME = "oauth_state";
+var STATE_COOKIE_MAX_AGE = 600;
+function createOAuthProvidersPlugin() {
+  const builder = chunk635JAMSE_cjs.PluginBuilder.create({
+    name: "oauth-providers",
+    version: "1.0.0-beta.1",
+    description: "OAuth2/OIDC social login with GitHub, Google, and more"
+  });
+  builder.metadata({
+    author: {
+      name: "SonicJS Team",
+      email: "team@sonicjs.com"
+    },
+    license: "MIT",
+    compatibility: "^2.0.0"
+  });
+  function getCallbackUrl(c, provider) {
+    const proto = c.req.header("x-forwarded-proto") || "https";
+    const host = c.req.header("host") || "localhost";
+    return `${proto}://${host}/auth/oauth/${provider}/callback`;
+  }
+  async function loadSettings(db) {
+    const row = await db.prepare(
+      `SELECT settings FROM plugins WHERE id = 'oauth-providers'`
+    ).first();
+    if (!row?.settings) return null;
+    try {
+      return JSON.parse(row.settings);
+    } catch {
+      return null;
+    }
+  }
+  function getProviderCredentials(settings, providerId) {
+    if (!settings?.providers?.[providerId]) return null;
+    const p = settings.providers[providerId];
+    if (!p.enabled || !p.clientId || !p.clientSecret) return null;
+    return { clientId: p.clientId, clientSecret: p.clientSecret };
+  }
+  const oauthAPI = new hono.Hono();
+  oauthAPI.get("/:provider", async (c) => {
+    try {
+      const providerId = c.req.param("provider");
+      const providerConfig = BUILT_IN_PROVIDERS[providerId];
+      if (!providerConfig) {
+        return c.json({ error: `Unknown OAuth provider: ${providerId}` }, 400);
+      }
+      const db = c.env.DB;
+      const settings = await loadSettings(db);
+      const creds = getProviderCredentials(settings, providerId);
+      if (!creds) {
+        return c.json({
+          error: `OAuth provider "${providerId}" is not configured or not enabled`
+        }, 400);
+      }
+      const oauthService = new OAuthService(db);
+      const state = oauthService.generateState();
+      const redirectUri = getCallbackUrl(c, providerId);
+      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        // Lax required for OAuth redirect flow
+        maxAge: STATE_COOKIE_MAX_AGE,
+        path: "/auth/oauth"
+      });
+      const authorizeUrl = oauthService.buildAuthorizeUrl(
+        providerConfig,
+        creds.clientId,
+        redirectUri,
+        state
+      );
+      return c.redirect(authorizeUrl);
+    } catch (error) {
+      console.error("OAuth authorize error:", error);
+      return c.json({ error: "Failed to initiate OAuth flow" }, 500);
+    }
+  });
+  oauthAPI.get("/:provider/callback", async (c) => {
+    try {
+      const providerId = c.req.param("provider");
+      const providerConfig = BUILT_IN_PROVIDERS[providerId];
+      if (!providerConfig) {
+        return c.redirect("/auth/login?error=Unknown OAuth provider");
+      }
+      const stateParam = c.req.query("state");
+      const stateCookie = cookie.getCookie(c, STATE_COOKIE_NAME);
+      if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+        return c.redirect("/auth/login?error=Invalid OAuth state. Please try again.");
+      }
+      cookie.setCookie(c, STATE_COOKIE_NAME, "", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        maxAge: 0,
+        path: "/auth/oauth"
+      });
+      const errorParam = c.req.query("error");
+      if (errorParam) {
+        const errorDesc = c.req.query("error_description") || errorParam;
+        return c.redirect(`/auth/login?error=${encodeURIComponent(errorDesc)}`);
+      }
+      const code = c.req.query("code");
+      if (!code) {
+        return c.redirect("/auth/login?error=No authorization code received");
+      }
+      const db = c.env.DB;
+      const settings = await loadSettings(db);
+      const creds = getProviderCredentials(settings, providerId);
+      if (!creds) {
+        return c.redirect("/auth/login?error=OAuth provider not configured");
+      }
+      const oauthService = new OAuthService(db);
+      const redirectUri = getCallbackUrl(c, providerId);
+      const tokens = await oauthService.exchangeCode(
+        providerConfig,
+        creds.clientId,
+        creds.clientSecret,
+        code,
+        redirectUri
+      );
+      const profile = await oauthService.fetchUserProfile(providerConfig, tokens.access_token);
+      if (!profile.email) {
+        return c.redirect("/auth/login?error=Could not retrieve email from OAuth provider. Please ensure your email is public or grant email permission.");
+      }
+      const tokenExpiresAt = tokens.expires_in ? Date.now() + tokens.expires_in * 1e3 : null;
+      const existingOAuth = await oauthService.findOAuthAccount(providerId, profile.providerAccountId);
+      if (existingOAuth) {
+        await oauthService.updateOAuthTokens(
+          existingOAuth.id,
+          tokens.access_token,
+          tokens.refresh_token,
+          tokenExpiresAt ?? void 0
+        );
+        const user = await db.prepare(
+          "SELECT id, email, role, is_active FROM users WHERE id = ?"
+        ).bind(existingOAuth.user_id).first();
+        if (!user || !user.is_active) {
+          return c.redirect("/auth/login?error=Account is deactivated");
+        }
+        const tokenTtl2 = await chunkQ2NTBJYS_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+        const jwt2 = await chunkQ2NTBJYS_cjs.AuthManager.generateToken(
+          user.id,
+          user.email,
+          user.role,
+          c.env.JWT_SECRET,
+          tokenTtl2
+        );
+        chunkQ2NTBJYS_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
+        return c.redirect("/admin");
+      }
+      const existingUser = await oauthService.findUserByEmail(profile.email);
+      if (existingUser) {
+        if (!existingUser.is_active) {
+          return c.redirect("/auth/login?error=Account is deactivated");
+        }
+        await oauthService.createOAuthAccount({
+          userId: existingUser.id,
+          provider: providerId,
+          providerAccountId: profile.providerAccountId,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          tokenExpiresAt: tokenExpiresAt ?? void 0,
+          profileData: JSON.stringify(profile)
+        });
+        const tokenTtl2 = await chunkQ2NTBJYS_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+        const jwt2 = await chunkQ2NTBJYS_cjs.AuthManager.generateToken(
+          existingUser.id,
+          existingUser.email,
+          existingUser.role,
+          c.env.JWT_SECRET,
+          tokenTtl2
+        );
+        chunkQ2NTBJYS_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
+        return c.redirect("/admin");
+      }
+      const newUserId = await oauthService.createUserFromOAuth(profile);
+      await oauthService.createOAuthAccount({
+        userId: newUserId,
+        provider: providerId,
+        providerAccountId: profile.providerAccountId,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        tokenExpiresAt: tokenExpiresAt ?? void 0,
+        profileData: JSON.stringify(profile)
+      });
+      const tokenTtl = await chunkQ2NTBJYS_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+      const jwt = await chunkQ2NTBJYS_cjs.AuthManager.generateToken(
+        newUserId,
+        profile.email.toLowerCase(),
+        "viewer",
+        c.env.JWT_SECRET,
+        tokenTtl
+      );
+      chunkQ2NTBJYS_cjs.AuthManager.setAuthCookie(c, jwt, { sameSite: "Lax", maxAge: tokenTtl });
+      return c.redirect("/admin");
+    } catch (error) {
+      console.error("OAuth callback error:", error);
+      const message = error instanceof Error ? error.message : "OAuth authentication failed";
+      return c.redirect(`/auth/login?error=${encodeURIComponent(message)}`);
+    }
+  });
+  oauthAPI.post("/link", async (c) => {
+    try {
+      const user = c.get("user");
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      const body = await c.req.json();
+      const { provider } = body;
+      if (!provider || !BUILT_IN_PROVIDERS[provider]) {
+        return c.json({ error: "Invalid provider" }, 400);
+      }
+      const db = c.env.DB;
+      const settings = await loadSettings(db);
+      const creds = getProviderCredentials(settings, provider);
+      if (!creds) {
+        return c.json({ error: `OAuth provider "${provider}" is not configured` }, 400);
+      }
+      const oauthService = new OAuthService(db);
+      const state = oauthService.generateState();
+      const redirectUri = getCallbackUrl(c, provider);
+      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        maxAge: STATE_COOKIE_MAX_AGE,
+        path: "/auth/oauth"
+      });
+      const authorizeUrl = oauthService.buildAuthorizeUrl(
+        BUILT_IN_PROVIDERS[provider],
+        creds.clientId,
+        redirectUri,
+        state
+      );
+      return c.json({ redirectUrl: authorizeUrl });
+    } catch (error) {
+      console.error("OAuth link error:", error);
+      return c.json({ error: "Failed to initiate account linking" }, 500);
+    }
+  });
+  oauthAPI.post("/unlink", async (c) => {
+    try {
+      const user = c.get("user");
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      const body = await c.req.json();
+      const { provider } = body;
+      if (!provider) {
+        return c.json({ error: "Provider is required" }, 400);
+      }
+      const db = c.env.DB;
+      const oauthService = new OAuthService(db);
+      const success = await oauthService.unlinkOAuthAccount(user.userId, provider);
+      if (!success) {
+        return c.json({
+          error: "Cannot unlink the only authentication method. Set a password first."
+        }, 400);
+      }
+      return c.json({ success: true, message: `${provider} account unlinked` });
+    } catch (error) {
+      console.error("OAuth unlink error:", error);
+      return c.json({ error: "Failed to unlink account" }, 500);
+    }
+  });
+  oauthAPI.get("/accounts", async (c) => {
+    try {
+      const user = c.get("user");
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      const db = c.env.DB;
+      const oauthService = new OAuthService(db);
+      const accounts = await oauthService.findUserOAuthAccounts(user.userId);
+      return c.json({
+        accounts: accounts.map((a) => ({
+          provider: a.provider,
+          providerAccountId: a.provider_account_id,
+          linkedAt: a.created_at
+        }))
+      });
+    } catch (error) {
+      console.error("OAuth accounts error:", error);
+      return c.json({ error: "Failed to fetch linked accounts" }, 500);
+    }
+  });
+  builder.addRoute("/auth/oauth", oauthAPI, {
+    description: "OAuth2 social login endpoints",
+    requiresAuth: false,
+    priority: 100
+  });
+  builder.addMenuItem("OAuth Providers", "/admin/plugins/oauth-providers", {
+    icon: "shield",
+    order: 86,
+    permissions: ["oauth:manage"]
+  });
+  builder.lifecycle({
+    activate: async () => {
+      console.info("\u2705 OAuth Providers plugin activated");
+    },
+    deactivate: async () => {
+      console.info("\u274C OAuth Providers plugin deactivated");
+    }
+  });
+  return builder.build();
+}
+var oauthProvidersPlugin = createOAuthProvidersPlugin();
+
 // src/index.ts
-var VERSION = chunk74BFRAQS_cjs.package_default.version;
+var VERSION = chunk2HWICA5J_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.ROUTES_INFO; }
+  get: function () { return chunkN5LGKCE3_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.admin_api_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.adminCheckboxRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.admin_code_examples_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.adminCollectionsRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.admin_content_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.router; }
+  get: function () { return chunkN5LGKCE3_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.adminDesignRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.adminLogsRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.adminMediaRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.adminPluginRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.adminSettingsRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.admin_testimonials_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.userRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.api_content_crud_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.api_media_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.api_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.api_system_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.auth_default; }
+  get: function () { return chunkN5LGKCE3_cjs.auth_default; }
 });
 Object.defineProperty(exports, "createUserProfilesPlugin", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.createUserProfilesPlugin; }
+  get: function () { return chunkN5LGKCE3_cjs.createUserProfilesPlugin; }
 });
 Object.defineProperty(exports, "defineUserProfile", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.defineUserProfile; }
+  get: function () { return chunkN5LGKCE3_cjs.defineUserProfile; }
 });
 Object.defineProperty(exports, "getUserProfileConfig", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.getUserProfileConfig; }
+  get: function () { return chunkN5LGKCE3_cjs.getUserProfileConfig; }
 });
 Object.defineProperty(exports, "userProfilesPlugin", {
   enumerable: true,
-  get: function () { return chunkBX75LZES_cjs.userProfilesPlugin; }
+  get: function () { return chunkN5LGKCE3_cjs.userProfilesPlugin; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.Logger; }
-});
-Object.defineProperty(exports, "apiTokens", {
-  enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.apiTokens; }
-});
-Object.defineProperty(exports, "collections", {
-  enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.collections; }
-});
-Object.defineProperty(exports, "content", {
-  enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.content; }
-});
-Object.defineProperty(exports, "contentVersions", {
-  enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.contentVersions; }
+  get: function () { return chunkRGJ4RQ3Z_cjs.Logger; }
 });
 Object.defineProperty(exports, "getLogger", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.getLogger; }
+  get: function () { return chunkRGJ4RQ3Z_cjs.getLogger; }
 });
 Object.defineProperty(exports, "initLogger", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.initLogger; }
+  get: function () { return chunkRGJ4RQ3Z_cjs.initLogger; }
+});
+Object.defineProperty(exports, "apiTokens", {
+  enumerable: true,
+  get: function () { return chunk4RVMY6FI_cjs.apiTokens; }
+});
+Object.defineProperty(exports, "collections", {
+  enumerable: true,
+  get: function () { return chunk4RVMY6FI_cjs.collections; }
+});
+Object.defineProperty(exports, "content", {
+  enumerable: true,
+  get: function () { return chunk4RVMY6FI_cjs.content; }
+});
+Object.defineProperty(exports, "contentVersions", {
+  enumerable: true,
+  get: function () { return chunk4RVMY6FI_cjs.contentVersions; }
 });
 Object.defineProperty(exports, "insertCollectionSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertCollectionSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertCollectionSchema; }
 });
 Object.defineProperty(exports, "insertContentSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertContentSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertContentSchema; }
 });
 Object.defineProperty(exports, "insertLogConfigSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertLogConfigSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertLogConfigSchema; }
 });
 Object.defineProperty(exports, "insertMediaSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertMediaSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertMediaSchema; }
 });
 Object.defineProperty(exports, "insertPluginActivityLogSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertPluginActivityLogSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertPluginActivityLogSchema; }
 });
 Object.defineProperty(exports, "insertPluginAssetSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertPluginAssetSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertPluginAssetSchema; }
 });
 Object.defineProperty(exports, "insertPluginHookSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertPluginHookSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertPluginHookSchema; }
 });
 Object.defineProperty(exports, "insertPluginRouteSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertPluginRouteSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertPluginRouteSchema; }
 });
 Object.defineProperty(exports, "insertPluginSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertPluginSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertPluginSchema; }
 });
 Object.defineProperty(exports, "insertSystemLogSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertSystemLogSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertSystemLogSchema; }
 });
 Object.defineProperty(exports, "insertUserSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertUserSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertUserSchema; }
 });
 Object.defineProperty(exports, "insertWorkflowHistorySchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.insertWorkflowHistorySchema; }
+  get: function () { return chunk4RVMY6FI_cjs.insertWorkflowHistorySchema; }
 });
 Object.defineProperty(exports, "logConfig", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.logConfig; }
+  get: function () { return chunk4RVMY6FI_cjs.logConfig; }
 });
 Object.defineProperty(exports, "media", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.media; }
+  get: function () { return chunk4RVMY6FI_cjs.media; }
 });
 Object.defineProperty(exports, "pluginActivityLog", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.pluginActivityLog; }
+  get: function () { return chunk4RVMY6FI_cjs.pluginActivityLog; }
 });
 Object.defineProperty(exports, "pluginAssets", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.pluginAssets; }
+  get: function () { return chunk4RVMY6FI_cjs.pluginAssets; }
 });
 Object.defineProperty(exports, "pluginHooks", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.pluginHooks; }
+  get: function () { return chunk4RVMY6FI_cjs.pluginHooks; }
 });
 Object.defineProperty(exports, "pluginRoutes", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.pluginRoutes; }
+  get: function () { return chunk4RVMY6FI_cjs.pluginRoutes; }
 });
 Object.defineProperty(exports, "plugins", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.plugins; }
+  get: function () { return chunk4RVMY6FI_cjs.plugins; }
 });
 Object.defineProperty(exports, "selectCollectionSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectCollectionSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectCollectionSchema; }
 });
 Object.defineProperty(exports, "selectContentSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectContentSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectContentSchema; }
 });
 Object.defineProperty(exports, "selectLogConfigSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectLogConfigSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectLogConfigSchema; }
 });
 Object.defineProperty(exports, "selectMediaSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectMediaSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectMediaSchema; }
 });
 Object.defineProperty(exports, "selectPluginActivityLogSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectPluginActivityLogSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectPluginActivityLogSchema; }
 });
 Object.defineProperty(exports, "selectPluginAssetSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectPluginAssetSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectPluginAssetSchema; }
 });
 Object.defineProperty(exports, "selectPluginHookSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectPluginHookSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectPluginHookSchema; }
 });
 Object.defineProperty(exports, "selectPluginRouteSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectPluginRouteSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectPluginRouteSchema; }
 });
 Object.defineProperty(exports, "selectPluginSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectPluginSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectPluginSchema; }
 });
 Object.defineProperty(exports, "selectSystemLogSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectSystemLogSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectSystemLogSchema; }
 });
 Object.defineProperty(exports, "selectUserSchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectUserSchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectUserSchema; }
 });
 Object.defineProperty(exports, "selectWorkflowHistorySchema", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.selectWorkflowHistorySchema; }
+  get: function () { return chunk4RVMY6FI_cjs.selectWorkflowHistorySchema; }
 });
 Object.defineProperty(exports, "systemLogs", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.systemLogs; }
+  get: function () { return chunk4RVMY6FI_cjs.systemLogs; }
 });
 Object.defineProperty(exports, "users", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.users; }
+  get: function () { return chunk4RVMY6FI_cjs.users; }
 });
 Object.defineProperty(exports, "workflowHistory", {
   enumerable: true,
-  get: function () { return chunkXWQVFWPW_cjs.workflowHistory; }
+  get: function () { return chunk4RVMY6FI_cjs.workflowHistory; }
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.AuthManager; }
+  get: function () { return chunkQ2NTBJYS_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.PermissionManager; }
+  get: function () { return chunkQ2NTBJYS_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.bootstrapMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.cacheHeaders; }
+  get: function () { return chunkQ2NTBJYS_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.compressionMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.getActivePlugins; }
+  get: function () { return chunkQ2NTBJYS_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.isPluginActive; }
+  get: function () { return chunkQ2NTBJYS_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.logActivity; }
+  get: function () { return chunkQ2NTBJYS_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.loggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.optionalAuth; }
+  get: function () { return chunkQ2NTBJYS_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.requireActivePlugin; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.requireActivePlugins; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.requireAnyPermission; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.requireAuth; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.requirePermission; }
+  get: function () { return chunkQ2NTBJYS_cjs.requirePermission; }
+});
+Object.defineProperty(exports, "requireRbac", {
+  enumerable: true,
+  get: function () { return chunkQ2NTBJYS_cjs.requireRbac; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.requireRole; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.securityHeadersMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.securityHeadersMiddleware; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkV4V54BY3_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.PluginBootstrapService; }
+  get: function () { return chunk3ADEYHN2_cjs.PluginBootstrapService; }
 });
 Object.defineProperty(exports, "PluginServiceClass", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.PluginService; }
+  get: function () { return chunk3ADEYHN2_cjs.PluginService; }
 });
 Object.defineProperty(exports, "backfillFormSubmissions", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.backfillFormSubmissions; }
+  get: function () { return chunk3ADEYHN2_cjs.backfillFormSubmissions; }
 });
 Object.defineProperty(exports, "cleanupRemovedCollections", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.cleanupRemovedCollections; }
+  get: function () { return chunk3ADEYHN2_cjs.cleanupRemovedCollections; }
 });
 Object.defineProperty(exports, "createContentFromSubmission", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.createContentFromSubmission; }
+  get: function () { return chunk3ADEYHN2_cjs.createContentFromSubmission; }
 });
 Object.defineProperty(exports, "deriveCollectionSchemaFromFormio", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.deriveCollectionSchemaFromFormio; }
+  get: function () { return chunk3ADEYHN2_cjs.deriveCollectionSchemaFromFormio; }
 });
 Object.defineProperty(exports, "deriveSubmissionTitle", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.deriveSubmissionTitle; }
+  get: function () { return chunk3ADEYHN2_cjs.deriveSubmissionTitle; }
 });
 Object.defineProperty(exports, "fullCollectionSync", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.fullCollectionSync; }
+  get: function () { return chunk3ADEYHN2_cjs.fullCollectionSync; }
 });
 Object.defineProperty(exports, "getAvailableCollectionNames", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.getAvailableCollectionNames; }
+  get: function () { return chunk3ADEYHN2_cjs.getAvailableCollectionNames; }
 });
 Object.defineProperty(exports, "getManagedCollections", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.getManagedCollections; }
+  get: function () { return chunk3ADEYHN2_cjs.getManagedCollections; }
 });
 Object.defineProperty(exports, "isCollectionManaged", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.isCollectionManaged; }
+  get: function () { return chunk3ADEYHN2_cjs.isCollectionManaged; }
 });
 Object.defineProperty(exports, "loadCollectionConfig", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.loadCollectionConfig; }
+  get: function () { return chunk3ADEYHN2_cjs.loadCollectionConfig; }
 });
 Object.defineProperty(exports, "loadCollectionConfigs", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.loadCollectionConfigs; }
+  get: function () { return chunk3ADEYHN2_cjs.loadCollectionConfigs; }
 });
 Object.defineProperty(exports, "mapFormStatusToContentStatus", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.mapFormStatusToContentStatus; }
+  get: function () { return chunk3ADEYHN2_cjs.mapFormStatusToContentStatus; }
 });
 Object.defineProperty(exports, "registerCollections", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.registerCollections; }
+  get: function () { return chunk3ADEYHN2_cjs.registerCollections; }
 });
 Object.defineProperty(exports, "syncAllFormCollections", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.syncAllFormCollections; }
+  get: function () { return chunk3ADEYHN2_cjs.syncAllFormCollections; }
 });
 Object.defineProperty(exports, "syncCollection", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.syncCollection; }
+  get: function () { return chunk3ADEYHN2_cjs.syncCollection; }
 });
 Object.defineProperty(exports, "syncCollections", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.syncCollections; }
+  get: function () { return chunk3ADEYHN2_cjs.syncCollections; }
 });
 Object.defineProperty(exports, "syncFormCollection", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.syncFormCollection; }
+  get: function () { return chunk3ADEYHN2_cjs.syncFormCollection; }
 });
 Object.defineProperty(exports, "validateCollectionConfig", {
   enumerable: true,
-  get: function () { return chunkQOZZJZ76_cjs.validateCollectionConfig; }
+  get: function () { return chunk3ADEYHN2_cjs.validateCollectionConfig; }
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunk7KR6GOY3_cjs.MigrationService; }
+  get: function () { return chunkV4LDNRTP_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,
-  get: function () { return chunk4ZSNJDLS_cjs.renderFilterBar; }
+  get: function () { return chunkYMWCPRVW_cjs.renderFilterBar; }
 });
 Object.defineProperty(exports, "getConfirmationDialogScript", {
   enumerable: true,
-  get: function () { return chunkOHYBNCVL_cjs.getConfirmationDialogScript; }
+  get: function () { return chunkOZDZSWW7_cjs.getConfirmationDialogScript; }
 });
 Object.defineProperty(exports, "renderAlert", {
   enumerable: true,
-  get: function () { return chunkOHYBNCVL_cjs.renderAlert; }
+  get: function () { return chunkOZDZSWW7_cjs.renderAlert; }
 });
 Object.defineProperty(exports, "renderConfirmationDialog", {
   enumerable: true,
-  get: function () { return chunkOHYBNCVL_cjs.renderConfirmationDialog; }
+  get: function () { return chunkOZDZSWW7_cjs.renderConfirmationDialog; }
 });
 Object.defineProperty(exports, "renderForm", {
   enumerable: true,
-  get: function () { return chunkOHYBNCVL_cjs.renderForm; }
+  get: function () { return chunkOZDZSWW7_cjs.renderForm; }
 });
 Object.defineProperty(exports, "renderFormField", {
   enumerable: true,
-  get: function () { return chunkOHYBNCVL_cjs.renderFormField; }
+  get: function () { return chunkOZDZSWW7_cjs.renderFormField; }
 });
 Object.defineProperty(exports, "renderPagination", {
   enumerable: true,
-  get: function () { return chunkOHYBNCVL_cjs.renderPagination; }
+  get: function () { return chunkOZDZSWW7_cjs.renderPagination; }
 });
 Object.defineProperty(exports, "renderTable", {
   enumerable: true,
-  get: function () { return chunkOHYBNCVL_cjs.renderTable; }
+  get: function () { return chunkOZDZSWW7_cjs.renderTable; }
 });
 Object.defineProperty(exports, "HookSystemImpl", {
   enumerable: true,
-  get: function () { return chunkZUXOAZWZ_cjs.HookSystemImpl; }
+  get: function () { return chunkABB34XUS_cjs.HookSystemImpl; }
 });
 Object.defineProperty(exports, "HookUtils", {
   enumerable: true,
-  get: function () { return chunkZUXOAZWZ_cjs.HookUtils; }
+  get: function () { return chunkABB34XUS_cjs.HookUtils; }
 });
 Object.defineProperty(exports, "PluginManagerClass", {
   enumerable: true,
-  get: function () { return chunkZUXOAZWZ_cjs.PluginManager; }
+  get: function () { return chunkABB34XUS_cjs.PluginManager; }
 });
 Object.defineProperty(exports, "PluginRegistryImpl", {
   enumerable: true,
-  get: function () { return chunkZUXOAZWZ_cjs.PluginRegistryImpl; }
+  get: function () { return chunkABB34XUS_cjs.PluginRegistryImpl; }
 });
 Object.defineProperty(exports, "PluginValidatorClass", {
   enumerable: true,
-  get: function () { return chunkZUXOAZWZ_cjs.PluginValidator; }
+  get: function () { return chunkABB34XUS_cjs.PluginValidator; }
 });
 Object.defineProperty(exports, "ScopedHookSystemClass", {
   enumerable: true,
-  get: function () { return chunkZUXOAZWZ_cjs.ScopedHookSystem; }
+  get: function () { return chunkABB34XUS_cjs.ScopedHookSystem; }
 });
 Object.defineProperty(exports, "PluginBuilder", {
   enumerable: true,
@@ -11008,31 +10525,31 @@ Object.defineProperty(exports, "PluginHelpers", {
 });
 Object.defineProperty(exports, "QueryFilterBuilder", {
   enumerable: true,
-  get: function () { return chunk74BFRAQS_cjs.QueryFilterBuilder; }
+  get: function () { return chunk2HWICA5J_cjs.QueryFilterBuilder; }
 });
 Object.defineProperty(exports, "SONICJS_VERSION", {
   enumerable: true,
-  get: function () { return chunk74BFRAQS_cjs.SONICJS_VERSION; }
+  get: function () { return chunk2HWICA5J_cjs.SONICJS_VERSION; }
 });
 Object.defineProperty(exports, "TemplateRenderer", {
   enumerable: true,
-  get: function () { return chunk74BFRAQS_cjs.TemplateRenderer; }
+  get: function () { return chunk2HWICA5J_cjs.TemplateRenderer; }
 });
 Object.defineProperty(exports, "buildQuery", {
   enumerable: true,
-  get: function () { return chunk74BFRAQS_cjs.buildQuery; }
+  get: function () { return chunk2HWICA5J_cjs.buildQuery; }
 });
 Object.defineProperty(exports, "getCoreVersion", {
   enumerable: true,
-  get: function () { return chunk74BFRAQS_cjs.getCoreVersion; }
+  get: function () { return chunk2HWICA5J_cjs.getCoreVersion; }
 });
 Object.defineProperty(exports, "renderTemplate", {
   enumerable: true,
-  get: function () { return chunk74BFRAQS_cjs.renderTemplate; }
+  get: function () { return chunk2HWICA5J_cjs.renderTemplate; }
 });
 Object.defineProperty(exports, "templateRenderer", {
   enumerable: true,
-  get: function () { return chunk74BFRAQS_cjs.templateRenderer; }
+  get: function () { return chunk2HWICA5J_cjs.templateRenderer; }
 });
 Object.defineProperty(exports, "metricsTracker", {
   enumerable: true,

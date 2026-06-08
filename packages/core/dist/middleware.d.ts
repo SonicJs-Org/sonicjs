@@ -1,6 +1,14 @@
 import * as hono from 'hono';
 import { Context, Next, MiddlewareHandler } from 'hono';
-import { S as SonicJSConfig } from './app-C9esKLmh.js';
+import { S as SonicJSConfig } from './app-BkKXUqNy.js';
+import 'better-auth/client';
+import 'better-auth/plugins/two-factor';
+import 'better-auth/plugins/email-otp';
+import 'better-auth';
+import 'better-auth/plugins/magic-link';
+import 'better-call';
+import 'zod/v4/core';
+import 'zod';
 import '@cloudflare/workers-types';
 
 type Bindings = {
@@ -62,13 +70,42 @@ declare class AuthManager {
     /**
      * Verify a token's signature and expiration.
      *
+     * IMPORTANT: pass the `JWT_SECRET` binding (e.g. `c.env.JWT_SECRET`) as the
+     * `secret` argument. If omitted, this falls back to a development-only
+     * placeholder secret — tokens signed with the real `JWT_SECRET` will then
+     * silently fail verification. From inside a Hono handler prefer
+     * `AuthManager.verifyAuthRequest(c)`, which handles header/cookie extraction
+     * and pulls the secret from `c.env` for you.
+     *
      * If `graceSeconds` > 0, tokens whose `exp` is within the grace window
      * (i.e. expired by no more than `graceSeconds`) are still returned. This
      * supports a sliding-session refresh endpoint that accepts recently-expired
      * tokens. Signature failures always return null.
      */
     static verifyToken(token: string, secret?: string, graceSeconds?: number): Promise<JWTPayload | null>;
+    /**
+     * Verify the JWT on an incoming Hono request using the `JWT_SECRET`
+     * binding from `c.env`. Reads the token from the `Authorization: Bearer …`
+     * header first, then falls back to the `auth_token` cookie. Returns the
+     * decoded payload, or null when the token is missing, malformed, expired,
+     * or signed with a different secret.
+     *
+     * Use this from custom Hono routes mounted alongside SonicJS — it
+     * resolves the secret the same way `requireAuth()` does, without forcing
+     * the caller to plumb it through manually.
+     */
+    static verifyAuthRequest(c: Context): Promise<JWTPayload | null>;
     static hashPassword(password: string): Promise<string>;
+    /**
+     * Ensure a Better Auth `credential` account row exists for a user, holding the
+     * given password hash. Better Auth authenticates against `account.password`,
+     * NOT `users.password_hash`, so every flow that writes a password outside the
+     * BA sign-up path (admin set-password, reset, invitation, seed) MUST call this
+     * or the user is locked out. Idempotent — the row id mirrors migration 037's
+     * backfill (`cred-<userId>`). The legacy-PBKDF2 verify hook upgrades it to
+     * scrypt on first successful login.
+     */
+    static ensureCredentialAccount(db: D1Database, userId: string, passwordHash: string): Promise<void>;
     static hashPasswordLegacy(password: string): Promise<string>;
     static verifyPassword(password: string, storedHash: string): Promise<boolean>;
     static isLegacyHash(storedHash: string): boolean;
@@ -93,7 +130,12 @@ declare const requireRole: (requiredRole: string | string[]) => (c: Context, nex
 }, 401, "json">) | (Response & hono.TypedResponse<{
     error: string;
 }, 403, "json">)>;
-declare const optionalAuth: () => (c: Context, next: Next) => Promise<void>;
+declare const requireRbac: (resource: string, verb: string) => (c: Context, next: Next) => Promise<void | (Response & hono.TypedResponse<undefined, 302, "redirect">) | (Response & hono.TypedResponse<{
+    error: string;
+}, 401, "json">) | (Response & hono.TypedResponse<{
+    error: string;
+}, 403, "json">)>;
+declare const optionalAuth: () => (_c: Context, next: Next) => Promise<void>;
 
 /**
  * Middleware to track all HTTP requests for real-time analytics
@@ -105,7 +147,8 @@ declare const metricsMiddleware: () => MiddlewareHandler;
  * CSRF Protection Middleware — Signed Double-Submit Cookie
  *
  * Stateless CSRF protection for Cloudflare Workers (no session store needed).
- * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with JWT_SECRET.
+ * Token format: `<nonce>.<hmac>` where HMAC-SHA256 is keyed with BETTER_AUTH_SECRET
+ * (preferred) or JWT_SECRET (legacy fallback).
  *
  * Flow:
  *   GET  — ensureCsrfCookie(): reuse existing valid cookie or set a new one
@@ -200,4 +243,4 @@ declare const requireActivePlugins: any;
 declare const getActivePlugins: any;
 declare const isPluginActive: any;
 
-export { AuthManager, type Permission, PermissionManager, type UserPermissions, bootstrapMiddleware, cacheHeaders, compressionMiddleware, csrfProtection, detailedLoggingMiddleware, generateCsrfToken, getActivePlugins, getJwtExpirySeconds, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, rateLimit, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware, validateCsrfToken, verifySecurityConfig };
+export { AuthManager, type Permission, PermissionManager, type UserPermissions, bootstrapMiddleware, cacheHeaders, compressionMiddleware, csrfProtection, detailedLoggingMiddleware, generateCsrfToken, getActivePlugins, getJwtExpirySeconds, getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb, isPluginActive, logActivity, loggingMiddleware, metricsMiddleware, optionalAuth, performanceLoggingMiddleware, rateLimit, requireActivePlugin, requireActivePlugins, requireAnyPermission, requireAuth, requirePermission, requireRbac, requireRole, securityHeadersMiddleware as securityHeaders, securityLoggingMiddleware, validateCsrfToken, verifySecurityConfig };

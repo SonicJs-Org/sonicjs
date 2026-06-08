@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { requireAuth } from '../../../../middleware'
+import { RbacService } from '../../../../services/rbac'
 import { PluginService } from '../../../../services'
 import { SubscriptionService } from '../services/subscription-service'
 import { StripeEventService } from '../services/stripe-event-service'
@@ -285,7 +286,7 @@ apiRoutes.get('/subscription', requireAuth(), async (c) => {
 // List all subscriptions (admin only)
 apiRoutes.get('/subscriptions', requireAuth(), async (c) => {
   const user = c.get('user')
-  if (user?.role !== 'admin') return c.json({ error: 'Access denied' }, 403)
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) return c.json({ error: 'Access denied' }, 403)
 
   const db = c.env.DB
   const subscriptionService = new SubscriptionService(db)
@@ -306,7 +307,7 @@ apiRoutes.get('/subscriptions', requireAuth(), async (c) => {
 // Get subscription stats (admin only)
 apiRoutes.get('/stats', requireAuth(), async (c) => {
   const user = c.get('user')
-  if (user?.role !== 'admin') return c.json({ error: 'Access denied' }, 403)
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) return c.json({ error: 'Access denied' }, 403)
 
   const db = c.env.DB
   const subscriptionService = new SubscriptionService(db)
@@ -322,7 +323,7 @@ apiRoutes.get('/stats', requireAuth(), async (c) => {
 
 apiRoutes.post('/sync-subscriptions', requireAuth(), async (c) => {
   const user = c.get('user')
-  if (user?.role !== 'admin') return c.json({ error: 'Access denied' }, 403)
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) return c.json({ error: 'Access denied' }, 403)
 
   const db = c.env.DB
   const settings = await getSettings(db)
@@ -381,7 +382,7 @@ apiRoutes.post('/sync-subscriptions', requireAuth(), async (c) => {
 
 apiRoutes.get('/events', requireAuth(), async (c) => {
   const user = c.get('user')
-  if (user?.role !== 'admin') return c.json({ error: 'Access denied' }, 403)
+  if (!user || !(await new RbacService(c.env.DB).can(user.userId, 'settings', 'manage'))) return c.json({ error: 'Access denied' }, 403)
 
   const db = c.env.DB
   const eventService = new StripeEventService(db)

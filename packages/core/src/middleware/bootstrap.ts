@@ -1,9 +1,9 @@
 import { Context, Next } from "hono";
+import type { SonicJSConfig } from "../app";
 import { syncCollections } from "../services/collection-sync";
 import { syncAllFormCollections } from "../services/form-collection-sync";
 import { MigrationService } from "../services/migrations";
 import { PluginBootstrapService } from "../services/plugin-bootstrap";
-import type { SonicJSConfig } from "../app";
 
 type Bindings = {
   DB: D1Database;
@@ -15,6 +15,7 @@ type Bindings = {
 
 // Track if bootstrap has been run in this worker instance
 let bootstrapComplete = false;
+let bootstrapInFlight: Promise<void> | null = null;
 
 /**
  * Verify security-critical environment configuration at startup.
@@ -67,7 +68,7 @@ export function verifySecurityConfig(env: Bindings): void {
     if (hasCritical) {
       throw new Error(
         "[SonicJS Security] CRITICAL: Production deployment is missing a secure JWT_SECRET. " +
-          "Set it via `wrangler secret put JWT_SECRET` before deploying."
+        "Set it via `wrangler secret put JWT_SECRET` before deploying."
       );
     }
   }
@@ -99,52 +100,59 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
       return next();
     }
 
-    try {
-      console.log("[Bootstrap] Starting system initialization...");
+    if (!bootstrapInFlight) {
+      bootstrapInFlight = (async () => {
+        try {
+          console.log("[Bootstrap] Starting system initialization...");
 
-      // 1. Run database migrations first
-      console.log("[Bootstrap] Running database migrations...");
-      const migrationService = new MigrationService(c.env.DB);
-      await migrationService.runPendingMigrations();
+          // 1. Run database migrations first
+          console.log("[Bootstrap] Running database migrations...");
+          const migrationService = new MigrationService(c.env.DB);
+          await migrationService.runPendingMigrations();
 
-      // 2. Sync collection configurations
-      console.log("[Bootstrap] Syncing collection configurations...");
-      try {
-        await syncCollections(c.env.DB);
-      } catch (error) {
-        console.error("[Bootstrap] Error syncing collections:", error);
-        // Continue bootstrap even if collection sync fails
-      }
+          // 2. Sync collection configurations
+          console.log("[Bootstrap] Syncing collection configurations...");
+          try {
+            await syncCollections(c.env.DB);
+          } catch (error) {
+            console.error("[Bootstrap] Error syncing collections:", error);
+            // Continue bootstrap even if collection sync fails
+          }
 
-      // 2b. Sync form-derived shadow collections
-      console.log("[Bootstrap] Syncing form collections...");
-      try {
-        await syncAllFormCollections(c.env.DB);
-      } catch (error) {
-        console.error("[Bootstrap] Error syncing form collections:", error);
-      }
+          // 2b. Sync form-derived shadow collections
+          console.log("[Bootstrap] Syncing form collections...");
+          try {
+            await syncAllFormCollections(c.env.DB);
+          } catch (error) {
+            console.error("[Bootstrap] Error syncing form collections:", error);
+          }
 
-      // 3. Bootstrap core plugins (unless disableAll is set)
-      if (!config.plugins?.disableAll) {
-        console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new PluginBootstrapService(c.env.DB);
+          // 3. Bootstrap core plugins (unless disableAll is set)
+          if (!config.plugins?.disableAll) {
+            console.log("[Bootstrap] Bootstrapping core plugins...");
+            const bootstrapService = new PluginBootstrapService(c.env.DB);
 
-        // Check if bootstrap is needed
-        const needsBootstrap = await bootstrapService.isBootstrapNeeded();
-        if (needsBootstrap) {
-          await bootstrapService.bootstrapCorePlugins();
+            // Check if bootstrap is needed
+            const needsBootstrap = await bootstrapService.isBootstrapNeeded();
+            if (needsBootstrap) {
+              await bootstrapService.bootstrapCorePlugins();
+            }
+          } else {
+            console.log("[Bootstrap] Plugin bootstrap skipped (disableAll is true)");
+          }
+
+          // Mark bootstrap as complete for this worker instance
+          bootstrapComplete = true;
+          console.log("[Bootstrap] System initialization completed");
+        } catch (error) {
+          console.error("[Bootstrap] Error during system initialization:", error);
+          // Don't prevent the app from starting, but log the error
+        } finally {
+          bootstrapInFlight = null;
         }
-      } else {
-        console.log("[Bootstrap] Plugin bootstrap skipped (disableAll is true)");
-      }
-
-      // Mark bootstrap as complete for this worker instance
-      bootstrapComplete = true;
-      console.log("[Bootstrap] System initialization completed");
-    } catch (error) {
-      console.error("[Bootstrap] Error during system initialization:", error);
-      // Don't prevent the app from starting, but log the error
+      })();
     }
+    await bootstrapInFlight;
 
     // 4. Verify security configuration (outside try/catch so critical
     // errors in production propagate and prevent insecure deployments)
@@ -159,4 +167,5 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
  */
 export function resetBootstrap() {
   bootstrapComplete = false;
+  bootstrapInFlight = null;
 }

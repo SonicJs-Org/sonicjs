@@ -35,11 +35,8 @@ import { securityHeadersMiddleware } from './middleware/security-headers'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
-import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
-import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
-import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
@@ -365,24 +362,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Fixes GitHub Issue #461: Cache routes were not registered
   app.route('/admin/cache', cachePlugin.getRoutes())
 
-  // Plugin routes - OAuth Providers (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
-    for (const route of oauthProvidersPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
   // Plugin routes - User Profiles
   if (userProfilesPlugin.routes && userProfilesPlugin.routes.length > 0) {
     for (const route of userProfilesPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - OTP Login (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  // Register OTP Login routes first so they take precedence over the generic /:id handler
-  if (otpLoginPlugin.routes && otpLoginPlugin.routes.length > 0) {
-    for (const route of otpLoginPlugin.routes) {
       app.route(route.path, route.handler as any)
     }
   }
@@ -425,14 +407,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin routes - Email
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - Magic Link Auth (passwordless authentication via email links)
-  const magicLinkPlugin = createMagicLinkAuthPlugin()
-  if (magicLinkPlugin.routes && magicLinkPlugin.routes.length > 0) {
-    for (const route of magicLinkPlugin.routes) {
       app.route(route.path, route.handler as any)
     }
   }

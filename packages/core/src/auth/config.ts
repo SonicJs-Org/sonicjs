@@ -10,6 +10,41 @@
  * Extend via config.auth.extendBetterAuth in createSonicJSApp() to add social
  * providers, magic link, 2FA, etc.
  */
+/** Send an email via the SonicJS email plugin (Resend).
+ *  Loads apiKey/fromEmail/fromName from the `plugins` table at runtime.
+ *  Falls back to console.log when the plugin is unconfigured (local dev). */
+async function sendViaEmailPlugin(
+  db: D1Database,
+  to: string,
+  subject: string,
+  html: string
+): Promise<void> {
+  try {
+    const row = (await db
+      .prepare("SELECT settings FROM plugins WHERE id = 'email'")
+      .first()) as { settings: string } | null
+    if (row?.settings) {
+      const { apiKey, fromEmail, fromName } = JSON.parse(row.settings) as {
+        apiKey?: string; fromEmail?: string; fromName?: string
+      }
+      if (apiKey && fromEmail) {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: `${fromName ?? 'SonicJS'} <${fromEmail}>`,
+            to: [to],
+            subject,
+            html,
+          }),
+        })
+        return
+      }
+    }
+  } catch { /* fall through to dev log */ }
+  console.log(`[email-dev] To:${to} | Subject:${subject}`)
+}
+
 import { betterAuth } from 'better-auth'
 import { withCloudflare } from 'better-auth-cloudflare'
 import { hashPassword as baHashPassword, verifyPassword as baVerifyPassword } from 'better-auth/crypto'
@@ -196,23 +231,35 @@ export function getDefaultAuthOptions(env: Bindings) {
       // the link resolves to a BA session. Requires a working email service.
       magicLink({
         sendMagicLink: async ({ email, url }: { email: string; url: string }, _request: any) => {
-          // In production, integrate with the email plugin or send via Sendgrid.
-          // During local dev, log the link to the console so it can be tested
-          // without a real mail server.
-          console.log(`[magic-link] ${email} → ${url}`)
-          // TODO: wire to email plugin when SENDGRID_API_KEY or EMAIL_QUEUE is set.
+          await sendViaEmailPlugin(
+            env.DB, email,
+            'Your sign-in link',
+            `<div style="font-family:sans-serif;max-width:600px">
+              <h2>Sign in to SonicJS</h2>
+              <p>Click the link below to sign in. Expires in 15 minutes.</p>
+              <p><a href="${url}" style="background:#465FFF;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none">Sign in</a></p>
+              <p style="color:#666;font-size:12px">Or copy: ${url}</p>
+            </div>`
+          )
         },
-        expiresIn: 15 * 60, // 15 minutes (matches old SonicJS magic-link TTL)
+        expiresIn: 15 * 60,
       }),
 
       // Email OTP — 6-digit code sent to inbox. Replaces the otp-login-plugin.
       emailOTP({
         sendVerificationOTP: async (params: { email: string; otp: string; type: string }, _request: any) => {
-          console.log(`[email-otp] ${params.email} → ${params.otp}`)
-          // TODO: wire to email plugin.
+          await sendViaEmailPlugin(
+            env.DB, params.email,
+            'Your sign-in code',
+            `<div style="font-family:sans-serif;max-width:600px">
+              <h2>Your one-time code</h2>
+              <p style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#465FFF">${params.otp}</p>
+              <p style="color:#666">Expires in 10 minutes. Do not share this code.</p>
+            </div>`
+          )
         },
         otpLength: 6,
-        expiresIn: 10 * 60, // 10 minutes (matches old SonicJS OTP TTL)
+        expiresIn: 10 * 60,
       }),
 
       // ── Phase 6: 2FA / TOTP ────────────────────────────────────────────────

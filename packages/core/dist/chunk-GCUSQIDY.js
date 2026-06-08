@@ -1,9 +1,9 @@
 import { isFirstUserRegistration, isRegistrationEnabled, authValidationService } from './chunk-F2IDJF3K.js';
 import { getCacheService, CACHE_CONFIGS, SettingsService, getLogger, getAppInstance, buildRouteList, CATEGORY_INFO } from './chunk-DBGGOREJ.js';
-import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, logActivity, generateCsrfToken, getJwtExpirySecondsFromDb } from './chunk-J5B3IW2Z.js';
+import { requireAuth, requireRbac, isPluginActive, optionalAuth, rateLimit, AuthManager, logActivity, generateCsrfToken, getJwtExpirySecondsFromDb } from './chunk-JHIQZWAY.js';
 import { RbacService } from './chunk-WXJT2BCV.js';
 import { PluginService, PLUGIN_REGISTRY, findPluginByCodeName, createContentFromSubmission } from './chunk-VM7C2EGU.js';
-import { MigrationService } from './chunk-KT7DWOOW.js';
+import { MigrationService } from './chunk-SNNYBGB5.js';
 import { renderDesignPage, renderCheckboxPage, renderTestimonialsList, renderCodeExamplesList, renderAlert, renderTable, renderPagination, renderConfirmationDialog, getConfirmationDialogScript, renderAdminLayout, adminLayoutV2, renderForm } from './chunk-FTYNSPNP.js';
 import { init_admin_layout_catalyst_template, renderAdminLayoutCatalyst } from './chunk-DUEQN2JO.js';
 import { PluginBuilder, TurnstileService } from './chunk-EXNEW5US.js';
@@ -2396,7 +2396,7 @@ adminApiRoutes.delete("/collections/:id", async (c) => {
 });
 adminApiRoutes.get("/migrations/status", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-HA6BI5YB.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-FLSBJQBC.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const status = await migrationService.getMigrationStatus();
@@ -2421,7 +2421,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
         error: "Unauthorized. Admin access required."
       }, 403);
     }
-    const { MigrationService: MigrationService2 } = await import('./migrations-HA6BI5YB.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-FLSBJQBC.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const result = await migrationService.runPendingMigrations();
@@ -2443,7 +2443,7 @@ adminApiRoutes.post("/migrations/run", async (c) => {
 });
 adminApiRoutes.get("/migrations/validate", async (c) => {
   try {
-    const { MigrationService: MigrationService2 } = await import('./migrations-HA6BI5YB.js');
+    const { MigrationService: MigrationService2 } = await import('./migrations-FLSBJQBC.js');
     const db = c.env.DB;
     const migrationService = new MigrationService2(db);
     const validation = await migrationService.validateSchema();
@@ -5205,7 +5205,7 @@ var loginSchema = z.object({
 });
 async function clearBetterAuthSession(c) {
   try {
-    const { createAuth } = await import('./config-SHFNYCRE.js');
+    const { createAuth } = await import('./config-4L5Q77NH.js');
     const auth = createAuth(c.env);
     const res = await auth.api.signOut({ headers: c.req.raw.headers, asResponse: true });
     const setCookies = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [res.headers.get("set-cookie")].filter(Boolean);
@@ -5290,7 +5290,7 @@ authRoutes.post(
         </div>
       `);
       }
-      const { createAuth } = await import('./config-SHFNYCRE.js');
+      const { createAuth } = await import('./config-4L5Q77NH.js');
       const auth = createAuth(c.env);
       let baRes;
       try {
@@ -5394,7 +5394,7 @@ authRoutes.post(
         </div>
       `);
       }
-      const { createAuth } = await import('./config-SHFNYCRE.js');
+      const { createAuth } = await import('./config-4L5Q77NH.js');
       const auth = createAuth(c.env);
       const attemptSignIn = async () => {
         try {
@@ -5758,7 +5758,7 @@ authRoutes.post("/accept-invitation", async (c) => {
     ).run();
     await ensureCredentialAccount(db, invitedUser.id, passwordHash);
     try {
-      const { createAuth } = await import('./config-SHFNYCRE.js');
+      const { createAuth } = await import('./config-4L5Q77NH.js');
       const auth = createAuth(c.env);
       const baRes = await auth.api.signInEmail({
         body: { email: invitedUser.email, password },
@@ -29384,6 +29384,6 @@ var ROUTES_INFO = {
   reference: "https://github.com/sonicjs/sonicjs"
 };
 
-export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, createUserProfilesPlugin, defineUserProfile, getConfirmationDialogScript2 as getConfirmationDialogScript, getCustomData, getUserProfileConfig, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userProfilesPlugin, userRoutes };
-//# sourceMappingURL=chunk-QBOJMZIG.js.map
-//# sourceMappingURL=chunk-QBOJMZIG.js.map
+export { ROUTES_INFO, adminCheckboxRoutes, adminCollectionsRoutes, adminDesignRoutes, adminFormsRoutes, adminLogsRoutes, adminMediaRoutes, adminPluginRoutes, adminSettingsRoutes, admin_api_default, admin_code_examples_default, admin_content_default, admin_testimonials_default, api_content_crud_default, api_default, api_media_default, api_system_default, auth_default, createUserProfilesPlugin, defineUserProfile, getConfirmationDialogScript2 as getConfirmationDialogScript, getUserProfileConfig, public_forms_default, renderConfirmationDialog2 as renderConfirmationDialog, router, router2, test_cleanup_default, userProfilesPlugin, userRoutes };
+//# sourceMappingURL=chunk-GCUSQIDY.js.map
+//# sourceMappingURL=chunk-GCUSQIDY.js.map

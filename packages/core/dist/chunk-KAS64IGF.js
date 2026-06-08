@@ -10,6 +10,29 @@ import { twoFactor } from 'better-auth/plugins/two-factor';
 import { organization } from 'better-auth/plugins/organization';
 import { drizzle } from 'drizzle-orm/d1';
 
+async function sendViaEmailPlugin(db, to, subject, html) {
+  try {
+    const row = await db.prepare("SELECT settings FROM plugins WHERE id = 'email'").first();
+    if (row?.settings) {
+      const { apiKey, fromEmail, fromName } = JSON.parse(row.settings);
+      if (apiKey && fromEmail) {
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: `${fromName ?? "SonicJS"} <${fromEmail}>`,
+            to: [to],
+            subject,
+            html
+          })
+        });
+        return;
+      }
+    }
+  } catch {
+  }
+  console.log(`[email-dev] To:${to} | Subject:${subject}`);
+}
 async function verifyLegacyPbkdf2(password, stored) {
   const parts = stored.split(":");
   if (parts.length !== 4) return false;
@@ -149,19 +172,36 @@ function getDefaultAuthOptions(env) {
       // the link resolves to a BA session. Requires a working email service.
       magicLink({
         sendMagicLink: async ({ email, url }, _request) => {
-          console.log(`[magic-link] ${email} \u2192 ${url}`);
+          await sendViaEmailPlugin(
+            env.DB,
+            email,
+            "Your sign-in link",
+            `<div style="font-family:sans-serif;max-width:600px">
+              <h2>Sign in to SonicJS</h2>
+              <p>Click the link below to sign in. Expires in 15 minutes.</p>
+              <p><a href="${url}" style="background:#465FFF;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none">Sign in</a></p>
+              <p style="color:#666;font-size:12px">Or copy: ${url}</p>
+            </div>`
+          );
         },
         expiresIn: 15 * 60
-        // 15 minutes (matches old SonicJS magic-link TTL)
       }),
       // Email OTP — 6-digit code sent to inbox. Replaces the otp-login-plugin.
       emailOTP({
         sendVerificationOTP: async (params, _request) => {
-          console.log(`[email-otp] ${params.email} \u2192 ${params.otp}`);
+          await sendViaEmailPlugin(
+            env.DB,
+            params.email,
+            "Your sign-in code",
+            `<div style="font-family:sans-serif;max-width:600px">
+              <h2>Your one-time code</h2>
+              <p style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#465FFF">${params.otp}</p>
+              <p style="color:#666">Expires in 10 minutes. Do not share this code.</p>
+            </div>`
+          );
         },
         otpLength: 6,
         expiresIn: 10 * 60
-        // 10 minutes (matches old SonicJS OTP TTL)
       }),
       // ── Phase 6: 2FA / TOTP ────────────────────────────────────────────────
       // twoFactor adds /auth/two-factor/* endpoints for TOTP enrollment +
@@ -199,5 +239,5 @@ function createAuth(env, extendBetterAuth) {
 }
 
 export { createAuth, getDefaultAuthOptions };
-//# sourceMappingURL=chunk-ZHDOBIYR.js.map
-//# sourceMappingURL=chunk-ZHDOBIYR.js.map
+//# sourceMappingURL=chunk-KAS64IGF.js.map
+//# sourceMappingURL=chunk-KAS64IGF.js.map

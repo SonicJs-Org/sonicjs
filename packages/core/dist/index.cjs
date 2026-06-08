@@ -1,14 +1,14 @@
 'use strict';
 
-var chunkV7N7LADR_cjs = require('./chunk-V7N7LADR.cjs');
-var chunkPABXSJEQ_cjs = require('./chunk-PABXSJEQ.cjs');
+var chunkZHVJ3NSY_cjs = require('./chunk-ZHVJ3NSY.cjs');
+var chunkN5LGKCE3_cjs = require('./chunk-N5LGKCE3.cjs');
 require('./chunk-PQNVO5QM.cjs');
 var chunkRGJ4RQ3Z_cjs = require('./chunk-RGJ4RQ3Z.cjs');
 var chunk4RVMY6FI_cjs = require('./chunk-4RVMY6FI.cjs');
-var chunkRVHHSXJX_cjs = require('./chunk-RVHHSXJX.cjs');
+var chunkQ2NTBJYS_cjs = require('./chunk-Q2NTBJYS.cjs');
 var chunk323GE63K_cjs = require('./chunk-323GE63K.cjs');
 var chunk3ADEYHN2_cjs = require('./chunk-3ADEYHN2.cjs');
-var chunkNGMUIDYE_cjs = require('./chunk-NGMUIDYE.cjs');
+var chunkV4LDNRTP_cjs = require('./chunk-V4LDNRTP.cjs');
 var chunkYMWCPRVW_cjs = require('./chunk-YMWCPRVW.cjs');
 var chunkOZDZSWW7_cjs = require('./chunk-OZDZSWW7.cjs');
 var chunkNIUAH5PZ_cjs = require('./chunk-NIUAH5PZ.cjs');
@@ -21,13 +21,12 @@ var chunkMNWKYY5E_cjs = require('./chunk-MNWKYY5E.cjs');
 var chunkQTFKZBLC_cjs = require('./chunk-QTFKZBLC.cjs');
 require('./chunk-IGJUBJBW.cjs');
 var hono = require('hono');
-var cookie = require('hono/cookie');
-var zod = require('zod');
 var d1 = require('drizzle-orm/d1');
+var cookie = require('hono/cookie');
 
 chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 var adminRbacRoutes = new hono.Hono();
-adminRbacRoutes.use("*", chunkRVHHSXJX_cjs.requireRbac("rbac", "manage"));
+adminRbacRoutes.use("*", chunkQ2NTBJYS_cjs.requireRbac("rbac", "manage"));
 var esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 var TABS = `
   <div class="border-b border-zinc-950/10 dark:border-white/10 mb-6">
@@ -944,7 +943,7 @@ function formatCellValue(value) {
 // src/plugins/core-plugins/database-tools-plugin/admin-routes.ts
 function createDatabaseToolsAdminRoutes() {
   const router3 = new hono.Hono();
-  router3.use("*", chunkRVHHSXJX_cjs.requireAuth());
+  router3.use("*", chunkQ2NTBJYS_cjs.requireAuth());
   router3.get("/api/stats", async (c) => {
     try {
       const user = c.get("user");
@@ -1817,1203 +1816,6 @@ function createEmailPlugin() {
   return builder.build();
 }
 var emailPlugin = createEmailPlugin();
-
-// src/plugins/core-plugins/otp-login-plugin/otp-service.ts
-var OTPService = class {
-  constructor(db) {
-    this.db = db;
-  }
-  /**
-   * Generate a secure random OTP code
-   */
-  generateCode(length = 6) {
-    const digits = "0123456789";
-    let code = "";
-    for (let i = 0; i < length; i++) {
-      const randomValues = new Uint8Array(1);
-      crypto.getRandomValues(randomValues);
-      const randomValue = randomValues[0] ?? 0;
-      code += digits[randomValue % digits.length];
-    }
-    return code;
-  }
-  /**
-   * Create and store a new OTP code
-   */
-  async createOTPCode(email, settings, ipAddress, userAgent) {
-    const code = this.generateCode(settings.codeLength);
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    const expiresAt = now + settings.codeExpiryMinutes * 60 * 1e3;
-    const otpCode = {
-      id,
-      user_email: email.toLowerCase(),
-      code,
-      expires_at: expiresAt,
-      used: 0,
-      used_at: null,
-      ip_address: ipAddress || null,
-      user_agent: userAgent || null,
-      attempts: 0,
-      created_at: now
-    };
-    await this.db.prepare(`
-      INSERT INTO otp_codes (
-        id, user_email, code, expires_at, used, used_at,
-        ip_address, user_agent, attempts, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      otpCode.id,
-      otpCode.user_email,
-      otpCode.code,
-      otpCode.expires_at,
-      otpCode.used,
-      otpCode.used_at,
-      otpCode.ip_address,
-      otpCode.user_agent,
-      otpCode.attempts,
-      otpCode.created_at
-    ).run();
-    return otpCode;
-  }
-  /**
-   * Verify an OTP code
-   */
-  async verifyCode(email, code, settings) {
-    const normalizedEmail = email.toLowerCase();
-    const now = Date.now();
-    const otpCode = await this.db.prepare(`
-      SELECT * FROM otp_codes
-      WHERE user_email = ? AND code = ? AND used = 0
-      ORDER BY created_at DESC
-      LIMIT 1
-    `).bind(normalizedEmail, code).first();
-    if (!otpCode) {
-      return { valid: false, error: "Invalid or expired code" };
-    }
-    if (now > otpCode.expires_at) {
-      return { valid: false, error: "Code has expired" };
-    }
-    if (otpCode.attempts >= settings.maxAttempts) {
-      return { valid: false, error: "Maximum attempts exceeded" };
-    }
-    await this.db.prepare(`
-      UPDATE otp_codes
-      SET used = 1, used_at = ?, attempts = attempts + 1
-      WHERE id = ?
-    `).bind(now, otpCode.id).run();
-    return { valid: true };
-  }
-  /**
-   * Increment failed attempt count
-   */
-  async incrementAttempts(email, code) {
-    const normalizedEmail = email.toLowerCase();
-    const result = await this.db.prepare(`
-      UPDATE otp_codes
-      SET attempts = attempts + 1
-      WHERE user_email = ? AND code = ? AND used = 0
-      RETURNING attempts
-    `).bind(normalizedEmail, code).first();
-    return result?.attempts || 0;
-  }
-  /**
-   * Check rate limiting
-   */
-  async checkRateLimit(email, settings) {
-    const normalizedEmail = email.toLowerCase();
-    const oneHourAgo = Date.now() - 60 * 60 * 1e3;
-    const result = await this.db.prepare(`
-      SELECT COUNT(*) as count
-      FROM otp_codes
-      WHERE user_email = ? AND created_at > ?
-    `).bind(normalizedEmail, oneHourAgo).first();
-    const count = result?.count || 0;
-    return count < settings.rateLimitPerHour;
-  }
-  /**
-   * Get recent OTP requests for activity log
-   */
-  async getRecentRequests(limit = 50) {
-    const result = await this.db.prepare(`
-      SELECT * FROM otp_codes
-      ORDER BY created_at DESC
-      LIMIT ?
-    `).bind(limit).all();
-    const rows = result.results || [];
-    return rows.map((row) => this.mapRowToOTP(row));
-  }
-  /**
-   * Clean up expired codes (for maintenance)
-   */
-  async cleanupExpiredCodes() {
-    const now = Date.now();
-    const result = await this.db.prepare(`
-      DELETE FROM otp_codes
-      WHERE expires_at < ? OR (used = 1 AND used_at < ?)
-    `).bind(now, now - 30 * 24 * 60 * 60 * 1e3).run();
-    return result.meta.changes || 0;
-  }
-  mapRowToOTP(row) {
-    return {
-      id: String(row.id),
-      user_email: String(row.user_email),
-      code: String(row.code),
-      expires_at: Number(row.expires_at ?? Date.now()),
-      used: Number(row.used ?? 0),
-      used_at: row.used_at === null || row.used_at === void 0 ? null : Number(row.used_at),
-      ip_address: typeof row.ip_address === "string" ? row.ip_address : null,
-      user_agent: typeof row.user_agent === "string" ? row.user_agent : null,
-      attempts: Number(row.attempts ?? 0),
-      created_at: Number(row.created_at ?? Date.now())
-    };
-  }
-  /**
-   * Get OTP statistics
-   */
-  async getStats(days = 7) {
-    const since = Date.now() - days * 24 * 60 * 60 * 1e3;
-    const stats = await this.db.prepare(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN used = 1 THEN 1 ELSE 0 END) as successful,
-        SUM(CASE WHEN attempts >= 3 AND used = 0 THEN 1 ELSE 0 END) as failed,
-        SUM(CASE WHEN expires_at < ? AND used = 0 THEN 1 ELSE 0 END) as expired
-      FROM otp_codes
-      WHERE created_at > ?
-    `).bind(Date.now(), since).first();
-    return {
-      total: stats?.total || 0,
-      successful: stats?.successful || 0,
-      failed: stats?.failed || 0,
-      expired: stats?.expired || 0
-    };
-  }
-};
-
-// src/plugins/core-plugins/otp-login-plugin/email-templates.ts
-function sanitizeColor(value) {
-  if (!value) return "";
-  if (/^#[0-9a-fA-F]{3,8}$/.test(value)) return value;
-  if (/^[a-zA-Z]+$/.test(value)) return value;
-  if (/^(rgb|rgba|hsl|hsla)\([0-9.,\s%]+\)$/.test(value)) return value;
-  return "";
-}
-function escapeHtml3(value) {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function renderOTPEmailHTML(data) {
-  const logoUrl = data.logoUrl ? escapeHtml3(data.logoUrl) : "";
-  const loginUrl = data.loginUrl ? escapeHtml3(data.loginUrl) : "";
-  const appName = escapeHtml3(data.appName);
-  const loginButtonText = escapeHtml3(
-    data.loginButtonText && data.loginButtonText.trim() || `Sign in to ${data.appName}`
-  );
-  const logoWidth = Math.max(20, Math.min(600, Number(data.logoWidth) || 150));
-  const logoBorderWidth = Math.max(0, Math.min(20, Number(data.logoBorderWidth) || 0));
-  const logoBorderColor = sanitizeColor(data.logoBorderColor);
-  const logoBorderStyle = logoBorderWidth > 0 && logoBorderColor ? `border: ${logoBorderWidth}px solid ${logoBorderColor}; border-radius: 8px;` : "";
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Login Code</title>
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-
-  <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-
-    ${logoUrl ? `
-    <div style="text-align: center; padding: 30px 20px 20px;">
-      <img src="${logoUrl}" alt="${appName}" style="max-width: ${logoWidth}px; width: 100%; height: auto; ${logoBorderStyle}">
-    </div>
-    ` : ""}
-
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0 0 10px 0; font-size: 32px; font-weight: 600;">Your Login Code</h1>
-      <p style="margin: 0; opacity: 0.95; font-size: 16px;">Enter this code to sign in to ${appName}</p>
-    </div>
-
-    <div style="padding: 40px 30px;">
-      <div style="background: #f8f9fa; border: 2px dashed #667eea; border-radius: 12px; padding: 30px; text-align: center; margin: 0 0 30px 0;">
-        <div style="font-size: 56px; font-weight: bold; letter-spacing: 12px; color: #667eea; font-family: 'Courier New', Courier, monospace; line-height: 1;">
-          ${data.code}
-        </div>
-      </div>
-
-      ${loginUrl ? `
-      <div style="text-align: center; margin: 0 0 30px 0;">
-        <a href="${loginUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
-          ${loginButtonText}
-        </a>
-      </div>
-      ` : ""}
-
-      <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px 20px; margin: 0 0 30px 0; border-radius: 6px;">
-        <p style="margin: 0; font-size: 14px; color: #856404;">
-          <strong>\u26A0\uFE0F This code expires in ${data.expiryMinutes} minutes</strong>
-        </p>
-      </div>
-
-      <div style="margin: 0 0 30px 0;">
-        <h3 style="color: #333; margin: 0 0 15px 0; font-size: 18px;">Quick Tips:</h3>
-        <ul style="color: #666; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;">
-          <li>Enter the code exactly as shown (${data.codeLength} digits)</li>
-          <li>The code can only be used once</li>
-          <li>You have ${data.maxAttempts} attempts to enter the correct code</li>
-          <li>Request a new code if this one expires</li>
-        </ul>
-      </div>
-
-      <div style="background: #e8f4ff; border-radius: 8px; padding: 20px; margin: 0 0 30px 0;">
-        <p style="margin: 0 0 10px 0; font-size: 14px; color: #0066cc; font-weight: 600;">
-          \u{1F512} Security Notice
-        </p>
-        <p style="margin: 0; font-size: 13px; color: #004080; line-height: 1.6;">
-          Never share this code with anyone. ${appName} will never ask you for this code via phone, email, or social media.
-        </p>
-      </div>
-    </div>
-
-    <div style="border-top: 1px solid #eee; padding: 30px; background: #f8f9fa;">
-      <p style="margin: 0 0 15px 0; font-size: 14px; color: #666; text-align: center;">
-        <strong>Didn't request this code?</strong><br>
-        Someone may have entered your email by mistake. You can safely ignore this email.
-      </p>
-
-      <div style="text-align: center; color: #999; font-size: 12px; line-height: 1.6;">
-        <p style="margin: 5px 0;">This email was sent to ${escapeHtml3(data.email)}</p>
-        ${data.ipAddress ? `<p style="margin: 5px 0;">IP Address: ${escapeHtml3(data.ipAddress)}</p>` : ""}
-        <p style="margin: 5px 0;">Time: ${escapeHtml3(data.timestamp)}</p>
-      </div>
-    </div>
-
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-    <p style="margin: 0;">&copy; ${(/* @__PURE__ */ new Date()).getFullYear()} ${appName}. All rights reserved.</p>
-  </div>
-
-</body>
-</html>`;
-}
-function renderOTPEmailText(data) {
-  const ctaLabel = data.loginButtonText && data.loginButtonText.trim() || `Sign in to ${data.appName}`;
-  return `Your Login Code for ${data.appName}
-
-Your one-time verification code is:
-
-${data.code}
-
-This code expires in ${data.expiryMinutes} minutes.
-${data.loginUrl ? `
-${ctaLabel}: ${data.loginUrl}
-` : ""}
-
-Quick Tips:
-\u2022 Enter the code exactly as shown (${data.codeLength} digits)
-\u2022 The code can only be used once
-\u2022 You have ${data.maxAttempts} attempts to enter the correct code
-\u2022 Request a new code if this one expires
-
-Security Notice:
-Never share this code with anyone. ${data.appName} will never ask you for this code via phone, email, or social media.
-
-Didn't request this code?
-Someone may have entered your email by mistake. You can safely ignore this email.
-
----
-This email was sent to ${data.email}
-${data.ipAddress ? `IP Address: ${data.ipAddress}` : ""}
-Time: ${data.timestamp}
-
-\xA9 ${(/* @__PURE__ */ new Date()).getFullYear()} ${data.appName}. All rights reserved.`;
-}
-function renderOTPEmail(data) {
-  return {
-    html: renderOTPEmailHTML(data),
-    text: renderOTPEmailText(data)
-  };
-}
-
-// src/plugins/core-plugins/otp-login-plugin/index.ts
-var otpRequestSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required")
-});
-var otpVerifySchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required"),
-  code: zod.z.string().min(4).max(8)
-});
-var DEFAULT_SETTINGS = {
-  codeLength: 6,
-  codeExpiryMinutes: 10,
-  maxAttempts: 3,
-  rateLimitPerHour: 5,
-  allowNewUserRegistration: false,
-  logoUrl: "",
-  logoWidth: 150,
-  logoBorderWidth: 0,
-  logoBorderColor: "#ffffff",
-  loginUrl: "",
-  loginButtonText: ""
-};
-function createOTPLoginPlugin() {
-  const builder = chunk635JAMSE_cjs.PluginBuilder.create({
-    name: "otp-login",
-    version: "1.0.0-beta.1",
-    description: "Passwordless authentication via email one-time codes"
-  });
-  builder.metadata({
-    author: {
-      name: "SonicJS Team",
-      email: "team@sonicjs.com"
-    },
-    license: "MIT",
-    compatibility: "^2.0.0"
-  });
-  const otpAPI = new hono.Hono();
-  otpAPI.post("/request", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = otpRequestSchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      const { email } = validation.data;
-      const normalizedEmail = email.toLowerCase();
-      const db = c.env.DB;
-      const otpService = new OTPService(db);
-      let settings = { ...DEFAULT_SETTINGS };
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first();
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings);
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings };
-        } catch (e) {
-          console.warn("Failed to parse OTP plugin settings, using defaults");
-        }
-      }
-      const settingsService = new chunkRGJ4RQ3Z_cjs.SettingsService(db);
-      const generalSettings = await settingsService.getGeneralSettings();
-      const siteName = generalSettings.siteName;
-      const canRequest = await otpService.checkRateLimit(normalizedEmail, settings);
-      if (!canRequest) {
-        return c.json({
-          error: "Too many requests. Please try again in an hour."
-        }, 429);
-      }
-      const user = await db.prepare(`
-        SELECT id, email, role, is_active
-        FROM users
-        WHERE email = ?
-      `).bind(normalizedEmail).first();
-      if (!user && !settings.allowNewUserRegistration) {
-        return c.json({
-          message: "If an account exists for this email, you will receive a verification code shortly.",
-          expiresIn: settings.codeExpiryMinutes * 60
-        });
-      }
-      if (user && !user.is_active) {
-        return c.json({
-          error: "This account has been deactivated."
-        }, 403);
-      }
-      const ipAddress = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "unknown";
-      const userAgent = c.req.header("user-agent") || "unknown";
-      const otpCode = await otpService.createOTPCode(
-        normalizedEmail,
-        settings,
-        ipAddress,
-        userAgent
-      );
-      try {
-        const isDevMode = c.env.ENVIRONMENT === "development";
-        if (isDevMode) {
-          console.log(`[DEV] OTP Code for ${normalizedEmail}: ${otpCode.code}`);
-        }
-        const emailContent = renderOTPEmail({
-          code: otpCode.code,
-          expiryMinutes: settings.codeExpiryMinutes,
-          codeLength: settings.codeLength,
-          maxAttempts: settings.maxAttempts,
-          email: normalizedEmail,
-          ipAddress,
-          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-          appName: siteName,
-          logoUrl: settings.logoUrl || "",
-          logoWidth: settings.logoWidth,
-          logoBorderWidth: settings.logoBorderWidth,
-          logoBorderColor: settings.logoBorderColor || "",
-          loginUrl: settings.loginUrl || "",
-          loginButtonText: settings.loginButtonText || ""
-        });
-        const emailPlugin2 = await db.prepare(`
-          SELECT settings FROM plugins WHERE id = 'email'
-        `).first();
-        if (emailPlugin2?.settings) {
-          const emailSettings = JSON.parse(emailPlugin2.settings);
-          if (emailSettings.apiKey && emailSettings.fromEmail && emailSettings.fromName) {
-            const emailResponse = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${emailSettings.apiKey}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                from: `${emailSettings.fromName} <${emailSettings.fromEmail}>`,
-                to: [normalizedEmail],
-                subject: `Your login code for ${siteName}`,
-                html: emailContent.html,
-                text: emailContent.text,
-                reply_to: emailSettings.replyTo || emailSettings.fromEmail
-              })
-            });
-            if (!emailResponse.ok) {
-              const errorData = await emailResponse.json();
-              console.error("Failed to send OTP email via Resend:", errorData);
-            }
-          } else {
-            console.warn("Email plugin is not fully configured (missing apiKey, fromEmail, or fromName)");
-          }
-        } else {
-          console.warn("Email plugin is not active or has no settings configured");
-        }
-        const response = {
-          message: "If an account exists for this email, you will receive a verification code shortly.",
-          expiresIn: settings.codeExpiryMinutes * 60
-        };
-        if (isDevMode) {
-          response.dev_code = otpCode.code;
-        }
-        return c.json(response);
-      } catch (emailError) {
-        console.error("Error sending OTP email:", emailError);
-        return c.json({
-          error: "Failed to send verification code. Please try again."
-        }, 500);
-      }
-    } catch (error) {
-      console.error("OTP request error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
-    }
-  });
-  otpAPI.post("/verify", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = otpVerifySchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      const { email, code } = validation.data;
-      const normalizedEmail = email.toLowerCase();
-      const db = c.env.DB;
-      const otpService = new OTPService(db);
-      let settings = { ...DEFAULT_SETTINGS };
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first();
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings);
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings };
-        } catch (e) {
-          console.warn("Failed to parse OTP plugin settings, using defaults");
-        }
-      }
-      const verification = await otpService.verifyCode(normalizedEmail, code, settings);
-      if (!verification.valid) {
-        await otpService.incrementAttempts(normalizedEmail, code);
-        return c.json({
-          error: verification.error || "Invalid code",
-          attemptsRemaining: verification.attemptsRemaining
-        }, 401);
-      }
-      let user = await db.prepare(`
-        SELECT id, email, username, first_name, last_name, role, is_active, created_at
-        FROM users
-        WHERE email = ?
-      `).bind(normalizedEmail).first();
-      if (!user && settings.allowNewUserRegistration) {
-        const userId = crypto.randomUUID();
-        const now = Date.now();
-        const username = normalizedEmail.split("@")[0] + "_" + userId.slice(0, 6);
-        await db.prepare(`
-          INSERT INTO users (
-            id, email, username, first_name, last_name,
-            password_hash, role, is_active, email_verified, created_at, updated_at
-          ) VALUES (?, ?, ?, '', '', NULL, 'viewer', 1, 1, ?, ?)
-        `).bind(userId, normalizedEmail, username, now, now).run();
-        user = {
-          id: userId,
-          email: normalizedEmail,
-          username,
-          first_name: "",
-          last_name: "",
-          role: "viewer",
-          is_active: 1,
-          created_at: now
-        };
-      }
-      if (!user) {
-        return c.json({
-          error: "User not found"
-        }, 404);
-      }
-      if (!user.is_active) {
-        return c.json({
-          error: "Account is deactivated"
-        }, 403);
-      }
-      const tokenTtl = await chunkRVHHSXJX_cjs.getJwtExpirySecondsFromDb(db, c.env);
-      const token = await chunkRVHHSXJX_cjs.AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl);
-      cookie.setCookie(c, "auth_token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-        maxAge: tokenTtl
-      });
-      const customData = await chunkPABXSJEQ_cjs.getCustomData(db, user.id);
-      const { is_active: _isActive, ...publicUser } = user;
-      return c.json({
-        success: true,
-        user: {
-          ...publicUser,
-          ...customData
-        },
-        token,
-        message: "Authentication successful"
-      });
-    } catch (error) {
-      console.error("OTP verify error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
-    }
-  });
-  otpAPI.post("/resend", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = otpRequestSchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      return otpAPI.fetch(
-        new Request(c.req.url.replace("/resend", "/request"), {
-          method: "POST",
-          headers: c.req.raw.headers,
-          body: JSON.stringify({ email: validation.data.email })
-        }),
-        c.env
-      );
-    } catch (error) {
-      console.error("OTP resend error:", error);
-      return c.json({
-        error: "An error occurred. Please try again."
-      }, 500);
-    }
-  });
-  builder.addRoute("/auth/otp", otpAPI, {
-    description: "OTP authentication endpoints",
-    requiresAuth: false,
-    priority: 100
-  });
-  builder.addMenuItem("OTP Login", "/admin/plugins/otp-login", {
-    icon: "key",
-    order: 85,
-    permissions: ["otp:manage"]
-  });
-  builder.lifecycle({
-    activate: async () => {
-      console.info("\u2705 OTP Login plugin activated");
-    },
-    deactivate: async () => {
-      console.info("\u274C OTP Login plugin deactivated");
-    }
-  });
-  return builder.build();
-}
-var otpLoginPlugin = createOTPLoginPlugin();
-
-// src/plugins/core-plugins/oauth-providers/oauth-service.ts
-var GITHUB_PROVIDER = {
-  id: "github",
-  name: "GitHub",
-  authorizeUrl: "https://github.com/login/oauth/authorize",
-  tokenUrl: "https://github.com/login/oauth/access_token",
-  userInfoUrl: "https://api.github.com/user",
-  scopes: ["read:user", "user:email"],
-  mapProfile: (profile) => ({
-    providerAccountId: String(profile.id),
-    email: profile.email || "",
-    name: profile.name || profile.login || "",
-    avatar: profile.avatar_url || void 0
-  })
-};
-var GOOGLE_PROVIDER = {
-  id: "google",
-  name: "Google",
-  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenUrl: "https://oauth2.googleapis.com/token",
-  userInfoUrl: "https://www.googleapis.com/oauth2/v2/userinfo",
-  scopes: ["openid", "email", "profile"],
-  mapProfile: (profile) => ({
-    providerAccountId: String(profile.id),
-    email: profile.email || "",
-    name: profile.name || "",
-    avatar: profile.picture || void 0
-  })
-};
-var BUILT_IN_PROVIDERS = {
-  github: GITHUB_PROVIDER,
-  google: GOOGLE_PROVIDER
-};
-var OAuthService = class {
-  constructor(db) {
-    this.db = db;
-  }
-  /**
-   * Build the authorization redirect URL for a provider.
-   */
-  buildAuthorizeUrl(provider, clientId, redirectUri, state) {
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: provider.scopes.join(" "),
-      state
-    });
-    if (provider.id === "google") {
-      params.set("access_type", "offline");
-      params.set("prompt", "consent");
-    }
-    return `${provider.authorizeUrl}?${params.toString()}`;
-  }
-  /**
-   * Exchange authorization code for tokens using native fetch.
-   */
-  async exchangeCode(provider, clientId, clientSecret, code, redirectUri) {
-    const body = {
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code"
-    };
-    const response = await fetch(provider.tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json"
-      },
-      body: new URLSearchParams(body).toString()
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Token exchange failed (${response.status}): ${errorText}`);
-    }
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(`Token exchange error: ${data.error_description || data.error}`);
-    }
-    return {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_in: data.expires_in ? Number(data.expires_in) : void 0
-    };
-  }
-  /**
-   * Fetch user profile from the provider's userinfo endpoint.
-   */
-  async fetchUserProfile(provider, accessToken) {
-    const headers = {
-      "Authorization": `Bearer ${accessToken}`,
-      "Accept": "application/json"
-    };
-    if (provider.id === "github") {
-      headers["Authorization"] = `token ${accessToken}`;
-    }
-    const response = await fetch(provider.userInfoUrl, { headers });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch user profile (${response.status})`);
-    }
-    const profile = await response.json();
-    if (provider.id === "github" && !profile.email) {
-      const emailResponse = await fetch("https://api.github.com/user/emails", {
-        headers: {
-          "Authorization": `token ${accessToken}`,
-          "Accept": "application/json"
-        }
-      });
-      if (emailResponse.ok) {
-        const emails = await emailResponse.json();
-        const primaryEmail = emails.find((e) => e.primary && e.verified);
-        if (primaryEmail) {
-          profile.email = primaryEmail.email;
-        }
-      }
-    }
-    return provider.mapProfile(profile);
-  }
-  // ─── Database Operations ────────────────────────────────────────────────
-  /**
-   * Find an existing OAuth account link.
-   */
-  async findOAuthAccount(provider, providerAccountId) {
-    return await this.db.prepare(`
-      SELECT * FROM oauth_accounts
-      WHERE provider = ? AND provider_account_id = ?
-    `).bind(provider, providerAccountId).first();
-  }
-  /**
-   * Find all OAuth accounts for a user.
-   */
-  async findUserOAuthAccounts(userId) {
-    const result = await this.db.prepare(`
-      SELECT * FROM oauth_accounts WHERE user_id = ?
-    `).bind(userId).all();
-    return result.results || [];
-  }
-  /**
-   * Create a new OAuth account link.
-   */
-  async createOAuthAccount(params) {
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    await this.db.prepare(`
-      INSERT INTO oauth_accounts (
-        id, user_id, provider, provider_account_id,
-        access_token, refresh_token, token_expires_at,
-        profile_data, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      id,
-      params.userId,
-      params.provider,
-      params.providerAccountId,
-      params.accessToken,
-      params.refreshToken || null,
-      params.tokenExpiresAt || null,
-      params.profileData || null,
-      now,
-      now
-    ).run();
-    return {
-      id,
-      user_id: params.userId,
-      provider: params.provider,
-      provider_account_id: params.providerAccountId,
-      access_token: params.accessToken,
-      refresh_token: params.refreshToken || null,
-      token_expires_at: params.tokenExpiresAt || null,
-      profile_data: params.profileData || null,
-      created_at: now,
-      updated_at: now
-    };
-  }
-  /**
-   * Update tokens for an existing OAuth account.
-   */
-  async updateOAuthTokens(id, accessToken, refreshToken, tokenExpiresAt) {
-    await this.db.prepare(`
-      UPDATE oauth_accounts
-      SET access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = ?
-      WHERE id = ?
-    `).bind(accessToken, refreshToken || null, tokenExpiresAt || null, Date.now(), id).run();
-  }
-  /**
-   * Unlink an OAuth account from a user (only if they have another auth method).
-   */
-  async unlinkOAuthAccount(userId, provider) {
-    const user = await this.db.prepare(`
-      SELECT password_hash FROM users WHERE id = ?
-    `).bind(userId).first();
-    const otherLinks = await this.db.prepare(`
-      SELECT COUNT(*) as count FROM oauth_accounts
-      WHERE user_id = ? AND provider != ?
-    `).bind(userId, provider).first();
-    const hasPassword = !!user?.password_hash;
-    const hasOtherLinks = (otherLinks?.count || 0) > 0;
-    if (!hasPassword && !hasOtherLinks) {
-      return false;
-    }
-    await this.db.prepare(`
-      DELETE FROM oauth_accounts WHERE user_id = ? AND provider = ?
-    `).bind(userId, provider).run();
-    return true;
-  }
-  /**
-   * Find a user by email.
-   */
-  async findUserByEmail(email) {
-    return await this.db.prepare(`
-      SELECT id, email, role, is_active, first_name, last_name
-      FROM users WHERE email = ?
-    `).bind(email.toLowerCase()).first();
-  }
-  /**
-   * Create a new user from an OAuth profile.
-   */
-  async createUserFromOAuth(profile) {
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    const email = profile.email.toLowerCase();
-    const nameParts = (profile.name || email.split("@")[0] || "User").split(" ");
-    const firstName = nameParts[0] || "User";
-    const lastName = nameParts.slice(1).join(" ") || "";
-    const username = email.split("@")[0] || id.substring(0, 8);
-    const existing = await this.db.prepare(
-      "SELECT id FROM users WHERE username = ?"
-    ).bind(username).first();
-    const finalUsername = existing ? `${username}-${id.substring(0, 6)}` : username;
-    await this.db.prepare(`
-      INSERT INTO users (
-        id, email, username, first_name, last_name,
-        password_hash, role, avatar, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, 'viewer', ?, 1, ?, ?)
-    `).bind(
-      id,
-      email,
-      finalUsername,
-      firstName,
-      lastName,
-      profile.avatar || null,
-      now,
-      now
-    ).run();
-    return id;
-  }
-  /**
-   * Generate a cryptographically random state parameter for CSRF protection.
-   */
-  generateState() {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-};
-
-// src/plugins/core-plugins/oauth-providers/index.ts
-var STATE_COOKIE_NAME = "oauth_state";
-var STATE_COOKIE_MAX_AGE = 600;
-function createOAuthProvidersPlugin() {
-  const builder = chunk635JAMSE_cjs.PluginBuilder.create({
-    name: "oauth-providers",
-    version: "1.0.0-beta.1",
-    description: "OAuth2/OIDC social login with GitHub, Google, and more"
-  });
-  builder.metadata({
-    author: {
-      name: "SonicJS Team",
-      email: "team@sonicjs.com"
-    },
-    license: "MIT",
-    compatibility: "^2.0.0"
-  });
-  function getCallbackUrl(c, provider) {
-    const proto = c.req.header("x-forwarded-proto") || "https";
-    const host = c.req.header("host") || "localhost";
-    return `${proto}://${host}/auth/oauth/${provider}/callback`;
-  }
-  async function loadSettings(db) {
-    const row = await db.prepare(
-      `SELECT settings FROM plugins WHERE id = 'oauth-providers'`
-    ).first();
-    if (!row?.settings) return null;
-    try {
-      return JSON.parse(row.settings);
-    } catch {
-      return null;
-    }
-  }
-  function getProviderCredentials(settings, providerId) {
-    if (!settings?.providers?.[providerId]) return null;
-    const p = settings.providers[providerId];
-    if (!p.enabled || !p.clientId || !p.clientSecret) return null;
-    return { clientId: p.clientId, clientSecret: p.clientSecret };
-  }
-  const oauthAPI = new hono.Hono();
-  oauthAPI.get("/:provider", async (c) => {
-    try {
-      const providerId = c.req.param("provider");
-      const providerConfig = BUILT_IN_PROVIDERS[providerId];
-      if (!providerConfig) {
-        return c.json({ error: `Unknown OAuth provider: ${providerId}` }, 400);
-      }
-      const db = c.env.DB;
-      const settings = await loadSettings(db);
-      const creds = getProviderCredentials(settings, providerId);
-      if (!creds) {
-        return c.json({
-          error: `OAuth provider "${providerId}" is not configured or not enabled`
-        }, 400);
-      }
-      const oauthService = new OAuthService(db);
-      const state = oauthService.generateState();
-      const redirectUri = getCallbackUrl(c, providerId);
-      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        // Lax required for OAuth redirect flow
-        maxAge: STATE_COOKIE_MAX_AGE,
-        path: "/auth/oauth"
-      });
-      const authorizeUrl = oauthService.buildAuthorizeUrl(
-        providerConfig,
-        creds.clientId,
-        redirectUri,
-        state
-      );
-      return c.redirect(authorizeUrl);
-    } catch (error) {
-      console.error("OAuth authorize error:", error);
-      return c.json({ error: "Failed to initiate OAuth flow" }, 500);
-    }
-  });
-  oauthAPI.get("/:provider/callback", async (c) => {
-    try {
-      const providerId = c.req.param("provider");
-      const providerConfig = BUILT_IN_PROVIDERS[providerId];
-      if (!providerConfig) {
-        return c.redirect("/auth/login?error=Unknown OAuth provider");
-      }
-      const stateParam = c.req.query("state");
-      const stateCookie = cookie.getCookie(c, STATE_COOKIE_NAME);
-      if (!stateParam || !stateCookie || stateParam !== stateCookie) {
-        return c.redirect("/auth/login?error=Invalid OAuth state. Please try again.");
-      }
-      cookie.setCookie(c, STATE_COOKIE_NAME, "", {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        maxAge: 0,
-        path: "/auth/oauth"
-      });
-      const errorParam = c.req.query("error");
-      if (errorParam) {
-        const errorDesc = c.req.query("error_description") || errorParam;
-        return c.redirect(`/auth/login?error=${encodeURIComponent(errorDesc)}`);
-      }
-      const code = c.req.query("code");
-      if (!code) {
-        return c.redirect("/auth/login?error=No authorization code received");
-      }
-      const db = c.env.DB;
-      const settings = await loadSettings(db);
-      const creds = getProviderCredentials(settings, providerId);
-      if (!creds) {
-        return c.redirect("/auth/login?error=OAuth provider not configured");
-      }
-      const oauthService = new OAuthService(db);
-      const redirectUri = getCallbackUrl(c, providerId);
-      const tokens = await oauthService.exchangeCode(
-        providerConfig,
-        creds.clientId,
-        creds.clientSecret,
-        code,
-        redirectUri
-      );
-      const profile = await oauthService.fetchUserProfile(providerConfig, tokens.access_token);
-      if (!profile.email) {
-        return c.redirect("/auth/login?error=Could not retrieve email from OAuth provider. Please ensure your email is public or grant email permission.");
-      }
-      const tokenExpiresAt = tokens.expires_in ? Date.now() + tokens.expires_in * 1e3 : null;
-      const existingOAuth = await oauthService.findOAuthAccount(providerId, profile.providerAccountId);
-      if (existingOAuth) {
-        await oauthService.updateOAuthTokens(
-          existingOAuth.id,
-          tokens.access_token,
-          tokens.refresh_token,
-          tokenExpiresAt ?? void 0
-        );
-        const user = await db.prepare(
-          "SELECT id, email, role, is_active FROM users WHERE id = ?"
-        ).bind(existingOAuth.user_id).first();
-        if (!user || !user.is_active) {
-          return c.redirect("/auth/login?error=Account is deactivated");
-        }
-        const tokenTtl2 = await chunkRVHHSXJX_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-        const jwt2 = await chunkRVHHSXJX_cjs.AuthManager.generateToken(
-          user.id,
-          user.email,
-          user.role,
-          c.env.JWT_SECRET,
-          tokenTtl2
-        );
-        chunkRVHHSXJX_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
-        return c.redirect("/admin");
-      }
-      const existingUser = await oauthService.findUserByEmail(profile.email);
-      if (existingUser) {
-        if (!existingUser.is_active) {
-          return c.redirect("/auth/login?error=Account is deactivated");
-        }
-        await oauthService.createOAuthAccount({
-          userId: existingUser.id,
-          provider: providerId,
-          providerAccountId: profile.providerAccountId,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          tokenExpiresAt: tokenExpiresAt ?? void 0,
-          profileData: JSON.stringify(profile)
-        });
-        const tokenTtl2 = await chunkRVHHSXJX_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-        const jwt2 = await chunkRVHHSXJX_cjs.AuthManager.generateToken(
-          existingUser.id,
-          existingUser.email,
-          existingUser.role,
-          c.env.JWT_SECRET,
-          tokenTtl2
-        );
-        chunkRVHHSXJX_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
-        return c.redirect("/admin");
-      }
-      const newUserId = await oauthService.createUserFromOAuth(profile);
-      await oauthService.createOAuthAccount({
-        userId: newUserId,
-        provider: providerId,
-        providerAccountId: profile.providerAccountId,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        tokenExpiresAt: tokenExpiresAt ?? void 0,
-        profileData: JSON.stringify(profile)
-      });
-      const tokenTtl = await chunkRVHHSXJX_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const jwt = await chunkRVHHSXJX_cjs.AuthManager.generateToken(
-        newUserId,
-        profile.email.toLowerCase(),
-        "viewer",
-        c.env.JWT_SECRET,
-        tokenTtl
-      );
-      chunkRVHHSXJX_cjs.AuthManager.setAuthCookie(c, jwt, { sameSite: "Lax", maxAge: tokenTtl });
-      return c.redirect("/admin");
-    } catch (error) {
-      console.error("OAuth callback error:", error);
-      const message = error instanceof Error ? error.message : "OAuth authentication failed";
-      return c.redirect(`/auth/login?error=${encodeURIComponent(message)}`);
-    }
-  });
-  oauthAPI.post("/link", async (c) => {
-    try {
-      const user = c.get("user");
-      if (!user) {
-        return c.json({ error: "Authentication required" }, 401);
-      }
-      const body = await c.req.json();
-      const { provider } = body;
-      if (!provider || !BUILT_IN_PROVIDERS[provider]) {
-        return c.json({ error: "Invalid provider" }, 400);
-      }
-      const db = c.env.DB;
-      const settings = await loadSettings(db);
-      const creds = getProviderCredentials(settings, provider);
-      if (!creds) {
-        return c.json({ error: `OAuth provider "${provider}" is not configured` }, 400);
-      }
-      const oauthService = new OAuthService(db);
-      const state = oauthService.generateState();
-      const redirectUri = getCallbackUrl(c, provider);
-      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        maxAge: STATE_COOKIE_MAX_AGE,
-        path: "/auth/oauth"
-      });
-      const authorizeUrl = oauthService.buildAuthorizeUrl(
-        BUILT_IN_PROVIDERS[provider],
-        creds.clientId,
-        redirectUri,
-        state
-      );
-      return c.json({ redirectUrl: authorizeUrl });
-    } catch (error) {
-      console.error("OAuth link error:", error);
-      return c.json({ error: "Failed to initiate account linking" }, 500);
-    }
-  });
-  oauthAPI.post("/unlink", async (c) => {
-    try {
-      const user = c.get("user");
-      if (!user) {
-        return c.json({ error: "Authentication required" }, 401);
-      }
-      const body = await c.req.json();
-      const { provider } = body;
-      if (!provider) {
-        return c.json({ error: "Provider is required" }, 400);
-      }
-      const db = c.env.DB;
-      const oauthService = new OAuthService(db);
-      const success = await oauthService.unlinkOAuthAccount(user.userId, provider);
-      if (!success) {
-        return c.json({
-          error: "Cannot unlink the only authentication method. Set a password first."
-        }, 400);
-      }
-      return c.json({ success: true, message: `${provider} account unlinked` });
-    } catch (error) {
-      console.error("OAuth unlink error:", error);
-      return c.json({ error: "Failed to unlink account" }, 500);
-    }
-  });
-  oauthAPI.get("/accounts", async (c) => {
-    try {
-      const user = c.get("user");
-      if (!user) {
-        return c.json({ error: "Authentication required" }, 401);
-      }
-      const db = c.env.DB;
-      const oauthService = new OAuthService(db);
-      const accounts = await oauthService.findUserOAuthAccounts(user.userId);
-      return c.json({
-        accounts: accounts.map((a) => ({
-          provider: a.provider,
-          providerAccountId: a.provider_account_id,
-          linkedAt: a.created_at
-        }))
-      });
-    } catch (error) {
-      console.error("OAuth accounts error:", error);
-      return c.json({ error: "Failed to fetch linked accounts" }, 500);
-    }
-  });
-  builder.addRoute("/auth/oauth", oauthAPI, {
-    description: "OAuth2 social login endpoints",
-    requiresAuth: false,
-    priority: 100
-  });
-  builder.addMenuItem("OAuth Providers", "/admin/plugins/oauth-providers", {
-    icon: "shield",
-    order: 86,
-    permissions: ["oauth:manage"]
-  });
-  builder.lifecycle({
-    activate: async () => {
-      console.info("\u2705 OAuth Providers plugin activated");
-    },
-    deactivate: async () => {
-      console.info("\u274C OAuth Providers plugin deactivated");
-    }
-  });
-  return builder.build();
-}
-var oauthProvidersPlugin = createOAuthProvidersPlugin();
 
 // src/plugins/core-plugins/ai-search-plugin/services/embedding.service.ts
 var EmbeddingService = class {
@@ -4593,7 +3395,7 @@ function renderSettingsPage(data) {
 
 // src/plugins/core-plugins/ai-search-plugin/routes/admin.ts
 var adminRoutes = new hono.Hono();
-adminRoutes.use("*", chunkRVHHSXJX_cjs.requireAuth());
+adminRoutes.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes.get("/", async (c) => {
   try {
     const user = c.get("user");
@@ -4848,307 +3650,9 @@ var aiSearchPlugin = new chunk635JAMSE_cjs.PluginBuilder({
   description: manifest_default.description,
   author: { name: manifest_default.author }
 }).addService("aiSearch", AISearchService).addService("indexManager", IndexManager).addRoute("/admin/plugins/ai-search", admin_default).addRoute("/api/search", api_default2).build();
-var magicLinkRequestSchema = zod.z.object({
-  email: zod.z.string().email("Valid email is required")
-});
-function createMagicLinkAuthPlugin() {
-  const magicLinkRoutes = new hono.Hono();
-  magicLinkRoutes.post("/request", async (c) => {
-    try {
-      const body = await c.req.json();
-      const validation = magicLinkRequestSchema.safeParse(body);
-      if (!validation.success) {
-        return c.json({
-          error: "Validation failed",
-          details: validation.error.issues
-        }, 400);
-      }
-      const { email } = validation.data;
-      const normalizedEmail = email.toLowerCase();
-      const db = c.env.DB;
-      const oneHourAgo = Date.now() - 60 * 60 * 1e3;
-      const recentLinks = await db.prepare(`
-        SELECT COUNT(*) as count
-        FROM magic_links
-        WHERE user_email = ? AND created_at > ?
-      `).bind(normalizedEmail, oneHourAgo).first();
-      const rateLimitPerHour = 5;
-      if (recentLinks && recentLinks.count >= rateLimitPerHour) {
-        return c.json({
-          error: "Too many requests. Please try again later."
-        }, 429);
-      }
-      const user = await db.prepare(`
-        SELECT id, email, role, is_active
-        FROM users
-        WHERE email = ?
-      `).bind(normalizedEmail).first();
-      const allowNewUsers = false;
-      if (!user && !allowNewUsers) {
-        return c.json({
-          message: "If an account exists for this email, you will receive a magic link shortly."
-        });
-      }
-      if (user && !user.is_active) {
-        return c.json({
-          error: "This account has been deactivated."
-        }, 403);
-      }
-      const token = crypto.randomUUID() + "-" + crypto.randomUUID();
-      const tokenId = crypto.randomUUID();
-      const linkExpiryMinutes = 15;
-      const expiresAt = Date.now() + linkExpiryMinutes * 60 * 1e3;
-      await db.prepare(`
-        INSERT INTO magic_links (
-          id, user_email, token, expires_at, used, created_at, ip_address, user_agent
-        ) VALUES (?, ?, ?, ?, 0, ?, ?, ?)
-      `).bind(
-        tokenId,
-        normalizedEmail,
-        token,
-        expiresAt,
-        Date.now(),
-        c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "unknown",
-        c.req.header("user-agent") || "unknown"
-      ).run();
-      const baseUrl = new URL(c.req.url).origin;
-      const magicLink = `${baseUrl}/auth/magic-link/verify?token=${token}`;
-      try {
-        const emailPlugin2 = c.env.plugins?.get("email");
-        if (emailPlugin2 && emailPlugin2.sendEmail) {
-          await emailPlugin2.sendEmail({
-            to: normalizedEmail,
-            subject: "Your Magic Link to Sign In",
-            html: renderMagicLinkEmail(magicLink, linkExpiryMinutes)
-          });
-        } else {
-          console.error("Email plugin not available");
-          console.log(`Magic link for ${normalizedEmail}: ${magicLink}`);
-        }
-      } catch (error) {
-        console.error("Failed to send magic link email:", error);
-        return c.json({
-          error: "Failed to send email. Please try again later."
-        }, 500);
-      }
-      return c.json({
-        message: "If an account exists for this email, you will receive a magic link shortly.",
-        // For development only - remove in production
-        ...c.env.ENVIRONMENT === "development" && { dev_link: magicLink }
-      });
-    } catch (error) {
-      console.error("Magic link request error:", error);
-      return c.json({ error: "Failed to process request" }, 500);
-    }
-  });
-  magicLinkRoutes.get("/verify", async (c) => {
-    try {
-      const token = c.req.query("token");
-      if (!token) {
-        return c.redirect("/auth/login?error=Invalid magic link");
-      }
-      const db = c.env.DB;
-      const magicLink = await db.prepare(`
-        SELECT * FROM magic_links
-        WHERE token = ? AND used = 0
-      `).bind(token).first();
-      if (!magicLink) {
-        return c.redirect("/auth/login?error=Invalid or expired magic link");
-      }
-      if (magicLink.expires_at < Date.now()) {
-        return c.redirect("/auth/login?error=This magic link has expired");
-      }
-      let user = await db.prepare(`
-        SELECT * FROM users WHERE email = ? AND is_active = 1
-      `).bind(magicLink.user_email).first();
-      const allowNewUsers = false;
-      if (!user && allowNewUsers) {
-        const userId = crypto.randomUUID();
-        const username = magicLink.user_email.split("@")[0];
-        const now = Date.now();
-        await db.prepare(`
-          INSERT INTO users (
-            id, email, username, first_name, last_name,
-            password_hash, role, is_active, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, NULL, 'viewer', 1, ?, ?)
-        `).bind(
-          userId,
-          magicLink.user_email,
-          username,
-          username,
-          "",
-          now,
-          now
-        ).run();
-        user = {
-          id: userId,
-          email: magicLink.user_email,
-          username,
-          role: "viewer"
-        };
-      } else if (!user) {
-        return c.redirect("/auth/login?error=No account found for this email");
-      }
-      await db.prepare(`
-        UPDATE magic_links
-        SET used = 1, used_at = ?
-        WHERE id = ?
-      `).bind(Date.now(), magicLink.id).run();
-      const tokenTtl = await chunkRVHHSXJX_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
-      const jwtToken = await chunkRVHHSXJX_cjs.AuthManager.generateToken(
-        user.id,
-        user.email,
-        user.role,
-        c.env.JWT_SECRET,
-        tokenTtl
-      );
-      chunkRVHHSXJX_cjs.AuthManager.setAuthCookie(c, jwtToken, { maxAge: tokenTtl });
-      await db.prepare(`
-        UPDATE users SET last_login_at = ? WHERE id = ?
-      `).bind(Date.now(), user.id).run();
-      return c.redirect("/admin/dashboard?message=Successfully signed in");
-    } catch (error) {
-      console.error("Magic link verification error:", error);
-      return c.redirect("/auth/login?error=Authentication failed");
-    }
-  });
-  return {
-    name: "magic-link-auth",
-    version: "1.0.0",
-    description: "Passwordless authentication via email magic links",
-    author: {
-      name: "SonicJS Team",
-      email: "team@sonicjs.com"
-    },
-    dependencies: ["email"],
-    routes: [{
-      path: "/auth/magic-link",
-      handler: magicLinkRoutes,
-      description: "Magic link authentication endpoints",
-      requiresAuth: false
-    }],
-    async install(context) {
-      console.log("Installing magic-link-auth plugin...");
-    },
-    async activate(context) {
-      console.log("Magic link authentication activated");
-      console.log("Users can now sign in via /auth/magic-link/request");
-    },
-    async deactivate(context) {
-      console.log("Magic link authentication deactivated");
-    },
-    async uninstall(context) {
-      console.log("Uninstalling magic-link-auth plugin...");
-    }
-  };
-}
-function renderMagicLinkEmail(magicLink, expiryMinutes) {
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Your Magic Link</title>
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: #333;
-          max-width: 600px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-        .container {
-          background: #ffffff;
-          border-radius: 8px;
-          padding: 40px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .header {
-          text-align: center;
-          margin-bottom: 30px;
-        }
-        .header h1 {
-          color: #0ea5e9;
-          margin: 0;
-          font-size: 24px;
-        }
-        .content {
-          margin-bottom: 30px;
-        }
-        .button {
-          display: inline-block;
-          padding: 14px 32px;
-          background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-          color: #ffffff !important;
-          text-decoration: none;
-          border-radius: 6px;
-          font-weight: 600;
-          text-align: center;
-          margin: 20px 0;
-        }
-        .button:hover {
-          opacity: 0.9;
-        }
-        .expiry {
-          color: #ef4444;
-          font-size: 14px;
-          margin-top: 20px;
-        }
-        .footer {
-          margin-top: 40px;
-          padding-top: 20px;
-          border-top: 1px solid #e5e7eb;
-          font-size: 12px;
-          color: #6b7280;
-          text-align: center;
-        }
-        .security-note {
-          background: #fef3c7;
-          border-left: 4px solid #f59e0b;
-          padding: 12px 16px;
-          margin-top: 20px;
-          border-radius: 4px;
-          font-size: 14px;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>\u{1F517} Your Magic Link</h1>
-        </div>
-
-        <div class="content">
-          <p>Hello!</p>
-          <p>You requested a magic link to sign in to your account. Click the button below to continue:</p>
-
-          <div style="text-align: center;">
-            <a href="${magicLink}" class="button">Sign In</a>
-          </div>
-
-          <p class="expiry">\u23F0 This link expires in ${expiryMinutes} minutes</p>
-
-          <div class="security-note">
-            <strong>Security Notice:</strong> If you didn't request this link, you can safely ignore this email.
-            Someone may have entered your email address by mistake.
-          </div>
-        </div>
-
-        <div class="footer">
-          <p>This is an automated email from SonicJS.</p>
-          <p>For security, this link can only be used once.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-}
-createMagicLinkAuthPlugin();
 
 // src/plugins/core-plugins/security-audit-plugin/types.ts
-var DEFAULT_SETTINGS2 = {
+var DEFAULT_SETTINGS = {
   retention: {
     daysToKeep: 90,
     maxEvents: 1e5,
@@ -5173,7 +3677,7 @@ var DEFAULT_SETTINGS2 = {
 
 // src/plugins/core-plugins/security-audit-plugin/services/security-audit-service.ts
 var SecurityAuditService = class {
-  constructor(db, settings = DEFAULT_SETTINGS2) {
+  constructor(db, settings = DEFAULT_SETTINGS) {
     this.db = db;
     this.settings = settings;
   }
@@ -6012,7 +4516,7 @@ function renderSecuritySettingsPage(data) {
 
 // src/plugins/core-plugins/security-audit-plugin/routes/admin.ts
 var adminRoutes2 = new hono.Hono();
-adminRoutes2.use("*", chunkRVHHSXJX_cjs.requireAuth());
+adminRoutes2.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
@@ -6026,11 +4530,11 @@ async function getSettings(db) {
     const plugin2 = await pluginService.getPlugin("security-audit");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS2, ...settings };
+      return { ...DEFAULT_SETTINGS, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS2;
+  return DEFAULT_SETTINGS;
 }
 adminRoutes2.get("/", async (c) => {
   const db = c.env.DB;
@@ -6141,7 +4645,7 @@ var LOCK_PREFIX = "security:locked:";
 var BruteForceDetector = class {
   constructor(kv, settings) {
     this.kv = kv;
-    this.settings = settings || DEFAULT_SETTINGS2.bruteForce;
+    this.settings = settings || DEFAULT_SETTINGS.bruteForce;
   }
   settings;
   async recordFailedAttempt(ip, email) {
@@ -6288,7 +4792,7 @@ var BruteForceDetector = class {
 
 // src/plugins/core-plugins/security-audit-plugin/routes/api.ts
 var apiRoutes2 = new hono.Hono();
-apiRoutes2.use("*", chunkRVHHSXJX_cjs.requireAuth());
+apiRoutes2.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 apiRoutes2.use("*", async (c, next) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
@@ -6302,11 +4806,11 @@ async function getSettings2(db) {
     const plugin2 = await pluginService.getPlugin("security-audit");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS2, ...settings };
+      return { ...DEFAULT_SETTINGS, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS2;
+  return DEFAULT_SETTINGS;
 }
 apiRoutes2.get("/events", async (c) => {
   const db = c.env.DB;
@@ -6450,11 +4954,11 @@ async function getPluginSettings(db) {
     const plugin2 = await pluginService.getPlugin("security-audit");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS2, ...settings };
+      return { ...DEFAULT_SETTINGS, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS2;
+  return DEFAULT_SETTINGS;
 }
 async function isPluginActive2(db) {
   try {
@@ -7445,7 +5949,7 @@ function renderEventPagination(page, totalPages, type, status) {
 }
 
 // src/plugins/core-plugins/stripe-plugin/types.ts
-var DEFAULT_SETTINGS3 = {
+var DEFAULT_SETTINGS2 = {
   stripePublishableKey: "",
   stripeSecretKey: "",
   stripeWebhookSecret: "",
@@ -7456,7 +5960,7 @@ var DEFAULT_SETTINGS3 = {
 
 // src/plugins/core-plugins/stripe-plugin/routes/admin.ts
 var adminRoutes3 = new hono.Hono();
-adminRoutes3.use("*", chunkRVHHSXJX_cjs.requireAuth());
+adminRoutes3.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes3.use("*", async (c, next) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
@@ -7470,11 +5974,11 @@ async function getSettings3(db) {
     const plugin2 = await pluginService.getPlugin("stripe");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS3, ...settings };
+      return { ...DEFAULT_SETTINGS2, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS3;
+  return DEFAULT_SETTINGS2;
 }
 adminRoutes3.get("/", async (c) => {
   const db = c.env.DB;
@@ -7792,11 +6296,11 @@ async function getSettings4(db) {
     const plugin2 = await pluginService.getPlugin("stripe");
     if (plugin2?.settings) {
       const settings = typeof plugin2.settings === "string" ? JSON.parse(plugin2.settings) : plugin2.settings;
-      return { ...DEFAULT_SETTINGS3, ...settings };
+      return { ...DEFAULT_SETTINGS2, ...settings };
     }
   } catch {
   }
-  return DEFAULT_SETTINGS3;
+  return DEFAULT_SETTINGS2;
 }
 function mapStripeStatus(status) {
   const map = {
@@ -7939,7 +6443,7 @@ apiRoutes3.post("/webhook", async (c) => {
   }
   return c.json({ received: true });
 });
-apiRoutes3.post("/create-checkout-session", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
+apiRoutes3.post("/create-checkout-session", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const db = c.env.DB;
   const user = c.get("user");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
@@ -7979,7 +6483,7 @@ apiRoutes3.post("/create-checkout-session", chunkRVHHSXJX_cjs.requireAuth(), asy
   });
   return c.json({ sessionId: session.id, url: session.url });
 });
-apiRoutes3.get("/subscription", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/subscription", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const db = c.env.DB;
@@ -7991,7 +6495,7 @@ apiRoutes3.get("/subscription", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
   }
   return c.json({ subscription });
 });
-apiRoutes3.get("/subscriptions", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/subscriptions", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -8007,7 +6511,7 @@ apiRoutes3.get("/subscriptions", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
   const result = await subscriptionService.list(filters);
   return c.json(result);
 });
-apiRoutes3.get("/stats", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/stats", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -8016,7 +6520,7 @@ apiRoutes3.get("/stats", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
   const stats = await subscriptionService.getStats();
   return c.json(stats);
 });
-apiRoutes3.post("/sync-subscriptions", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
+apiRoutes3.post("/sync-subscriptions", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -8064,7 +6568,7 @@ apiRoutes3.post("/sync-subscriptions", chunkRVHHSXJX_cjs.requireAuth(), async (c
     }, 500);
   }
 });
-apiRoutes3.get("/events", chunkRVHHSXJX_cjs.requireAuth(), async (c) => {
+apiRoutes3.get("/events", chunkQ2NTBJYS_cjs.requireAuth(), async (c) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) return c.json({ error: "Access denied" }, 403);
   const db = c.env.DB;
@@ -8229,7 +6733,7 @@ var HOOKS2 = {
   USER_LOGIN: "user:login"};
 chunkNIUAH5PZ_cjs.init_admin_layout_catalyst_template();
 var adminRoutes4 = new hono.Hono();
-adminRoutes4.use("*", chunkRVHHSXJX_cjs.requireAuth());
+adminRoutes4.use("*", chunkQ2NTBJYS_cjs.requireAuth());
 adminRoutes4.use("*", async (c, next) => {
   const user = c.get("user");
   if (!user || !await new chunk323GE63K_cjs.RbacService(c.env.DB).can(user.userId, "settings", "manage")) {
@@ -8300,7 +6804,7 @@ adminRoutes4.get("/", async (c) => {
         <div class="divide-y divide-zinc-950/5 dark:divide-white/10">
           ${topPages.length > 0 ? topPages.map((p) => `
             <div class="flex items-center justify-between px-6 py-3">
-              <span class="text-sm text-zinc-700 dark:text-zinc-300 font-mono truncate">${escapeHtml4(p.path)}</span>
+              <span class="text-sm text-zinc-700 dark:text-zinc-300 font-mono truncate">${escapeHtml3(p.path)}</span>
               <span class="text-sm font-medium text-zinc-500 dark:text-zinc-400">${p.views}</span>
             </div>
           `).join("") : `
@@ -8329,7 +6833,7 @@ adminRoutes4.get("/", async (c) => {
             <tbody class="divide-y divide-zinc-950/5 dark:divide-white/10">
               ${recentActivity.length > 0 ? recentActivity.map((a) => `
                 <tr>
-                  <td class="px-6 py-2 font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-xs">${escapeHtml4(a.url || "")}</td>
+                  <td class="px-6 py-2 font-mono text-zinc-700 dark:text-zinc-300 truncate max-w-xs">${escapeHtml3(a.url || "")}</td>
                   <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${a.method === "GET" ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}">${a.method || ""}</span></td>
                   <td class="px-6 py-2"><span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${(a.status_code || 0) >= 400 ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"}">${a.status_code || ""}</span></td>
                   <td class="px-6 py-2 text-zinc-500 dark:text-zinc-400">${a.duration || 0}ms</td>
@@ -8359,7 +6863,7 @@ adminRoutes4.get("/", async (c) => {
     dynamicMenuItems: c.get("pluginMenuItems")
   }));
 });
-function escapeHtml4(str) {
+function escapeHtml3(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
@@ -10028,7 +8532,7 @@ function renderCacheDashboard(data) {
     </script>
 
     <!-- Confirmation Dialogs -->
-    ${chunkPABXSJEQ_cjs.renderConfirmationDialog({
+    ${chunkN5LGKCE3_cjs.renderConfirmationDialog({
     id: "clear-all-cache-confirm",
     title: "Clear All Cache",
     message: "Are you sure you want to clear all cache entries? This cannot be undone.",
@@ -10039,7 +8543,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearAllCaches()"
   })}
 
-    ${chunkPABXSJEQ_cjs.renderConfirmationDialog({
+    ${chunkN5LGKCE3_cjs.renderConfirmationDialog({
     id: "clear-namespace-cache-confirm",
     title: "Clear Namespace Cache",
     message: "Clear cache for this namespace?",
@@ -10050,7 +8554,7 @@ function renderCacheDashboard(data) {
     onConfirm: "performClearNamespaceCache()"
   })}
 
-    ${chunkPABXSJEQ_cjs.getConfirmationDialogScript()}
+    ${chunkN5LGKCE3_cjs.getConfirmationDialogScript()}
   `;
   const layoutData = {
     title: "Cache System",
@@ -10742,8 +9246,8 @@ function createSonicJSApp(config = {}) {
     c.set("appVersion", appVersion);
     await next();
   });
-  app2.use("*", chunkRVHHSXJX_cjs.metricsMiddleware());
-  app2.use("*", chunkRVHHSXJX_cjs.bootstrapMiddleware(config));
+  app2.use("*", chunkQ2NTBJYS_cjs.metricsMiddleware());
+  app2.use("*", chunkQ2NTBJYS_cjs.bootstrapMiddleware(config));
   if (config.middleware?.beforeAuth) {
     for (const middleware of config.middleware.beforeAuth) {
       app2.use("*", middleware);
@@ -10752,11 +9256,11 @@ function createSonicJSApp(config = {}) {
   app2.use("*", async (_c, next) => {
     await next();
   });
-  app2.use("*", chunkRVHHSXJX_cjs.securityHeadersMiddleware());
-  app2.use("*", chunkRVHHSXJX_cjs.csrfProtection());
+  app2.use("*", chunkQ2NTBJYS_cjs.securityHeadersMiddleware());
+  app2.use("*", chunkQ2NTBJYS_cjs.csrfProtection());
   app2.use("*", async (c, next) => {
     try {
-      const auth = chunkV7N7LADR_cjs.createAuth(c.env, config.auth?.extendBetterAuth);
+      const auth = chunkZHVJ3NSY_cjs.createAuth(c.env, config.auth?.extendBetterAuth);
       const session = await auth.api.getSession({ headers: c.req.raw.headers });
       if (session?.user) {
         const u = session.user;
@@ -10787,8 +9291,8 @@ function createSonicJSApp(config = {}) {
       app2.use("*", middleware);
     }
   }
-  app2.use("/admin/*", chunkRVHHSXJX_cjs.requireAuth());
-  app2.use("/admin/*", chunkRVHHSXJX_cjs.requireRbac("portal", "access"));
+  app2.use("/admin/*", chunkQ2NTBJYS_cjs.requireAuth());
+  app2.use("/admin/*", chunkQ2NTBJYS_cjs.requireRbac("portal", "access"));
   app2.use("/admin/*", pluginMenuMiddleware());
   const NAV_LANDING = [
     { path: "/admin/content", perm: "content:read" },
@@ -10832,21 +9336,21 @@ function createSonicJSApp(config = {}) {
     } catch {
     }
   });
-  app2.route("/api", chunkPABXSJEQ_cjs.api_default);
-  app2.route("/api/media", chunkPABXSJEQ_cjs.api_media_default);
-  app2.route("/api/system", chunkPABXSJEQ_cjs.api_system_default);
-  app2.route("/admin/api", chunkPABXSJEQ_cjs.admin_api_default);
-  app2.route("/admin/dashboard", chunkPABXSJEQ_cjs.router);
-  app2.route("/admin/collections", chunkPABXSJEQ_cjs.adminCollectionsRoutes);
-  app2.route("/admin/forms", chunkPABXSJEQ_cjs.adminFormsRoutes);
-  app2.route("/admin/settings", chunkPABXSJEQ_cjs.adminSettingsRoutes);
-  app2.route("/forms", chunkPABXSJEQ_cjs.public_forms_default);
-  app2.route("/api/forms", chunkPABXSJEQ_cjs.public_forms_default);
-  app2.route("/admin/api-reference", chunkPABXSJEQ_cjs.router2);
+  app2.route("/api", chunkN5LGKCE3_cjs.api_default);
+  app2.route("/api/media", chunkN5LGKCE3_cjs.api_media_default);
+  app2.route("/api/system", chunkN5LGKCE3_cjs.api_system_default);
+  app2.route("/admin/api", chunkN5LGKCE3_cjs.admin_api_default);
+  app2.route("/admin/dashboard", chunkN5LGKCE3_cjs.router);
+  app2.route("/admin/collections", chunkN5LGKCE3_cjs.adminCollectionsRoutes);
+  app2.route("/admin/forms", chunkN5LGKCE3_cjs.adminFormsRoutes);
+  app2.route("/admin/settings", chunkN5LGKCE3_cjs.adminSettingsRoutes);
+  app2.route("/forms", chunkN5LGKCE3_cjs.public_forms_default);
+  app2.route("/api/forms", chunkN5LGKCE3_cjs.public_forms_default);
+  app2.route("/admin/api-reference", chunkN5LGKCE3_cjs.router2);
   app2.route("/admin/database-tools", createDatabaseToolsAdminRoutes());
   app2.route("/admin/seed-data", createSeedDataAdminRoutes());
-  app2.route("/admin/content", chunkPABXSJEQ_cjs.admin_content_default);
-  app2.route("/admin/media", chunkPABXSJEQ_cjs.adminMediaRoutes);
+  app2.route("/admin/content", chunkN5LGKCE3_cjs.admin_content_default);
+  app2.route("/admin/media", chunkN5LGKCE3_cjs.adminMediaRoutes);
   app2.use("/auth/*", securityAuditMiddleware());
   if (securityAuditPlugin.routes && securityAuditPlugin.routes.length > 0) {
     for (const route of securityAuditPlugin.routes) {
@@ -10859,18 +9363,8 @@ function createSonicJSApp(config = {}) {
     }
   }
   app2.route("/admin/cache", cache_default.getRoutes());
-  if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
-    for (const route of oauthProvidersPlugin.routes) {
-      app2.route(route.path, route.handler);
-    }
-  }
-  if (chunkPABXSJEQ_cjs.userProfilesPlugin.routes && chunkPABXSJEQ_cjs.userProfilesPlugin.routes.length > 0) {
-    for (const route of chunkPABXSJEQ_cjs.userProfilesPlugin.routes) {
-      app2.route(route.path, route.handler);
-    }
-  }
-  if (otpLoginPlugin.routes && otpLoginPlugin.routes.length > 0) {
-    for (const route of otpLoginPlugin.routes) {
+  if (chunkN5LGKCE3_cjs.userProfilesPlugin.routes && chunkN5LGKCE3_cjs.userProfilesPlugin.routes.length > 0) {
+    for (const route of chunkN5LGKCE3_cjs.userProfilesPlugin.routes) {
       app2.route(route.path, route.handler);
     }
   }
@@ -10885,24 +9379,18 @@ function createSonicJSApp(config = {}) {
       app2.route(route.path, route.handler);
     }
   }
-  app2.route("/admin/plugins", chunkPABXSJEQ_cjs.adminPluginRoutes);
-  app2.route("/admin/logs", chunkPABXSJEQ_cjs.adminLogsRoutes);
+  app2.route("/admin/plugins", chunkN5LGKCE3_cjs.adminPluginRoutes);
+  app2.route("/admin/logs", chunkN5LGKCE3_cjs.adminLogsRoutes);
   app2.route("/admin/rbac", adminRbacRoutes);
-  app2.route("/admin", chunkPABXSJEQ_cjs.userRoutes);
-  app2.route("/auth", chunkPABXSJEQ_cjs.auth_default);
+  app2.route("/admin", chunkN5LGKCE3_cjs.userRoutes);
+  app2.route("/auth", chunkN5LGKCE3_cjs.auth_default);
   app2.on(["GET", "POST"], "/auth/*", (c) => {
-    const auth = chunkV7N7LADR_cjs.createAuth(c.env, config.auth?.extendBetterAuth);
+    const auth = chunkZHVJ3NSY_cjs.createAuth(c.env, config.auth?.extendBetterAuth);
     return auth.handler(c.req.raw);
   });
-  app2.route("/", chunkPABXSJEQ_cjs.test_cleanup_default);
+  app2.route("/", chunkN5LGKCE3_cjs.test_cleanup_default);
   if (emailPlugin.routes && emailPlugin.routes.length > 0) {
     for (const route of emailPlugin.routes) {
-      app2.route(route.path, route.handler);
-    }
-  }
-  const magicLinkPlugin = createMagicLinkAuthPlugin();
-  if (magicLinkPlugin.routes && magicLinkPlugin.routes.length > 0) {
-    for (const route of magicLinkPlugin.routes) {
       app2.route(route.path, route.handler);
     }
   }
@@ -10977,100 +9465,667 @@ function createDb(d1$1) {
   return d1.drizzle(d1$1, { schema: chunk4RVMY6FI_cjs.schema_exports });
 }
 
+// src/plugins/core-plugins/oauth-providers/oauth-service.ts
+var GITHUB_PROVIDER = {
+  id: "github",
+  name: "GitHub",
+  authorizeUrl: "https://github.com/login/oauth/authorize",
+  tokenUrl: "https://github.com/login/oauth/access_token",
+  userInfoUrl: "https://api.github.com/user",
+  scopes: ["read:user", "user:email"],
+  mapProfile: (profile) => ({
+    providerAccountId: String(profile.id),
+    email: profile.email || "",
+    name: profile.name || profile.login || "",
+    avatar: profile.avatar_url || void 0
+  })
+};
+var GOOGLE_PROVIDER = {
+  id: "google",
+  name: "Google",
+  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+  tokenUrl: "https://oauth2.googleapis.com/token",
+  userInfoUrl: "https://www.googleapis.com/oauth2/v2/userinfo",
+  scopes: ["openid", "email", "profile"],
+  mapProfile: (profile) => ({
+    providerAccountId: String(profile.id),
+    email: profile.email || "",
+    name: profile.name || "",
+    avatar: profile.picture || void 0
+  })
+};
+var BUILT_IN_PROVIDERS = {
+  github: GITHUB_PROVIDER,
+  google: GOOGLE_PROVIDER
+};
+var OAuthService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  /**
+   * Build the authorization redirect URL for a provider.
+   */
+  buildAuthorizeUrl(provider, clientId, redirectUri, state) {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: provider.scopes.join(" "),
+      state
+    });
+    if (provider.id === "google") {
+      params.set("access_type", "offline");
+      params.set("prompt", "consent");
+    }
+    return `${provider.authorizeUrl}?${params.toString()}`;
+  }
+  /**
+   * Exchange authorization code for tokens using native fetch.
+   */
+  async exchangeCode(provider, clientId, clientSecret, code, redirectUri) {
+    const body = {
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code"
+    };
+    const response = await fetch(provider.tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      body: new URLSearchParams(body).toString()
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Token exchange failed (${response.status}): ${errorText}`);
+    }
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(`Token exchange error: ${data.error_description || data.error}`);
+    }
+    return {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in ? Number(data.expires_in) : void 0
+    };
+  }
+  /**
+   * Fetch user profile from the provider's userinfo endpoint.
+   */
+  async fetchUserProfile(provider, accessToken) {
+    const headers = {
+      "Authorization": `Bearer ${accessToken}`,
+      "Accept": "application/json"
+    };
+    if (provider.id === "github") {
+      headers["Authorization"] = `token ${accessToken}`;
+    }
+    const response = await fetch(provider.userInfoUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user profile (${response.status})`);
+    }
+    const profile = await response.json();
+    if (provider.id === "github" && !profile.email) {
+      const emailResponse = await fetch("https://api.github.com/user/emails", {
+        headers: {
+          "Authorization": `token ${accessToken}`,
+          "Accept": "application/json"
+        }
+      });
+      if (emailResponse.ok) {
+        const emails = await emailResponse.json();
+        const primaryEmail = emails.find((e) => e.primary && e.verified);
+        if (primaryEmail) {
+          profile.email = primaryEmail.email;
+        }
+      }
+    }
+    return provider.mapProfile(profile);
+  }
+  // ─── Database Operations ────────────────────────────────────────────────
+  /**
+   * Find an existing OAuth account link.
+   */
+  async findOAuthAccount(provider, providerAccountId) {
+    return await this.db.prepare(`
+      SELECT * FROM oauth_accounts
+      WHERE provider = ? AND provider_account_id = ?
+    `).bind(provider, providerAccountId).first();
+  }
+  /**
+   * Find all OAuth accounts for a user.
+   */
+  async findUserOAuthAccounts(userId) {
+    const result = await this.db.prepare(`
+      SELECT * FROM oauth_accounts WHERE user_id = ?
+    `).bind(userId).all();
+    return result.results || [];
+  }
+  /**
+   * Create a new OAuth account link.
+   */
+  async createOAuthAccount(params) {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    await this.db.prepare(`
+      INSERT INTO oauth_accounts (
+        id, user_id, provider, provider_account_id,
+        access_token, refresh_token, token_expires_at,
+        profile_data, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      params.userId,
+      params.provider,
+      params.providerAccountId,
+      params.accessToken,
+      params.refreshToken || null,
+      params.tokenExpiresAt || null,
+      params.profileData || null,
+      now,
+      now
+    ).run();
+    return {
+      id,
+      user_id: params.userId,
+      provider: params.provider,
+      provider_account_id: params.providerAccountId,
+      access_token: params.accessToken,
+      refresh_token: params.refreshToken || null,
+      token_expires_at: params.tokenExpiresAt || null,
+      profile_data: params.profileData || null,
+      created_at: now,
+      updated_at: now
+    };
+  }
+  /**
+   * Update tokens for an existing OAuth account.
+   */
+  async updateOAuthTokens(id, accessToken, refreshToken, tokenExpiresAt) {
+    await this.db.prepare(`
+      UPDATE oauth_accounts
+      SET access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(accessToken, refreshToken || null, tokenExpiresAt || null, Date.now(), id).run();
+  }
+  /**
+   * Unlink an OAuth account from a user (only if they have another auth method).
+   */
+  async unlinkOAuthAccount(userId, provider) {
+    const user = await this.db.prepare(`
+      SELECT password_hash FROM users WHERE id = ?
+    `).bind(userId).first();
+    const otherLinks = await this.db.prepare(`
+      SELECT COUNT(*) as count FROM oauth_accounts
+      WHERE user_id = ? AND provider != ?
+    `).bind(userId, provider).first();
+    const hasPassword = !!user?.password_hash;
+    const hasOtherLinks = (otherLinks?.count || 0) > 0;
+    if (!hasPassword && !hasOtherLinks) {
+      return false;
+    }
+    await this.db.prepare(`
+      DELETE FROM oauth_accounts WHERE user_id = ? AND provider = ?
+    `).bind(userId, provider).run();
+    return true;
+  }
+  /**
+   * Find a user by email.
+   */
+  async findUserByEmail(email) {
+    return await this.db.prepare(`
+      SELECT id, email, role, is_active, first_name, last_name
+      FROM users WHERE email = ?
+    `).bind(email.toLowerCase()).first();
+  }
+  /**
+   * Create a new user from an OAuth profile.
+   */
+  async createUserFromOAuth(profile) {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const email = profile.email.toLowerCase();
+    const nameParts = (profile.name || email.split("@")[0] || "User").split(" ");
+    const firstName = nameParts[0] || "User";
+    const lastName = nameParts.slice(1).join(" ") || "";
+    const username = email.split("@")[0] || id.substring(0, 8);
+    const existing = await this.db.prepare(
+      "SELECT id FROM users WHERE username = ?"
+    ).bind(username).first();
+    const finalUsername = existing ? `${username}-${id.substring(0, 6)}` : username;
+    await this.db.prepare(`
+      INSERT INTO users (
+        id, email, username, first_name, last_name,
+        password_hash, role, avatar, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, 'viewer', ?, 1, ?, ?)
+    `).bind(
+      id,
+      email,
+      finalUsername,
+      firstName,
+      lastName,
+      profile.avatar || null,
+      now,
+      now
+    ).run();
+    return id;
+  }
+  /**
+   * Generate a cryptographically random state parameter for CSRF protection.
+   */
+  generateState() {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+};
+
+// src/plugins/core-plugins/oauth-providers/index.ts
+var STATE_COOKIE_NAME = "oauth_state";
+var STATE_COOKIE_MAX_AGE = 600;
+function createOAuthProvidersPlugin() {
+  const builder = chunk635JAMSE_cjs.PluginBuilder.create({
+    name: "oauth-providers",
+    version: "1.0.0-beta.1",
+    description: "OAuth2/OIDC social login with GitHub, Google, and more"
+  });
+  builder.metadata({
+    author: {
+      name: "SonicJS Team",
+      email: "team@sonicjs.com"
+    },
+    license: "MIT",
+    compatibility: "^2.0.0"
+  });
+  function getCallbackUrl(c, provider) {
+    const proto = c.req.header("x-forwarded-proto") || "https";
+    const host = c.req.header("host") || "localhost";
+    return `${proto}://${host}/auth/oauth/${provider}/callback`;
+  }
+  async function loadSettings(db) {
+    const row = await db.prepare(
+      `SELECT settings FROM plugins WHERE id = 'oauth-providers'`
+    ).first();
+    if (!row?.settings) return null;
+    try {
+      return JSON.parse(row.settings);
+    } catch {
+      return null;
+    }
+  }
+  function getProviderCredentials(settings, providerId) {
+    if (!settings?.providers?.[providerId]) return null;
+    const p = settings.providers[providerId];
+    if (!p.enabled || !p.clientId || !p.clientSecret) return null;
+    return { clientId: p.clientId, clientSecret: p.clientSecret };
+  }
+  const oauthAPI = new hono.Hono();
+  oauthAPI.get("/:provider", async (c) => {
+    try {
+      const providerId = c.req.param("provider");
+      const providerConfig = BUILT_IN_PROVIDERS[providerId];
+      if (!providerConfig) {
+        return c.json({ error: `Unknown OAuth provider: ${providerId}` }, 400);
+      }
+      const db = c.env.DB;
+      const settings = await loadSettings(db);
+      const creds = getProviderCredentials(settings, providerId);
+      if (!creds) {
+        return c.json({
+          error: `OAuth provider "${providerId}" is not configured or not enabled`
+        }, 400);
+      }
+      const oauthService = new OAuthService(db);
+      const state = oauthService.generateState();
+      const redirectUri = getCallbackUrl(c, providerId);
+      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        // Lax required for OAuth redirect flow
+        maxAge: STATE_COOKIE_MAX_AGE,
+        path: "/auth/oauth"
+      });
+      const authorizeUrl = oauthService.buildAuthorizeUrl(
+        providerConfig,
+        creds.clientId,
+        redirectUri,
+        state
+      );
+      return c.redirect(authorizeUrl);
+    } catch (error) {
+      console.error("OAuth authorize error:", error);
+      return c.json({ error: "Failed to initiate OAuth flow" }, 500);
+    }
+  });
+  oauthAPI.get("/:provider/callback", async (c) => {
+    try {
+      const providerId = c.req.param("provider");
+      const providerConfig = BUILT_IN_PROVIDERS[providerId];
+      if (!providerConfig) {
+        return c.redirect("/auth/login?error=Unknown OAuth provider");
+      }
+      const stateParam = c.req.query("state");
+      const stateCookie = cookie.getCookie(c, STATE_COOKIE_NAME);
+      if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+        return c.redirect("/auth/login?error=Invalid OAuth state. Please try again.");
+      }
+      cookie.setCookie(c, STATE_COOKIE_NAME, "", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        maxAge: 0,
+        path: "/auth/oauth"
+      });
+      const errorParam = c.req.query("error");
+      if (errorParam) {
+        const errorDesc = c.req.query("error_description") || errorParam;
+        return c.redirect(`/auth/login?error=${encodeURIComponent(errorDesc)}`);
+      }
+      const code = c.req.query("code");
+      if (!code) {
+        return c.redirect("/auth/login?error=No authorization code received");
+      }
+      const db = c.env.DB;
+      const settings = await loadSettings(db);
+      const creds = getProviderCredentials(settings, providerId);
+      if (!creds) {
+        return c.redirect("/auth/login?error=OAuth provider not configured");
+      }
+      const oauthService = new OAuthService(db);
+      const redirectUri = getCallbackUrl(c, providerId);
+      const tokens = await oauthService.exchangeCode(
+        providerConfig,
+        creds.clientId,
+        creds.clientSecret,
+        code,
+        redirectUri
+      );
+      const profile = await oauthService.fetchUserProfile(providerConfig, tokens.access_token);
+      if (!profile.email) {
+        return c.redirect("/auth/login?error=Could not retrieve email from OAuth provider. Please ensure your email is public or grant email permission.");
+      }
+      const tokenExpiresAt = tokens.expires_in ? Date.now() + tokens.expires_in * 1e3 : null;
+      const existingOAuth = await oauthService.findOAuthAccount(providerId, profile.providerAccountId);
+      if (existingOAuth) {
+        await oauthService.updateOAuthTokens(
+          existingOAuth.id,
+          tokens.access_token,
+          tokens.refresh_token,
+          tokenExpiresAt ?? void 0
+        );
+        const user = await db.prepare(
+          "SELECT id, email, role, is_active FROM users WHERE id = ?"
+        ).bind(existingOAuth.user_id).first();
+        if (!user || !user.is_active) {
+          return c.redirect("/auth/login?error=Account is deactivated");
+        }
+        const tokenTtl2 = await chunkQ2NTBJYS_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+        const jwt2 = await chunkQ2NTBJYS_cjs.AuthManager.generateToken(
+          user.id,
+          user.email,
+          user.role,
+          c.env.JWT_SECRET,
+          tokenTtl2
+        );
+        chunkQ2NTBJYS_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
+        return c.redirect("/admin");
+      }
+      const existingUser = await oauthService.findUserByEmail(profile.email);
+      if (existingUser) {
+        if (!existingUser.is_active) {
+          return c.redirect("/auth/login?error=Account is deactivated");
+        }
+        await oauthService.createOAuthAccount({
+          userId: existingUser.id,
+          provider: providerId,
+          providerAccountId: profile.providerAccountId,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          tokenExpiresAt: tokenExpiresAt ?? void 0,
+          profileData: JSON.stringify(profile)
+        });
+        const tokenTtl2 = await chunkQ2NTBJYS_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+        const jwt2 = await chunkQ2NTBJYS_cjs.AuthManager.generateToken(
+          existingUser.id,
+          existingUser.email,
+          existingUser.role,
+          c.env.JWT_SECRET,
+          tokenTtl2
+        );
+        chunkQ2NTBJYS_cjs.AuthManager.setAuthCookie(c, jwt2, { sameSite: "Lax", maxAge: tokenTtl2 });
+        return c.redirect("/admin");
+      }
+      const newUserId = await oauthService.createUserFromOAuth(profile);
+      await oauthService.createOAuthAccount({
+        userId: newUserId,
+        provider: providerId,
+        providerAccountId: profile.providerAccountId,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        tokenExpiresAt: tokenExpiresAt ?? void 0,
+        profileData: JSON.stringify(profile)
+      });
+      const tokenTtl = await chunkQ2NTBJYS_cjs.getJwtExpirySecondsFromDb(c.env.DB, c.env);
+      const jwt = await chunkQ2NTBJYS_cjs.AuthManager.generateToken(
+        newUserId,
+        profile.email.toLowerCase(),
+        "viewer",
+        c.env.JWT_SECRET,
+        tokenTtl
+      );
+      chunkQ2NTBJYS_cjs.AuthManager.setAuthCookie(c, jwt, { sameSite: "Lax", maxAge: tokenTtl });
+      return c.redirect("/admin");
+    } catch (error) {
+      console.error("OAuth callback error:", error);
+      const message = error instanceof Error ? error.message : "OAuth authentication failed";
+      return c.redirect(`/auth/login?error=${encodeURIComponent(message)}`);
+    }
+  });
+  oauthAPI.post("/link", async (c) => {
+    try {
+      const user = c.get("user");
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      const body = await c.req.json();
+      const { provider } = body;
+      if (!provider || !BUILT_IN_PROVIDERS[provider]) {
+        return c.json({ error: "Invalid provider" }, 400);
+      }
+      const db = c.env.DB;
+      const settings = await loadSettings(db);
+      const creds = getProviderCredentials(settings, provider);
+      if (!creds) {
+        return c.json({ error: `OAuth provider "${provider}" is not configured` }, 400);
+      }
+      const oauthService = new OAuthService(db);
+      const state = oauthService.generateState();
+      const redirectUri = getCallbackUrl(c, provider);
+      cookie.setCookie(c, STATE_COOKIE_NAME, state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        maxAge: STATE_COOKIE_MAX_AGE,
+        path: "/auth/oauth"
+      });
+      const authorizeUrl = oauthService.buildAuthorizeUrl(
+        BUILT_IN_PROVIDERS[provider],
+        creds.clientId,
+        redirectUri,
+        state
+      );
+      return c.json({ redirectUrl: authorizeUrl });
+    } catch (error) {
+      console.error("OAuth link error:", error);
+      return c.json({ error: "Failed to initiate account linking" }, 500);
+    }
+  });
+  oauthAPI.post("/unlink", async (c) => {
+    try {
+      const user = c.get("user");
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      const body = await c.req.json();
+      const { provider } = body;
+      if (!provider) {
+        return c.json({ error: "Provider is required" }, 400);
+      }
+      const db = c.env.DB;
+      const oauthService = new OAuthService(db);
+      const success = await oauthService.unlinkOAuthAccount(user.userId, provider);
+      if (!success) {
+        return c.json({
+          error: "Cannot unlink the only authentication method. Set a password first."
+        }, 400);
+      }
+      return c.json({ success: true, message: `${provider} account unlinked` });
+    } catch (error) {
+      console.error("OAuth unlink error:", error);
+      return c.json({ error: "Failed to unlink account" }, 500);
+    }
+  });
+  oauthAPI.get("/accounts", async (c) => {
+    try {
+      const user = c.get("user");
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      const db = c.env.DB;
+      const oauthService = new OAuthService(db);
+      const accounts = await oauthService.findUserOAuthAccounts(user.userId);
+      return c.json({
+        accounts: accounts.map((a) => ({
+          provider: a.provider,
+          providerAccountId: a.provider_account_id,
+          linkedAt: a.created_at
+        }))
+      });
+    } catch (error) {
+      console.error("OAuth accounts error:", error);
+      return c.json({ error: "Failed to fetch linked accounts" }, 500);
+    }
+  });
+  builder.addRoute("/auth/oauth", oauthAPI, {
+    description: "OAuth2 social login endpoints",
+    requiresAuth: false,
+    priority: 100
+  });
+  builder.addMenuItem("OAuth Providers", "/admin/plugins/oauth-providers", {
+    icon: "shield",
+    order: 86,
+    permissions: ["oauth:manage"]
+  });
+  builder.lifecycle({
+    activate: async () => {
+      console.info("\u2705 OAuth Providers plugin activated");
+    },
+    deactivate: async () => {
+      console.info("\u274C OAuth Providers plugin deactivated");
+    }
+  });
+  return builder.build();
+}
+var oauthProvidersPlugin = createOAuthProvidersPlugin();
+
 // src/index.ts
 var VERSION = chunk2HWICA5J_cjs.package_default.version;
 
 Object.defineProperty(exports, "ROUTES_INFO", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.ROUTES_INFO; }
+  get: function () { return chunkN5LGKCE3_cjs.ROUTES_INFO; }
 });
 Object.defineProperty(exports, "adminApiRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.admin_api_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_api_default; }
 });
 Object.defineProperty(exports, "adminCheckboxRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.adminCheckboxRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminCheckboxRoutes; }
 });
 Object.defineProperty(exports, "adminCodeExamplesRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.admin_code_examples_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_code_examples_default; }
 });
 Object.defineProperty(exports, "adminCollectionsRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.adminCollectionsRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminCollectionsRoutes; }
 });
 Object.defineProperty(exports, "adminContentRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.admin_content_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_content_default; }
 });
 Object.defineProperty(exports, "adminDashboardRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.router; }
+  get: function () { return chunkN5LGKCE3_cjs.router; }
 });
 Object.defineProperty(exports, "adminDesignRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.adminDesignRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminDesignRoutes; }
 });
 Object.defineProperty(exports, "adminLogsRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.adminLogsRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminLogsRoutes; }
 });
 Object.defineProperty(exports, "adminMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.adminMediaRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminMediaRoutes; }
 });
 Object.defineProperty(exports, "adminPluginRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.adminPluginRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminPluginRoutes; }
 });
 Object.defineProperty(exports, "adminSettingsRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.adminSettingsRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.adminSettingsRoutes; }
 });
 Object.defineProperty(exports, "adminTestimonialsRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.admin_testimonials_default; }
+  get: function () { return chunkN5LGKCE3_cjs.admin_testimonials_default; }
 });
 Object.defineProperty(exports, "adminUsersRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.userRoutes; }
+  get: function () { return chunkN5LGKCE3_cjs.userRoutes; }
 });
 Object.defineProperty(exports, "apiContentCrudRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.api_content_crud_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_content_crud_default; }
 });
 Object.defineProperty(exports, "apiMediaRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.api_media_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_media_default; }
 });
 Object.defineProperty(exports, "apiRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.api_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_default; }
 });
 Object.defineProperty(exports, "apiSystemRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.api_system_default; }
+  get: function () { return chunkN5LGKCE3_cjs.api_system_default; }
 });
 Object.defineProperty(exports, "authRoutes", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.auth_default; }
+  get: function () { return chunkN5LGKCE3_cjs.auth_default; }
 });
 Object.defineProperty(exports, "createUserProfilesPlugin", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.createUserProfilesPlugin; }
+  get: function () { return chunkN5LGKCE3_cjs.createUserProfilesPlugin; }
 });
 Object.defineProperty(exports, "defineUserProfile", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.defineUserProfile; }
+  get: function () { return chunkN5LGKCE3_cjs.defineUserProfile; }
 });
 Object.defineProperty(exports, "getUserProfileConfig", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.getUserProfileConfig; }
+  get: function () { return chunkN5LGKCE3_cjs.getUserProfileConfig; }
 });
 Object.defineProperty(exports, "userProfilesPlugin", {
   enumerable: true,
-  get: function () { return chunkPABXSJEQ_cjs.userProfilesPlugin; }
+  get: function () { return chunkN5LGKCE3_cjs.userProfilesPlugin; }
 });
 Object.defineProperty(exports, "Logger", {
   enumerable: true,
@@ -11238,87 +10293,87 @@ Object.defineProperty(exports, "workflowHistory", {
 });
 Object.defineProperty(exports, "AuthManager", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.AuthManager; }
+  get: function () { return chunkQ2NTBJYS_cjs.AuthManager; }
 });
 Object.defineProperty(exports, "PermissionManager", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.PermissionManager; }
+  get: function () { return chunkQ2NTBJYS_cjs.PermissionManager; }
 });
 Object.defineProperty(exports, "bootstrapMiddleware", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.bootstrapMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.bootstrapMiddleware; }
 });
 Object.defineProperty(exports, "cacheHeaders", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.cacheHeaders; }
+  get: function () { return chunkQ2NTBJYS_cjs.cacheHeaders; }
 });
 Object.defineProperty(exports, "compressionMiddleware", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.compressionMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.compressionMiddleware; }
 });
 Object.defineProperty(exports, "detailedLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.detailedLoggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.detailedLoggingMiddleware; }
 });
 Object.defineProperty(exports, "getActivePlugins", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.getActivePlugins; }
+  get: function () { return chunkQ2NTBJYS_cjs.getActivePlugins; }
 });
 Object.defineProperty(exports, "isPluginActive", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.isPluginActive; }
+  get: function () { return chunkQ2NTBJYS_cjs.isPluginActive; }
 });
 Object.defineProperty(exports, "logActivity", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.logActivity; }
+  get: function () { return chunkQ2NTBJYS_cjs.logActivity; }
 });
 Object.defineProperty(exports, "loggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.loggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.loggingMiddleware; }
 });
 Object.defineProperty(exports, "optionalAuth", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.optionalAuth; }
+  get: function () { return chunkQ2NTBJYS_cjs.optionalAuth; }
 });
 Object.defineProperty(exports, "performanceLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.performanceLoggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.performanceLoggingMiddleware; }
 });
 Object.defineProperty(exports, "requireActivePlugin", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.requireActivePlugin; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireActivePlugin; }
 });
 Object.defineProperty(exports, "requireActivePlugins", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.requireActivePlugins; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireActivePlugins; }
 });
 Object.defineProperty(exports, "requireAnyPermission", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.requireAnyPermission; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireAnyPermission; }
 });
 Object.defineProperty(exports, "requireAuth", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.requireAuth; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireAuth; }
 });
 Object.defineProperty(exports, "requirePermission", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.requirePermission; }
+  get: function () { return chunkQ2NTBJYS_cjs.requirePermission; }
 });
 Object.defineProperty(exports, "requireRbac", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.requireRbac; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireRbac; }
 });
 Object.defineProperty(exports, "requireRole", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.requireRole; }
+  get: function () { return chunkQ2NTBJYS_cjs.requireRole; }
 });
 Object.defineProperty(exports, "securityHeaders", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.securityHeadersMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.securityHeadersMiddleware; }
 });
 Object.defineProperty(exports, "securityLoggingMiddleware", {
   enumerable: true,
-  get: function () { return chunkRVHHSXJX_cjs.securityLoggingMiddleware; }
+  get: function () { return chunkQ2NTBJYS_cjs.securityLoggingMiddleware; }
 });
 Object.defineProperty(exports, "PluginBootstrapService", {
   enumerable: true,
@@ -11402,7 +10457,7 @@ Object.defineProperty(exports, "validateCollectionConfig", {
 });
 Object.defineProperty(exports, "MigrationService", {
   enumerable: true,
-  get: function () { return chunkNGMUIDYE_cjs.MigrationService; }
+  get: function () { return chunkV4LDNRTP_cjs.MigrationService; }
 });
 Object.defineProperty(exports, "renderFilterBar", {
   enumerable: true,

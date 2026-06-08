@@ -60,6 +60,7 @@ npm install wrangler drizzle-kit  # For development
 // src/index.ts
 import { createSonicJSApp } from '@sonicjs-cms/core'
 import type { SonicJSConfig } from '@sonicjs-cms/core'
+// import myPlugin from './plugins/my-plugin'
 
 const config: SonicJSConfig = {
   collections: {
@@ -67,8 +68,9 @@ const config: SonicJSConfig = {
     autoSync: true
   },
   plugins: {
-    directory: './src/plugins',
-    autoLoad: false
+    register: [
+      // myPlugin,
+    ]
   }
 }
 

@@ -284,6 +284,16 @@ export default plugin.build()
 
 </CodeGroup>
 
+Then register it with your app in `src/index.ts`:
+
+```typescript
+import myPlugin from './plugins/my-plugin'
+
+export default createSonicJSApp({
+  plugins: { register: [myPlugin] }
+})
+```
+
 Check the [Plugin Development Guide](/plugins/development) for comprehensive documentation.
 
 ### Can I use external APIs and services?

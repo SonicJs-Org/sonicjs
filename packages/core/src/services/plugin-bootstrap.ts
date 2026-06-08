@@ -39,6 +39,15 @@ const BOOTSTRAP_PLUGIN_IDS = [
   "global-variables",
   "user-profiles",
   "stripe",
+  // The plugins below are mounted via mountPluginManagerRoutes in app.ts
+  // and their routes are gated by the DB-backed `is_active` check, so they
+  // must be installed + activated on first boot or every request to their
+  // routes returns 404.
+  "email",
+  "otp-login",
+  "security-audit",
+  "core-analytics",
+  "magic-link-auth",
 ];
 
 function registryToCorePlugin(entry: PluginRegistryEntry): CorePlugin {

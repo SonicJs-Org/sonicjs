@@ -31,6 +31,17 @@ export interface Plugin {
   
   // Extension points
   routes?: PluginRoutes[]
+  /**
+   * Optional imperative route registration, called synchronously at app
+   * construction time. Use this for routes that can't be expressed as a static
+   * `routes[]` entry (e.g. conditional mounting).
+   *
+   * MUST be synchronous: Hono's router locks after the first request, so all
+   * `app.route()` calls have to happen before any request is served. Returning
+   * a Promise throws `PluginRegisterMustBeSyncError`. Async, env-dependent work
+   * belongs in lifecycle hooks (`install`/`activate`), not here.
+   */
+  register?: (app: Hono) => void
   middleware?: PluginMiddleware[]
   models?: PluginModel[]
   services?: PluginService[]

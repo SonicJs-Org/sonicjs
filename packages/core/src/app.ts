@@ -46,7 +46,14 @@ import { requireAuth, requireRole } from './middleware/auth'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
+import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
+import { shortcodesPlugin } from './plugins/core-plugins/shortcodes-plugin'
 import cachePlugin from './plugins/cache'
+import type { Plugin } from './plugins/types'
+import { registerPluginRoutes } from './plugins/mount'
+import { HookSystemImpl } from './plugins/hook-system'
+import { setHookSystem } from './plugins/hooks/hook-system-singleton'
+import { createPluginWirer } from './plugins/wire'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
 
@@ -97,9 +104,32 @@ export interface SonicJSConfig {
 
   // Plugins configuration
   plugins?: {
+    /**
+     * @deprecated No-op. Cloudflare Workers has no runtime filesystem, so a
+     * plugin directory cannot be scanned at runtime. Pass plugins explicitly via
+     * `register` instead.
+     */
     directory?: string
+    /**
+     * @deprecated No-op. Filesystem autoload is not supported on Workers. Pass
+     * plugins explicitly via `register` instead.
+     */
     autoLoad?: boolean
-    disableAll?: boolean  // Disable all plugins including core plugins
+    /**
+     * User-supplied plugins to mount. Each plugin's declarative `routes[]` and/or
+     * synchronous `register(app)` hook is mounted into the app, before the
+     * `/admin` catch-all so plugin admin pages are not shadowed.
+     *
+     * @example
+     * createSonicJSApp({ plugins: { register: [contactFormPlugin] } })
+     */
+    register?: Plugin[]
+    /**
+     * Disable ALL plugins — core AND user. When true, no plugin routes are
+     * mounted and plugin bootstrap (DB seeding) is skipped. Use this to run a
+     * bare core app.
+     */
+    disableAll?: boolean
   }
 
   // Custom routes
@@ -160,6 +190,47 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const appVersion = config.version || getCoreVersion()
   const appName = config.name || 'SonicJS AI'
 
+  // ── Plugin hook system (two-phase boot) ───────────────────────────────────
+  // Create the app's hook system and publish it as the process singleton so
+  // env-independent callers (e.g. cron handlers) can reach it. Route mounting is
+  // synchronous (below); hook subscriptions + plugin onBoot run lazily on the
+  // first request via wireRegisteredPlugins (see plugins/wire.ts).
+  const hookSystem = new HookSystemImpl()
+  setHookSystem(hookSystem)
+
+  // Core plugins, split by where their routes mount relative to the /admin
+  // catch-all. Defined once and reused for both mounting and wiring so the two
+  // never drift.
+  // Not annotated as Plugin[]: the core plugins are typed against the built
+  // `dist` declarations, which TS treats as a distinct identity from the `src`
+  // Plugin. Both consumers (registerPluginRoutes, createPluginWirer) accept a
+  // structural subset, so inference is the right call here.
+  const magicLinkPlugin = createMagicLinkAuthPlugin()
+  const corePluginsBeforeCatchAll = [
+    securityAuditPlugin,
+    aiSearchPlugin,
+    oauthProvidersPlugin,
+    userProfilesPlugin,
+    otpLoginPlugin,
+    analyticsPlugin,
+    stripePlugin,
+    // Previously declared via PluginBuilder.addRoute() but never mounted in
+    // app.ts, so their routes 404'd in production. Fixes #758.
+    globalVariablesPlugin,
+    shortcodesPlugin,
+  ]
+  const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin]
+
+  // Lazy, once-guarded plugin wiring (the async half of two-phase boot). The
+  // first request subscribes every plugin's hooks and runs their onBoot; later
+  // requests await the same cached pass. Errors are isolated so wiring can never
+  // break a request.
+  const wirePlugins = createPluginWirer(
+    () => [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])],
+    () => ({ hooks: hookSystem, env: firstRequestEnv })
+  )
+  let firstRequestEnv: Record<string, unknown> | undefined
+
   // App version middleware
   app.use('*', async (c, next) => {
     c.set('appVersion', appVersion)
@@ -171,6 +242,20 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // Bootstrap middleware - runs migrations, syncs collections, and initializes plugins
   app.use('*', bootstrapMiddleware(config))
+
+  // Plugin wiring middleware - lazily subscribes plugin hooks and runs onBoot
+  // exactly once, after bootstrap. Skipped entirely when plugins are disabled.
+  app.use('*', async (c, next) => {
+    if (!config.plugins?.disableAll) {
+      firstRequestEnv = c.env as unknown as Record<string, unknown>
+      try {
+        await wirePlugins()
+      } catch (err) {
+        console.error('[plugins] wiring failed:', err)
+      }
+    }
+    return next()
+  })
 
   // Custom middleware - before auth
   if (config.middleware?.beforeAuth) {
@@ -227,63 +312,29 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Security audit middleware - logs auth events (login, register, logout)
   app.use('/auth/*', securityAuditMiddleware())
 
-  // Plugin routes - Security Audit (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  if (securityAuditPlugin.routes && securityAuditPlugin.routes.length > 0) {
-    for (const route of securityAuditPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
+  // ── Plugin routes (before the /admin catch-all) ───────────────────────────
+  // All plugin route mounting flows through registerPluginRoutes() (see
+  // plugins/mount.ts), which mounts each plugin's declarative routes[] and/or
+  // synchronous register(app) hook. These MUST be mounted before the bare
+  // `/admin` catch-all so plugin-owned `/admin/<x>` pages are not shadowed.
+  //
+  // `disableAll` turns off every plugin — core AND user — for a bare core app.
+  if (!config.plugins?.disableAll) {
+    registerPluginRoutes(app, corePluginsBeforeCatchAll, { source: 'core' })
 
-  // Plugin routes - AI Search (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  // Register AI Search routes first so they take precedence over the generic /:id handler
-  if (aiSearchPlugin.routes && aiSearchPlugin.routes.length > 0) {
-    for (const route of aiSearchPlugin.routes) {
-      app.route(route.path, route.handler)
-    }
-  }
+    // Plugin routes - Cache (dashboard and management API)
+    // Fixes GitHub Issue #461: Cache routes were not registered
+    app.route('/admin/cache', cachePlugin.getRoutes())
 
-  // Plugin routes - Cache (dashboard and management API)
-  // Fixes GitHub Issue #461: Cache routes were not registered
-  app.route('/admin/cache', cachePlugin.getRoutes())
-
-  // Plugin routes - OAuth Providers (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  if (oauthProvidersPlugin.routes && oauthProvidersPlugin.routes.length > 0) {
-    for (const route of oauthProvidersPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - User Profiles
-  if (userProfilesPlugin.routes && userProfilesPlugin.routes.length > 0) {
-    for (const route of userProfilesPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - OTP Login (MUST be registered BEFORE admin/plugins to avoid route conflict)
-  // Register OTP Login routes first so they take precedence over the generic /:id handler
-  if (otpLoginPlugin.routes && otpLoginPlugin.routes.length > 0) {
-    for (const route of otpLoginPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - Analytics (must be before /admin/plugins catch-all)
-  if (analyticsPlugin.routes && analyticsPlugin.routes.length > 0) {
-    for (const route of analyticsPlugin.routes) {
-      app.route(route.path, route.handler as any)
+    // User-supplied plugins. Mounted here — before the catch-all — so consumers
+    // never have to edit core or hand-mount routes (#829, #621, #758).
+    if (config.plugins?.register && config.plugins.register.length > 0) {
+      registerPluginRoutes(app, config.plugins.register, { source: 'user' })
     }
   }
 
   // Public event tracking API — POST /api/events (open), GET /api/events (admin)
   app.route('/api/events', eventsApiRoutes)
-
-  // Plugin routes - Stripe (must be before /admin/plugins catch-all)
-  if (stripePlugin.routes && stripePlugin.routes.length > 0) {
-    for (const route of stripePlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
 
   app.route('/admin/plugins', adminPluginRoutes)
   app.route('/admin/logs', adminLogsRoutes)
@@ -293,19 +344,11 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Test cleanup routes (only for development/test environments)
   app.route('/', testCleanupRoutes)
 
-  // Plugin routes - Email
-  if (emailPlugin.routes && emailPlugin.routes.length > 0) {
-    for (const route of emailPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
-  }
-
-  // Plugin routes - Magic Link Auth (passwordless authentication via email links)
-  const magicLinkPlugin = createMagicLinkAuthPlugin()
-  if (magicLinkPlugin.routes && magicLinkPlugin.routes.length > 0) {
-    for (const route of magicLinkPlugin.routes) {
-      app.route(route.path, route.handler as any)
-    }
+  // Plugin routes mounted AFTER the /admin catch-all.
+  // Email (/admin/plugins/email) and magic-link auth routes were historically
+  // registered here; position preserved to keep route-match precedence identical.
+  if (!config.plugins?.disableAll) {
+    registerPluginRoutes(app, corePluginsAfterCatchAll, { source: 'core' })
   }
 
   // Serve favicon

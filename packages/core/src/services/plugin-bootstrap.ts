@@ -26,11 +26,9 @@ export interface CorePlugin {
  * auto-installed on first boot. Edit this list to control which
  * plugins are bootstrapped.
  */
-// Only the minimum required plugins are auto-installed. All others must be installed manually.
+// Only core-auth is auto-installed. All others must be installed manually.
 const BOOTSTRAP_PLUGIN_IDS = [
   "core-auth",
-  "core-media",
-  "core-cache",
 ];
 
 function registryToCorePlugin(entry: PluginRegistryEntry): CorePlugin {

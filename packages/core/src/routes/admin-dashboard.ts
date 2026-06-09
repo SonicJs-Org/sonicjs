@@ -84,10 +84,17 @@ router.get('/stats', async (c) => {
       console.error('Error fetching collections count:', error)
     }
 
-    // Get content count
+    // Get content count. In the v3 greenfield schema content is document-backed only.
     let contentCount = 0
     try {
-      const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content c JOIN collections col ON c.collection_id = col.id WHERE (col.source_type IS NULL OR col.source_type = 'user')")
+      const contentStmt = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM documents d
+        JOIN collections col ON col.name = d.type_id
+        WHERE d.is_current_draft = 1
+          AND d.deleted_at IS NULL
+          AND (col.source_type IS NULL OR col.source_type = 'user')
+      `)
       const contentResult = await contentStmt.first()
       contentCount = (contentResult as any)?.count || 0
     } catch (error) {

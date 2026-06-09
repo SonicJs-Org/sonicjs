@@ -255,12 +255,11 @@ adminSettingsRoutes.get('/api/migrations/status', async (c) => {
   }
 })
 
-// Run pending migrations
+// Migration execution is managed by Wrangler/D1, not by the running app.
 adminSettingsRoutes.post('/api/migrations/run', async (c) => {
   try {
     const user = c.get('user')
 
-    // Only allow admin users to run migrations
     if (!user || user.role !== 'admin') {
       return c.json({
         success: false,
@@ -268,15 +267,12 @@ adminSettingsRoutes.post('/api/migrations/run', async (c) => {
       }, 403)
     }
 
-    const db = c.env.DB
-    const migrationService = new MigrationService(db)
-    const result = await migrationService.runPendingMigrations()
-
     return c.json({
-      success: result.success,
-      message: result.message,
-      applied: result.applied
-    })
+      success: false,
+      message: 'Migrations are managed by Cloudflare D1. Run `wrangler d1 migrations apply DB --local` or `wrangler d1 migrations apply DB --remote`.',
+      applied: [],
+      errors: []
+    }, 409)
   } catch (error) {
     console.error('Error running migrations:', error)
     return c.json({
@@ -603,4 +599,148 @@ adminSettingsRoutes.post('/security', async (c) => {
 // Save settings (legacy endpoint - redirect to general)
 adminSettingsRoutes.post('/', async (c) => {
   return c.redirect('/admin/settings/general')
+})
+
+// ── email_log browser (T4.4) ─────────────────────────────────────────────────
+
+/** GET /admin/settings/email-log — HTML browser for core email_log table. */
+adminSettingsRoutes.get('/email-log', async (c) => {
+  const db = c.env.DB
+  const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10))
+  const pageSize = 50
+  const offset = (page - 1) * pageSize
+
+  let rows: any[] = []
+  let total = 0
+
+  try {
+    const countRow = await db.prepare('SELECT COUNT(*) as n FROM email_log').first() as any
+    total = countRow?.n ?? 0
+    const result = await db
+      .prepare(
+        `SELECT id, flow, status, provider, recipient, subject, provider_id,
+                delivery_state, delivery_synced_at, user_id, created_at
+         FROM email_log
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(pageSize, offset)
+      .all()
+    rows = (result.results ?? []) as any[]
+  } catch {
+    // Table may not exist yet (pre-migration) — render empty state.
+  }
+
+  const totalPages = Math.ceil(total / pageSize)
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Log — SonicJS Admin</title>
+  <link rel="stylesheet" href="/admin/assets/css/admin.css">
+  <style>
+    .email-log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .email-log-table th, .email-log-table td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+    .email-log-table th { background: #f9fafb; font-weight: 600; }
+    .badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .badge-sent { background: #dcfce7; color: #166534; }
+    .badge-failed { background: #fee2e2; color: #991b1b; }
+    .badge-pending { background: #fef9c3; color: #854d0e; }
+    .delivery-ok { color: #16a34a; }
+    .delivery-fail { color: #dc2626; }
+    .pagination { display: flex; gap: 8px; padding: 16px 0; }
+    .pagination a { padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 4px; text-decoration: none; color: #374151; }
+    .pagination a.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .empty-state { padding: 40px; text-align: center; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div style="padding: 24px; max-width: 1200px; margin: 0 auto;">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
+      <a href="/admin/settings" style="color: #6b7280; text-decoration: none;">← Settings</a>
+      <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Email Log</h1>
+      <span style="color: #6b7280; font-size: 14px;">${total.toLocaleString()} total sends</span>
+    </div>
+
+    ${rows.length === 0 ? `
+      <div class="empty-state">
+        <p>No emails logged yet. Email sends are recorded here once the email_log table is migrated.</p>
+        <p style="margin-top: 8px; font-size: 12px; color: #9ca3af;">Run migration 037 (and 038 for delivery columns) if the table is missing.</p>
+      </div>
+    ` : `
+      <table class="email-log-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Flow</th>
+            <th>Recipient</th>
+            <th>Subject</th>
+            <th>Provider</th>
+            <th>Status</th>
+            <th>Delivery</th>
+            <th>User</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r: any) => {
+            const ts = r.created_at ? new Date(r.created_at).toLocaleString() : '—'
+            const deliveryBadge = r.delivery_state
+              ? `<span class="${r.delivery_state === 'delivered' ? 'delivery-ok' : 'delivery-fail'}">${r.delivery_state}</span>`
+              : '<span style="color:#9ca3af">—</span>'
+            const statusClass = r.status === 'sent' ? 'badge-sent' : r.status === 'failed' ? 'badge-failed' : 'badge-pending'
+            return `<tr>
+              <td style="white-space:nowrap;color:#6b7280;font-size:12px">${ts}</td>
+              <td>${r.flow ?? '—'}</td>
+              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.recipient ?? '—'}</td>
+              <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.subject ?? '—'}</td>
+              <td>${r.provider ?? '—'}</td>
+              <td><span class="badge ${statusClass}">${r.status ?? '—'}</span></td>
+              <td>${deliveryBadge}</td>
+              <td style="font-size:12px;color:#6b7280">${r.user_id ?? '—'}</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+
+      ${totalPages > 1 ? `
+        <div class="pagination">
+          ${Array.from({ length: totalPages }, (_, i) => i + 1).map((p) =>
+            `<a href="?page=${p}" class="${p === page ? 'active' : ''}">${p}</a>`
+          ).join('')}
+        </div>
+      ` : ''}
+    `}
+  </div>
+</body>
+</html>`
+
+  return c.html(html)
+})
+
+/** GET /admin/settings/email-log/api — JSON data for the email_log table. */
+adminSettingsRoutes.get('/email-log/api', async (c) => {
+  const db = c.env.DB
+  const limit = Math.min(200, parseInt(c.req.query('limit') ?? '50', 10))
+  const offset = Math.max(0, parseInt(c.req.query('offset') ?? '0', 10))
+  const flow = c.req.query('flow')
+  const status = c.req.query('status')
+
+  try {
+    const conditions: string[] = []
+    const params: unknown[] = []
+    if (flow) { conditions.push('flow = ?'); params.push(flow) }
+    if (status) { conditions.push('status = ?'); params.push(status) }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const rows = await db
+      .prepare(`SELECT * FROM email_log ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+      .bind(...params, limit, offset)
+      .all()
+
+    return c.json({ data: rows.results ?? [], limit, offset })
+  } catch (err) {
+    return c.json({ error: 'email_log not available', details: String(err) }, 503)
+  }
 })

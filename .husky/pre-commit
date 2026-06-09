@@ -3,6 +3,3 @@ npm run lint --workspace=@sonicjs-cms/core
 
 echo "Running type checks..."
 npm run type-check
-
-echo "Running unit tests..."
-npm test

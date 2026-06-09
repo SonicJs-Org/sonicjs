@@ -128,7 +128,7 @@ describe('References API', () => {
         all: vi.fn().mockResolvedValue({
           results: [
             { name: 'pages', display_name: 'Pages' },
-            { name: 'blog_posts', display_name: 'Blog Posts' }
+            { name: 'blog_post', display_name: 'Blog Posts' }
           ]
         })
       })
@@ -136,7 +136,7 @@ describe('References API', () => {
       const result = await referencesAPI.getAvailableCollections(mockDb)
       expect(result).toEqual([
         { name: 'pages', displayName: 'Pages' },
-        { name: 'blog_posts', displayName: 'Blog Posts' }
+        { name: 'blog_post', displayName: 'Blog Posts' }
       ])
     })
 

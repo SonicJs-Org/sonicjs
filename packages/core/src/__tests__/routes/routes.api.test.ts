@@ -98,7 +98,7 @@ describe.skip('API Routes', () => {
       const mockResults = [
         {
           id: '1',
-          name: 'blog_posts',
+          name: 'blog_post',
           display_name: 'Blog Posts',
           description: 'Blog post content',
           schema: '{"fields": []}',
@@ -245,7 +245,7 @@ describe.skip('API Routes', () => {
     it('should return content for specific collection', async () => {
       const mockCollection = {
         id: 'col1',
-        name: 'blog_posts',
+        name: 'blog_post',
         display_name: 'Blog Posts',
         schema: '{"fields": [{"name": "title", "type": "text"}]}',
         is_active: 1
@@ -282,7 +282,7 @@ describe.skip('API Routes', () => {
           })
         })
 
-      const res = await app.fetch(new Request('https://test.com/collections/blog_posts/content'), mockEnv)
+      const res = await app.fetch(new Request('https://test.com/collections/blog_post/content'), mockEnv)
       const data = await res.json()
 
       expect(res.status).toBe(200)
@@ -292,7 +292,7 @@ describe.skip('API Routes', () => {
 
       expect(data.data).toHaveLength(1)
       expect(data.data[0].collectionId).toBe('col1')
-      expect(data.meta.collection.name).toBe('blog_posts')
+      expect(data.meta.collection.name).toBe('blog_post')
       expect(data.meta.collection.schema).toEqual({ fields: [{ name: 'title', type: 'text' }] })
     })
 
@@ -317,7 +317,7 @@ describe.skip('API Routes', () => {
         })
       })
 
-      const res = await app.fetch(new Request('https://test.com/collections/blog_posts/content'), mockEnv)
+      const res = await app.fetch(new Request('https://test.com/collections/blog_post/content'), mockEnv)
       const data = await res.json()
       
       expect(res.status).toBe(500)

@@ -24,7 +24,10 @@ import {
   adminSettingsRoutes,
   adminFormsRoutes,
   publicFormsRoutes,
-  adminApiReferenceRoutes
+  adminApiReferenceRoutes,
+  apiDocumentsRoutes,
+  adminDocumentsRoutes,
+  adminTestimonialsRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
@@ -34,6 +37,7 @@ import { securityHeadersMiddleware } from './middleware/security-headers'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
+import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
 import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
@@ -42,6 +46,7 @@ import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
+import { testimonialsPlugin } from './plugins/core-plugins/testimonials'
 import { requireAuth, requireRole } from './middleware/auth'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
@@ -258,7 +263,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     globalVariablesPlugin,
     shortcodesPlugin,
   ]
-  const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin]
+  const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
   // Lazy, once-guarded plugin wiring (the async half of two-phase boot). The
   // first request subscribes every plugin's hooks and runs their onBoot; later
@@ -397,6 +402,20 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api', apiRoutes)
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
+  app.route('/api/documents', apiDocumentsRoutes)
+  app.route('/admin/documents', adminDocumentsRoutes)
+  // Testimonials admin (document-backed). The plugin adds the sidebar item to /admin/testimonials,
+  // but the HTML router itself must be mounted here like the other core admin routers — it was missing,
+  // so the Testimonials page and "add testimonial" form (hx-post /admin/testimonials) 404'd.
+  app.route('/admin/testimonials', adminTestimonialsRoutes)
+  // Testimonials PUBLIC API (/api/testimonials, document-model backed). The plugin declares it via
+  // builder.addRoute, but — like the admin router above — it was never mounted here, so the public
+  // testimonials API 404'd on a fresh install. Mount it the same way the other plugin routes are.
+  if (testimonialsPlugin.routes && testimonialsPlugin.routes.length > 0) {
+    for (const route of testimonialsPlugin.routes) {
+      app.route(route.path, route.handler as any)
+    }
+  }
   app.route('/admin/api', adminApiRoutes)
   app.route('/admin/dashboard', adminDashboardRoutes)
   app.route('/admin/collections', adminCollectionsRoutes)

@@ -5,6 +5,7 @@ import { isPluginActive } from '../middleware/plugin-middleware'
 import { normalizeFieldType } from './admin-collections-field-types'
 import { renderCollectionsListPage } from '../templates/pages/admin-collections-list.template'
 import { renderCollectionFormPage } from '../templates/pages/admin-collections-form.template'
+import { loadCollectionConfigs } from '../services/collection-loader'
 
 // Type definitions for collections
 interface Collection {
@@ -16,6 +17,7 @@ interface Collection {
   formattedDate: string
   field_count?: number
   managed?: boolean
+  source_type?: string | null
 }
 
 interface CollectionFormData {
@@ -112,10 +114,9 @@ adminCollectionsRoutes.get('/', async (c) => {
     let results
     if (search) {
       stmt = db.prepare(`
-        SELECT id, name, display_name, description, created_at, managed, schema
-        FROM collections
+        SELECT id, name, display_name, description, created_at, schema
+        FROM document_types
         WHERE is_active = 1
-        AND (source_type IS NULL OR source_type = 'user')
         AND (name LIKE ? OR display_name LIKE ? OR description LIKE ?)
         ORDER BY created_at DESC
       `)
@@ -123,20 +124,37 @@ adminCollectionsRoutes.get('/', async (c) => {
       const queryResults = await stmt.bind(searchParam, searchParam, searchParam).all()
       results = queryResults.results
     } else {
-      stmt = db.prepare("SELECT id, name, display_name, description, created_at, managed, schema FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY created_at DESC")
+      stmt = db.prepare("SELECT id, name, display_name, description, created_at, schema FROM document_types WHERE is_active = 1 ORDER BY created_at DESC")
       const queryResults = await stmt.all()
       results = queryResults.results
     }
 
-    // Fetch field counts for all collections from content_fields table (legacy)
-    const fieldCountStmt = db.prepare('SELECT collection_id, COUNT(*) as count FROM content_fields GROUP BY collection_id')
-    const { results: fieldCountResults } = await fieldCountStmt.all()
-    const fieldCounts = new Map((fieldCountResults || []).map((row: any) => [String(row.collection_id), Number(row.count)]))
+    // Load code-defined collections
+    const codeCollections = await loadCollectionConfigs()
 
-    const collections: Collection[] = (results || [])
+    // Convert code collections to Collection type
+    const codeCollectionsMap = new Map(
+      codeCollections.map((cfg: any) => {
+        const fieldCount = cfg.schema?.properties ? Object.keys(cfg.schema.properties).length : 0
+        return [cfg.name, {
+          id: cfg.name,
+          name: cfg.name,
+          display_name: cfg.displayName,
+          description: cfg.description,
+          created_at: 0,
+          formattedDate: 'Code-defined',
+          field_count: fieldCount,
+          managed: cfg.managed !== false,
+          source_type: 'code'
+        } as Collection]
+      })
+    )
+
+    // Convert database results to Collection type
+    const dbCollections: Collection[] = (results || [])
       .filter((row: any) => row && row.id)
       .map((row: any) => {
-        // Calculate field count: use schema if available, otherwise use content_fields table
+        // Calculate field count from schema
         let fieldCount = 0
         if (row.schema) {
           try {
@@ -145,11 +163,8 @@ adminCollectionsRoutes.get('/', async (c) => {
               fieldCount = Object.keys(schema.properties).length
             }
           } catch (e) {
-            // If schema parsing fails, fall back to content_fields count
-            fieldCount = fieldCounts.get(String(row.id)) || 0
+            console.error('Error parsing schema for document type:', row.id, e)
           }
-        } else {
-          fieldCount = fieldCounts.get(String(row.id)) || 0
         }
 
         return {
@@ -160,9 +175,36 @@ adminCollectionsRoutes.get('/', async (c) => {
           created_at: Number(row.created_at || 0),
           formattedDate: row.created_at ? new Date(Number(row.created_at)).toLocaleDateString() : 'Unknown',
           field_count: fieldCount,
-          managed: row.managed === 1
+          managed: false,
+          source_type: 'user'
         }
       })
+
+    // Merge: database collections + code collections (code ownership wins for same name)
+    const mergedMap = new Map(codeCollectionsMap)
+    dbCollections.forEach(collection => {
+      const codeCollection = codeCollectionsMap.get(collection.name)
+      mergedMap.set(collection.name, codeCollection ? {
+        ...collection,
+        display_name: codeCollection.display_name,
+        description: codeCollection.description,
+        field_count: codeCollection.field_count,
+        managed: true,
+        source_type: 'code',
+        formattedDate: 'Code-defined'
+      } : collection)
+    })
+
+    // Apply search filter if present
+    let collections = Array.from(mergedMap.values())
+    if (search) {
+      const searchLower = search.toLowerCase()
+      collections = collections.filter(c =>
+        c.name.toLowerCase().includes(searchLower) ||
+        c.display_name.toLowerCase().includes(searchLower) ||
+        (c.description && c.description.toLowerCase().includes(searchLower))
+      )
+    }
 
     const pageData: CollectionsListPageData = {
       collections,
@@ -261,8 +303,8 @@ adminCollectionsRoutes.post('/', async (c) => {
 
     const db = c.env.DB
 
-    // Check if collection already exists
-    const existingStmt = db.prepare('SELECT id FROM collections WHERE name = ?')
+    // Check if document type already exists
+    const existingStmt = db.prepare('SELECT id FROM document_types WHERE name = ?')
     const existing = await existingStmt.bind(name).first()
 
     if (existing) {
@@ -278,41 +320,34 @@ adminCollectionsRoutes.post('/', async (c) => {
       }
     }
 
-    // Create basic schema for the collection
+    // Create basic schema for the document type
     const basicSchema = {
       type: "object",
       properties: {
         title: {
           type: "string",
-          title: "Title",
-          required: true
+          title: "Title"
         },
         content: {
           type: "string",
           title: "Content",
           format: "richtext"
-        },
-        status: {
-          type: "string",
-          title: "Status",
-          enum: ["draft", "published", "archived"],
-          default: "draft"
         }
       },
       required: ["title"]
     }
 
-    // Create collection
-    const collectionId = crypto.randomUUID()
-    const now = Date.now()
+    // Create document type
+    const typeId = crypto.randomUUID()
+    const now = Math.floor(Date.now() / 1000) // unixepoch
 
     const insertStmt = db.prepare(`
-      INSERT INTO collections (id, name, display_name, description, schema, is_active, created_at, updated_at)
+      INSERT INTO document_types (id, name, display_name, description, schema, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     await insertStmt.bind(
-      collectionId,
+      typeId,
       name,
       displayName,
       description || null,
@@ -338,14 +373,14 @@ adminCollectionsRoutes.post('/', async (c) => {
           Collection created successfully! Redirecting to edit mode...
           <script>
             setTimeout(() => {
-              window.location.href = '/admin/collections/${collectionId}';
+              window.location.href = '/admin/collections/${typeId}';
             }, 1500);
           </script>
         </div>
       `)
     } else {
       // For regular form submission, redirect to edit page
-      return c.redirect(`/admin/collections/${collectionId}`)
+      return c.redirect(`/admin/collections/${typeId}`)
     }
   } catch (error) {
     console.error('Error creating collection:', error)
@@ -370,7 +405,7 @@ adminCollectionsRoutes.get('/:id', async (c) => {
     const id = c.req.param('id')
     const user = c.get('user')
 
-    const stmt = db.prepare('SELECT * FROM collections WHERE id = ?')
+    const stmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
     const collection = await stmt.bind(id).first() as any
 
     if (!collection) {
@@ -441,36 +476,7 @@ adminCollectionsRoutes.get('/:id', async (c) => {
       }
     }
 
-    // Fall back to content_fields table if no schema or parsing failed
-    if (fields.length === 0) {
-      const fieldsStmt = db.prepare(`
-        SELECT * FROM content_fields
-        WHERE collection_id = ?
-        ORDER BY field_order ASC
-      `)
-      const { results: fieldsResults } = await fieldsStmt.bind(id).all()
-      fields = (fieldsResults || []).map((row: any) => {
-        let fieldOptions = {}
-        if (row.field_options) {
-          try {
-            fieldOptions = typeof row.field_options === 'string' ? JSON.parse(row.field_options) : row.field_options
-          } catch (e) {
-            console.error('Error parsing field_options for field:', row.field_name, e)
-            fieldOptions = {}
-          }
-        }
-        return {
-          id: row.id,
-          field_name: row.field_name,
-          field_type: row.field_type,
-          field_label: row.field_label,
-          field_options: fieldOptions,
-          field_order: row.field_order,
-          is_required: row.is_required === 1,
-          is_searchable: row.is_searchable === 1
-        }
-      })
-    }
+    // New document model uses schema as source of truth
 
     // Check which editor plugins are active
     const [tinymceActive, quillActive, mdxeditorActive] = await Promise.all([
@@ -556,12 +562,13 @@ adminCollectionsRoutes.put('/:id', async (c) => {
     const db = c.env.DB
 
     const updateStmt = db.prepare(`
-      UPDATE collections
+      UPDATE document_types
       SET display_name = ?, description = ?, updated_at = ?
       WHERE id = ?
     `)
 
-    await updateStmt.bind(displayName, description || null, Date.now(), id).run()
+    const now = Math.floor(Date.now() / 1000) // unixepoch
+    await updateStmt.bind(displayName, description || null, now, id).run()
 
     return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
@@ -584,24 +591,31 @@ adminCollectionsRoutes.delete('/:id', async (c) => {
     const id = c.req.param('id')
     const db = c.env.DB
 
-    // Check if collection has content
-    const contentStmt = db.prepare('SELECT COUNT(*) as count FROM content WHERE collection_id = ?')
+    const typeStmt = db.prepare('SELECT name FROM document_types WHERE id = ?')
+    const docType = await typeStmt.bind(id).first() as any
+
+    if (!docType) {
+      return c.html(html`
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          Document type not found.
+        </div>
+      `)
+    }
+
+    // Check if document type has documents
+    const contentStmt = db.prepare("SELECT COUNT(DISTINCT root_id) as count FROM documents WHERE type_id = ?")
     const contentResult = await contentStmt.bind(id).first() as any
 
     if (contentResult && contentResult.count > 0) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Cannot delete collection: it contains ${contentResult.count} content item(s). Delete all content first.
+          Cannot delete document type: it contains ${contentResult.count} document(s). Delete all documents first.
         </div>
       `)
     }
 
-    // Delete collection fields first
-    const deleteFieldsStmt = db.prepare('DELETE FROM content_fields WHERE collection_id = ?')
-    await deleteFieldsStmt.bind(id).run()
-
-    // Delete collection
-    const deleteStmt = db.prepare('DELETE FROM collections WHERE id = ?')
+    // Delete document type
+    const deleteStmt = db.prepare('DELETE FROM document_types WHERE id = ?')
     await deleteStmt.bind(id).run()
 
     return c.html(html`
@@ -642,8 +656,8 @@ adminCollectionsRoutes.post('/:id/fields', async (c) => {
 
     const db = c.env.DB
 
-    // Get current collection to check its schema
-    const getCollectionStmt = db.prepare('SELECT * FROM collections WHERE id = ?')
+    // Get current document type to check its schema
+    const getCollectionStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
     const collection = await getCollectionStmt.bind(collectionId).first() as any
 
     if (!collection) {
@@ -654,14 +668,6 @@ adminCollectionsRoutes.post('/:id/fields', async (c) => {
     let schema = collection.schema ? (typeof collection.schema === 'string' ? JSON.parse(collection.schema) : collection.schema) : null
 
     if (schema && schema.properties && schema.properties[fieldName]) {
-      return c.json({ success: false, error: 'A field with this name already exists.' })
-    }
-
-    // Also check content_fields table for legacy support
-    const existingStmt = db.prepare('SELECT id FROM content_fields WHERE collection_id = ? AND field_name = ?')
-    const existing = await existingStmt.bind(collectionId, fieldName).first()
-
-    if (existing) {
       return c.json({ success: false, error: 'A field with this name already exists.' })
     }
 
@@ -724,53 +730,23 @@ adminCollectionsRoutes.post('/:id/fields', async (c) => {
         schema.required.push(fieldName)
       }
 
-      // Update collection schema in database
+      // Update document type schema in database
       const updateSchemaStmt = db.prepare(`
-        UPDATE collections
+        UPDATE document_types
         SET schema = ?, updated_at = ?
         WHERE id = ?
       `)
 
-      await updateSchemaStmt.bind(JSON.stringify(schema), Date.now(), collectionId).run()
+      const now = Math.floor(Date.now() / 1000) // unixepoch
+      await updateSchemaStmt.bind(JSON.stringify(schema), now, collectionId).run()
 
       console.log('[Add Field] Added field to schema:', fieldName, fieldConfig)
 
       return c.json({ success: true, fieldId: `schema-${fieldName}` })
     }
 
-    // Fallback: If no schema exists, use content_fields table
-    // Get next field order
-    const orderStmt = db.prepare('SELECT MAX(field_order) as max_order FROM content_fields WHERE collection_id = ?')
-    const orderResult = await orderStmt.bind(collectionId).first() as any
-    const nextOrder = (orderResult?.max_order || 0) + 1
-
-    // Create field in content_fields table
-    const fieldId = crypto.randomUUID()
-    const now = Date.now()
-
-    const insertStmt = db.prepare(`
-      INSERT INTO content_fields (
-        id, collection_id, field_name, field_type, field_label,
-        field_options, field_order, is_required, is_searchable,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    await insertStmt.bind(
-      fieldId,
-      collectionId,
-      fieldName,
-      fieldType,
-      fieldLabel,
-      fieldOptions,
-      nextOrder,
-      isRequired ? 1 : 0,
-      isSearchable ? 1 : 0,
-      now,
-      now
-    ).run()
-
-    return c.json({ success: true, fieldId })
+    // All new fields must be part of schema
+    return c.json({ success: false, error: 'Cannot add field without schema.' })
   } catch (error) {
     console.error('Error adding field:', error)
     return c.json({ success: false, error: 'Failed to add field.' })
@@ -816,8 +792,8 @@ adminCollectionsRoutes.put('/:collectionId/fields/:fieldId', async (c) => {
 
       console.log('[Field Update] Updating schema field:', fieldName)
 
-      // Get the current collection
-      const getCollectionStmt = db.prepare('SELECT * FROM collections WHERE id = ?')
+      // Get the current document type
+      const getCollectionStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
       const collection = await getCollectionStmt.bind(collectionId).first()
 
       if (!collection) {
@@ -888,14 +864,15 @@ adminCollectionsRoutes.put('/:collectionId/fields/:fieldId', async (c) => {
         console.log('[Field Update] Final field config:', schema.properties[fieldName])
       }
 
-      // Update the collection in the database
+      // Update the document type in the database
       const updateCollectionStmt = db.prepare(`
-        UPDATE collections
+        UPDATE document_types
         SET schema = ?, updated_at = ?
         WHERE id = ?
       `)
 
-      const result = await updateCollectionStmt.bind(JSON.stringify(schema), Date.now(), collectionId).run()
+      const now = Math.floor(Date.now() / 1000) // unixepoch
+      const result = await updateCollectionStmt.bind(JSON.stringify(schema), now, collectionId).run()
 
       console.log('[Field Update] Schema update result:', {
         success: result.success,
@@ -905,30 +882,8 @@ adminCollectionsRoutes.put('/:collectionId/fields/:fieldId', async (c) => {
       return c.json({ success: true })
     }
 
-    // For regular database fields
-    const updateStmt = db.prepare(`
-      UPDATE content_fields
-      SET field_label = ?, field_type = ?, field_options = ?, is_required = ?, is_searchable = ?, updated_at = ?
-      WHERE id = ?
-    `)
-
-    const result = await updateStmt.bind(fieldLabel, fieldType, fieldOptions, isRequired ? 1 : 0, isSearchable ? 1 : 0, Date.now(), fieldId).run()
-
-    console.log('[Field Update] Update result:', {
-      success: result.success,
-      meta: result.meta,
-      changes: result.meta?.changes,
-      last_row_id: result.meta?.last_row_id
-    })
-
-    // Verify the update by reading back the field
-    const verifyStmt = db.prepare('SELECT * FROM content_fields WHERE id = ?')
-    const verifyResult = await verifyStmt.bind(fieldId).first()
-    console.log('[Field Update] Verification - field after update:', verifyResult)
-
-    console.log('[Field Update] Successfully updated field with type:', fieldType)
-
-    return c.json({ success: true })
+    // All fields in new model must be schema-based
+    return c.json({ success: false, error: 'Field not found.' })
   } catch (error) {
     console.error('Error updating field:', error)
     return c.json({ success: false, error: 'Failed to update field.' })
@@ -946,8 +901,8 @@ adminCollectionsRoutes.delete('/:collectionId/fields/:fieldId', async (c) => {
     if (fieldId.startsWith('schema-')) {
       const fieldName = fieldId.replace('schema-', '')
 
-      // Get the current collection
-      const getCollectionStmt = db.prepare('SELECT * FROM collections WHERE id = ?')
+      // Get the current document type
+      const getCollectionStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
       const collection = await getCollectionStmt.bind(collectionId).first() as any
 
       if (!collection) {
@@ -972,14 +927,15 @@ adminCollectionsRoutes.delete('/:collectionId/fields/:fieldId', async (c) => {
           }
         }
 
-        // Update the collection in the database
+        // Update the document type in the database
         const updateCollectionStmt = db.prepare(`
-          UPDATE collections
+          UPDATE document_types
           SET schema = ?, updated_at = ?
           WHERE id = ?
         `)
 
-        await updateCollectionStmt.bind(JSON.stringify(schema), Date.now(), collectionId).run()
+        const now = Math.floor(Date.now() / 1000) // unixepoch
+        await updateCollectionStmt.bind(JSON.stringify(schema), now, collectionId).run()
 
         console.log('[Delete Field] Removed field from schema:', fieldName)
 
@@ -989,11 +945,8 @@ adminCollectionsRoutes.delete('/:collectionId/fields/:fieldId', async (c) => {
       }
     }
 
-    // For regular database fields
-    const deleteStmt = db.prepare('DELETE FROM content_fields WHERE id = ?')
-    await deleteStmt.bind(fieldId).run()
-
-    return c.json({ success: true })
+    // All fields in new model must be schema-based
+    return c.json({ success: false, error: 'Field not found.' })
   } catch (error) {
     console.error('Error deleting field:', error)
     return c.json({ success: false, error: 'Failed to delete field.' })
@@ -1004,19 +957,48 @@ adminCollectionsRoutes.delete('/:collectionId/fields/:fieldId', async (c) => {
 adminCollectionsRoutes.post('/:collectionId/fields/reorder', async (c) => {
   try {
     const body = await c.req.json()
-    const fieldIds = body.fieldIds as string[]
+    const fieldOrder = body.fieldOrder as Record<string, number>
 
-    if (!Array.isArray(fieldIds)) {
+    if (!fieldOrder || typeof fieldOrder !== 'object') {
       return c.json({ success: false, error: 'Invalid field order data.' })
     }
 
     const db = c.env.DB
+    const collectionId = c.req.param('collectionId')
 
-    // Update field order
-    for (let i = 0; i < fieldIds.length; i++) {
-      const updateStmt = db.prepare('UPDATE content_fields SET field_order = ?, updated_at = ? WHERE id = ?')
-      await updateStmt.bind(i + 1, Date.now(), fieldIds[i]).run()
+    // Get current document type
+    const getStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
+    const docType = await getStmt.bind(collectionId).first() as any
+
+    if (!docType) {
+      return c.json({ success: false, error: 'Document type not found.' })
     }
+
+    // Parse schema and reorder properties
+    let schema = typeof docType.schema === 'string' ? JSON.parse(docType.schema) : docType.schema
+    if (!schema || !schema.properties) {
+      return c.json({ success: false, error: 'No schema properties found.' })
+    }
+
+    // Rebuild properties in new order
+    const newProperties: Record<string, any> = {}
+    Object.keys(fieldOrder).forEach(fieldName => {
+      if (schema.properties[fieldName]) {
+        newProperties[fieldName] = schema.properties[fieldName]
+      }
+    })
+    // Add any fields not in fieldOrder
+    Object.keys(schema.properties).forEach(fieldName => {
+      if (!newProperties[fieldName]) {
+        newProperties[fieldName] = schema.properties[fieldName]
+      }
+    })
+    schema.properties = newProperties
+
+    // Update schema
+    const updateStmt = db.prepare('UPDATE document_types SET schema = ?, updated_at = ? WHERE id = ?')
+    const now = Math.floor(Date.now() / 1000) // unixepoch
+    await updateStmt.bind(JSON.stringify(schema), now, collectionId).run()
 
     return c.json({ success: true })
   } catch (error) {

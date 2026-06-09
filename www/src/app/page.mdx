@@ -476,20 +476,42 @@ Join thousands of developers building the future of web APIs
   </div>
 
   <div className="space-y-6">
-    {/* v2.18.1 - Latest Release */}
+    {/* v2.19.0 - Latest Release */}
     <div className="border-l-4 border-emerald-500 dark:border-emerald-400 pl-4 py-1">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">v2.18.1</span>
+        <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">v2.19.0</span>
         <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-300 font-bold">LATEST</span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">2026-05-01</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-05-28</span>
       </div>
       <div className="text-sm space-y-1">
         <div className="flex items-start gap-2">
           <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
-          <span className="text-gray-700 dark:text-gray-300"><strong>Custom user-profile fields in auth responses</strong> — <code>/auth/me</code> and <code>/auth/otp/verify</code> now include fields registered via <code>defineUserProfile()</code>, so apps can gate UI on plan/tier/etc. without a second roundtrip</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Admin code export modal for collections</strong> — Generate ready-to-use TypeScript collection config code directly from the admin UI</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Array fields with media items no longer crash the form</strong> — Collections configured as <code>{`type: 'array'`}</code> with <code>{`items: { type: 'media' }`}</code> now load cleanly in the new-content form</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>AuthManager.verifyToken usable from custom Hono routes</strong>, SVG uploads no longer fail on D1, and the <code>create-sonicjs</code> starter uses the <code>MEDIA_BUCKET</code> binding name</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v2.18.1 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v2.18.1</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-05-01</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Custom user-profile fields in auth responses</strong> — <code>/auth/me</code> and <code>/auth/otp/verify</code> now include fields registered via <code>defineUserProfile()</code>, so apps can gate UI on plan/tier/etc. without a second roundtrip</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
           <span className="text-gray-700 dark:text-gray-300"><strong>Richer OTP verify payload</strong> — also returns <code>username</code>, <code>first_name</code>, <code>last_name</code>, and <code>created_at</code>, and no longer leaks the internal <code>is_active</code> flag</span>
         </div>
       </div>
@@ -635,25 +657,6 @@ Join thousands of developers building the future of web APIs
         <div className="flex items-start gap-2">
           <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
           <span className="text-gray-700 dark:text-gray-300"><strong>User Profile Fixes</strong> - Select options, custom field saving, OTP auto-registration</span>
-        </div>
-      </div>
-    </div>
-
-    {/* v2.12.0 */}
-    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v2.12.0</span>
-
-        <span className="text-sm text-gray-500 dark:text-gray-400">2026-04-07</span>
-      </div>
-      <div className="text-sm space-y-1">
-        <div className="flex items-start gap-2">
-          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-          <span className="text-gray-700 dark:text-gray-300"><strong>Security Audit Plugin</strong> - Brute-force detection and security event logging</span>
-        </div>
-        <div className="flex items-start gap-2">
-          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-          <span className="text-gray-700 dark:text-gray-300"><strong>User Profile Fields Plugin</strong> - Configurable user profile fields</span>
         </div>
       </div>
     </div>

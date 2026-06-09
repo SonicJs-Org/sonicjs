@@ -7,8 +7,8 @@
 import type { CollectionConfig } from "@sonicjs-cms/core";
 
 export default {
-  name: "blog_posts",
-  displayName: "Blog Posts",
+  name: "blog_post",
+  displayName: "Blog Post",
   description: "Manage your blog posts",
   icon: "📝",
 

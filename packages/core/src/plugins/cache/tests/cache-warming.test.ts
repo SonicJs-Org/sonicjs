@@ -25,7 +25,7 @@ const createMockDb = (
         all: vi.fn().mockResolvedValue({
           results: sql.includes('collections')
             ? collectionsData
-            : sql.includes('content')
+            : (sql.includes('content') || sql.includes('documents')) // content is document-backed now
               ? contentData
               : sql.includes('media')
                 ? mediaData
@@ -134,7 +134,7 @@ describe('Cache Warming', () => {
       const db = {
         prepare: vi.fn().mockImplementation((sql: string) => {
           callCount++
-          if (sql.includes('content')) {
+          if (sql.includes('content') || sql.includes('documents')) { // content is document-backed now
             return {
               all: vi.fn().mockRejectedValue(new Error('Content error'))
             }

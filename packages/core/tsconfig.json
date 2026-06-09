@@ -11,7 +11,9 @@
     "baseUrl": "./",
     "paths": {
       "@sonicjs-cms/templates": ["../templates/src/index.ts"],
-      "@sonicjs-cms/templates/*": ["../templates/src/*"]
+      "@sonicjs-cms/templates/*": ["../templates/src/*"],
+      "@sonicjs-cms/core": ["./src/index.ts"],
+      "@sonicjs-cms/core/*": ["./src/*"]
     },
     "resolveJsonModule": true,
     "types": ["@cloudflare/workers-types", "node"],

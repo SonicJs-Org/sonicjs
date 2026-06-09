@@ -1,332 +1,233 @@
+/**
+ * Testimonials plugin — data layer migrated to document model (migration 037).
+ * The `testimonials` table was dropped in migration 038.
+ * Public API keeps the same JSON response shape for backward compatibility;
+ * `id` is now the document rootId (string) instead of an autoincrement integer.
+ */
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { Plugin } from '@sonicjs-cms/core'
+import type { Plugin } from '../../types'
 import { PluginBuilder } from '../../sdk/plugin-builder'
+import { DocumentsService } from '../../../services/documents'
+import { DocumentTypeRegistry } from '../../../services/document-type-registry'
 
 const testimonialSchema = z.object({
-  id: z.number().optional(),
-  authorName: z.string().min(1, 'Author name is required').max(100, 'Author name must be under 100 characters'),
-  authorTitle: z.string().max(100, 'Author title must be under 100 characters').optional(),
-  authorCompany: z.string().max(100, 'Company must be under 100 characters').optional(),
-  testimonialText: z.string().min(1, 'Testimonial text is required').max(1000, 'Testimonial must be under 1000 characters'),
+  authorName: z.string().min(1, 'Author name is required').max(100),
+  authorTitle: z.string().max(100).optional(),
+  authorCompany: z.string().max(100).optional(),
+  testimonialText: z.string().min(1, 'Testimonial text is required').max(1000),
   rating: z.number().min(1).max(5).optional(),
-  isPublished: z.boolean().default(true),
+  isPublished: z.boolean().default(false), // new testimonials default to DRAFT, not auto-published
   sortOrder: z.number().default(0),
-  createdAt: z.number().optional(),
-  updatedAt: z.number().optional()
 })
 
-const testimonialMigration = `
-CREATE TABLE IF NOT EXISTS testimonials (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  author_name TEXT NOT NULL,
-  author_title TEXT,
-  author_company TEXT,
-  testimonial_text TEXT NOT NULL,
-  rating INTEGER CHECK(rating >= 1 AND rating <= 5),
-  isPublished INTEGER NOT NULL DEFAULT 1,
-  sortOrder INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-  updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-);
+async function getService(db: D1Database) {
+  const registry = new DocumentTypeRegistry(db)
+  const docType = await registry.findById('testimonial')
+  return new DocumentsService(db, {
+    queryableFields: docType?.queryableFields ?? [],
+    typeSchemaVersion: docType?.schemaVersion ?? 1,
+    maxVersionsPerRoot: docType?.settings.maxVersionsPerRoot ?? 50,
+  })
+}
 
-CREATE INDEX IF NOT EXISTS idx_testimonials_published ON testimonials(isPublished);
-CREATE INDEX IF NOT EXISTS idx_testimonials_sort_order ON testimonials(sortOrder);
-CREATE INDEX IF NOT EXISTS idx_testimonials_rating ON testimonials(rating);
-
-CREATE TRIGGER IF NOT EXISTS testimonials_updated_at
-  AFTER UPDATE ON testimonials
-BEGIN
-  UPDATE testimonials SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
-END;
-`
+// Map a document row to the legacy API shape (backward-compatible).
+function docToApiShape(row: any) {
+  const data = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data ?? {})
+  return {
+    id: row.root_id ?? row.rootId,
+    author_name: data.authorName ?? '',
+    author_title: data.authorTitle ?? null,
+    author_company: data.authorCompany ?? null,
+    testimonial_text: data.testimonialText ?? '',
+    rating: data.rating ?? null,
+    isPublished: row.is_published === 1 || row.isPublished === true ? 1 : 0,
+    sortOrder: data.sortOrder ?? 0,
+    created_at: row.created_at ?? row.createdAt,
+    updated_at: row.updated_at ?? row.updatedAt,
+  }
+}
 
 const testimonialAPIRoutes = new Hono()
 
+// ─── List published testimonials ──────────────────────────────────────────────
 testimonialAPIRoutes.get('/', async (c) => {
   try {
+    const db = (c as any).env?.DB as D1Database
     const { published, minRating } = c.req.query()
-    const db = (c as any).env?.DB
+    const now = Math.floor(Date.now() / 1000)
 
-    if (!db) {
-      return c.json({ error: 'Database not available' }, 500)
-    }
+    const params: (string | number)[] = ['default', 'testimonial', now, now]
+    let sql = `SELECT * FROM documents
+               WHERE tenant_id = ? AND type_id = ? AND is_published = 1 AND deleted_at IS NULL
+                 AND (scheduled_at IS NULL OR scheduled_at <= ?)
+                 AND (expires_at IS NULL OR expires_at > ?)`
 
-    let query = 'SELECT * FROM testimonials WHERE 1=1'
-    const params: any[] = []
-
-    if (published !== undefined) {
-      query += ' AND isPublished = ?'
-      params.push(published === 'true' ? 1 : 0)
+    if (published === 'false') {
+      // Caller explicitly wants drafts — return current drafts instead
+      sql = `SELECT * FROM documents
+             WHERE tenant_id = ? AND type_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+               AND (scheduled_at IS NULL OR scheduled_at <= ?)
+               AND (expires_at IS NULL OR expires_at > ?)`
     }
 
     if (minRating) {
-      query += ' AND rating >= ?'
+      sql += ' AND q_tst_rating >= ?'
       params.push(parseInt(minRating, 10))
     }
 
-    query += ' ORDER BY sortOrder ASC, created_at DESC'
+    sql += ' ORDER BY q_tst_sort_order ASC, updated_at DESC'
 
-    const { results } = await db.prepare(query).bind(...params).all()
-
-    return c.json({
-      success: true,
-      data: results
-    })
+    const { results } = await db.prepare(sql).bind(...params).all()
+    return c.json({ success: true, data: (results ?? []).map(docToApiShape) })
   } catch (error) {
-    return c.json({
-      success: false,
-      error: 'Failed to fetch testimonials'
-    }, 500)
+    console.error('Error fetching testimonials:', error)
+    return c.json({ success: false, error: 'Failed to fetch testimonials' }, 500)
   }
 })
 
+// ─── Get single testimonial ───────────────────────────────────────────────────
 testimonialAPIRoutes.get('/:id', async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
-    const db = (c as any).env?.DB
+    const db = (c as any).env?.DB as D1Database
+    const rootId = c.req.param('id')
+    const now = Math.floor(Date.now() / 1000)
 
-    if (!db) {
-      return c.json({ error: 'Database not available' }, 500)
-    }
+    const row = await db.prepare(
+      `SELECT * FROM documents
+       WHERE root_id = ? AND tenant_id = ? AND is_published = 1 AND deleted_at IS NULL
+         AND (scheduled_at IS NULL OR scheduled_at <= ?)
+         AND (expires_at IS NULL OR expires_at > ?)`
+    ).bind(rootId, 'default', now, now).first()
 
-    const { results } = await db.prepare('SELECT * FROM testimonials WHERE id = ?').bind(id).all()
-
-    if (!results || results.length === 0) {
-      return c.json({ error: 'Testimonial not found' }, 404)
-    }
-
-    return c.json({
-      success: true,
-      data: results[0]
-    })
+    if (!row) return c.json({ error: 'Testimonial not found' }, 404)
+    return c.json({ success: true, data: docToApiShape(row) })
   } catch (error) {
-    return c.json({
-      success: false,
-      error: 'Failed to fetch testimonial'
-    }, 500)
+    return c.json({ success: false, error: 'Failed to fetch testimonial' }, 500)
   }
 })
 
+// ─── Create ───────────────────────────────────────────────────────────────────
 testimonialAPIRoutes.post('/', async (c) => {
   try {
+    const db = (c as any).env?.DB as D1Database
     const body = await c.req.json()
-    const validatedData = testimonialSchema.parse(body)
-    const db = (c as any).env?.DB
+    const validated = testimonialSchema.parse(body)
+    const svc = await getService(db)
 
-    if (!db) {
-      return c.json({ error: 'Database not available' }, 500)
-    }
+    const doc = await svc.create({
+      typeId: 'testimonial', tenantId: 'default', locale: 'default',
+      title: validated.authorName, sortOrder: validated.sortOrder,
+      data: {
+        authorName: validated.authorName, authorTitle: validated.authorTitle,
+        authorCompany: validated.authorCompany, testimonialText: validated.testimonialText,
+        rating: validated.rating, sortOrder: validated.sortOrder,
+      },
+      parentRootId: '', visible: true, metadata: {}, publishOnCreate: false,
+    })
 
-    const { results } = await db.prepare(`
-      INSERT INTO testimonials (author_name, author_title, author_company, testimonial_text, rating, isPublished, sortOrder)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      RETURNING *
-    `).bind(
-      validatedData.authorName,
-      validatedData.authorTitle || null,
-      validatedData.authorCompany || null,
-      validatedData.testimonialText,
-      validatedData.rating || null,
-      validatedData.isPublished ? 1 : 0,
-      validatedData.sortOrder
-    ).all()
+    if (validated.isPublished) await svc.publish(doc.id)
 
-    return c.json({
-      success: true,
-      data: results?.[0],
-      message: 'Testimonial created successfully'
-    }, 201)
+    // Fetch the saved row for the response shape.
+    const saved = await db.prepare('SELECT * FROM documents WHERE id = ?').bind(doc.id).first()
+    return c.json({ success: true, data: docToApiShape(saved), message: 'Testimonial created successfully' }, 201)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: 'Validation failed',
-        details: error.issues
-      }, 400)
-    }
-
-    return c.json({
-      success: false,
-      error: 'Failed to create testimonial'
-    }, 500)
+    if (error instanceof z.ZodError) return c.json({ success: false, error: 'Validation failed', details: error.issues }, 400)
+    console.error('Error creating testimonial:', error)
+    return c.json({ success: false, error: 'Failed to create testimonial' }, 500)
   }
 })
 
+// ─── Update (save new draft + sync publish state) ─────────────────────────────
 testimonialAPIRoutes.put('/:id', async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
+    const db = (c as any).env?.DB as D1Database
+    const rootId = c.req.param('id')
     const body = await c.req.json()
-    const validatedData = testimonialSchema.partial().parse(body)
-    const db = (c as any).env?.DB
+    const validated = testimonialSchema.partial().parse(body)
+    const svc = await getService(db)
 
-    if (!db) {
-      return c.json({ error: 'Database not available' }, 500)
-    }
+    const data: Record<string, unknown> = {}
+    if (validated.authorName !== undefined) data.authorName = validated.authorName
+    if (validated.authorTitle !== undefined) data.authorTitle = validated.authorTitle
+    if (validated.authorCompany !== undefined) data.authorCompany = validated.authorCompany
+    if (validated.testimonialText !== undefined) data.testimonialText = validated.testimonialText
+    if (validated.rating !== undefined) data.rating = validated.rating
+    if (validated.sortOrder !== undefined) data.sortOrder = validated.sortOrder
 
-    const updateFields = []
-    const updateValues = []
-
-    if (validatedData.authorName !== undefined) {
-      updateFields.push('author_name = ?')
-      updateValues.push(validatedData.authorName)
-    }
-    if (validatedData.authorTitle !== undefined) {
-      updateFields.push('author_title = ?')
-      updateValues.push(validatedData.authorTitle)
-    }
-    if (validatedData.authorCompany !== undefined) {
-      updateFields.push('author_company = ?')
-      updateValues.push(validatedData.authorCompany)
-    }
-    if (validatedData.testimonialText !== undefined) {
-      updateFields.push('testimonial_text = ?')
-      updateValues.push(validatedData.testimonialText)
-    }
-    if (validatedData.rating !== undefined) {
-      updateFields.push('rating = ?')
-      updateValues.push(validatedData.rating)
-    }
-    if (validatedData.isPublished !== undefined) {
-      updateFields.push('isPublished = ?')
-      updateValues.push(validatedData.isPublished ? 1 : 0)
-    }
-    if (validatedData.sortOrder !== undefined) {
-      updateFields.push('sortOrder = ?')
-      updateValues.push(validatedData.sortOrder)
-    }
-
-    if (updateFields.length === 0) {
+    if (Object.keys(data).length === 0 && validated.isPublished === undefined) {
       return c.json({ error: 'No fields to update' }, 400)
     }
 
-    updateValues.push(id)
-
-    const { results } = await db.prepare(`
-      UPDATE testimonials
-      SET ${updateFields.join(', ')}
-      WHERE id = ?
-      RETURNING *
-    `).bind(...updateValues).all()
-
-    if (!results || results.length === 0) {
-      return c.json({ error: 'Testimonial not found' }, 404)
-    }
-
-    return c.json({
-      success: true,
-      data: results[0],
-      message: 'Testimonial updated successfully'
+    const newDraft = await svc.saveDraft(rootId, {
+      title: validated.authorName, sortOrder: validated.sortOrder, data,
     })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: 'Validation failed',
-        details: error.issues
-      }, 400)
+
+    // saveDraft always returns an unpublished draft, so sync against the root's published row
+    // (gating on newDraft.isPublished would make unpublish dead code).
+    if (validated.isPublished !== undefined) {
+      const pubRow = await db
+        .prepare('SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = ?')
+        .bind(rootId, 'default')
+        .first() as { id: string } | null
+      if (validated.isPublished) await svc.publish(newDraft.id)
+      else if (pubRow) await svc.unpublish(pubRow.id)
     }
 
-    return c.json({
-      success: false,
-      error: 'Failed to update testimonial'
-    }, 500)
+    const saved = await db.prepare('SELECT * FROM documents WHERE id = ?').bind(newDraft.id).first()
+    return c.json({ success: true, data: docToApiShape(saved), message: 'Testimonial updated successfully' })
+  } catch (error) {
+    if (error instanceof z.ZodError) return c.json({ success: false, error: 'Validation failed', details: error.issues }, 400)
+    console.error('Error updating testimonial:', error)
+    return c.json({ success: false, error: 'Failed to update testimonial' }, 500)
   }
 })
 
+// ─── Delete (soft delete) ─────────────────────────────────────────────────────
 testimonialAPIRoutes.delete('/:id', async (c) => {
   try {
-    const id = parseInt(c.req.param('id'))
-    const db = (c as any).env?.DB
+    const db = (c as any).env?.DB as D1Database
+    const rootId = c.req.param('id')
+    const row = await db.prepare('SELECT id FROM documents WHERE root_id = ? AND is_current_draft = 1').bind(rootId).first() as any
+    if (!row) return c.json({ error: 'Testimonial not found' }, 404)
 
-    if (!db) {
-      return c.json({ error: 'Database not available' }, 500)
-    }
-
-    const { changes } = await db.prepare('DELETE FROM testimonials WHERE id = ?').bind(id).run()
-
-    if (changes === 0) {
-      return c.json({ error: 'Testimonial not found' }, 404)
-    }
-
-    return c.json({
-      success: true,
-      message: 'Testimonial deleted successfully'
-    })
+    const svc = await getService(db)
+    await svc.softDelete(row.id)
+    return c.json({ success: true, message: 'Testimonial deleted successfully' })
   } catch (error) {
-    return c.json({
-      success: false,
-      error: 'Failed to delete testimonial'
-    }, 500)
+    return c.json({ success: false, error: 'Failed to delete testimonial' }, 500)
   }
 })
 
 export function createTestimonialPlugin(): Plugin {
   const builder = PluginBuilder.create({
     name: 'testimonials-plugin',
-    version: '1.0.0-beta.1',
-    description: 'Customer testimonials management plugin'
+    version: '1.0.0-beta.2',
+    description: 'Customer testimonials management — backed by the document model'
   })
 
-  builder.metadata({
-    author: {
-      name: 'SonicJS',
-      email: 'info@sonicjs.com'
-    },
-    license: 'MIT',
-    compatibility: '^1.0.0'
-  })
+  builder.metadata({ author: { name: 'SonicJS', email: 'info@sonicjs.com' }, license: 'MIT', compatibility: '^1.0.0' })
 
-  builder.addModel('Testimonial', {
-    tableName: 'testimonials',
-    schema: testimonialSchema,
-    migrations: [testimonialMigration]
-  })
+  // No addModel() — the testimonials table no longer exists.
+  // Data lives in the documents table (type_id = 'testimonial').
 
   builder.addRoute('/api/testimonials', testimonialAPIRoutes, {
-    description: 'Testimonials API endpoints',
+    description: 'Testimonials API — document-model backed',
     requiresAuth: false
   })
 
   builder.addAdminPage('/testimonials', 'Testimonials', 'TestimonialsListView', {
-    description: 'Manage customer testimonials',
-    icon: 'star',
-    permissions: ['admin', 'editor']
+    description: 'Manage customer testimonials', icon: 'star', permissions: ['admin', 'editor']
   })
-
-  builder.addAdminPage('/testimonials/new', 'New Testimonial', 'TestimonialsFormView', {
-    description: 'Create a new testimonial',
-    permissions: ['admin', 'editor']
-  })
-
-  builder.addAdminPage('/testimonials/:id', 'Edit Testimonial', 'TestimonialsFormView', {
-    description: 'Edit an existing testimonial',
-    permissions: ['admin', 'editor']
-  })
-
-  builder.addMenuItem('Testimonials', '/admin/testimonials', {
-    icon: 'star',
-    order: 60,
-    permissions: ['admin', 'editor']
-  })
+  builder.addAdminPage('/testimonials/new', 'New Testimonial', 'TestimonialsFormView', { permissions: ['admin', 'editor'] })
+  builder.addAdminPage('/testimonials/:id', 'Edit Testimonial', 'TestimonialsFormView', { permissions: ['admin', 'editor'] })
+  builder.addMenuItem('Testimonials', '/admin/testimonials', { icon: 'star', order: 60, permissions: ['admin', 'editor'] })
 
   builder.lifecycle({
-    install: async (context) => {
-      const { db } = context
-      await db.prepare(testimonialMigration).run()
-      console.log('Testimonials plugin installed successfully')
-    },
-    uninstall: async (context) => {
-      const { db } = context
-      await db.prepare('DROP TABLE IF EXISTS testimonials').run()
-      console.log('Testimonials plugin uninstalled successfully')
-    },
-    activate: async () => {
-      console.log('Testimonials plugin activated')
-    },
-    deactivate: async () => {
-      console.log('Testimonials plugin deactivated')
-    }
+    install: async () => { console.log('Testimonials plugin installed (document-model backed)') },
+    uninstall: async () => { console.log('Testimonials plugin uninstalled') },
+    activate: async () => { console.log('Testimonials plugin activated') },
+    deactivate: async () => { console.log('Testimonials plugin deactivated') },
   })
 
   return builder.build() as Plugin

@@ -309,7 +309,8 @@ const logger = new Logger({ category: 'custom', level: 'info' })
 logger.info('Application started')
 
 const migrationService = new MigrationService(db)
-await migrationService.runAllMigrations()
+const status = await migrationService.getMigrationStatus()
+await migrationService.ensureSchemaCompatibility()
 ```
 
 ## 🏗️ Architecture
@@ -400,9 +401,9 @@ migrations/*.sql → scripts/generate-migrations.ts → src/db/migrations-bundle
 The `generate-migrations.ts` script:
 - Reads all `.sql` files from `migrations/`
 - Generates `src/db/migrations-bundle.ts` with embedded SQL
-- Provides `getMigrationSQLById()` for runtime access
+- Lets `MigrationService` compare bundled migrations against D1's `d1_migrations` status
 
-**Important**: Always rebuild after modifying migration files. The `.sql` files are not used at runtime.
+**Important**: Cloudflare D1/Wrangler is the migration runner and `d1_migrations` is the canonical tracking table. Run migrations with `wrangler d1 migrations apply`; SonicJS only reports status and runs idempotent compatibility repairs at bootstrap.
 
 ## 🔄 Versioning
 

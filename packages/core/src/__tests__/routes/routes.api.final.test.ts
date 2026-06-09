@@ -65,7 +65,7 @@ describe.skip('API Routes - Final Working Tests', () => {
       const mockResults = [
         {
           id: '1',
-          name: 'blog_posts',
+          name: 'blog_post',
           display_name: 'Blog Posts',
           description: 'Blog post content',
           schema: '{"fields": []}',
@@ -158,7 +158,7 @@ describe.skip('API Routes - Final Working Tests', () => {
     it('should handle collection-specific content with D1 chaining', async () => {
       const mockCollection = {
         id: 'col1',
-        name: 'blog_posts',
+        name: 'blog_post',
         display_name: 'Blog Posts',
         schema: '{"fields": []}',
         is_active: 1
@@ -203,13 +203,13 @@ describe.skip('API Routes - Final Working Tests', () => {
       const app = new Hono<{ Bindings: typeof testEnv }>()
       app.route('/', apiRoutes)
 
-      const req = new Request('https://test.com/collections/blog_posts/content')
+      const req = new Request('https://test.com/collections/blog_post/content')
       const res = await app.fetch(req, testEnv)
       const data = await res.json()
 
       expect(res.status).toBe(200)
       expect(data.data).toHaveLength(1)
-      expect(data.meta.collection.name).toBe('blog_posts')
+      expect(data.meta.collection.name).toBe('blog_post')
     })
 
     it('should return 404 for non-existent collection', async () => {

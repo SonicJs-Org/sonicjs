@@ -4,7 +4,8 @@
  * Every email in the app goes through `EmailService.send()`:
  *  1. normalize the message (resolve `from`, coerce recipients to arrays),
  *  2. hand it to the configured {@link EmailProvider},
- *  3. record the attempt in `email_log` (status, provider, provider id, error).
+ *  3. record the attempt as an `email_log` document in the `documents` table
+ *     (type_id='email_log', single draft version, never published).
  *
  * Logging is best-effort: a logging failure never fails the send. Providers must
  * not throw for ordinary delivery failures (they return `ok: false`), so the
@@ -30,7 +31,7 @@ export interface EmailServiceOptions {
   defaultFrom: string
   /** Default reply-to applied when a message omits `replyTo`. */
   defaultReplyTo?: string
-  /** When provided, every send writes a row to `email_log`. */
+  /** When provided, every send writes an email_log document to the documents table. */
   db?: EmailLogDb
   /** Injectable clock (tests). Defaults to `Date.now`. */
   now?: () => number
@@ -70,6 +71,25 @@ export class EmailService {
     return this.provider.isConfigured()
   }
 
+  /**
+   * Ask the active provider to reconcile delivery state for a batch of
+   * recently-sent email_log document rows. Returns empty array when the provider
+   * does not implement `reconcile()` (Resend, SendGrid, Console).
+   *
+   * Called by the `email-reconciliation` cron plugin.
+   */
+  async reconcileDelivery(
+    rows: import('./types').EmailLogRow[]
+  ): Promise<Array<{ id: string; delivery_state: string }>> {
+    if (!this.provider.reconcile) return []
+    try {
+      return await this.provider.reconcile(rows)
+    } catch (err) {
+      console.error('[email] reconcile() failed:', err)
+      return []
+    }
+  }
+
   /** Normalize, send, and log. Never throws for ordinary delivery failures. */
   async send(message: EmailMessage): Promise<SendResult> {
     const normalized: NormalizedEmailMessage = {
@@ -97,41 +117,65 @@ export class EmailService {
     return logId ? { ...result, logId } : result
   }
 
-  /** Best-effort insert into `email_log`. Returns the row id, or undefined if not logged. */
+  /**
+   * Best-effort write of an email_log document into the `documents` table.
+   * Documents use SECONDS for timestamps (not ms). Email log entries are
+   * draft-only (is_current_draft=1, is_published=0, maxVersionsPerRoot=1).
+   * Returns the new document's root_id, or undefined if logging is disabled / fails.
+   */
   private async writeLog(message: NormalizedEmailMessage, result: SendResult): Promise<string | undefined> {
     if (!this.db) return undefined
-    const id = this.idFactory()
-    const ts = this.now()
+    const rootId = this.idFactory()
+    const docId = this.idFactory()
+    // Documents table uses SECONDS (D29)
+    const tsSeconds = Math.floor(this.now() / 1000)
+
+    const data = JSON.stringify({
+      toEmail: message.to.join(','),
+      fromEmail: message.from,
+      subject: message.subject,
+      status: result.ok ? 'sent' : 'failed',
+      provider: result.provider,
+      providerId: result.providerId ?? null,
+      error: result.error ?? null,
+      flow: message.flow ?? null,
+      metadata: message.metadata ?? null,
+      failedAtSend: result.ok ? null : tsSeconds,
+      deliveryState: null,
+      deliverySyncedAt: null,
+    })
+
     try {
       await this.db
         .prepare(
-          `INSERT INTO email_log (
-             id, to_email, from_email, subject, status, provider, provider_id,
-             error, flow, metadata, failed_at_send, delivery_state, delivery_synced_at, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO documents (
+             id, root_id, type_id, type_version, version_number,
+             is_current_draft, is_published, status,
+             parent_root_id, tenant_id, locale, translation_group_id,
+             title, data, metadata, sort_order, visible,
+             created_at, updated_at
+           ) VALUES (
+             ?, ?, 'email_log', 1, 1,
+             1, 0, 'draft',
+             '', 'default', 'default', '',
+             ?, ?, '{}', 0, 1,
+             ?, ?
+           )`
         )
         .bind(
-          id,
-          message.to.join(','),
-          message.from,
-          message.subject,
-          result.ok ? 'sent' : 'failed',
-          result.provider,
-          result.providerId ?? null,
-          result.error ?? null,
-          message.flow ?? null,
-          message.metadata ? JSON.stringify(message.metadata) : null,
-          result.ok ? null : ts,
-          null,
-          null,
-          ts
+          docId,
+          rootId,
+          message.subject ?? '',
+          data,
+          tsSeconds,
+          tsSeconds
         )
         .run()
-      return id
+      return rootId
     } catch (error) {
       // Logging must never break a send.
       // eslint-disable-next-line no-console
-      console.error('[email] failed to write email_log row:', error)
+      console.error('[email] failed to write email_log document:', error)
       return undefined
     }
   }

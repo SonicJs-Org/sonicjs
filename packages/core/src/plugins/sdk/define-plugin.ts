@@ -43,6 +43,59 @@ import type { HookEventName } from '../hooks/catalog'
 import type { PluginBootContext, WirableHook } from '../wire'
 import type { CronContext, CronDeclaration, CronTickEvent } from '../cron'
 import type { MountableRoute } from '../mount'
+import { getCoreVersion } from '../../utils/version'
+
+// ── Minimal semver helpers (no external dep — Workers are bundle-size constrained) ─
+
+/** True if `v` is a valid semver string (X.Y.Z with optional pre-release). */
+function isSemver(v: string): boolean {
+  return /^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/.test(v.trim())
+}
+
+/**
+ * Very lightweight semver range satisfier. Handles the most common range forms:
+ * exact (`1.2.3`), caret (`^1.2.3` = compatible major), tilde (`~1.2.3` = compatible
+ * minor), comparators (`>=1.0.0`, `>1`, `<2.0.0`), and space-separated AND chains.
+ * Not a full semver implementation — use the `semver` npm package if you need
+ * full range syntax in a non-Workers environment.
+ */
+function semverSatisfies(version: string, range: string): boolean {
+  try {
+    const [major, minor, patch] = version.trim().split('-')[0]!.split('.').map(Number)
+    const v = major! * 1_000_000 + (minor ?? 0) * 1_000 + (patch ?? 0)
+
+    const toInt = (s: string) => {
+      const [a, b, c] = s.split('.').map(Number)
+      return a! * 1_000_000 + (b ?? 0) * 1_000 + (c ?? 0)
+    }
+
+    // AND chain: all clauses must pass.
+    return range
+      .trim()
+      .split(/\s+(?=[><=^~])|\s+(?=\d)/)
+      .filter(Boolean)
+      .every((clause) => {
+        const c = clause.trim()
+        if (c.startsWith('^')) {
+          const base = toInt(c.slice(1))
+          const nextMajor = Math.floor(base / 1_000_000 + 1) * 1_000_000
+          return v >= base && v < nextMajor
+        }
+        if (c.startsWith('~')) {
+          const base = toInt(c.slice(1))
+          const nextMinor = Math.floor(base / 1_000 + 1) * 1_000
+          return v >= base && v < nextMinor
+        }
+        if (c.startsWith('>=')) return v >= toInt(c.slice(2))
+        if (c.startsWith('<=')) return v <= toInt(c.slice(2))
+        if (c.startsWith('>')) return v > toInt(c.slice(1))
+        if (c.startsWith('<')) return v < toInt(c.slice(1))
+        return v === toInt(c) // exact
+      })
+  } catch {
+    return true // fail open — don't block a plugin on a parse error
+  }
+}
 
 /**
  * Declarative typed hook subscriptions: a map of canonical event name → handler,
@@ -81,8 +134,18 @@ export interface DefinePluginInput<Caps extends readonly Capability[] = readonly
   id: string
   /** Human-readable display name. Defaults to `id`. */
   name?: string
-  /** Semantic version. */
+  /**
+   * Semantic version of this plugin (e.g. `'1.2.3'`). Must be a valid semver
+   * string — invalid values emit a console.warn at definition time.
+   */
   version: string
+  /**
+   * A semver range expressing which SonicJS core versions this plugin supports
+   * (e.g. `'^3.0.0'` or `'>=3.1.0 <4.0.0'`). Checked against the running
+   * core version at registration; a mismatch logs a compatibility warning but
+   * does not block activation (plugins remain resilient by default).
+   */
+  sonicjsVersionRange?: string
   description?: string
   author?: { name: string; email?: string; url?: string }
   /** Other plugin ids this one needs (load-order / activation). */
@@ -138,6 +201,8 @@ export interface DefinedPlugin {
   id: string
   name: string
   version: string
+  /** The semver range for SonicJS core compatibility declared by the author. */
+  sonicjsVersionRange?: string
   description?: string
   author?: { name: string; email?: string; url?: string }
   dependencies?: string[]
@@ -196,6 +261,28 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
   if (!input.id) throw new Error('definePlugin: `id` is required')
   if (!input.version) throw new Error(`definePlugin: \`version\` is required (plugin "${input.id}")`)
 
+  // Semver validation: warn if the plugin's own version is not a valid semver string.
+  if (!isSemver(input.version)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[plugins] Plugin "${input.id}" has an invalid version: "${input.version}". ` +
+        `Use a valid semver string (e.g. "1.0.0") to participate in version-range checks.`
+    )
+  }
+
+  // SonicJS core compatibility range check.
+  if (input.sonicjsVersionRange) {
+    const coreVersion = getCoreVersion()
+    if (!semverSatisfies(coreVersion, input.sonicjsVersionRange)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[plugins] Plugin "${input.id}" declares sonicjsVersionRange "${input.sonicjsVersionRange}" ` +
+          `but running core version is "${coreVersion}". ` +
+          `The plugin may not work correctly. Consider updating the plugin or the version range.`
+      )
+    }
+  }
+
   // Normalize declared capabilities to canonical names first (resolves deprecated
   // / cross-fork spellings like `storage:write` → `media:write`), then warn on any
   // that remain unknown. Strict-reject at registration is layered in Phase 5d.
@@ -237,6 +324,7 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
     id: input.id,
     name,
     version: input.version,
+    sonicjsVersionRange: input.sonicjsVersionRange,
     description: input.description,
     author: input.author,
     dependencies: input.dependencies,

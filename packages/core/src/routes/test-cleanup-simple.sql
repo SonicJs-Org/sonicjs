@@ -38,15 +38,15 @@ DELETE FROM users WHERE email != 'admin@sonicjs.com' AND (email LIKE '%test%' OR
 
 -- Step 5: Delete test collection data
 DELETE FROM collection_fields WHERE collection_id IN (
-  SELECT id FROM collections WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
+  SELECT id FROM collections WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles')
 );
 
 DELETE FROM content WHERE collection_id IN (
-  SELECT id FROM collections WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
+  SELECT id FROM collections WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles')
 );
 
 -- Step 6: Delete test collections
-DELETE FROM collections WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles');
+DELETE FROM collections WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles');
 
 -- Step 7: Clean orphans
 DELETE FROM content_data WHERE content_id NOT IN (SELECT id FROM content);

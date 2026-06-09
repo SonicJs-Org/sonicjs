@@ -272,7 +272,7 @@ describe('Collections API Logic', () => {
       const mockCollections = [
         {
           id: 'collection-1',
-          name: 'blog_posts',
+          name: 'blog_post',
           displayName: 'Blog Posts',
           description: 'Blog post collection',
           createdAt: '2023-01-01T00:00:00Z'
@@ -347,10 +347,10 @@ describe('Collections API Logic', () => {
         .mockReturnValueOnce(firstPrepare)
         .mockReturnValueOnce(secondPrepare)
 
-      const result = await collectionsAPI.getCollectionContent(mockDb, 'blog_posts')
+      const result = await collectionsAPI.getCollectionContent(mockDb, 'blog_post')
 
       expect(result.status).toBe(200)
-      expect(result.data.collection).toBe('blog_posts')
+      expect(result.data.collection).toBe('blog_post')
       expect(result.data.content).toEqual(mockContent)
       expect(result.data.total).toBe(1)
     })

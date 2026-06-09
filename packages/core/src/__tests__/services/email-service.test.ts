@@ -18,19 +18,18 @@ afterEach(() => {
 })
 
 // ── Fake email_log db ────────────────────────────────────────────────────────
+// Email service now writes to the documents table. The bind values map to:
+// id, root_id, title(subject), data(JSON), created_at(s), updated_at(s)
 function fakeDb(): { db: EmailLogDb; rows: Record<string, unknown>[] } {
   const rows: Record<string, unknown>[] = []
-  const columns = [
-    'id', 'to_email', 'from_email', 'subject', 'status', 'provider', 'provider_id',
-    'error', 'flow', 'metadata', 'failed_at_send', 'delivery_state', 'delivery_synced_at', 'created_at',
-  ]
+  const docColumns = ['id', 'root_id', 'title', 'data', 'created_at', 'updated_at']
   const db: EmailLogDb = {
     prepare() {
       return {
         bind(...values: unknown[]) {
           return {
             async run() {
-              rows.push(Object.fromEntries(columns.map((c, i) => [c, values[i]])))
+              rows.push(Object.fromEntries(docColumns.map((c, i) => [c, values[i]])))
             },
           }
         },
@@ -100,16 +99,19 @@ describe('EmailService', () => {
     expect(result.ok).toBe(true)
     expect(result.logId).toBe('log-1')
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({
-      id: 'log-1',
-      to_email: 'a@b.com',
-      from_email: 'noreply@site.com',
+    // Email log is stored as a document: check the document envelope + parse data JSON.
+    expect(rows[0].id).toBe('log-1')
+    expect(rows[0].root_id).toBe('log-1')
+    expect(rows[0].created_at).toBe(1717200000) // seconds (documents use epoch seconds)
+    const data = JSON.parse(rows[0].data as string)
+    expect(data).toMatchObject({
+      toEmail: 'a@b.com',
+      fromEmail: 'noreply@site.com',
       status: 'sent',
       provider: 'recording',
-      provider_id: 'rec-1',
+      providerId: 'rec-1',
       flow: 'welcome',
-      failed_at_send: null,
-      created_at: 1717200000000,
+      failedAtSend: null,
     })
   })
 
@@ -127,7 +129,8 @@ describe('EmailService', () => {
     const result = await svc.send({ to: 'a@b.com', subject: 'Hi' })
 
     expect(result.ok).toBe(false)
-    expect(rows[0]).toMatchObject({ status: 'failed', error: 'boom', failed_at_send: 999 })
+    const data = JSON.parse(rows[0].data as string)
+    expect(data).toMatchObject({ status: 'failed', error: 'boom', failedAtSend: 0 }) // Math.floor(999/1000)=0
   })
 
   it('surfaces a throwing provider as a structured failure (does not throw)', async () => {

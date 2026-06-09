@@ -200,7 +200,7 @@ test.describe('Collections Management', () => {
   });
 
   test('should show collection actions', async ({ page }) => {
-    // Find any existing collection row (blog_posts was removed, use any available collection)
+    // Find any existing collection row (blog_post was removed, use any available collection)
     const tableRows = page.locator('tbody tr');
     const rowCount = await tableRows.count();
 
@@ -222,7 +222,7 @@ test.describe('Collections Management', () => {
   });
 
   test('should navigate to collection content', async ({ page }) => {
-    // Find any existing collection row (blog_posts was removed, use any available collection)
+    // Find any existing collection row (blog_post was removed, use any available collection)
     const tableRows = page.locator('tbody tr');
     const rowCount = await tableRows.count();
 

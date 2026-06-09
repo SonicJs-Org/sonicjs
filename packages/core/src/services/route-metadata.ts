@@ -158,7 +158,7 @@ const ROUTE_METADATA: Record<string, RouteMeta> = {
   'DELETE /admin/api/collections/:id/fields/:fieldId': { description: 'Remove a field from a collection', category: 'Admin', authentication: true },
   'POST /admin/api/collections/:id/fields/reorder': { description: 'Reorder fields in a collection', category: 'Admin', authentication: true },
   'GET /admin/api/migrations/status': { description: 'Get database migration status', category: 'Admin', authentication: true },
-  'POST /admin/api/migrations/run': { description: 'Run pending database migrations', category: 'Admin', authentication: true },
+  'POST /admin/api/migrations/run': { description: 'Explain how to run D1 migrations with Wrangler', category: 'Admin', authentication: true },
   'GET /admin/api/content': { description: 'List content items with filtering and pagination', category: 'Admin', authentication: true },
   'GET /admin/api/content/:id': { description: 'Get a content item for admin editing', category: 'Admin', authentication: true },
   'POST /admin/api/content': { description: 'Create content via admin API', category: 'Admin', authentication: true },

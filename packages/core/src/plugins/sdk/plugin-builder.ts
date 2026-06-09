@@ -291,7 +291,19 @@ export class PluginBuilder {
   }
 
   /**
-   * Build the plugin
+   * Build the plugin.
+   *
+   * The returned object is augmented with v3 compatibility fields so it
+   * satisfies the structural contracts used by the new wiring, topo-sort, and
+   * capability-gate without needing a full migration to `definePlugin`:
+   *
+   *   - `id` — same as `name`; used by topo-sort for dependency lookup.
+   *   - `capabilities` — empty array; the capability gate is skipped for
+   *     PluginBuilder plugins (backwards-compatible: `capabilities: undefined`
+   *     would gate nothing, `[]` is explicit and opt-in-ready).
+   *
+   * Existing plugins get topo-sort ordering for free once they declare
+   * `dependencies` in the `create()` options.
    */
   build(): Plugin {
     // Validate required fields
@@ -299,7 +311,12 @@ export class PluginBuilder {
       throw new Error('Plugin name and version are required')
     }
 
-    return this.plugin as Plugin
+    // V3 compatibility fields — added without breaking the Plugin type contract.
+    const built = this.plugin as Plugin & { id?: string; capabilities?: string[] }
+    built.id = built.id ?? this.plugin.name
+    built.capabilities = built.capabilities ?? []
+
+    return built as Plugin
   }
 }
 

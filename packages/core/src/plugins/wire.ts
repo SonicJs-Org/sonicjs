@@ -156,7 +156,57 @@ export async function wireRegisteredPlugins(
     }
   }
 
+  // Phase C (best-effort): reflect wired plugin list into the `plugins` DB table
+  // so the admin view stays in sync with what's actually running. Errors are
+  // non-fatal — DB unavailable during cron-first boot should not break wiring.
+  if (context.env?.DB) {
+    reflectWiredPlugins(valid, context.env.DB as D1DatabaseLike).catch((err) => {
+      console.warn('[plugins] DB reflection failed (non-fatal):', err)
+    })
+  }
+
   return result
+}
+
+/** Minimal D1 interface needed for reflection (avoids a hard @cloudflare/workers-types dep). */
+interface D1DatabaseLike {
+  prepare(sql: string): { bind(...args: unknown[]): { run(): Promise<unknown> } }
+  batch(stmts: unknown[]): Promise<unknown>
+}
+
+/**
+ * Best-effort: register each wired plugin in the `plugins` table so the admin
+ * can see and manage it. New plugins start as 'inactive' — an admin must
+ * explicitly activate them via the Plugins admin page. Existing rows keep
+ * their current status so admin deactivation survives reboots.
+ * Non-fatal on any error.
+ */
+async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike): Promise<void> {
+  const now = Date.now()
+  for (const plugin of plugins) {
+    const id = (plugin as any).id ?? plugin.name
+    if (!id) continue
+    const displayName = (plugin as any).name ?? id
+    const version = (plugin as any).version ?? '0.0.0'
+    const description = (plugin as any).description ?? ''
+    try {
+      await db
+        .prepare(
+          `INSERT INTO plugins (id, name, display_name, description, version, author, category,
+              status, is_core, installed_at, last_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'inactive', 1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             version = excluded.version,
+             display_name = excluded.display_name,
+             last_updated = excluded.last_updated`
+        )
+        .bind(id, id, displayName, description, version, 'core', 'core', now, now)
+        .run()
+    } catch {
+      // Individual plugin upsert failure is silently skipped — one bad row
+      // must not abort the rest of the reflection pass.
+    }
+  }
 }
 
 /**

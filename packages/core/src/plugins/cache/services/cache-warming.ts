@@ -88,11 +88,12 @@ async function warmRecentContent(db: D1Database, limit: number = 50): Promise<nu
   let count = 0
 
   try {
-    const stmt = db.prepare(`SELECT * FROM content ORDER BY created_at DESC LIMIT ${limit}`)
+    // Content is document-backed now — warm recent current-draft documents (decommission of `content`).
+    const stmt = db.prepare(`SELECT * FROM documents WHERE is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
     const { results } = await stmt.all()
 
     for (const content of results as any[]) {
-      const key = contentCache.generateKey('item', content.id)
+      const key = contentCache.generateKey('item', content.root_id ?? content.id)
       await contentCache.set(key, content)
       count++
     }

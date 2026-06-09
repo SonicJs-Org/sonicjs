@@ -43,6 +43,10 @@ export type { SortablePlugin, TopoSortOptions } from './plugins/topo-sort'
 // Cloudflare email provider
 export { CloudflareEmailProvider } from './services/email/providers/cloudflare'
 export type { CloudflareEmailProviderOptions, CFSendEmailBinding } from './services/email/providers/cloudflare'
+export type { EmailLogRow } from './services/email/types'
+
+// Core plugins exported for use in Worker entries and custom scheduled handlers
+export { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 
 // ============================================================================
 // Placeholders - To be populated in Phase 2

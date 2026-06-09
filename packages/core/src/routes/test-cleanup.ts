@@ -11,6 +11,14 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 const app = new Hono()
 
+async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .bind(tableName)
+    .first()
+  return !!row
+}
+
 /**
  * Clean up all test data (collections, content, users except admin)
  * POST /test-cleanup
@@ -25,46 +33,56 @@ app.post('/test-cleanup', async (c: Context) => {
 
   try {
     let deletedCount = 0
+    const hasContentTable = await tableExists(db, 'content')
 
     // Use pattern-based deletes to avoid SQL variable limits
     // This approach uses subqueries instead of building large IN lists
 
+    const documentsResult = await db.prepare(`
+      DELETE FROM documents
+      WHERE tenant_id = 'default'
+        AND (title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%')
+    `).run()
+    deletedCount += documentsResult.meta?.changes || 0
+
     // Step 1: Delete child data for test content (by pattern)
-    await db.prepare(`
-      DELETE FROM content_versions
-      WHERE content_id IN (
-        SELECT id FROM content
-        WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
-      )
-    `).run()
-
-    await db.prepare(`
-      DELETE FROM workflow_history
-      WHERE content_id IN (
-        SELECT id FROM content
-        WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
-      )
-    `).run()
-
-    // Note: content_data table may not exist in all schemas
-    try {
+    if (hasContentTable) {
       await db.prepare(`
-        DELETE FROM content_data
+        DELETE FROM content_versions
         WHERE content_id IN (
           SELECT id FROM content
           WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
         )
       `).run()
-    } catch (e) {
-      // Table doesn't exist, skip
-    }
 
-    // Step 2: Delete test content by pattern
-    const contentResult = await db.prepare(`
-      DELETE FROM content
-      WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
-    `).run()
-    deletedCount += contentResult.meta?.changes || 0
+      await db.prepare(`
+        DELETE FROM workflow_history
+        WHERE content_id IN (
+          SELECT id FROM content
+          WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
+        )
+      `).run()
+
+      // Note: content_data table may not exist in all schemas
+      try {
+        await db.prepare(`
+          DELETE FROM content_data
+          WHERE content_id IN (
+            SELECT id FROM content
+            WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
+          )
+        `).run()
+      } catch (e) {
+        // Table doesn't exist, skip
+      }
+
+      // Step 2: Delete test content by pattern
+      const contentResult = await db.prepare(`
+        DELETE FROM content
+        WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
+      `).run()
+      deletedCount += contentResult.meta?.changes || 0
+    }
 
     // Step 3: Delete child data for test users
     await db.prepare(`
@@ -90,42 +108,59 @@ app.post('/test-cleanup', async (c: Context) => {
     `).run()
     deletedCount += usersResult.meta?.changes || 0
 
-    // Step 5: Delete child data for test collections
+    // Step 5: Delete child data for test collections.
+    // NOTE: `blog_post` is intentionally NOT in this list — it is a SEEDED collection (migration 001)
+    // that backs the document-model blog feature, not disposable test data. Deleting it here broke the
+    // doc-backed blog e2e (the new-content form had no collection to resolve). Only genuine test
+    // artifacts are removed.
     try {
       await db.prepare(`
         DELETE FROM collection_fields
         WHERE collection_id IN (
           SELECT id FROM collections
-          WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
+          WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles')
         )
       `).run()
     } catch (e) {
       // Table doesn't exist
     }
 
-    // Delete remaining content from test collections
     await db.prepare(`
-      DELETE FROM content
-      WHERE collection_id IN (
-        SELECT id FROM collections
-        WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
-      )
+      DELETE FROM documents
+      WHERE tenant_id = 'default'
+        AND type_id IN (
+          SELECT name FROM collections
+          WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles')
+        )
     `).run()
+
+    // Delete remaining legacy content from test collections
+    if (hasContentTable) {
+      await db.prepare(`
+        DELETE FROM content
+        WHERE collection_id IN (
+          SELECT id FROM collections
+          WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles')
+        )
+      `).run()
+    }
 
     // Step 6: Delete test collections
     const collectionsResult = await db.prepare(`
       DELETE FROM collections
-      WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
+      WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles')
     `).run()
     deletedCount += collectionsResult.meta?.changes || 0
 
     // Step 7: Clean up orphaned data (skip if tables don't exist)
-    try {
-      await db.prepare(`
-        DELETE FROM content_data WHERE content_id NOT IN (SELECT id FROM content)
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
+    if (hasContentTable) {
+      try {
+        await db.prepare(`
+          DELETE FROM content_data WHERE content_id NOT IN (SELECT id FROM content)
+        `).run()
+      } catch (e) {
+        // Table doesn't exist
+      }
     }
 
     try {
@@ -136,20 +171,22 @@ app.post('/test-cleanup', async (c: Context) => {
       // Table doesn't exist
     }
 
-    try {
-      await db.prepare(`
-        DELETE FROM content_versions WHERE content_id NOT IN (SELECT id FROM content)
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
-    }
+    if (hasContentTable) {
+      try {
+        await db.prepare(`
+          DELETE FROM content_versions WHERE content_id NOT IN (SELECT id FROM content)
+        `).run()
+      } catch (e) {
+        // Table doesn't exist
+      }
 
-    try {
-      await db.prepare(`
-        DELETE FROM workflow_history WHERE content_id NOT IN (SELECT id FROM content)
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
+      try {
+        await db.prepare(`
+          DELETE FROM workflow_history WHERE content_id NOT IN (SELECT id FROM content)
+        `).run()
+      } catch (e) {
+        // Table doesn't exist
+      }
     }
 
     // Step 8: Delete old activity logs (keep only last 100)
@@ -228,12 +265,13 @@ app.post('/test-cleanup/collections', async (c: Context) => {
 
   try {
     let deletedCount = 0
+    const hasContentTable = await tableExists(db, 'content')
 
     // Get test collection IDs first
     const collections = await db.prepare(`
-      SELECT id FROM collections
+      SELECT id, name FROM collections
       WHERE name LIKE 'test_%'
-      OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
+      OR name IN ('test_collection', 'products', 'articles')
     `).all()
 
     if (collections.results && collections.results.length > 0) {
@@ -244,9 +282,15 @@ app.post('/test-cleanup/collections', async (c: Context) => {
         await db.prepare('DELETE FROM collection_fields WHERE collection_id = ?').bind(id).run()
       }
 
-      // Delete associated content
-      for (const id of collectionIds) {
-        await db.prepare('DELETE FROM content WHERE collection_id = ?').bind(id).run()
+      for (const collection of collections.results as any[]) {
+        await db.prepare("DELETE FROM documents WHERE tenant_id = 'default' AND type_id = ?").bind(collection.name).run()
+      }
+
+      // Delete associated legacy content
+      if (hasContentTable) {
+        for (const id of collectionIds) {
+          await db.prepare('DELETE FROM content WHERE collection_id = ?').bind(id).run()
+        }
       }
 
       // Delete the collections
@@ -285,24 +329,41 @@ app.post('/test-cleanup/content', async (c: Context) => {
   }
 
   try {
-    // Delete test content
-    const result = await db.prepare(`
-      DELETE FROM content
-      WHERE title LIKE 'Test %'
-      OR title LIKE '%E2E%'
-      OR title LIKE '%Playwright%'
-      OR title LIKE '%Sample%'
+    const documentsResult = await db.prepare(`
+      DELETE FROM documents
+      WHERE tenant_id = 'default'
+      AND (
+        title LIKE 'Test %'
+        OR title LIKE '%E2E%'
+        OR title LIKE '%Playwright%'
+        OR title LIKE '%Sample%'
+      )
     `).run()
 
-    // Clean up orphaned content_data
-    await db.prepare(`
-      DELETE FROM content_data
-      WHERE content_id NOT IN (SELECT id FROM content)
-    `).run()
+    let deletedCount = documentsResult.meta?.changes || 0
+    const hasContentTable = await tableExists(db, 'content')
+    if (hasContentTable) {
+      const result = await db.prepare(`
+        DELETE FROM content
+        WHERE title LIKE 'Test %'
+        OR title LIKE '%E2E%'
+        OR title LIKE '%Playwright%'
+        OR title LIKE '%Sample%'
+      `).run()
+      deletedCount += result.meta?.changes || 0
+    }
+
+    if (hasContentTable) {
+      // Clean up orphaned content_data
+      await db.prepare(`
+        DELETE FROM content_data
+        WHERE content_id NOT IN (SELECT id FROM content)
+      `).run()
+    }
 
     return c.json({
       success: true,
-      deletedCount: result.meta?.changes || 0,
+      deletedCount,
       message: 'Test content cleaned up successfully'
     })
   } catch (error) {

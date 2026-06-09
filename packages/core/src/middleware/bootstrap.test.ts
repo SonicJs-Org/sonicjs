@@ -12,10 +12,10 @@ vi.mock('../services/collection-sync', () => ({
 }))
 
 vi.mock('../services/migrations', () => {
-  const mockRunPendingMigrations = vi.fn().mockResolvedValue(undefined)
+  const mockEnsureSchemaCompatibility = vi.fn().mockResolvedValue(undefined)
   return {
     MigrationService: vi.fn().mockImplementation(function() {
-      this.runPendingMigrations = mockRunPendingMigrations
+      this.ensureSchemaCompatibility = mockEnsureSchemaCompatibility
       return this
     })
   }

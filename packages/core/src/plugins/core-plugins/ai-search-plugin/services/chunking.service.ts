@@ -158,7 +158,7 @@ export class ChunkingService {
    */
   getOptimalChunkSize(contentType: string): number {
     switch (contentType) {
-      case 'blog_posts':
+      case 'blog_post':
       case 'articles':
         return 600 // Larger chunks for long-form content
       case 'products':

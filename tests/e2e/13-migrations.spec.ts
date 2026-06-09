@@ -53,7 +53,7 @@ test.describe.skip('Admin Migrations Page', () => {
     
     // Check for action buttons
     await expect(page.locator('button:has-text("Refresh Status")')).toBeVisible();
-    await expect(page.locator('button:has-text("Run Pending")')).toBeVisible();
+    await expect(page.locator('button:has-text("Managed by Wrangler")')).toBeVisible();
     await expect(page.locator('button:has-text("Validate Schema")')).toBeVisible();
   });
 
@@ -141,7 +141,7 @@ test.describe.skip('Admin Migrations Page', () => {
     expect(responseData).toHaveProperty('data');
   });
 
-  test('should handle run pending migrations with confirmation', async ({ page }) => {
+  test('should show migrations are managed by Wrangler', async ({ page }) => {
     // Navigate directly to migrations tab
     await page.goto('/admin/settings/migrations');
 
@@ -151,24 +151,9 @@ test.describe.skip('Admin Migrations Page', () => {
     // Wait for migration status to load
     await page.waitForTimeout(1000);
 
-    // Setup dialog handler to cancel the confirmation
-    page.on('dialog', async dialog => {
-      expect(dialog.message()).toContain('Are you sure you want to run pending migrations');
-      await dialog.dismiss();
-    });
-
-    // Click run pending button (should trigger confirmation dialog)
-    await page.click('button:has-text("Run Pending")');
-
-    // If the button is disabled (no pending migrations), skip this test
-    const runButton = page.locator('button:has-text("Run Pending")');
-    const isDisabled = await runButton.isDisabled();
-
-    if (!isDisabled) {
-      // The dialog should have been triggered and dismissed
-      // Button should still be enabled since we cancelled
-      await expect(runButton).toBeEnabled();
-    }
+    const runButton = page.locator('button:has-text("Managed by Wrangler")');
+    await expect(runButton).toBeVisible();
+    await expect(runButton).toBeDisabled();
   });
 
   test('should show proper migration status indicators', async ({ page }) => {
@@ -200,7 +185,7 @@ test.describe.skip('Admin Migrations Page', () => {
     }
   });
 
-  test('should disable run button when no pending migrations', async ({ page }) => {
+  test('should always disable in-app migration execution', async ({ page }) => {
     // Navigate to migrations tab
     await page.goto('/admin/settings');
     await page.click('[data-tab="migrations"]');
@@ -208,19 +193,8 @@ test.describe.skip('Admin Migrations Page', () => {
     // Wait for API response
     await page.waitForTimeout(2000);
     
-    // Check pending migrations count
-    const pendingCount = await page.locator('#pending-migrations').textContent();
-    const hasPendingMigrations = parseInt(pendingCount || '0') > 0;
-    
-    const runButton = page.locator('button:has-text("Run Pending")');
-    
-    if (!hasPendingMigrations) {
-      // Button should be disabled when no pending migrations
-      await expect(runButton).toBeDisabled();
-    } else {
-      // Button should be enabled when there are pending migrations
-      await expect(runButton).toBeEnabled();
-    }
+    const runButton = page.locator('button:has-text("Managed by Wrangler")');
+    await expect(runButton).toBeDisabled();
   });
 
   test('should have proper ARIA labels and accessibility', async ({ page }) => {
@@ -233,7 +207,7 @@ test.describe.skip('Admin Migrations Page', () => {
     
     // Check that action buttons are properly labeled
     const refreshButton = page.locator('button:has-text("Refresh Status")');
-    const runButton = page.locator('button:has-text("Run Pending")');
+    const runButton = page.locator('button:has-text("Managed by Wrangler")');
     const validateButton = page.locator('button:has-text("Validate Schema")');
     
     await expect(refreshButton).toBeVisible();
@@ -242,7 +216,7 @@ test.describe.skip('Admin Migrations Page', () => {
     
     // Verify buttons have descriptive text content
     await expect(refreshButton).toContainText('Refresh Status');
-    await expect(runButton).toContainText('Run Pending');
+    await expect(runButton).toContainText('Managed by Wrangler');
     await expect(validateButton).toContainText('Validate Schema');
   });
 
@@ -323,24 +297,17 @@ test.describe('Migrations API Endpoints', () => {
     expect(data).toHaveProperty('data');
   });
 
-  test('should require admin role for run migrations endpoint', async ({ page }) => {
-    // This test verifies that the endpoint properly checks admin permissions
+  test('should explain that migration execution is managed by Wrangler', async ({ page }) => {
     const csrfToken = await getCsrfTokenFromPage(page);
     const response = await page.request.post('/admin/api/migrations/run', {
       headers: { ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) }
     });
-    
-    // Should either succeed (if user is admin) or return 403
-    expect([200, 403]).toContain(response.status());
+
+    expect(response.status()).toBe(409);
     
     const data = await response.json();
-    
-    if (response.status() === 403) {
-      expect(data).toHaveProperty('success', false);
-      expect(data.error).toContain('Unauthorized');
-    } else {
-      expect(data).toHaveProperty('success');
-    }
+    expect(data).toHaveProperty('success', false);
+    expect(data.message).toContain('wrangler d1 migrations apply');
   });
 
   test('should handle malformed API requests gracefully', async ({ page }) => {

@@ -142,7 +142,12 @@ function CodePanel({
   label?: string
   code?: string
 }) {
-  let child = Children.only(children)
+  // MDX can hand us more than a single child here (e.g. stray whitespace
+  // text nodes around the <code> element), which makes Children.only throw and
+  // 500s the page. Pick the first real element instead; the `code` prop is
+  // supplied on the <pre> by rehypeShiki regardless, so the copy button and
+  // highlighting still work.
+  let child = Children.toArray(children).find(isValidElement)
 
   if (isValidElement(child)) {
     const props = child.props as { tag?: string; label?: string; code?: string }

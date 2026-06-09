@@ -8,7 +8,7 @@ test.describe('Slug Generation', () => {
   })
 
   test('should auto-generate slug from title when creating new content', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -29,8 +29,8 @@ test.describe('Slug Generation', () => {
     await expect(statusDiv).toContainText('Available', { timeout: 5000 })
   })
 
-  test('should auto-generate slug for pages collection', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=pages-collection')
+  test('should auto-generate slug for blog_post collection', async ({ page }) => {
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -52,7 +52,7 @@ test.describe('Slug Generation', () => {
   })
 
   test('should handle special characters in slug generation', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -71,7 +71,7 @@ test.describe('Slug Generation', () => {
   })
 
   test('should stop auto-generating after manual edit', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -98,7 +98,7 @@ test.describe('Slug Generation', () => {
   })
 
   test('should regenerate slug when button clicked', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -130,7 +130,7 @@ test.describe('Slug Generation', () => {
 
   test('should detect duplicate slugs within same collection', async ({ page }) => {
     // First, create content with a specific slug
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -145,7 +145,7 @@ test.describe('Slug Generation', () => {
     await page.waitForTimeout(2000)
     
     // Now try to create another with same slug
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -166,12 +166,12 @@ test.describe('Slug Generation', () => {
   })
 
   test.skip('should allow same slug in different collections', async ({ page }) => {
-    // NOTE: Skipping because news-collection doesn't have a slug field in the database
-    // Only pages-collection has a slug field defined in migration 003
+    // NOTE: Skipping because blog_post doesn't have a slug field in the database
+    // Only blog_post has a slug field defined in migration 003
     // This test would need another collection with a slug field to work properly
     
-    // Create in pages collection
-    await page.goto('/admin/content/new?collection=pages-collection')
+    // Create in blog_post collection
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -184,8 +184,8 @@ test.describe('Slug Generation', () => {
     await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
     
-    // Try to use same slug in news collection
-    await page.goto('/admin/content/new?collection=news-collection')
+    // Try to use same slug in blog_post collection
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     
     // Wait for the form to load
@@ -207,7 +207,7 @@ test.describe('Slug Generation', () => {
 
   test('should not auto-change slug when editing existing content', async ({ page }) => {
     // Create content first
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -221,7 +221,7 @@ test.describe('Slug Generation', () => {
     await page.waitForTimeout(2000)
     
     // Navigate to content list and find the item
-    await page.goto('/admin/content?collection=pages-collection')
+    await page.goto('/admin/content?collection=blog_post')
     await page.waitForTimeout(1000)
     
     // Click on the content to edit it
@@ -246,7 +246,7 @@ test.describe('Slug Generation', () => {
 
   test('should allow manual regeneration in edit mode', async ({ page }) => {
     // Create content first
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -257,7 +257,7 @@ test.describe('Slug Generation', () => {
     await page.waitForTimeout(2000)
     
     // Navigate to edit
-    await page.goto('/admin/content?collection=pages-collection')
+    await page.goto('/admin/content?collection=blog_post')
     await page.waitForTimeout(1000)
     
     const contentLink = page.locator(`a:has-text("Regen Test Page")`).first()
@@ -285,7 +285,7 @@ test.describe('Slug Generation', () => {
   })
 
   test('should show checking status during duplicate validation', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -313,7 +313,7 @@ test.describe('Slug Generation', () => {
 
   test('should prevent form submission with duplicate slug', async ({ page }) => {
     // Create first content
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     
@@ -323,7 +323,7 @@ test.describe('Slug Generation', () => {
     await page.waitForTimeout(2000)
     
     // Try to create duplicate
-    await page.goto('/admin/content/new?collection=pages-collection')
+    await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
     await page.waitForSelector('input[name="title"]', { timeout: 10000 })
     

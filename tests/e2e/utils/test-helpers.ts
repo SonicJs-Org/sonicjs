@@ -74,8 +74,8 @@ export async function ensureWorkflowTablesExist(page: Page) {
       }
     });
 
-    // Only log non-404/401 errors (404/401 means endpoint doesn't exist or auth failed, which is expected in some cases)
-    if (response.status() !== 404 && response.status() !== 401) {
+    // 409 means migrations are intentionally managed by Wrangler/D1.
+    if (response.status() !== 404 && response.status() !== 401 && response.status() !== 409) {
       console.log('Migration response status:', response.status());
     }
   } catch (error) {
@@ -618,4 +618,4 @@ export async function checkAPIHealth(page: Page) {
   const health = await response.json();
   expect(health.status).toBe('running');
   return health;
-} 
+}

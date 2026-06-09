@@ -1,0 +1,220 @@
+---
+title: "Using Emdash with SonicJS: Run Parallel AI Coding Agents on Your CMS"
+description: "Learn how to pair Emdash, the open-source agentic development environment, with SonicJS. Run multiple coding agents in parallel across isolated git worktrees to build collections, plugins, and frontends faster."
+keywords:
+  - "emdash sonicjs"
+  - "parallel ai coding agents"
+  - "emdash tutorial"
+  - "git worktree coding agents"
+  - "sonicjs ai development"
+  - "claude code sonicjs"
+category: "guides"
+tags:
+  - "emdash"
+  - "ai-coding"
+  - "workflow"
+  - "git-worktrees"
+  - "productivity"
+  - "tutorial"
+publishedAt: "2026-05-29"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/using-emdash-with-sonicjs/hero.png"
+  alt: "Several AI coding agents working in parallel on isolated branches of a SonicJS project, illustrated as glowing worktrees branching from a central git repository"
+  width: 1536
+  height: 1024
+openGraph:
+  type: "article"
+  title: "Using Emdash with SonicJS: Run Parallel AI Coding Agents"
+  description: "Pair Emdash's parallel, worktree-isolated coding agents with SonicJS to build collections, plugins, and frontends at the same time."
+---
+
+# Using Emdash with SonicJS: Run Parallel AI Coding Agents on Your CMS
+
+<TLDRBox>
+**TL;DR** — Emdash is an open-source desktop app that runs multiple coding agents in parallel, each in its own isolated git worktree. Point it at your SonicJS repo and you can build a new collection, write a plugin, and update the docs site — all at the same time, with zero branch conflicts — then review the diffs and open PRs from one window.
+
+**Key Stats:**
+- Run many agents at once, each in an isolated git worktree
+- Provider-agnostic — works with Claude Code, Codex, Gemini, and 20+ other CLI agents
+- Open source (Apache 2.0), local-first — your code never touches Emdash servers
+- macOS, Windows, and Linux
+</TLDRBox>
+
+SonicJS is built for speed — edge-first, TypeScript end to end, plugin-driven. The way you *build* on it should be just as fast. [Emdash](https://www.emdash.sh/) is an open-source agentic development environment (YC W26) that lets you run several coding agents in parallel, each isolated in its own git worktree. Instead of waiting for one agent to finish a task before starting the next, you fan out work across your SonicJS project and review everything in one place.
+
+This guide walks through installing Emdash, connecting it to a SonicJS project, and using parallel agents to ship real CMS work faster.
+
+## Why Emdash + SonicJS?
+
+| Feature | Why it matters for SonicJS |
+|---------|----------------------------|
+| **Parallel agents** | Build a collection, a plugin, and a frontend route simultaneously |
+| **Git worktree isolation** | Two agents can touch the same repo without stepping on each other |
+| **Provider-agnostic** | Use Claude Code, Codex, Gemini, or whatever CLI agent you prefer |
+| **Diff review in one place** | Inspect every agent's changes, run tests, and open PRs without context switching |
+| **Local-first** | Your SonicJS code and chat transcripts stay on your machine |
+
+SonicJS work tends to break into clean, independent chunks — a new collection schema here, a plugin there, a docs update on the side. That's exactly the shape of work parallel agents are good at.
+
+## How Emdash Works
+
+When you hand a task to an agent, Emdash creates a dedicated **git worktree** — a full working tree that shares the same `.git` directory but lives in its own folder on disk. Each agent gets its own branch and its own files, so multiple agents can modify the same repository (even the same file) at the same time without conflicts.
+
+You then review each worktree's diff, run tests, and merge or open a pull request when the work looks good. All app state is stored in a local SQLite database; Emdash doesn't send your code or transcripts to any server.
+
+## Prerequisites
+
+Before you start, make sure you have:
+
+- **Git** installed locally (worktrees are a core git feature)
+- **Node.js 20+** — required by SonicJS and most agent CLIs
+- **At least one coding agent CLI** installed and authenticated (e.g. Claude Code)
+- **A SonicJS project** — local or cloned from your repo
+
+```bash
+# Check your tooling
+git --version
+node --version   # v20.0.0 or higher
+```
+
+If you don't have a SonicJS project yet, create one first:
+
+```bash
+# Scaffold a new SonicJS app
+npx create-sonicjs my-cms
+cd my-cms
+npm run dev      # http://localhost:8787
+```
+
+## Step 1: Install Emdash
+
+Emdash ships as a desktop app for macOS, Windows, and Linux.
+
+**macOS (Homebrew):**
+
+```bash
+brew install --cask emdash
+```
+
+**macOS (direct):** download the ARM64 or Intel x64 DMG from the [releases page](https://www.emdash.sh/).
+
+**Windows:** install via the MSI installer (x64) or run the portable executable.
+
+**Linux:** use the AppImage (x64) or the Debian package (`.deb`).
+
+Open Emdash once it's installed. The first launch will ask which coding agents you want to use.
+
+## Step 2: Install and Authenticate a Coding Agent
+
+Emdash is provider-agnostic — it orchestrates agent CLIs you already have installed rather than shipping its own model. Install at least one. For example, Claude Code:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude   # follow the prompt to authenticate
+```
+
+Other supported options include Codex, Gemini, OpenCode, Cursor, Cline, and around two dozen more. Install whichever you prefer the same way you normally would, then make sure it runs from your terminal — Emdash invokes the CLI on your behalf.
+
+<TLDRBox>
+**Tip:** Authenticate your agent CLI from a normal terminal *before* using it in Emdash. Emdash launches the CLI in each worktree, so it relies on your existing login/session.
+</TLDRBox>
+
+## Step 3: Add Your SonicJS Project
+
+In Emdash, add a project by pointing it at your local SonicJS repository (the folder containing your `package.json` and `wrangler` config). Emdash reads the git repo so it can spin up worktrees from your current branch.
+
+Make sure your working tree is clean and committed first — agents branch from your current state:
+
+```bash
+cd my-cms
+git status          # should be clean
+git checkout main
+git pull
+```
+
+## Step 4: Fan Out Parallel Tasks
+
+This is where Emdash earns its keep. Instead of one long agent session, create several agents, each with a focused SonicJS task. Each one gets its own worktree and branch.
+
+Here are three independent tasks that map cleanly onto a SonicJS project — perfect to run at once:
+
+**Agent A — Add a `products` collection**
+
+```text
+Add a new "products" collection to this SonicJS project.
+Fields: title (text, required), slug (text, unique), price (number),
+description (rich text), and featured (boolean). Register it in the
+collections config and generate the migration. Follow the existing
+collection patterns in this repo.
+```
+
+**Agent B — Build a caching plugin**
+
+```text
+Create a SonicJS plugin that adds Cloudflare KV response caching to
+public GET API routes. Include a settings page for TTL, follow the
+existing plugin architecture, and write it in TypeScript.
+```
+
+**Agent C — Update the docs site**
+
+```text
+Add a docs page describing the new products collection and its API
+endpoints. Match the structure and tone of the existing docs pages.
+```
+
+Because each agent runs in its own worktree, Agent A's new collection files never collide with Agent B's plugin, even though both modify shared config. You can pull task descriptions straight from Linear, GitHub, Jira, or Asana issues if you track work there.
+
+## Step 5: Review Diffs, Test, and Open PRs
+
+As agents finish, Emdash shows each worktree's diff in one view. For each one:
+
+1. **Read the diff** — confirm the agent followed your SonicJS conventions (collection registration, plugin hooks, types).
+2. **Run it in the worktree** — agents work in real folders, so you can run the app and tests against the change:
+
+   ```bash
+   npm run dev      # verify the feature in the admin UI
+   npm test         # run your test suite
+   ```
+
+3. **Open a pull request** — when a change looks good, create a PR (and watch CI) directly from Emdash, or merge the branch.
+
+Because the worktrees are independent branches, you can merge Agent A's collection now and keep iterating on Agent B's plugin without blocking either.
+
+## A Practical SonicJS Workflow
+
+Here's a workflow that scales nicely as your SonicJS project grows:
+
+1. **Decompose the milestone** into independent, branch-sized tasks (one collection, one plugin, one route, one docs update).
+2. **Spin up an agent per task** in Emdash so they run in parallel.
+3. **Review and merge fast-movers first** — small, well-scoped changes (a new field, a docs page) usually land first.
+4. **Iterate on the bigger ones** in their worktrees — feed follow-up instructions to the agent that owns the plugin.
+5. **Keep `main` green** — run `npm test` and `npm run dev` against each worktree before merging.
+
+This keeps SonicJS's plugin- and collection-oriented architecture working *for* you: clean module boundaries make it easy to hand each agent a self-contained slice of work.
+
+## Tips for Better Results
+
+- **Be specific about conventions.** Tell the agent to "follow the existing collection/plugin patterns in this repo." SonicJS has clear structures — point the agent at them.
+- **One concern per agent.** Smaller, focused tasks produce cleaner diffs and fewer merge surprises.
+- **Commit before fanning out.** Worktrees branch from your current state, so start from a clean, up-to-date `main`.
+- **Verify in the admin UI.** For collection and plugin changes, run `npm run dev` and click through the SonicJS admin before merging.
+- **Mix providers.** Try different agents on different tasks — Emdash makes it trivial to compare results.
+
+## Conclusion
+
+Emdash turns SonicJS development into a parallel pipeline. Its worktree isolation lets multiple coding agents build collections, plugins, and frontend routes side by side without conflicts, and its single-pane diff review keeps you in control of what actually lands. Pair the open-source, local-first agentic environment with SonicJS's edge-first, modular architecture and you have a fast, conflict-free way to ship CMS features.
+
+Install [Emdash](https://www.emdash.sh/), point it at your SonicJS repo, and try fanning out your next three tasks at once.
+
+## Further Reading
+
+- [Creating Custom Collections in SonicJS](/blog/creating-custom-collections-in-sonicjs)
+- [SonicJS Plugins: How to Extend Your CMS](/blog/sonicjs-plugins-extending-your-cms)
+- [Getting Started with SonicJS](/blog/getting-started-with-sonicjs)
+- [Emdash documentation](https://docs.emdash.sh/)

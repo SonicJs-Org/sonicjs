@@ -448,7 +448,7 @@ adminContentRoutes.get('/', async (c) => {
 
     // Also include active document types in the models dropdown (prefixed with doc: to distinguish)
     const docTypeRegistry = new DocumentTypeRegistry(db)
-    const docTypes = await docTypeRegistry.findAll()
+    const docTypes = (await docTypeRegistry.findAll()).filter(dt => !dt.settings?.internal)
 
     // Merge database and code collections (db takes precedence)
     const allCollections = [

@@ -20,6 +20,8 @@ export interface DocumentTypeSettings {
   baseGrants?: Record<string, Permission[]>
   maxVersionsPerRoot?: number
   pii?: boolean
+  /** Hide this type from the admin content list and all-view (e.g. internal system types like 'plugin'). */
+  internal?: boolean
 }
 
 export interface PluginDocumentType {

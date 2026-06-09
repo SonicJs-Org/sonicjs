@@ -43,6 +43,7 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     settings: {
       baseGrants: { admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'] },
       maxVersionsPerRoot: 1,
+      internal: true,
     },
     queryableFields: [
       { name: 'status',   kind: 'scalar', type: 'text',    column: 'q_plugin_status' },

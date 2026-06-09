@@ -66,10 +66,11 @@ export class PluginBootstrapService {
 
   /**
    * Core plugins derived from the auto-generated plugin registry.
-   * Only plugins listed in BOOTSTRAP_PLUGIN_IDS are included.
+   * Only plugins listed in BOOTSTRAP_PLUGIN_IDS AND marked is_core=true are auto-installed.
+   * Non-core plugins are available in the registry but not bootstrapped.
    */
   private readonly CORE_PLUGINS: CorePlugin[] = BOOTSTRAP_PLUGIN_IDS
-    .filter((id) => PLUGIN_REGISTRY[id] !== undefined)
+    .filter((id) => PLUGIN_REGISTRY[id] !== undefined && PLUGIN_REGISTRY[id]!.is_core === true)
     .map((id) => registryToCorePlugin(PLUGIN_REGISTRY[id]!));
 
   /**

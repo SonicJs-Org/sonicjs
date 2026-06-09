@@ -35,8 +35,6 @@ export { default as adminCodeExamplesRoutes } from './admin-code-examples'
 export { adminDashboardRoutes } from './admin-dashboard'
 export { adminCollectionsRoutes } from './admin-collections'
 export { adminSettingsRoutes } from './admin-settings'
-export { adminFormsRoutes } from './admin-forms'
-export { default as publicFormsRoutes } from './public-forms'
 export { adminApiReferenceRoutes } from './admin-api-reference'
 
 export const ROUTES_INFO = {
@@ -61,8 +59,6 @@ export const ROUTES_INFO = {
     'adminDashboardRoutes',
     'adminCollectionsRoutes',
     'adminSettingsRoutes',
-    'adminFormsRoutes',
-    'publicFormsRoutes',
     'adminApiReferenceRoutes'
   ],
   status: 'Core package routes ready',

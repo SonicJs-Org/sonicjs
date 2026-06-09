@@ -74,6 +74,12 @@
   },
   "iconEmoji": "⚡",
   "is_core": true,
+  "adminMenu": {
+    "label": "Cache",
+    "icon": "server",
+    "path": "/admin/cache",
+    "order": 60
+  },
   "defaultSettings": {
     "enableMemoryCache": true,
     "enableKVCache": true,

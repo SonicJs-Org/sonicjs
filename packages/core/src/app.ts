@@ -22,8 +22,6 @@ import {
   adminDashboardRoutes,
   adminCollectionsRoutes,
   adminSettingsRoutes,
-  adminFormsRoutes,
-  publicFormsRoutes,
   adminApiReferenceRoutes,
   apiDocumentsRoutes,
   adminDocumentsRoutes,
@@ -47,6 +45,7 @@ import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugi
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { testimonialsPlugin } from './plugins/core-plugins/testimonials'
+import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole } from './middleware/auth'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
@@ -416,13 +415,18 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       app.route(route.path, route.handler as any)
     }
   }
+
+  // Plugin routes - Forms (admin builder, public rendering, API submission)
+  if (formsPlugin.routes && formsPlugin.routes.length > 0) {
+    for (const route of formsPlugin.routes) {
+      app.route(route.path, route.handler as any)
+    }
+  }
+
   app.route('/admin/api', adminApiRoutes)
   app.route('/admin/dashboard', adminDashboardRoutes)
   app.route('/admin/collections', adminCollectionsRoutes)
-  app.route('/admin/forms', adminFormsRoutes)
   app.route('/admin/settings', adminSettingsRoutes)
-  app.route('/forms', publicFormsRoutes)
-  app.route('/api/forms', publicFormsRoutes) // API endpoint for form submissions
   app.route('/admin/api-reference', adminApiReferenceRoutes)
   app.route('/admin/database-tools', createDatabaseToolsAdminRoutes())
   app.route('/admin/seed-data', createSeedDataAdminRoutes())

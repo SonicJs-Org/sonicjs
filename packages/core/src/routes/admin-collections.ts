@@ -114,7 +114,7 @@ adminCollectionsRoutes.get('/', async (c) => {
     let results
     if (search) {
       stmt = db.prepare(`
-        SELECT id, name, display_name, description, created_at, schema
+        SELECT id, name, display_name, description, created_at, schema, source, queryable_fields
         FROM document_types
         WHERE is_active = 1
         AND (name LIKE ? OR display_name LIKE ? OR description LIKE ?)
@@ -124,7 +124,7 @@ adminCollectionsRoutes.get('/', async (c) => {
       const queryResults = await stmt.bind(searchParam, searchParam, searchParam).all()
       results = queryResults.results
     } else {
-      stmt = db.prepare("SELECT id, name, display_name, description, created_at, schema FROM document_types WHERE is_active = 1 ORDER BY created_at DESC")
+      stmt = db.prepare("SELECT id, name, display_name, description, created_at, schema, source, queryable_fields FROM document_types WHERE is_active = 1 ORDER BY created_at DESC")
       const queryResults = await stmt.all()
       results = queryResults.results
     }
@@ -167,6 +167,14 @@ adminCollectionsRoutes.get('/', async (c) => {
           }
         }
 
+        // Also count queryable fields for document model types
+        if (fieldCount === 0 && row.queryable_fields) {
+          try {
+            const qf = typeof row.queryable_fields === 'string' ? JSON.parse(row.queryable_fields) : row.queryable_fields
+            if (Array.isArray(qf)) fieldCount = qf.length
+          } catch (e) {}
+        }
+
         return {
           id: String(row.id || ''),
           name: String(row.name || ''),
@@ -176,7 +184,7 @@ adminCollectionsRoutes.get('/', async (c) => {
           formattedDate: row.created_at ? new Date(Number(row.created_at)).toLocaleDateString() : 'Unknown',
           field_count: fieldCount,
           managed: false,
-          source_type: 'user'
+          source_type: (row.source === 'code' || row.source === 'system' || row.source === 'plugin') ? 'code' : 'user'
         }
       })
 

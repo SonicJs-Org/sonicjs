@@ -1,7 +1,4 @@
 import type { D1Database } from '@cloudflare/workers-types'
-// Note: PLUGIN_REGISTRY and CORE_PLUGIN_IDS are project-specific
-// They should be passed as parameters to the service in the consuming application
-// import { PLUGIN_REGISTRY, CORE_PLUGIN_IDS } from '../plugins/plugin-registry'
 
 export interface PluginData {
   id: string
@@ -33,109 +30,93 @@ export interface PluginStats {
   uninstalled: number
 }
 
+const TENANT = 'default'
+const TYPE_ID = 'plugin'
+
 export class PluginService {
   constructor(private db: D1Database) {}
 
   async getAllPlugins(): Promise<PluginData[]> {
-    // Ensure all plugins from registry exist in database (auto-install if missing)
-    await this.ensureAllPluginsExist()
-
-    const stmt = this.db.prepare(`
-      SELECT * FROM plugins
-      ORDER BY is_core DESC, display_name ASC
-    `)
-
-    const { results } = await stmt.all()
-    return (results || []).map(this.mapPluginFromDb)
-  }
-
-  /**
-   * Ensure all plugins from the registry exist in the database
-   * Auto-installs any newly detected plugins with inactive status
-   *
-   * Note: This method should be overridden or configured with a plugin registry
-   * in the consuming application
-   */
-  private async ensureAllPluginsExist(): Promise<void> {
-    // This functionality requires a project-specific PLUGIN_REGISTRY
-    // In the consuming application, you should pass the registry to this service
-    console.log('[PluginService] ensureAllPluginsExist - requires PLUGIN_REGISTRY configuration')
+    const { results } = await this.db.prepare(`
+      SELECT * FROM documents
+      WHERE type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+      ORDER BY json_extract(data, '$.isCore') DESC, title ASC
+    `).bind(TYPE_ID, TENANT).all()
+    return (results || []).map(mapDocumentToPlugin)
   }
 
   async getPlugin(pluginId: string): Promise<PluginData | null> {
-    const stmt = this.db.prepare('SELECT * FROM plugins WHERE id = ?')
-    const plugin = await stmt.bind(pluginId).first()
-    
-    if (!plugin) return null
-    return this.mapPluginFromDb(plugin)
+    const row = await this.db.prepare(`
+      SELECT * FROM documents
+      WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+    `).bind(pluginId, TYPE_ID, TENANT).first()
+    if (!row) return null
+    return mapDocumentToPlugin(row)
   }
 
   async getPluginByName(name: string): Promise<PluginData | null> {
-    const stmt = this.db.prepare('SELECT * FROM plugins WHERE name = ?')
-    const plugin = await stmt.bind(name).first()
-    
-    if (!plugin) return null
-    return this.mapPluginFromDb(plugin)
+    return this.getPlugin(name)
   }
 
   async getPluginStats(): Promise<PluginStats> {
-    const stmt = this.db.prepare(`
-      SELECT 
+    const stats = await this.db.prepare(`
+      SELECT
         COUNT(*) as total,
-        COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
-        COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive,
-        COUNT(CASE WHEN status = 'error' THEN 1 END) as errors
-      FROM plugins
-    `)
-    
-    const stats = await stmt.first() as any
+        COUNT(CASE WHEN q_plugin_status = 'active' THEN 1 END) as active,
+        COUNT(CASE WHEN q_plugin_status = 'inactive' THEN 1 END) as inactive,
+        COUNT(CASE WHEN q_plugin_status = 'error' THEN 1 END) as errors
+      FROM documents
+      WHERE type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+    `).bind(TYPE_ID, TENANT).first() as any
     return {
-      total: stats.total || 0,
-      active: stats.active || 0,
-      inactive: stats.inactive || 0,
-      errors: stats.errors || 0,
-      uninstalled: 0
+      total: stats?.total || 0,
+      active: stats?.active || 0,
+      inactive: stats?.inactive || 0,
+      errors: stats?.errors || 0,
+      uninstalled: 0,
     }
   }
 
   async installPlugin(pluginData: Partial<PluginData>): Promise<PluginData> {
-    const id = pluginData.id || `plugin-${Date.now()}`
+    const slug = pluginData.id || pluginData.name || `plugin-${Date.now()}`
+    const docId = crypto.randomUUID()
     const now = Math.floor(Date.now() / 1000)
-    
-    const stmt = this.db.prepare(`
-      INSERT INTO plugins (
-        id, name, display_name, description, version, author, category, icon,
-        status, is_core, settings, permissions, dependencies, download_count, 
-        rating, installed_at, last_updated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    
-    await stmt.bind(
-      id,
-      pluginData.name || id,
-      pluginData.display_name || 'Unnamed Plugin',
-      pluginData.description || '',
-      pluginData.version || '1.0.0',
-      pluginData.author || 'Unknown',
-      pluginData.category || 'utilities',
-      pluginData.icon || '🔌',
-      'inactive',
-      pluginData.is_core || false,
-      JSON.stringify(pluginData.settings || {}),
-      JSON.stringify(pluginData.permissions || []),
-      JSON.stringify(pluginData.dependencies || []),
-      pluginData.download_count || 0,
-      pluginData.rating || 0,
-      now,
-      now
+    const data = JSON.stringify({
+      name: slug,
+      displayName: pluginData.display_name || 'Unnamed Plugin',
+      description: pluginData.description || '',
+      version: pluginData.version || '1.0.0',
+      author: pluginData.author || 'Unknown',
+      category: pluginData.category || 'utilities',
+      icon: pluginData.icon || '🔌',
+      status: 'inactive',
+      isCore: pluginData.is_core || false,
+      settings: pluginData.settings || {},
+      permissions: pluginData.permissions || [],
+      dependencies: pluginData.dependencies || [],
+      downloadCount: pluginData.download_count || 0,
+      rating: pluginData.rating || 0,
+    })
+    // R5: 17 columns / 9 ? / 8 literals — verified
+    await this.db.prepare(`
+      INSERT INTO documents (
+        id, root_id, type_id, version_number, is_current_draft, is_published, status,
+        parent_root_id, slug, title, tenant_id, locale, translation_group_id,
+        data, metadata, created_at, updated_at
+      ) VALUES (
+        ?, ?, ?, 1, 1, 1, 'published',
+        '', ?, ?, ?, 'default', '',
+        ?, '{}', ?, ?
+      )
+    `).bind(
+      docId, docId, TYPE_ID,
+      slug, pluginData.display_name || 'Unnamed Plugin', TENANT,
+      data, now, now
     ).run()
-    
-    // Log the installation
-    await this.logActivity(id, 'installed', null, { version: pluginData.version })
-    
-    const installed = await this.getPlugin(id)
+
+    await this.logActivity(slug, 'installed', null, { version: pluginData.version })
+    const installed = await this.getPlugin(slug)
     if (!installed) throw new Error('Failed to install plugin')
-    
     return installed
   }
 
@@ -143,153 +124,131 @@ export class PluginService {
     const plugin = await this.getPlugin(pluginId)
     if (!plugin) throw new Error('Plugin not found')
     if (plugin.is_core) throw new Error('Cannot uninstall core plugins')
-    
-    // First deactivate if active
-    if (plugin.status === 'active') {
-      await this.deactivatePlugin(pluginId)
-    }
-    
-    // Delete the plugin
-    const stmt = this.db.prepare('DELETE FROM plugins WHERE id = ?')
-    await stmt.bind(pluginId).run()
-    
-    // Log the uninstallation
+    if (plugin.status === 'active') await this.deactivatePlugin(pluginId)
+    const now = Math.floor(Date.now() / 1000)
+    await this.db.prepare(`
+      UPDATE documents
+      SET deleted_at = ?, updated_at = ?, is_current_draft = 0, is_published = 0
+      WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1
+    `).bind(now, now, pluginId, TYPE_ID, TENANT).run()
     await this.logActivity(pluginId, 'uninstalled', null, { name: plugin.name })
   }
 
   async activatePlugin(pluginId: string): Promise<void> {
     const plugin = await this.getPlugin(pluginId)
     if (!plugin) throw new Error('Plugin not found')
-    
-    // Check dependencies
     if (plugin.dependencies && plugin.dependencies.length > 0) {
       await this.checkDependencies(plugin.dependencies)
     }
-    
     const now = Math.floor(Date.now() / 1000)
-    const stmt = this.db.prepare(`
-      UPDATE plugins 
-      SET status = 'active', activated_at = ?, error_message = NULL 
-      WHERE id = ?
-    `)
-    
-    await stmt.bind(now, pluginId).run()
-    
-    // Log the activation
+    await this.db.prepare(`
+      UPDATE documents
+      SET data = json_set(data, '$.status', 'active', '$.activatedAt', ?, '$.errorMessage', null),
+          updated_at = ?
+      WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+    `).bind(now, now, pluginId, TYPE_ID, TENANT).run()
     await this.logActivity(pluginId, 'activated', null)
   }
 
   async deactivatePlugin(pluginId: string): Promise<void> {
     const plugin = await this.getPlugin(pluginId)
     if (!plugin) throw new Error('Plugin not found')
-    
-    // Check if other plugins depend on this one
     await this.checkDependents(plugin.name)
-    
-    const stmt = this.db.prepare(`
-      UPDATE plugins 
-      SET status = 'inactive', activated_at = NULL 
-      WHERE id = ?
-    `)
-    
-    await stmt.bind(pluginId).run()
-    
-    // Log the deactivation
+    const now = Math.floor(Date.now() / 1000)
+    await this.db.prepare(`
+      UPDATE documents
+      SET data = json_set(data, '$.status', 'inactive', '$.activatedAt', null),
+          updated_at = ?
+      WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+    `).bind(now, pluginId, TYPE_ID, TENANT).run()
     await this.logActivity(pluginId, 'deactivated', null)
   }
 
   async updatePluginSettings(pluginId: string, settings: any): Promise<void> {
     const plugin = await this.getPlugin(pluginId)
     if (!plugin) throw new Error('Plugin not found')
-    
-    const stmt = this.db.prepare(`
-      UPDATE plugins 
-      SET settings = ?, updated_at = unixepoch() 
-      WHERE id = ?
-    `)
-    
-    await stmt.bind(JSON.stringify(settings), pluginId).run()
-    
-    // Log the settings update
+    const now = Math.floor(Date.now() / 1000)
+    await this.db.prepare(`
+      UPDATE documents
+      SET data = json_set(data, '$.settings', json(?)), updated_at = ?
+      WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+    `).bind(JSON.stringify(settings), now, pluginId, TYPE_ID, TENANT).run()
     await this.logActivity(pluginId, 'settings_updated', null)
   }
 
+  async updatePluginVersion(pluginId: string, patch: { version: string; description: string; permissions: string[]; settings: any }): Promise<void> {
+    const now = Math.floor(Date.now() / 1000)
+    await this.db.prepare(`
+      UPDATE documents
+      SET data = json_set(data,
+            '$.version', ?,
+            '$.description', ?,
+            '$.permissions', json(?),
+            '$.settings', json(?)
+          ),
+          updated_at = ?
+      WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+    `).bind(
+      patch.version, patch.description,
+      JSON.stringify(patch.permissions), JSON.stringify(patch.settings || {}),
+      now, pluginId, TYPE_ID, TENANT
+    ).run()
+  }
+
   async setPluginError(pluginId: string, error: string): Promise<void> {
-    const stmt = this.db.prepare(`
-      UPDATE plugins 
-      SET status = 'error', error_message = ? 
-      WHERE id = ?
-    `)
-    
-    await stmt.bind(error, pluginId).run()
-    
-    // Log the error
+    const now = Math.floor(Date.now() / 1000)
+    await this.db.prepare(`
+      UPDATE documents
+      SET data = json_set(data, '$.status', 'error', '$.errorMessage', ?),
+          updated_at = ?
+      WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+    `).bind(error, now, pluginId, TYPE_ID, TENANT).run()
     await this.logActivity(pluginId, 'error', null, { error })
   }
 
   async getPluginActivity(pluginId: string, limit: number = 10): Promise<any[]> {
-    const stmt = this.db.prepare(`
-      SELECT * FROM plugin_activity_log 
-      WHERE plugin_id = ? 
-      ORDER BY timestamp DESC 
+    const { results } = await this.db.prepare(`
+      SELECT * FROM plugin_activity_log
+      WHERE plugin_id = ?
+      ORDER BY timestamp DESC
       LIMIT ?
-    `)
-    
-    const { results } = await stmt.bind(pluginId, limit).all()
+    `).bind(pluginId, limit).all()
     return (results || []).map((row: any) => ({
       id: row.id,
       action: row.action,
       userId: row.user_id,
       details: row.details ? JSON.parse(row.details) : null,
-      timestamp: row.timestamp
+      timestamp: row.timestamp,
     }))
   }
 
   async registerHook(pluginId: string, hookName: string, handlerName: string, priority: number = 10): Promise<void> {
     const id = `hook-${Date.now()}`
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO plugin_hooks (id, plugin_id, hook_name, handler_name, priority)
       VALUES (?, ?, ?, ?, ?)
-    `)
-    
-    await stmt.bind(id, pluginId, hookName, handlerName, priority).run()
+    `).bind(id, pluginId, hookName, handlerName, priority).run()
   }
 
   async registerRoute(pluginId: string, path: string, method: string, handlerName: string, middleware?: any[]): Promise<void> {
     const id = `route-${Date.now()}`
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO plugin_routes (id, plugin_id, path, method, handler_name, middleware)
       VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    
-    await stmt.bind(
-      id, 
-      pluginId, 
-      path, 
-      method, 
-      handlerName, 
-      JSON.stringify(middleware || [])
-    ).run()
+    `).bind(id, pluginId, path, method, handlerName, JSON.stringify(middleware || [])).run()
   }
 
   async getPluginHooks(pluginId: string): Promise<any[]> {
-    const stmt = this.db.prepare(`
-      SELECT * FROM plugin_hooks 
-      WHERE plugin_id = ? AND is_active = TRUE
-      ORDER BY priority ASC
-    `)
-    
-    const { results } = await stmt.bind(pluginId).all()
+    const { results } = await this.db.prepare(`
+      SELECT * FROM plugin_hooks WHERE plugin_id = ? AND is_active = TRUE ORDER BY priority ASC
+    `).bind(pluginId).all()
     return results || []
   }
 
   async getPluginRoutes(pluginId: string): Promise<any[]> {
-    const stmt = this.db.prepare(`
-      SELECT * FROM plugin_routes 
-      WHERE plugin_id = ? AND is_active = TRUE
-    `)
-    
-    const { results } = await stmt.bind(pluginId).all()
+    const { results } = await this.db.prepare(`
+      SELECT * FROM plugin_routes WHERE plugin_id = ? AND is_active = TRUE
+    `).bind(pluginId).all()
     return results || []
   }
 
@@ -303,56 +262,52 @@ export class PluginService {
   }
 
   private async checkDependents(pluginName: string): Promise<void> {
-    const stmt = this.db.prepare(`
-      SELECT id, display_name FROM plugins 
-      WHERE status = 'active' 
-      AND dependencies LIKE ?
-    `)
-    
-    const { results } = await stmt.bind(`%"${pluginName}"%`).all()
+    const { results } = await this.db.prepare(`
+      SELECT slug, title FROM documents
+      WHERE type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+        AND q_plugin_status = 'active'
+        AND json_extract(data, '$.dependencies') LIKE ?
+    `).bind(TYPE_ID, TENANT, `%"${pluginName}"%`).all()
     if (results && results.length > 0) {
-      const names = results.map((p: any) => p.display_name).join(', ')
+      const names = results.map((p: any) => p.title || p.slug).join(', ')
       throw new Error(`Cannot deactivate. The following plugins depend on this one: ${names}`)
     }
   }
 
   private async logActivity(pluginId: string, action: string, userId: string | null, details?: any): Promise<void> {
     const id = `activity-${Date.now()}`
-    const stmt = this.db.prepare(`
-      INSERT INTO plugin_activity_log (id, plugin_id, action, user_id, details)
-      VALUES (?, ?, ?, ?, ?)
-    `)
-    
-    await stmt.bind(
-      id,
-      pluginId,
-      action,
-      userId,
-      details ? JSON.stringify(details) : null
-    ).run()
-  }
-
-  private mapPluginFromDb(row: any): PluginData {
-    return {
-      id: row.id,
-      name: row.name,
-      display_name: row.display_name,
-      description: row.description,
-      version: row.version,
-      author: row.author,
-      category: row.category,
-      icon: row.icon,
-      status: row.status,
-      is_core: row.is_core === 1,
-      settings: row.settings ? JSON.parse(row.settings) : undefined,
-      permissions: row.permissions ? JSON.parse(row.permissions) : undefined,
-      dependencies: row.dependencies ? JSON.parse(row.dependencies) : undefined,
-      download_count: row.download_count || 0,
-      rating: row.rating || 0,
-      installed_at: row.installed_at,
-      activated_at: row.activated_at,
-      last_updated: row.last_updated,
-      error_message: row.error_message
+    try {
+      await this.db.prepare(`
+        INSERT INTO plugin_activity_log (id, plugin_id, action, user_id, details)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(id, pluginId, action, userId, details ? JSON.stringify(details) : null).run()
+    } catch {
+      // Activity logging is best-effort; don't fail the main operation
     }
+  }
+}
+
+function mapDocumentToPlugin(row: any): PluginData {
+  const data = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {})
+  return {
+    id: row.slug || data.name || row.root_id,
+    name: data.name || row.slug || '',
+    display_name: data.displayName || row.title || '',
+    description: data.description || '',
+    version: data.version || '1.0.0',
+    author: data.author || 'Unknown',
+    category: data.category || 'utilities',
+    icon: data.icon || '🔌',
+    status: data.status || 'inactive',
+    is_core: data.isCore === true || data.isCore === 1,
+    settings: data.settings,
+    permissions: data.permissions,
+    dependencies: data.dependencies,
+    download_count: data.downloadCount || 0,
+    rating: data.rating || 0,
+    installed_at: row.created_at,
+    activated_at: data.activatedAt || undefined,
+    last_updated: row.updated_at,
+    error_message: data.errorMessage || undefined,
   }
 }

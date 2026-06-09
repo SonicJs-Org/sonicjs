@@ -87,6 +87,11 @@ ALTER TABLE documents ADD COLUMN q_media_size      INTEGER AS (json_extract(data
 ALTER TABLE documents ADD COLUMN q_blog_difficulty TEXT AS (json_extract(data, '$.difficulty')) VIRTUAL;
 ALTER TABLE documents ADD COLUMN q_blog_author     TEXT AS (json_extract(data, '$.author'))     VIRTUAL;
 
+-- Plugin (managed via document model)
+ALTER TABLE documents ADD COLUMN q_plugin_status   TEXT    AS (json_extract(data, '$.status'))   VIRTUAL;
+ALTER TABLE documents ADD COLUMN q_plugin_category TEXT    AS (json_extract(data, '$.category')) VIRTUAL;
+ALTER TABLE documents ADD COLUMN q_plugin_is_core  INTEGER AS (json_extract(data, '$.isCore'))   VIRTUAL;
+
 -- Revision chain
 CREATE INDEX IF NOT EXISTS idx_documents_root ON documents(root_id, version_number DESC);
 
@@ -119,6 +124,8 @@ CREATE INDEX IF NOT EXISTS idx_q_msg_email    ON documents(tenant_id, type_id, q
 CREATE INDEX IF NOT EXISTS idx_q_blog_difficulty ON documents(tenant_id, type_id, q_blog_difficulty) WHERE is_current_draft = 1;
 CREATE INDEX IF NOT EXISTS idx_q_blog_author ON documents(tenant_id, type_id, q_blog_author) WHERE is_current_draft = 1;
 CREATE INDEX IF NOT EXISTS idx_q_blog_difficulty_pub ON documents(tenant_id, type_id, q_blog_difficulty) WHERE is_published = 1;
+CREATE INDEX IF NOT EXISTS idx_q_plugin_status   ON documents(tenant_id, type_id, q_plugin_status)   WHERE is_current_draft = 1;
+CREATE INDEX IF NOT EXISTS idx_q_plugin_category ON documents(tenant_id, type_id, q_plugin_category) WHERE is_current_draft = 1;
 
 -- Partial unique indexes: the hard concurrency guarantees for draft/publish invariants.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_one_current_draft

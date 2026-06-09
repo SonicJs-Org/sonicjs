@@ -32,6 +32,25 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     ],
   })
 
+  // Plugin registry (document-backed plugin management)
+  await registry.register({
+    id: 'plugin',
+    name: 'plugin',
+    displayName: 'Plugin',
+    description: 'System plugin record (managed by the plugin bootstrap service)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      baseGrants: { admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'] },
+      maxVersionsPerRoot: 1,
+    },
+    queryableFields: [
+      { name: 'status',   kind: 'scalar', type: 'text',    column: 'q_plugin_status' },
+      { name: 'category', kind: 'scalar', type: 'text',    column: 'q_plugin_category' },
+      { name: 'isCore',   kind: 'scalar', type: 'integer', column: 'q_plugin_is_core' },
+    ],
+  })
+
 }
 
 /**

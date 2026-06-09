@@ -121,6 +121,10 @@ export class MigrationService {
       ['q_email_provider', "q_email_provider TEXT AS (json_extract(data, '$.provider')) VIRTUAL"],
       ['q_email_flow',     "q_email_flow TEXT AS (json_extract(data, '$.flow')) VIRTUAL"],
       ['q_email_to',       "q_email_to TEXT AS (json_extract(data, '$.toEmail')) VIRTUAL"],
+      // plugin document type
+      ['q_plugin_status',   "q_plugin_status TEXT AS (json_extract(data, '$.status')) VIRTUAL"],
+      ['q_plugin_category', "q_plugin_category TEXT AS (json_extract(data, '$.category')) VIRTUAL"],
+      ['q_plugin_is_core',  "q_plugin_is_core INTEGER AS (json_extract(data, '$.isCore')) VIRTUAL"],
     ]
     // Note: pragma_table_info does NOT list VIRTUAL generated columns — use table_xinfo, which does.
     let existing = new Set<string>()

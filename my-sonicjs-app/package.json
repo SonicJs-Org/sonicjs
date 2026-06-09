@@ -20,6 +20,7 @@
     "update": "npm install @sonicjs-cms/core@latest --save",
     "update:beta": "npm install @sonicjs-cms/core@beta --save",
     "seed": "tsx scripts/seed-admin.ts",
+    "seed:documents": "tsx scripts/seed-documents.ts",
     "setup:db": "bash scripts/setup-worktree-db.sh"
   },
   "dependencies": {

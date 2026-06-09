@@ -2,6 +2,34 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAuth } from '../middleware'
 import type { Bindings, Variables } from '../app'
+import { MediaDocumentService } from '../services/media-documents'
+
+// Phase 6 (transition / dual-write): mirror an upload into a media_asset document so the document
+// model becomes the eventual source of truth. Best-effort while the library still reads the legacy
+// `media` table — a mirror failure must never fail the upload. Flipped to authoritative in a later slice.
+async function mirrorUploadToDocument(
+  db: any,
+  rec: { filename: string; original_name: string; mime_type: string; size: number; width: number | null; height: number | null; folder: string; r2_key: string },
+  userId?: string,
+) {
+  try {
+    await new MediaDocumentService(db).createFromUpload(
+      {
+        filename: rec.filename,
+        originalName: rec.original_name,
+        mimeType: rec.mime_type,
+        size: rec.size,
+        width: rec.width,
+        height: rec.height,
+        folder: rec.folder,
+        r2Key: rec.r2_key,
+      },
+      userId,
+    )
+  } catch (e) {
+    console.error('media_asset document mirror failed (non-fatal):', e)
+  }
+}
 
 // Helper function to generate short IDs (replacement for nanoid)
 function generateId(): string {
@@ -162,6 +190,9 @@ apiMediaRoutes.post('/upload', async (c) => {
     // Emit media upload event
     await emitEvent('media.upload', { id: mediaRecord.id, filename: mediaRecord.filename })
 
+    // Phase 6: mirror into a media_asset document (best-effort dual-write).
+    await mirrorUploadToDocument(c.env.DB, mediaRecord, user.userId)
+
     return c.json({
       success: true,
       file: {
@@ -316,6 +347,9 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
           mediaRecord.uploaded_by,
           mediaRecord.uploaded_at
         ).run()
+
+        // Phase 6: mirror into a media_asset document (best-effort dual-write).
+        await mirrorUploadToDocument(c.env.DB, mediaRecord, user.userId)
 
         uploadResults.push({
           id: mediaRecord.id,

@@ -306,3 +306,104 @@ describe('renderDynamicField - Media', () => {
     expect(html).toContain('hidden'); // Preview grid should be hidden
   });
 });
+
+/**
+ * Array-of-media regression test
+ *
+ * Bug: A collection field configured as `type: 'array'` with `items: { type: 'media' }`
+ * crashed the new-content form with `TypeError: url.toLowerCase is not a function`.
+ *
+ * Root cause: renderStructuredArrayField renders an empty-item template with itemValue={}.
+ * For non-object item types, renderStructuredItemFields passed that `{}` straight through
+ * to the media renderer, which then called `({}).toLowerCase()` inside isVideoUrl.
+ */
+describe('renderDynamicField - array of media items', () => {
+  it('should render an empty array of media items without throwing', () => {
+    const field: FieldDefinition = {
+      id: 'images-field',
+      field_name: 'images',
+      field_type: 'array',
+      field_label: 'Images',
+      field_options: {
+        items: {
+          type: 'media',
+          title: 'Image',
+          accept: 'image/*',
+          maxSize: '10MB',
+        },
+      },
+      field_order: 1,
+      is_required: false,
+      is_searchable: false,
+    };
+
+    // Previously threw "TypeError: url.toLowerCase is not a function" while rendering
+    // the empty-item <template> server-side.
+    const html = renderDynamicField(field, { value: [] });
+
+    expect(html).toContain('data-structured-array');
+    expect(html).toContain('data-field-name="images"');
+    expect(html).toContain('data-structured-array-template');
+  });
+
+  it('should render an array of media items with existing string values', () => {
+    const field: FieldDefinition = {
+      id: 'images-field',
+      field_name: 'images',
+      field_type: 'array',
+      field_label: 'Images',
+      field_options: {
+        items: { type: 'media', title: 'Image' },
+      },
+      field_order: 1,
+      is_required: false,
+      is_searchable: false,
+    };
+
+    const html = renderDynamicField(field, {
+      value: ['https://example.com/a.jpg', 'https://example.com/b.png'],
+    });
+
+    expect(html).toContain('data-structured-array');
+    expect(html).toContain('https://example.com/a.jpg');
+    expect(html).toContain('https://example.com/b.png');
+  });
+});
+
+describe('renderDynamicField - media field defensive handling', () => {
+  const baseField: FieldDefinition = {
+    id: 'media-field',
+    field_name: 'photo',
+    field_type: 'media',
+    field_label: 'Photo',
+    field_options: {},
+    field_order: 1,
+    is_required: false,
+    is_searchable: false,
+  };
+
+  it('should not throw when value is an empty object (single mode)', () => {
+    expect(() =>
+      renderDynamicField(baseField, { value: {} as unknown as string }),
+    ).not.toThrow();
+  });
+
+  it('should not throw when value is an empty object (multiple mode)', () => {
+    const multipleField = { ...baseField, field_options: { multiple: true } };
+    expect(() =>
+      renderDynamicField(multipleField, { value: {} as unknown as string }),
+    ).not.toThrow();
+  });
+
+  it('should ignore non-string entries in a multiple-mode array', () => {
+    const multipleField = { ...baseField, field_options: { multiple: true } };
+    const html = renderDynamicField(multipleField, {
+      value: ['https://example.com/a.jpg', {} as unknown as string, ''],
+    });
+
+    expect(html).toContain('https://example.com/a.jpg');
+    // Empty/object values shouldn't produce stray <img>/<video> tags
+    expect(html).not.toContain('<img src=""');
+    expect(html).not.toContain('<img src="[object');
+  });
+});

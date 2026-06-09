@@ -131,11 +131,12 @@ apiSystemRoutes.get('/stats', async (c) => {
   try {
     const db = c.env.DB
 
-    // Get content statistics
+    // Get content statistics (document-backed: one row per root for user collections).
     const contentStats = await db.prepare(`
       SELECT COUNT(*) as total_content
-      FROM content
-      WHERE deleted_at IS NULL
+      FROM documents
+      WHERE is_current_draft = 1 AND deleted_at IS NULL
+        AND type_id IN (SELECT name FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user'))
     `).first() as any
 
     // Get media statistics

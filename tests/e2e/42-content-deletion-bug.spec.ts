@@ -53,13 +53,13 @@ test.describe('Content Deletion UI Bug (Issue #522)', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for collection selection page and click "Pages" collection
-      const pagesLink = page.locator('a[href*="collection=pages-collection"]');
+      const pagesLink = page.locator('a[href*="collection=blog_post"]');
       if (await pagesLink.count() > 0) {
         await pagesLink.click();
         await page.waitForLoadState('networkidle');
         await page.waitForTimeout(1000);
 
-        // Fill in the form - Pages collection has: title, content, slug, meta_description, featured_image
+        // Fill in the form - blog_post collection has: title, content, slug, meta_description, featured_image
         const titleField = page.locator('input[name="title"]');
         if (await titleField.count() > 0) {
           await titleField.fill(testTitle);
@@ -88,7 +88,7 @@ test.describe('Content Deletion UI Bug (Issue #522)', () => {
         return true;
       } else {
         // Try "News" collection as fallback
-        const newsLink = page.locator('a[href*="collection=news-collection"]');
+        const newsLink = page.locator('a[href*="collection=blog_post"]');
         if (await newsLink.count() > 0) {
           await newsLink.click();
           await page.waitForLoadState('networkidle');

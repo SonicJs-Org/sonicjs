@@ -102,7 +102,7 @@ describe.skip('Collections Integration Tests', () => {
     })
 
     it('should handle collection with content lifecycle', async () => {
-      const collection = mockCollections.blog_posts
+      const collection = mockCollections.blog_post
       const content = mockContent.blog_post_1
 
       // Mock collection exists
@@ -135,7 +135,7 @@ describe.skip('Collections Integration Tests', () => {
   describe('Collection API Integration', () => {
     it('should list collections with proper pagination and filtering', async () => {
       const activeCollections = [
-        mockCollections.blog_posts,
+        mockCollections.blog_post,
         mockCollections.pages,
         mockCollections.products
       ]
@@ -163,13 +163,13 @@ describe.skip('Collections Integration Tests', () => {
 
       expect(response.collections).toHaveLength(3)
       expect(response.total).toBe(3)
-      expect(response.collections[0].name).toBe('blog_posts')
+      expect(response.collections[0].name).toBe('blog_post')
       expect(response.collections[1].name).toBe('pages')
       expect(response.collections[2].name).toBe('products')
     })
 
     it('should retrieve collection content with author information', async () => {
-      const collection = mockCollections.blog_posts
+      const collection = mockCollections.blog_post
       const content = [mockContent.blog_post_1, mockContent.blog_post_2]
       const author = mockUsers.admin
 
@@ -190,7 +190,7 @@ describe.skip('Collections Integration Tests', () => {
       })
 
       const response = {
-        collection: 'blog_posts',
+        collection: 'blog_post',
         content: content.map(c => ({
           id: c.id,
           title: c.title,
@@ -203,7 +203,7 @@ describe.skip('Collections Integration Tests', () => {
         total: content.length
       }
 
-      expect(response.collection).toBe('blog_posts')
+      expect(response.collection).toBe('blog_post')
       expect(response.content).toHaveLength(2)
       expect(response.content[0].title).toBe('Welcome to SonicJS AI')
       expect(response.content[0].author).toBe('admin')
@@ -213,7 +213,7 @@ describe.skip('Collections Integration Tests', () => {
 
   describe('Schema Validation Integration', () => {
     it('should validate collection data against schema', async () => {
-      const collection = mockCollections.blog_posts
+      const collection = mockCollections.blog_post
       const validContent = {
         title: 'Valid Blog Post',
         content: '<p>This is valid content</p>',
@@ -485,7 +485,7 @@ describe.skip('Collections Integration Tests', () => {
       // Scenario: Setting up a blog platform with multiple content types
       const blogCollections = [
         generateCollectionData({
-          name: 'blog_posts',
+          name: 'blog_post',
           displayName: 'Blog Posts',
           schema: {
             type: 'object',
@@ -542,7 +542,7 @@ describe.skip('Collections Integration Tests', () => {
       }))
 
       expect(createdCollections).toHaveLength(3)
-      expect(createdCollections[0].name).toBe('blog_posts')
+      expect(createdCollections[0].name).toBe('blog_post')
       expect(createdCollections[1].name).toBe('authors')
       expect(createdCollections[2].name).toBe('categories')
 

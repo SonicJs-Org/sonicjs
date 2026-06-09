@@ -1,5 +1,5 @@
 import { D1Database } from '@cloudflare/workers-types'
-import { bundledMigrations, getMigrationSQLById, type BundledMigration } from '../db/migrations-bundle'
+import { bundledMigrations } from '../db/migrations-bundle'
 
 export interface Migration {
   id: string
@@ -23,20 +23,11 @@ export class MigrationService {
   constructor(private db: D1Database) {}
 
   /**
-   * Initialize the migrations tracking table
+   * Cloudflare D1 owns migration bookkeeping through `d1_migrations`.
+   * SonicJS intentionally does not create its own tracking table.
    */
   async initializeMigrationsTable(): Promise<void> {
-    const createTableQuery = `
-      CREATE TABLE IF NOT EXISTS migrations (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        filename TEXT NOT NULL,
-        applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        checksum TEXT
-      )
-    `
-
-    await this.db.prepare(createTableQuery).run()
+    // Kept as a no-op for compatibility with older callers.
   }
 
   /**
@@ -44,18 +35,8 @@ export class MigrationService {
    */
   async getAvailableMigrations(): Promise<Migration[]> {
     const migrations: Migration[] = []
-
-    // Get applied migrations from database
-    const appliedResult = await this.db.prepare(
-      'SELECT id, name, filename, applied_at FROM migrations ORDER BY applied_at ASC'
-    ).all()
-
-    const appliedMigrations = new Map(
-      appliedResult.results?.map((row: any) => [row.id, row]) || []
-    )
-
-    // Auto-detect applied migrations by checking if their tables exist
-    await this.autoDetectAppliedMigrations(appliedMigrations)
+    const appliedMigrations = await this.getD1AppliedMigrations()
+    await this.ensureSchemaCompatibility()
 
     // Use bundled migrations as the source of truth
     for (const bundled of bundledMigrations) {
@@ -77,225 +58,88 @@ export class MigrationService {
   }
 
   /**
-   * Auto-detect applied migrations by checking if their tables exist
+   * Read Wrangler/D1's canonical migration table. If the table is absent, no
+   * migrations have been applied by the supported migration runner yet.
    */
-  private async autoDetectAppliedMigrations(appliedMigrations: Map<string, any>): Promise<void> {
-    // Check if basic schema tables exist (migration 001)
-    if (!appliedMigrations.has('001')) {
-      const hasBasicTables = await this.checkTablesExist(['users', 'content', 'collections', 'media'])
-      if (hasBasicTables) {
-        appliedMigrations.set('001', {
-          id: '001',
-          applied_at: new Date().toISOString(),
-          name: 'Initial Schema',
-          filename: '001_initial_schema.sql'
-        })
-        await this.markMigrationApplied('001', 'Initial Schema', '001_initial_schema.sql')
-      }
-    }
+  private async getD1AppliedMigrations(): Promise<Map<string, any>> {
+    try {
+      const appliedResult = await this.db.prepare(
+        'SELECT name, applied_at FROM d1_migrations ORDER BY applied_at ASC'
+      ).all()
 
-    // Check if FAQ tables exist (migration 002)
-    // Migration 002 creates only the 'faqs' table
-    if (!appliedMigrations.has('002')) {
-      const hasFaqTables = await this.checkTablesExist(['faqs'])
-      if (hasFaqTables) {
-        appliedMigrations.set('002', {
-          id: '002',
-          applied_at: new Date().toISOString(),
-          name: 'Faq Plugin',
-          filename: '002_faq_plugin.sql'
-        })
-        await this.markMigrationApplied('002', 'Faq Plugin', '002_faq_plugin.sql')
-      }
+      return new Map(
+        (appliedResult.results ?? [])
+          .map((row: any) => {
+            const filename = String(row.name ?? '')
+            const id = filename.match(/^(\d+)/)?.[1]
+            if (!id) return null
+            return [id, {
+              id,
+              name: filename,
+              filename,
+              applied_at: row.applied_at
+            }]
+          })
+          .filter((entry): entry is [string, any] => entry !== null)
+      )
+    } catch (error) {
+      return new Map()
     }
+  }
 
-    // Check if stage 5 enhancement tables exist (migration 003)
-    // Migration 003 creates content_fields, content_relationships, workflow_templates tables
-    if (!appliedMigrations.has('003')) {
-      const hasStage5Tables = await this.checkTablesExist(['content_fields', 'content_relationships', 'workflow_templates'])
-      if (hasStage5Tables) {
-        appliedMigrations.set('003', {
-          id: '003',
-          applied_at: new Date().toISOString(),
-          name: 'Stage 5 Enhancements',
-          filename: '003_stage5_enhancements.sql'
-        })
-        await this.markMigrationApplied('003', 'Stage 5 Enhancements', '003_stage5_enhancements.sql')
-      }
+  /**
+   * Run idempotent compatibility repairs that are safe outside migration state.
+   */
+  async ensureSchemaCompatibility(): Promise<void> {
+    if (await this.checkTablesExist(['documents'])) {
+      await this.ensureDocumentGeneratedColumns()
     }
+  }
 
-    // Check if testimonials table exists (migration 012)
-    if (!appliedMigrations.has('012')) {
-      const hasTestimonialsTables = await this.checkTablesExist(['testimonials'])
-      if (hasTestimonialsTables) {
-        appliedMigrations.set('012', {
-          id: '012',
-          applied_at: new Date().toISOString(),
-          name: 'Testimonials Plugin',
-          filename: '012_testimonials_plugin.sql'
-        })
-        await this.markMigrationApplied('012', 'Testimonials Plugin', '012_testimonials_plugin.sql')
-      }
+  /**
+   * Ensure the `documents` table exposes every queryable VIRTUAL generated column (D45). Safe to run on
+   * every bootstrap: existing columns are skipped, missing ones are added, and the unavoidable race of a
+   * concurrent add surfaces as a swallowed "duplicate column name" error.
+   */
+  private async ensureDocumentGeneratedColumns(): Promise<void> {
+    // (column name, full ADD COLUMN body) — kept in sync with migrations 043 + 044.
+    const columns: Array<[string, string]> = [
+      ['q_faq_category',    "q_faq_category TEXT AS (json_extract(data, '$.category')) VIRTUAL"],
+      ['q_faq_sort_order',  "q_faq_sort_order INTEGER AS (json_extract(data, '$.sortOrder')) VIRTUAL"],
+      ['q_tst_rating',      "q_tst_rating INTEGER AS (json_extract(data, '$.rating')) VIRTUAL"],
+      ['q_tst_company',     "q_tst_company TEXT AS (json_extract(data, '$.authorCompany')) VIRTUAL"],
+      ['q_tst_sort_order',  "q_tst_sort_order INTEGER AS (json_extract(data, '$.sortOrder')) VIRTUAL"],
+      ['q_msg_review',      "q_msg_review TEXT AS (json_extract(data, '$.reviewStatus')) VIRTUAL"],
+      ['q_msg_email',       "q_msg_email TEXT AS (json_extract(data, '$.email')) VIRTUAL"],
+      ['q_media_mime',      "q_media_mime TEXT AS (json_extract(data, '$.mimeType')) VIRTUAL"],
+      ['q_media_folder',    "q_media_folder TEXT AS (json_extract(data, '$.folder')) VIRTUAL"],
+      ['q_media_size',      "q_media_size INTEGER AS (json_extract(data, '$.size')) VIRTUAL"],
+      ['q_blog_difficulty', "q_blog_difficulty TEXT AS (json_extract(data, '$.difficulty')) VIRTUAL"],
+      ['q_blog_author',     "q_blog_author TEXT AS (json_extract(data, '$.author')) VIRTUAL"],
+      // email_log document type (plugin-system/email-reconciliation)
+      ['q_email_status',   "q_email_status TEXT AS (json_extract(data, '$.status')) VIRTUAL"],
+      ['q_email_provider', "q_email_provider TEXT AS (json_extract(data, '$.provider')) VIRTUAL"],
+      ['q_email_flow',     "q_email_flow TEXT AS (json_extract(data, '$.flow')) VIRTUAL"],
+      ['q_email_to',       "q_email_to TEXT AS (json_extract(data, '$.toEmail')) VIRTUAL"],
+    ]
+    // Note: pragma_table_info does NOT list VIRTUAL generated columns — use table_xinfo, which does.
+    let existing = new Set<string>()
+    try {
+      const info = await this.db.prepare("SELECT name FROM pragma_table_xinfo('documents')").all()
+      existing = new Set((info?.results ?? []).map((r: any) => r.name))
+    } catch {
+      // table_xinfo unavailable — fall back to attempting every ALTER (duplicate errors are swallowed).
     }
-
-    // Check if code_examples table exists (migration 013)
-    if (!appliedMigrations.has('013')) {
-      const hasCodeExamplesTables = await this.checkTablesExist(['code_examples'])
-      if (hasCodeExamplesTables) {
-        appliedMigrations.set('013', {
-          id: '013',
-          applied_at: new Date().toISOString(),
-          name: 'Code Examples Plugin',
-          filename: '013_code_examples_plugin.sql'
-        })
-        await this.markMigrationApplied('013', 'Code Examples Plugin', '013_code_examples_plugin.sql')
-      }
-    }
-
-    // Check if user management tables exist (migration 004)
-    if (!appliedMigrations.has('004')) {
-      const hasUserTables = await this.checkTablesExist(['api_tokens', 'workflow_history'])
-      if (hasUserTables) {
-        appliedMigrations.set('004', {
-          id: '004',
-          applied_at: new Date().toISOString(),
-          name: 'User Management',
-          filename: '004_stage6_user_management.sql'
-        })
-        await this.markMigrationApplied('004', 'User Management', '004_stage6_user_management.sql')
-      }
-    }
-
-    // Check if plugin system tables exist (migration 006)
-    if (!appliedMigrations.has('006')) {
-      const hasPluginTables = await this.checkTablesExist(['plugins', 'plugin_hooks'])
-      if (hasPluginTables) {
-        appliedMigrations.set('006', {
-          id: '006',
-          applied_at: new Date().toISOString(),
-          name: 'Plugin System',
-          filename: '006_plugin_system.sql'
-        })
-        await this.markMigrationApplied('006', 'Plugin System', '006_plugin_system.sql')
-      }
-    }
-
-    // Check if managed column exists (migration 011)
-    // This handles both cases:
-    // 1. Migration not marked as applied but column exists -> mark as applied
-    // 2. Migration marked as applied but column doesn't exist -> remove from applied (will re-run)
-    const hasManagedColumn = await this.checkColumnExists('collections', 'managed')
-    if (!appliedMigrations.has('011') && hasManagedColumn) {
-      appliedMigrations.set('011', {
-        id: '011',
-        applied_at: new Date().toISOString(),
-        name: 'Config Managed Collections',
-        filename: '011_config_managed_collections.sql'
-      })
-      await this.markMigrationApplied('011', 'Config Managed Collections', '011_config_managed_collections.sql')
-    } else if (appliedMigrations.has('011') && !hasManagedColumn) {
-      // Migration was marked as applied but column doesn't exist - remove it so it will re-run
-      console.log('[Migration] Migration 011 marked as applied but managed column missing - will re-run')
-      appliedMigrations.delete('011')
-      await this.removeMigrationApplied('011')
-    }
-
-    // Check if system_logs table exists (migration 009)
-    if (!appliedMigrations.has('009')) {
-      const hasLoggingTables = await this.checkTablesExist(['system_logs', 'log_config'])
-      if (hasLoggingTables) {
-        appliedMigrations.set('009', {
-          id: '009',
-          applied_at: new Date().toISOString(),
-          name: 'System Logging',
-          filename: '009_system_logging.sql'
-        })
-        await this.markMigrationApplied('009', 'System Logging', '009_system_logging.sql')
-      }
-    }
-
-    // Check if settings table exists (migration 018)
-    if (!appliedMigrations.has('018')) {
-      const hasSettingsTable = await this.checkTablesExist(['settings'])
-      if (hasSettingsTable) {
-        appliedMigrations.set('018', {
-          id: '018',
-          applied_at: new Date().toISOString(),
-          name: 'Settings Table',
-          filename: '018_settings_table.sql'
-        })
-        await this.markMigrationApplied('018', 'Settings Table', '018_settings_table.sql')
-      }
-    }
-
-    // Check if forms tables exist (migration 029)
-    // Migration 029 was reassigned between releases: older versions used it for "Ai Search Plugin",
-    // newer versions use it for "Add Forms System". This handles the case where 029 is marked as
-    // applied (from the old AI Search migration) but the forms tables don't actually exist.
-    const hasFormsTables = await this.checkTablesExist(['forms', 'form_submissions', 'form_files'])
-    if (!appliedMigrations.has('029') && hasFormsTables) {
-      appliedMigrations.set('029', {
-        id: '029',
-        applied_at: new Date().toISOString(),
-        name: 'Add Forms System',
-        filename: '029_add_forms_system.sql'
-      })
-      await this.markMigrationApplied('029', 'Add Forms System', '029_add_forms_system.sql')
-    } else if (appliedMigrations.has('029') && !hasFormsTables) {
-      // Migration was marked as applied (possibly from old "Ai Search Plugin" migration)
-      // but forms tables don't exist - remove it so the forms migration will re-run
-      console.log('[Migration] Migration 029 marked as applied but forms tables missing - will re-run')
-      appliedMigrations.delete('029')
-      await this.removeMigrationApplied('029')
-    }
-
-    // Check if user_profiles table exists (migration 032)
-    // Table may already exist from app-level migration (my-sonicjs-app/migrations/018_user_profiles.sql)
-    if (!appliedMigrations.has('032')) {
-      const hasUserProfilesTable = await this.checkTablesExist(['user_profiles'])
-      if (hasUserProfilesTable) {
-        appliedMigrations.set('032', {
-          id: '032',
-          applied_at: new Date().toISOString(),
-          name: 'User Profiles',
-          filename: '032_user_profiles.sql'
-        })
-        await this.markMigrationApplied('032', 'User Profiles', '032_user_profiles.sql')
-      }
-    }
-
-    // Ensure user_profiles.data column exists (migration 035 is now a no-op).
-    // Databases that ran the old 032 (without data column) need the column added.
-    // Migration 035 was converted to a no-op to fix #771 (duplicate column error
-    // on fresh installs), so we add the column here if it's missing.
-    const hasUserProfilesTable = await this.checkTablesExist(['user_profiles'])
-    if (hasUserProfilesTable) {
-      const hasDataColumn = await this.checkColumnExists('user_profiles', 'data')
-      if (!hasDataColumn) {
-        try {
-          await this.db.prepare(`ALTER TABLE user_profiles ADD COLUMN data TEXT DEFAULT '{}'`).run()
-          console.log('[Migration] Added missing data column to user_profiles')
-        } catch (error) {
-          // Column may have been added concurrently; ignore duplicate column errors
-          const msg = error instanceof Error ? error.message : String(error)
-          if (!msg.includes('duplicate column name')) {
-            console.error('[Migration] Failed to add data column to user_profiles:', msg)
-          }
+    for (const [name, body] of columns) {
+      if (existing.has(name)) continue
+      try {
+        await this.db.prepare(`ALTER TABLE documents ADD COLUMN ${body}`).run()
+        console.log(`[Migration] D45: added missing documents.${name}`)
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        if (!msg.includes('duplicate column name')) {
+          console.error(`[Migration] D45: failed to add documents.${name}:`, msg)
         }
-      }
-    }
-
-    // Mark migration 035 as applied since it's now a no-op (column handled above)
-    if (!appliedMigrations.has('035')) {
-      const hasDataCol = hasUserProfilesTable && await this.checkColumnExists('user_profiles', 'data')
-      if (hasDataCol) {
-        appliedMigrations.set('035', {
-          id: '035',
-          applied_at: new Date().toISOString(),
-          name: 'User Profiles Data Column',
-          filename: '035_user_profiles_data_column.sql'
-        })
-        await this.markMigrationApplied('035', 'User Profiles Data Column', '035_user_profiles_data_column.sql')
       }
     }
   }
@@ -339,8 +183,6 @@ export class MigrationService {
    * Get migration status summary
    */
   async getMigrationStatus(): Promise<MigrationStatus> {
-    await this.initializeMigrationsTable()
-
     const migrations = await this.getAvailableMigrations()
     const appliedMigrations = migrations.filter(m => m.applied)
     const pendingMigrations = migrations.filter(m => !m.applied)
@@ -359,201 +201,47 @@ export class MigrationService {
   }
 
   /**
-   * Mark a migration as applied
+   * D1 migration state is managed by Wrangler.
    */
   async markMigrationApplied(migrationId: string, name: string, filename: string): Promise<void> {
-    await this.initializeMigrationsTable()
-
-    await this.db.prepare(
-      'INSERT OR REPLACE INTO migrations (id, name, filename, applied_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
-    ).bind(migrationId, name, filename).run()
+    void migrationId
+    void name
+    void filename
   }
 
   /**
-   * Remove a migration from the applied list (so it can be re-run)
+   * D1 migration state is managed by Wrangler.
    */
   async removeMigrationApplied(migrationId: string): Promise<void> {
-    await this.initializeMigrationsTable()
-
-    await this.db.prepare(
-      'DELETE FROM migrations WHERE id = ?'
-    ).bind(migrationId).run()
+    void migrationId
   }
 
   /**
    * Check if a specific migration has been applied
    */
   async isMigrationApplied(migrationId: string): Promise<boolean> {
-    await this.initializeMigrationsTable()
-
-    const result = await this.db.prepare(
-      'SELECT COUNT(*) as count FROM migrations WHERE id = ?'
-    ).bind(migrationId).first()
-
-    return (result?.count as number) > 0
+    const appliedMigrations = await this.getD1AppliedMigrations()
+    return appliedMigrations.has(migrationId)
   }
 
   /**
    * Get the last applied migration
    */
   async getLastAppliedMigration(): Promise<Migration | null> {
-    await this.initializeMigrationsTable()
-
-    const result = await this.db.prepare(
-      'SELECT id, name, filename, applied_at FROM migrations ORDER BY applied_at DESC LIMIT 1'
-    ).first()
-
-    if (!result) return null
-
-    return {
-      id: result.id as string,
-      name: result.name as string,
-      filename: result.filename as string,
-      applied: true,
-      appliedAt: result.applied_at as string
-    }
+    const migrations = await this.getAvailableMigrations()
+    return migrations.filter(m => m.applied).at(-1) ?? null
   }
 
   /**
    * Run pending migrations
    */
   async runPendingMigrations(): Promise<{ success: boolean; message: string; applied: string[]; errors: string[] }> {
-    await this.initializeMigrationsTable()
-
-    const status = await this.getMigrationStatus()
-    const pendingMigrations = status.migrations.filter(m => !m.applied)
-
-    if (pendingMigrations.length === 0) {
-      return {
-        success: true,
-        message: 'All migrations are up to date',
-        applied: [],
-        errors: []
-      }
-    }
-
-    // Actually execute the migration files
-    const applied: string[] = []
-    const errors: string[] = []
-
-    for (const migration of pendingMigrations) {
-      try {
-        console.log(`[Migration] Applying ${migration.id}: ${migration.name}`)
-        await this.applyMigration(migration)
-        await this.markMigrationApplied(migration.id, migration.name, migration.filename)
-        applied.push(migration.id)
-        console.log(`[Migration] Successfully applied ${migration.id}`)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        console.error(`[Migration] Failed to apply migration ${migration.id}:`, errorMessage)
-        errors.push(`${migration.id}: ${errorMessage}`)
-        // Continue with other migrations instead of stopping on first failure
-        // This allows independent migrations to still be applied
-      }
-    }
-
-    if (errors.length > 0 && applied.length === 0) {
-      return {
-        success: false,
-        message: `Failed to apply migrations: ${errors.join('; ')}`,
-        applied,
-        errors
-      }
-    }
-
     return {
-      success: true,
-      message: applied.length > 0
-        ? `Applied ${applied.length} migration(s)${errors.length > 0 ? ` (${errors.length} failed)` : ''}`
-        : 'No migrations applied',
-      applied,
-      errors
+      success: false,
+      message: 'Migrations are managed by Cloudflare D1. Run `wrangler d1 migrations apply DB --local` or `wrangler d1 migrations apply DB --remote`.',
+      applied: [],
+      errors: []
     }
-  }
-
-  /**
-   * Apply a specific migration
-   */
-  private async applyMigration(migration: Migration): Promise<void> {
-    // Get the actual migration SQL from the bundle
-    const migrationSQL = getMigrationSQLById(migration.id)
-
-    if (migrationSQL === null) {
-      throw new Error(`Migration SQL not found for ${migration.id}`)
-    }
-
-    if (migrationSQL.trim() === '') {
-      console.log(`[Migration] Skipping empty migration ${migration.id}`)
-      return
-    }
-
-    // Split SQL into individual statements, handling triggers properly
-    const statements = this.splitSQLStatements(migrationSQL)
-
-    for (const statement of statements) {
-      if (statement.trim()) {
-        try {
-          await this.db.prepare(statement).run()
-        } catch (error) {
-          // Check if it's a "already exists" type error and skip it
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          if (errorMessage.includes('already exists') ||
-              errorMessage.includes('duplicate column name') ||
-              errorMessage.includes('UNIQUE constraint failed')) {
-            console.log(`[Migration] Skipping (already exists): ${statement.substring(0, 50)}...`)
-            continue
-          }
-          console.error(`[Migration] Error executing statement: ${statement.substring(0, 100)}...`)
-          throw error
-        }
-      }
-    }
-  }
-
-  /**
-   * Split SQL into statements, handling CREATE TRIGGER properly
-   */
-  private splitSQLStatements(sql: string): string[] {
-    const statements: string[] = []
-    let current = ''
-    let inTrigger = false
-
-    const lines = sql.split('\n')
-
-    for (const line of lines) {
-      const trimmed = line.trim()
-
-      // Skip comments and empty lines
-      if (trimmed.startsWith('--') || trimmed.length === 0) {
-        continue
-      }
-
-      // Check if we're entering a trigger
-      if (trimmed.toUpperCase().includes('CREATE TRIGGER')) {
-        inTrigger = true
-      }
-
-      current += line + '\n'
-
-      // Check if we're exiting a trigger
-      if (inTrigger && trimmed.toUpperCase() === 'END;') {
-        statements.push(current.trim())
-        current = ''
-        inTrigger = false
-      }
-      // Check for regular statement end (not in trigger)
-      else if (!inTrigger && trimmed.endsWith(';')) {
-        statements.push(current.trim())
-        current = ''
-      }
-    }
-
-    // Add any remaining statement
-    if (current.trim()) {
-      statements.push(current.trim())
-    }
-
-    return statements.filter(s => s.length > 0)
   }
 
   /**
@@ -564,7 +252,7 @@ export class MigrationService {
 
     // Basic table existence checks
     const requiredTables = [
-      'users', 'content', 'collections', 'media'
+      'users', 'documents', 'document_types'
     ]
 
     for (const table of requiredTables) {

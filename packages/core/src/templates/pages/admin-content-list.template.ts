@@ -159,7 +159,7 @@ export function renderContentListPage(data: ContentListPageData): string {
           </button>
           <button
             class="inline-flex items-center justify-center p-1.5 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 ring-1 ring-inset ring-purple-600/20 dark:ring-purple-500/20 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
-            onclick="window.open('/api/content/${row.id}', '_blank')"
+            onclick="window.open('/api/content/${String(row.id).includes('/') ? String(row.id).split('/').pop() : row.id}', '_blank')"
             title="View API"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

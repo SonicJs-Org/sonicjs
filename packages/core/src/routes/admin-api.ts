@@ -35,10 +35,17 @@ adminApiRoutes.get('/stats', async (c) => {
       console.error('Error fetching collections count:', error)
     }
 
-    // Get content count
+    // Get content count. In the v3 greenfield schema content is document-backed only.
     let contentCount = 0
     try {
-      const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content c JOIN collections col ON c.collection_id = col.id WHERE c.deleted_at IS NULL AND (col.source_type IS NULL OR col.source_type = 'user')")
+      const contentStmt = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM documents d
+        JOIN collections col ON col.name = d.type_id
+        WHERE d.is_current_draft = 1
+          AND d.deleted_at IS NULL
+          AND (col.source_type IS NULL OR col.source_type = 'user')
+      `)
       const contentResult = await contentStmt.first()
       contentCount = (contentResult as any)?.count || 0
     } catch (error) {
@@ -370,16 +377,21 @@ adminApiRoutes.get('/references', async (c) => {
       ])
     )
     const collectionIds = collections.map((entry) => entry.id)
+    const collectionNames = collections.map((entry) => entry.name)
 
     if (id) {
-      const idPlaceholders = collectionIds.map(() => '?').join(', ')
       const itemStmt = db.prepare(`
-        SELECT id, title, slug, collection_id
-        FROM content
-        WHERE id = ? AND collection_id IN (${idPlaceholders})
+        SELECT d.root_id AS id, d.title, d.slug, col.id AS collection_id
+        FROM documents d
+        JOIN collections col ON col.name = d.type_id
+        WHERE d.root_id = ?
+          AND d.type_id IN (${collectionNames.map(() => '?').join(', ')})
+          AND d.tenant_id = 'default'
+          AND d.is_current_draft = 1
+          AND d.deleted_at IS NULL
         LIMIT 1
       `)
-      const item = await itemStmt.bind(id, ...collectionIds).first() as any
+      const item = await itemStmt.bind(id, ...collectionNames).first() as any
 
       if (!item) {
         return c.json({ error: 'Reference not found' }, 404)
@@ -395,39 +407,49 @@ adminApiRoutes.get('/references', async (c) => {
       })
     }
 
-    let stmt
     let results
-
-    const listPlaceholders = collectionIds.map(() => '?').join(', ')
-    const statusFilterValues = ['published']
-    const statusClause = ` AND status IN (${statusFilterValues.map(() => '?').join(', ')})`
+    const typePlaceholders = collectionNames.map(() => '?').join(', ')
 
     if (search) {
       const searchParam = `%${search}%`
-      stmt = db.prepare(`
-        SELECT id, title, slug, status, updated_at, collection_id
-        FROM content
-        WHERE collection_id IN (${listPlaceholders})
-        AND (title LIKE ? OR slug LIKE ?)
-        ${statusClause}
-        ORDER BY updated_at DESC
+      const stmt = db.prepare(`
+        SELECT d.root_id AS id, d.title, d.slug,
+               CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
+               d.updated_at * 1000 AS updated_at,
+               col.id AS collection_id
+        FROM documents d
+        JOIN collections col ON col.name = d.type_id
+        WHERE d.type_id IN (${typePlaceholders})
+          AND d.tenant_id = 'default'
+          AND d.is_current_draft = 1
+          AND d.deleted_at IS NULL
+          AND d.is_published = 1
+          AND (d.title LIKE ? OR d.slug LIKE ?)
+        ORDER BY d.updated_at DESC
         LIMIT ?
       `)
       const queryResults = await stmt
-        .bind(...collectionIds, searchParam, searchParam, ...statusFilterValues, limit)
+        .bind(...collectionNames, searchParam, searchParam, limit)
         .all()
       results = queryResults.results
     } else {
-      stmt = db.prepare(`
-        SELECT id, title, slug, status, updated_at, collection_id
-        FROM content
-        WHERE collection_id IN (${listPlaceholders})
-        ${statusClause}
-        ORDER BY updated_at DESC
+      const stmt = db.prepare(`
+        SELECT d.root_id AS id, d.title, d.slug,
+               CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
+               d.updated_at * 1000 AS updated_at,
+               col.id AS collection_id
+        FROM documents d
+        JOIN collections col ON col.name = d.type_id
+        WHERE d.type_id IN (${typePlaceholders})
+          AND d.tenant_id = 'default'
+          AND d.is_current_draft = 1
+          AND d.deleted_at IS NULL
+          AND d.is_published = 1
+        ORDER BY d.updated_at DESC
         LIMIT ?
       `)
       const queryResults = await stmt
-        .bind(...collectionIds, ...statusFilterValues, limit)
+        .bind(...collectionNames, limit)
         .all()
       results = queryResults.results
     }
@@ -643,9 +665,9 @@ adminApiRoutes.delete('/collections/:id', async (c) => {
       return c.json({ error: 'Collection not found' }, 404)
     }
 
-    // Check if collection has content
-    const contentStmt = db.prepare('SELECT COUNT(*) as count FROM content WHERE collection_id = ?')
-    const contentResult = await contentStmt.bind(id).first() as any
+    // Check if collection has document content.
+    const contentStmt = db.prepare("SELECT COUNT(DISTINCT root_id) as count FROM documents WHERE tenant_id = 'default' AND type_id = ?")
+    const contentResult = await contentStmt.bind(collection.name).first() as any
 
     if (contentResult && contentResult.count > 0) {
       return c.json({
@@ -698,12 +720,11 @@ adminApiRoutes.get('/migrations/status', async (c) => {
   }
 })
 
-// Run pending migrations
+// Migration execution is managed by Wrangler/D1, not by the running app.
 adminApiRoutes.post('/migrations/run', async (c) => {
   try {
     const user = c.get('user')
 
-    // Only allow admin users to run migrations
     if (!user || user.role !== 'admin') {
       return c.json({
         success: false,
@@ -711,17 +732,12 @@ adminApiRoutes.post('/migrations/run', async (c) => {
       }, 403)
     }
 
-    const { MigrationService } = await import('../services/migrations')
-    const db = c.env.DB
-    const migrationService = new MigrationService(db)
-    const result = await migrationService.runPendingMigrations()
-
     return c.json({
-      success: result.success,
-      message: result.message,
-      applied: result.applied,
-      errors: result.errors
-    })
+      success: false,
+      message: 'Migrations are managed by Cloudflare D1. Run `wrangler d1 migrations apply DB --local` or `wrangler d1 migrations apply DB --remote`.',
+      applied: [],
+      errors: []
+    }, 409)
   } catch (error) {
     console.error('Error running migrations:', error)
     const errorMessage = error instanceof Error ? error.message : String(error)

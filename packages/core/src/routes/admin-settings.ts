@@ -255,12 +255,11 @@ adminSettingsRoutes.get('/api/migrations/status', async (c) => {
   }
 })
 
-// Run pending migrations
+// Migration execution is managed by Wrangler/D1, not by the running app.
 adminSettingsRoutes.post('/api/migrations/run', async (c) => {
   try {
     const user = c.get('user')
 
-    // Only allow admin users to run migrations
     if (!user || user.role !== 'admin') {
       return c.json({
         success: false,
@@ -268,15 +267,12 @@ adminSettingsRoutes.post('/api/migrations/run', async (c) => {
       }, 403)
     }
 
-    const db = c.env.DB
-    const migrationService = new MigrationService(db)
-    const result = await migrationService.runPendingMigrations()
-
     return c.json({
-      success: result.success,
-      message: result.message,
-      applied: result.applied
-    })
+      success: false,
+      message: 'Migrations are managed by Cloudflare D1. Run `wrangler d1 migrations apply DB --local` or `wrangler d1 migrations apply DB --remote`.',
+      applied: [],
+      errors: []
+    }, 409)
   } catch (error) {
     console.error('Error running migrations:', error)
     return c.json({

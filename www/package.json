@@ -1,15 +1,16 @@
 {
   "name": "www",
-  "version": "2.0.1",
+  "version": "3.0.0-beta.0",
   "description": "Official documentation website for SonicJS headless CMS",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "predev": "node scripts/generate-sections.mjs",
-    "dev": "next dev -p 3010",
+    "predev": "kill -9 $(lsof -ti:3010) 2>/dev/null || true; node scripts/generate-sections.mjs",
+    "dev": "next dev --webpack -p 3010",
     "prebuild": "node scripts/generate-sections.mjs",
     "build": "next build --webpack",
     "start": "next start -p 3010",

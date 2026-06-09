@@ -94,7 +94,7 @@ export interface CollectionSchema {
 export interface CollectionConfig {
   /**
    * Unique machine name for the collection (lowercase, underscores)
-   * e.g., 'blog_posts', 'products', 'team_members'
+   * e.g., 'blog_post', 'products', 'team_members'
    */
   name: string
 

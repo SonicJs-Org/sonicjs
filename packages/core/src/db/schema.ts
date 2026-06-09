@@ -26,8 +26,8 @@ export const collections = sqliteTable('collections', {
   schema: text('schema', { mode: 'json' }).notNull(), // JSON schema definition
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   managed: integer('managed', { mode: 'boolean' }).notNull().default(false), // Config-managed collections cannot be edited in UI
-  sourceType: text('source_type').default('user'), // 'user' (normal), 'form' (form-derived)
-  sourceId: text('source_id'), // stores the form ID for form-derived collections
+  sourceType: text('source_type').default('user'), // 'user' (DB-created), 'code' (config-defined), 'form' (form-derived)
+  sourceId: text('source_id'), // stores the source ID for derived collections
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });

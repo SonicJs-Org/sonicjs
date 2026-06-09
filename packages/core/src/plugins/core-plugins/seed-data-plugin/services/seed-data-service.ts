@@ -167,7 +167,7 @@ export class SeedDataService {
       let contentData: any
 
       // Generate content based on collection type
-      if (collection.name === 'blog_posts' || collection.name.includes('blog')) {
+      if (collection.name === 'blog_post' || collection.name.includes('blog')) {
         title = this.blogTitles[Math.floor(Math.random() * this.blogTitles.length)] || 'Untitled Blog Post'
         contentData = {
           body: this.blogContent[Math.floor(Math.random() * this.blogContent.length)] || 'Blog content here',

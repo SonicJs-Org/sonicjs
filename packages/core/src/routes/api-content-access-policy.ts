@@ -1,6 +1,6 @@
 import type { FilterCondition, FilterGroup, QueryFilter } from '../utils/query-filter'
 
-function canReadNonPublicContent(userRole?: string): boolean {
+export function canReadNonPublicContent(userRole?: string): boolean {
   return userRole === 'admin' || userRole === 'editor'
 }
 
@@ -8,7 +8,7 @@ function isStatusCondition(condition: FilterCondition): boolean {
   return condition.field === 'status'
 }
 
-function stripStatusConditions(group?: FilterGroup): FilterGroup | undefined {
+export function stripStatusConditions(group?: FilterGroup): FilterGroup | undefined {
   if (!group) {
     return undefined
   }

@@ -4,7 +4,116 @@ import { schemaDefinitions } from '../schemas'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import { QueryFilterBuilder, QueryFilter } from '../utils'
 import { isPluginActive, optionalAuth } from '../middleware'
-import { normalizePublicContentFilter } from './api-content-access-policy'
+import { canReadNonPublicContent, normalizePublicContentFilter } from './api-content-access-policy'
+import { documentSecondsToMs } from '../services/documents'
+
+// Document columns the public list is allowed to ORDER BY. The legacy `content` table exposed
+// collection_id; on documents that maps to type_id. Anything else (incl. nonexistent columns like a
+// raw `collection_id`) would make SQLite throw → HTTP 500 (D31), so unknown plain columns are dropped.
+// Dotted/JSON paths (e.g. `data.foo`) are always allowed — they compile to json_extract.
+const DOC_SORTABLE_COLUMNS = new Set([
+  'created_at', 'updated_at', 'published_at', 'scheduled_at', 'expires_at',
+  'title', 'slug', 'status', 'sort_order', 'version_number', 'type_id',
+])
+
+// D32: read the caller's requested `status` (added by parseFromQuery, or via where-JSON / filter[]) so
+// privileged callers can ask for published/draft/archived/deleted explicitly.
+function extractRequestedStatus(group?: { and?: any[]; or?: any[] }): string | undefined {
+  if (!group) return undefined
+  const find = (arr?: any[]) => arr?.find(c => c?.field === 'status' && c?.operator === 'equals')?.value
+  const v = find(group.and) ?? find(group.or)
+  return typeof v === 'string' ? v : undefined
+}
+
+// Strip the given fields from a flat (and/or) where group so they never reach the documents SQL. Used
+// for `status` (visibility is enforced below) and `collection_id` (no such column on documents — D31).
+function stripFields(group: { and?: any[]; or?: any[] } | undefined, fields: Set<string>) {
+  if (!group) return { and: [] as any[] }
+  const filterArr = (arr?: any[]) => (arr ?? []).filter(c => !fields.has(c?.field))
+  const out: any = {}
+  const and = filterArr(group.and)
+  const or = filterArr(group.or)
+  if (and.length) out.and = and
+  if (or.length) out.or = or
+  return out
+}
+
+// D31/D44: translate `collection_id` sort → `type_id` and drop sort fields that aren't real document
+// columns (a raw `collection_id` sort 500s). JSON-path sorts pass through unchanged.
+function sanitizeDocSort(sort?: QueryFilter['sort']): QueryFilter['sort'] | undefined {
+  if (!sort) return undefined
+  const out = sort
+    .map(s => ({ field: s.field === 'collection_id' ? 'type_id' : s.field, order: s.order }))
+    .filter(s => s.field.includes('.') || DOC_SORTABLE_COLUMNS.has(s.field))
+  return out.length ? out : undefined
+}
+
+// ─── Public content reads are document-backed (legacy `content` decommission, step 2) ────────────
+// Re-target the QueryFilterBuilder at the `documents` table while preserving full filter parity:
+// user data-field filters already compile to json_extract(data,'$.x') and carry over unchanged. We
+// strip `status`/`collection_id` and instead control visibility + de-dupe to ONE row per root via
+// is_published / is_current_draft (a superseded published row keeps status='published' but
+// is_published=0, so status is not a safe key). type scoping uses type_id (== collection name).
+function augmentFilterForDocuments(
+  filter: QueryFilter,
+  opts: { typeId?: string; typeIds?: string[]; role?: string },
+): QueryFilter {
+  const requestedStatus = extractRequestedStatus(filter.where)
+  // Strip `status` (visibility is controlled below) and `collection_id` (D31: not a documents column).
+  const where: any = stripFields(filter.where, new Set(['status', 'collection_id']))
+  const and = where.and ? [...where.and] : []
+
+  if (opts.typeId) and.push({ field: 'type_id', operator: 'equals', value: opts.typeId })
+  else if (opts.typeIds && opts.typeIds.length) and.push({ field: 'type_id', operator: 'in', value: opts.typeIds })
+
+  // Visibility + one-row-per-root. Anon can ONLY ever see the published revision (no fail-open),
+  // regardless of any requested status. Privileged callers (admin/editor) may request a specific
+  // status; the default (no status) is the current-draft working set (D32).
+  if (!canReadNonPublicContent(opts.role)) {
+    and.push({ field: 'deleted_at', operator: 'exists', value: false })
+    and.push({ field: 'is_published', operator: 'equals', value: 1 })
+  } else {
+    switch (requestedStatus) {
+      case 'published':
+        and.push({ field: 'deleted_at', operator: 'exists', value: false })
+        and.push({ field: 'is_published', operator: 'equals', value: 1 })
+        break
+      case 'draft':
+        and.push({ field: 'deleted_at', operator: 'exists', value: false })
+        and.push({ field: 'is_current_draft', operator: 'equals', value: 1 })
+        and.push({ field: 'is_published', operator: 'equals', value: 0 })
+        break
+      case 'archived':
+        and.push({ field: 'deleted_at', operator: 'exists', value: false })
+        and.push({ field: 'is_current_draft', operator: 'equals', value: 1 })
+        and.push({ field: 'status', operator: 'equals', value: 'archived' })
+        break
+      case 'deleted':
+        and.push({ field: 'deleted_at', operator: 'exists', value: true })
+        and.push({ field: 'is_current_draft', operator: 'equals', value: 1 })
+        break
+      default:
+        and.push({ field: 'deleted_at', operator: 'exists', value: false })
+        and.push({ field: 'is_current_draft', operator: 'equals', value: 1 })
+    }
+  }
+
+  return { ...filter, where: { ...where, and }, sort: sanitizeDocSort(filter.sort) }
+}
+
+function mapDocRowToContent(row: any, collectionId: string | null) {
+  return {
+    id: row.root_id,
+    title: row.title,
+    slug: row.slug,
+    status: row.status,
+    collectionId,
+    data: row.data ? JSON.parse(row.data) : {},
+    // D29: document timestamps are SECONDS; the legacy `content` API contract is MILLISECONDS.
+    created_at: documentSecondsToMs(row.created_at),
+    updated_at: documentSecondsToMs(row.updated_at),
+  }
+}
 import apiContentCrudRoutes from './api-content-crud'
 import type { Bindings, Variables as AppVariables } from '../app'
 
@@ -554,42 +663,52 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
     const db = c.env.DB
     const queryParams = c.req.query()
 
-    // Handle collection parameter - convert collection name to collection_id
+    const role = c.get('user')?.role
+
+    // Resolve collection scoping to document type ids (== collection name). Build a name→collectionId
+    // map so the response keeps a stable collectionId field.
+    const collIdByName = new Map<string, string>()
+    let typeId: string | undefined
+    let typeIds: string[] | undefined
     if (queryParams.collection) {
       const collectionName = queryParams.collection
-      const collectionStmt = db.prepare('SELECT id FROM collections WHERE name = ? AND is_active = 1')
-      const collectionResult = await collectionStmt.bind(collectionName).first()
-
-      if (collectionResult) {
-        // Replace 'collection' param with 'collection_id' for the filter builder
-        queryParams.collection_id = (collectionResult as any).id
-        delete queryParams.collection
-      } else {
-        // Collection not found - return empty result
+      const collectionResult = await db.prepare('SELECT id FROM collections WHERE name = ? AND is_active = 1').bind(collectionName).first() as any
+      if (!collectionResult) {
         return c.json({
           data: [],
-          meta: addTimingMeta(c, {
-            count: 0,
-            timestamp: new Date().toISOString(),
-            message: `Collection '${collectionName}' not found`
-          }, executionStart)
+          meta: addTimingMeta(c, { count: 0, timestamp: new Date().toISOString(), message: `Collection '${collectionName}' not found` }, executionStart)
         })
       }
+      typeId = collectionName
+      collIdByName.set(collectionName, collectionResult.id)
+      delete queryParams.collection
+    } else if (queryParams.collection_id) {
+      // D31: legacy `?collection_id=<id>` — resolve the collection name (== document type id) and scope
+      // to it. `collection_id` is stripped from the documents where-tree (no such column) by augment.
+      const collectionResult = await db.prepare('SELECT id, name FROM collections WHERE id = ? AND is_active = 1').bind(queryParams.collection_id).first() as any
+      if (!collectionResult) {
+        return c.json({
+          data: [],
+          meta: addTimingMeta(c, { count: 0, timestamp: new Date().toISOString(), message: `Collection '${queryParams.collection_id}' not found` }, executionStart)
+        })
+      }
+      typeId = collectionResult.name
+      collIdByName.set(collectionResult.name, collectionResult.id)
+    } else {
+      const { results: cols } = await db.prepare("SELECT id, name FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user')").all()
+      typeIds = (cols ?? []).map((r: any) => { collIdByName.set(r.name, r.id); return r.name })
     }
 
-    // Parse filter from query parameters
+    // Parse the user filter (data-field filters carry over as json_extract), then re-target to
+    // the documents table with type + visibility scoping (one row per root).
     const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
-    const normalizedFilter = normalizePublicContentFilter(filter, c.get('user')?.role)
-
-    // Set default limit if not provided
-    if (!normalizedFilter.limit) {
-      normalizedFilter.limit = 50
-    }
+    const normalizedFilter = augmentFilterForDocuments(filter, { typeId, typeIds, role })
+    if (!normalizedFilter.limit) normalizedFilter.limit = 50
     normalizedFilter.limit = Math.min(normalizedFilter.limit, 1000) // Max 1000
 
     // Build SQL query from filter
     const builder = new QueryFilterBuilder()
-    const queryResult = builder.build('content', normalizedFilter)
+    const queryResult = builder.build('documents', normalizedFilter)
 
     // Check for query building errors
     if (queryResult.errors.length > 0) {
@@ -643,24 +762,17 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
 
     const { results } = await boundStmt.all()
 
-    // Transform results to match API spec (camelCase)
-    const transformedResults = results.map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      slug: row.slug,
-      status: row.status,
-      collectionId: row.collection_id,
-      data: row.data ? JSON.parse(row.data) : {},
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    }))
+    // Transform document rows to the public content shape (id == document root id).
+    const transformedResults = results.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
 
     const responseData = {
       data: transformedResults,
       meta: addTimingMeta(c, {
         count: results.length,
         timestamp: new Date().toISOString(),
-        filter: normalizedFilter,
+        // D44: echo the caller's filter with the access policy applied (status=published forced for
+        // anonymous callers — the visible enforcement proof), NOT the internal doc-augmented where-tree.
+        filter: normalizePublicContentFilter(filter, role),
         cache: {
           hit: false,
           source: 'database'
@@ -700,27 +812,15 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
       return c.json({ error: 'Collection not found' }, 404)
     }
 
-    // Parse filter from query parameters
+    const collIdByName = new Map<string, string>()
+    collIdByName.set(collection!, (collectionResult as any).id)
+
+    // Parse the user filter, re-target to documents scoped to this collection's type + visibility.
+    // type_id == the collection name; one row per root via is_published / is_current_draft.
+    const role = c.get('user')?.role
     const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
-    const normalizedFilter = normalizePublicContentFilter(filter, c.get('user')?.role)
+    const normalizedFilter = augmentFilterForDocuments(filter, { typeId: collection, role })
 
-    // Add collection_id filter to where clause
-    if (!normalizedFilter.where) {
-      normalizedFilter.where = { and: [] }
-    }
-
-    if (!normalizedFilter.where.and) {
-      normalizedFilter.where.and = []
-    }
-
-    // Add collection filter
-    normalizedFilter.where.and.push({
-      field: 'collection_id',
-      operator: 'equals',
-      value: (collectionResult as any).id
-    })
-
-    // Set default limit if not provided
     if (!normalizedFilter.limit) {
       normalizedFilter.limit = 50
     }
@@ -728,7 +828,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
 
     // Build SQL query from filter
     const builder = new QueryFilterBuilder()
-    const queryResult = builder.build('content', normalizedFilter)
+    const queryResult = builder.build('documents', normalizedFilter)
 
     // Check for query building errors
     if (queryResult.errors.length > 0) {
@@ -783,17 +883,8 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
 
     const { results } = await boundStmt.all()
 
-    // Transform results to match API spec (camelCase)
-    const transformedResults = results.map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      slug: row.slug,
-      status: row.status,
-      collectionId: row.collection_id,
-      data: row.data ? JSON.parse(row.data) : {},
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    }))
+    // Transform document rows to the public content shape (id == document root id).
+    const transformedResults = results.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
 
     const responseData = {
       data: transformedResults,
@@ -804,7 +895,9 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
         },
         count: results.length,
         timestamp: new Date().toISOString(),
-        filter: normalizedFilter,
+        // D44: echo the caller's filter with the access policy applied (status=published forced for
+        // anonymous callers — the visible enforcement proof), NOT the internal doc-augmented where-tree.
+        filter: normalizePublicContentFilter(filter, role),
         cache: {
           hit: false,
           source: 'database'

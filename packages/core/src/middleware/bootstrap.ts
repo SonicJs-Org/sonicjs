@@ -3,6 +3,7 @@ import { syncCollections } from "../services/collection-sync";
 import { syncAllFormCollections } from "../services/form-collection-sync";
 import { MigrationService } from "../services/migrations";
 import { PluginBootstrapService } from "../services/plugin-bootstrap";
+import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes } from "../services/document-types-seed";
 import type { SonicJSConfig } from "../app";
 
 type Bindings = {
@@ -102,10 +103,11 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
     try {
       console.log("[Bootstrap] Starting system initialization...");
 
-      // 1. Run database migrations first
-      console.log("[Bootstrap] Running database migrations...");
+      // 1. Run idempotent schema compatibility repairs. Migration state and
+      // migration execution are owned by Cloudflare D1/Wrangler.
+      console.log("[Bootstrap] Checking schema compatibility...");
       const migrationService = new MigrationService(c.env.DB);
-      await migrationService.runPendingMigrations();
+      await migrationService.ensureSchemaCompatibility();
 
       // 2. Sync collection configurations
       console.log("[Bootstrap] Syncing collection configurations...");
@@ -124,7 +126,23 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
         console.error("[Bootstrap] Error syncing form collections:", error);
       }
 
-      // 3. Bootstrap core plugins (unless disableAll is set)
+      // 3. Register document types (idempotent)
+      console.log("[Bootstrap] Registering document types...");
+      try {
+        await bootstrapDocumentTypes(c.env.DB);
+      } catch (error) {
+        console.error("[Bootstrap] Error registering document types:", error);
+      }
+
+      // 3b. Make every content collection document-backed (so all new content goes to `documents`).
+      try {
+        const auto = await autoRegisterCollectionDocumentTypes(c.env.DB);
+        if (auto.length) console.log(`[Bootstrap] Document-backed collections registered: ${auto.join(", ")}`);
+      } catch (error) {
+        console.error("[Bootstrap] Error auto-registering collection document types:", error);
+      }
+
+      // 4. Bootstrap core plugins (unless disableAll is set)
       if (!config.plugins?.disableAll) {
         console.log("[Bootstrap] Bootstrapping core plugins...");
         const bootstrapService = new PluginBootstrapService(c.env.DB);

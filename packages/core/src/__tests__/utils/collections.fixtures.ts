@@ -2,9 +2,9 @@ import { vi, expect } from 'vitest'
 
 // Collection test fixtures and utilities
 export const mockCollections = {
-  blog_posts: {
+  blog_post: {
     id: 'collection-blog-posts-1',
-    name: 'blog_posts',
+    name: 'blog_post',
     displayName: 'Blog Posts',
     description: 'Blog post content collection',
     schema: {

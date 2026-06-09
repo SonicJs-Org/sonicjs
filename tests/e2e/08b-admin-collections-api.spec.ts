@@ -299,7 +299,7 @@ test.describe('Admin Collections API', () => {
       // This test would verify that collections with content cannot be deleted
       // Implementation depends on business rules
       
-      const response = await request.delete('/admin/api/collections/blog_posts', {
+      const response = await request.delete('/admin/api/collections/blog_post', {
         headers: authHeaders
       });
 

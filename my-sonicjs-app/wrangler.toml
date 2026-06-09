@@ -13,7 +13,7 @@ workers_dev = true
 # Note: database_name and database_id are automatically updated by GitHub Actions
 [[d1_databases]]
 binding = "DB"
-database_name = "sonicjs-worktree-lane711-plugin-system-define"
+database_name = "sonicjs-worktree-lane711-plugin-system-closeout"
 database_id = "9a952ef1-7394-47ef-a7ab-8fd981b83aae"
 migrations_dir = "./migrations"
 

@@ -102,6 +102,11 @@ echo ""
 echo "Seeding admin user..."
 npx tsx scripts/seed-admin.ts
 
+# Seed default welcome blog post
+echo ""
+echo "Seeding default blog content..."
+npx tsx scripts/seed-documents.ts
+
 echo ""
 echo "=========================================="
 echo "Database setup complete!"

@@ -114,7 +114,8 @@ describe('syncCollection', () => {
       description: 'A test collection',
       schema: config.schema, // Object, not string - will be stringified by the code
       is_active: 1,
-      managed: 1
+      managed: 1,
+      source_type: 'code'
     })
 
     const result = await syncCollection(mockDb as any, config)
@@ -230,7 +231,8 @@ describe('syncCollection', () => {
       description: null,
       schema: config.schema, // Object, not string
       is_active: 1,
-      managed: 1
+      managed: 1,
+      source_type: 'code'
     })
 
     const result = await syncCollection(mockDb as any, config)
@@ -281,8 +283,60 @@ describe('syncCollection', () => {
       expect.any(String), // schema
       1, // isActive defaults to true
       1, // managed
+      'code',
       expect.any(Number),
       expect.any(Number)
+    )
+  })
+
+  it('should stamp new config-managed collections as code source', async () => {
+    mockDb._mocks.first.mockResolvedValue(null)
+    mockDb._mocks.run.mockResolvedValue({ success: true })
+
+    const result = await syncCollection(mockDb as any, createTestConfig())
+
+    expect(result.status).toBe('created')
+    expect(mockDb._mocks.bind).toHaveBeenCalledWith(
+      expect.any(String),
+      'test-collection',
+      'Test Collection',
+      'A test collection',
+      expect.any(String),
+      1,
+      1,
+      'code',
+      expect.any(Number),
+      expect.any(Number)
+    )
+  })
+
+  it('should update existing config-managed collections missing code source', async () => {
+    const config = createTestConfig()
+    mockDb._mocks.first.mockResolvedValue({
+      id: 'col-test-123',
+      name: 'test-collection',
+      display_name: 'Test Collection',
+      description: 'A test collection',
+      schema: config.schema,
+      is_active: 1,
+      managed: 1,
+      source_type: 'user'
+    })
+    mockDb._mocks.run.mockResolvedValue({ success: true })
+
+    const result = await syncCollection(mockDb as any, config)
+
+    expect(result.status).toBe('updated')
+    expect(mockDb._mocks.prepare).toHaveBeenCalledWith(expect.stringContaining('source_type = ?'))
+    expect(mockDb._mocks.bind).toHaveBeenCalledWith(
+      'Test Collection',
+      'A test collection',
+      expect.any(String),
+      1,
+      1,
+      'code',
+      expect.any(Number),
+      'test-collection'
     )
   })
 
@@ -354,7 +408,8 @@ describe('syncCollections', () => {
         description: 'A test collection',
         schema: testConfig.schema, // Use same schema object
         is_active: 1,
-        managed: 1
+        managed: 1,
+        source_type: 'code'
       })
     mockDb._mocks.run.mockResolvedValue({ success: true })
 

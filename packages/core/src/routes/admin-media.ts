@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from '../middleware'
 import { renderMediaLibraryPage, MediaLibraryPageData, FolderStats, TypeStats } from '../templates/pages/admin-media-library.template'
 import { renderMediaFileDetails, MediaFileDetailsData } from '../templates/components/media-file-details.template'
 import { MediaFile, renderMediaFileCard } from '../templates/components/media-grid.template'
+import { MediaDocumentService } from '../services/media-documents'
 import type { Bindings, Variables } from '../app'
 
 // File validation schema
@@ -537,6 +538,16 @@ adminMediaRoutes.post('/upload', async (c) => {
           Math.floor(Date.now() / 1000)
         ).run()
 
+        // Phase 6: mirror into a media_asset document (best-effort dual-write).
+        try {
+          await new MediaDocumentService(c.env.DB).createFromUpload(
+            { filename, originalName: file.name, mimeType: file.type, size: file.size, width, height, folder, r2Key },
+            user!.userId,
+          )
+        } catch (e) {
+          console.error('media_asset document mirror failed (non-fatal):', e)
+        }
+
         uploadResults.push({
           id: fileId,
           filename: filename,
@@ -738,9 +749,8 @@ adminMediaRoutes.delete('/cleanup', requireRole('admin'), async (c) => {
     const allMediaStmt = db.prepare('SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL')
     const { results: allMedia } = await allMediaStmt.all<{ id: string; r2_key: string; filename: string }>()
 
-    // Find media files referenced in content
-    // Content can reference media in various JSON fields like data, hero_image, etc.
-    const contentStmt = db.prepare('SELECT data FROM content')
+    // Find media files referenced in document content.
+    const contentStmt = db.prepare("SELECT data FROM documents WHERE tenant_id = 'default' AND deleted_at IS NULL")
     const { results: contentRecords } = await contentStmt.all<{ data: unknown }>()
 
     // Extract all media URLs from content
@@ -858,6 +868,27 @@ adminMediaRoutes.delete('/:id', async (c) => {
           Permission denied
         </div>
       `)
+    }
+
+    // Reference-aware delete (Phase 6): if this file is backed by a media_asset document with strong
+    // inbound references, block the hard-delete and tell the user to remove those references first.
+    try {
+      const mediaDoc = await c.env.DB
+        .prepare("SELECT root_id FROM documents WHERE type_id = 'media_asset' AND tenant_id = 'default' AND is_current_draft = 1 AND json_extract(data, '$.r2Key') = ?")
+        .bind(fileRecord.r2_key)
+        .first() as any
+      if (mediaDoc) {
+        const impact = await new MediaDocumentService(c.env.DB).getDeleteImpact(mediaDoc.root_id)
+        if (!impact.canHardDelete) {
+          return c.html(html`
+            <div class="bg-amber-100 border border-amber-400 text-amber-800 px-4 py-3 rounded mb-4">
+              This file is still used by ${impact.strongRefs.length} item(s) and cannot be deleted. Remove those references first, or archive it instead.
+            </div>
+          `)
+        }
+      }
+    } catch (e) {
+      console.error('reference-aware delete check failed (non-fatal):', e)
     }
 
     // Delete from R2

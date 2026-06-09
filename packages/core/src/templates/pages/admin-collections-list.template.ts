@@ -10,6 +10,7 @@ export interface Collection {
   formattedDate: string
   field_count?: number
   managed?: boolean
+  source_type?: string | null
 }
 
 export interface CollectionsListPageData {
@@ -85,13 +86,22 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
         sortable: true,
         sortType: 'string',
         render: (_value: any, collection: any) => {
-          if (collection.managed) {
+          if (collection.source_type === 'code' || collection.managed) {
             return `
               <div class="flex items-center gap-1.5">
                 <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
                 </svg>
                 <span class="text-sm text-zinc-700 dark:text-zinc-300">Code</span>
+              </div>
+            `
+          } else if (collection.source_type === 'form') {
+            return `
+              <div class="flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm0 2h10a1 1 0 011 1v1H4V7a1 1 0 011-1zm-1 5v2a1 1 0 001 1h10a1 1 0 001-1v-2H4z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-sm text-zinc-700 dark:text-zinc-300">Form</span>
               </div>
             `
           } else {

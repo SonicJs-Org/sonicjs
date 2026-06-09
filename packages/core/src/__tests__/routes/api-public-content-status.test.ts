@@ -1,181 +1,76 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// @ts-nocheck
+// Public content API status-visibility policy — now document-backed (legacy content decommission).
+// Rewritten from SQL-param assertions (old content-table impl) to behavior assertions against real
+// SQLite: the policy is unchanged (anon/viewer/author see only published; admin/editor see drafts),
+// it's just enforced via documents (is_published / is_current_draft) instead of a content status filter.
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import apiRoutes from '../../routes/api'
 import { AuthManager } from '../../middleware/auth'
+import { createTestD1 } from '../utils/d1-sqlite'
+import { DocumentsService } from '../../services/documents'
 
-type MockQueryRecord = {
-  sql: string
-  params: unknown[]
+function buildApp(db: any) {
+  const app = new Hono()
+  app.use('*', async (c, next) => {
+    ;(c as any).env = { DB: db, KV: {} }
+    c.set('startTime', Date.now())
+    await next()
+  })
+  app.route('/api', apiRoutes)
+  return app
 }
 
-function createMockEnv() {
-  const queryLog: MockQueryRecord[] = []
-  const collection = {
-    id: 'pages-collection',
-    name: 'pages',
-    display_name: 'Pages',
-    schema: '{}',
-    is_active: 1
-  }
+describe('Public content API status policy (documents-backed)', () => {
+  let db: any
+  let app: any
 
-  const contentResults = [
-    {
-      id: 'published-1',
-      title: 'Published',
-      slug: 'published',
-      status: 'published',
-      collection_id: 'pages-collection',
-      data: '{}',
-      created_at: 1,
-      updated_at: 1
-    }
-  ]
-
-  const db = {
-    prepare: vi.fn((sql: string) => {
-      const statement = {
-        bind: vi.fn((...params: unknown[]) => {
-          queryLog.push({ sql, params })
-          return statement
-        }),
-        first: vi.fn(async () => {
-          if (sql.includes('SELECT id FROM plugins')) {
-            return null
-          }
-
-          if (sql.includes('SELECT * FROM collections WHERE name = ? AND is_active = 1')) {
-            return collection
-          }
-
-          if (sql.includes('SELECT id FROM collections WHERE name = ? AND is_active = 1')) {
-            return { id: collection.id }
-          }
-
-          return null
-        }),
-        all: vi.fn(async () => ({ results: contentResults }))
-      }
-
-      return statement
-    })
-  }
-
-  return {
-    env: {
-      DB: db,
-      KV: {}
-    },
-    queryLog
-  }
-}
-
-describe('Public content API status policy', () => {
-  let app: Hono
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    app = new Hono()
-    app.route('/api', apiRoutes)
+  beforeEach(async () => {
+    vi.restoreAllMocks()
+    db = createTestD1()
+    db.raw.prepare("INSERT INTO collections (id,name,display_name,schema,is_active,source_type,created_at,updated_at) VALUES ('pages-collection','pages','Pages','{}',1,NULL,1,1)").run()
+    const svc = new DocumentsService(db, { tenantId: 'default', queryableFields: [] })
+    await svc.create({ typeId: 'pages', tenantId: 'default', title: 'Published', slug: 'published', data: {}, publishOnCreate: true })
+    await svc.create({ typeId: 'pages', tenantId: 'default', title: 'Draft', slug: 'draft', data: {} })
+    app = buildApp(db)
   })
+  afterEach(() => db.close())
 
-  it('forces anonymous /api/content requests to published status', async () => {
-    const { env, queryLog } = createMockEnv()
-
-    const response = await app.fetch(new Request('https://test.com/api/content?status=draft'), env as any)
-    expect(response.status).toBe(200)
-
-    const contentQuery = queryLog.find(entry => entry.sql.startsWith('SELECT * FROM content'))
-    expect(contentQuery).toBeDefined()
-    expect(contentQuery?.params).toEqual(['published', 50])
-  })
-
-  it('forces anonymous collection content requests to published status even with raw where status filters', async () => {
-    const { env, queryLog } = createMockEnv()
-    const where = encodeURIComponent(JSON.stringify({
-      or: [
-        { field: 'status', operator: 'not_equals', value: 'published' },
-        { field: 'slug', operator: 'equals', value: 'published' }
-      ]
-    }))
-
-    const response = await app.fetch(
-      new Request(`https://test.com/api/collections/pages/content?where=${where}`),
-      env as any
-    )
-
-    expect(response.status).toBe(200)
-
-    const contentQuery = queryLog.find(entry => entry.sql.startsWith('SELECT * FROM content'))
-    expect(contentQuery).toBeDefined()
-    expect(contentQuery?.params).toEqual(['published', 'pages-collection', 'published', 50])
-  })
-
-  it('preserves explicit draft filtering for authenticated requests', async () => {
-    const { env, queryLog } = createMockEnv()
+  const authAs = (role: string) =>
     vi.spyOn(AuthManager, 'verifyToken').mockResolvedValue({
-      userId: 'user-1',
-      email: 'admin@sonicjs.com',
-      role: 'admin',
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000)
-    })
+      userId: 'u', email: 'e@f.g', role, exp: Math.floor(Date.now() / 1000) + 3600, iat: Math.floor(Date.now() / 1000),
+    } as any)
 
-    const response = await app.fetch(new Request('https://test.com/api/content?status=draft', {
-      headers: {
-        Cookie: 'auth_token=valid-token'
-      }
-    }), env as any)
+  const slugs = (body: any) => (body.data ?? []).map((d: any) => d.slug).sort()
 
-    expect(response.status).toBe(200)
+  it('forces anonymous /api/content requests to published (ignores ?status=draft)', async () => {
+    const res = await app.request('/api/content?collection=pages&status=draft')
+    expect(res.status).toBe(200)
+    expect(slugs(await res.json())).toEqual(['published'])
+  })
 
-    const contentQuery = queryLog.find(entry => entry.sql.startsWith('SELECT * FROM content'))
-    expect(contentQuery).toBeDefined()
-    expect(contentQuery?.params).toEqual(['draft', 50])
+  it('forces anonymous collection content to published even with raw where status filters', async () => {
+    const where = encodeURIComponent(JSON.stringify({ or: [{ field: 'status', operator: 'not_equals', value: 'published' }] }))
+    const res = await app.request(`/api/collections/pages/content?where=${where}`)
+    expect(res.status).toBe(200)
+    expect(slugs(await res.json())).toEqual(['published'])
+  })
+
+  it('preserves draft visibility for authenticated admin requests', async () => {
+    authAs('admin')
+    const res = await app.request('/api/content?collection=pages', { headers: { Cookie: 'auth_token=valid' } })
+    expect(slugs(await res.json())).toEqual(['draft', 'published'])
   })
 
   it('forces published filtering for authenticated viewer requests', async () => {
-    const { env, queryLog } = createMockEnv()
-    vi.spyOn(AuthManager, 'verifyToken').mockResolvedValue({
-      userId: 'user-2',
-      email: 'viewer@sonicjs.com',
-      role: 'viewer',
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000)
-    })
-
-    const response = await app.fetch(new Request('https://test.com/api/content?status=draft', {
-      headers: {
-        Cookie: 'auth_token=viewer-token'
-      }
-    }), env as any)
-
-    expect(response.status).toBe(200)
-
-    const contentQuery = queryLog.find(entry => entry.sql.startsWith('SELECT * FROM content'))
-    expect(contentQuery).toBeDefined()
-    expect(contentQuery?.params).toEqual(['published', 50])
+    authAs('viewer')
+    const res = await app.request('/api/content?collection=pages', { headers: { Cookie: 'auth_token=valid' } })
+    expect(slugs(await res.json())).toEqual(['published'])
   })
 
   it('forces published filtering for authenticated author requests', async () => {
-    const { env, queryLog } = createMockEnv()
-    vi.spyOn(AuthManager, 'verifyToken').mockResolvedValue({
-      userId: 'user-3',
-      email: 'author@sonicjs.com',
-      role: 'author',
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000)
-    })
-
-    const response = await app.fetch(new Request('https://test.com/api/content?status=archived', {
-      headers: {
-        Cookie: 'auth_token=author-token'
-      }
-    }), env as any)
-
-    expect(response.status).toBe(200)
-
-    const contentQuery = queryLog.find(entry => entry.sql.startsWith('SELECT * FROM content'))
-    expect(contentQuery).toBeDefined()
-    expect(contentQuery?.params).toEqual(['published', 50])
+    authAs('author')
+    const res = await app.request('/api/content?collection=pages&status=archived', { headers: { Cookie: 'auth_token=valid' } })
+    expect(slugs(await res.json())).toEqual(['published'])
   })
 })

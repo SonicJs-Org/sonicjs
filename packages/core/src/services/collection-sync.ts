@@ -63,12 +63,13 @@ export async function syncCollection(db: D1Database, config: CollectionConfig): 
     const schemaJson = JSON.stringify(config.schema)
     const isActive = config.isActive !== false ? 1 : 0
     const managed = config.managed !== false ? 1 : 0
+    const sourceType = 'code'
 
     if (!existing) {
       // Create new collection
       const insertStmt = db.prepare(`
-        INSERT INTO collections (id, name, display_name, description, schema, is_active, managed, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO collections (id, name, display_name, description, schema, is_active, managed, source_type, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       await insertStmt.bind(
@@ -79,6 +80,7 @@ export async function syncCollection(db: D1Database, config: CollectionConfig): 
         schemaJson,
         isActive,
         managed,
+        sourceType,
         now,
         now
       ).run()
@@ -97,13 +99,15 @@ export async function syncCollection(db: D1Database, config: CollectionConfig): 
       const existingDescription = existing.description
       const existingIsActive = existing.is_active
       const existingManaged = existing.managed
+      const existingSourceType = existing.source_type
 
       const needsUpdate =
         schemaJson !== existingSchema ||
         config.displayName !== existingDisplayName ||
         (config.description || null) !== existingDescription ||
         isActive !== existingIsActive ||
-        managed !== existingManaged
+        managed !== existingManaged ||
+        sourceType !== existingSourceType
 
       if (!needsUpdate) {
         return {
@@ -116,7 +120,7 @@ export async function syncCollection(db: D1Database, config: CollectionConfig): 
       // Update existing collection
       const updateStmt = db.prepare(`
         UPDATE collections
-        SET display_name = ?, description = ?, schema = ?, is_active = ?, managed = ?, updated_at = ?
+        SET display_name = ?, description = ?, schema = ?, is_active = ?, managed = ?, source_type = ?, source_id = NULL, updated_at = ?
         WHERE name = ?
       `)
 
@@ -126,6 +130,7 @@ export async function syncCollection(db: D1Database, config: CollectionConfig): 
         schemaJson,
         isActive,
         managed,
+        sourceType,
         now,
         config.name
       ).run()

@@ -5,6 +5,10 @@
  * Each route is refactored to remove monolith-specific dependencies.
  */
 
+// Document model routes
+export { apiDocumentsRoutes } from './api-documents'
+export { adminDocumentsRoutes } from './admin-documents'
+
 // API routes
 export { default as apiRoutes } from './api'
 export { default as apiContentCrudRoutes } from './api-content-crud'

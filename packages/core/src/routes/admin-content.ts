@@ -12,6 +12,12 @@ import { ContentListPageData, renderContentListPage } from '../templates/pages/a
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
 import { escapeHtml, sanitizeRichText } from '../utils/sanitize'
 import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
+import { DocumentTypeRegistry } from '../services/document-type-registry'
+import { DocumentsService } from '../services/documents'
+import { renderDocumentFormPage } from '../templates/pages/admin-documents-form.template'
+import { createDocumentSchema } from '../schemas/document'
+import type { QueryableField } from '../schemas/document'
+import { loadCollectionConfigs } from '../services/collection-loader'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -183,84 +189,238 @@ adminContentRoutes.use('*', requireAuth())
 
 // Get collection fields
 async function getCollectionFields(db: D1Database, collectionId: string) {
-  const cache = getCacheService(CACHE_CONFIGS.collection!)
+  console.log(`[getCollectionFields] Loading fields for collection: ${collectionId}`)
 
-  return cache.getOrSet(
-    cache.generateKey('fields', collectionId),
-    async () => {
-      // First, check if collection has a schema (code-based collection)
-      const collectionStmt = db.prepare('SELECT schema FROM collections WHERE id = ?')
-      const collectionRow = await collectionStmt.bind(collectionId).first() as any
+  // First, check if document type has a schema in database
+  const collectionStmt = db.prepare('SELECT schema, queryable_fields FROM document_types WHERE id = ?')
+  const collectionRow = await collectionStmt.bind(collectionId).first() as any
 
-      if (collectionRow && collectionRow.schema) {
-        try {
-          const schema = typeof collectionRow.schema === 'string' ? JSON.parse(collectionRow.schema) : collectionRow.schema
-          if (schema && schema.properties) {
-            // Convert schema properties to field format
-            let fieldOrder = 0
-            return Object.entries(schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
-              const fieldOptions = buildSchemaFieldOptions(fieldConfig)
+  if (collectionRow) {
+    console.log(`[getCollectionFields] Found in database`)
+    try {
+      const schema = collectionRow.schema
+        ? (typeof collectionRow.schema === 'string' ? JSON.parse(collectionRow.schema) : collectionRow.schema)
+        : {}
+      if (schema && schema.properties) {
+        const fieldCount = Object.keys(schema.properties).length
+        console.log(`[getCollectionFields] Database schema has ${fieldCount} fields`)
+        // Convert schema properties to field format
+        let fieldOrder = 0
+        return Object.entries(schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
+          const fieldOptions = buildSchemaFieldOptions(fieldConfig)
 
-              return {
-                id: `schema-${fieldName}`,
-                field_name: fieldName,
-                field_type: resolveSchemaFieldType(fieldConfig),
-                field_label: fieldConfig.title || fieldName,
-                field_options: fieldOptions,
-                field_order: fieldOrder++,
-                is_required: fieldConfig.required === true || (schema.required && schema.required.includes(fieldName)),
-                is_searchable: false
-              }
-            })
+          return {
+            id: `schema-${fieldName}`,
+            field_name: fieldName,
+            field_type: resolveSchemaFieldType(fieldConfig),
+            field_label: fieldConfig.title || fieldName,
+            field_options: fieldOptions,
+            field_order: fieldOrder++,
+            is_required: fieldConfig.required === true || (schema.required && schema.required.includes(fieldName)),
+            is_searchable: false
           }
-        } catch (e) {
-          console.error('Error parsing collection schema:', e)
-        }
+        })
       }
 
-      // Fall back to content_fields table for legacy collections
-      const stmt = db.prepare(`
-        SELECT * FROM content_fields
-        WHERE collection_id = ?
-        ORDER BY field_order ASC
-      `)
-      const { results } = await stmt.bind(collectionId).all()
+      // Schema has no properties (e.g. anyObject passthrough registered via bootstrapDocumentTypes).
+      // Check if there's a matching code collection with a full schema first.
+      const codeCollections = await loadCollectionConfigs()
+      const codeMatch = codeCollections.find((c: any) => c.name === collectionId)
+      if (codeMatch && codeMatch.schema?.properties) {
+        console.log(`[getCollectionFields] DB doc type has no properties — using code collection schema`)
+        // Fall through to the code collection path below by returning early from the try block
+        // (we'll pick it up in the code-collections block after this if/try)
+      } else {
+        // No code collection either — generate default fields: title + slug always; plus queryable scalars.
+        console.log(`[getCollectionFields] Generating default fields from queryable_fields`)
+        const queryableFields: Array<{ name: string; kind: string; type: string }> =
+          collectionRow.queryable_fields
+            ? JSON.parse(typeof collectionRow.queryable_fields === 'string' ? collectionRow.queryable_fields : JSON.stringify(collectionRow.queryable_fields))
+            : (schema.queryableFields ?? [])
 
-      return (results || []).map((row: any) => ({
-        id: row.id,
-        field_name: row.field_name,
-        field_type: row.field_type,
-        field_label: row.field_label,
-        field_options: row.field_options ? JSON.parse(row.field_options) : {},
-        field_order: row.field_order,
-        is_required: row.is_required === 1,
-        is_searchable: row.is_searchable === 1
-      }))
+        const defaultFields: any[] = [
+          { id: 'schema-title', field_name: 'title', field_type: 'text', field_label: 'Title', field_options: null, field_order: 0, is_required: true, is_searchable: true },
+          { id: 'schema-slug', field_name: 'slug', field_type: 'slug', field_label: 'Slug', field_options: null, field_order: 1, is_required: true, is_searchable: false },
+        ]
+        let order = 2
+        for (const qf of queryableFields) {
+          if (qf.name === 'title' || qf.name === 'slug') continue
+          defaultFields.push({
+            id: `schema-${qf.name}`,
+            field_name: qf.name,
+            field_type: qf.type === 'integer' ? 'number' : 'text',
+            field_label: qf.name.charAt(0).toUpperCase() + qf.name.slice(1).replace(/([A-Z])/g, ' $1'),
+            field_options: null,
+            field_order: order++,
+            is_required: false,
+            is_searchable: false,
+          })
+        }
+        return defaultFields
+      }
+    } catch (e) {
+      console.error('[getCollectionFields] Error parsing database collection schema:', e)
     }
-  )
+  }
+
+  console.log(`[getCollectionFields] Not in database, checking code collections`)
+
+  // Check code-defined collections (don't cache these since they can change)
+  const codeCollections = await loadCollectionConfigs()
+  console.log(`[getCollectionFields] Found ${codeCollections.length} code collections`)
+
+  const codeCollection = codeCollections.find((c: any) => c.name === collectionId)
+
+  if (codeCollection && codeCollection.schema) {
+    console.log(`[getCollectionFields] Found code collection: ${collectionId}`)
+    try {
+      const schema = codeCollection.schema
+      if (schema && schema.properties) {
+        const fieldCount = Object.keys(schema.properties).length
+        console.log(`[getCollectionFields] Code collection schema has ${fieldCount} fields`)
+        // Convert schema properties to field format
+        let fieldOrder = 0
+        return Object.entries(schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
+          const fieldOptions = buildSchemaFieldOptions(fieldConfig)
+
+          return {
+            id: `schema-${fieldName}`,
+            field_name: fieldName,
+            field_type: resolveSchemaFieldType(fieldConfig),
+            field_label: fieldConfig.title || fieldName,
+            field_options: fieldOptions,
+            field_order: fieldOrder++,
+            is_required: fieldConfig.required === true || (schema.required && schema.required.includes(fieldName)),
+            is_searchable: false
+          }
+        })
+      }
+    } catch (e) {
+      console.error('[getCollectionFields] Error parsing code collection schema:', e)
+    }
+  } else {
+    console.log(`[getCollectionFields] Code collection "${collectionId}" not found`)
+  }
+
+  console.log(`[getCollectionFields] Returning 0 fields`)
+  return []
 }
 
 // Get collection by ID
 async function getCollection(db: D1Database, collectionId: string) {
+  console.log(`[getCollection] Loading collection by ID: ${collectionId}`)
   const cache = getCacheService(CACHE_CONFIGS.collection!)
 
   return cache.getOrSet(
     cache.generateKey('collection', collectionId),
     async () => {
-      const stmt = db.prepare('SELECT * FROM collections WHERE id = ? AND is_active = 1')
+      console.log(`[getCollection] Cache miss, querying database`)
+      const stmt = db.prepare('SELECT * FROM document_types WHERE id = ? AND is_active = 1')
       const collection = await stmt.bind(collectionId).first() as any
 
-      if (!collection) return null
-
-      return {
-        id: collection.id,
-        name: collection.name,
-        display_name: collection.display_name,
-        description: collection.description,
-        schema: collection.schema ? JSON.parse(collection.schema) : {}
+      if (collection) {
+        console.log(`[getCollection] Found in database`)
+        return {
+          id: collection.id,
+          name: collection.name,
+          display_name: collection.display_name,
+          description: collection.description,
+          schema: collection.schema ? JSON.parse(collection.schema) : {}
+        }
       }
+
+      console.log(`[getCollection] Not in database, checking code collections`)
+      // Check code-defined collections
+      const codeCollections = await loadCollectionConfigs()
+      const codeCollection = codeCollections.find((c: any) => c.name === collectionId)
+
+      if (codeCollection) {
+        console.log(`[getCollection] Found code collection: ${collectionId}`)
+        return {
+          id: codeCollection.name,
+          name: codeCollection.name,
+          display_name: codeCollection.displayName,
+          description: codeCollection.description,
+          schema: codeCollection.schema || {}
+        }
+      }
+
+      console.log(`[getCollection] Not found: ${collectionId}`)
+      return null
     }
   )
+}
+
+// ─── Document-backing (Option B) ────────────────────────────────────────────────
+// A collection is "document-backed" when a document type with the SAME id as the collection name is
+// registered + active (e.g. the `blog_post` collection ↔ the `blog_post` document type). Such
+// collections keep the rich /admin/content editor UI but store data in the `documents` table.
+async function getDocBackingType(db: D1Database, collectionName?: string | null) {
+  if (!collectionName) return null
+  const dt = await new DocumentTypeRegistry(db).findById(collectionName)
+  return dt && dt.isActive ? dt : null
+}
+
+async function getCollectionByName(db: D1Database, name: string) {
+  console.log(`[getCollectionByName] Loading collection by name: ${name}`)
+  const row = await db.prepare('SELECT * FROM document_types WHERE name = ? AND is_active = 1').bind(name).first() as any
+  if (row) {
+    console.log(`[getCollectionByName] Found in database`)
+    return {
+      id: row.id, name: row.name, display_name: row.display_name,
+      description: row.description, schema: row.schema ? JSON.parse(row.schema) : {},
+    }
+  }
+
+  console.log(`[getCollectionByName] Not in database, checking code collections`)
+  // Check code-defined collections
+  const codeCollections = await loadCollectionConfigs()
+  const codeCollection = codeCollections.find((c: any) => c.name === name)
+
+  if (codeCollection) {
+    console.log(`[getCollectionByName] Found code collection: ${name}`)
+    return {
+      id: codeCollection.name,
+      name: codeCollection.name,
+      display_name: codeCollection.displayName,
+      description: codeCollection.description,
+      schema: codeCollection.schema || {}
+    }
+  }
+
+  console.log(`[getCollectionByName] Not found: ${name}`)
+  return null
+}
+
+// Rich-editor plugin flags/settings the content form needs (Quill/TinyMCE/MDX/workflow), so a
+// document-backed edit form looks identical to the legacy content editor.
+async function loadContentEditorFlags(db: D1Database): Promise<Record<string, unknown>> {
+  const flags: Record<string, unknown> = { workflowEnabled: await isPluginActive(db, 'workflow') }
+  const editors: Array<[string, string]> = [['tinymce-plugin', 'tinymce'], ['quill-editor', 'quill'], ['easy-mdx', 'mdxeditor']]
+  for (const [plugin, key] of editors) {
+    const enabled = await isPluginActive(db, plugin)
+    flags[`${key}Enabled`] = enabled
+    if (enabled) {
+      const ps = new PluginService(db)
+      const p = await ps.getPlugin(plugin)
+      flags[`${key}Settings`] = p?.settings
+    }
+  }
+  return flags
+}
+
+function makeDocService(db: D1Database, docType: any) {
+  return new DocumentsService(db, {
+    queryableFields: docType.queryableFields ?? [],
+    typeSchemaVersion: docType.schemaVersion ?? 1,
+    maxVersionsPerRoot: docType.settings?.maxVersionsPerRoot ?? 50,
+    tenantId: 'default',
+  })
+}
+
+function slugify(s?: string | null): string | null {
+  if (!s) return null
+  return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || null
 }
 
 // Content list (main page)
@@ -278,14 +438,177 @@ adminContentRoutes.get('/', async (c) => {
     const search = url.searchParams.get('search') || ''
     const offset = (page - 1) * limit
 
-    // Get all collections for filter dropdown (exclude form-sourced)
-    const collectionsStmt = db.prepare("SELECT id, name, display_name FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY display_name")
+    // Get all document types for filter dropdown (database)
+    const collectionsStmt = db.prepare("SELECT id, name, display_name FROM document_types WHERE is_active = 1 ORDER BY display_name")
     const { results: collectionsResults } = await collectionsStmt.all()
-    const models = (collectionsResults || []).map((row: any) => ({
-      name: row.name,
-      displayName: row.display_name
-    }))
 
+    // Load code-defined collections
+    const codeCollections = await loadCollectionConfigs()
+    const codeCollectionMap = new Map(codeCollections.map((c: any) => [c.name, c]))
+
+    // Also include active document types in the models dropdown (prefixed with doc: to distinguish)
+    const docTypeRegistry = new DocumentTypeRegistry(db)
+    const docTypes = await docTypeRegistry.findAll()
+
+    // Merge database and code collections (db takes precedence)
+    const allCollections = [
+      ...codeCollections.filter((c: any) => !collectionsResults?.find((r: any) => r.name === c.name)),
+      ...(collectionsResults || []).map((row: any) => ({ name: row.name, displayName: row.display_name }))
+    ]
+
+    // A document type whose id matches a collection name backs that collection (Option B) and is
+    // managed through the collection entry — don't also list it as a separate doc: model.
+    const collectionNames = new Set(allCollections.map((c: any) => c.name))
+    const models = [
+      ...allCollections.map((c: any) => ({ name: c.name, displayName: c.displayName })),
+      ...docTypes.filter(dt => !collectionNames.has(dt.id)).map(dt => ({ name: `doc:${dt.id}`, displayName: dt.displayName })),
+    ]
+
+    // ── Document-type branch: query documents table instead of content ──────────
+    // Triggered by a `doc:` model OR a document-backed collection (collection name == doc type id).
+    const docBackedCollection = !modelName.startsWith('doc:') && modelName !== 'all'
+      ? docTypes.find(dt => dt.id === modelName)
+      : undefined
+    const isDocModel = modelName.startsWith('doc:') || !!docBackedCollection
+    if (isDocModel) {
+      const typeId = modelName.startsWith('doc:') ? modelName.slice(4) : modelName
+      const docType = docTypes.find(dt => dt.id === typeId)
+
+      const docParams: (string | number)[] = ['default', typeId]
+      let docSql = `SELECT * FROM documents WHERE tenant_id = ? AND type_id = ? AND is_current_draft = 1`
+      // D32: honor the ?status= filter (mirror the all-view union's doc-half mapping). 'deleted' shows
+      // soft-deleted roots; published/draft refine by the published flag; 'all' shows the working set.
+      if (status === 'deleted') docSql += ' AND deleted_at IS NOT NULL'
+      else {
+        docSql += ' AND deleted_at IS NULL'
+        if (status === 'published') docSql += ' AND is_published = 1'
+        else if (status === 'draft') docSql += ' AND is_published = 0'
+      }
+      if (search) {
+        docSql += ` AND (title LIKE ? OR json_extract(data,'$.question') LIKE ? OR json_extract(data,'$.authorName') LIKE ? OR json_extract(data,'$.name') LIKE ?)`
+        const term = `%${search}%`
+        docParams.push(term, term, term, term)
+      }
+      const countRow = await db.prepare(docSql.replace('SELECT *', 'SELECT COUNT(*) as count')).bind(...docParams).first() as any
+      docSql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?'
+      docParams.push(limit, offset)
+      const { results: docRows } = await db.prepare(docSql).bind(...docParams).all()
+
+      const statusBadgeCss = {
+        published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',
+        draft: 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20',
+      }
+      const contentItems = (docRows || []).map((row: any) => {
+        const data = JSON.parse(row.data ?? '{}')
+        const label = row.is_published ? 'Published' : 'Draft'
+        const css = row.is_published ? statusBadgeCss.published : statusBadgeCss.draft
+        return {
+          // Doc-backed collections edit through the rich collection editor at /admin/content/:rootId/edit;
+          // pure doc: types use the generic document form at /admin/content/documents/:typeId/:rootId.
+          id: docBackedCollection ? row.root_id : `documents/${typeId}/${row.root_id}`,
+          title: row.title || data.question || data.authorName || data.name || row.root_id,
+          slug: row.slug || '',
+          modelName: docType?.displayName ?? typeId,
+          statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${css}">${label}</span>`,
+          authorName: row.created_by || 'System',
+          // Document timestamps are stored in SECONDS (documents.ts), unlike legacy content rows which
+          // store MILLISECONDS — hence the *1000 here (D23).
+          formattedDate: new Date((row.updated_at ?? 0) * 1000).toLocaleDateString(),
+          // No list-level publish/unpublish for document rows (D14): those content-list action endpoints
+          // operate on the legacy `content` table and are keyed by a version :documentId, not root_id.
+          // Publish/unpublish happen in the edit form, which posts to the working document routes.
+          availableActions: [],
+        }
+      })
+
+      return c.html(renderContentListPage({
+        modelName, status, page, search, models, contentItems,
+        totalItems: countRow?.count ?? 0,
+        itemsPerPage: limit,
+        user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+        version: c.get('appVersion'),
+      }))
+    }
+
+    // ── All-view documents list ────────────────────────────────────────────────
+    // The document-model POC keeps legacy `content` paths available, but the All view is
+    // a documents-only list over every active document type.
+    if (modelName === 'all') {
+      const allTypeIds = docTypes.map(dt => dt.id)
+      const like = search ? `%${search}%` : null
+      const docConds = ['d.is_current_draft = 1', "d.tenant_id = 'default'"]
+      const docParams: any[] = []
+      if (allTypeIds.length > 0) {
+        const ph = allTypeIds.map(() => '?').join(',')
+        docConds.push(`d.type_id IN (${ph})`)
+        docParams.push(...allTypeIds)
+      }
+      if (status === 'deleted') docConds.push('d.deleted_at IS NOT NULL')
+      else {
+        docConds.push('d.deleted_at IS NULL')
+        if (status === 'published') docConds.push('d.is_published = 1')
+        else if (status === 'draft') docConds.push('d.is_published = 0')
+      }
+      if (like) { docConds.push("(d.title LIKE ? OR json_extract(d.data,'$.author') LIKE ?)"); docParams.push(like, like) }
+
+      const unionSql = `
+        SELECT d.root_id AS id, d.title AS title, d.slug AS slug,
+               CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
+               d.updated_at * 1000 AS updated_at,
+               dt.display_name AS cdisplay, COALESCE(d.created_by, 'System') AS author_label
+        FROM documents d JOIN document_types dt ON dt.id = d.type_id
+        WHERE ${docConds.join(' AND ')}
+        ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+      const { results: unionRows } = await db.prepare(unionSql).bind(...docParams, limit, offset).all()
+
+      const countRow = await db.prepare(
+        `SELECT COUNT(*) AS count FROM documents d WHERE ${docConds.join(' AND ')}`,
+      ).bind(...docParams).first() as any
+
+      const badge: Record<string, string> = {
+        published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',
+        draft: 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20',
+        deleted: 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20',
+      }
+      const contentItems = (unionRows || []).map((row: any) => ({
+        id: row.id,
+        title: row.title || row.slug || row.id,
+        slug: row.slug || '',
+        modelName: row.cdisplay,
+        statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${badge[row.status] ?? badge.draft}">${row.status}</span>`,
+        authorName: row.author_label,
+        formattedDate: new Date(row.updated_at ?? 0).toLocaleDateString(),
+        availableActions: [],
+      }))
+
+      return c.html(renderContentListPage({
+        modelName, status, page, search, models, contentItems,
+        totalItems: countRow?.count ?? 0,
+        itemsPerPage: limit,
+        user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+        version: c.get('appVersion'),
+      }))
+    }
+
+    const emptyPageData: ContentListPageData = {
+      modelName,
+      status,
+      page,
+      search,
+      models,
+      contentItems: [],
+      totalItems: 0,
+      itemsPerPage: limit,
+      user: user ? {
+        name: user!.email,
+        email: user!.email,
+        role: user!.role
+      } : undefined,
+      version: c.get('appVersion')
+    }
+    return c.html(renderContentListPage(emptyPageData))
+
+    // ── Legacy content branch ──────────────────────────────────────────────────
     // Build where conditions
     const conditions: string[] = []
     const params: any[] = []
@@ -319,7 +642,7 @@ adminContentRoutes.get('/', async (c) => {
 
     // Get total count
     const countStmt = db.prepare(`
-      SELECT COUNT(*) as count 
+      SELECT COUNT(*) as count
       FROM content c
       JOIN collections col ON c.collection_id = col.id
       ${whereClause}
@@ -422,9 +745,9 @@ adminContentRoutes.get('/', async (c) => {
       totalItems,
       itemsPerPage: limit,
       user: user ? {
-        name: user.email,
-        email: user.email,
-        role: user.role
+        name: user?.email ?? '',
+        email: user?.email ?? '',
+        role: user?.role ?? ''
       } : undefined,
       version: c.get('appVersion')
     }
@@ -446,16 +769,31 @@ adminContentRoutes.get('/new', async (c) => {
     if (!collectionId) {
       // Show collection selection page
       const db = c.env.DB
-      // Exclude form-sourced collections — users shouldn't manually create content in form collections
-      const collectionsStmt = db.prepare("SELECT id, name, display_name, description FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user') ORDER BY display_name")
+      // Get all document types for content creation (database)
+      const collectionsStmt = db.prepare("SELECT id, name, display_name, description FROM document_types WHERE is_active = 1 ORDER BY display_name")
       const { results } = await collectionsStmt.all()
 
-      const collections = (results || []).map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        display_name: row.display_name,
-        description: row.description
-      }))
+      // Load code-defined collections
+      const codeCollections = await loadCollectionConfigs()
+
+      // Merge code and database collections
+      const dbCollectionNames = new Set((results || []).map((r: any) => r.name))
+      const allCollections = [
+        ...codeCollections.filter((c: any) => !dbCollectionNames.has(c.name)).map((c: any) => ({
+          id: c.name,
+          name: c.name,
+          display_name: c.displayName,
+          description: c.description
+        })),
+        ...(results || []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          display_name: row.display_name,
+          description: row.description
+        }))
+      ]
+
+      const collections = allCollections
 
       // Render collection selection page
       const selectionHTML = `
@@ -494,7 +832,10 @@ adminContentRoutes.get('/new', async (c) => {
     }
 
     const db = c.env.DB
-    const collection = await getCollection(db, collectionId)
+    // Resolve ?collection= by id OR name. The content-list "New" button passes the collection id, but
+    // a collection name (== document type id for doc-backed collections, e.g. ?collection=blog_post)
+    // is the stable identifier callers/links use — accept both so the form always carries a collection_id.
+    const collection = (await getCollection(db, collectionId)) ?? (await getCollectionByName(db, collectionId))
 
     if (!collection) {
       const formData: ContentFormData = {
@@ -510,7 +851,8 @@ adminContentRoutes.get('/new', async (c) => {
       return c.html(renderContentFormPage(formData))
     }
 
-    const fields = await getCollectionFields(db, collectionId)
+    // Use the RESOLVED collection id (the ?collection= param may have been a name).
+    const fields = await getCollectionFields(db, collection.id)
 
     // Check if workflow plugin is active
     const workflowEnabled = await isPluginActive(db, 'workflow')
@@ -595,6 +937,49 @@ adminContentRoutes.get('/:id/edit', async (c) => {
     // Capture referrer parameters to preserve filters when returning to list
     const referrerParams = url.searchParams.get('ref') || ''
 
+    // ── Option B: if :id is a document-backed root, render the rich editor from the document ──
+    const docRow = await db
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = 'default' AND deleted_at IS NULL")
+      .bind(id).first() as any
+    if (docRow) {
+      const docType = await getDocBackingType(db, docRow.type_id)
+      const dcoll = docType ? await getCollectionByName(db, docRow.type_id) : null
+      if (docType && dcoll) {
+        const fields = await getCollectionFields(db, dcoll.id)
+        const flags = await loadContentEditorFlags(db)
+        const formData: ContentFormData = {
+          id: docRow.root_id,
+          title: docRow.title,
+          slug: docRow.slug,
+          created_at: docRow.created_at,
+          updated_at: docRow.updated_at,
+          published_at: docRow.published_at,
+          data: docRow.data ? JSON.parse(docRow.data) : {},
+          status: docRow.is_published ? 'published' : (docRow.status ?? 'draft'),
+          collection: dcoll,
+          fields,
+          isEdit: true,
+          referrerParams,
+          user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+          version: c.get('appVersion'),
+          ...flags,
+        } as ContentFormData
+        return c.html(renderContentFormPage(formData))
+      }
+    }
+
+    const notFoundData: ContentFormData = {
+      collection: { id: '', name: '', display_name: 'Unknown', schema: {} },
+      fields: [],
+      error: 'Content not found.',
+      user: user ? {
+        name: user.email,
+        email: user.email,
+        role: user.role
+      } : undefined
+    }
+    return c.html(renderContentFormPage(notFoundData))
+
     // Get content with caching
     const cache = getCacheService(CACHE_CONFIGS.content!)
     const content = await cache.getOrSet(
@@ -618,9 +1003,9 @@ adminContentRoutes.get('/:id/edit', async (c) => {
         fields: [],
         error: 'Content not found.',
         user: user ? {
-          name: user.email,
-          email: user.email,
-          role: user.role
+          name: user!.email,
+          email: user!.email,
+          role: user!.role
         } : undefined
       }
       return c.html(renderContentFormPage(formData))
@@ -693,9 +1078,9 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       mdxeditorSettings,
       referrerParams,
       user: user ? {
-        name: user.email,
-        email: user.email,
-        role: user.role
+        name: user!.email,
+        email: user!.email,
+        role: user!.role
       } : undefined,
       version: c.get('appVersion')
     }
@@ -785,6 +1170,29 @@ adminContentRoutes.post('/', async (c) => {
     // Handle scheduling
     const scheduledPublishAt = formData.get('scheduled_publish_at') as string
     const scheduledUnpublishAt = formData.get('scheduled_unpublish_at') as string
+
+    // ── Option B: document-backed collection → store in `documents`, not `content` ──
+    const createDocType = await getDocBackingType(db, collection.name)
+    if (createDocType) {
+      const svc = makeDocService(db, createDocType)
+      const doc = await svc.create(createDocumentSchema.parse({
+        typeId: createDocType.id, tenantId: 'default', locale: 'default',
+        title: data.title || slug || 'Untitled', slug: slug || undefined,
+        data, publishOnCreate: status === 'published',
+      }), user?.userId)
+      const cache = getCacheService(CACHE_CONFIGS.content!)
+      await cache.invalidate(`content:list:${collectionId}:*`)
+      const redirectUrl = `/admin/content/${doc.rootId}/edit?success=Content created successfully!`
+      return c.req.header('HX-Request') === 'true'
+        ? c.text('', 200, { 'HX-Redirect': redirectUrl })
+        : c.redirect(redirectUrl)
+    }
+
+    return c.html(html`
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        Collection is not document-backed.
+      </div>
+    `, 400)
 
     // Create content
     const contentId = crypto.randomUUID()
@@ -886,6 +1294,50 @@ adminContentRoutes.put('/:id', async (c) => {
 
     const db = c.env.DB
 
+    // ── Option B: if :id is a document-backed root, save a new draft + sync publish state ──
+    const docRowU = await db
+      .prepare("SELECT id, type_id FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = 'default'")
+      .bind(id).first() as any
+    if (docRowU) {
+      const docType = await getDocBackingType(db, docRowU.type_id)
+      const dcoll = docType ? await getCollectionByName(db, docRowU.type_id) : null
+      if (docType && dcoll) {
+        const fields = await getCollectionFields(db, dcoll.id)
+        const { data, errors } = extractFieldData(fields, formData)
+        if (Object.keys(errors).length > 0) {
+          const flags = await loadContentEditorFlags(db)
+          return c.html(renderContentFormPage({
+            id, collection: dcoll, fields, data, validationErrors: errors,
+            error: 'Please fix the validation errors below.', isEdit: true,
+            user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+            ...flags,
+          } as ContentFormData))
+        }
+        const slug = slugify(data.slug || data.title)
+        let status = formData.get('status') as string || 'draft'
+        if (action === 'save_and_publish') status = 'published'
+
+        const svc = makeDocService(db, docType)
+        const newDraft = await svc.saveDraft(id, { title: data.title ?? null, slug, data }, user?.userId)
+        // saveDraft always returns an unpublished draft; sync against the root's published row.
+        const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = 'default'").bind(id).first() as any
+        if (status === 'published') await svc.publish(newDraft.id, user?.userId)
+        else if (pub) await svc.unpublish(pub.id)
+
+        await getCacheService(CACHE_CONFIGS.content!).invalidate(`content:list:*`)
+        const redirectUrl = `/admin/content/${id}/edit?success=Content updated successfully!`
+        return c.req.header('HX-Request') === 'true'
+          ? c.text('', 200, { 'HX-Redirect': redirectUrl })
+          : c.redirect(redirectUrl)
+      }
+    }
+
+    return c.html(html`
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        Content not found.
+      </div>
+    `, 404)
+
     // Get existing content
     const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
     const existingContent = await contentStmt.bind(id).first() as any
@@ -915,16 +1367,16 @@ adminContentRoutes.put('/:id', async (c) => {
     if (Object.keys(errors).length > 0) {
       const formDataWithErrors: ContentFormData = {
         id,
-        collection,
+        collection: collection!,
         fields,
         data,
         validationErrors: errors,
         error: 'Please fix the validation errors below.',
         isEdit: true,
         user: user ? {
-          name: user.email,
-          email: user.email,
-          role: user.role
+          name: user!.email,
+          email: user!.email,
+          role: user!.role
         } : undefined
       }
       return c.html(renderContentFormPage(formDataWithErrors))
@@ -1020,24 +1472,14 @@ adminContentRoutes.put('/:id', async (c) => {
       ).run()
     }
 
-    // Handle different actions
-    const referrerParams = formData.get('referrer_params') as string
-    const redirectUrl = action === 'save_and_continue'
-      ? `/admin/content/${id}/edit?success=Content updated successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ''}`
-      : referrerParams
-        ? `/admin/content?${referrerParams}&success=Content updated successfully!`
-        : `/admin/content?collection=${existingContent.collection_id}&success=Content updated successfully!`
+    const redirectUrl = `/admin/content/${id}/edit?success=Content updated successfully!`
 
     // Check if this is an HTMX request
     const isHTMX = c.req.header('HX-Request') === 'true'
 
     if (isHTMX) {
-      // For HTMX requests, use HX-Redirect header to trigger client-side redirect
-      return c.text('', 200, {
-        'HX-Redirect': redirectUrl
-      })
+      return c.text('', 200, { 'HX-Redirect': redirectUrl })
     } else {
-      // For regular requests, use server-side redirect
       return c.redirect(redirectUrl)
     }
 
@@ -1134,6 +1576,34 @@ adminContentRoutes.post('/duplicate', async (c) => {
     }
 
     const db = c.env.DB
+
+    const docOriginal = await db
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = 'default' AND deleted_at IS NULL")
+      .bind(originalId)
+      .first() as any
+    if (docOriginal) {
+      const docType = await getDocBackingType(db, docOriginal.type_id)
+      if (docType) {
+        const svc = makeDocService(db, docType)
+        const originalData = docOriginal.data ? JSON.parse(docOriginal.data) : {}
+        const copyData = {
+          ...originalData,
+          title: `${originalData.title || docOriginal.title || 'Untitled'} (Copy)`
+        }
+        const copy = await svc.create(createDocumentSchema.parse({
+          typeId: docType.id,
+          tenantId: 'default',
+          locale: 'default',
+          title: copyData.title,
+          slug: `${docOriginal.slug || 'copy'}-copy-${Date.now()}`,
+          data: copyData,
+          publishOnCreate: false,
+        }), user?.userId)
+        return c.json({ success: true, id: copy.rootId })
+      }
+    }
+
+    return c.json({ success: false, error: 'Content not found' }, 404)
 
     // Get original content
     const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
@@ -1281,40 +1751,65 @@ adminContentRoutes.post('/bulk-action', async (c) => {
     if (!action || !ids || ids.length === 0) {
       return c.json({ success: false, error: 'Action and IDs required' })
     }
+    if (!['delete', 'publish', 'draft'].includes(action)) {
+      return c.json({ success: false, error: 'Invalid action' })
+    }
 
     const db = c.env.DB
     const now = Date.now()
 
-    if (action === 'delete') {
-      // Soft delete by setting status to 'deleted'
-      const placeholders = ids.map(() => '?').join(',')
-      const stmt = db.prepare(`
-        UPDATE content
-        SET status = 'deleted', updated_at = ?
-        WHERE id IN (${placeholders})
-      `)
-      await stmt.bind(now, ...ids).run()
-    } else if (action === 'publish' || action === 'draft') {
-      // Update status
-      const placeholders = ids.map(() => '?').join(',')
-      const publishedAt = action === 'publish' ? now : null
-      const stmt = db.prepare(`
-        UPDATE content
-        SET status = ?, published_at = ?, updated_at = ?
-        WHERE id IN (${placeholders})
-      `)
-      await stmt.bind(action, publishedAt, now, ...ids).run()
-    } else {
-      return c.json({ success: false, error: 'Invalid action' })
+    // D33: bulk ids can be document root ids (doc-backed collections) OR legacy content ids. The old
+    // handler only ran `UPDATE content … WHERE id IN (…)`, which silently no-ops on doc rows while still
+    // reporting success. Partition the ids and route each set to the correct store.
+    const idPlaceholders = ids.map(() => '?').join(',')
+    const { results: docRootRows } = await db
+      .prepare(`SELECT DISTINCT root_id, type_id FROM documents WHERE tenant_id = 'default' AND root_id IN (${idPlaceholders})`)
+      .bind(...ids)
+      .all()
+    const docRoots = (docRootRows || []) as Array<{ root_id: string; type_id: string }>
+    const docRootIds = new Set(docRoots.map(r => r.root_id))
+    const contentIds = (ids as string[]).filter(id => !docRootIds.has(id))
+
+    // ── Document-backed rows ──────────────────────────────────────────────────
+    if (docRoots.length > 0) {
+      if (action === 'delete') {
+        // Soft-delete every version row of each root (mirror the single-row DELETE). Seconds (D29).
+        const nowSec = Math.floor(now / 1000)
+        const dph = docRoots.map(() => '?').join(',')
+        await db
+          .prepare(`UPDATE documents SET deleted_at = ?, updated_at = ? WHERE tenant_id = 'default' AND root_id IN (${dph})`)
+          .bind(nowSec, nowSec, ...docRoots.map(r => r.root_id))
+          .run()
+      } else {
+        // publish / draft → run through DocumentsService so the published flag, prev-published
+        // demotion and derived rows stay consistent (one row per root).
+        for (const root of docRoots) {
+          const docType = await getDocBackingType(db, root.type_id)
+          if (!docType) continue
+          const svc = makeDocService(db, docType)
+          if (action === 'publish') {
+            const draft = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND tenant_id = 'default' AND is_current_draft = 1").bind(root.root_id).first() as any
+            if (draft) await svc.publish(draft.id, user?.userId)
+          } else {
+            const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND tenant_id = 'default' AND is_published = 1").bind(root.root_id).first() as any
+            if (pub) await svc.unpublish(pub.id)
+          }
+        }
+      }
     }
 
-    // Invalidate cache for all affected content items
+    // Legacy `content` rows were removed from the v3 greenfield schema. Unknown/non-document ids are
+    // ignored here instead of probing a table that should no longer exist.
+
+    // Invalidate content caches and the public-API filtered caches so both surfaces reflect the change.
     const cache = getCacheService(CACHE_CONFIGS.content!)
     for (const contentId of ids) {
       await cache.delete(cache.generateKey('content', contentId))
     }
-    // Also invalidate list caches (they contain content from potentially multiple collections)
     await cache.invalidate('content:list:*')
+    const apiCache = getCacheService(CACHE_CONFIGS.api!)
+    await apiCache.invalidate('content-filtered:*')
+    await apiCache.invalidate('collection-content-filtered:*')
 
     return c.json({ success: true, count: ids.length })
   } catch (error) {
@@ -1329,6 +1824,23 @@ adminContentRoutes.delete('/:id', async (c) => {
     const id = c.req.param('id')
     const db = c.env.DB
     const user = c.get('user')
+
+    // ── Option B: if :id is a document-backed root, soft-delete every version row of the root ──
+    const docDel = await db
+      .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = 'default' LIMIT 1")
+      .bind(id).first() as any
+    if (docDel && (await getDocBackingType(db, docDel.type_id))) {
+      const now = Math.floor(Date.now() / 1000)
+      await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = 'default'").bind(now, now, id).run()
+      await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+      return c.html(`
+        <div id="content-list" hx-get="/admin/content?model=${docDel.type_id}" hx-trigger="load" hx-swap="outerHTML">
+          <div class="flex items-center justify-center p-8"><span class="text-zinc-500">Deleting…</span></div>
+        </div>
+      `)
+    }
+
+    return c.json({ success: false, error: 'Content not found' }, 404)
 
     // Check if content exists
     const contentStmt = db.prepare('SELECT id, title FROM content WHERE id = ?')
@@ -1376,6 +1888,8 @@ adminContentRoutes.get('/:id/versions', async (c) => {
   try {
     const id = c.req.param('id')
     const db = c.env.DB
+
+    return c.html('<p>Content not found</p>', 404)
 
     // Get current content
     const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
@@ -1430,6 +1944,8 @@ adminContentRoutes.post('/:id/restore/:version', async (c) => {
     const version = parseInt(c.req.param('version') || '0')
     const user = c.get('user')
     const db = c.env.DB
+
+    return c.json({ success: false, error: 'Version not found' }, 404)
 
     // Get the specific version
     const versionStmt = db.prepare(`
@@ -1585,4 +2101,213 @@ ${escapeHtml(JSON.stringify(data, null, 2))}
     return c.html('<p>Error generating preview</p>')
   }
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DOCUMENT MODEL ROUTES  (/admin/content/documents/:typeId/...)
+// Document-backed content types managed within the existing content admin.
+// Edit links in the content list use id = "documents/:typeId/:rootId" which
+// maps to these routes via the existing /:id/edit handler (see redirect below).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function userCtx(c: any) {
+  const u = c.get('user')
+  return u ? { name: u.email, email: u.email, role: u.role } : undefined
+}
+
+function parseDocFormData(
+  formData: FormData,
+  queryableFields: QueryableField[] = [],
+): { title: string | null; slug: string | null; data: Record<string, unknown> } {
+  const title = (formData.get('title') as string | null) || null
+  const slug = (formData.get('slug') as string | null) || null
+  // Facet fields are ALWAYS arrays (D16) — a single value like 'homepage' has no comma but must still
+  // become ['homepage'] so document_facets materializes it. Field-kind drives this, not comma-sniffing.
+  const facetNames = new Set(queryableFields.filter(f => f.kind === 'facet').map(f => f.name))
+  const data: Record<string, unknown> = {}
+  for (const [key, val] of formData.entries()) {
+    if (key.startsWith('data[') && key.endsWith(']')) {
+      const fieldName = key.slice(5, -1)
+      const strVal = val as string
+      if (facetNames.has(fieldName)) {
+        data[fieldName] = strVal.split(',').map(s => s.trim()).filter(Boolean)
+      } else if (strVal.includes(',') && !strVal.startsWith('{')) {
+        data[fieldName] = strVal.split(',').map(s => s.trim()).filter(Boolean)
+      } else if (strVal === 'true') { data[fieldName] = true }
+      else if (strVal === 'false') { data[fieldName] = false }
+      else if (strVal !== '' && !isNaN(Number(strVal)) && strVal.trim() !== '') { data[fieldName] = Number(strVal) }
+      else { data[fieldName] = strVal }
+    }
+  }
+  return { title, slug, data }
+}
+
+async function getDocService(db: D1Database, typeId: string) {
+  const registry = new DocumentTypeRegistry(db)
+  const docType = await registry.findById(typeId)
+  const svc = new DocumentsService(db, {
+    queryableFields: docType?.queryableFields ?? [],
+    typeSchemaVersion: docType?.schemaVersion ?? 1,
+    maxVersionsPerRoot: docType?.settings?.maxVersionsPerRoot ?? 50,
+  })
+  return { svc, docType }
+}
+
+// ─── New document form ────────────────────────────────────────────────────────
+adminContentRoutes.get('/documents/:typeId/new', async (c) => {
+  const { typeId } = c.req.param()
+  const registry = new DocumentTypeRegistry(c.env.DB)
+  const docType = await registry.findById(typeId)
+  if (!docType) return c.html('<p>Unknown document type.</p>', 404)
+  return c.html(renderDocumentFormPage({ docType, isEdit: false, user: userCtx(c) }))
+})
+
+// ─── Create document ──────────────────────────────────────────────────────────
+adminContentRoutes.post('/documents/:typeId/new', async (c) => {
+  const { typeId } = c.req.param()
+  const db = c.env.DB
+  const user = c.get('user') as any
+  try {
+    const { svc, docType } = await getDocService(db, typeId)
+    if (!docType) return c.html('<p>Unknown document type.</p>', 404)
+    const formData = await c.req.formData()
+    const { title, slug, data } = parseDocFormData(formData, docType.queryableFields)
+    const doc = await svc.create(createDocumentSchema.parse({
+      typeId, tenantId: 'default', locale: 'default',
+      title: title ?? undefined, slug: slug ?? undefined, data,
+    }), user?.userId)
+    return c.redirect(`/admin/content/documents/${typeId}/${doc.rootId}/edit?message=Created+successfully`)
+  } catch (err: any) {
+    const registry = new DocumentTypeRegistry(c.env.DB)
+    const docType = await registry.findById(typeId)
+    if (!docType) return c.html('<p>Unknown document type.</p>', 404)
+    return c.html(renderDocumentFormPage({ docType, isEdit: false, user: userCtx(c), message: err?.message ?? 'Failed to create', messageType: 'error' }))
+  }
+})
+
+// ─── Edit document form ───────────────────────────────────────────────────────
+adminContentRoutes.get('/documents/:typeId/:rootId/edit', async (c) => {
+  const { typeId, rootId } = c.req.param()
+  const db = c.env.DB
+  const message = c.req.query('message')
+  const registry = new DocumentTypeRegistry(db)
+  const docType = await registry.findById(typeId)
+  if (!docType) return c.html('<p>Unknown document type.</p>', 404)
+
+  const draftRow = await db.prepare(
+    'SELECT * FROM documents WHERE root_id = ? AND tenant_id = ? AND is_current_draft = 1'
+  ).bind(rootId, 'default').first() as any
+  if (!draftRow) return c.html('<p>Document not found.</p>', 404)
+
+  let publishedDoc = null
+  if (!draftRow.is_published) {
+    const pubRow = await db.prepare(
+      'SELECT * FROM documents WHERE root_id = ? AND tenant_id = ? AND is_published = 1'
+    ).bind(rootId, 'default').first() as any
+    if (pubRow) publishedDoc = { id: pubRow.id, rootId: pubRow.root_id, typeId: pubRow.type_id, versionNumber: pubRow.version_number, isCurrentDraft: false, isPublished: true, status: pubRow.status, data: JSON.parse(pubRow.data ?? '{}') } as any
+  }
+
+  const doc = {
+    id: draftRow.id, rootId: draftRow.root_id, typeId: draftRow.type_id, typeVersion: draftRow.type_version,
+    versionOfId: draftRow.version_of_id, versionNumber: draftRow.version_number,
+    isCurrentDraft: draftRow.is_current_draft === 1, isPublished: draftRow.is_published === 1, status: draftRow.status,
+    parentRootId: draftRow.parent_root_id, slug: draftRow.slug, path: draftRow.path, title: draftRow.title,
+    zone: draftRow.zone, sortOrder: draftRow.sort_order, visible: draftRow.visible === 1,
+    publishedAt: draftRow.published_at, scheduledAt: draftRow.scheduled_at, expiresAt: draftRow.expires_at,
+    deletedAt: draftRow.deleted_at, tenantId: draftRow.tenant_id, locale: draftRow.locale,
+    translationGroupId: draftRow.translation_group_id, data: JSON.parse(draftRow.data ?? '{}'),
+    metadata: JSON.parse(draftRow.metadata ?? '{}'), ownerId: draftRow.owner_id,
+    createdBy: draftRow.created_by, updatedBy: draftRow.updated_by,
+    createdAt: draftRow.created_at, updatedAt: draftRow.updated_at,
+  } as any
+
+  return c.html(renderDocumentFormPage({ docType, doc, publishedDoc, isEdit: true, message, user: userCtx(c) }))
+})
+
+// ─── Save draft ───────────────────────────────────────────────────────────────
+adminContentRoutes.post('/documents/:typeId/:rootId', async (c) => {
+  const { typeId, rootId } = c.req.param()
+  const db = c.env.DB
+  const user = c.get('user') as any
+  try {
+    const formData = await c.req.formData()
+    const _method = formData.get('_method') as string | null
+    if (_method !== 'PUT') return c.redirect(`/admin/content/documents/${typeId}/${rootId}/edit?message=Unknown+action`)
+    const { svc, docType } = await getDocService(db, typeId)
+    const { title, slug, data } = parseDocFormData(formData, docType?.queryableFields ?? [])
+    await svc.saveDraft(rootId, { title, slug, data }, user?.userId)
+    return c.redirect(`/admin/content/documents/${typeId}/${rootId}/edit?message=Draft+saved`)
+  } catch (err: any) {
+    return c.redirect(`/admin/content/documents/${typeId}/${rootId}/edit?message=${encodeURIComponent(err?.message ?? 'Save failed')}`)
+  }
+})
+
+// ─── Publish ──────────────────────────────────────────────────────────────────
+adminContentRoutes.post('/documents/:typeId/:documentId/publish', async (c) => {
+  const { typeId, documentId } = c.req.param()
+  const db = c.env.DB
+  const user = c.get('user') as any
+  try {
+    const row = await db.prepare('SELECT root_id FROM documents WHERE id = ?').bind(documentId).first() as any
+    const { svc } = await getDocService(db, typeId)
+    await svc.publish(documentId, user?.userId)
+    return c.redirect(`/admin/content/documents/${typeId}/${row?.root_id}/edit?message=Published`)
+  } catch (err: any) {
+    return c.redirect(`/admin/content?model=doc:${typeId}&message=${encodeURIComponent(err?.message ?? 'Publish failed')}`)
+  }
+})
+
+// ─── Unpublish ────────────────────────────────────────────────────────────────
+adminContentRoutes.post('/documents/:typeId/:documentId/unpublish', async (c) => {
+  const { typeId, documentId } = c.req.param()
+  const db = c.env.DB
+  try {
+    const row = await db.prepare('SELECT root_id FROM documents WHERE id = ?').bind(documentId).first() as any
+    const { svc } = await getDocService(db, typeId)
+    await svc.unpublish(documentId)
+    return c.redirect(`/admin/content/documents/${typeId}/${row?.root_id}/edit?message=Unpublished`)
+  } catch (err: any) {
+    return c.redirect(`/admin/content?model=doc:${typeId}&message=${encodeURIComponent(err?.message ?? 'Unpublish failed')}`)
+  }
+})
+
+// ─── Delete (soft) ────────────────────────────────────────────────────────────
+adminContentRoutes.post('/documents/:typeId/:documentId/delete', async (c) => {
+  const { typeId, documentId } = c.req.param()
+  const db = c.env.DB
+  try {
+    const { svc, docType } = await getDocService(db, typeId)
+    if (docType?.settings?.pii) {
+      const row = await db.prepare('SELECT root_id FROM documents WHERE id = ?').bind(documentId).first() as any
+      if (row) await svc.erase(row.root_id, 'default')
+    } else {
+      await svc.softDelete(documentId)
+    }
+    return c.redirect(`/admin/content?model=doc:${typeId}&message=Deleted`)
+  } catch (err: any) {
+    return c.redirect(`/admin/content?model=doc:${typeId}&message=${encodeURIComponent(err?.message ?? 'Delete failed')}`)
+  }
+})
+
+// ─── Version history fragment (HTMX) ─────────────────────────────────────────
+adminContentRoutes.get('/documents/:typeId/:rootId/versions', async (c) => {
+  const { typeId, rootId } = c.req.param()
+  const db = c.env.DB
+  const { renderVersionHistoryFragment } = await import('../templates/pages/admin-documents-form.template')
+  const registry = new DocumentTypeRegistry(db)
+  const docType = await registry.findById(typeId)
+  if (!docType) return c.html('<div>Unknown type.</div>', 404)
+  const result = await db.prepare(
+    'SELECT id, version_number, is_current_draft, is_published, status, updated_at, created_by FROM documents WHERE root_id = ? AND tenant_id = ? ORDER BY version_number DESC LIMIT 50'
+  ).bind(rootId, 'default').all()
+  const versions = (result.results ?? []).map((r: any) => ({
+    id: r.id, versionNumber: r.version_number, isCurrentDraft: r.is_current_draft === 1,
+    isPublished: r.is_published === 1, status: r.status, updatedAt: r.updated_at, createdBy: r.created_by,
+  }))
+  return c.html(renderVersionHistoryFragment({ versions, docType, rootId }))
+})
+
+// The content list sets item.id = "documents/:typeId/:rootId", so the rendered edit link is
+// /admin/content/documents/:typeId/:rootId/edit — served by the GET handler above. No catch-all is
+// needed here (removed a stale comment that promised one but defined nothing — D14).
+
 export default adminContentRoutes

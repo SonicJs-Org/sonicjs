@@ -23,6 +23,7 @@ export async function syncCollections(db: D1Database): Promise<CollectionSyncRes
   }
 
   for (const config of configs) {
+    if (config.internal) continue
     const result = await syncCollection(db, config)
     results.push(result)
   }

@@ -14,7 +14,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "sonicjs-worktree-lane711-rbac-admin-subtabs"
-database_id = "cd4978c1-d13b-4321-90b7-6c04ab8624de"
+database_id = "f817d212-8316-47cd-b35e-bce32df9d2c5"
 migrations_dir = "./migrations"
 
 # R2 Bucket for media storage (using CI bucket)

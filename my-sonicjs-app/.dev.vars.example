@@ -9,3 +9,6 @@
 # Or:
 #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 BETTER_AUTH_SECRET="replace-me-with-32-bytes-of-hex"
+# Optional: set if Better Auth can't detect the base URL (avoids redirect/callback warnings).
+# Use whatever port wrangler dev actually binds to (default 8787, may differ if port is taken).
+# BETTER_AUTH_URL="http://localhost:8787"

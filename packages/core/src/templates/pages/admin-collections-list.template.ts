@@ -11,11 +11,13 @@ export interface Collection {
   field_count?: number
   managed?: boolean
   source_type?: string | null
+  internal?: boolean
 }
 
 export interface CollectionsListPageData {
   collections: Collection[]
   search?: string
+  showInternal?: boolean
   user?: {
     name: string
     email: string
@@ -25,6 +27,7 @@ export interface CollectionsListPageData {
 }
 
 export function renderCollectionsListPage(data: CollectionsListPageData): string {
+  const showInternal = data.showInternal ?? false
   const tableData: any = {
     tableId: 'collections-table',
     rowClickable: true,
@@ -46,6 +49,11 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
                       <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
                     </svg>
                     Config
+                  </span>
+                ` : ''}
+                ${collection.internal ? `
+                  <span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-700/50 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 ring-1 ring-inset ring-zinc-300/50 dark:ring-zinc-600/50" title="Internal system collection">
+                    Internal
                   </span>
                 ` : ''}
             </div>
@@ -238,10 +246,30 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
                       clearButton.classList.add('hidden');
                     }
                   }
+
+                  function toggleInternalCollections(checked) {
+                    const params = new URLSearchParams(window.location.search);
+                    if (checked) {
+                      params.set('showInternal', '1');
+                    } else {
+                      params.delete('showInternal');
+                    }
+                    window.location.href = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                  }
                 </script>
               </div>
               <div class="flex items-center gap-x-3">
                 <span class="text-sm/6 font-medium text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-full bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm">${data.collections.length} ${data.collections.length === 1 ? 'collection' : 'collections'}</span>
+                <label class="inline-flex items-center gap-x-2 px-3 py-1.5 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-950 dark:text-white text-sm font-medium rounded-full ring-1 ring-inset ring-zinc-200/50 dark:ring-zinc-700/50 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-all duration-200" title="Show internal system collections">
+                  <input
+                    type="checkbox"
+                    id="show-internal"
+                    ${showInternal ? 'checked' : ''}
+                    onchange="toggleInternalCollections(this.checked)"
+                    class="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                  >
+                  <span>Show internal</span>
+                </label>
                 <button
                   class="inline-flex items-center gap-x-1.5 px-3 py-1.5 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-950 dark:text-white text-sm font-medium rounded-full ring-1 ring-inset ring-cyan-200/50 dark:ring-cyan-700/50 hover:bg-gradient-to-r hover:from-cyan-50 hover:to-blue-50 dark:hover:from-cyan-900/30 dark:hover:to-blue-900/30 hover:ring-cyan-300 dark:hover:ring-cyan-600 transition-all duration-200"
                   onclick="location.reload()"

@@ -132,63 +132,12 @@ adminApiRoutes.get('/storage', async (c) => {
  * GET /admin/api/activity
  */
 adminApiRoutes.get('/activity', async (c) => {
-  try {
-    const db = c.env.DB
-    const limit = parseInt(c.req.query('limit') || '10')
-
-    // Get recent activities from activity_logs table
-    const activityStmt = db.prepare(`
-      SELECT
-        a.id,
-        a.action,
-        a.resource_type,
-        a.resource_id,
-        a.details,
-        a.created_at,
-        u.email,
-        u.first_name,
-        u.last_name
-      FROM activity_logs a
-      LEFT JOIN auth_user u ON a.user_id = u.id
-      WHERE a.resource_type IN ('content', 'collections', 'users', 'media')
-      ORDER BY a.created_at DESC
-      LIMIT ?
-    `)
-
-    const { results } = await activityStmt.bind(limit).all()
-
-    const recentActivity = (results || []).map((row: any) => {
-      const userName = row.first_name && row.last_name
-        ? `${row.first_name} ${row.last_name}`
-        : row.email || 'System'
-
-      let details: any = {}
-      try {
-        details = row.details ? JSON.parse(row.details) : {}
-      } catch (e) {
-        console.error('Error parsing activity details:', e)
-      }
-
-      return {
-        id: row.id,
-        type: row.resource_type,
-        action: row.action,
-        resource_id: row.resource_id,
-        details,
-        timestamp: new Date(Number(row.created_at)).toISOString(),
-        user: userName
-      }
-    })
-
-    return c.json({
-      data: recentActivity,
-      count: recentActivity.length,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Error fetching recent activity:', error)
-    return c.json({ error: 'Failed to fetch recent activity' }, 500)
-  }
+  // activity_logs is not yet available — will be implemented as a plugin
+  return c.json({
+    data: [],
+    count: 0,
+    timestamp: new Date().toISOString()
+  })
 })
 
 /**

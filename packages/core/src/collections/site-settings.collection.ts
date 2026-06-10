@@ -13,6 +13,7 @@ export default {
   description: 'Global site configuration including general settings and security options',
   icon: '⚙️',
   color: '#6B7280',
+  internal: true,
 
   schema: {
     type: 'object',

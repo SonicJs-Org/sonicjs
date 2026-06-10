@@ -121,6 +121,12 @@ export interface CollectionConfig {
   managed?: boolean
 
   /**
+   * If true, this is an internal system collection hidden by default in the admin UI
+   * Default: false
+   */
+  internal?: boolean
+
+  /**
    * If true, the collection is active and available for use
    * Default: true
    */

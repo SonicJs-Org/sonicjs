@@ -25,8 +25,7 @@ export function createAnalyticsPlugin(): Plugin {
       email: 'team@sonicjs.com'
     },
     license: 'MIT',
-    compatibility: '^0.1.0',
-    dependencies: ['core-auth'] // Requires auth for admin access
+    compatibility: '^0.1.0'
   })
 
   // Create analytics API routes

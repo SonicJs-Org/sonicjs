@@ -18,6 +18,7 @@ interface Collection {
   field_count?: number
   managed?: boolean
   source_type?: string | null
+  internal?: boolean
 }
 
 interface CollectionFormData {
@@ -57,6 +58,7 @@ interface CollectionField {
 interface CollectionsListPageData {
   collections: Collection[]
   search?: string
+  showInternal?: boolean
   user?: {
     name: string
     email: string
@@ -108,6 +110,7 @@ adminCollectionsRoutes.get('/', async (c) => {
     const db = c.env.DB
     const url = new URL(c.req.url)
     const search = url.searchParams.get('search') || ''
+    const showInternal = url.searchParams.get('showInternal') === '1'
 
     // Build query based on search
     let stmt
@@ -145,7 +148,8 @@ adminCollectionsRoutes.get('/', async (c) => {
           formattedDate: 'Code-defined',
           field_count: fieldCount,
           managed: cfg.managed !== false,
-          source_type: 'code'
+          source_type: 'code',
+          internal: cfg.internal === true
         } as Collection]
       })
     )
@@ -184,7 +188,8 @@ adminCollectionsRoutes.get('/', async (c) => {
           formattedDate: row.created_at ? new Date(Number(row.created_at)).toLocaleDateString() : 'Unknown',
           field_count: fieldCount,
           managed: false,
-          source_type: (row.source === 'code' || row.source === 'system' || row.source === 'plugin') ? 'code' : 'user'
+          source_type: (row.source === 'code' || row.source === 'system' || row.source === 'plugin') ? 'code' : 'user',
+          internal: row.source === 'system' || row.source === 'plugin'
         }
       })
 
@@ -199,12 +204,16 @@ adminCollectionsRoutes.get('/', async (c) => {
         field_count: codeCollection.field_count,
         managed: true,
         source_type: 'code',
-        formattedDate: 'Code-defined'
+        formattedDate: 'Code-defined',
+        internal: codeCollection.internal  // code config is authoritative; developer-defined collections are never internal
       } : collection)
     })
 
-    // Apply search filter if present
+    // Apply filters
     let collections = Array.from(mergedMap.values())
+    if (!showInternal) {
+      collections = collections.filter(c => !c.internal)
+    }
     if (search) {
       const searchLower = search.toLowerCase()
       collections = collections.filter(c =>
@@ -217,6 +226,7 @@ adminCollectionsRoutes.get('/', async (c) => {
     const pageData: CollectionsListPageData = {
       collections,
       search,
+      showInternal,
       user: user ? {
         name: user.email,
         email: user.email,

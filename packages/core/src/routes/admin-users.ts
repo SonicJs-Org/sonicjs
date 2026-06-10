@@ -1369,240 +1369,44 @@ userRoutes.delete('/cancel-invitation/:id', async (c) => {
  * GET /admin/activity-logs - View activity logs
  */
 userRoutes.get('/activity-logs', async (c) => {
-  const db = c.env.DB
+  // activity_logs is not yet available — will be implemented as a plugin
   const user = c.get('user')
-
-  try {
-    // Get pagination and filter parameters
-    const page = parseInt(c.req.query('page') || '1')
-    const limit = parseInt(c.req.query('limit') || '50')
-    const offset = (page - 1) * limit
-
-    const filters = {
-      action: c.req.query('action') || '',
-      resource_type: c.req.query('resource_type') || '',
-      date_from: c.req.query('date_from') || '',
-      date_to: c.req.query('date_to') || '',
-      user_id: c.req.query('user_id') || ''
-    }
-
-    // Build where clause
-    let whereConditions: string[] = []
-    let params: any[] = []
-
-    if (filters.action) {
-      whereConditions.push('al.action = ?')
-      params.push(filters.action)
-    }
-
-    if (filters.resource_type) {
-      whereConditions.push('al.resource_type = ?')
-      params.push(filters.resource_type)
-    }
-
-    if (filters.user_id) {
-      whereConditions.push('al.user_id = ?')
-      params.push(filters.user_id)
-    }
-
-    if (filters.date_from) {
-      const fromTimestamp = new Date(filters.date_from).getTime()
-      whereConditions.push('al.created_at >= ?')
-      params.push(fromTimestamp)
-    }
-
-    if (filters.date_to) {
-      const toTimestamp = new Date(filters.date_to + ' 23:59:59').getTime()
-      whereConditions.push('al.created_at <= ?')
-      params.push(toTimestamp)
-    }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
-
-    // Get activity logs with user information
-    const logsStmt = db.prepare(`
-      SELECT 
-        al.id, al.user_id, al.action, al.resource_type, al.resource_id,
-        al.details, al.ip_address, al.user_agent, al.created_at,
-        u.email as user_email,
-        COALESCE(u.first_name || ' ' || u.last_name, u.email) as user_name
-      FROM activity_logs al
-      LEFT JOIN auth_user u ON al.user_id = u.id
-      ${whereClause}
-      ORDER BY al.created_at DESC
-      LIMIT ? OFFSET ?
-    `)
-
-    const { results: logs } = await logsStmt.bind(...params, limit, offset).all()
-
-    // Get total count for pagination
-    const countStmt = db.prepare(`
-      SELECT COUNT(*) as total 
-      FROM activity_logs al
-      LEFT JOIN auth_user u ON al.user_id = u.id
-      ${whereClause}
-    `)
-    const countResult = await countStmt.bind(...params).first() as any
-    const totalLogs = countResult?.total || 0
-
-    // Parse details JSON for each log
-    const formattedLogs: ActivityLog[] = (logs || []).map((log: any) => ({
-      ...log,
-      details: log.details ? JSON.parse(log.details) : null
-    }))
-
-    // Log the activity
-    await logActivity(
-      db, user!.userId, 'activity.logs_viewed', undefined, undefined,
-      { filters, page, limit },
-      c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
-      c.req.header('user-agent')
-    )
-
-    const pageData: ActivityLogsPageData = {
-      logs: formattedLogs,
-      pagination: {
-        page,
-        limit,
-        total: totalLogs,
-        pages: Math.ceil(totalLogs / limit)
-      },
-      filters,
-      user: {
-        name: user!.email.split('@')[0] || user!.email, // Use email username as fallback
-        email: user!.email,
-        role: user!.role
-      }
-    }
-
-    return c.html(renderActivityLogsPage(pageData))
-
-  } catch (error) {
-    console.error('Activity logs error:', error)
-    
-    const pageData: ActivityLogsPageData = {
-      logs: [],
-      pagination: { page: 1, limit: 50, total: 0, pages: 0 },
-      filters: {},
-      user: {
-        name: user!.email,
-        email: user!.email,
-        role: user!.role
-      }
-    }
-
-    return c.html(renderActivityLogsPage(pageData))
+  const page = parseInt(c.req.query('page') || '1')
+  const limit = parseInt(c.req.query('limit') || '50')
+  const filters = {
+    action: c.req.query('action') || '',
+    resource_type: c.req.query('resource_type') || '',
+    date_from: c.req.query('date_from') || '',
+    date_to: c.req.query('date_to') || '',
+    user_id: c.req.query('user_id') || ''
   }
+  const pageData: ActivityLogsPageData = {
+    logs: [],
+    pagination: { page, limit, total: 0, pages: 0 },
+    filters,
+    user: {
+      name: user!.email.split('@')[0] || user!.email,
+      email: user!.email,
+      role: user!.role
+    }
+  }
+  return c.html(renderActivityLogsPage(pageData))
 })
 
 /**
  * GET /admin/activity-logs/export - Export activity logs to CSV
  */
 userRoutes.get('/activity-logs/export', async (c) => {
-  const db = c.env.DB
-  const user = c.get('user')
-
-  try {
-    // Get filter parameters (same as list view)
-    const filters = {
-      action: c.req.query('action') || '',
-      resource_type: c.req.query('resource_type') || '',
-      date_from: c.req.query('date_from') || '',
-      date_to: c.req.query('date_to') || '',
-      user_id: c.req.query('user_id') || ''
+  // activity_logs is not yet available — will be implemented as a plugin
+  const csvHeaders = ['Timestamp', 'User', 'Email', 'Action', 'Resource Type', 'Resource ID', 'IP Address', 'Details']
+  const csvContent = csvHeaders.join(',')
+  const filename = `activity-logs-${new Date().toISOString().split('T')[0]}.csv`
+  return new Response(csvContent, {
+    headers: {
+      'Content-Type': 'text/csv',
+      'Content-Disposition': `attachment; filename="${filename}"`
     }
-
-    // Build where clause
-    let whereConditions: string[] = []
-    let params: any[] = []
-
-    if (filters.action) {
-      whereConditions.push('al.action = ?')
-      params.push(filters.action)
-    }
-
-    if (filters.resource_type) {
-      whereConditions.push('al.resource_type = ?')
-      params.push(filters.resource_type)
-    }
-
-    if (filters.user_id) {
-      whereConditions.push('al.user_id = ?')
-      params.push(filters.user_id)
-    }
-
-    if (filters.date_from) {
-      const fromTimestamp = new Date(filters.date_from).getTime()
-      whereConditions.push('al.created_at >= ?')
-      params.push(fromTimestamp)
-    }
-
-    if (filters.date_to) {
-      const toTimestamp = new Date(filters.date_to + ' 23:59:59').getTime()
-      whereConditions.push('al.created_at <= ?')
-      params.push(toTimestamp)
-    }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
-
-    // Get all matching activity logs (limit to 10,000 for performance)
-    const logsStmt = db.prepare(`
-      SELECT 
-        al.id, al.user_id, al.action, al.resource_type, al.resource_id,
-        al.details, al.ip_address, al.user_agent, al.created_at,
-        u.email as user_email,
-        COALESCE(u.first_name || ' ' || u.last_name, u.email) as user_name
-      FROM activity_logs al
-      LEFT JOIN auth_user u ON al.user_id = u.id
-      ${whereClause}
-      ORDER BY al.created_at DESC
-      LIMIT 10000
-    `)
-
-    const { results: logs } = await logsStmt.bind(...params).all()
-
-    // Generate CSV content
-    const csvHeaders = ['Timestamp', 'User', 'Email', 'Action', 'Resource Type', 'Resource ID', 'IP Address', 'Details']
-    const csvRows = [csvHeaders.join(',')]
-
-    for (const log of (logs || [])) {
-      const row = [
-        `"${new Date((log as any).created_at).toISOString()}"`,
-        `"${(log as any).user_name || 'Unknown'}"`,
-        `"${(log as any).user_email || 'N/A'}"`,
-        `"${(log as any).action}"`,
-        `"${(log as any).resource_type || 'N/A'}"`,
-        `"${(log as any).resource_id || 'N/A'}"`,
-        `"${(log as any).ip_address || 'N/A'}"`,
-        `"${(log as any).details ? JSON.stringify(JSON.parse((log as any).details)) : 'N/A'}"`
-      ]
-      csvRows.push(row.join(','))
-    }
-
-    const csvContent = csvRows.join('\n')
-
-    // Log the export activity
-    await logActivity(
-      db, user!.userId, 'activity.logs_exported', undefined, undefined,
-      { filters, count: logs?.length || 0 },
-      c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
-      c.req.header('user-agent')
-    )
-
-    // Return CSV file
-    const filename = `activity-logs-${new Date().toISOString().split('T')[0]}.csv`
-    
-    return new Response(csvContent, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="${filename}"`
-      }
-    })
-
-  } catch (error) {
-    console.error('Activity logs export error:', error)
-    return c.json({ error: 'Failed to export activity logs' }, 500)
-  }
+  })
 })
 
 export { userRoutes }

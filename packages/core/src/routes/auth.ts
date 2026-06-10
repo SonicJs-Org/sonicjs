@@ -615,7 +615,7 @@ authRoutes.post('/register/form',
     await setCsrfCookie(c)
 
     // Redirect based on role
-    const redirectUrl = role === 'admin' ? '/admin/dashboard' : '/admin/dashboard'
+    const redirectUrl = '/admin/content'
 
     return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
@@ -698,11 +698,11 @@ authRoutes.post('/login/form',
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             <div class="flex-1">
-              <p class="text-sm font-medium text-green-700 dark:text-lime-300">Login successful! Redirecting to admin dashboard...</p>
+              <p class="text-sm font-medium text-green-700 dark:text-lime-300">Login successful! Redirecting...</p>
             </div>
           </div>
           <script>
-            setTimeout(() => { window.location.href = '/admin'; }, 500);
+            setTimeout(() => { window.location.href = '/admin/content'; }, 500);
           </script>
         </div>
       </div>
@@ -1021,7 +1021,7 @@ authRoutes.post('/accept-invitation', async (c) => {
     // Activity logging is deferred until utils/log-activity is implemented
 
     // Redirect to admin dashboard
-    return c.redirect('/admin/dashboard?welcome=true')
+    return c.redirect('/admin/content')
 
   } catch (error) {
     console.error('Accept invitation error:', error)

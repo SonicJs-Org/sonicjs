@@ -231,45 +231,49 @@ adminRbacRoutes.get('/', async (c) => {
   const saveRoleIds = selectedRoles.filter((r) => !isAdmin(r)).map((r) => r.id).join(',')
   const firstSelected = selectedRoles[0]
 
+  const btn = 'inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100'
+  const inp = 'rounded-md bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15'
+  const card = 'rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-5'
   const inpSm = 'rounded-md bg-white dark:bg-white/5 px-2 py-1 text-sm text-zinc-900 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15'
-  const roleList = roles
+  const roleIds = roles.map((r) => r.id).join(',')
+  const roleListItems = roles
     .map((r) => {
       const portalChecked = roleHasPortalAccess(r)
       const portalDisabled = isAdmin(r)
       return (
-        `<li class="py-2 border-b border-zinc-950/5 dark:border-white/5">
-          <form method="post" action="/admin/rbac/roles/${esc(r.id)}" class="flex items-center gap-2 flex-wrap">
-            <input class="${inpSm} flex-1 min-w-[120px]" name="display_name" value="${esc(
-              r.display_name
-            )}" required>
-            ${
-              r.is_system
-                ? `<code class="text-xs text-zinc-500 dark:text-zinc-400">${esc(
-                    r.name
-                  )}</code><span class="rounded-full bg-zinc-100 dark:bg-white/10 px-2 py-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">system</span>`
-                : `<input class="${inpSm} w-28" name="name" value="${esc(r.name)}" required>`
-            }
-            <button class="rounded-md bg-zinc-200 dark:bg-white/10 px-2.5 py-1 text-xs font-medium text-zinc-900 dark:text-white hover:bg-zinc-300 dark:hover:bg-white/20">Save</button>
-            ${
-              r.is_system
-                ? ''
-                : `<button formaction="/admin/rbac/roles/${esc(
-                    r.id
-                  )}/delete" formnovalidate onclick="return confirm('Delete role ${esc(
-                    r.name
-                  )}?')" class="text-xs text-red-600 dark:text-red-400 hover:underline">delete</button>`
-            }
-            <label class="ml-auto inline-flex items-center gap-2 rounded-md bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-500/20">
-              <input type="checkbox" name="portal_access" value="1" ${portalChecked ? 'checked' : ''} ${
-                portalDisabled ? 'disabled' : ''
-              } class="h-3.5 w-3.5 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
-              Access portal
-            </label>
-          </form>
+        `<li class="py-2 border-b border-zinc-950/5 dark:border-white/5 flex items-center gap-2 flex-wrap">
+          <input form="roles-bulk-form" class="${inpSm} flex-1 min-w-[120px]" name="display_name_${esc(r.id)}" value="${esc(r.display_name)}" required>
+          ${
+            r.is_system
+              ? `<code class="text-xs text-zinc-500 dark:text-zinc-400">${esc(r.name)}</code><span class="rounded-full bg-zinc-100 dark:bg-white/10 px-2 py-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">system</span>`
+              : `<input form="roles-bulk-form" class="${inpSm} w-28" name="name_${esc(r.id)}" value="${esc(r.name)}" required>`
+          }
+          <label class="ml-auto inline-flex items-center gap-2 rounded-md bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-500/20">
+            <input form="roles-bulk-form" type="checkbox" name="portal_${esc(r.id)}" value="1" ${portalChecked ? 'checked' : ''} ${
+              portalDisabled ? 'disabled' : ''
+            } class="h-3.5 w-3.5 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
+            Access portal
+          </label>
+          ${
+            r.is_system
+              ? ''
+              : `<button form="delete-role-${esc(r.id)}" type="submit" onclick="return confirm('Delete role ${esc(r.name)}?')" class="text-xs text-red-600 dark:text-red-400 hover:underline">delete</button>`
+          }
         </li>`
       )
     })
     .join('')
+  const roleDeleteForms = roles
+    .filter((r) => !r.is_system)
+    .map((r) => `<form id="delete-role-${esc(r.id)}" method="post" action="/admin/rbac/roles/${esc(r.id)}/delete"></form>`)
+    .join('')
+  const roleList = `
+    <form id="roles-bulk-form" method="post" action="/admin/rbac/roles/bulk">
+      <input type="hidden" name="role_ids" value="${esc(roleIds)}">
+      <ul class="mb-4">${roleListItems}</ul>
+      <button type="submit" class="${btn}">Save roles</button>
+    </form>
+    ${roleDeleteForms}`
 
   const verbList = matrixVerbs
     .map(
@@ -286,10 +290,6 @@ adminRbacRoutes.get('/', async (c) => {
         </li>`
     )
     .join('')
-
-  const btn = 'inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100'
-  const inp = 'rounded-md bg-white dark:bg-white/5 px-3 py-1.5 text-sm text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-300 dark:outline-white/15'
-  const card = 'rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-5'
 
   // Scoped styles for the vertical colored scope range (colors come from each
   // segment's --sc var; :checked can't be done via inline style).
@@ -375,8 +375,8 @@ adminRbacRoutes.get('/', async (c) => {
       <div class="${card}">
         <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
         <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions are configured in the <strong>Matrix</strong> tab.</p>
-        <ul class="mb-4">${roleList}</ul>
-        <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2">
+        ${roleList}
+        <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2 mt-4">
           <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
           <input class="${inp}" type="text" name="display_name" placeholder="Display name" required>
           <button class="${btn}">Add role</button>
@@ -516,6 +516,26 @@ adminRbacRoutes.post('/grants', async (c) => {
   return c.redirect(`/admin/rbac${qs ? `?${qs}` : ''}`)
 })
 
+adminRbacRoutes.post('/roles/bulk', async (c) => {
+  const form = await c.req.formData()
+  const roleIds = String(form.get('role_ids') || '').split(',').filter(Boolean)
+  const rbac = new RbacService(c.env.DB)
+  for (const roleId of roleIds) {
+    const displayName = String(form.get(`display_name_${roleId}`) || '').trim()
+    const nameVal = form.get(`name_${roleId}`) ? String(form.get(`name_${roleId}`)).trim() : undefined
+    const portalAccess = form.get(`portal_${roleId}`) === '1'
+    if (displayName) {
+      try {
+        await rbac.updateRole(roleId, displayName, '', nameVal)
+        if (roleId !== 'role-admin') {
+          await rbac.setRolePortalAccess(roleId, portalAccess)
+        }
+      } catch { /* duplicate name */ }
+    }
+  }
+  return c.redirect('/admin/rbac#roles-verbs')
+})
+
 adminRbacRoutes.post('/roles', async (c) => {
   const form = await c.req.formData()
   const name = String(form.get('name') || '').trim()
@@ -525,7 +545,7 @@ adminRbacRoutes.post('/roles', async (c) => {
       await new RbacService(c.env.DB).createRole(name, displayName)
     } catch { /* duplicate */ }
   }
-  return c.redirect('/admin/rbac')
+  return c.redirect('/admin/rbac#roles-verbs')
 })
 
 adminRbacRoutes.post('/roles/:id', async (c) => {
@@ -544,12 +564,12 @@ adminRbacRoutes.post('/roles/:id', async (c) => {
       }
     } catch { /* duplicate name */ }
   }
-  return c.redirect(`/admin/rbac?compare=1&roles=${encodeURIComponent(roleId)}`)
+  return c.redirect(`/admin/rbac#roles-verbs`)
 })
 
 adminRbacRoutes.post('/roles/:id/delete', async (c) => {
   await new RbacService(c.env.DB).deleteRole(c.req.param('id'))
-  return c.redirect('/admin/rbac')
+  return c.redirect('/admin/rbac#roles-verbs')
 })
 
 adminRbacRoutes.post('/verbs', async (c) => {
@@ -560,12 +580,12 @@ adminRbacRoutes.post('/verbs', async (c) => {
       await new RbacService(c.env.DB).createVerb(name)
     } catch { /* duplicate */ }
   }
-  return c.redirect('/admin/rbac')
+  return c.redirect('/admin/rbac#roles-verbs')
 })
 
 adminRbacRoutes.post('/verbs/:id/delete', async (c) => {
   await new RbacService(c.env.DB).deleteVerb(c.req.param('id'))
-  return c.redirect('/admin/rbac')
+  return c.redirect('/admin/rbac#roles-verbs')
 })
 
 adminRbacRoutes.get('/check', async (c) => {

@@ -19,7 +19,6 @@ import {
   adminMediaRoutes,
   adminPluginRoutes,
   adminLogsRoutes,
-  adminDashboardRoutes,
   adminCollectionsRoutes,
   adminSettingsRoutes,
   adminApiReferenceRoutes,
@@ -36,6 +35,8 @@ import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-
 import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPlugin } from './plugins/core-plugins/email-plugin'
 import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
+import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
+import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
@@ -52,6 +53,7 @@ import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
 import { shortcodesPlugin } from './plugins/core-plugins/shortcodes-plugin'
 import { helloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
+import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
 import type { Plugin } from './plugins/types'
 import { registerPluginRoutes } from './plugins/mount'
@@ -256,10 +258,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // `dist` declarations, which TS treats as a distinct identity from the `src`
   // Plugin. Both consumers (registerPluginRoutes, createPluginWirer) accept a
   // structural subset, so inference is the right call here.
+  const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
     aiSearchPlugin,
+    oauthProvidersPlugin,
     userProfilesPlugin,
+    otpLoginPlugin,
     analyticsPlugin,
     stripePlugin,
     // Previously declared via PluginBuilder.addRoute() but never mounted in
@@ -268,7 +273,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     shortcodesPlugin,
     helloWorldPlugin,
   ]
-  const corePluginsAfterCatchAll = [emailPlugin, emailReconciliationPlugin]
+  const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
   // Lazy, once-guarded plugin wiring (the async half of two-phase boot). The
   // first request subscribes every plugin's hooks and runs their onBoot; later
@@ -530,7 +535,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   }
 
   app.route('/admin/api', adminApiRoutes)
-  app.route('/admin/dashboard', adminDashboardRoutes)
   app.route('/admin/collections', adminCollectionsRoutes)
   app.route('/admin/settings', adminSettingsRoutes)
   app.route('/admin/api-reference', adminApiReferenceRoutes)

@@ -243,6 +243,79 @@ test.describe('RBAC — sub-tab navigation', () => {
     await expect(page.locator('#panel-tools')).toBeVisible();
     await expect(page.locator('#panel-matrix')).toBeHidden();
   });
+
+  test('Roles & Verbs tab has single Save roles button (no per-row Save)', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-roles-verbs');
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+
+    // Single bulk save button exists
+    await expect(page.locator('#roles-bulk-form button[type="submit"]')).toBeVisible();
+
+    // No stray inline "Save" buttons per role row
+    const inlineRowSaves = page.locator('#panel-roles-verbs li button:has-text("Save")');
+    await expect(inlineRowSaves).toHaveCount(0);
+  });
+
+  test('Save roles redirects back to Roles & Verbs tab', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-roles-verbs');
+    await page.locator('#roles-bulk-form button[type="submit"]').click();
+    await page.waitForLoadState('networkidle');
+
+    // After redirect, Roles & Verbs panel should be active
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+    await expect(page.locator('#panel-matrix')).toBeHidden();
+    await expect(page.locator('#subtab-roles-verbs')).toHaveClass(/active/);
+  });
+
+  test('Portal access checkbox persists after save', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-roles-verbs');
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+
+    // Find the viewer role portal checkbox
+    const viewerPortal = page.locator('input[name^="portal_role-viewer"]');
+    const wasChecked = await viewerPortal.isChecked();
+
+    // Toggle it
+    if (!viewerPortal.isDisabled()) {
+      if (wasChecked) {
+        await viewerPortal.uncheck();
+      } else {
+        await viewerPortal.check();
+      }
+    }
+
+    await page.locator('#roles-bulk-form button[type="submit"]').click();
+    await page.waitForLoadState('networkidle');
+
+    // Should land on Roles & Verbs tab
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+
+    // Checkbox state should reflect what we saved
+    const viewerPortalAfter = page.locator('input[name^="portal_role-viewer"]');
+    if (!viewerPortalAfter.isDisabled()) {
+      const nowChecked = await viewerPortalAfter.isChecked();
+      expect(nowChecked).toBe(!wasChecked);
+      // Restore original state
+      if (!wasChecked) {
+        await viewerPortalAfter.uncheck();
+      } else {
+        await viewerPortalAfter.check();
+      }
+      await page.locator('#roles-bulk-form button[type="submit"]').click();
+    }
+  });
 });
 
 test.describe('RBAC — admin sections accessible', () => {

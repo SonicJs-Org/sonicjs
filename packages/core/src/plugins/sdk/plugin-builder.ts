@@ -314,7 +314,8 @@ export class PluginBuilder {
     // V3 compatibility fields — added without breaking the Plugin type contract.
     const built = this.plugin as Plugin & { id?: string; capabilities?: string[] }
     built.id = built.id ?? this.plugin.name
-    built.capabilities = built.capabilities ?? []
+    // Leave capabilities as undefined so wire.ts treats this as an old-style
+    // PluginBuilder plugin and skips the capability gate (backwards-compatible).
 
     return built as Plugin
   }

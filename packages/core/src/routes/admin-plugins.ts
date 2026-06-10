@@ -200,9 +200,9 @@ adminPluginRoutes.get('/:id', async (c) => {
     const templateActivity = (activity || []).map(item => ({
       id: item.id,
       action: item.action,
-      message: item.message,
+      message: formatPluginActivityMessage(item),
       timestamp: item.timestamp,
-      user: item.user_email
+      user: item.userId || undefined
     }))
 
     const pageData: PluginSettingsPageData = {
@@ -389,6 +389,17 @@ function formatLastUpdated(timestamp: number): string {
   if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`
   if (diff < 2592000) return `${Math.floor(diff / 604800)} weeks ago`
   return `${Math.floor(diff / 2592000)} months ago`
+}
+
+function formatPluginActivityMessage(item: { action: string; details: unknown }): string {
+  if (item.details && typeof item.details === 'object' && !Array.isArray(item.details)) {
+    const message = (item.details as Record<string, unknown>).message
+    if (typeof message === 'string' && message.length > 0) {
+      return message
+    }
+  }
+
+  return item.action.replace(/_/g, ' ')
 }
 
 export { adminPluginRoutes }

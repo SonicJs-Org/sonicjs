@@ -1,0 +1,11 @@
+# Copy to .dev.vars and fill in real values. .dev.vars is gitignored.
+# Wrangler loads this file for `wrangler dev` (local dev only).
+#
+# Required: BETTER_AUTH_SECRET must be >= 16 chars. Auth init refuses to
+# start without it and login returns 500.
+#
+# Generate a strong random secret:
+#   openssl rand -hex 32
+# Or:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+BETTER_AUTH_SECRET="replace-me-with-32-bytes-of-hex"

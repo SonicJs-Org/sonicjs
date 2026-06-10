@@ -47,38 +47,7 @@ function getMockSettings(user: any) {
       language: 'en',
       maintenanceMode: false
     },
-    appearance: {
-      theme: 'dark' as const,
-      primaryColor: '#465FFF',
-      logoUrl: '',
-      favicon: '',
-      customCSS: ''
-    },
-    security: {
-      twoFactorEnabled: false,
-      sessionTimeout: 30,
-      passwordRequirements: {
-        minLength: 8,
-        requireUppercase: true,
-        requireNumbers: true,
-        requireSymbols: false
-      },
-      ipWhitelist: []
-    },
-    notifications: {
-      emailNotifications: true,
-      contentUpdates: true,
-      systemAlerts: true,
-      userRegistrations: false,
-      emailFrequency: 'immediate' as const
-    },
-    storage: {
-      maxFileSize: 10,
-      allowedFileTypes: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'docx'],
-      storageProvider: 'cloudflare' as const,
-      backupFrequency: 'daily' as const,
-      retentionPeriod: 30
-    },
+    security: {},
     migrations: {
       totalMigrations: 0,
       appliedMigrations: 0,
@@ -126,37 +95,19 @@ adminSettingsRoutes.get('/general', async (c) => {
   return c.html(renderSettingsPage(pageData))
 })
 
-// Appearance settings
-adminSettingsRoutes.get('/appearance', (c) => {
-  const user = c.get('user')
-  const pageData: SettingsPageData = {
-    user: user ? {
-      name: user.email,
-      email: user.email,
-      role: user.role
-    } : undefined,
-    settings: getMockSettings(user),
-    activeTab: 'appearance',
-    version: c.get('appVersion')
-  }
-  return c.html(renderSettingsPage(pageData))
-})
-
 // Security settings
 adminSettingsRoutes.get('/security', async (c) => {
   const user = c.get('user')
   const db = c.env.DB
   const settingsService = new SettingsService(db)
 
-  // Load persisted security settings (JWT TTL + refresh grace)
   const persisted = await settingsService.getSecuritySettings()
 
   const mockSettings = getMockSettings(user)
   mockSettings.security = {
-    ...mockSettings.security,
     jwtExpiresIn: persisted.jwtExpiresIn,
     jwtRefreshGraceSeconds: persisted.jwtRefreshGraceSeconds
-  } as any
+  }
 
   const pageData: SettingsPageData = {
     user: user ? {
@@ -166,38 +117,6 @@ adminSettingsRoutes.get('/security', async (c) => {
     } : undefined,
     settings: mockSettings,
     activeTab: 'security',
-    version: c.get('appVersion')
-  }
-  return c.html(renderSettingsPage(pageData))
-})
-
-// Notifications settings
-adminSettingsRoutes.get('/notifications', (c) => {
-  const user = c.get('user')
-  const pageData: SettingsPageData = {
-    user: user ? {
-      name: user.email,
-      email: user.email,
-      role: user.role
-    } : undefined,
-    settings: getMockSettings(user),
-    activeTab: 'notifications',
-    version: c.get('appVersion')
-  }
-  return c.html(renderSettingsPage(pageData))
-})
-
-// Storage settings
-adminSettingsRoutes.get('/storage', (c) => {
-  const user = c.get('user')
-  const pageData: SettingsPageData = {
-    user: user ? {
-      name: user.email,
-      email: user.email,
-      role: user.role
-    } : undefined,
-    settings: getMockSettings(user),
-    activeTab: 'storage',
     version: c.get('appVersion')
   }
   return c.html(renderSettingsPage(pageData))

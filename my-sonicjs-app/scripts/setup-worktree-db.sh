@@ -24,6 +24,32 @@ echo "Database name: $DB_NAME"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# Ensure .dev.vars exists with required secrets. Wrangler loads it for local
+# dev; without BETTER_AUTH_SECRET, auth init throws and login returns 500.
+gen_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  fi
+}
+
+if [ ! -f .dev.vars ]; then
+  echo ""
+  echo "Generating .dev.vars with a fresh BETTER_AUTH_SECRET..."
+  AUTH_SECRET=$(gen_secret)
+  cat > .dev.vars <<EOF
+# Local dev secrets — gitignored. Do not commit.
+# Regenerate BETTER_AUTH_SECRET with: openssl rand -hex 32
+BETTER_AUTH_SECRET="$AUTH_SECRET"
+EOF
+  echo ".dev.vars created."
+elif ! grep -q '^BETTER_AUTH_SECRET=' .dev.vars; then
+  echo "Appending BETTER_AUTH_SECRET to existing .dev.vars..."
+  AUTH_SECRET=$(gen_secret)
+  echo "BETTER_AUTH_SECRET=\"$AUTH_SECRET\"" >> .dev.vars
+fi
+
 # Check if database already exists
 echo "Checking for existing database..."
 EXISTING_DB=$(npx wrangler d1 list --json 2>/dev/null | jq -r ".[] | select(.name == \"$DB_NAME\") | .uuid" || echo "")

@@ -154,11 +154,11 @@ test.describe('Settings - General Tab', () => {
     await page.goto('/admin/settings/general');
     await page.waitForLoadState('networkidle');
 
-    // Click on appearance tab
-    await page.locator('a[href="/admin/settings/appearance"]').click();
+    // Click on security tab
+    await page.locator('a[href="/admin/settings/security"]').click();
     await page.waitForLoadState('networkidle');
 
-    expect(page.url()).toContain('/admin/settings/appearance');
+    expect(page.url()).toContain('/admin/settings/security');
 
     // Go back to general
     await page.locator('a[href="/admin/settings/general"]').click();

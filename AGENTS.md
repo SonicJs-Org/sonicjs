@@ -69,6 +69,11 @@ Skip cavecrew for: known-path edits, multi-file features, anything codegraph ans
 - Playwright E2E: `npm run e2e`, smoke subset via `npm run e2e:smoke`, headed/UI via `npm run e2e:ui`
 - Sample-app DB reset: `npm run db:reset` (or `npm run setup:db` inside `my-sonicjs-app`)
 
+### Local secrets (`my-sonicjs-app/.dev.vars`)
+- `wrangler dev` reads `my-sonicjs-app/.dev.vars` for local secrets. Auth refuses to initialize without `BETTER_AUTH_SECRET` (>=16 chars); requests to `/auth/*` then return 500 with "BETTER_AUTH_SECRET is missing or too short".
+- `npm run workspace` (and `npm run db:reset` → `setup-worktree-db.sh`) auto-create `.dev.vars` with a fresh `openssl rand -hex 32` secret. Re-runs are idempotent — won't overwrite.
+- Manual fix if file is missing: `cd my-sonicjs-app && cp .dev.vars.example .dev.vars` then set `BETTER_AUTH_SECRET="$(openssl rand -hex 32)"`. `.dev.vars` is gitignored — never commit it. For prod/preview use `wrangler secret put BETTER_AUTH_SECRET`.
+
 ## Coding Style & Patterns
 - TypeScript-first ES modules. Keep exported/public signatures fully typed; lean on Zod validation where applicable.
 - Use established folder conventions for routes (`packages/core/src/routes`), templates (`packages/core/src/templates`), plugins (`packages/core/src/plugins`), and Drizzle schema (`packages/core/src/db`).

@@ -838,20 +838,12 @@ userRoutes.get('/users/:id/edit', async (c) => {
 
     // Get user profile data (backed by the user_profile document)
     const profileData = await readProfileData(db, userId)
-    const hasProfile = profileData.displayName != null || profileData.bio != null ||
-      profileData.company != null || profileData.jobTitle != null || profileData.website != null ||
-      profileData.location != null || profileData.dateOfBirth != null ||
+    const hasProfile = profileData.displayName != null ||
       Object.keys(profileData.custom).length > 0
 
     // Convert profile to UserProfileData interface
     const profile: UserProfileData | undefined = hasProfile ? {
       displayName: profileData.displayName ?? undefined,
-      bio: profileData.bio ?? undefined,
-      company: profileData.company ?? undefined,
-      jobTitle: profileData.jobTitle ?? undefined,
-      website: profileData.website ?? undefined,
-      location: profileData.location ?? undefined,
-      dateOfBirth: profileData.dateOfBirth ?? undefined
     } : undefined
 
     // Custom profile data lives under data.custom
@@ -927,14 +919,6 @@ userRoutes.put('/users/:id', async (c) => {
 
     // Extract profile fields
     const profileDisplayName = sanitizeInput(formData.get('profile_display_name')?.toString()) || null
-    const profileBio = sanitizeInput(formData.get('profile_bio')?.toString()) || null
-    const profileCompany = sanitizeInput(formData.get('profile_company')?.toString()) || null
-    const profileJobTitle = sanitizeInput(formData.get('profile_job_title')?.toString()) || null
-    const profileWebsite = formData.get('profile_website')?.toString()?.trim() || null
-    const profileLocation = sanitizeInput(formData.get('profile_location')?.toString()) || null
-    const profileDateOfBirthStr = formData.get('profile_date_of_birth')?.toString()?.trim() || null
-    const profileDateOfBirth = profileDateOfBirthStr ? new Date(profileDateOfBirthStr).getTime() : null
-
     // Extract custom profile fields (merged into the profile document below)
     const profileConfig = getUserProfileConfig()
     let sanitizedCustom: Record<string, any> | null = null
@@ -986,19 +970,6 @@ userRoutes.put('/users/:id', async (c) => {
       }
     }
 
-    // Validate website URL if provided
-    if (profileWebsite) {
-      try {
-        new URL(profileWebsite)
-      } catch {
-        return c.html(renderAlert({
-          type: 'error',
-          message: 'Please enter a valid website URL.',
-          dismissible: true
-        }))
-      }
-    }
-
     // Check if email is taken by another user
     const checkStmt = db.prepare(`
       SELECT id FROM auth_user
@@ -1039,19 +1010,12 @@ userRoutes.put('/users/:id', async (c) => {
     }
 
     // Check if any profile field has data
-    const hasProfileData = profileDisplayName || profileBio || profileCompany ||
-      profileJobTitle || profileWebsite || profileLocation || profileDateOfBirth
+    const hasProfileData = profileDisplayName
 
     if (hasProfileData || sanitizedCustom !== null) {
       // Persist to the user_profile document (typed fields + custom namespace).
       await writeProfileData(db, userId, {
         displayName: profileDisplayName,
-        bio: profileBio,
-        company: profileCompany,
-        jobTitle: profileJobTitle,
-        website: profileWebsite,
-        location: profileLocation,
-        dateOfBirth: profileDateOfBirth,
         ...(sanitizedCustom !== null ? { custom: sanitizedCustom } : {}),
       }, user!.userId)
     }
@@ -1067,7 +1031,8 @@ userRoutes.put('/users/:id', async (c) => {
     return c.html(renderAlert({
       type: 'success',
       message: 'User updated successfully!',
-      dismissible: true
+      dismissible: true,
+      className: 'mb-4'
     }))
 
   } catch (error) {

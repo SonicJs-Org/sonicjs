@@ -484,7 +484,46 @@ adminCollectionsRoutes.get('/:id', async (c) => {
       }
     }
 
-    // New document model uses schema as source of truth
+    // If no fields from DB schema, fall back to code-defined collection config
+    // (e.g. blog_post is registered via registerCollections with a full field schema,
+    // but its document_types entry uses a passthrough Zod schema with no .properties)
+    let isCodeDriven = false
+    if (fields.length === 0) {
+      try {
+        const codeCollections = await loadCollectionConfigs()
+        const codeCol = codeCollections.find((c) => c.name === id || c.name === collection.name)
+        if (codeCol?.schema?.properties) {
+          let fieldOrder = 0
+          fields = Object.entries(codeCol.schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
+            let fieldType = fieldConfig.type || 'string'
+            if (fieldConfig.enum) {
+              fieldType = 'select'
+            } else if (fieldConfig.format === 'richtext') {
+              fieldType = 'richtext'
+            } else if (fieldConfig.format === 'media') {
+              fieldType = 'media'
+            } else if (fieldConfig.format === 'date-time') {
+              fieldType = 'date'
+            } else if (fieldConfig.type === 'slug' || fieldConfig.format === 'slug') {
+              fieldType = 'slug'
+            }
+            return {
+              id: `schema-${fieldName}`,
+              field_name: fieldName,
+              field_type: fieldType,
+              field_label: fieldConfig.title || fieldName,
+              field_options: fieldConfig,
+              field_order: fieldOrder++,
+              is_required: fieldConfig.required === true || !!(codeCol.schema.required && (codeCol.schema.required as string[]).includes(fieldName)),
+              is_searchable: fieldConfig.searchable === true || false
+            }
+          })
+          isCodeDriven = true
+        }
+      } catch (e) {
+        console.error('Error loading code collection config:', e)
+      }
+    }
 
     // Check which editor plugins are active
     const [tinymceActive, quillActive, mdxeditorActive] = await Promise.all([
@@ -505,7 +544,7 @@ adminCollectionsRoutes.get('/:id', async (c) => {
       display_name: collection.display_name,
       description: collection.description,
       fields: fields,
-      managed: collection.managed === 1,
+      managed: collection.managed === 1 || isCodeDriven,
       isEdit: true,
       user: user ? {
         name: user.email,

@@ -13,6 +13,22 @@ const anyObject = z.record(z.string(), z.unknown())
 export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
   const registry = new DocumentTypeRegistry(db)
 
+  // Site settings: internal singleton config — never surfaced in content admin.
+  await registry.register({
+    id: 'site_settings',
+    name: 'site_settings',
+    displayName: 'Site Settings',
+    description: 'Global site configuration (internal; managed via admin settings UI)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'update', 'delete', 'manage'] },
+    },
+    queryableFields: [],
+  })
+
   // Blog post: the code-managed `blog_post` collection is backed by the document model.
   // The matching id (`blog_post` == collection name) is how content admin detects doc-backing.
   await registry.register({

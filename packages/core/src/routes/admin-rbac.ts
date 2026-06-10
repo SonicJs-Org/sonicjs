@@ -308,86 +308,137 @@ adminRbacRoutes.get('/', async (c) => {
     ${swatch('#10b981', 'Any')}${swatch('#f59e0b', 'Own')}${swatch('#9ca3af', 'None')}
   </div>`
 
+  const subTabNav = `
+  <div class="border-b border-zinc-950/10 dark:border-white/10 mb-6">
+    <nav class="-mb-px flex space-x-1" aria-label="RBAC sub-tabs">
+      <button onclick="showRbacTab('matrix')" id="subtab-matrix" class="rbac-subtab whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium">Matrix</button>
+      <button onclick="showRbacTab('roles-verbs')" id="subtab-roles-verbs" class="rbac-subtab whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium">Roles &amp; Verbs</button>
+      <button onclick="showRbacTab('tools')" id="subtab-tools" class="rbac-subtab whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium">Tools</button>
+    </nav>
+  </div>
+  <style>
+    .rbac-subtab{border-color:transparent;color:rgb(113 113 122);cursor:pointer;background:none}
+    .rbac-subtab:hover{border-color:rgb(161 161 170);color:rgb(39 39 42)}
+    .dark .rbac-subtab:hover{border-color:rgb(113 113 122);color:rgb(228 228 231)}
+    .rbac-subtab.active{border-color:rgb(6 182 212);color:rgb(8 145 178)}
+    .dark .rbac-subtab.active{color:rgb(34 211 238)}
+  </style>`
+
   const content = `
   ${scopeStyles}
   ${TABS}
-  <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare them side by side. Permission cells can be <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>; <strong>Own</strong> is available for content and collection read/update/delete permissions and means the user can only act on content where they are the author. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. Backend entry is controlled by the <strong>Access portal</strong> checkbox in the Roles section. The <strong>All resources</strong> row selects a whole verb column for that role. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
+  ${subTabNav}
 
-  <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
-    <input type="hidden" name="compare" value="1">
-    <span class="text-xs text-zinc-500 dark:text-zinc-400 mr-1">Compare roles:</span>${roleTabs}
-    <a href="/admin/rbac?compare=1" class="ml-auto inline-flex items-center gap-1 rounded-md border border-zinc-300 dark:border-white/15 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10">Clear</a>
-  </form>
+  <!-- Panel: Matrix -->
+  <div id="panel-matrix">
+    <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Select roles to compare side by side. Cells: <strong>None</strong>, <strong>Own</strong>, or <strong>Any</strong>. <strong>Own</strong> restricts to author-owned content. Wildcards: <code>*</code> = all resources, <code>collection:*</code> = all collections; <code>manage</code> implies all verbs. Portal access is in the <strong>Roles &amp; Verbs</strong> tab. <span class="text-amber-600 dark:text-amber-400">🔒 Administrator</span> is full-access and read-only.</p>
 
-  <form method="post" action="/admin/rbac/grants" class="${card} mb-8 overflow-x-auto">
-    <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
-    <input type="hidden" name="compare" value="1">
-    ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join('')}
-    ${selectedRoles
-      .filter((r) => !isAdmin(r) && roleHasExplicitPortalAccess(r))
-      .map((r) => `<input type="hidden" name="g|${esc(r.id)}|portal|access" value="any">`)
-      .join('')}
-    <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
-      <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? '' : 's'})</span></h3>
-      ${scopeLegend}
-      <button type="submit" class="${btn}">Save changes</button>
-    </div>
-    ${
-      selectedRoles.length === 0
-        ? '<p class="text-sm text-zinc-500">Select one or more roles above to compare.</p>'
-        : `<table class="w-full text-sm border-collapse">
-      <thead>
-        <tr class="border-b border-zinc-950/10 dark:border-white/10">
-          <th rowspan="2" class="px-3 py-2 text-left text-xs font-semibold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-900">Resource</th>
-          ${headRow1}
-        </tr>
-        <tr class="border-b border-zinc-950/10 dark:border-white/10">${headRow2}</tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>`
-    }
-  </form>
+    <form method="get" action="/admin/rbac" class="flex flex-wrap items-center gap-2 mb-4">
+      <input type="hidden" name="compare" value="1">
+      <span class="text-xs text-zinc-500 dark:text-zinc-400 mr-1">Compare roles:</span>${roleTabs}
+      <a href="/admin/rbac?compare=1" class="ml-auto inline-flex items-center gap-1 rounded-md border border-zinc-300 dark:border-white/15 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10">Clear</a>
+    </form>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-    <div class="${card}">
-      <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
-      <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions stay in the matrix above.</p>
-      <ul class="mb-4">${roleList}</ul>
-      <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2">
-        <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
-        <input class="${inp}" type="text" name="display_name" placeholder="Display name" required>
-        <button class="${btn}">Add role</button>
-      </form>
-    </div>
-    <div class="${card}">
-      <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Verbs</h3>
-      <ul class="mb-4">${verbList}</ul>
-      <form method="post" action="/admin/rbac/verbs" class="flex flex-wrap gap-2">
-        <input class="${inp}" type="text" name="name" placeholder="custom verb (e.g. publish)" required>
-        <button class="${btn}">Add verb</button>
-      </form>
+    <form method="post" action="/admin/rbac/grants" class="${card} mb-8 overflow-x-auto">
+      <input type="hidden" name="save_roles" value="${esc(saveRoleIds)}">
+      <input type="hidden" name="compare" value="1">
+      ${selectedRoles.map((r) => `<input type="hidden" name="view_roles" value="${esc(r.id)}">`).join('')}
+      ${selectedRoles
+        .filter((r) => !isAdmin(r) && roleHasExplicitPortalAccess(r))
+        .map((r) => `<input type="hidden" name="g|${esc(r.id)}|portal|access" value="any">`)
+        .join('')}
+      <div class="flex items-center justify-between gap-4 flex-wrap mb-3">
+        <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Permission matrix <span class="text-sm font-normal text-zinc-500">(${selectedRoles.length} role${selectedRoles.length === 1 ? '' : 's'})</span></h3>
+        ${scopeLegend}
+        <button type="submit" class="${btn}">Save changes</button>
+      </div>
+      ${
+        selectedRoles.length === 0
+          ? '<p class="text-sm text-zinc-500">Select one or more roles above to compare.</p>'
+          : `<table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="border-b border-zinc-950/10 dark:border-white/10">
+            <th rowspan="2" class="px-3 py-2 text-left text-xs font-semibold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-900">Resource</th>
+            ${headRow1}
+          </tr>
+          <tr class="border-b border-zinc-950/10 dark:border-white/10">${headRow2}</tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`
+      }
+    </form>
+  </div>
+
+  <!-- Panel: Roles & Verbs -->
+  <div id="panel-roles-verbs" style="display:none">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="${card}">
+        <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
+        <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions are configured in the <strong>Matrix</strong> tab.</p>
+        <ul class="mb-4">${roleList}</ul>
+        <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2">
+          <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
+          <input class="${inp}" type="text" name="display_name" placeholder="Display name" required>
+          <button class="${btn}">Add role</button>
+        </form>
+      </div>
+      <div class="${card}">
+        <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Verbs</h3>
+        <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">System verbs cannot be deleted. Custom verbs (marked ✦) can be removed if no grants reference them.</p>
+        <ul class="mb-4">${verbList}</ul>
+        <form method="post" action="/admin/rbac/verbs" class="flex flex-wrap gap-2">
+          <input class="${inp}" type="text" name="name" placeholder="custom verb (e.g. publish)" required>
+          <button class="${btn}">Add verb</button>
+        </form>
+      </div>
     </div>
   </div>
 
-  <div class="${card}">
-    <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Live permission check</h3>
-    <div class="flex flex-wrap items-center gap-2">
-      <span class="text-sm text-zinc-500">resource</span><input class="${inp}" type="text" id="ck_res" value="document_type:blog-post">
-      <span class="text-sm text-zinc-500">verb</span><input class="${inp}" type="text" id="ck_verb" value="update">
-      <button type="button" class="${btn}" onclick="ckme()">Can I?</button>
-      ${
-        firstSelected
-          ? `<button type="button" class="${btn}" onclick="ckrole()">Can "${esc(firstSelected.name)}"?</button>`
-          : ''
-      }
+  <!-- Panel: Tools -->
+  <div id="panel-tools" style="display:none">
+    <div class="${card} mb-6">
+      <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-1">Live permission check</h3>
+      <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-4">Test whether the current session user (or a specific role) has permission for a resource + verb combination.</p>
+      <div class="flex flex-wrap items-end gap-3 mb-4">
+        <label class="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Resource
+          <input class="${inp}" type="text" id="ck_res" value="document_type:blog-post">
+        </label>
+        <label class="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Verb
+          <input class="${inp}" type="text" id="ck_verb" value="update">
+        </label>
+        <div class="flex gap-2">
+          <button type="button" class="${btn}" onclick="ckme()">Can I?</button>
+          ${
+            firstSelected
+              ? `<button type="button" class="${btn}" onclick="ckrole()">Can &ldquo;${esc(firstSelected.name)}&rdquo;?</button>`
+              : ''
+          }
+        </div>
+      </div>
+      <pre id="out" class="rounded-lg bg-zinc-950 text-lime-400 p-3 text-xs whitespace-pre-wrap">(results appear here)</pre>
     </div>
-    <pre id="out" class="mt-3 rounded-lg bg-zinc-950 text-lime-400 p-3 text-xs whitespace-pre-wrap">(results here)</pre>
   </div>
 
   <script>
+    var RBAC_TABS = ['matrix','roles-verbs','tools'];
+    function showRbacTab(name) {
+      RBAC_TABS.forEach(function(t) {
+        var panel = document.getElementById('panel-'+t);
+        var btn = document.getElementById('subtab-'+t);
+        if (panel) panel.style.display = t === name ? '' : 'none';
+        if (btn) btn.classList.toggle('active', t === name);
+      });
+      try { history.replaceState(null, '', location.pathname + location.search + '#' + name); } catch(e){}
+    }
+    (function() {
+      var hash = location.hash.replace('#', '');
+      showRbacTab(RBAC_TABS.indexOf(hash) !== -1 ? hash : 'matrix');
+    })();
+
     // "All resources" cascade — per role column: choosing Own/Any on the '*'
-    // row selects (and locks) that role's whole verb column. Cells are radio
-    // segmented switches (each its own group by name); drive .checked here.
+    // row selects (and locks) that role's whole verb column.
     function cascade(role, verb){
       var master=document.querySelector('input[type=radio][data-res="*"][data-role="'+role+'"][data-verb="'+verb+'"]:checked');
       var val=master?master.value:'none';
@@ -402,6 +453,7 @@ adminRbacRoutes.get('/', async (c) => {
     document.querySelectorAll('input[type=radio][data-res="*"]:checked').forEach(function(radio){
       if(radio.value !== 'none' && !radio.disabled) cascade(radio.dataset.role, radio.dataset.verb);
     });
+
     var out=document.getElementById('out');
     function j(u){fetch(u,{credentials:'include'}).then(function(r){return r.text().then(function(t){out.textContent=r.status+' '+u+'\\n'+t;});});}
     function ckme(){j('/admin/rbac/check?resource='+encodeURIComponent(ck_res.value)+'&verb='+encodeURIComponent(ck_verb.value));}

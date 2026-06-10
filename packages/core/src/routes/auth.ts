@@ -183,21 +183,18 @@ authRoutes.post('/register',
       // Create user
       const userId = crypto.randomUUID()
       const now = new Date()
+      const nowSec = Math.floor(now.getTime() / 1000)
 
-      await db.prepare(`
-        INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        userId,
-        normalizedEmail,
-        firstName,
-        lastName,
-        passwordHash,
-        'viewer', // Default role
-        1, // is_active
-        now.getTime(),
-        now.getTime()
-      ).run()
+      await db.batch([
+        db.prepare(`
+          INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(userId, normalizedEmail, firstName, lastName, passwordHash, 'viewer', 1, now.getTime(), now.getTime()),
+        // Better Auth sign-in/email requires an auth_account credential row — create it alongside auth_user
+        db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+          VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+          .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+      ])
       
       // Save custom profile fields if configured
       const profileConfig = getUserProfileConfig()
@@ -738,15 +735,23 @@ authRoutes.post('/seed-admin',
       const passwordHash = await AuthManager.hashPassword('sonicjs!')
       const nowMs = Date.now()
       const nowSec = Math.floor(nowMs / 1000)
-      await db.batch([
-        // auth_user has no password_hash column (BA stores it in auth_account)
-        db.prepare('UPDATE auth_user SET updated_at = ? WHERE id = ?')
-          .bind(nowMs, existingAdmin.id),
-        // Upsert BA credential account so sign-in/email works
-        db.prepare(`INSERT OR REPLACE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+      // Update user timestamp
+      await db.prepare('UPDATE auth_user SET updated_at = ? WHERE id = ?')
+        .bind(nowMs, existingAdmin.id).run()
+      // Update existing credential account password if one exists; otherwise insert.
+      // Do NOT use INSERT OR REPLACE with a fixed id — BA may have created one with a UUID id,
+      // and replacing by a different id would create a duplicate row.
+      const existingCred = await db.prepare(
+        `SELECT id FROM auth_account WHERE user_id = ? AND provider_id = 'credential'`
+      ).bind(existingAdmin.id).first()
+      if (existingCred) {
+        await db.prepare(`UPDATE auth_account SET password = ?, updated_at = ? WHERE id = ?`)
+          .bind(passwordHash, nowSec, existingCred.id).run()
+      } else {
+        await db.prepare(`INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
           VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
-          .bind(`cred-${existingAdmin.id}`, existingAdmin.id, existingAdmin.id, passwordHash, nowSec, nowSec),
-      ])
+          .bind(`cred-${existingAdmin.id}`, existingAdmin.id, existingAdmin.id, passwordHash, nowSec, nowSec).run()
+      }
       // RBAC roles are document-backed — assign outside the SQL batch.
       await new RbacService(db).addUserRoleByName(String(existingAdmin.id), 'admin')
       return c.json({

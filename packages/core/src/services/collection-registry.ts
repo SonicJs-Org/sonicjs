@@ -30,11 +30,12 @@ export class CollectionRegistry {
       const record: CollectionRecord = {
         ...config,
         id: config.name,
+        slug: config.slug ?? config.name.replace(/_/g, '-'),
         managed: config.managed !== undefined ? config.managed : true,
         isActive: config.isActive !== undefined ? config.isActive : true,
       }
       this.byName.set(record.name, record)
-      if (record.slug) this.bySlug.set(record.slug, record)
+      this.bySlug.set(record.slug!, record)
     }
   }
 

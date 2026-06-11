@@ -24,9 +24,9 @@ userRoutes.use('/cancel-invitation/*', requireRole(['admin']))
 userRoutes.use('/activity-logs', requireRole(['admin']))
 userRoutes.use('/activity-logs/*', requireRole(['admin']))
 
-// Redirect /admin to /admin/dashboard
+// Redirect /admin to /admin/content
 userRoutes.get('/', (c) => {
-  return c.redirect('/admin/dashboard')
+  return c.redirect('/admin/content')
 })
 
 // Timezone options for profile form

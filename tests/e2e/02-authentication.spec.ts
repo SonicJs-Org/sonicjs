@@ -19,7 +19,7 @@ test.describe('Authentication', () => {
   test('should login successfully with valid credentials', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Should be on admin dashboard (app redirects /admin to /admin/dashboard)
+    // Should be on admin (redirects to /admin/content)
     await expect(page).toHaveURL(/\/admin/);
     // Verify we're logged in by checking for any admin content
     // Don't check for specific elements as layout may vary

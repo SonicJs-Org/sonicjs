@@ -166,6 +166,13 @@ export interface CollectionConfig {
    * Optional metadata
    */
   metadata?: Record<string, any>
+
+  /**
+   * Optional URL-safe slug for the API base route.
+   * Defaults to the collection name if not set.
+   * e.g., slug: 'blog-posts' → GET /api/blog-posts
+   */
+  slug?: string
 }
 
 export interface CollectionConfigModule {

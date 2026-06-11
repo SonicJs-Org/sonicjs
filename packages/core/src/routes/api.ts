@@ -805,7 +805,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     const queryParams = c.req.query()
 
     // First check if collection exists in the in-memory registry
-    const record = getCollectionRegistry().getByName(collection!)
+    const record = getCollectionRegistry().getBySlugOrName(collection!)
     if (!record || record.isActive === false) {
       return c.json({ error: 'Collection not found' }, 404)
     }
@@ -930,17 +930,17 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     const db = c.env.DB
     const queryParams = c.req.query()
 
-    const record = getCollectionRegistry().getByName(collection!)
+    const record = getCollectionRegistry().getBySlugOrName(collection!)
     if (!record || record.isActive === false) {
       return c.json({ error: 'Collection not found' }, 404)
     }
 
     const collIdByName = new Map<string, string>()
-    collIdByName.set(collection!, record.id)
+    collIdByName.set(record.name, record.id)
 
     const role = c.get('user')?.role
     const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
-    const normalizedFilter = augmentFilterForDocuments(filter, { typeId: collection, role })
+    const normalizedFilter = augmentFilterForDocuments(filter, { typeId: record.name, role })
     if (!normalizedFilter.limit) normalizedFilter.limit = 50
     normalizedFilter.limit = Math.min(normalizedFilter.limit, 1000)
 
@@ -999,7 +999,7 @@ apiRoutes.get('/:collection/:id', optionalAuth(), async (c) => {
     const id = c.req.param('id')
     const db = c.env.DB
 
-    const record = getCollectionRegistry().getByName(collection!)
+    const record = getCollectionRegistry().getBySlugOrName(collection!)
     if (!record || record.isActive === false) {
       return c.json({ error: 'Collection not found' }, 404)
     }
@@ -1011,7 +1011,7 @@ apiRoutes.get('/:collection/:id', optionalAuth(), async (c) => {
           ? "SELECT * FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL"
           : "SELECT * FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND is_published = 1 AND deleted_at IS NULL",
       )
-      .bind(id, collection)
+      .bind(id, record.name)
       .first() as any
 
     if (!docRow) return c.json({ error: 'Content not found' }, 404)
@@ -1091,9 +1091,12 @@ apiRoutes.put('/:collection/:id', requireAuth(), requireRole(['admin', 'editor',
     const user = c.get('user')
     const body = await c.req.json()
 
+    const collRecord = getCollectionRegistry().getBySlugOrName(collection!)
+    const typeName = collRecord?.name ?? collection!
+
     const docRow = await db
       .prepare("SELECT root_id, type_id FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL")
-      .bind(id, collection)
+      .bind(id, typeName)
       .first() as any
     if (!docRow) return c.json({ error: 'Content not found' }, 404)
 
@@ -1147,7 +1150,9 @@ apiRoutes.delete('/:collection/:id', requireAuth(), requireRole(['admin', 'edito
     const db = c.env.DB
     const user = c.get('user')
 
-    const docRow = await db.prepare("SELECT type_id FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND deleted_at IS NULL LIMIT 1").bind(id, collection).first() as any
+    const collRecord = getCollectionRegistry().getBySlugOrName(collection!)
+    const typeName = collRecord?.name ?? collection!
+    const docRow = await db.prepare("SELECT type_id FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND deleted_at IS NULL LIMIT 1").bind(id, typeName).first() as any
     if (!docRow) return c.json({ error: 'Content not found' }, 404)
 
     const actor: HookActor | undefined = user ? { id: user.userId, email: user.email ?? '', role: user.role } : undefined

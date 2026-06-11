@@ -59,11 +59,11 @@ router.get('/', async (c) => {
     for (const col of collections) {
       const displayName = col.displayName || col.name
       collectionRoutes.push(
-        { method: 'GET',    path: `/api/${col.name}`,     description: `List ${displayName} items`,     authentication: false, category: 'Collections', documented: true },
-        { method: 'GET',    path: `/api/${col.name}/:id`, description: `Get a ${displayName} by ID`,    authentication: false, category: 'Collections', documented: true },
-        { method: 'POST',   path: `/api/${col.name}`,     description: `Create a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
-        { method: 'PUT',    path: `/api/${col.name}/:id`, description: `Update a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
-        { method: 'DELETE', path: `/api/${col.name}/:id`, description: `Delete a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
+        { method: 'GET',    path: `/api/${col.slug || col.name}`,     description: `List ${displayName} items`,     authentication: false, category: 'Collections', documented: true },
+        { method: 'GET',    path: `/api/${col.slug || col.name}/:id`, description: `Get a ${displayName} by ID`,    authentication: false, category: 'Collections', documented: true },
+        { method: 'POST',   path: `/api/${col.slug || col.name}`,     description: `Create a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
+        { method: 'PUT',    path: `/api/${col.slug || col.name}/:id`, description: `Update a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
+        { method: 'DELETE', path: `/api/${col.slug || col.name}/:id`, description: `Delete a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
       )
     }
 

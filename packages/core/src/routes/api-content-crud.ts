@@ -20,7 +20,7 @@ const apiContentCrudRoutes = new Hono<{ Bindings: Bindings; Variables: Variables
 // registered collection still resolve.
 export async function resolveDocBacking(db: D1Database, collectionIdOrName: string) {
   const registry = getCollectionRegistry()
-  const record = registry.getByName(collectionIdOrName) ?? registry.getById(collectionIdOrName)
+  const record = registry.getBySlugOrName(collectionIdOrName) ?? registry.getById(collectionIdOrName)
   if (record) {
     const docType = await new DocumentTypeRegistry(db).findById(record.name)
     return docType ? { coll: { id: record.id, name: record.name }, docType } : null

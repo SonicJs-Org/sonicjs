@@ -1,11 +1,27 @@
+/**
+ * Admin Collections (read-only)
+ *
+ * Collections are code-defined — registered via `registerCollections()` in the
+ * app entry point or a plugin's `onBoot`. This file provides:
+ *   GET /admin/collections          — list page (old UI restored)
+ *   GET /admin/collections/new      — instructional page (no create form)
+ *   GET /admin/collections/:id      — detail / field viewer (read-only)
+ *
+ * The old POST/PUT/DELETE handlers were removed in the drop-db-collections plan
+ * (see docs/ai/plans/drop-db-collections-plan.md). Collections are code-only.
+ */
+
 import { Hono } from 'hono'
 import { html } from 'hono/html'
-import { requireAuth, requireRole } from '../middleware'
+import { requireAuth } from '../middleware'
 import { isPluginActive } from '../middleware/plugin-middleware'
-import { normalizeFieldType } from './admin-collections-field-types'
 import { renderCollectionsListPage } from '../templates/pages/admin-collections-list.template'
 import { renderCollectionFormPage } from '../templates/pages/admin-collections-form.template'
 import { loadCollectionConfigs } from '../services/collection-loader'
+import { getCollectionRegistry } from '../services/collection-registry'
+import { renderAdminLayoutCatalyst } from '../templates/layouts/admin-layout-catalyst.template'
+import { getCoreVersion } from '../utils/version'
+import { escapeHtml } from '../utils/sanitize'
 
 // Type definitions for collections
 interface Collection {
@@ -95,52 +111,38 @@ type Variables = {
 
 export const adminCollectionsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
-// Apply authentication middleware
 adminCollectionsRoutes.use('*', requireAuth())
 
-// Enforce admin-only access on collection modification routes
-adminCollectionsRoutes.post('*', requireRole(['admin']))
-adminCollectionsRoutes.put('*', requireRole(['admin']))
-adminCollectionsRoutes.delete('*', requireRole(['admin']))
+// ── List ─────────────────────────────────────────────────────────────────────
 
-// Collections management - List all collections
 adminCollectionsRoutes.get('/', async (c) => {
   try {
     const user = c.get('user')
-    const db = c.env.DB
     const url = new URL(c.req.url)
     const search = url.searchParams.get('search') || ''
     const showInternal = url.searchParams.get('showInternal') === '1'
 
-    // Build query based on search
-    let stmt
-    let results
-    if (search) {
-      stmt = db.prepare(`
-        SELECT id, name, display_name, description, created_at, schema, source, queryable_fields
-        FROM document_types
-        WHERE is_active = 1
-        AND (name LIKE ? OR display_name LIKE ? OR description LIKE ?)
-        ORDER BY created_at DESC
-      `)
-      const searchParam = `%${search}%`
-      const queryResults = await stmt.bind(searchParam, searchParam, searchParam).all()
-      results = queryResults.results
-    } else {
-      stmt = db.prepare("SELECT id, name, display_name, description, created_at, schema, source, queryable_fields FROM document_types WHERE is_active = 1 ORDER BY created_at DESC")
+    // Build list from the in-memory registry + document_types (for any plugin-registered types
+    // that were not registered via registerCollections but directly via DocumentTypeRegistry).
+    const db = c.env.DB
+    let results: any[] = []
+    try {
+      const stmt = db.prepare(
+        "SELECT id, name, display_name, description, created_at, schema, source, queryable_fields FROM document_types WHERE is_active = 1 ORDER BY created_at DESC"
+      )
       const queryResults = await stmt.all()
-      results = queryResults.results
+      results = queryResults.results ?? []
+    } catch (e) {
+      // document_types may not exist in dev — fall through to code-only path.
     }
 
-    // Load code-defined collections
-    const codeCollections = await loadCollectionConfigs()
-
-    // Convert code collections to Collection type
+    // Code-defined collections from registry (source of truth for user collections).
+    const codeCollections = getCollectionRegistry().list()
     const codeCollectionsMap = new Map(
-      codeCollections.map((cfg: any) => {
+      codeCollections.map((cfg) => {
         const fieldCount = cfg.schema?.properties ? Object.keys(cfg.schema.properties).length : 0
         return [cfg.name, {
-          id: cfg.name,
+          id: cfg.id,
           name: cfg.name,
           display_name: cfg.displayName,
           description: cfg.description,
@@ -149,36 +151,28 @@ adminCollectionsRoutes.get('/', async (c) => {
           field_count: fieldCount,
           managed: cfg.managed !== false,
           source_type: 'code',
-          internal: cfg.internal === true
+          internal: cfg.internal === true,
         } as Collection]
       })
     )
 
-    // Convert database results to Collection type
-    const dbCollections: Collection[] = (results || [])
+    // DB/document_type rows (system types from plugins, etc.)
+    const dbCollections: Collection[] = results
       .filter((row: any) => row && row.id)
       .map((row: any) => {
-        // Calculate field count from schema
         let fieldCount = 0
         if (row.schema) {
           try {
             const schema = typeof row.schema === 'string' ? JSON.parse(row.schema) : row.schema
-            if (schema && schema.properties) {
-              fieldCount = Object.keys(schema.properties).length
-            }
-          } catch (e) {
-            console.error('Error parsing schema for document type:', row.id, e)
-          }
+            if (schema?.properties) fieldCount = Object.keys(schema.properties).length
+          } catch {}
         }
-
-        // Also count queryable fields for document model types
         if (fieldCount === 0 && row.queryable_fields) {
           try {
             const qf = typeof row.queryable_fields === 'string' ? JSON.parse(row.queryable_fields) : row.queryable_fields
             if (Array.isArray(qf)) fieldCount = qf.length
-          } catch (e) {}
+          } catch {}
         }
-
         return {
           id: String(row.id || ''),
           name: String(row.name || ''),
@@ -189,37 +183,35 @@ adminCollectionsRoutes.get('/', async (c) => {
           field_count: fieldCount,
           managed: false,
           source_type: (row.source === 'code' || row.source === 'system' || row.source === 'plugin') ? 'code' : 'user',
-          internal: row.source === 'system' || row.source === 'plugin'
+          internal: row.source === 'system' || row.source === 'plugin',
         }
       })
 
-    // Merge: database collections + code collections (code ownership wins for same name)
+    // Merge: code wins for same name.
     const mergedMap = new Map(codeCollectionsMap)
-    dbCollections.forEach(collection => {
-      const codeCollection = codeCollectionsMap.get(collection.name)
-      mergedMap.set(collection.name, codeCollection ? {
-        ...collection,
-        display_name: codeCollection.display_name,
-        description: codeCollection.description,
-        field_count: codeCollection.field_count,
+    dbCollections.forEach((col) => {
+      const codeCol = codeCollectionsMap.get(col.name)
+      mergedMap.set(col.name, codeCol ? {
+        ...col,
+        display_name: codeCol.display_name,
+        description: codeCol.description,
+        field_count: codeCol.field_count,
         managed: true,
         source_type: 'code',
         formattedDate: 'Code-defined',
-        internal: codeCollection.internal  // code config is authoritative; developer-defined collections are never internal
-      } : collection)
+        internal: codeCol.internal,
+      } : col)
     })
 
-    // Apply filters
     let collections = Array.from(mergedMap.values())
-    if (!showInternal) {
-      collections = collections.filter(c => !c.internal)
-    }
+    if (!showInternal) collections = collections.filter((c) => !c.internal)
     if (search) {
-      const searchLower = search.toLowerCase()
-      collections = collections.filter(c =>
-        c.name.toLowerCase().includes(searchLower) ||
-        c.display_name.toLowerCase().includes(searchLower) ||
-        (c.description && c.description.toLowerCase().includes(searchLower))
+      const needle = search.toLowerCase()
+      collections = collections.filter(
+        (c) =>
+          c.name.toLowerCase().includes(needle) ||
+          c.display_name.toLowerCase().includes(needle) ||
+          (c.description && c.description.toLowerCase().includes(needle))
       )
     }
 
@@ -227,12 +219,8 @@ adminCollectionsRoutes.get('/', async (c) => {
       collections,
       search,
       showInternal,
-      user: user ? {
-        name: user.email,
-        email: user.email,
-        role: user.role
-      } : undefined,
-      version: c.get('appVersion')
+      user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+      version: c.get('appVersion'),
     }
 
     return c.html(renderCollectionsListPage(pageData))
@@ -243,784 +231,239 @@ adminCollectionsRoutes.get('/', async (c) => {
   }
 })
 
-// New collection form
+// ── New (instructional, no form) ─────────────────────────────────────────────
+
+const DOCS_URL = 'https://sonicjs.com/collections'
+
 adminCollectionsRoutes.get('/new', async (c) => {
   const user = c.get('user')
-  const db = c.env.DB
+  const content = `
+    <div class="max-w-3xl space-y-8">
+      <div class="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-6">
+        <div class="flex items-start gap-3">
+          <svg class="h-6 w-6 text-cyan-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div>
+            <h2 class="text-lg font-semibold text-zinc-100">Collections are code-defined</h2>
+            <p class="mt-2 text-sm text-zinc-300">
+              SonicJS uses code-first collection definitions. Add a new collection by creating a
+              <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">.collection.ts</code>
+              file and registering it via <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">registerCollections()</code>.
+            </p>
+          </div>
+        </div>
+      </div>
 
-  // Check which editor plugins are active
-  const [tinymceActive, quillActive, mdxeditorActive] = await Promise.all([
-    isPluginActive(db, 'tinymce-plugin'),
-    isPluginActive(db, 'quill-editor'),
-    isPluginActive(db, 'easy-mdx')
-  ])
+      <div>
+        <h3 class="text-base font-semibold text-zinc-100 mb-3">Quick start — app-level</h3>
+        <ol class="space-y-3 text-sm text-zinc-300">
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-800 text-cyan-400 text-xs font-semibold flex items-center justify-center">1</span>
+            <span>Create <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">src/collections/my-collection.collection.ts</code> exporting a <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">CollectionConfig</code> default export.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-800 text-cyan-400 text-xs font-semibold flex items-center justify-center">2</span>
+            <span>Import and register it in <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">src/index.ts</code> using <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">registerCollections([myCollection])</code>.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-800 text-cyan-400 text-xs font-semibold flex items-center justify-center">3</span>
+            <span>Restart the dev server. The collection appears in the list and is available at <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">/admin/content</code>.</span>
+          </li>
+        </ol>
+      </div>
 
-  console.log('[Collections /new] Editor plugins status:', {
-    tinymce: tinymceActive,
-    quill: quillActive,
-    easyMdx: mdxeditorActive
-  })
+      <div>
+        <h3 class="text-base font-semibold text-zinc-100 mb-3">Example</h3>
+        <pre class="rounded-lg bg-zinc-950 border border-zinc-800 p-4 overflow-x-auto text-xs text-zinc-300"><code>// src/collections/products.collection.ts
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-  const formData: CollectionFormData = {
-    isEdit: false,
-    user: user ? {
-      name: user.email,
-      email: user.email,
-      role: user.role
-    } : undefined,
-    version: c.get('appVersion'),
-    editorPlugins: {
-      tinymce: tinymceActive,
-      quill: quillActive,
-      easyMdx: mdxeditorActive
-    }
-  }
+const productsCollection: CollectionConfig = {
+  name: 'products',
+  displayName: 'Products',
+  description: 'Catalog products',
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', title: 'Title', required: true },
+      price: { type: 'number', title: 'Price', required: true },
+      sku:   { type: 'string', title: 'SKU' },
+    },
+    required: ['title', 'price'],
+  },
+}
 
-  return c.html(renderCollectionFormPage(formData))
+export default productsCollection</code></pre>
+      </div>
+
+      <div>
+        <h3 class="text-base font-semibold text-zinc-100 mb-3">Then register it</h3>
+        <pre class="rounded-lg bg-zinc-950 border border-zinc-800 p-4 overflow-x-auto text-xs text-zinc-300"><code>// src/index.ts
+import { registerCollections } from '@sonicjs-cms/core'
+import productsCollection from './collections/products.collection'
+
+registerCollections([productsCollection])</code></pre>
+      </div>
+
+      <div class="rounded-lg border border-zinc-700 bg-zinc-900/30 p-5">
+        <div class="flex items-start gap-3">
+          <svg class="h-5 w-5 text-purple-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+          </svg>
+          <div>
+            <h3 class="text-sm font-semibold text-zinc-100">Building a plugin?</h3>
+            <p class="mt-1 text-sm text-zinc-400">
+              Plugins can also register collections — call
+              <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">registerCollections([...])</code>
+              inside your plugin's <code class="rounded bg-zinc-800 px-1 py-0.5 text-cyan-400">onBoot</code> handler.
+              Collections registered by plugins appear in the list alongside app-defined ones.
+            </p>
+            <pre class="mt-3 rounded bg-zinc-950 border border-zinc-800 p-3 text-xs text-zinc-300 overflow-x-auto"><code>// my-plugin/index.ts
+import { definePlugin, registerCollections } from '@sonicjs-cms/core'
+import myCollection from './my-collection.collection'
+
+export const myPlugin = definePlugin({
+  name: 'my-plugin',
+  async onBoot(ctx) {
+    registerCollections([myCollection])
+  },
+})</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-3 pt-2">
+        <a href="${DOCS_URL}"
+           target="_blank" rel="noopener"
+           class="inline-flex items-center gap-2 rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-cyan-400 transition-colors">
+          Read the docs
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+        </a>
+        <a href="/admin/collections"
+           class="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 transition-colors">
+          ← Back to collections
+        </a>
+      </div>
+    </div>
+  `
+
+  const u = user as { email?: string; role?: string } | undefined
+  return c.html(
+    renderAdminLayoutCatalyst({
+      title: 'Add a Collection',
+      pageTitle: 'Add a Collection',
+      currentPath: '/admin/collections',
+      version: getCoreVersion(),
+      user: u ? { name: u.email ?? 'Admin', email: u.email ?? '', role: u.role ?? 'admin' } : undefined,
+      content,
+    })
+  )
 })
 
-// Create collection
-adminCollectionsRoutes.post('/', async (c) => {
-  try {
-    const formData = await c.req.formData()
-    const name = formData.get('name') as string
-    const displayName = formData.get('displayName') as string
-    const description = formData.get('description') as string
+// ── Detail (read-only) ────────────────────────────────────────────────────────
 
-    // Check if this is an HTMX request
-    const isHtmx = c.req.header('HX-Request') === 'true'
-
-    // Basic validation
-    if (!name || !displayName) {
-      const errorMsg = 'Name and display name are required.'
-      if (isHtmx) {
-        return c.html(html`
-          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            ${errorMsg}
-          </div>
-        `)
-      } else {
-        // For regular form submission, redirect back with error
-        return c.redirect('/admin/collections/new')
-      }
-    }
-
-    // Validate name format
-    if (!/^[a-z0-9_]+$/.test(name)) {
-      const errorMsg = 'Collection name must contain only lowercase letters, numbers, and underscores.'
-      if (isHtmx) {
-        return c.html(html`
-          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            ${errorMsg}
-          </div>
-        `)
-      } else {
-        return c.redirect('/admin/collections/new')
-      }
-    }
-
-    const db = c.env.DB
-
-    // Check if document type already exists
-    const existingStmt = db.prepare('SELECT id FROM document_types WHERE name = ?')
-    const existing = await existingStmt.bind(name).first()
-
-    if (existing) {
-      const errorMsg = 'A collection with this name already exists.'
-      if (isHtmx) {
-        return c.html(html`
-          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            ${errorMsg}
-          </div>
-        `)
-      } else {
-        return c.redirect('/admin/collections/new')
-      }
-    }
-
-    // Create basic schema for the document type
-    const basicSchema = {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-          title: "Title"
-        },
-        content: {
-          type: "string",
-          title: "Content",
-          format: "richtext"
-        }
-      },
-      required: ["title"]
-    }
-
-    // Create document type
-    const typeId = crypto.randomUUID()
-    const now = Math.floor(Date.now() / 1000) // unixepoch
-
-    const insertStmt = db.prepare(`
-      INSERT INTO document_types (id, name, display_name, description, schema, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    await insertStmt.bind(
-      typeId,
-      name,
-      displayName,
-      description || null,
-      JSON.stringify(basicSchema),
-      1, // is_active
-      now,
-      now
-    ).run()
-
-    // Clear cache (only if CACHE_KV is available)
-    if (c.env.CACHE_KV) {
-      try {
-        await c.env.CACHE_KV.delete('cache:collections:all')
-        await c.env.CACHE_KV.delete(`cache:collection:${name}`)
-      } catch (e) {
-        console.error('Error clearing cache:', e)
-      }
-    }
-
-    if (isHtmx) {
-      return c.html(html`
-        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-          Collection created successfully! Redirecting to edit mode...
-          <script>
-            setTimeout(() => {
-              window.location.href = '/admin/collections/${typeId}';
-            }, 1500);
-          </script>
-        </div>
-      `)
-    } else {
-      // For regular form submission, redirect to edit page
-      return c.redirect(`/admin/collections/${typeId}`)
-    }
-  } catch (error) {
-    console.error('Error creating collection:', error)
-    const isHtmx = c.req.header('HX-Request') === 'true'
-
-    if (isHtmx) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Failed to create collection. Please try again.
-        </div>
-      `)
-    } else {
-      return c.redirect('/admin/collections/new')
-    }
-  }
-})
-
-// Edit collection form
 adminCollectionsRoutes.get('/:id', async (c) => {
   const db = c.env.DB
   try {
     const id = c.req.param('id')
     const user = c.get('user')
 
-    const stmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
-    const collection = await stmt.bind(id).first() as any
+    // Look up via document_types first (has structured field data), fall back to registry.
+    let collection: any = null
+    try {
+      const stmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
+      collection = await stmt.bind(id).first()
+    } catch {}
 
-    if (!collection) {
-      // Check which editor plugins are active
-      const [tinymceActive, quillActive, mdxeditorActive] = await Promise.all([
-        isPluginActive(db, 'tinymce-plugin'),
-        isPluginActive(db, 'quill-editor'),
-        isPluginActive(db, 'easy-mdx')
-      ])
+    const registryRecord = getCollectionRegistry().getById(id) ?? getCollectionRegistry().getByName(id)
 
+    if (!collection && !registryRecord) {
       const formData: CollectionFormData = {
         isEdit: true,
         error: 'Collection not found.',
-        user: user ? {
-          name: user.email,
-          email: user.email,
-          role: user.role
-        } : undefined,
+        user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
         version: c.get('appVersion'),
-        editorPlugins: {
-          tinymce: tinymceActive,
-          quill: quillActive,
-          easyMdx: mdxeditorActive
-        }
+        editorPlugins: { tinymce: false, quill: false, easyMdx: false },
       }
       return c.html(renderCollectionFormPage(formData))
     }
 
-    // Get collection fields - try schema first, then content_fields table
-    let fields: CollectionField[] = []
+    // Derive fields: prefer document_types schema, fall back to registry config.
+    let fields: any[] = []
+    let isCodeDriven = false
 
-    // If collection has a schema, parse it
-    if (collection.schema) {
+    if (collection?.schema) {
       try {
         const schema = typeof collection.schema === 'string' ? JSON.parse(collection.schema) : collection.schema
-        if (schema && schema.properties) {
-          // Convert schema properties to field format
-          let fieldOrder = 0
-          fields = Object.entries(schema.properties).map(([fieldName, fieldConfig]: [string, any]) => {
-            // Normalize schema formats to UI field types
-            let fieldType = fieldConfig.type || 'string'
-            if (fieldConfig.enum) {
-              fieldType = 'select'
-            } else if (fieldConfig.format === 'richtext') {
-              fieldType = 'richtext'
-            } else if (fieldConfig.format === 'media') {
-              fieldType = 'media'
-            } else if (fieldConfig.format === 'date-time') {
-              fieldType = 'date'
-            } else if (fieldConfig.type === 'slug' || fieldConfig.format === 'slug') {
-              fieldType = 'slug'
-            }
-            
-            return {
-              id: `schema-${fieldName}`,
-              field_name: fieldName,
-              field_type: fieldType,
-              field_label: fieldConfig.title || fieldName,
-              field_options: fieldConfig,
-              field_order: fieldOrder++,
-              is_required: fieldConfig.required === true || (schema.required && schema.required.includes(fieldName)),
-              is_searchable: fieldConfig.searchable === true || false
-            }
-          })
+        if (schema?.properties) {
+          let order = 0
+          fields = Object.entries(schema.properties).map(([name, cfg]: [string, any]) => ({
+            id: `schema-${name}`,
+            field_name: name,
+            field_type: cfg.enum ? 'select' : cfg.type === 'slug' || cfg.format === 'slug' ? 'slug' : cfg.format === 'richtext' ? 'richtext' : cfg.format === 'media' ? 'media' : cfg.format === 'date-time' ? 'date' : cfg.type || 'string',
+            field_label: cfg.title || name,
+            field_options: cfg,
+            field_order: order++,
+            is_required: cfg.required === true || !!(schema.required && (schema.required as string[]).includes(name)),
+            is_searchable: cfg.searchable === true,
+          }))
         }
-      } catch (e) {
-        console.error('Error parsing collection schema:', e)
-      }
+      } catch {}
     }
 
-    // New document model uses schema as source of truth
+    if (fields.length === 0 && registryRecord?.schema?.properties) {
+      let order = 0
+      fields = Object.entries(registryRecord.schema.properties).map(([name, cfg]: [string, any]) => ({
+        id: `schema-${name}`,
+        field_name: name,
+        field_type: cfg.enum ? 'select' : cfg.type === 'slug' || cfg.format === 'slug' ? 'slug' : cfg.format === 'richtext' ? 'richtext' : cfg.format === 'media' ? 'media' : cfg.format === 'date-time' ? 'date' : cfg.type || 'string',
+        field_label: cfg.title || name,
+        field_options: cfg,
+        field_order: order++,
+        is_required: cfg.required === true || !!(registryRecord.schema.required && (registryRecord.schema.required as string[]).includes(name)),
+        is_searchable: (cfg as any).searchable === true,
+      }))
+      isCodeDriven = true
+    }
 
-    // Check which editor plugins are active
     const [tinymceActive, quillActive, mdxeditorActive] = await Promise.all([
       isPluginActive(db, 'tinymce-plugin'),
       isPluginActive(db, 'quill-editor'),
-      isPluginActive(db, 'easy-mdx')
+      isPluginActive(db, 'easy-mdx'),
     ])
 
-    console.log('[Collections /:id] Editor plugins status:', {
-      tinymce: tinymceActive,
-      quill: quillActive,
-      easyMdx: mdxeditorActive
-    })
-
+    const displayName = collection?.display_name ?? registryRecord?.displayName ?? id
     const formData: CollectionFormData = {
-      id: collection.id,
-      name: collection.name,
-      display_name: collection.display_name,
-      description: collection.description,
-      fields: fields,
-      managed: collection.managed === 1,
+      id: collection?.id ?? registryRecord?.id,
+      name: collection?.name ?? registryRecord?.name,
+      display_name: displayName,
+      description: collection?.description ?? registryRecord?.description,
+      fields,
+      managed: collection?.managed === 1 || isCodeDriven || !!registryRecord,
       isEdit: true,
-      user: user ? {
-        name: user.email,
-        email: user.email,
-        role: user.role
-      } : undefined,
+      user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
       version: c.get('appVersion'),
-      editorPlugins: {
-        tinymce: tinymceActive,
-        quill: quillActive,
-        easyMdx: mdxeditorActive
-      }
+      editorPlugins: { tinymce: tinymceActive, quill: quillActive, easyMdx: mdxeditorActive },
     }
 
     return c.html(renderCollectionFormPage(formData))
   } catch (error) {
     console.error('Error fetching collection:', error)
     const user = c.get('user')
-
-    // Check which editor plugins are active (even in error state)
     const [tinymceActive, quillActive, mdxeditorActive] = await Promise.all([
       isPluginActive(db, 'tinymce-plugin'),
       isPluginActive(db, 'quill-editor'),
-      isPluginActive(db, 'easy-mdx')
+      isPluginActive(db, 'easy-mdx'),
     ])
-
     const formData: CollectionFormData = {
       isEdit: true,
       error: 'Failed to load collection.',
-      user: user ? {
-        name: user.email,
-        email: user.email,
-        role: user.role
-      } : undefined,
+      user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
       version: c.get('appVersion'),
-      editorPlugins: {
-        tinymce: tinymceActive,
-        quill: quillActive,
-        easyMdx: mdxeditorActive
-      }
+      editorPlugins: { tinymce: tinymceActive, quill: quillActive, easyMdx: mdxeditorActive },
     }
     return c.html(renderCollectionFormPage(formData))
-  }
-})
-
-// Update collection
-adminCollectionsRoutes.put('/:id', async (c) => {
-  try {
-    const id = c.req.param('id')
-    const formData = await c.req.formData()
-    const displayName = formData.get('displayName') as string
-    const description = formData.get('description') as string
-
-    if (!displayName) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Display name is required.
-        </div>
-      `)
-    }
-
-    const db = c.env.DB
-
-    const updateStmt = db.prepare(`
-      UPDATE document_types
-      SET display_name = ?, description = ?, updated_at = ?
-      WHERE id = ?
-    `)
-
-    const now = Math.floor(Date.now() / 1000) // unixepoch
-    await updateStmt.bind(displayName, description || null, now, id).run()
-
-    return c.html(html`
-      <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
-        Collection updated successfully!
-      </div>
-    `)
-  } catch (error) {
-    console.error('Error updating collection:', error)
-    return c.html(html`
-      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        Failed to update collection. Please try again.
-      </div>
-    `)
-  }
-})
-
-// Delete collection
-adminCollectionsRoutes.delete('/:id', async (c) => {
-  try {
-    const id = c.req.param('id')
-    const db = c.env.DB
-
-    const typeStmt = db.prepare('SELECT name FROM document_types WHERE id = ?')
-    const docType = await typeStmt.bind(id).first() as any
-
-    if (!docType) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Document type not found.
-        </div>
-      `)
-    }
-
-    // Check if document type has documents
-    const contentStmt = db.prepare("SELECT COUNT(DISTINCT root_id) as count FROM documents WHERE type_id = ?")
-    const contentResult = await contentStmt.bind(id).first() as any
-
-    if (contentResult && contentResult.count > 0) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Cannot delete document type: it contains ${contentResult.count} document(s). Delete all documents first.
-        </div>
-      `)
-    }
-
-    // Delete document type
-    const deleteStmt = db.prepare('DELETE FROM document_types WHERE id = ?')
-    await deleteStmt.bind(id).run()
-
-    return c.html(html`
-      <script>
-        window.location.href = '/admin/collections';
-      </script>
-    `)
-  } catch (error) {
-    console.error('Error deleting collection:', error)
-    return c.html(html`
-      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        Failed to delete collection. Please try again.
-      </div>
-    `)
-  }
-})
-
-// Add field to collection
-adminCollectionsRoutes.post('/:id/fields', async (c) => {
-  try {
-    const collectionId = c.req.param('id')
-    const formData = await c.req.formData()
-    const fieldName = formData.get('field_name') as string
-    const fieldType = formData.get('field_type') as string
-    const fieldLabel = formData.get('field_label') as string
-    const isRequired = formData.get('is_required') === '1'
-    const isSearchable = formData.get('is_searchable') === '1'
-    const fieldOptions = formData.get('field_options') as string || '{}'
-
-    if (!fieldName || !fieldType || !fieldLabel) {
-      return c.json({ success: false, error: 'Field name, type, and label are required.' })
-    }
-
-    // Validate field name format
-    if (!/^[a-z0-9_]+$/.test(fieldName)) {
-      return c.json({ success: false, error: 'Field name must contain only lowercase letters, numbers, and underscores.' })
-    }
-
-    const db = c.env.DB
-
-    // Get current document type to check its schema
-    const getCollectionStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
-    const collection = await getCollectionStmt.bind(collectionId).first() as any
-
-    if (!collection) {
-      return c.json({ success: false, error: 'Collection not found.' })
-    }
-
-    // Check if field already exists in schema
-    let schema = collection.schema ? (typeof collection.schema === 'string' ? JSON.parse(collection.schema) : collection.schema) : null
-
-    if (schema && schema.properties && schema.properties[fieldName]) {
-      return c.json({ success: false, error: 'A field with this name already exists.' })
-    }
-
-    // Parse field options
-    let parsedOptions = {}
-    try {
-      parsedOptions = fieldOptions ? JSON.parse(fieldOptions) : {}
-    } catch (e) {
-      console.error('Error parsing field options:', e)
-    }
-
-    // Add field to schema (primary storage method)
-    if (schema) {
-      if (!schema.properties) {
-        schema.properties = {}
-      }
-      if (!schema.required) {
-        schema.required = []
-      }
-
-      // Build field config based on type
-      const fieldConfig: any = {
-        type: fieldType === 'number' ? 'number' : fieldType === 'boolean' ? 'boolean' : 'string',
-        title: fieldLabel,
-        searchable: isSearchable,
-        ...parsedOptions
-      }
-
-      const normalizedFieldType = normalizeFieldType(fieldType)
-
-      // Handle special field types
-      if (normalizedFieldType === 'richtext') {
-        fieldConfig.format = 'richtext'
-      } else if (normalizedFieldType === 'date') {
-        fieldConfig.format = 'date-time'
-      } else if (normalizedFieldType === 'select') {
-        fieldConfig.enum = (parsedOptions as any).options || []
-      } else if (fieldType === 'radio') {
-        fieldConfig.type = 'radio'
-        if (!(parsedOptions as any).enum && (parsedOptions as any).options) {
-          fieldConfig.enum = (parsedOptions as any).options
-        }
-      } else if (fieldType === 'media') {
-        fieldConfig.format = 'media'
-      } else if (normalizedFieldType === 'slug') {
-        fieldConfig.type = 'slug'
-        fieldConfig.format = 'slug'
-      } else if (normalizedFieldType === 'quill') {
-        fieldConfig.type = 'quill'
-      } else if (normalizedFieldType === 'markdown') {
-        fieldConfig.type = 'markdown'
-      } else if (normalizedFieldType === 'reference') {
-        fieldConfig.type = 'reference'
-      }
-
-      schema.properties[fieldName] = fieldConfig
-
-      // Add to required array if needed
-      if (isRequired && !schema.required.includes(fieldName)) {
-        schema.required.push(fieldName)
-      }
-
-      // Update document type schema in database
-      const updateSchemaStmt = db.prepare(`
-        UPDATE document_types
-        SET schema = ?, updated_at = ?
-        WHERE id = ?
-      `)
-
-      const now = Math.floor(Date.now() / 1000) // unixepoch
-      await updateSchemaStmt.bind(JSON.stringify(schema), now, collectionId).run()
-
-      console.log('[Add Field] Added field to schema:', fieldName, fieldConfig)
-
-      return c.json({ success: true, fieldId: `schema-${fieldName}` })
-    }
-
-    // All new fields must be part of schema
-    return c.json({ success: false, error: 'Cannot add field without schema.' })
-  } catch (error) {
-    console.error('Error adding field:', error)
-    return c.json({ success: false, error: 'Failed to add field.' })
-  }
-})
-
-// Update field
-adminCollectionsRoutes.put('/:collectionId/fields/:fieldId', async (c) => {
-  try {
-    const fieldId = c.req.param('fieldId')
-    const collectionId = c.req.param('collectionId')
-    const formData = await c.req.formData()
-    const fieldLabel = formData.get('field_label') as string
-    const fieldType = formData.get('field_type') as string
-    // Use getAll() to handle hidden input + checkbox pattern (get last value)
-    const isRequiredValues = formData.getAll('is_required')
-    const isSearchableValues = formData.getAll('is_searchable')
-    const isRequired = isRequiredValues[isRequiredValues.length - 1] === '1'
-    const isSearchable = isSearchableValues[isSearchableValues.length - 1] === '1'
-    const fieldOptions = formData.get('field_options') as string || '{}'
-
-    // Log all form data for debugging
-    console.log('[Field Update] Field ID:', fieldId)
-    console.log('[Field Update] Form data received:', {
-      field_label: fieldLabel,
-      field_type: fieldType,
-      is_required: formData.get('is_required'),
-      is_searchable: formData.get('is_searchable'),
-      field_options: fieldOptions
-    })
-
-    if (!fieldLabel) {
-      return c.json({ success: false, error: 'Field label is required.' })
-    }
-
-    const db = c.env.DB
-
-    // Check if this is a schema field (starts with "schema-")
-    if (fieldId.startsWith('schema-')) {
-      // Schema fields are part of the collection's JSON schema
-      // We need to update the collection's schema in the database
-      const fieldName = fieldId.replace('schema-', '')
-
-      console.log('[Field Update] Updating schema field:', fieldName)
-
-      // Get the current document type
-      const getCollectionStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
-      const collection = await getCollectionStmt.bind(collectionId).first()
-
-      if (!collection) {
-        return c.json({ success: false, error: 'Collection not found.' })
-      }
-
-      // Parse the current schema
-      let schema = typeof collection.schema === 'string' ? JSON.parse(collection.schema) : collection.schema
-      if (!schema) {
-        schema = { type: 'object', properties: {}, required: [] }
-      }
-      if (!schema.properties) {
-        schema.properties = {}
-      }
-      if (!schema.required) {
-        schema.required = []
-      }
-
-      // Update the field in the schema
-      if (schema.properties[fieldName]) {
-        // Parse field options from form
-        let parsedFieldOptions: Record<string, any> = {}
-        try {
-          parsedFieldOptions = JSON.parse(fieldOptions)
-        } catch (e) {
-          console.error('[Field Update] Error parsing field options:', e)
-        }
-
-        // Build the updated field config - merge in field options
-        const updatedFieldConfig: any = {
-          ...schema.properties[fieldName],
-          ...parsedFieldOptions,
-          type: fieldType,
-          title: fieldLabel,
-          searchable: isSearchable
-        }
-
-        // Also set/remove the individual required property on the field
-        // This ensures consistency regardless of which format is checked in GET
-        if (isRequired) {
-          updatedFieldConfig.required = true
-        } else {
-          delete updatedFieldConfig.required
-        }
-
-        schema.properties[fieldName] = updatedFieldConfig
-
-        // Handle required field in the schema's required array (proper JSON Schema way)
-        const requiredIndex = schema.required.indexOf(fieldName)
-        console.log('[Field Update] Required field handling:', {
-          fieldName,
-          isRequired,
-          currentRequiredArray: schema.required,
-          requiredIndex
-        })
-
-        if (isRequired && requiredIndex === -1) {
-          // Add to required array if checked and not already there
-          schema.required.push(fieldName)
-          console.log('[Field Update] Added field to required array')
-        } else if (!isRequired && requiredIndex !== -1) {
-          // Remove from required array if unchecked and currently there
-          schema.required.splice(requiredIndex, 1)
-          console.log('[Field Update] Removed field from required array')
-        }
-
-        console.log('[Field Update] Final required array:', schema.required)
-        console.log('[Field Update] Final field config:', schema.properties[fieldName])
-      }
-
-      // Update the document type in the database
-      const updateCollectionStmt = db.prepare(`
-        UPDATE document_types
-        SET schema = ?, updated_at = ?
-        WHERE id = ?
-      `)
-
-      const now = Math.floor(Date.now() / 1000) // unixepoch
-      const result = await updateCollectionStmt.bind(JSON.stringify(schema), now, collectionId).run()
-
-      console.log('[Field Update] Schema update result:', {
-        success: result.success,
-        changes: result.meta?.changes
-      })
-
-      return c.json({ success: true })
-    }
-
-    // All fields in new model must be schema-based
-    return c.json({ success: false, error: 'Field not found.' })
-  } catch (error) {
-    console.error('Error updating field:', error)
-    return c.json({ success: false, error: 'Failed to update field.' })
-  }
-})
-
-// Delete field
-adminCollectionsRoutes.delete('/:collectionId/fields/:fieldId', async (c) => {
-  try {
-    const fieldId = c.req.param('fieldId')
-    const collectionId = c.req.param('collectionId')
-    const db = c.env.DB
-
-    // Check if this is a schema field (starts with "schema-")
-    if (fieldId.startsWith('schema-')) {
-      const fieldName = fieldId.replace('schema-', '')
-
-      // Get the current document type
-      const getCollectionStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
-      const collection = await getCollectionStmt.bind(collectionId).first() as any
-
-      if (!collection) {
-        return c.json({ success: false, error: 'Collection not found.' })
-      }
-
-      // Parse the current schema
-      let schema = typeof collection.schema === 'string' ? JSON.parse(collection.schema) : collection.schema
-      if (!schema || !schema.properties) {
-        return c.json({ success: false, error: 'Field not found in schema.' })
-      }
-
-      // Remove field from schema
-      if (schema.properties[fieldName]) {
-        delete schema.properties[fieldName]
-
-        // Also remove from required array if present
-        if (schema.required && Array.isArray(schema.required)) {
-          const requiredIndex = schema.required.indexOf(fieldName)
-          if (requiredIndex !== -1) {
-            schema.required.splice(requiredIndex, 1)
-          }
-        }
-
-        // Update the document type in the database
-        const updateCollectionStmt = db.prepare(`
-          UPDATE document_types
-          SET schema = ?, updated_at = ?
-          WHERE id = ?
-        `)
-
-        const now = Math.floor(Date.now() / 1000) // unixepoch
-        await updateCollectionStmt.bind(JSON.stringify(schema), now, collectionId).run()
-
-        console.log('[Delete Field] Removed field from schema:', fieldName)
-
-        return c.json({ success: true })
-      } else {
-        return c.json({ success: false, error: 'Field not found in schema.' })
-      }
-    }
-
-    // All fields in new model must be schema-based
-    return c.json({ success: false, error: 'Field not found.' })
-  } catch (error) {
-    console.error('Error deleting field:', error)
-    return c.json({ success: false, error: 'Failed to delete field.' })
-  }
-})
-
-// Update field order
-adminCollectionsRoutes.post('/:collectionId/fields/reorder', async (c) => {
-  try {
-    const body = await c.req.json()
-    const fieldOrder = body.fieldOrder as Record<string, number>
-
-    if (!fieldOrder || typeof fieldOrder !== 'object') {
-      return c.json({ success: false, error: 'Invalid field order data.' })
-    }
-
-    const db = c.env.DB
-    const collectionId = c.req.param('collectionId')
-
-    // Get current document type
-    const getStmt = db.prepare('SELECT * FROM document_types WHERE id = ?')
-    const docType = await getStmt.bind(collectionId).first() as any
-
-    if (!docType) {
-      return c.json({ success: false, error: 'Document type not found.' })
-    }
-
-    // Parse schema and reorder properties
-    let schema = typeof docType.schema === 'string' ? JSON.parse(docType.schema) : docType.schema
-    if (!schema || !schema.properties) {
-      return c.json({ success: false, error: 'No schema properties found.' })
-    }
-
-    // Rebuild properties in new order
-    const newProperties: Record<string, any> = {}
-    Object.keys(fieldOrder).forEach(fieldName => {
-      if (schema.properties[fieldName]) {
-        newProperties[fieldName] = schema.properties[fieldName]
-      }
-    })
-    // Add any fields not in fieldOrder
-    Object.keys(schema.properties).forEach(fieldName => {
-      if (!newProperties[fieldName]) {
-        newProperties[fieldName] = schema.properties[fieldName]
-      }
-    })
-    schema.properties = newProperties
-
-    // Update schema
-    const updateStmt = db.prepare('UPDATE document_types SET schema = ?, updated_at = ? WHERE id = ?')
-    const now = Math.floor(Date.now() / 1000) // unixepoch
-    await updateStmt.bind(JSON.stringify(schema), now, collectionId).run()
-
-    return c.json({ success: true })
-  } catch (error) {
-    console.error('Error reordering fields:', error)
-    return c.json({ success: false, error: 'Failed to reorder fields.' })
   }
 })

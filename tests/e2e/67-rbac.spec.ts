@@ -12,16 +12,14 @@ const ADMIN_EMAIL = 'admin@sonicjs.com';
 const ADMIN_PASSWORD = 'sonicjs!';
 
 test.describe('RBAC — seeded roles and grants', () => {
-  test('RBAC admin UI lists four system roles', async ({ page }) => {
+  test('RBAC admin UI lists the seeded admin role (the only hardcoded role)', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/rbac');
     await page.waitForLoadState('networkidle');
 
-    // All four seeded roles must appear (use .first() since role name appears in multiple places)
+    // `admin` is the only role seeded by default — all other roles are created
+    // and managed by an administrator from this UI.
     await expect(page.getByText('Administrator').first()).toBeVisible();
-    await expect(page.getByText('Editor').first()).toBeVisible();
-    await expect(page.getByText('Author').first()).toBeVisible();
-    await expect(page.getByText('Viewer').first()).toBeVisible();
   });
 
   test('RBAC admin UI is accessible to admin', async ({ page }) => {
@@ -33,16 +31,16 @@ test.describe('RBAC — seeded roles and grants', () => {
 });
 
 test.describe('RBAC — portal access enforcement', () => {
-  test('admin has portal:access (can load /admin)', async ({ page }) => {
+  test('admin has portal:access (can load gated admin route)', async ({ page }) => {
     await loginAsAdmin(page);
-    const res = await page.goto('/admin');
+    const res = await page.goto('/admin/rbac');
     expect(res?.status()).toBe(200);
     expect(page.url()).toMatch(/\/admin/);
   });
 
-  test('unauthenticated request to /admin is blocked', async ({ page }) => {
+  test('unauthenticated request to admin route is blocked', async ({ page }) => {
     await page.context().clearCookies();
-    await page.goto('/admin');
+    await page.goto('/admin/rbac');
     expect(page.url()).toMatch(/\/auth\/login/);
   });
 
@@ -78,7 +76,7 @@ test.describe('RBAC — portal access enforcement', () => {
     }
 
     // Navigate to admin — should be blocked
-    await page.goto('/admin');
+    await page.goto('/admin/rbac');
     // Should redirect to login (no portal:access)
     expect(page.url()).toMatch(/\/auth\/login|\/admin/);
 
@@ -253,7 +251,7 @@ test.describe('RBAC — sub-tab navigation', () => {
     await expect(page.locator('#panel-roles-verbs')).toBeVisible();
 
     // Single bulk save button exists
-    await expect(page.locator('#roles-bulk-form button[type="submit"]')).toBeVisible();
+    await expect(page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' })).toBeVisible();
 
     // No stray inline "Save" buttons per role row
     const inlineRowSaves = page.locator('#panel-roles-verbs li button:has-text("Save")');
@@ -266,7 +264,7 @@ test.describe('RBAC — sub-tab navigation', () => {
     await page.waitForLoadState('networkidle');
 
     await page.click('#subtab-roles-verbs');
-    await page.locator('#roles-bulk-form button[type="submit"]').click();
+    await page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' }).click();
     await page.waitForLoadState('networkidle');
 
     // After redirect, Roles & Verbs panel should be active
@@ -279,41 +277,38 @@ test.describe('RBAC — sub-tab navigation', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/rbac');
     await page.waitForLoadState('networkidle');
-
     await page.click('#subtab-roles-verbs');
     await expect(page.locator('#panel-roles-verbs')).toBeVisible();
 
-    // Find the viewer role portal checkbox
-    const viewerPortal = page.locator('input[name^="portal_role-viewer"]');
-    const wasChecked = await viewerPortal.isChecked();
-
-    // Toggle it
-    if (!viewerPortal.isDisabled()) {
-      if (wasChecked) {
-        await viewerPortal.uncheck();
-      } else {
-        await viewerPortal.check();
-      }
+    // Only `admin` is hardcoded; admin's portal checkbox is locked. Create a
+    // custom role here so we can toggle its portal access freely.
+    const roleName = 'portal-persist-test';
+    const roleId = `role-${roleName}`;
+    if ((await page.locator(`input[name="portal_${roleId}"]`).count()) === 0) {
+      await page.locator('form[action="/admin/rbac/roles"] input[name="name"]').fill(roleName);
+      await page.locator('form[action="/admin/rbac/roles"] input[name="display_name"]').fill('Portal Persist Test');
+      await page.locator('form[action="/admin/rbac/roles"] button').filter({ hasText: 'Add role' }).click();
+      await page.waitForLoadState('networkidle');
+      await page.click('#subtab-roles-verbs');
     }
 
-    await page.locator('#roles-bulk-form button[type="submit"]').click();
-    await page.waitForLoadState('networkidle');
+    const portal = page.locator(`input[name="portal_${roleId}"]`);
+    await expect(portal).toBeVisible();
+    const wasChecked = await portal.isChecked();
+    await portal.click();
 
-    // Should land on Roles & Verbs tab
+    await page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' }).click();
+    await page.waitForLoadState('networkidle');
     await expect(page.locator('#panel-roles-verbs')).toBeVisible();
 
-    // Checkbox state should reflect what we saved
-    const viewerPortalAfter = page.locator('input[name^="portal_role-viewer"]');
-    if (!viewerPortalAfter.isDisabled()) {
-      const nowChecked = await viewerPortalAfter.isChecked();
-      expect(nowChecked).toBe(!wasChecked);
-      // Restore original state
-      if (!wasChecked) {
-        await viewerPortalAfter.uncheck();
-      } else {
-        await viewerPortalAfter.check();
-      }
-      await page.locator('#roles-bulk-form button[type="submit"]').click();
+    const portalAfter = page.locator(`input[name="portal_${roleId}"]`);
+    const nowChecked = await portalAfter.isChecked();
+    expect(nowChecked).toBe(!wasChecked);
+
+    if (nowChecked !== wasChecked) {
+      await portalAfter.click();
+      await page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' }).click();
+      await page.waitForLoadState('networkidle');
     }
   });
 });

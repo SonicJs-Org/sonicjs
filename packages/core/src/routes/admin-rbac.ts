@@ -56,23 +56,6 @@ adminRbacRoutes.get('/', async (c) => {
   for (const g of grants) grantsByRole.get(g.role_id)?.set(`${g.resource}|${g.verb}`, g.scope || 'any')
   const cellScope = (role: { id: string; name: string }, res: string, verb: string): PermissionScope =>
     isAdmin(role) ? 'any' : grantsByRole.get(role.id)?.get(`${res}|${verb}`) || 'none'
-  const grantMatches = (grantResource: string, grantVerb: string, resource: string, verb: string): boolean => {
-    const resourceOk =
-      grantResource === '*' ||
-      grantResource === resource ||
-      (grantResource === 'document_type:*' && resource.startsWith('document_type:'))
-    return resourceOk && (grantVerb === '*' || grantVerb === verb || grantVerb === 'manage')
-  }
-  const roleHasPortalAccess = (role: { id: string; name: string }): boolean => {
-    if (isAdmin(role)) return true
-    const roleGrants = grantsByRole.get(role.id)
-    if (!roleGrants) return false
-    return [...roleGrants.keys()].some((key) => {
-      const idx = key.lastIndexOf('|')
-      if (idx === -1) return false
-      return grantMatches(key.slice(0, idx), key.slice(idx + 1), 'portal', 'access')
-    })
-  }
   const roleHasExplicitPortalAccess = (role: { id: string; name: string }): boolean =>
     isAdmin(role) || grantsByRole.get(role.id)?.has('portal|access') || false
   const supportsOwnScope = (res: string, verb: string) =>
@@ -238,7 +221,7 @@ adminRbacRoutes.get('/', async (c) => {
   const roleIds = roles.map((r) => r.id).join(',')
   const roleListItems = roles
     .map((r) => {
-      const portalChecked = roleHasPortalAccess(r)
+      const portalChecked = roleHasExplicitPortalAccess(r)
       const portalDisabled = isAdmin(r)
       return (
         `<li class="py-2 border-b border-zinc-950/5 dark:border-white/5 flex items-center gap-2 flex-wrap">
@@ -273,7 +256,18 @@ adminRbacRoutes.get('/', async (c) => {
       <ul class="mb-4">${roleListItems}</ul>
       <button type="submit" class="${btn}">Save roles</button>
     </form>
-    ${roleDeleteForms}`
+    ${roleDeleteForms}
+  `
+  const addRoleCard = `
+    <div class="${card}">
+      <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-1">Add new role</h3>
+      <p class="mb-4 text-xs text-zinc-500 dark:text-zinc-400">Create a custom role. After adding, configure its permissions in the <strong>Matrix</strong> tab and set portal access above.</p>
+      <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2">
+        <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
+        <input class="${inp}" type="text" name="display_name" placeholder="Display name" required>
+        <button class="${btn}">Add role</button>
+      </form>
+    </div>`
 
   const verbList = matrixVerbs
     .map(
@@ -371,16 +365,11 @@ adminRbacRoutes.get('/', async (c) => {
 
   <!-- Panel: Roles & Verbs -->
   <div id="panel-roles-verbs" style="display:none">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
       <div class="${card}">
         <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
         <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions are configured in the <strong>Matrix</strong> tab.</p>
         ${roleList}
-        <form method="post" action="/admin/rbac/roles" class="flex flex-wrap gap-2 mt-4">
-          <input class="${inp}" type="text" name="name" placeholder="name (e.g. moderator)" required>
-          <input class="${inp}" type="text" name="display_name" placeholder="Display name" required>
-          <button class="${btn}">Add role</button>
-        </form>
       </div>
       <div class="${card}">
         <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Verbs</h3>
@@ -392,6 +381,7 @@ adminRbacRoutes.get('/', async (c) => {
         </form>
       </div>
     </div>
+    ${addRoleCard}
   </div>
 
   <!-- Panel: Tools -->
@@ -523,14 +513,17 @@ adminRbacRoutes.post('/roles/bulk', async (c) => {
   for (const roleId of roleIds) {
     const displayName = String(form.get(`display_name_${roleId}`) || '').trim()
     const nameVal = form.get(`name_${roleId}`) ? String(form.get(`name_${roleId}`)).trim() : undefined
-    const portalAccess = form.get(`portal_${roleId}`) === '1'
+    const portalAccess = roleId !== 'role-admin' ? form.get(`portal_${roleId}`) === '1' : null
     if (displayName) {
       try {
-        await rbac.updateRole(roleId, displayName, '', nameVal)
-        if (roleId !== 'role-admin') {
-          await rbac.setRolePortalAccess(roleId, portalAccess)
+        if (portalAccess !== null) {
+          await rbac.updateRoleAndPortalAccess(roleId, displayName, nameVal, portalAccess)
+        } else {
+          await rbac.updateRole(roleId, displayName, '', nameVal)
         }
-      } catch { /* duplicate name */ }
+      } catch (err) {
+        console.error('[RBAC bulk save] error for role', roleId, err)
+      }
     }
   }
   return c.redirect('/admin/rbac#roles-verbs')
@@ -558,9 +551,10 @@ adminRbacRoutes.post('/roles/:id', async (c) => {
   if (displayName) {
     try {
       const rbac = new RbacService(c.env.DB)
-      await rbac.updateRole(roleId, displayName, description, name)
       if (roleId !== 'role-admin') {
-        await rbac.setRolePortalAccess(roleId, portalAccess)
+        await rbac.updateRoleAndPortalAccess(roleId, displayName, name, portalAccess, description)
+      } else {
+        await rbac.updateRole(roleId, displayName, description, name)
       }
     } catch { /* duplicate name */ }
   }

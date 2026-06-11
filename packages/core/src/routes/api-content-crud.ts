@@ -18,7 +18,7 @@ const apiContentCrudRoutes = new Hono<{ Bindings: Bindings; Variables: Variables
 // code-defined collections id == name). Reads the in-memory CollectionRegistry; falls back
 // to a direct document_types lookup so plugin-owned types (e.g. blog_post) without a
 // registered collection still resolve.
-async function resolveDocBacking(db: D1Database, collectionIdOrName: string) {
+export async function resolveDocBacking(db: D1Database, collectionIdOrName: string) {
   const registry = getCollectionRegistry()
   const record = registry.getByName(collectionIdOrName) ?? registry.getById(collectionIdOrName)
   if (record) {
@@ -37,7 +37,7 @@ async function resolveDocBacking(db: D1Database, collectionIdOrName: string) {
   return null
 }
 
-function slugify(s?: string | null): string | null {
+export function slugify(s?: string | null): string | null {
   if (!s) return null
   return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || null
 }

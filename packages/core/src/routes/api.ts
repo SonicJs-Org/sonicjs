@@ -3,10 +3,14 @@ import { cors } from 'hono/cors'
 import { schemaDefinitions } from '../schemas'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import { QueryFilterBuilder, QueryFilter } from '../utils'
-import { isPluginActive, optionalAuth } from '../middleware'
+import { isPluginActive, optionalAuth, requireAuth, requireRole } from '../middleware'
 import { canReadNonPublicContent, normalizePublicContentFilter } from './api-content-access-policy'
-import { documentSecondsToMs } from '../services/documents'
+import { documentSecondsToMs, DocumentsService } from '../services/documents'
 import { getCollectionRegistry, collectionRecordToRow } from '../services/collection-registry'
+import { DocumentTypeRegistry } from '../services/document-type-registry'
+import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
+import type { HookActor } from '../plugins/hooks/catalog'
+import { createDocumentSchema } from '../schemas/document'
 
 // Document columns the public list is allowed to ORDER BY. The legacy `content` table exposed
 // collection_id; on documents that maps to type_id. Anything else (incl. nonexistent columns like a
@@ -115,7 +119,7 @@ function mapDocRowToContent(row: any, collectionId: string | null) {
     updated_at: documentSecondsToMs(row.updated_at),
   }
 }
-import apiContentCrudRoutes from './api-content-crud'
+import apiContentCrudRoutes, { resolveDocBacking, slugify } from './api-content-crud'
 import type { Bindings, Variables as AppVariables } from '../app'
 
 // Extend Variables with API-specific fields
@@ -913,5 +917,258 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
 
 // Mount CRUD routes for content
 apiRoutes.route('/content', apiContentCrudRoutes)
+
+// ─── Per-collection shorthand routes: GET /api/:collection, GET /api/:collection/:id,
+//     POST /api/:collection, PUT /api/:collection/:id, DELETE /api/:collection/:id ──────────────
+// Wildcards must come after all specific routes above.
+
+// GET /api/:collection — list items (shorthand for /api/collections/:collection/content)
+apiRoutes.get('/:collection', optionalAuth(), async (c) => {
+  const executionStart = Date.now()
+  try {
+    const collection = c.req.param('collection')
+    const db = c.env.DB
+    const queryParams = c.req.query()
+
+    const record = getCollectionRegistry().getByName(collection!)
+    if (!record || record.isActive === false) {
+      return c.json({ error: 'Collection not found' }, 404)
+    }
+
+    const collIdByName = new Map<string, string>()
+    collIdByName.set(collection!, record.id)
+
+    const role = c.get('user')?.role
+    const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
+    const normalizedFilter = augmentFilterForDocuments(filter, { typeId: collection, role })
+    if (!normalizedFilter.limit) normalizedFilter.limit = 50
+    normalizedFilter.limit = Math.min(normalizedFilter.limit, 1000)
+
+    const builder = new QueryFilterBuilder()
+    const queryResult = builder.build('documents', normalizedFilter)
+
+    if (queryResult.errors.length > 0) {
+      return c.json({ error: 'Invalid filter parameters', details: queryResult.errors }, 400)
+    }
+
+    const cacheEnabled = c.get('cacheEnabled')
+    const cache = getCacheService(CACHE_CONFIGS.api!)
+    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql })}`)
+
+    if (cacheEnabled) {
+      const cacheResult = await cache.getWithSource<any>(cacheKey)
+      if (cacheResult.hit && cacheResult.data) {
+        c.header('X-Cache-Status', 'HIT')
+        c.header('X-Cache-Source', cacheResult.source)
+        if (cacheResult.ttl) c.header('X-Cache-TTL', Math.floor(cacheResult.ttl).toString())
+        return c.json({ ...cacheResult.data, meta: addTimingMeta(c, { ...cacheResult.data.meta, cache: { hit: true, source: cacheResult.source, ttl: cacheResult.ttl ? Math.floor(cacheResult.ttl) : undefined } }, executionStart) })
+      }
+    }
+
+    c.header('X-Cache-Status', 'MISS')
+    c.header('X-Cache-Source', 'database')
+
+    const stmt = db.prepare(queryResult.sql)
+    const boundStmt = queryResult.params.length > 0 ? stmt.bind(...queryResult.params) : stmt
+    const { results } = await boundStmt.all()
+
+    const transformedResults = results.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
+    const responseData = {
+      data: transformedResults,
+      meta: addTimingMeta(c, {
+        collection: collectionRecordToRow(record),
+        count: results.length,
+        timestamp: new Date().toISOString(),
+        filter: normalizePublicContentFilter(filter, role),
+        cache: { hit: false, source: 'database' },
+      }, executionStart)
+    }
+
+    if (cacheEnabled) await cache.set(cacheKey, responseData)
+    return c.json(responseData)
+  } catch (error) {
+    console.error('Error fetching collection content:', error)
+    return c.json({ error: 'Failed to fetch content', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
+
+// GET /api/:collection/:id — single item by root_id, scoped to collection
+apiRoutes.get('/:collection/:id', optionalAuth(), async (c) => {
+  try {
+    const collection = c.req.param('collection')
+    const id = c.req.param('id')
+    const db = c.env.DB
+
+    const record = getCollectionRegistry().getByName(collection!)
+    if (!record || record.isActive === false) {
+      return c.json({ error: 'Collection not found' }, 404)
+    }
+
+    const privileged = canReadNonPublicContent(c.get('user')?.role)
+    const docRow = await db
+      .prepare(
+        privileged
+          ? "SELECT * FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL"
+          : "SELECT * FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND is_published = 1 AND deleted_at IS NULL",
+      )
+      .bind(id, collection)
+      .first() as any
+
+    if (!docRow) return c.json({ error: 'Content not found' }, 404)
+
+    const coll = getCollectionRegistry().getByName(docRow.type_id)
+    const transformedContent = {
+      id: docRow.root_id,
+      title: docRow.title,
+      slug: docRow.slug,
+      status: docRow.status,
+      collectionId: coll?.id ?? docRow.type_id,
+      data: docRow.data ? JSON.parse(docRow.data) : {},
+      created_at: documentSecondsToMs(docRow.created_at),
+      updated_at: documentSecondsToMs(docRow.updated_at),
+    }
+
+    dispatchHookEvent(c, 'content:read', { collection: docRow.type_id, id: docRow.root_id, data: transformedContent.data }, 'fire-and-forget')
+    return c.json({ data: transformedContent })
+  } catch (error) {
+    console.error('Error fetching content:', error)
+    return c.json({ error: 'Failed to fetch content', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
+
+// POST /api/:collection — create item in collection
+apiRoutes.post('/:collection', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
+  try {
+    const collection = c.req.param('collection')
+    const db = c.env.DB
+    const user = c.get('user')
+    const body = await c.req.json()
+    const { title, slug, status, data } = body
+
+    if (!title) return c.json({ error: 'title is required' }, 400)
+
+    const backing = await resolveDocBacking(db, collection!)
+    if (!backing) return c.json({ error: 'Collection not found' }, 404)
+
+    let finalSlug = slugify(slug || title) || title.toLowerCase().replace(/\s+/g, '-')
+
+    const dup = await db
+      .prepare("SELECT root_id FROM documents WHERE type_id = ? AND tenant_id = 'default' AND (is_current_draft = 1 OR is_published = 1) AND deleted_at IS NULL AND slug = ?")
+      .bind(backing.coll.name, finalSlug)
+      .first()
+    if (dup) return c.json({ error: 'A content item with this slug already exists in this collection' }, 409)
+
+    const actor: HookActor | undefined = user ? { id: user.userId, email: user.email ?? '', role: user.role } : undefined
+    let hookData = data || {}
+    try {
+      const beforePayload = await dispatchHookEvent(c, 'content:before:create', { collection: backing.coll.name, data: { title, slug: finalSlug, status: status || 'draft', ...hookData }, user: actor }, 'in-band')
+      hookData = typeof beforePayload?.data === 'object' ? beforePayload.data : hookData
+    } catch (err) {
+      return c.json({ error: 'Write cancelled by plugin', details: String(err) }, 400)
+    }
+
+    const svc = new DocumentsService(db, { queryableFields: backing.docType.queryableFields ?? [], typeSchemaVersion: backing.docType.schemaVersion ?? 1, maxVersionsPerRoot: backing.docType.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default' })
+    const doc = await svc.create(createDocumentSchema.parse({ typeId: backing.coll.name, tenantId: 'default', locale: 'default', title, slug: finalSlug, data: hookData, publishOnCreate: (status || 'draft') === 'published' }), user?.userId)
+
+    const cache = getCacheService(CACHE_CONFIGS.api!)
+    await cache.invalidate('content-filtered:*')
+    await cache.invalidate('collection-content-filtered:*')
+    dispatchHookEvent(c, 'content:after:create', { collection: backing.coll.name, id: doc.rootId, data: doc.data ?? {}, user: actor }, 'fire-and-forget')
+
+    return c.json({ data: { id: doc.rootId, title: doc.title, slug: doc.slug, status: doc.status, collectionId: backing.coll.id, data: doc.data, created_at: documentSecondsToMs(doc.createdAt), updated_at: documentSecondsToMs(doc.updatedAt) } }, 201)
+  } catch (error) {
+    console.error('Error creating content:', error)
+    return c.json({ error: 'Failed to create content', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
+
+// PUT /api/:collection/:id — update item
+apiRoutes.put('/:collection/:id', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
+  try {
+    const collection = c.req.param('collection')
+    const id = c.req.param('id')
+    const db = c.env.DB
+    const user = c.get('user')
+    const body = await c.req.json()
+
+    const docRow = await db
+      .prepare("SELECT root_id, type_id FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL")
+      .bind(id, collection)
+      .first() as any
+    if (!docRow) return c.json({ error: 'Content not found' }, 404)
+
+    const actor: HookActor | undefined = user ? { id: user.userId, email: user.email ?? '', role: user.role } : undefined
+    let hookData = body.data
+    try {
+      const beforePayload = await dispatchHookEvent(c, 'content:before:update', { collection: docRow.type_id, id, data: { title: body.title, slug: body.slug, status: body.status, ...(body.data || {}) }, user: actor }, 'in-band')
+      if (typeof beforePayload?.data === 'object') hookData = beforePayload.data
+    } catch (err) {
+      return c.json({ error: 'Write cancelled by plugin', details: String(err) }, 400)
+    }
+
+    const docType = await new DocumentTypeRegistry(db).findById(docRow.type_id)
+    const svc = new DocumentsService(db, { queryableFields: docType?.queryableFields ?? [], typeSchemaVersion: docType?.schemaVersion ?? 1, maxVersionsPerRoot: docType?.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default' })
+    const input: any = {}
+    if (body.title !== undefined) input.title = body.title
+    if (body.slug !== undefined) input.slug = slugify(body.slug)
+    if (hookData !== undefined) input.data = hookData
+    const newDraft = await svc.saveDraft(id!, input, user?.userId)
+    const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = 'default'").bind(id).first() as any
+    const wasPublished = !!pub
+    if (body.status === 'published' || (body.status === undefined && pub)) {
+      await svc.publish(newDraft.id, user?.userId)
+    } else if (body.status === 'draft' && pub) {
+      await svc.unpublish(pub.id)
+    }
+
+    const cache = getCacheService(CACHE_CONFIGS.api!)
+    await cache.invalidate('content-filtered:*')
+    await cache.invalidate('collection-content-filtered:*')
+    const coll = getCollectionRegistry().getByName(docRow.type_id)
+    const saved = await db.prepare('SELECT * FROM documents WHERE id = ?').bind(newDraft.id).first() as any
+    const savedData = saved?.data ? JSON.parse(saved.data) : {}
+
+    dispatchHookEvent(c, 'content:after:update', { collection: docRow.type_id, id, data: savedData, user: actor }, 'fire-and-forget')
+    const nowPublished = body.status === 'published' || (body.status === undefined && wasPublished)
+    if (nowPublished && !wasPublished) dispatchHookEvent(c, 'content:after:publish', { collection: docRow.type_id, id, data: savedData, user: actor }, 'fire-and-forget')
+
+    return c.json({ data: { id: saved.root_id, title: saved.title, slug: saved.slug, status: saved.status, collectionId: coll?.id ?? docRow.type_id, data: savedData, created_at: documentSecondsToMs(saved.created_at), updated_at: documentSecondsToMs(saved.updated_at) } })
+  } catch (error) {
+    console.error('Error updating content:', error)
+    return c.json({ error: 'Failed to update content', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
+
+// DELETE /api/:collection/:id — delete item
+apiRoutes.delete('/:collection/:id', requireAuth(), requireRole(['admin', 'editor', 'author']), async (c) => {
+  try {
+    const collection = c.req.param('collection')
+    const id = c.req.param('id')
+    const db = c.env.DB
+    const user = c.get('user')
+
+    const docRow = await db.prepare("SELECT type_id FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND deleted_at IS NULL LIMIT 1").bind(id, collection).first() as any
+    if (!docRow) return c.json({ error: 'Content not found' }, 404)
+
+    const actor: HookActor | undefined = user ? { id: user.userId, email: user.email ?? '', role: user.role } : undefined
+    try {
+      await dispatchHookEvent(c, 'content:before:delete', { collection: docRow.type_id, id, data: {}, user: actor }, 'in-band')
+    } catch (err) {
+      return c.json({ error: 'Delete cancelled by plugin', details: String(err) }, 400)
+    }
+
+    const now = Math.floor(Date.now() / 1000)
+    await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = 'default'").bind(now, now, id).run()
+    const cache = getCacheService(CACHE_CONFIGS.api!)
+    await cache.invalidate('content-filtered:*')
+    await cache.invalidate('collection-content-filtered:*')
+    dispatchHookEvent(c, 'content:after:delete', { collection: docRow.type_id, id, data: {}, user: actor }, 'fire-and-forget')
+
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting content:', error)
+    return c.json({ error: 'Failed to delete content', details: error instanceof Error ? error.message : String(error) }, 500)
+  }
+})
 
 export default apiRoutes

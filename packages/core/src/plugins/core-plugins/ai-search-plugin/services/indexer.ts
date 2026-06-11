@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type { AISearchSettings, IndexStatus } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { getCollectionRegistry } from '../../../../services/collection-registry'
 
 /**
  * Index Manager Service
@@ -26,18 +27,17 @@ export class IndexManager {
    */
   async indexCollection(collectionId: string): Promise<IndexStatus> {
     try {
-      // Get collection info
-      const collectionStmt = this.db.prepare(
-        'SELECT id, name, display_name FROM collections WHERE id = ?'
-      )
-      const collection = await collectionStmt.bind(collectionId).first<{
-        id: string
-        name: string
-        display_name: string
-      }>()
-
-      if (!collection) {
+      // Get collection info from the in-memory registry. For code-defined
+      // collections id == name, so getById and getByName both succeed.
+      const registry = getCollectionRegistry()
+      const record = registry.getById(collectionId) ?? registry.getByName(collectionId)
+      if (!record) {
         throw new Error(`Collection ${collectionId} not found`)
+      }
+      const collection = {
+        id: record.id,
+        name: record.name,
+        display_name: record.displayName,
       }
 
       // Update status to indexing

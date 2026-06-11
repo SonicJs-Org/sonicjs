@@ -7,6 +7,7 @@
 
 import { Hono } from 'hono'
 import type { Bindings, Variables } from '../app'
+import { getCollectionRegistry } from '../services/collection-registry'
 
 export const apiSystemRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -132,12 +133,21 @@ apiSystemRoutes.get('/stats', async (c) => {
     const db = c.env.DB
 
     // Get content statistics (document-backed: one row per root for user collections).
-    const contentStats = await db.prepare(`
-      SELECT COUNT(*) as total_content
-      FROM documents
-      WHERE is_current_draft = 1 AND deleted_at IS NULL
-        AND type_id IN (SELECT name FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user'))
-    `).first() as any
+    // type_ids come from the in-memory registry (code-defined, non-internal, active).
+    const typeIds = getCollectionRegistry()
+      .listActive()
+      .filter((r) => !r.internal)
+      .map((r) => r.name)
+    let contentStats: { total_content?: number } | null = null
+    if (typeIds.length > 0) {
+      const placeholders = typeIds.map(() => '?').join(',')
+      contentStats = await db.prepare(`
+        SELECT COUNT(*) as total_content
+        FROM documents
+        WHERE is_current_draft = 1 AND deleted_at IS NULL
+          AND type_id IN (${placeholders})
+      `).bind(...typeIds).first() as any
+    }
 
     // Get media statistics
     const mediaStats = await db.prepare(`

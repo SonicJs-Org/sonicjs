@@ -8,6 +8,7 @@ import type {
   NewCollectionNotification,
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { getCollectionRegistry } from '../../../../services/collection-registry'
 
 /**
  * AI Search Service
@@ -102,25 +103,24 @@ export class AISearchService {
    */
   async detectNewCollections(): Promise<NewCollectionNotification[]> {
     try {
-      // Get all collections (exclude test collections)
-      // Note: D1 doesn't support parameterized LIKE, so we filter in JavaScript
-      const collectionsStmt = this.db.prepare(
-        'SELECT id, name, display_name, description FROM collections WHERE is_active = 1'
-      )
-      const { results: allCollections } = await collectionsStmt.all<{
-        id: number
-        name: string
-        display_name: string
-        description?: string
-      }>()
-      
+      // Get all active code-defined collections from the in-memory registry.
+      const allCollections = getCollectionRegistry()
+        .listActive()
+        .filter((r) => !r.internal)
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          display_name: r.displayName,
+          description: r.description ?? undefined,
+        }))
+
           // Filter out test collections (starts with test_, ends with _test, or is test_collection)
           const collections = (allCollections || []).filter(
             (col) => {
               if (!col.name) return false
               const name = col.name.toLowerCase()
-              return !name.startsWith('test_') && 
-                     !name.endsWith('_test') && 
+              return !name.startsWith('test_') &&
+                     !name.endsWith('_test') &&
                      name !== 'test_collection' &&
                      !name.includes('_test_') &&
                      name !== 'large_payload_test' &&
@@ -178,34 +178,20 @@ export class AISearchService {
    */
   async getAllCollections(): Promise<CollectionInfo[]> {
     try {
-      // Get all collections (same query as content page)
-      const collectionsStmt = this.db.prepare(
-        'SELECT id, name, display_name, description FROM collections WHERE is_active = 1 ORDER BY display_name'
-      )
-      const { results: allCollections } = await collectionsStmt.all<{
-        id: string
-        name: string
-        display_name: string
-        description?: string
-      }>()
-      
-      console.log('[AISearchService.getAllCollections] Raw collections from DB:', allCollections?.length || 0)
-      const firstCollection = allCollections?.[0]
-      if (firstCollection) {
-        console.log('[AISearchService.getAllCollections] Sample collection:', {
-          id: firstCollection.id,
-          name: firstCollection.name,
-          display_name: firstCollection.display_name
-        })
-      }
-      
-      // No filtering needed - test collections are now properly cleaned up by E2E tests
-      const collections = (allCollections || []).filter(
-        (col) => col.id && col.name
-      )
-      
-      console.log('[AISearchService.getAllCollections] After filtering test collections:', collections.length)
-      console.log('[AISearchService.getAllCollections] Remaining collections:', collections.map(c => c.name).join(', '))
+      // Get all active code-defined collections from the in-memory registry,
+      // sorted by display name.
+      const allCollections = getCollectionRegistry()
+        .listActive()
+        .filter((r) => !r.internal)
+        .sort((a, b) => a.displayName.localeCompare(b.displayName))
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          display_name: r.displayName,
+          description: r.description ?? undefined,
+        }))
+
+      const collections = allCollections.filter((col) => col.id && col.name)
 
       // Get settings
       const settings = await this.getSettings()

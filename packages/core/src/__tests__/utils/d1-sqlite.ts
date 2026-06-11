@@ -77,9 +77,6 @@ export function createTestD1(): TestD1 {
   for (const m of DOC_MIGRATIONS) {
     sqlite.exec(readFileSync(join(MIGRATIONS_DIR, m), 'utf8'))
   }
-  // The production baseline seeds default collections for a fresh app. Tests build their
-  // own fixture collections, so clear seeded rows to avoid unique-name collisions.
-  sqlite.exec("DELETE FROM collections WHERE name IN ('blog_post', 'pages', 'news')")
 
   return {
     prepare(sql: string) {

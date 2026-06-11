@@ -451,7 +451,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const NAV_LANDING: Array<{ path: string; perm: string }> = [
     { path: '/admin/content', perm: 'content:read' },
     { path: '/admin/media', perm: 'media:read' },
-    { path: '/admin/collections', perm: 'collections:manage' },
+    { path: '/admin/collections', perm: 'content:read' },
     { path: '/admin/forms', perm: 'content:read' },
     { path: '/admin/users', perm: 'users:manage' },
     { path: '/admin/plugins', perm: 'plugins:manage' },

@@ -6,6 +6,7 @@
 
 import { getCacheService } from './cache.js'
 import { CACHE_CONFIGS } from './cache-config.js'
+import { getCollectionRegistry, collectionRecordToRow } from '../../../services/collection-registry'
 
 /**
  * Warm cache with common queries
@@ -57,10 +58,11 @@ async function warmCollections(db: D1Database): Promise<number> {
   let count = 0
 
   try {
-    const stmt = db.prepare('SELECT * FROM collections WHERE is_active = 1')
-    const { results } = await stmt.all()
+    const results = getCollectionRegistry()
+      .listActive()
+      .map(collectionRecordToRow)
 
-    for (const collection of results as any[]) {
+    for (const collection of results) {
       const key = collectionCache.generateKey('item', collection.id)
       await collectionCache.set(key, collection)
       count++

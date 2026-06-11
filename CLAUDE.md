@@ -56,17 +56,21 @@ Full design + remediation runbook: `docs/ai/plans/document-model-poc-plan.md` (A
 - **Generated-column budget**: D1 hard limit is 100 columns/table. Adding `q_*` columns goes through `MigrationService.ensureDocumentGeneratedColumns()` (idempotent `table_xinfo` + ALTER) — **not** a new migration file (D45 pattern).
 - **PII / right-to-erasure**: types with PII set `settings.pii = true` and **hard-erase** all versions (facets → refs → permissions → all `documents` rows in one batch) + delete R2 object.
 
-### Every collection is doc-backed (global)
+### Collections are code-only (no DB table)
 
-`autoRegisterCollectionDocumentTypes(db)` runs at bootstrap (after collection sync) and registers a document type (id == collection name) for **every active user collection**. All `/admin/content` writes go to `documents`. `collections` is the **permanent** schema/type registry — do not target it for deletion.
+Collections are registered via `registerCollections([...])` in the app entry point and live in the **in-memory `CollectionRegistry`** (singleton, populated at bootstrap). The `collections` DB table was dropped in PR 4 of the drop-db-collections plan (`docs/ai/plans/drop-db-collections-plan.md`). Never add a `collections` table or `syncCollections()` call.
+
+`autoRegisterCollectionDocumentTypes` runs at bootstrap and reads from `getCollectionRegistry().listActive()` to register a `document_type` row for every code-defined collection (id == collection name). All `/admin/content` writes go to `documents`.
+
+To add a collection: create a `CollectionConfig` export + call `registerCollections()` — no migration needed.
 
 ### Bootstrap order
 
 ```
-migrations (0001 core, 0002 documents, 0003 platform)
+migrations (0001 core, 0002 documents)
 → MigrationService.ensureDocumentGeneratedColumns (q_* self-heal)
-→ collection sync
-→ autoRegisterCollectionDocumentTypes
+→ loadCollectionConfigs → CollectionRegistry.register  ← code-only; no DB sync
+→ autoRegisterCollectionDocumentTypes (reads registry)
 → bootstrapDocumentTypes (seed system types)
 → plugin onBoot
 ```
@@ -93,21 +97,22 @@ Base grants only match `public` + `role`, so the `role` principal is mandatory f
 ### Drizzle vs raw SQL split
 
 - `db/schema.ts` = legacy tables only (no `documents*`, no `q_*`, no partial unique indexes). R2.
-- All document SQL lives in raw migrations (`0002`, `0003`, future) + `DocumentsService` / `DocumentRepository`.
+- All document SQL lives in raw migrations (`0002`, future `0003+`) + `DocumentsService` / `DocumentRepository`.
 
 ### Migration numbering
 
 - `0001_core.sql` — Better Auth tables.
 - `0002_documents.sql` — document repository (5 tables + `q_*` generated cols + partial unique indexes).
-- `0003_platform.sql` — platform tables (collections, settings, plugins, etc.).
-- **Next free: `0004_*`.**
+- **Next free: `0003_*`.** (`collections` table never created on greenfield — no drop migration needed.)
 - Adding queryable scalar fields: use `MigrationService.ensureDocumentGeneratedColumns()` self-heal — **not** a new migration file (D45 pattern).
 
 ### Files (cheat-sheet)
 
 | Concern | File |
 |---|---|
-| Schema | `packages/core/migrations/0002_documents.sql`, `0003_platform.sql` |
+| Schema | `packages/core/migrations/0001_core.sql`, `0002_documents.sql` |
+| Collection registry | `packages/core/src/services/collection-registry.ts` (`getCollectionRegistry`, `CollectionRegistry`) |
+| Collection registration | `registerCollections([...])` in app entry point (`my-sonicjs-app/src/index.ts`); read-only admin list at `/admin/collections` |
 | Self-heal `q_*` columns | `packages/core/src/services/migrations.ts` (`ensureDocumentGeneratedColumns`) |
 | Bootstrap | `packages/core/src/middleware/bootstrap.ts` |
 | Write API | `packages/core/src/services/documents.ts` (`create`, `saveDraft`, `publish`, `unpublish`, `erase`) |
@@ -131,7 +136,7 @@ Base grants only match `public` + `role`, so the `role` principal is mandatory f
 
 ### Adding a new feature → checklist
 
-1. **Register a document type** in your plugin's `onBoot` (don't add a table). Source = `'system'` for plugin-owned, `'user'` for collection-driven.
+1. **Register a document type** in your plugin's `onBoot` (don't add a table). Source = `'system'` for plugin-owned, `'user'` for collection-driven. For user collections, `autoRegisterCollectionDocumentTypes` handles this automatically at bootstrap — no manual step needed.
 2. **Add queryable fields** as `q_*` entries in `ensureDocumentGeneratedColumns` (no new migration file). Stay under the 100-column budget.
 3. **Writes**: go through `DocumentsService` (which uses raw `prepare/bind/batch` — R1) — tenant defaults to `'default'`.
 4. **Reads**: go through `DocumentRepository.list()` (R4) — never inline `prepare` in a handler.
@@ -145,7 +150,8 @@ Base grants only match `public` + `role`, so the `role` principal is mandatory f
 - **Auto `content`→`documents` backfill**: descoped (new installs only). Manual `scripts/backfill-content.ts` preserves `created_at` if ever needed.
 - **Media library read-flip**: in progress, slice 3 (`MediaDocumentService.list()` done; admin handlers + `api-media` DELETE still on legacy `media`).
 - **Workflow plugin**: routes commented out, dead code; not on critical path for `content` DROP.
-- **`content`/`media` table DROP**: blocked (D34/D35 + media read-flip pending). `collections` table is permanent.
+- **`content`/`media` table DROP**: blocked (D34/D35 + media read-flip pending).
+- **`collections` table**: never created on greenfield. Collections are code-only via `CollectionRegistry` and `registerCollections()`. Do not add a `collections` table or `syncCollections()` call.
 
 ## Token-Efficient Tooling (REQUIRED before grep/Read sprees)
 

@@ -291,7 +291,7 @@ describe('renderAdminLayoutCatalyst', () => {
     it('should highlight active path', () => {
       const html = renderAdminLayoutCatalyst({
         ...baseData,
-        currentPath: '/admin/collections',
+        currentPath: '/admin/content',
       });
 
       expect(html).toContain('data-current="true"');

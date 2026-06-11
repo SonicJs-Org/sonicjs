@@ -240,12 +240,6 @@ export class MigrationService {
       }
     }
 
-    // Check for managed column in collections
-    const hasManagedColumn = await this.checkColumnExists('collections', 'managed')
-    if (!hasManagedColumn) {
-      issues.push('Missing column: collections.managed')
-    }
-
     return {
       valid: issues.length === 0,
       issues

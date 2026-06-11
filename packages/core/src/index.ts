@@ -58,26 +58,14 @@ export { emailReconciliationPlugin } from './plugins/core-plugins/email-reconcil
 
 // Services - Week 2 (COMPLETED)
 export {
-  // Collection Management
+  // Collection Management — code-only API. DB-backed sync was removed in PR 4
+  // of the drop-db-collections plan; collections live in the in-memory
+  // CollectionRegistry now.
   loadCollectionConfigs,
   loadCollectionConfig,
   getAvailableCollectionNames,
   validateCollectionConfig,
   registerCollections,
-  syncCollections,
-  syncCollection,
-  isCollectionManaged,
-  getManagedCollections,
-  cleanupRemovedCollections,
-  fullCollectionSync,
-  // Form-Collection Sync
-  syncAllFormCollections,
-  syncFormCollection,
-  createContentFromSubmission,
-  deriveCollectionSchemaFromFormio,
-  deriveSubmissionTitle,
-  mapFormStatusToContentStatus,
-  backfillFormSubmissions,
   // Database Migrations
   MigrationService,
   // Logging
@@ -269,7 +257,6 @@ export {
   createDb,
   // Schema exports
   users,
-  collections,
   content,
   contentVersions,
   media,
@@ -285,8 +272,6 @@ export {
   // Zod validation schemas
   insertUserSchema,
   selectUserSchema,
-  insertCollectionSchema,
-  selectCollectionSchema,
   insertContentSchema,
   selectContentSchema,
   insertMediaSchema,
@@ -312,8 +297,6 @@ export {
 export type {
   User,
   NewUser,
-  Collection,
-  NewCollection,
   Content,
   NewContent,
   Media,

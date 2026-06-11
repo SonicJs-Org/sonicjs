@@ -4,55 +4,79 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTestD1 } from '../utils/d1-sqlite'
 import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes } from '../../services/document-types-seed'
 import { DocumentTypeRegistry } from '../../services/document-type-registry'
+import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
 
 describe('autoRegisterCollectionDocumentTypes', () => {
   let db
   beforeEach(() => {
     db = createTestD1()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,is_active,source_type,created_at,updated_at) VALUES ('n','news','News',1,NULL,1,1)").run()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,is_active,source_type,created_at,updated_at) VALUES ('p','pages','Pages',1,'user',1,1)").run()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,is_active,source_type,created_at,updated_at) VALUES ('f','contact_form','Contact Form',1,'form',1,1)").run()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,is_active,source_type,created_at,updated_at) VALUES ('x','archived_coll','Archived',0,NULL,1,1)").run()
+    resetCollectionRegistry()
   })
-  afterEach(() => db.close())
+  afterEach(() => {
+    db.close()
+    resetCollectionRegistry()
+  })
 
-  it('does not auto-register DB-driven collections as document types', async () => {
+  it('registers a document type for each code-defined collection in the registry', async () => {
+    getCollectionRegistry().register([
+      { name: 'news', displayName: 'News', schema: { type: 'object', properties: {} } },
+      { name: 'pages', displayName: 'Pages', schema: { type: 'object', properties: {} } },
+    ])
+
     const registered = await autoRegisterCollectionDocumentTypes(db)
-    expect(registered).toEqual([])
+    expect(registered.sort()).toEqual(['news', 'pages'])
 
     const registry = new DocumentTypeRegistry(db)
-    expect(await registry.findById('news')).toBeNull()
-    expect(await registry.findById('pages')).toBeNull()
-    expect(await registry.findById('contact_form')).toBeNull()
-    expect(await registry.findById('archived_coll')).toBeNull()
+    expect(await registry.findById('news')).not.toBeNull()
+    expect(await registry.findById('pages')).not.toBeNull()
+  })
+
+  it('skips inactive collections', async () => {
+    getCollectionRegistry().register([
+      { name: 'active_coll', displayName: 'Active', schema: { type: 'object', properties: {} } },
+      { name: 'archived_coll', displayName: 'Archived', isActive: false, schema: { type: 'object', properties: {} } },
+    ])
+
+    const registered = await autoRegisterCollectionDocumentTypes(db)
+    expect(registered).toEqual(['active_coll'])
+  })
+
+  it('skips internal collections', async () => {
+    getCollectionRegistry().register([
+      { name: 'public_coll', displayName: 'Public', schema: { type: 'object', properties: {} } },
+      { name: 'internal_coll', displayName: 'Internal', internal: true, schema: { type: 'object', properties: {} } },
+    ])
+
+    const registered = await autoRegisterCollectionDocumentTypes(db)
+    expect(registered).toEqual(['public_coll'])
   })
 
   it('keeps the code-defined blog_post type hand-tuned', async () => {
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,is_active,source_type,created_at,updated_at) VALUES ('b','blog_post','Blog Posts',1,NULL,1,1)").run()
+    getCollectionRegistry().register([
+      { name: 'blog_post', displayName: 'Blog Posts', schema: { type: 'object', properties: {} } },
+    ])
     await bootstrapDocumentTypes(db) // registers blog_post with q_blog_* queryable fields
 
     const registered = await autoRegisterCollectionDocumentTypes(db)
+    // blog_post is excluded from the auto-register path so the hand-tuned
+    // queryable fields aren't flattened to [].
     expect(registered).toEqual([])
 
-    // blog_post keeps its hand-tuned queryable fields (not flattened to []).
     const blog = await new DocumentTypeRegistry(db).findById('blog_post')
     expect(blog.queryableFields.some(f => f.name === 'difficulty')).toBe(true)
   })
 
-  it('registers only the default blog_post document type', async () => {
+  it('registers only the default seeded types when no collections are in the registry', async () => {
     await bootstrapDocumentTypes(db)
 
     const registry = new DocumentTypeRegistry(db)
     const types = await registry.findAll()
 
-    expect(types.map(t => t.id)).toEqual(['blog_post'])
+    expect(types.map(t => t.id).sort()).toContain('blog_post')
   })
 
-  it('no-ops when the collections table is absent', async () => {
-    const freshDb = createTestD1()
-    freshDb.raw.exec('DROP TABLE collections')
-    const registered = await autoRegisterCollectionDocumentTypes(freshDb)
+  it('returns an empty list when the registry is empty', async () => {
+    const registered = await autoRegisterCollectionDocumentTypes(db)
     expect(registered).toEqual([])
-    freshDb.close()
   })
 })

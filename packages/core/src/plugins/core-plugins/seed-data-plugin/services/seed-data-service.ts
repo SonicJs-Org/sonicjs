@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types'
+import { getCollectionRegistry, collectionRecordToRow } from '../../../../services/collection-registry'
 
 export class SeedDataService {
   constructor(private db: D1Database) {}
@@ -141,8 +142,13 @@ export class SeedDataService {
     const usersStmt = this.db.prepare('SELECT * FROM auth_user')
     const { results: allUsers } = await usersStmt.all()
 
-    const collectionsStmt = this.db.prepare('SELECT * FROM collections')
-    const { results: allCollections } = await collectionsStmt.all()
+    // Collections come from the in-memory registry (code-defined). Map to the
+    // legacy row shape so the downstream INSERTs that reference `collection.id`
+    // / `collection.name` continue to work.
+    const allCollections = getCollectionRegistry()
+      .listActive()
+      .filter((r) => !r.internal)
+      .map(collectionRecordToRow)
 
     if (!allUsers || allUsers.length === 0) {
       throw new Error('No users found. Please create users first.')

@@ -13,25 +13,14 @@ export {
   registerCollections,
 } from './collection-loader'
 
+// Collection Registry (code-only, in-memory)
 export {
-  syncCollections,
-  syncCollection,
-  isCollectionManaged,
-  getManagedCollections,
-  cleanupRemovedCollections,
-  fullCollectionSync,
-} from './collection-sync'
-
-// Form-Collection Sync
-export {
-  syncAllFormCollections,
-  syncFormCollection,
-  createContentFromSubmission,
-  deriveCollectionSchemaFromFormio,
-  deriveSubmissionTitle,
-  mapFormStatusToContentStatus,
-  backfillFormSubmissions,
-} from './form-collection-sync'
+  CollectionRegistry,
+  getCollectionRegistry,
+  resetCollectionRegistry,
+  collectionRecordToRow,
+} from './collection-registry'
+export type { CollectionRecord, CollectionRowShape } from './collection-registry'
 
 // Database Migrations
 export { MigrationService } from './migrations'

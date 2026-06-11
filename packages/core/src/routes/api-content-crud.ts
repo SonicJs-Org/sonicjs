@@ -6,6 +6,7 @@ import type { Bindings, Variables } from '../app'
 import { resolveContentVariables } from '../plugins/core-plugins/global-variables-plugin/variable-resolver'
 import { DocumentsService, documentSecondsToMs } from '../services/documents'
 import { DocumentTypeRegistry } from '../services/document-type-registry'
+import { getCollectionRegistry } from '../services/collection-registry'
 import { createDocumentSchema } from '../schemas/document'
 import type { D1Database } from '@cloudflare/workers-types'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
@@ -13,29 +14,21 @@ import type { HookActor } from '../plugins/hooks/catalog'
 
 const apiContentCrudRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
-// Resolve the document type backing a content collection (by collection db id OR name). When present
-// the write goes to the documents table (legacy `content` decommission); otherwise legacy content.
+// Resolve the document type backing a content collection (by collection name OR id — for
+// code-defined collections id == name). Reads the in-memory CollectionRegistry; falls back
+// to a direct document_types lookup so plugin-owned types (e.g. blog_post) without a
+// registered collection still resolve.
 async function resolveDocBacking(db: D1Database, collectionIdOrName: string) {
-  // Try collections table first (legacy path). If the table doesn't exist (greenfield v3 schema
-  // that hasn't run syncCollections yet), fall through to the document_types direct lookup.
-  let coll: { id: string; name: string } | null = null
-  try {
-    coll = await db
-      .prepare('SELECT id, name FROM collections WHERE id = ? OR name = ?')
-      .bind(collectionIdOrName, collectionIdOrName)
-      .first() as { id: string; name: string } | null
-  } catch {
-    // collections table absent — fall through to direct document_types lookup
+  const registry = getCollectionRegistry()
+  const record = registry.getByName(collectionIdOrName) ?? registry.getById(collectionIdOrName)
+  if (record) {
+    const docType = await new DocumentTypeRegistry(db).findById(record.name)
+    return docType ? { coll: { id: record.id, name: record.name }, docType } : null
   }
 
-  if (coll) {
-    const docType = await new DocumentTypeRegistry(db).findById(coll.name)
-    return docType ? { coll, docType } : null
-  }
-
-  // No collections row — check if document_types has a matching entry directly.
-  // This handles code-defined collections (registered via registerCollections/bootstrapDocumentTypes)
-  // that live in document_types but never had a collections table row.
+  // No registry entry — check if document_types has a matching entry directly.
+  // This handles plugin-owned types (e.g. blog_post via bootstrapDocumentTypes) that
+  // exist as document types without a corresponding collection config.
   const docType = await new DocumentTypeRegistry(db).findById(collectionIdOrName)
   if (docType) {
     return { coll: { id: collectionIdOrName, name: collectionIdOrName }, docType }
@@ -108,7 +101,8 @@ apiContentCrudRoutes.get('/:id', optionalAuth(), async (c) => {
 
     let transformedContent: any
     if (docRow) {
-      const coll = await db.prepare('SELECT id FROM collections WHERE name = ?').bind(docRow.type_id).first() as any
+      // For code-defined collections, registry id == name (== docRow.type_id).
+      const coll = getCollectionRegistry().getByName(docRow.type_id)
       transformedContent = {
         id: docRow.root_id,
         title: docRow.title,
@@ -300,7 +294,7 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
       const cache = getCacheService(CACHE_CONFIGS.api!)
       await cache.invalidate('content-filtered:*')
       await cache.invalidate('collection-content-filtered:*')
-      const coll = await db.prepare('SELECT id FROM collections WHERE name = ?').bind(docRow.type_id).first() as any
+      const coll = getCollectionRegistry().getByName(docRow.type_id)
       const saved = await db.prepare('SELECT * FROM documents WHERE id = ?').bind(newDraft.id).first() as any
       const savedData = saved?.data ? JSON.parse(saved.data) : {}
 

@@ -1,6 +1,6 @@
 import { Context, Next } from "hono";
-import { syncCollections } from "../services/collection-sync";
-import { syncAllFormCollections } from "../services/form-collection-sync";
+import { loadCollectionConfigs } from "../services/collection-loader";
+import { getCollectionRegistry } from "../services/collection-registry";
 import { MigrationService } from "../services/migrations";
 import { PluginBootstrapService } from "../services/plugin-bootstrap";
 import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes } from "../services/document-types-seed";
@@ -109,21 +109,16 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
       const migrationService = new MigrationService(c.env.DB);
       await migrationService.ensureSchemaCompatibility();
 
-      // 2. Sync collection configurations
-      console.log("[Bootstrap] Syncing collection configurations...");
+      // 2. Populate the in-memory collection registry from code-defined configs.
+      // This is the source of truth going forward; the DB `collections` table is
+      // being decommissioned (see docs/ai/plans/drop-db-collections-plan.md).
+      console.log("[Bootstrap] Populating collection registry...");
       try {
-        await syncCollections(c.env.DB);
+        const configs = await loadCollectionConfigs();
+        getCollectionRegistry().register(configs);
+        console.log(`[Bootstrap] Registry populated with ${configs.length} collection(s)`);
       } catch (error) {
-        console.error("[Bootstrap] Error syncing collections:", error);
-        // Continue bootstrap even if collection sync fails
-      }
-
-      // 2b. Sync form-derived shadow collections
-      console.log("[Bootstrap] Syncing form collections...");
-      try {
-        await syncAllFormCollections(c.env.DB);
-      } catch (error) {
-        console.error("[Bootstrap] Error syncing form collections:", error);
+        console.error("[Bootstrap] Error populating collection registry:", error);
       }
 
       // 3. Register document types (idempotent)

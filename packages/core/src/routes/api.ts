@@ -6,6 +6,7 @@ import { QueryFilterBuilder, QueryFilter } from '../utils'
 import { isPluginActive, optionalAuth } from '../middleware'
 import { canReadNonPublicContent, normalizePublicContentFilter } from './api-content-access-policy'
 import { documentSecondsToMs } from '../services/documents'
+import { getCollectionRegistry, collectionRecordToRow } from '../services/collection-registry'
 
 // Document columns the public list is allowed to ORDER BY. The legacy `content` table exposed
 // collection_id; on documents that maps to type_id. Anything else (incl. nonexistent columns like a
@@ -617,28 +618,23 @@ apiRoutes.get('/collections', async (c) => {
       }
     }
 
-    // Cache miss - fetch from database
+    // Cache miss — read from the in-memory registry (code-defined collections).
     c.header('X-Cache-Status', 'MISS')
-    c.header('X-Cache-Source', 'database')
+    c.header('X-Cache-Source', 'registry')
 
-    const stmt = db.prepare("SELECT * FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user')")
-    const { results } = await stmt.all()
-
-    // Parse schema and format results
-    const transformedResults = results.map((row: any) => ({
-      ...row,
-      schema: row.schema ? JSON.parse(row.schema) : {},
-      is_active: row.is_active // Keep as number (1 or 0)
-    }))
+    const records = getCollectionRegistry()
+      .listActive()
+      .filter((r) => !r.internal)
+    const transformedResults = records.map(collectionRecordToRow)
 
     const responseData = {
       data: transformedResults,
       meta: addTimingMeta(c, {
-        count: results.length,
+        count: transformedResults.length,
         timestamp: new Date().toISOString(),
         cache: {
           hit: false,
-          source: 'database'
+          source: 'registry'
         }
       }, executionStart)
     }
@@ -670,33 +666,33 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
     const collIdByName = new Map<string, string>()
     let typeId: string | undefined
     let typeIds: string[] | undefined
+    const registry = getCollectionRegistry()
     if (queryParams.collection) {
       const collectionName = queryParams.collection
-      const collectionResult = await db.prepare('SELECT id FROM collections WHERE name = ? AND is_active = 1').bind(collectionName).first() as any
-      if (!collectionResult) {
+      const record = registry.getByName(collectionName)
+      if (!record || record.isActive === false) {
         return c.json({
           data: [],
           meta: addTimingMeta(c, { count: 0, timestamp: new Date().toISOString(), message: `Collection '${collectionName}' not found` }, executionStart)
         })
       }
       typeId = collectionName
-      collIdByName.set(collectionName, collectionResult.id)
+      collIdByName.set(collectionName, record.id)
       delete queryParams.collection
     } else if (queryParams.collection_id) {
-      // D31: legacy `?collection_id=<id>` — resolve the collection name (== document type id) and scope
-      // to it. `collection_id` is stripped from the documents where-tree (no such column) by augment.
-      const collectionResult = await db.prepare('SELECT id, name FROM collections WHERE id = ? AND is_active = 1').bind(queryParams.collection_id).first() as any
-      if (!collectionResult) {
+      // D31: legacy `?collection_id=<id>` — for code-defined collections, id == name.
+      const record = registry.getById(queryParams.collection_id)
+      if (!record || record.isActive === false) {
         return c.json({
           data: [],
           meta: addTimingMeta(c, { count: 0, timestamp: new Date().toISOString(), message: `Collection '${queryParams.collection_id}' not found` }, executionStart)
         })
       }
-      typeId = collectionResult.name
-      collIdByName.set(collectionResult.name, collectionResult.id)
+      typeId = record.name
+      collIdByName.set(record.name, record.id)
     } else {
-      const { results: cols } = await db.prepare("SELECT id, name FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user')").all()
-      typeIds = (cols ?? []).map((r: any) => { collIdByName.set(r.name, r.id); return r.name })
+      const records = registry.listActive().filter((r) => !r.internal)
+      typeIds = records.map((r) => { collIdByName.set(r.name, r.id); return r.name })
     }
 
     // Parse the user filter (data-field filters carry over as json_extract), then re-target to
@@ -804,16 +800,14 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     const db = c.env.DB
     const queryParams = c.req.query()
 
-    // First check if collection exists
-    const collectionStmt = db.prepare('SELECT * FROM collections WHERE name = ? AND is_active = 1')
-    const collectionResult = await collectionStmt.bind(collection).first()
-
-    if (!collectionResult) {
+    // First check if collection exists in the in-memory registry
+    const record = getCollectionRegistry().getByName(collection!)
+    if (!record || record.isActive === false) {
       return c.json({ error: 'Collection not found' }, 404)
     }
 
     const collIdByName = new Map<string, string>()
-    collIdByName.set(collection!, (collectionResult as any).id)
+    collIdByName.set(collection!, record.id)
 
     // Parse the user filter, re-target to documents scoped to this collection's type + visibility.
     // type_id == the collection name; one row per root via is_published / is_current_draft.
@@ -889,10 +883,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     const responseData = {
       data: transformedResults,
       meta: addTimingMeta(c, {
-        collection: {
-          ...(collectionResult as any),
-          schema: (collectionResult as any).schema ? JSON.parse((collectionResult as any).schema) : {}
-        },
+        collection: collectionRecordToRow(record),
         count: results.length,
         timestamp: new Date().toISOString(),
         // D44: echo the caller's filter with the access policy applied (status=published forced for
@@ -900,7 +891,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
         filter: normalizePublicContentFilter(filter, role),
         cache: {
           hit: false,
-          source: 'database'
+          source: 'registry'
         }
       }, executionStart)
     }

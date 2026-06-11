@@ -41,14 +41,8 @@ adminRoutes.get('/', async (c) => {
     const collections = await service.getAllCollections()
     console.log('[AI Search Settings Route] Collections returned:', collections.length)
     
-    // If no collections, try direct query
-    if (collections.length === 0) {
-      const directQuery = await db.prepare('SELECT id, name, display_name FROM collections WHERE is_active = 1').all()
-      console.log('[AI Search Settings Route] Direct DB query found:', directQuery.results?.length || 0, 'collections')
-      if (directQuery.results && directQuery.results.length > 0) {
-        console.log('[AI Search Settings Route] Sample from DB:', directQuery.results[0])
-      }
-    } else if (collections.length > 0 && collections[0]) {
+    // Diagnostic logging only — the registry is the source of truth now.
+    if (collections.length > 0 && collections[0]) {
       console.log('[AI Search Settings Route] First collection:', {
         id: collections[0].id,
         name: collections[0].name,

@@ -83,25 +83,17 @@ export const session = authSession;
 export const account = authAccount;
 export const verification = authVerification;
 
-// Content collections - dynamic schema definitions
-export const collections = sqliteTable('collections', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull().unique(),
-  displayName: text('display_name').notNull(),
-  description: text('description'),
-  schema: text('schema', { mode: 'json' }).notNull(), // JSON schema definition
-  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  managed: integer('managed', { mode: 'boolean' }).notNull().default(false), // Config-managed collections cannot be edited in UI
-  sourceType: text('source_type').default('user'), // 'user' (DB-created), 'code' (config-defined), 'form' (form-derived)
-  sourceId: text('source_id'), // stores the source ID for derived collections
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-});
+// Collections are code-only — registered via `registerCollections()`. The
+// `collections` table was dropped in PR 4 of the drop-db-collections plan
+// (docs/ai/plans/drop-db-collections-plan.md). The in-memory CollectionRegistry
+// is now the source of truth for collection metadata.
 
-// Content items - actual content data
+// Content items - actual content data (legacy; being decommissioned alongside
+// the rest of the pre-document-model schema). `collection_id` is retained as
+// a plain text column — no FK to the removed `collections` table.
 export const content = sqliteTable('content', {
   id: text('id').primaryKey(),
-  collectionId: text('collection_id').notNull().references(() => collections.id),
+  collectionId: text('collection_id').notNull(),
   slug: text('slug').notNull(),
   title: text('title').notNull(),
   data: text('data', { mode: 'json' }).notNull(), // JSON content data
@@ -247,12 +239,9 @@ export const insertUserSchema = createInsertSchema(authUser, {
 
 export const selectUserSchema = createSelectSchema(authUser);
 
-export const insertCollectionSchema = createInsertSchema(collections, {
-  name: (schema: any) => schema.min(1).regex(/^[a-z0-9_]+$/, 'Collection name must be lowercase with underscores'),
-  displayName: (schema: any) => schema.min(1),
-});
-
-export const selectCollectionSchema = createSelectSchema(collections);
+// Collection Zod schemas removed with the `collections` table — see
+// drop-db-collections plan PR 4. Use the CollectionConfig type from
+// `types/collection-config.ts` for code-defined collections.
 
 export const insertContentSchema = createInsertSchema(content, {
   slug: (schema: any) => schema.min(1).regex(/^[a-zA-Z0-9_-]+$/, 'Slug must contain only letters, numbers, underscores, and hyphens'),
@@ -399,8 +388,10 @@ export const selectEmailLogSchema = createSelectSchema(emailLog);
 export type AuthUser = typeof authUser.$inferSelect;
 export type User = typeof authUser.$inferSelect;
 export type NewUser = typeof authUser.$inferInsert;
-export type Collection = typeof collections.$inferSelect;
-export type NewCollection = typeof collections.$inferInsert;
+// Collection type aliases removed with the `collections` table — see
+// drop-db-collections plan PR 4. Use CollectionConfig from
+// `types/collection-config.ts` or CollectionRecord from
+// `services/collection-registry.ts`.
 export type Content = typeof content.$inferSelect;
 export type NewContent = typeof content.$inferInsert;
 export type Media = typeof media.$inferSelect;

@@ -1,6 +1,7 @@
 import { D1Database } from '@cloudflare/workers-types'
 import { z } from 'zod'
 import { DocumentTypeRegistry } from './document-type-registry'
+import { getCollectionRegistry } from './collection-registry'
 
 // Passthrough schema: accepts any JSON object for POC types.
 // Individual fields are validated at the queryable-field level; the full
@@ -101,10 +102,49 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
 }
 
 /**
- * DB-driven collections are not auto-registered as document types by default.
- * Content types must be defined in code and registered explicitly.
+ * Register a document type for every code-defined collection in the registry.
+ *
+ * Code-defined collections become document-backed automatically so that all
+ * content writes against them flow through the documents repository. The
+ * document type's id == collection name, matching how content admin detects
+ * doc-backing.
  */
 export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promise<string[]> {
-  void db
-  return []
+  const registry = new DocumentTypeRegistry(db)
+  const collections = getCollectionRegistry().listActive()
+  const registered: string[] = []
+
+  for (const collection of collections) {
+    // Skip system/internal collections that already have explicit document type
+    // definitions in bootstrapDocumentTypes (e.g. blog_post is seeded above
+    // with its own queryable fields). The explicit registration wins.
+    if (collection.internal) continue
+    if (collection.name === 'blog_post') continue
+
+    try {
+      await registry.register({
+        id: collection.name,
+        name: collection.name,
+        displayName: collection.displayName,
+        description: collection.description,
+        source: 'system',
+        schema: anyObject,
+        settings: {
+          baseGrants: {
+            public: ['read'],
+            admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'],
+            editor: ['read', 'create', 'update', 'publish'],
+            viewer: ['read'],
+          },
+          maxVersionsPerRoot: 50,
+        },
+        queryableFields: [],
+      })
+      registered.push(collection.name)
+    } catch (error) {
+      console.error(`[document-types-seed] Failed to register collection "${collection.name}":`, error)
+    }
+  }
+
+  return registered
 }

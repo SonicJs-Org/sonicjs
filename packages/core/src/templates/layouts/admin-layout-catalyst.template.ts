@@ -353,7 +353,7 @@ export function renderAdminLayoutCatalyst(
           </svg>
         </button>
         <div class="ml-4 flex-1">
-          ${renderLogo({ size: "sm", showText: true, variant: "white", version: data.version, href: "/admin" })}
+          ${renderLogo({ size: "sm", showText: true, variant: "white", version: data.version, href: "/admin/content" })}
         </div>
       </header>
 
@@ -513,6 +513,27 @@ export function renderAdminLayoutCatalyst(
     // Check for pending migrations when the page loads
     document.addEventListener('DOMContentLoaded', checkPendingMigrations);
 
+    // Docs dropdown toggle
+    function toggleDocsDropdown() {
+      const dropDowns = document.querySelectorAll('.docsDropdown');
+      dropDowns.forEach(dropdown => {
+        dropdown.classList.toggle('hidden');
+      });
+    }
+
+    // Close docs dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+      const dropdowns = document.querySelectorAll('.docsDropdown');
+      const button = event.target.closest('[data-docs-menu]');
+      if (!button) {
+        dropdowns.forEach(function(dropdown) {
+          if (!dropdown.contains(event.target)) {
+            dropdown.classList.add('hidden');
+          }
+        });
+      }
+    });
+
     // Plugins accordion toggle
     function togglePluginsMenu(btn) {
       var accordion = btn.closest('[data-plugins-accordion]');
@@ -550,10 +571,10 @@ function renderCatalystSidebar(
 ): string {
   let baseMenuItems = [
     {
-      label: "Collections",
-      path: "/admin/collections",
+      label: "Home",
+      path: "/admin",
       icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"/>
+        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
       </svg>`,
     },
     {
@@ -561,6 +582,13 @@ function renderCatalystSidebar(
       path: "/admin/content",
       icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
         <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+      </svg>`,
+    },
+    {
+      label: "Collections",
+      path: "/admin/collections",
+      icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"/>
       </svg>`,
     },
     {
@@ -640,7 +668,7 @@ function renderCatalystSidebar(
 
       <!-- Sidebar Header -->
       <div class="flex flex-col border-b border-zinc-950/5 p-4 dark:border-white/5">
-        ${renderLogo({ size: "md", showText: true, variant: "white", version, href: "/admin" })}
+        ${renderLogo({ size: "md", showText: true, variant: "white", version, href: "/admin/content" })}
       </div>
 
       <!-- Sidebar Body -->
@@ -712,6 +740,47 @@ function renderCatalystSidebar(
             </div>
             <div data-plugins-submenu class="pl-6 mt-0.5 flex flex-col gap-0.5 hidden">
               ${pluginsSubItems}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Docs menu -->
+      <div class="border-t border-zinc-950/5 p-4 dark:border-white/5">
+        <div class="relative">
+          <button
+            data-docs-menu
+            onclick="toggleDocsDropdown()"
+            class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm/5 font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5"
+          >
+            <svg class="h-5 w-5 shrink-0 fill-zinc-500 dark:fill-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+            </svg>
+            <span class="flex-1 truncate">Docs</span>
+            <svg class="h-4 w-4 shrink-0 fill-zinc-500 dark:fill-zinc-400" viewBox="0 0 20 20">
+              <path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" />
+            </svg>
+          </button>
+          <div class="docsDropdown hidden absolute bottom-full mb-2 left-0 right-0 mx-2 rounded-xl bg-white shadow-lg ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10 z-50">
+            <div class="p-2">
+              <a href="/admin/api-reference" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">
+                <svg class="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+                </svg>
+                API Docs
+              </a>
+              <a href="https://sonicjs.com" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">
+                <svg class="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/>
+                </svg>
+                Developer Docs
+              </a>
+              <a href="/api" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">
+                <svg class="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
+                </svg>
+                OpenAPI
+              </a>
             </div>
           </div>
         </div>

@@ -129,6 +129,14 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
         console.error("[Bootstrap] Error registering document types:", error);
       }
 
+      // 2c. Repair legacy users that have password_hash in auth_user but no
+      // auth_account credential row (registered before Better Auth migration).
+      try {
+        await repairMissingCredentialAccounts(c.env.DB)
+      } catch (error) {
+        console.error('[Bootstrap] Error repairing credential accounts:', error)
+      }
+
       // 3a. Seed system RBAC roles/verbs/grants as documents (idempotent).
       try {
         const { RbacService } = await import("../services/rbac");
@@ -180,4 +188,33 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
  */
 export function resetBootstrap() {
   bootstrapComplete = false;
+}
+
+/**
+ * Find auth_user rows that have a password_hash but no auth_account credential
+ * row (created before Better Auth migration) and repair them. Idempotent —
+ * INSERT OR IGNORE means re-runs are safe.
+ */
+async function repairMissingCredentialAccounts(db: D1Database): Promise<void> {
+  const { results } = await db.prepare(`
+    SELECT u.id, u.password_hash
+    FROM auth_user u
+    WHERE u.password_hash IS NOT NULL AND u.password_hash != ''
+    AND NOT EXISTS (
+      SELECT 1 FROM auth_account a
+      WHERE a.user_id = u.id AND a.provider_id = 'credential'
+    )
+  `).all()
+
+  if (!results.length) return
+
+  console.log(`[Bootstrap] Repairing ${results.length} user(s) missing credential auth_account rows`)
+  const nowSec = Math.floor(Date.now() / 1000)
+  for (const user of results as Array<{ id: string; password_hash: string }>) {
+    await db.prepare(`
+      INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+      VALUES (?, ?, ?, 'credential', ?, ?, ?)
+    `).bind(`cred-${user.id}`, user.id, user.id, user.password_hash, nowSec, nowSec).run()
+  }
+  console.log(`[Bootstrap] Credential account repair complete (${results.length} repaired)`)
 }

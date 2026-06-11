@@ -71,8 +71,11 @@ const SYSTEM_RESOURCES: RbacResource[] = [
 
 export class RbacService {
   // Precedence for projecting the user's RBAC roles back onto the legacy
-  // users.role compat column (highest privilege first). System roles only.
-  private static readonly LEGACY_ROLE_PRECEDENCE = ['admin', 'editor', 'author', 'viewer']
+  // users.role compat column (highest privilege first). Only `admin` is
+  // hardcoded as a seeded role — `editor` is listed here purely so that if an
+  // administrator chooses to recreate a role named `editor`, legacy code that
+  // still gates on the `editor` label keeps working.
+  private static readonly LEGACY_ROLE_PRECEDENCE = ['admin', 'editor']
 
   private _docs?: DocumentsService
 
@@ -322,6 +325,26 @@ export class RbacService {
     await this.upsertDoc(T_ROLE, roleId, next, displayName)
   }
 
+  /** Update displayName + portal access in a single write to avoid double-saveDraft FK issues. */
+  async updateRoleAndPortalAccess(
+    roleId: string,
+    displayName: string,
+    name: string | undefined,
+    portalEnabled: boolean,
+    description?: string,
+  ): Promise<void> {
+    const role = await this.getDoc<RoleData>(T_ROLE, roleId)
+    if (!role) return
+    const next: RoleData = { ...role.data, displayName, description: description ?? role.data.description ?? '' }
+    if (!role.data.isSystem && name) {
+      next.name = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    }
+    const grants = (next.grants ?? []).filter((g) => !(g.resource === 'portal' && g.verb === 'access'))
+    if (portalEnabled) grants.push({ resource: 'portal', verb: 'access', scope: 'any' })
+    next.grants = grants
+    await this.upsertDoc(T_ROLE, roleId, next, displayName)
+  }
+
   async createVerb(name: string, description = ''): Promise<void> {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
     const id = `verb-${slug}`
@@ -432,25 +455,25 @@ export class RbacService {
    * document types are registered.
    */
   async ensureSystemRbacSeed(): Promise<void> {
+    // `admin` is the only hardcoded SYSTEM role (locked, undeletable). `editor`
+    // is seeded as a non-system example so a fresh install has a usable second
+    // role out of the box, but an administrator can edit, rename, or delete it.
     const roles: Array<RoleData & { id: string }> = [
       { id: 'role-admin', name: 'admin', displayName: 'Administrator', description: 'Full access to everything', isSystem: true,
         grants: [
           { resource: '*', verb: 'manage' }, { resource: 'portal', verb: 'access' }, { resource: 'rbac', verb: 'manage' },
           { resource: 'document_types', verb: 'manage' }, { resource: 'email', verb: 'manage' }, { resource: 'users', verb: 'manage' },
         ] },
-      { id: 'role-editor', name: 'editor', displayName: 'Editor', description: 'Manage documents across all types', isSystem: true,
+      { id: 'role-editor', name: 'editor', displayName: 'Editor', description: 'Manage documents across all types', isSystem: false,
         grants: [
-          { resource: 'documents', verb: 'manage' }, { resource: 'document_type:*', verb: 'read' },
-          { resource: 'document_type:*', verb: 'create' }, { resource: 'document_type:*', verb: 'update' },
-          { resource: 'document_type:*', verb: 'delete' }, { resource: 'settings', verb: 'read' },
+          { resource: 'portal', verb: 'access' },
+          { resource: 'documents', verb: 'manage' },
+          { resource: 'document_type:*', verb: 'read' },
+          { resource: 'document_type:*', verb: 'create' },
+          { resource: 'document_type:*', verb: 'update' },
+          { resource: 'document_type:*', verb: 'delete' },
+          { resource: 'settings', verb: 'read' },
         ] },
-      { id: 'role-author', name: 'author', displayName: 'Author', description: 'Create and edit own documents', isSystem: true,
-        grants: [
-          { resource: 'documents', verb: 'read' }, { resource: 'documents', verb: 'create' },
-          { resource: 'documents', verb: 'update' }, { resource: 'document_type:*', verb: 'read' },
-        ] },
-      { id: 'role-viewer', name: 'viewer', displayName: 'Viewer', description: 'Read-only access', isSystem: true,
-        grants: [{ resource: 'documents', verb: 'read' }, { resource: 'document_type:*', verb: 'read' }] },
     ]
     const verbs: Array<VerbData & { id: string }> = [
       { id: 'verb-access', name: 'access', description: 'Enter or use a portal/resource', isSystem: true, sortOrder: 5 },

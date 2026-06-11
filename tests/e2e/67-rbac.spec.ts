@@ -12,16 +12,14 @@ const ADMIN_EMAIL = 'admin@sonicjs.com';
 const ADMIN_PASSWORD = 'sonicjs!';
 
 test.describe('RBAC — seeded roles and grants', () => {
-  test('RBAC admin UI lists four system roles', async ({ page }) => {
+  test('RBAC admin UI lists the seeded admin role (the only hardcoded role)', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/rbac');
     await page.waitForLoadState('networkidle');
 
-    // All four seeded roles must appear (use .first() since role name appears in multiple places)
+    // `admin` is the only role seeded by default — all other roles are created
+    // and managed by an administrator from this UI.
     await expect(page.getByText('Administrator').first()).toBeVisible();
-    await expect(page.getByText('Editor').first()).toBeVisible();
-    await expect(page.getByText('Author').first()).toBeVisible();
-    await expect(page.getByText('Viewer').first()).toBeVisible();
   });
 
   test('RBAC admin UI is accessible to admin', async ({ page }) => {
@@ -33,16 +31,16 @@ test.describe('RBAC — seeded roles and grants', () => {
 });
 
 test.describe('RBAC — portal access enforcement', () => {
-  test('admin has portal:access (can load /admin)', async ({ page }) => {
+  test('admin has portal:access (can load gated admin route)', async ({ page }) => {
     await loginAsAdmin(page);
-    const res = await page.goto('/admin');
+    const res = await page.goto('/admin/rbac');
     expect(res?.status()).toBe(200);
     expect(page.url()).toMatch(/\/admin/);
   });
 
-  test('unauthenticated request to /admin is blocked', async ({ page }) => {
+  test('unauthenticated request to admin route is blocked', async ({ page }) => {
     await page.context().clearCookies();
-    await page.goto('/admin');
+    await page.goto('/admin/rbac');
     expect(page.url()).toMatch(/\/auth\/login/);
   });
 
@@ -78,7 +76,7 @@ test.describe('RBAC — portal access enforcement', () => {
     }
 
     // Navigate to admin — should be blocked
-    await page.goto('/admin');
+    await page.goto('/admin/rbac');
     // Should redirect to login (no portal:access)
     expect(page.url()).toMatch(/\/auth\/login|\/admin/);
 
@@ -166,6 +164,152 @@ test.describe('RBAC — role management API', () => {
       headers: csrfCookie ? { 'X-CSRF-Token': csrfCookie } : {},
     });
     expect(delRes.status() === 200 || delRes.status() === 302 || delRes.ok()).toBeTruthy();
+  });
+});
+
+test.describe('RBAC — sub-tab navigation', () => {
+  test('Matrix tab is active by default', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    // Matrix panel visible, others hidden
+    await expect(page.locator('#panel-matrix')).toBeVisible();
+    await expect(page.locator('#panel-roles-verbs')).toBeHidden();
+    await expect(page.locator('#panel-tools')).toBeHidden();
+
+    // Matrix sub-tab button has active class
+    await expect(page.locator('#subtab-matrix')).toHaveClass(/active/);
+  });
+
+  test('Roles & Verbs tab shows roles and verbs panels', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-roles-verbs');
+
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+    await expect(page.locator('#panel-matrix')).toBeHidden();
+    await expect(page.locator('#panel-tools')).toBeHidden();
+    await expect(page.locator('#subtab-roles-verbs')).toHaveClass(/active/);
+
+    // Both Roles and Verbs headings must be visible
+    await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Verbs' })).toBeVisible();
+  });
+
+  test('Tools tab shows live permission check', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-tools');
+
+    await expect(page.locator('#panel-tools')).toBeVisible();
+    await expect(page.locator('#panel-matrix')).toBeHidden();
+    await expect(page.locator('#panel-roles-verbs')).toBeHidden();
+    await expect(page.locator('#subtab-tools')).toHaveClass(/active/);
+
+    // Live check inputs and heading visible
+    await expect(page.locator('#ck_res')).toBeVisible();
+    await expect(page.locator('#ck_verb')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Live permission check' })).toBeVisible();
+  });
+
+  test('Tools tab: Can I? check returns JSON result', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-tools');
+    await page.fill('#ck_res', 'documents');
+    await page.fill('#ck_verb', 'read');
+    await page.click('button:has-text("Can I?")');
+
+    // Wait for result to populate
+    await expect(page.locator('#out')).not.toHaveText('(results appear here)', { timeout: 5000 });
+    const result = await page.locator('#out').textContent();
+    expect(result).toContain('200');
+  });
+
+  test('Hash navigation opens correct tab', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac#tools');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.locator('#panel-tools')).toBeVisible();
+    await expect(page.locator('#panel-matrix')).toBeHidden();
+  });
+
+  test('Roles & Verbs tab has single Save roles button (no per-row Save)', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-roles-verbs');
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+
+    // Single bulk save button exists
+    await expect(page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' })).toBeVisible();
+
+    // No stray inline "Save" buttons per role row
+    const inlineRowSaves = page.locator('#panel-roles-verbs li button:has-text("Save")');
+    await expect(inlineRowSaves).toHaveCount(0);
+  });
+
+  test('Save roles redirects back to Roles & Verbs tab', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+
+    await page.click('#subtab-roles-verbs');
+    await page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' }).click();
+    await page.waitForLoadState('networkidle');
+
+    // After redirect, Roles & Verbs panel should be active
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+    await expect(page.locator('#panel-matrix')).toBeHidden();
+    await expect(page.locator('#subtab-roles-verbs')).toHaveClass(/active/);
+  });
+
+  test('Portal access checkbox persists after save', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/rbac');
+    await page.waitForLoadState('networkidle');
+    await page.click('#subtab-roles-verbs');
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+
+    // Only `admin` is hardcoded; admin's portal checkbox is locked. Create a
+    // custom role here so we can toggle its portal access freely.
+    const roleName = 'portal-persist-test';
+    const roleId = `role-${roleName}`;
+    if ((await page.locator(`input[name="portal_${roleId}"]`).count()) === 0) {
+      await page.locator('form[action="/admin/rbac/roles"] input[name="name"]').fill(roleName);
+      await page.locator('form[action="/admin/rbac/roles"] input[name="display_name"]').fill('Portal Persist Test');
+      await page.locator('form[action="/admin/rbac/roles"] button').filter({ hasText: 'Add role' }).click();
+      await page.waitForLoadState('networkidle');
+      await page.click('#subtab-roles-verbs');
+    }
+
+    const portal = page.locator(`input[name="portal_${roleId}"]`);
+    await expect(portal).toBeVisible();
+    const wasChecked = await portal.isChecked();
+    await portal.click();
+
+    await page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('#panel-roles-verbs')).toBeVisible();
+
+    const portalAfter = page.locator(`input[name="portal_${roleId}"]`);
+    const nowChecked = await portalAfter.isChecked();
+    expect(nowChecked).toBe(!wasChecked);
+
+    if (nowChecked !== wasChecked) {
+      await portalAfter.click();
+      await page.locator('#roles-bulk-form button[type="submit"]').filter({ hasText: 'Save roles' }).click();
+      await page.waitForLoadState('networkidle');
+    }
   });
 });
 

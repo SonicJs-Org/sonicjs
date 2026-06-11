@@ -183,21 +183,18 @@ authRoutes.post('/register',
       // Create user
       const userId = crypto.randomUUID()
       const now = new Date()
+      const nowSec = Math.floor(now.getTime() / 1000)
 
-      await db.prepare(`
-        INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        userId,
-        normalizedEmail,
-        firstName,
-        lastName,
-        passwordHash,
-        'viewer', // Default role
-        1, // is_active
-        now.getTime(),
-        now.getTime()
-      ).run()
+      await db.batch([
+        db.prepare(`
+          INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(userId, normalizedEmail, firstName, lastName, passwordHash, 'viewer', 1, now.getTime(), now.getTime()),
+        // Better Auth sign-in/email requires an auth_account credential row — create it alongside auth_user
+        db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+          VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+          .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+      ])
       
       // Save custom profile fields if configured
       const profileConfig = getUserProfileConfig()
@@ -726,61 +723,84 @@ authRoutes.post('/seed-admin',
   async (c) => {
   try {
     const db = c.env.DB
-    
-    // auth_user table is created by migration 0001 — no inline DDL needed
-    
-    // Check if admin user already exists
-    const existingAdmin = await db.prepare('SELECT id FROM auth_user WHERE email = ?')
-      .bind('admin@sonicjs.com')
-      .first()
+    const rbac = new RbacService(db)
+    const results: Array<{ email: string; status: string }> = []
 
-    if (existingAdmin) {
-      const passwordHash = await AuthManager.hashPassword('sonicjs!')
+    const upsertSeedUser = async (opts: {
+      id: string
+      email: string
+      name: string
+      firstName: string
+      lastName: string
+      role: string
+      rbacRole: string
+      password: string
+    }) => {
+      const passwordHash = await AuthManager.hashPassword(opts.password)
       const nowMs = Date.now()
       const nowSec = Math.floor(nowMs / 1000)
+      const existing = await db.prepare('SELECT id FROM auth_user WHERE email = ?').bind(opts.email).first()
+      if (existing) {
+        await db.prepare('UPDATE auth_user SET updated_at = ? WHERE id = ?').bind(nowMs, existing.id).run()
+        const existingCred = await db.prepare(
+          `SELECT id FROM auth_account WHERE user_id = ? AND provider_id = 'credential'`
+        ).bind(existing.id).first()
+        if (existingCred) {
+          await db.prepare(`UPDATE auth_account SET password = ?, updated_at = ? WHERE id = ?`)
+            .bind(passwordHash, nowSec, existingCred.id).run()
+        } else {
+          await db.prepare(`INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+            VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+            .bind(`cred-${existing.id}`, existing.id, existing.id, passwordHash, nowSec, nowSec).run()
+        }
+        await rbac.addUserRoleByName(String(existing.id), opts.rbacRole)
+        return 'updated'
+      }
       await db.batch([
-        // auth_user has no password_hash column (BA stores it in auth_account)
-        db.prepare('UPDATE auth_user SET updated_at = ? WHERE id = ?')
-          .bind(nowMs, existingAdmin.id),
-        // Upsert BA credential account so sign-in/email works
-        db.prepare(`INSERT OR REPLACE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+        db.prepare(`INSERT INTO auth_user (id, name, email, email_verified, first_name, last_name, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, 1, ?, ?, ?, 1, ?, ?)`)
+          .bind(opts.id, opts.name, opts.email, opts.firstName, opts.lastName, opts.role, nowMs, nowMs),
+        db.prepare(`INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
           VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
-          .bind(`cred-${existingAdmin.id}`, existingAdmin.id, existingAdmin.id, passwordHash, nowSec, nowSec),
+          .bind(`cred-${opts.id}`, opts.id, opts.id, passwordHash, nowSec, nowSec),
       ])
-      // RBAC roles are document-backed — assign outside the SQL batch.
-      await new RbacService(db).addUserRoleByName(String(existingAdmin.id), 'admin')
-      return c.json({
-        message: 'Admin user already exists (account updated)',
-        user: { id: existingAdmin.id, email: 'admin@sonicjs.com', role: 'admin' }
-      })
+      await rbac.addUserRoleByName(opts.id, opts.rbacRole)
+      return 'created'
     }
 
-    const passwordHash = await AuthManager.hashPassword('sonicjs!')
-    const userId = 'admin-user-id'
-    const nowMs = Date.now()
-    const nowSec = Math.floor(nowMs / 1000)
-    const adminEmail = 'admin@sonicjs.com'
-
-    await db.batch([
-      // auth_user row — no password_hash column; BA stores password in auth_account
-      db.prepare(`INSERT INTO auth_user (id, name, email, email_verified, first_name, last_name, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, 1, ?, ?, 'admin', 1, ?, ?)`)
-        .bind(userId, 'Admin User', adminEmail, 'Admin', 'User', nowMs, nowMs),
-      // BA credential account — PBKDF2 hash; BA's custom verify hook in auth/config.ts handles it
-      db.prepare(`INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
-        VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
-        .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
-    ])
-    // RBAC roles are document-backed — assign outside the SQL batch.
-    await new RbacService(db).addUserRoleByName(userId, 'admin')
-
-    return c.json({
-      message: 'Admin user created successfully',
-      user: { id: userId, email: adminEmail, role: 'admin' }
+    results.push({
+      email: 'admin@sonicjs.com',
+      status: await upsertSeedUser({
+        id: 'admin-user-id',
+        email: 'admin@sonicjs.com',
+        name: 'Admin User',
+        firstName: 'Admin',
+        lastName: 'User',
+        role: 'admin',
+        rbacRole: 'admin',
+        password: 'sonicjs!',
+      }),
     })
+
+    // Temporary editor user for testing
+    results.push({
+      email: 'e@e.com',
+      status: await upsertSeedUser({
+        id: 'editor-user-eddie',
+        email: 'e@e.com',
+        name: 'Eddie McEditor',
+        firstName: 'Eddie',
+        lastName: 'McEditor',
+        role: 'editor',
+        rbacRole: 'editor',
+        password: '123123123',
+      }),
+    })
+
+    return c.json({ message: 'Seed complete', users: results })
   } catch (error) {
     console.error('Seed admin error:', error)
-    return c.json({ error: 'Failed to create admin user', details: error instanceof Error ? error.message : String(error) }, 500)
+    return c.json({ error: 'Failed to seed users', details: error instanceof Error ? error.message : String(error) }, 500)
   }
 })
 

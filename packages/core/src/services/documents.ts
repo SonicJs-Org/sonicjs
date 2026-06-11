@@ -227,7 +227,8 @@ export class DocumentsService {
       ...this.projection.buildDerivedInsertStatements(newDoc, this.opts.queryableFields ?? [], now),
     ]
 
-    // 5. Prune excess versions (beyond maxVersionsPerRoot), never the published or current-draft row.
+    // 5. Prune excess versions (beyond maxVersionsPerRoot), never the published or current-draft row,
+    //    and never a version still referenced as version_of_id by another row (FK RESTRICT).
     const maxVersions = this.opts.maxVersionsPerRoot ?? DEFAULT_MAX_VERSIONS
     statements.push(
       this.db.prepare(
@@ -235,8 +236,9 @@ export class DocumentsService {
          AND id NOT IN (
            SELECT id FROM documents WHERE root_id = ? AND tenant_id = ? AND is_current_draft = 0 AND is_published = 0
            ORDER BY version_number DESC LIMIT ?
-         )`,
-      ).bind(rootId, this.tenantId, rootId, this.tenantId, maxVersions),
+         )
+         AND id NOT IN (SELECT version_of_id FROM documents WHERE version_of_id IS NOT NULL AND root_id = ? AND tenant_id = ?)`,
+      ).bind(rootId, this.tenantId, rootId, this.tenantId, maxVersions, rootId, this.tenantId),
     )
 
     await this.db.batch(statements)

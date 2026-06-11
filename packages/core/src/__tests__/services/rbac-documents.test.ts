@@ -52,22 +52,38 @@ function addUser(db, id, active = 1) {
      VALUES (?, ?, 1, ?, ?, 'f', 'l', 'viewer', ?)`,
   ).run(id, `${id}@t.co`, now, now, active)
 }
+async function addAdmin(db, rbac, id = 'admin') {
+  addUser(db, id)
+  await rbac.addUserRoleByName(id, 'admin')
+}
 
 describe('RbacService — document-backed', () => {
   let db
   beforeEach(async () => { db = makeDb(); await new RbacService(db).ensureSystemRbacSeed() })
   afterEach(() => db.close())
 
-  it('seeds 4 system roles + 6 verbs as documents, idempotently', async () => {
+  it('seeds admin (locked system role) + editor (deletable example role) + 6 verbs, idempotently', async () => {
     const rbac = new RbacService(db)
-    expect((await rbac.getRoles()).map((r) => r.name).sort()).toEqual(['admin', 'author', 'editor', 'viewer'])
+    const roles = await rbac.getRoles()
+    expect(roles.map((r) => r.name).sort()).toEqual(['admin', 'editor'])
+    // `admin` is the only hardcoded SYSTEM role; `editor` is a deletable example.
+    expect(roles.find((r) => r.name === 'admin')?.is_system).toBe(1)
+    expect(roles.find((r) => r.name === 'editor')?.is_system).toBe(0)
     expect((await rbac.getVerbs()).map((v) => v.name)).toEqual(['access', 'read', 'create', 'update', 'delete', 'manage'])
-    // Re-seed: still exactly 4 roles (no duplicate documents).
+    // Re-seed: still exactly 2 roles (no duplicate documents).
     await rbac.ensureSystemRbacSeed()
-    expect((await rbac.getRoles()).length).toBe(4)
-    // Stored as documents.
+    expect((await rbac.getRoles()).length).toBe(2)
     const n = db.raw.prepare("SELECT COUNT(*) c FROM documents WHERE type_id='rbac_role' AND is_current_draft=1").get().c
-    expect(n).toBe(4)
+    expect(n).toBe(2)
+  })
+
+  it('seeded editor role is deletable (only admin is locked)', async () => {
+    const rbac = new RbacService(db)
+    await rbac.deleteRole('role-editor')
+    expect((await rbac.getRoles()).some((r) => r.id === 'role-editor')).toBe(false)
+    // Admin survives delete attempt because it is a system role.
+    await rbac.deleteRole('role-admin')
+    expect((await rbac.getRoles()).some((r) => r.id === 'role-admin')).toBe(true)
   })
 
   it('admin manage grant implies every verb on every resource', async () => {
@@ -81,35 +97,54 @@ describe('RbacService — document-backed', () => {
     expect(db.raw.prepare("SELECT role FROM auth_user WHERE id='u-admin'").get().role).toBe('admin')
   })
 
-  it('viewer can read documents but not delete', async () => {
+  it('editor can manage documents and access the portal', async () => {
     const rbac = new RbacService(db)
-    addUser(db, 'u-view')
-    await rbac.addUserRoleByName('u-view', 'viewer')
-    expect(await rbac.can('u-view', 'documents', 'read')).toBe(true)
-    expect(await rbac.can('u-view', 'documents', 'delete')).toBe(false)
-    expect(await rbac.can('u-view', 'document_type:blog_post', 'read')).toBe(true) // document_type:* wildcard
+    await addAdmin(db, rbac)
+    addUser(db, 'u-editor')
+    await rbac.addUserRoleByName('u-editor', 'editor')
+    expect(await rbac.can('u-editor', 'documents', 'read')).toBe(true)
+    expect(await rbac.can('u-editor', 'documents', 'delete')).toBe(true)
+    expect(await rbac.can('u-editor', 'document_type:blog_post', 'read')).toBe(true) // document_type:* wildcard
+    expect(await rbac.can('u-editor', 'portal', 'access')).toBe(true)
   })
 
   it('setRoleGrants replaces a role grant set and is reflected in checks', async () => {
     const rbac = new RbacService(db)
+    await addAdmin(db, rbac)
     addUser(db, 'u1')
-    await rbac.addUserRoleByName('u1', 'viewer')
+    await rbac.addUserRoleByName('u1', 'editor')
     expect(await rbac.can('u1', 'email', 'manage')).toBe(false)
-    await rbac.setRoleGrants('role-viewer', [{ resource: 'email', verb: 'manage' }])
+    await rbac.setRoleGrants('role-editor', [{ resource: 'email', verb: 'manage' }])
     expect(await rbac.can('u1', 'email', 'manage')).toBe(true)
     expect(await rbac.can('u1', 'documents', 'read')).toBe(false) // old grants replaced
+  })
+
+  it('updates role display name and portal access in one write', async () => {
+    const rbac = new RbacService(db)
+    await addAdmin(db, rbac)
+    await rbac.updateRoleAndPortalAccess('role-editor', 'Managing Editor', undefined, false)
+    let roles = await rbac.getRoles()
+    expect(roles.find((r) => r.id === 'role-editor')?.display_name).toBe('Managing Editor')
+    addUser(db, 'u-editor')
+    await rbac.addUserRoleByName('u-editor', 'editor')
+    expect(await rbac.can('u-editor', 'portal', 'access')).toBe(false)
+
+    await rbac.updateRoleAndPortalAccess('role-editor', 'Editor', undefined, true)
+    roles = await rbac.getRoles()
+    expect(roles.find((r) => r.id === 'role-editor')?.display_name).toBe('Editor')
+    expect(await rbac.can('u-editor', 'portal', 'access')).toBe(true)
   })
 
   it('self-lockout guard blocks removing the last portal+rbac admin', async () => {
     const rbac = new RbacService(db)
     addUser(db, 'only-admin')
     await rbac.addUserRoleByName('only-admin', 'admin')
-    // Demoting the sole admin to viewer must throw.
-    await expect(rbac.setUserRoles('only-admin', ['role-viewer'])).rejects.toThrow(/Refusing to update roles/)
+    // Demoting the sole admin to editor must throw because editor lacks rbac:manage.
+    await expect(rbac.setUserRoles('only-admin', ['role-editor'])).rejects.toThrow(/Refusing to update roles/)
     // A second admin makes it safe.
     addUser(db, 'admin2')
     await rbac.addUserRoleByName('admin2', 'admin')
-    await expect(rbac.setUserRoles('only-admin', ['role-viewer'])).resolves.toBeUndefined()
+    await expect(rbac.setUserRoles('only-admin', ['role-editor'])).resolves.toBeUndefined()
     expect(await rbac.can('only-admin', 'rbac', 'manage')).toBe(false)
   })
 

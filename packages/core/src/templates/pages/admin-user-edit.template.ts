@@ -5,12 +5,6 @@ import { escapeHtml } from '../../utils/sanitize'
 
 export interface UserProfileData {
   displayName?: string
-  bio?: string
-  company?: string
-  jobTitle?: string
-  website?: string
-  location?: string
-  dateOfBirth?: number
 }
 
 export interface UserEditData {
@@ -159,83 +153,17 @@ export function renderUserEditPage(data: UserEditPageData): string {
               <!-- Profile Information -->
               <div class="mb-8">
                 <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-4">Profile Information</h3>
-                <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Extended profile data for this user</p>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Display Name</label>
-                    <input
-                      type="text"
-                      name="profile_display_name"
-                      value="${escapeHtml(data.userToEdit.profile?.displayName || '')}"
-                      placeholder="Public display name"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Company</label>
-                    <input
-                      type="text"
-                      name="profile_company"
-                      value="${escapeHtml(data.userToEdit.profile?.company || '')}"
-                      placeholder="Company or organization"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Job Title</label>
-                    <input
-                      type="text"
-                      name="profile_job_title"
-                      value="${escapeHtml(data.userToEdit.profile?.jobTitle || '')}"
-                      placeholder="Job title or role"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Website</label>
-                    <input
-                      type="url"
-                      name="profile_website"
-                      value="${escapeHtml(data.userToEdit.profile?.website || '')}"
-                      placeholder="https://example.com"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Location</label>
-                    <input
-                      type="text"
-                      name="profile_location"
-                      value="${escapeHtml(data.userToEdit.profile?.location || '')}"
-                      placeholder="City, Country"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Date of Birth</label>
-                    <input
-                      type="date"
-                      name="profile_date_of_birth"
-                      value="${data.userToEdit.profile?.dateOfBirth ? new Date(data.userToEdit.profile.dateOfBirth).toISOString().split('T')[0] : ''}"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-                </div>
-
-                <div class="mt-6">
-                  <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Bio</label>
-                  <textarea
-                    name="profile_bio"
-                    rows="3"
-                    placeholder="Short bio or description"
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Display Name</label>
+                  <input
+                    type="text"
+                    name="profile_display_name"
+                    value="${escapeHtml(data.userToEdit.profile?.displayName || '')}"
+                    placeholder="Public display name"
                     class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                  >${escapeHtml(data.userToEdit.profile?.bio || '')}</textarea>
+                  />
                 </div>
+                ${renderAlert({ type: 'info', dismissible: true, message: 'To add more profile fields, edit: packages/core/src/templates/pages/admin-user-edit.template.ts' })}
               </div>
 
               ${data.customProfileFieldsHtml || ''}

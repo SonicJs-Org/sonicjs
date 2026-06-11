@@ -88,9 +88,9 @@ describe('PluginBuilder.build() v3 compat fields', () => {
     expect((plugin as any).id).toBe('my-plugin')
   })
 
-  it('build() adds empty capabilities array', () => {
+  it('build() leaves capabilities undefined (exempt from capability gate)', () => {
     const plugin = PluginBuilder.create({ name: 'my-plugin', version: '1.0.0' }).build()
-    expect((plugin as any).capabilities).toEqual([])
+    expect((plugin as any).capabilities).toBeUndefined()
   })
 
   it('build() does not override explicitly set capabilities', () => {

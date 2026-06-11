@@ -106,6 +106,11 @@ export const CATEGORY_INFO: Record<string, CategoryInfo> = {
     title: 'Files',
     description: 'File serving from R2 storage',
     icon: '&#x1f4c1;'
+  },
+  'Collections': {
+    title: 'Collections',
+    description: 'Per-collection REST endpoints (auto-generated from registered collections)',
+    icon: '&#x1f4da;'
   }
 }
 
@@ -253,6 +258,13 @@ const ROUTE_METADATA: Record<string, RouteMeta> = {
   'GET /api/system/info': { description: 'Get system information and version', category: 'System', authentication: false },
   'GET /api/system/schema': { description: 'Get database schema information', category: 'System', authentication: false },
 
+  // Collection shorthand routes
+  'GET /api/:collection': { description: 'List items from a collection (shorthand route)', category: 'Collections', authentication: false },
+  'GET /api/:collection/:id': { description: 'Get a single item by ID from a collection', category: 'Collections', authentication: false },
+  'POST /api/:collection': { description: 'Create an item in a collection', category: 'Collections', authentication: true },
+  'PUT /api/:collection/:id': { description: 'Update an item in a collection', category: 'Collections', authentication: true },
+  'DELETE /api/:collection/:id': { description: 'Delete an item from a collection', category: 'Collections', authentication: true },
+
   // File serving
   'GET /files/*': { description: 'Serve files from R2 storage (public access)', category: 'Files', authentication: false },
 
@@ -335,6 +347,7 @@ function inferCategory(path: string): string {
   if (path.startsWith('/forms/')) return 'Forms'
   if (path.startsWith('/files/')) return 'Files'
   if (path === '/health' || path.startsWith('/api')) return 'System'
+  if (path.match(/^\/api\/[^/]+(\/:id)?$/) && !path.startsWith('/api/content') && !path.startsWith('/api/collections') && !path.startsWith('/api/media') && !path.startsWith('/api/search') && !path.startsWith('/api/system') && !path.startsWith('/api/health') && !path.startsWith('/api/documents') && !path.startsWith('/api/forms')) return 'Collections'
   return 'Other'
 }
 

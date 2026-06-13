@@ -273,13 +273,6 @@ export const emailPlugin = definePlugin({
       order: 80,
       permissions: ['email:manage'],
     },
-    {
-      label: 'Email Log',
-      path: '/admin/plugins/email/log',
-      icon: 'document',
-      order: 81,
-      permissions: ['email:manage'],
-    },
   ],
 
   configSchema: {

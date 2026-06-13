@@ -88,7 +88,15 @@ adminMediaRoutes.get('/', async (c) => {
     
     const stmt = db.prepare(query)
     const { results } = await stmt.bind(...params).all()
-    
+
+    // Get the total count over the same filters (without LIMIT/OFFSET) so the
+    // sidebar "All Files" total and pagination reflect the whole library, not
+    // just the rows on the current page.
+    const countQuery = `SELECT COUNT(*) as total FROM media WHERE ${conditions.join(' AND ')}`
+    const countStmt = db.prepare(countQuery)
+    const countRow = await countStmt.bind(...params).first<{ total: number }>()
+    const totalFiles = countRow?.total ?? 0
+
     // Get folder statistics
     const foldersStmt = db.prepare(`
       SELECT folder, COUNT(*) as count, SUM(size) as totalSize
@@ -150,8 +158,8 @@ adminMediaRoutes.get('/', async (c) => {
       currentType: type,
       currentView: view as 'grid' | 'list',
       currentPage: page,
-      totalFiles: results.length,
-      hasNextPage: results.length === limit,
+      totalFiles,
+      hasNextPage: offset + results.length < totalFiles,
       user: {
         name: user!.email,
         email: user!.email,

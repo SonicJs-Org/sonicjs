@@ -35,7 +35,7 @@ export default {
         helpText: "A short summary of the post",
       },
       content: {
-        type: "quill",
+        type: "lexical",
         title: "Content",
         required: true,
       },

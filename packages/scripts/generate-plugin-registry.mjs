@@ -61,6 +61,7 @@ function normalizeManifest(manifest) {
   const displayName = manifest.displayName || manifest.name || id
   const iconEmoji = manifest.iconEmoji || ''
   const is_core = manifest.is_core ?? manifest.isCore ?? manifest.core ?? false
+  const defaultActive = manifest.defaultActive === true ? true : undefined
   const defaultSettings = manifest.defaultSettings || {}
 
   // Normalize author (some manifests use object { name, email })
@@ -101,6 +102,7 @@ function normalizeManifest(manifest) {
     category: manifest.category || 'general',
     iconEmoji,
     is_core,
+    ...(defaultActive !== undefined && { defaultActive }),
     permissions,
     dependencies: manifest.dependencies || [],
     defaultSettings,
@@ -142,6 +144,8 @@ export interface PluginRegistryEntry {
   category: string
   iconEmoji: string
   is_core: boolean
+  /** When true, the plugin is auto-installed and activated on greenfield installs. */
+  defaultActive?: boolean
   permissions: string[]
   dependencies: string[]
   defaultSettings: Record<string, any>

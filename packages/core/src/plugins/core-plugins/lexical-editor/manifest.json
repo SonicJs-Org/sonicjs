@@ -1,0 +1,64 @@
+{
+  "id": "lexical-editor",
+  "name": "Lexical Rich Text Editor",
+  "version": "1.0.0",
+  "description": "Lexical editor integration for rich text editing. Default rich text editor for SonicJS — on by default for greenfield installs.",
+  "author": "SonicJS Team",
+  "homepage": "https://lexical.dev/",
+  "repository": "https://github.com/lane711/sonicjs",
+  "license": "MIT",
+  "category": "editor",
+  "tags": [
+    "editor",
+    "richtext",
+    "wysiwyg",
+    "lexical",
+    "content"
+  ],
+  "dependencies": [],
+  "settings": {
+    "defaultHeight": {
+      "type": "number",
+      "label": "Default Editor Height",
+      "description": "Default height in pixels for the editor",
+      "default": 300
+    },
+    "defaultToolbar": {
+      "type": "select",
+      "label": "Default Toolbar",
+      "description": "Toolbar preset",
+      "default": "standard",
+      "options": [
+        "full",
+        "standard",
+        "minimal"
+      ]
+    },
+    "placeholder": {
+      "type": "string",
+      "label": "Placeholder Text",
+      "description": "Placeholder shown when editor is empty",
+      "default": "Enter content..."
+    }
+  },
+  "hooks": {
+    "onActivate": "activate",
+    "onDeactivate": "deactivate"
+  },
+  "routes": [],
+  "permissions": {},
+  "iconEmoji": "📝",
+  "is_core": true,
+  "defaultActive": true,
+  "defaultSettings": {
+    "defaultHeight": 300,
+    "defaultToolbar": "standard",
+    "placeholder": "Enter content..."
+  },
+  "adminMenu": {
+    "label": "Lexical Editor",
+    "icon": "pencil-square",
+    "path": "/admin/plugins/lexical-editor",
+    "order": 80
+  }
+}

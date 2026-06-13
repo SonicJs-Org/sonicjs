@@ -93,13 +93,17 @@ app.post('/test-cleanup', async (c: Context) => {
       )
     `).run()
 
-    await db.prepare(`
-      DELETE FROM media
-      WHERE uploaded_by IN (
-        SELECT id FROM auth_user
-        WHERE email != 'admin@sonicjs.com' AND (email LIKE '%test%' OR email LIKE '%example.com%')
-      )
-    `).run()
+    try {
+      await db.prepare(`
+        DELETE FROM media
+        WHERE uploaded_by IN (
+          SELECT id FROM auth_user
+          WHERE email != 'admin@sonicjs.com' AND (email LIKE '%test%' OR email LIKE '%example.com%')
+        )
+      `).run()
+    } catch (e) {
+      // media table decommissioned — media now in documents
+    }
 
     // Step 4: Delete test users
     const usersResult = await db.prepare(`

@@ -172,6 +172,8 @@ export class PluginService {
           updated_at = ?
       WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
     `).bind(now, now, pluginId, TYPE_ID, TENANT).run()
+    // Sync status into the plugins table so isPluginActive() sees the change immediately.
+    await this.db.prepare(`UPDATE plugins SET status = 'active' WHERE id = ?`).bind(pluginId).run().catch(() => {})
     // Plugin activation state feeds the tenant resolver cache (the multi-tenant plugin short-circuits
     // to single-tenant while inactive). The UI toggle does not run plugin lifecycle callbacks, so bust
     // the cache here. Cheap no-op for every other plugin.
@@ -190,6 +192,8 @@ export class PluginService {
           updated_at = ?
       WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
     `).bind(now, pluginId, TYPE_ID, TENANT).run()
+    // Sync status into the plugins table so isPluginActive() sees the change immediately.
+    await this.db.prepare(`UPDATE plugins SET status = 'inactive' WHERE id = ?`).bind(pluginId).run().catch(() => {})
     invalidateTenantCache()
     await this.logActivity(pluginId, 'deactivated', null)
   }

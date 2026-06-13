@@ -396,7 +396,12 @@ async function getCollectionByName(db: D1Database, name: string) {
 // document-backed edit form looks identical to the legacy content editor.
 async function loadContentEditorFlags(db: D1Database): Promise<Record<string, unknown>> {
   const flags: Record<string, unknown> = { workflowEnabled: await isPluginActive(db, 'workflow') }
-  const editors: Array<[string, string]> = [['tinymce-plugin', 'tinymce'], ['quill-editor', 'quill'], ['easy-mdx', 'mdxeditor']]
+  const editors: Array<[string, string]> = [
+    ['tinymce-plugin', 'tinymce'],
+    ['quill-editor', 'quill'],
+    ['easy-mdx', 'mdxeditor'],
+    ['lexical-editor', 'lexical'],
+  ]
   for (const [plugin, key] of editors) {
     const enabled = await isPluginActive(db, plugin)
     flags[`${key}Enabled`] = enabled
@@ -889,11 +894,20 @@ adminContentRoutes.get('/new', async (c) => {
       mdxeditorSettings = mdxeditorPlugin?.settings
     }
 
+    // Check if Lexical Editor plugin is active and get settings
+    const lexicalEnabled = await isPluginActive(db, 'lexical-editor')
+    let lexicalSettings
+    if (lexicalEnabled) {
+      const pluginService = new PluginService(db)
+      const lexicalPlugin = await pluginService.getPlugin('lexical-editor')
+      lexicalSettings = lexicalPlugin?.settings
+    }
+
     console.log('[Content Form /new] Editor plugins status:', {
       tinymce: tinymceEnabled,
       quill: quillEnabled,
       mdxeditor: mdxeditorEnabled,
-      mdxeditorSettings
+      lexical: lexicalEnabled,
     })
 
     const formData: ContentFormData = {
@@ -907,6 +921,8 @@ adminContentRoutes.get('/new', async (c) => {
       quillSettings,
       mdxeditorEnabled,
       mdxeditorSettings,
+      lexicalEnabled,
+      lexicalSettings,
       user: user ? {
         name: user.email,
         email: user.email,
@@ -1057,6 +1073,15 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       mdxeditorSettings = mdxeditorPlugin?.settings
     }
 
+    // Check if Lexical Editor plugin is active and get settings
+    const lexicalEnabled = await isPluginActive(db, 'lexical-editor')
+    let lexicalSettings
+    if (lexicalEnabled) {
+      const pluginService = new PluginService(db)
+      const lexicalPlugin = await pluginService.getPlugin('lexical-editor')
+      lexicalSettings = lexicalPlugin?.settings
+    }
+
     const formData: ContentFormData = {
       id: content.id,
       title: content.title,
@@ -1081,6 +1106,8 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       quillSettings,
       mdxeditorEnabled,
       mdxeditorSettings,
+      lexicalEnabled,
+      lexicalSettings,
       referrerParams,
       user: user ? {
         name: user!.email,

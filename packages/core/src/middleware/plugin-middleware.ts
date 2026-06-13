@@ -14,12 +14,17 @@ import type { D1Database } from '@cloudflare/workers-types'
  */
 export async function isPluginActive(db: D1Database, pluginId: string): Promise<boolean> {
   try {
-    const result = await db
-      .prepare('SELECT status FROM plugins WHERE id = ?')
+    // documents table is the authoritative source — PluginService writes here on install/activate.
+    // Sidebar nav uses the same query pattern; plugins table is unreliable (may not exist).
+    const docResult = await db
+      .prepare(
+        `SELECT json_extract(data, '$.status') as status FROM documents
+         WHERE slug = ? AND type_id = 'plugin' AND tenant_id = 'default'
+           AND is_current_draft = 1 AND deleted_at IS NULL`
+      )
       .bind(pluginId)
       .first()
-
-    return result?.status === 'active'
+    return (docResult as any)?.status === 'active'
   } catch (error) {
     console.error(`[isPluginActive] Error checking plugin status for ${pluginId}:`, error)
     return false
@@ -61,8 +66,11 @@ export async function requireActivePlugins(db: D1Database, pluginIds: string[]):
 export async function getActivePlugins(db: D1Database): Promise<any[]> {
   try {
     const { results } = await db
-      .prepare('SELECT * FROM plugins WHERE status = ?')
-      .bind('active')
+      .prepare(
+        `SELECT slug as id, json_extract(data, '$.status') as status, data FROM documents
+         WHERE type_id = 'plugin' AND tenant_id = 'default'
+           AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+      )
       .all()
 
     return results || []

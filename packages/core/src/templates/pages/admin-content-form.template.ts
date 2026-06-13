@@ -1,6 +1,7 @@
 import { getMDXEditorInitScript, getMDXEditorScripts } from '../../plugins/available/easy-mdx'
 import { getTinyMCEInitScript, getTinyMCEScript } from '../../plugins/available/tinymce-plugin'
 import { getQuillCDN, getQuillInitScript } from '../../plugins/core-plugins/quill-editor'
+import { getLexicalImportMap, getLexicalLoaderScript, getLexicalInitScript, getLexicalStyles } from '../../plugins/core-plugins/lexical-editor'
 import { renderAlert } from '../alert.template'
 import { FieldDefinition, renderDynamicField, renderFieldGroup } from '../components/dynamic-field.template'
 import { getConfirmationDialogScript, renderConfirmationDialog } from '../confirmation-dialog.template'
@@ -56,6 +57,12 @@ export interface ContentFormData {
     toolbar?: string
     placeholder?: string
   }
+  lexicalEnabled?: boolean // Flag to indicate if Lexical Editor plugin is active (default richtext editor)
+  lexicalSettings?: {
+    defaultHeight?: number
+    defaultToolbar?: 'full' | 'standard' | 'minimal'
+    placeholder?: string
+  }
   referrerParams?: string // URL parameters to preserve filters when returning to list
   user?: {
     name: string
@@ -91,7 +98,8 @@ export function renderContentFormPage(data: ContentFormData): string {
   const pluginStatuses = {
     quillEnabled: data.quillEnabled || false,
     mdxeditorEnabled: data.mdxeditorEnabled || false,
-    tinymceEnabled: data.tinymceEnabled || false
+    tinymceEnabled: data.tinymceEnabled || false,
+    lexicalEnabled: data.lexicalEnabled || false,
   }
 
   // Render field groups
@@ -447,6 +455,14 @@ export function renderContentFormPage(data: ContentFormData): string {
     })}
 
     ${getConfirmationDialogScript()}
+
+    ${data.lexicalEnabled ? getLexicalStyles() : '<!-- Lexical plugin not active -->'}
+
+    ${data.lexicalEnabled ? getLexicalImportMap() : ''}
+
+    ${data.lexicalEnabled ? getLexicalLoaderScript() : ''}
+
+    ${data.lexicalEnabled ? getLexicalInitScript({ defaultHeight: data.lexicalSettings?.defaultHeight, defaultToolbar: data.lexicalSettings?.defaultToolbar }) : ''}
 
     ${data.tinymceEnabled ? getTinyMCEScript(data.tinymceSettings?.apiKey) : '<!-- TinyMCE plugin not active -->'}
 

@@ -83,12 +83,12 @@ async function verifyLegacyPbkdf2(password: string, stored: string): Promise<boo
  * Build the default Better Auth options used by SonicJS (through the CF shim).
  * Exported so apps can extend via config.auth.extendBetterAuth.
  */
-export function getDefaultAuthOptions(env: Bindings) {
+export function getDefaultAuthOptions(env: Bindings, requestBaseURL?: string) {
   const db = drizzle(env.DB)
 
   return {
     secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
+    baseURL: env.BETTER_AUTH_URL || requestBaseURL,
     appName: 'SonicJS',
     ...withCloudflare(
       {
@@ -284,7 +284,7 @@ export type BetterAuthDefaultOptions = ReturnType<typeof getDefaultAuthOptions>
 export type ExtendBetterAuth = (opts: BetterAuthDefaultOptions) => BetterAuthDefaultOptions
 
 /** Create a Better Auth instance for this request. */
-export function createAuth(env: Bindings, extendBetterAuth?: ExtendBetterAuth) {
+export function createAuth(env: Bindings, extendBetterAuth?: ExtendBetterAuth, requestBaseURL?: string) {
   // Hard-fail rather than sign sessions with an undefined/blank secret. The
   // secret must be provided via `wrangler secret put BETTER_AUTH_SECRET`
   // (prod/preview) or a gitignored `.dev.vars` (local) — never committed.
@@ -295,7 +295,7 @@ export function createAuth(env: Bindings, extendBetterAuth?: ExtendBetterAuth) {
         'Refusing to initialize auth without a strong signing secret.'
     )
   }
-  const defaults = getDefaultAuthOptions(env)
+  const defaults = getDefaultAuthOptions(env, requestBaseURL)
   const options = extendBetterAuth ? extendBetterAuth(defaults) : defaults
   return betterAuth(options as Parameters<typeof betterAuth>[0])
 }

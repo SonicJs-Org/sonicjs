@@ -38,6 +38,12 @@ export interface WirablePlugin {
   /** IDs of plugins that must be wired before this one. */
   dependencies?: string[]
   /**
+   * When true, the plugin is inserted as 'active' on first install.
+   * Subsequent boots leave the admin-managed status untouched (the ON CONFLICT
+   * clause does not update `status`), so admins can still deactivate it.
+   */
+  defaultActive?: boolean
+  /**
    * Capabilities declared by the plugin. When present (even as an empty array),
    * the wire phase enforces that each declarative hook subscription is covered by
    * a matching capability in {@link HOOK_CAPABILITY_MAP}. Absent on old-style
@@ -189,18 +195,19 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
     const displayName = (plugin as any).name ?? id
     const version = (plugin as any).version ?? '0.0.0'
     const description = (plugin as any).description ?? ''
+    const initialStatus = (plugin as any).defaultActive ? 'active' : 'inactive'
     try {
       await db
         .prepare(
           `INSERT INTO plugins (id, name, display_name, description, version, author, category,
               status, is_core, installed_at, last_updated)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'inactive', 1, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              version = excluded.version,
              display_name = excluded.display_name,
              last_updated = excluded.last_updated`
         )
-        .bind(id, id, displayName, description, version, 'core', 'core', now, now)
+        .bind(id, id, displayName, description, version, 'core', 'core', initialStatus, now, now)
         .run()
     } catch {
       // Individual plugin upsert failure is silently skipped — one bad row

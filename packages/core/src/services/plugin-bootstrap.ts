@@ -26,9 +26,14 @@ export interface CorePlugin {
  * auto-installed on first boot. Edit this list to control which
  * plugins are bootstrapped.
  */
-// Only core-auth is auto-installed. All others must be installed manually.
+// core-auth always bootstrapped. Plugins with defaultActive:true in manifest.json are also
+// auto-installed and activated on greenfield installs.
 const BOOTSTRAP_PLUGIN_IDS = [
   "core-auth",
+  // Collect any registry entries marked defaultActive (e.g. lexical-editor)
+  ...Object.values(PLUGIN_REGISTRY)
+    .filter(e => e.defaultActive === true && e.id !== "core-auth")
+    .map(e => e.id),
 ];
 
 function registryToCorePlugin(entry: PluginRegistryEntry): CorePlugin {

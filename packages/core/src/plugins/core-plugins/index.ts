@@ -18,6 +18,9 @@ export { seedDataPlugin, createSeedDataPlugin } from './seed-data-plugin'
 export { databaseToolsPlugin } from './database-tools-plugin'
 export { helloWorldPlugin, createHelloWorldPlugin } from './hello-world-plugin'
 export { quillEditorPlugin, createQuillEditorPlugin } from './quill-editor'
+export { lexicalEditorPlugin, createLexicalEditorPlugin } from './lexical-editor'
+export { getLexicalStyles, getLexicalImportMap, getLexicalLoaderScript, getLexicalInitScript, renderLexicalField } from './lexical-editor'
+export type { LexicalOptions, LexicalToolbarItem } from './lexical-editor'
 export { emailPlugin, createEmailPlugin } from './email-plugin'
 export { otpLoginPlugin, createOTPLoginPlugin } from './otp-login-plugin'
 export { turnstilePlugin } from './turnstile-plugin'
@@ -56,6 +59,7 @@ export const CORE_PLUGIN_IDS = [
   'database-tools',
   'hello-world',
   'quill-editor',
+  'lexical-editor',
   'email',
   'otp-login',
   'turnstile',

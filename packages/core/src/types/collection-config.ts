@@ -14,6 +14,7 @@ export type FieldType =
   | 'email'
   | 'url'
   | 'richtext'
+  | 'lexical'
   | 'markdown'
   | 'mdxeditor'
   | 'easymde'

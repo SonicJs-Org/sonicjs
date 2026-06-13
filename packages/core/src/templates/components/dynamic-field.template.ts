@@ -1,4 +1,5 @@
 import { getDragSortableScript } from './drag-sortable.template'
+import { renderLexicalField } from '../../plugins/core-plugins/lexical-editor'
 
 /**
  * Returns shared readFieldValue function used by both blocks and structured fields.
@@ -183,6 +184,7 @@ export interface FieldRenderOptions {
     quillEnabled?: boolean
     mdxeditorEnabled?: boolean
     tinymceEnabled?: boolean
+    lexicalEnabled?: boolean
   }
   collectionId?: string
   contentId?: string
@@ -228,13 +230,20 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
   let fallbackToTextarea = false
   let fallbackWarning = ''
 
-  if (field.field_type === 'quill' && !pluginStatuses.quillEnabled) {
+  if (field.field_type === 'lexical' && !pluginStatuses.lexicalEnabled) {
+    fallbackToTextarea = true
+    fallbackWarning = '⚠️ Lexical Editor plugin is inactive. Using textarea fallback.'
+  } else if (field.field_type === 'quill' && !pluginStatuses.quillEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ Quill Editor plugin is inactive. Using textarea fallback.'
   } else if (isMarkdownEditorFieldType(field.field_type) && !pluginStatuses.mdxeditorEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ Markdown editor plugin is inactive. Using textarea fallback.'
-  } else if ((field.field_type === 'richtext' || field.field_type === 'tinymce') && !pluginStatuses.tinymceEnabled) {
+  } else if (field.field_type === 'richtext' && !pluginStatuses.lexicalEnabled && !pluginStatuses.tinymceEnabled) {
+    // richtext with no active editor plugin → textarea
+    fallbackToTextarea = true
+    fallbackWarning = '⚠️ No rich text editor plugin is active. Using textarea fallback.'
+  } else if (field.field_type === 'tinymce' && !pluginStatuses.tinymceEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ TinyMCE plugin is inactive. Using textarea fallback.'
   }
@@ -372,7 +381,38 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       `
       break
 
+    case 'lexical':
+      fieldHTML = renderLexicalField(fieldId, fieldName, value, {
+        toolbar: opts.toolbar || 'standard',
+        placeholder: opts.placeholder || 'Enter content...',
+        height: opts.height || 300,
+      })
+      break
+
     case 'richtext':
+      // Lexical is the default richtext editor; fall back to TinyMCE if only that is active.
+      if (pluginStatuses.lexicalEnabled) {
+        fieldHTML = renderLexicalField(fieldId, fieldName, value, {
+          toolbar: opts.toolbar || 'standard',
+          placeholder: opts.placeholder || 'Enter content...',
+          height: opts.height || 300,
+        })
+      } else {
+        const editorMetadata = getEditorMetadata(field.field_type)
+        fieldHTML = `
+          <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || 'full'}" data-editor-family="${editorMetadata?.family || ''}" data-editor-provider="${editorMetadata?.provider || ''}">
+            <textarea
+              id="${fieldId}"
+              name="${fieldName}"
+              class="${baseClasses} ${errorClasses} min-h-[${opts.height || 300}px]"
+              ${required}
+              ${disabled ? 'disabled' : ''}
+            >${escapeHtml(value)}</textarea>
+          </div>
+        `
+      }
+      break
+
     case 'tinymce':
       {
       const editorMetadata = getEditorMetadata(field.field_type)

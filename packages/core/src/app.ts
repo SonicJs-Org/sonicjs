@@ -54,6 +54,7 @@ import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-p
 import { shortcodesPlugin } from './plugins/core-plugins/shortcodes-plugin'
 import { helloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
 import { multiTenantPlugin } from './plugins/core-plugins/multi-tenant-plugin'
+import { lexicalEditorPlugin } from './plugins/core-plugins/lexical-editor'
 import { tenantMiddleware } from './middleware/tenant'
 import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
@@ -289,6 +290,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     shortcodesPlugin,
     helloWorldPlugin,
     multiTenantPlugin,
+    lexicalEditorPlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
@@ -413,7 +415,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // c.get('user') consumer keep working unchanged.
   app.use('*', async (c, next) => {
     try {
-      const auth = createAuth(c.env, config.auth?.extendBetterAuth)
+      const reqUrl = new URL(c.req.url)
+      const requestBaseURL = `${reqUrl.protocol}//${reqUrl.host}`
+      const auth = createAuth(c.env, config.auth?.extendBetterAuth, requestBaseURL)
       const session = await auth.api.getSession({ headers: c.req.raw.headers })
       if (session?.user) {
         const u = session.user as { id: string; email: string; role?: string; isSuperAdmin?: boolean }
@@ -596,7 +600,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // page-render routes (GET /auth/login, /auth/register) take precedence; only
   // Better Auth's own API paths fall through to this catch-all.
   app.on(['GET', 'POST'], '/auth/*', (c) => {
-    const auth = createAuth(c.env, config.auth?.extendBetterAuth)
+    const reqUrl = new URL(c.req.url)
+    const requestBaseURL = `${reqUrl.protocol}//${reqUrl.host}`
+    const auth = createAuth(c.env, config.auth?.extendBetterAuth, requestBaseURL)
     return auth.handler(c.req.raw)
   })
 

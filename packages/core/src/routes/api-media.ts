@@ -132,8 +132,8 @@ apiMediaRoutes.post('/upload', async (c) => {
       public_url: publicUrl,
       thumbnail_url: thumbnailUrl,
       uploaded_by: user.userId,
-      uploaded_at: Math.floor(Date.now() / 1000),
-      created_at: Math.floor(Date.now() / 1000)
+      uploaded_at: Date.now(),
+      created_at: Date.now()
     }
 
     const stmt = c.env.DB.prepare(`
@@ -175,7 +175,7 @@ apiMediaRoutes.post('/upload', async (c) => {
         r2_key: mediaRecord.r2_key,
         publicUrl: mediaRecord.public_url,
         thumbnailUrl: mediaRecord.thumbnail_url,
-        uploadedAt: new Date(mediaRecord.uploaded_at * 1000).toISOString()
+        uploadedAt: new Date(mediaRecord.uploaded_at).toISOString()
       }
     })
   } catch (error) {
@@ -291,7 +291,7 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
           public_url: publicUrl,
           thumbnail_url: thumbnailUrl,
           uploaded_by: user.userId,
-          uploaded_at: Math.floor(Date.now() / 1000)
+          uploaded_at: Date.now()
         }
 
         const stmt = c.env.DB.prepare(`
@@ -328,7 +328,7 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
           r2_key: mediaRecord.r2_key,
           publicUrl: mediaRecord.public_url,
           thumbnailUrl: mediaRecord.thumbnail_url,
-          uploadedAt: new Date(mediaRecord.uploaded_at * 1000).toISOString()
+          uploadedAt: new Date(mediaRecord.uploaded_at).toISOString()
         })
       } catch (error) {
         errors.push({

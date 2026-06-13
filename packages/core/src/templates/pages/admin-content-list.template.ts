@@ -24,6 +24,11 @@ export interface ContentListPageData {
     name: string
     displayName: string
   }>
+  /** Non-internal collections for the "New Content" dropdown — same set as /admin/collections. */
+  newContentCollections: Array<{
+    name: string
+    displayName: string
+  }>
   contentItems: ContentItem[]
   totalItems: number
   itemsPerPage: number
@@ -224,13 +229,43 @@ export function renderContentListPage(data: ContentListPageData): string {
           <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">Content Management</h1>
           <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">Manage and organize your content items</p>
         </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-          <a href="/admin/content/new" class="inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm">
+        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none relative" id="new-content-dropdown">
+          <button
+            onclick="toggleNewContentDropdown()"
+            class="inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm"
+          >
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
             </svg>
             New Content
-          </a>
+            <svg class="ml-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div
+            id="new-content-menu"
+            class="hidden absolute right-0 mt-2 w-56 origin-top-right rounded-lg bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 z-50 py-1"
+          >
+            ${data.newContentCollections.length === 0 ? `
+              <p class="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">No collections available</p>
+            ` : data.newContentCollections.map(col => `<a
+                href="/admin/content/new?collection=${col.name}"
+                class="flex items-center px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5 hover:text-zinc-950 dark:hover:text-white transition-colors"
+              >${col.displayName}</a>`).join('')}
+          </div>
+          <script>
+            function toggleNewContentDropdown() {
+              var menu = document.getElementById('new-content-menu');
+              menu.classList.toggle('hidden');
+            }
+            document.addEventListener('click', function(e) {
+              var dropdown = document.getElementById('new-content-dropdown');
+              var menu = document.getElementById('new-content-menu');
+              if (dropdown && menu && !dropdown.contains(e.target)) {
+                menu.classList.add('hidden');
+              }
+            });
+          </script>
         </div>
       </div>
       <!-- Filters -->

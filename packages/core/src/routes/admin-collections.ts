@@ -17,7 +17,7 @@ import { requireAuth } from '../middleware'
 import { isPluginActive } from '../middleware/plugin-middleware'
 import { renderCollectionsListPage } from '../templates/pages/admin-collections-list.template'
 import { renderCollectionFormPage } from '../templates/pages/admin-collections-form.template'
-import { loadCollectionConfigs } from '../services/collection-loader'
+import { loadCollectionConfigs, isCodeCollectionInternal, isDbDocTypeInternal } from '../services/collection-loader'
 import { getCollectionRegistry } from '../services/collection-registry'
 import { renderAdminLayoutCatalyst } from '../templates/layouts/admin-layout-catalyst.template'
 import { getCoreVersion } from '../utils/version'
@@ -151,7 +151,7 @@ adminCollectionsRoutes.get('/', async (c) => {
           field_count: fieldCount,
           managed: cfg.managed !== false,
           source_type: 'code',
-          internal: cfg.internal === true,
+          internal: isCodeCollectionInternal(cfg),
         } as Collection]
       })
     )
@@ -183,7 +183,7 @@ adminCollectionsRoutes.get('/', async (c) => {
           field_count: fieldCount,
           managed: false,
           source_type: (row.source === 'code' || row.source === 'system' || row.source === 'plugin') ? 'code' : 'user',
-          internal: row.source === 'system' || row.source === 'plugin',
+          internal: isDbDocTypeInternal(row.source),
         }
       })
 

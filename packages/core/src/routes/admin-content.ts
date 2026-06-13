@@ -17,7 +17,7 @@ import { DocumentsService } from '../services/documents'
 import { renderDocumentFormPage } from '../templates/pages/admin-documents-form.template'
 import { createDocumentSchema } from '../schemas/document'
 import type { QueryableField } from '../schemas/document'
-import { loadCollectionConfigs } from '../services/collection-loader'
+import { loadCollectionConfigs, getVisibleCollections } from '../services/collection-loader'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -469,6 +469,9 @@ adminContentRoutes.get('/', async (c) => {
       ...docTypes.filter(dt => !collectionNames.has(dt.id)).map(dt => ({ name: `doc:${dt.id}`, displayName: dt.displayName })),
     ]
 
+    // Non-internal collections for the "New Content" dropdown — same filtering as /admin/collections.
+    const newContentCollections = await getVisibleCollections(db)
+
     // ── Document-type branch: query documents table instead of content ──────────
     // Triggered by a `doc:` model OR a document-backed collection (collection name == doc type id).
     const docBackedCollection = !modelName.startsWith('doc:') && modelName !== 'all'
@@ -527,7 +530,7 @@ adminContentRoutes.get('/', async (c) => {
       })
 
       return c.html(renderContentListPage({
-        modelName, status, page, search, models, contentItems,
+        modelName, status, page, search, models, newContentCollections, contentItems,
         totalItems: countRow?.count ?? 0,
         itemsPerPage: limit,
         user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
@@ -587,7 +590,7 @@ adminContentRoutes.get('/', async (c) => {
       }))
 
       return c.html(renderContentListPage({
-        modelName, status, page, search, models, contentItems,
+        modelName, status, page, search, models, newContentCollections, contentItems,
         totalItems: countRow?.count ?? 0,
         itemsPerPage: limit,
         user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
@@ -601,6 +604,7 @@ adminContentRoutes.get('/', async (c) => {
       page,
       search,
       models,
+      newContentCollections,
       contentItems: [],
       totalItems: 0,
       itemsPerPage: limit,
@@ -746,6 +750,7 @@ adminContentRoutes.get('/', async (c) => {
       page,
       search,
       models,
+      newContentCollections,
       contentItems,
       totalItems,
       itemsPerPage: limit,

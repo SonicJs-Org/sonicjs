@@ -5,7 +5,60 @@
  * Supports both development (reading from filesystem) and production (bundled).
  */
 
+import type { D1Database } from '@cloudflare/workers-types'
 import { CollectionConfig, CollectionConfigModule } from '../types/collection-config'
+import { getCollectionRegistry } from './collection-registry'
+
+export interface VisibleCollection {
+  name: string
+  displayName: string
+}
+
+/** True when a code-registry collection should be hidden from user-facing menus. */
+export function isCodeCollectionInternal(cfg: { internal?: boolean }): boolean {
+  return cfg.internal === true
+}
+
+/** True when a document_types DB row should be hidden from user-facing menus. */
+export function isDbDocTypeInternal(source?: string | null): boolean {
+  return source === 'system' || source === 'plugin'
+}
+
+/**
+ * Returns collections visible to users (non-internal) for UI menus like "New Content".
+ * Canonical filtering logic shared with /admin/collections:
+ *   - Code registry: cfg.internal !== true
+ *   - DB document_types: source is not 'system' or 'plugin'
+ * Code registry wins on name collisions.
+ */
+export async function getVisibleCollections(db: D1Database): Promise<VisibleCollection[]> {
+  const codeRegistry = getCollectionRegistry().list()
+  const codeMap = new Map<string, VisibleCollection>()
+  for (const cfg of codeRegistry) {
+    if (!isCodeCollectionInternal(cfg)) {
+      codeMap.set(cfg.name, { name: cfg.name, displayName: cfg.displayName })
+    }
+  }
+
+  let dbRows: any[] = []
+  try {
+    const { results } = await db.prepare(
+      "SELECT name, display_name, source FROM document_types WHERE is_active = 1 ORDER BY display_name"
+    ).all()
+    dbRows = results ?? []
+  } catch {
+    // document_types may not exist in early dev
+  }
+
+  const merged = new Map<string, VisibleCollection>(codeMap)
+  for (const row of dbRows) {
+    if (!isDbDocTypeInternal(row.source) && !merged.has(row.name)) {
+      merged.set(row.name, { name: String(row.name), displayName: String(row.display_name) })
+    }
+  }
+
+  return Array.from(merged.values())
+}
 
 // Global registry for externally registered collections
 const registeredCollections: CollectionConfig[] = []

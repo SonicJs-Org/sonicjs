@@ -534,7 +534,7 @@ adminMediaRoutes.post('/upload', async (c) => {
           publicUrl,
           thumbnailUrl,
           user!.userId,
-          Math.floor(Date.now() / 1000)
+          Date.now()
         ).run()
 
         uploadResults.push({

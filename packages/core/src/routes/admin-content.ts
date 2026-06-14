@@ -456,14 +456,18 @@ adminContentRoutes.get('/', async (c) => {
     const codeCollections = await loadCollectionConfigs()
     const codeCollectionMap = new Map(codeCollections.map((c: any) => [c.name, c]))
 
-    // Also include active document types in the models dropdown (prefixed with doc: to distinguish)
+    // Also include active document types in the models dropdown (prefixed with doc: to distinguish).
+    // Internal/auth-owned types (user_profile, plugin, rbac_*, site_settings, tenant, …) must NOT appear
+    // as selectable content models — filter them out of every dropdown source, not just `docTypes`.
     const docTypeRegistry = new DocumentTypeRegistry(db)
     const docTypes = (await docTypeRegistry.findAll()).filter(dt => !dt.settings?.internal && !dt.isAuth)
+    const visibleTypeIds = new Set(docTypes.map(dt => dt.id))
 
-    // Merge database and code collections (db takes precedence)
+    // Merge database and code collections (db takes precedence). The raw document_types query above is
+    // unfiltered, so drop internal/auth types here using the registry-derived visible set.
     const allCollections = [
       ...codeCollections.filter((c: any) => !collectionsResults?.find((r: any) => r.name === c.name)),
-      ...(collectionsResults || []).map((row: any) => ({ name: row.name, displayName: row.display_name }))
+      ...(collectionsResults || []).filter((row: any) => visibleTypeIds.has(row.id)).map((row: any) => ({ name: row.name, displayName: row.display_name }))
     ]
 
     // A document type whose id matches a collection name backs that collection (Option B) and is
@@ -788,6 +792,14 @@ adminContentRoutes.get('/new', async (c) => {
       const collectionsStmt = db.prepare("SELECT id, name, display_name, description FROM document_types WHERE is_active = 1 ORDER BY display_name")
       const { results } = await collectionsStmt.all()
 
+      // Internal/auth-owned types (media_asset, plugin, rbac_*, site_settings, tenant, …) are not
+      // content — they must not be offered as a "create new content" collection.
+      const visibleTypeIds = new Set(
+        (await new DocumentTypeRegistry(db).findAll())
+          .filter(dt => !dt.settings?.internal && !dt.isAuth)
+          .map(dt => dt.id),
+      )
+
       // Load code-defined collections
       const codeCollections = await loadCollectionConfigs()
 
@@ -800,7 +812,7 @@ adminContentRoutes.get('/new', async (c) => {
           display_name: c.displayName,
           description: c.description
         })),
-        ...(results || []).map((row: any) => ({
+        ...(results || []).filter((row: any) => visibleTypeIds.has(row.id)).map((row: any) => ({
           id: row.id,
           name: row.name,
           display_name: row.display_name,

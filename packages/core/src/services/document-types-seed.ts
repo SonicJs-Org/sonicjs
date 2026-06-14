@@ -110,6 +110,36 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     queryableFields: [],
   })
 
+  // Media asset (document-authoritative media library). One document per uploaded R2 object.
+  // Internal: managed via the media library + media selector, not offered as a content model.
+  // Registering here both satisfies the documents.type_id FK and creates the q_media_* columns
+  // (DocumentTypeRegistry.register → ensureScalarSchema). Must stay in sync with MEDIA_QUERYABLE
+  // in services/media-documents.ts.
+  await registry.register({
+    id: 'media_asset',
+    name: 'media_asset',
+    displayName: 'Media Asset',
+    description: 'Uploaded media file metadata (managed via the media library; backs an R2 object)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 5,
+      baseGrants: {
+        admin: ['read', 'create', 'update', 'delete', 'manage'],
+        editor: ['read', 'create', 'update'],
+        author: ['read', 'create'],
+        viewer: ['read'],
+      },
+    },
+    queryableFields: [
+      { name: 'mimeType', kind: 'scalar', type: 'text', column: 'q_media_mime' },
+      { name: 'folder', kind: 'scalar', type: 'text', column: 'q_media_folder' },
+      { name: 'size', kind: 'scalar', type: 'integer', column: 'q_media_size' },
+      { name: 'tags', kind: 'facet', type: 'text' },
+    ],
+  })
+
   // ── RBAC (auth-owned). 3 document types replace 4 relational tables: ──────────
   //   rbac_role        slug = roleId,  data.grants[] embedded (replaces role_grants)
   //   rbac_verb        slug = verbId

@@ -7,6 +7,7 @@ import { bootstrapDocumentTypes } from '../../services/document-types-seed'
 import { DocumentsService } from '../../services/documents'
 import {
   MediaDocumentService,
+  MEDIA_QUERYABLE,
   mediaDocToRecord,
   mediaDocToFile,
   deriveMediaPublicUrl,
@@ -31,6 +32,8 @@ describe('media-as-document (Phase 6)', () => {
   beforeEach(async () => {
     db = createTestD1()
     await bootstrapDocumentTypes(db)
+    // Migrations ship only the base documents schema; add the media_asset q_media_* generated columns.
+    await db.applyScalarSchema('media_asset', MEDIA_QUERYABLE)
   })
   afterEach(() => db.close())
 

@@ -24,19 +24,17 @@ test.describe('User profile (document-backed)', () => {
     const userId = (await reg.json()).user?.id;
     expect(userId).toBeTruthy();
 
-    // Edit the user's profile.
+    // Edit the user's profile. The standard profile now carries only displayName (bio lives on
+    // auth_user; company/website/etc. were removed) plus the custom-fields namespace.
     await page.goto(`/admin/users/${userId}/edit`);
     const displayName = `Display ${ts}`;
     await page.fill('input[name="profile_display_name"]', displayName);
-    await page.fill('input[name="profile_company"]', 'Acme Inc');
     await page.click('button[type="submit"]');
     await page.waitForLoadState('networkidle');
 
-    // Reload the edit page; the profile values must survive a round-trip
-    // through the user_profile document.
+    // Reload the edit page; the value must survive a round-trip through the user_profile document.
     await page.goto(`/admin/users/${userId}/edit`);
     await expect(page.locator('input[name="profile_display_name"]')).toHaveValue(displayName);
-    await expect(page.locator('input[name="profile_company"]')).toHaveValue('Acme Inc');
   });
 
   test('user_profile type is not offered as content', async ({ page }) => {

@@ -15,6 +15,7 @@ vi.mock('../../middleware/auth', () => ({
 }))
 
 import adminContentRoutes from '../../routes/admin-content'
+import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
 
 const BLOG_SCHEMA = JSON.stringify({
   type: 'object',
@@ -54,13 +55,12 @@ describe('admin-content blog_post (code-defined doc type) — create-as-draft re
 
   beforeEach(async () => {
     db = createTestD1()
-    db.raw.prepare("INSERT INTO users (id,email,first_name,last_name,role,is_active,created_at,updated_at) VALUES ('u1','a@b.c','Ada','Lovelace','admin',1,1,1)").run()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,description,schema,is_active,source_type,managed,created_at,updated_at) VALUES (?,?,?,?,?,1,'user',1,1,1)")
-      .run(COLL, COLL, 'Blog Post', 'Blog posts', BLOG_SCHEMA)
+    // Collections are code-only now (id === name) — register in the in-memory registry.
+    getCollectionRegistry().register([{ name: COLL, displayName: 'Blog Post', description: 'Blog posts', schema: JSON.parse(BLOG_SCHEMA) }])
     await bootstrapDocumentTypes(db)
     app = buildApp(db)
   })
-  afterEach(() => db.close())
+  afterEach(() => { db.close(); resetCollectionRegistry() })
 
   function createBlogPost(slug: string, status: string, action: string) {
     return app.request('/admin/content', {
@@ -77,7 +77,8 @@ describe('admin-content blog_post (code-defined doc type) — create-as-draft re
     expect(doc.is_published).toBe(0)
     expect(doc.is_current_draft).toBe(1)
     expect(doc.status).toBe('draft')
-    expect(db.raw.prepare('SELECT COUNT(*) AS count FROM content').get().count).toBe(0)
+    // The document-model schema has no legacy `content` table — its absence is the proof the write went to documents.
+    expect(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='content'").get()).toBeFalsy()
   })
 
   it('green "Save & Publish" button → published (this is the only path that should publish)', async () => {

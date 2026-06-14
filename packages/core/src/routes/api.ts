@@ -11,6 +11,7 @@ import { DocumentTypeRegistry } from '../services/document-type-registry'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import type { HookActor } from '../plugins/hooks/catalog'
 import { createDocumentSchema } from '../schemas/document'
+import { getCoreVersion } from '../utils/version'
 
 // Document columns the public list is allowed to ORDER BY. The legacy `content` table exposed
 // collection_id; on documents that maps to type_id. Anything else (incl. nonexistent columns like a
@@ -182,7 +183,7 @@ apiRoutes.get('/', (c) => {
     openapi: '3.0.0',
     info: {
       title: 'SonicJS AI API',
-      version: '0.1.0',
+      version: getCoreVersion(),
       description: 'RESTful API for SonicJS headless CMS - a modern, AI-powered content management system built on Cloudflare Workers',
       contact: {
         name: 'SonicJS Support',

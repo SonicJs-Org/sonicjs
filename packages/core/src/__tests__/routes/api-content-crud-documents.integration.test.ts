@@ -16,6 +16,7 @@ vi.mock('../../middleware', () => ({
 }))
 
 import apiContentCrudRoutes from '../../routes/api-content-crud'
+import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
 
 function buildApp(db: any) {
   const app = new Hono()
@@ -32,17 +33,18 @@ describe('api-content-crud → documents (decommission step)', () => {
 
   beforeEach(async () => {
     db = createTestD1()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,schema,is_active,source_type,created_at,updated_at) VALUES ('blog-post-id','blog_post','Blog Post','{}',1,NULL,1,1)").run()
+    // Collections are code-only now (id === name) — register in the in-memory registry.
+    getCollectionRegistry().register([{ name: 'blog_post', displayName: 'Blog Post', schema: {} }])
     await bootstrapDocumentTypes(db)
     app = buildApp(db)
   })
-  afterEach(() => db.close())
+  afterEach(() => { db.close(); resetCollectionRegistry() })
 
   it('POST creates a document (not a content row), published, and GET /:id resolves it', async () => {
-    const res = await app.request('/api/content', json('POST', { collectionId: 'blog-post-id', title: 'Hello', slug: 'hello', status: 'published', data: { body: 'x' } }))
+    const res = await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'Hello', slug: 'hello', status: 'published', data: { body: 'x' } }))
     expect(res.status).toBe(201)
     const created = (await res.json()).data
-    expect(created.collectionId).toBe('blog-post-id')
+    expect(created.collectionId).toBe('blog_post')
 
     // stored as a published blog_post document
     const doc = db.raw.prepare("SELECT * FROM documents WHERE type_id='blog_post' AND slug='hello'").get()
@@ -56,13 +58,13 @@ describe('api-content-crud → documents (decommission step)', () => {
   })
 
   it('rejects a duplicate slug with 409', async () => {
-    await app.request('/api/content', json('POST', { collectionId: 'blog-post-id', title: 'A', slug: 'dup', data: {} }))
-    const res = await app.request('/api/content', json('POST', { collectionId: 'blog-post-id', title: 'B', slug: 'dup', data: {} }))
+    await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'A', slug: 'dup', data: {} }))
+    const res = await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'B', slug: 'dup', data: {} }))
     expect(res.status).toBe(409)
   })
 
   it('PUT saves a new draft and republishes it', async () => {
-    const created = (await (await app.request('/api/content', json('POST', { collectionId: 'blog-post-id', title: 'V1', slug: 'v', status: 'published', data: {} }))).json()).data
+    const created = (await (await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'V1', slug: 'v', status: 'published', data: {} }))).json()).data
     const res = await app.request(`/api/content/${created.id}`, json('PUT', { data: { body: 'v2' }, status: 'published' }))
     expect(res.status).toBe(200)
     expect(db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(created.id).n).toBe(2)
@@ -70,7 +72,7 @@ describe('api-content-crud → documents (decommission step)', () => {
   })
 
   it('DELETE soft-deletes every version row of the root', async () => {
-    const created = (await (await app.request('/api/content', json('POST', { collectionId: 'blog-post-id', title: 'Del', slug: 'del', data: {} }))).json()).data
+    const created = (await (await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'Del', slug: 'del', data: {} }))).json()).data
     const res = await app.request(`/api/content/${created.id}`, { method: 'DELETE' })
     expect(res.status).toBe(200)
     expect(db.raw.prepare('SELECT deleted_at FROM documents WHERE root_id=?').get(created.id).deleted_at).not.toBeNull()

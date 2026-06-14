@@ -163,7 +163,7 @@ describe('Registration Settings', () => {
       const result = await isFirstUserRegistration(mockDb as any)
 
       expect(result).toBe(true)
-      expect(mockDb.prepare).toHaveBeenCalledWith('SELECT COUNT(*) as count FROM users')
+      expect(mockDb.prepare).toHaveBeenCalledWith('SELECT COUNT(*) as count FROM auth_user')
     })
 
     it('should return false when users exist', async () => {
@@ -233,9 +233,9 @@ describe('Registration Settings', () => {
 
       mockDb.first
         .mockResolvedValueOnce({ count: 1 }) // First call - isFirstUserRegistration (user exists)
-        .mockResolvedValueOnce({              // Second call - isRegistrationEnabled
-          settings: JSON.stringify({
-            registration: { enabled: false }
+        .mockResolvedValueOnce({              // Second call - isRegistrationEnabled (plugin document)
+          data: JSON.stringify({
+            settings: { registration: { enabled: false } }
           })
         })
 
@@ -256,9 +256,9 @@ describe('Registration Settings', () => {
 
       mockDb.first
         .mockResolvedValueOnce({ count: 1 }) // First call - isFirstUserRegistration (user exists)
-        .mockResolvedValueOnce({              // Second call - isRegistrationEnabled
-          settings: JSON.stringify({
-            registration: { enabled: true }
+        .mockResolvedValueOnce({              // Second call - isRegistrationEnabled (plugin document)
+          data: JSON.stringify({
+            settings: { registration: { enabled: true } }
           })
         })
 

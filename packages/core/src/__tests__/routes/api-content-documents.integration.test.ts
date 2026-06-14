@@ -28,6 +28,7 @@ vi.mock('../../middleware/auth', () => ({
 
 import apiRoutes from '../../routes/api'
 import { DocumentsService } from '../../services/documents'
+import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
 
 const BLOG_SCHEMA = JSON.stringify({
   type: 'object',
@@ -58,7 +59,8 @@ const json = (role?: string) => ({
 describe('document-backed content API — regression-audit fixes (§7)', () => {
   let db: any
   let app: any
-  const COLL = 'bp-id'
+  // Collections are code-only now (id === name). The doc type id is the collection id.
+  const COLL = 'blog_post'
 
   async function post(body: any, role = 'admin') {
     return app.request('/api/content', { method: 'POST', headers: json(role), body: JSON.stringify(body) })
@@ -74,12 +76,11 @@ describe('document-backed content API — regression-audit fixes (§7)', () => {
 
   beforeEach(async () => {
     db = createTestD1()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,description,schema,is_active,source_type,managed,created_at,updated_at) VALUES (?,?,?,?,?,1,'user',1,1,1)")
-      .run(COLL, 'blog_post', 'Blog Posts', 'Blog', BLOG_SCHEMA)
+    getCollectionRegistry().register([{ name: 'blog_post', displayName: 'Blog Posts', description: 'Blog', schema: JSON.parse(BLOG_SCHEMA) }])
     await bootstrapDocumentTypes(db) // registers the blog_post document type → collection is doc-backed
     app = buildApp(db)
   })
-  afterEach(() => db.close())
+  afterEach(() => { db.close(); resetCollectionRegistry() })
 
   // ── D29 ──────────────────────────────────────────────────────────────────
   it('D29: POST + list + GET return timestamps in MILLISECONDS (documents store seconds)', async () => {

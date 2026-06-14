@@ -17,6 +17,7 @@ vi.mock('../../middleware', () => ({
 }))
 
 import apiRoutes from '../../routes/api'
+import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
 
 function buildApp(db: any) {
   const app = new Hono()
@@ -36,13 +37,14 @@ describe('public content API → documents (decommission step 2)', () => {
   beforeEach(async () => {
     h.user = undefined
     db = createTestD1()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,schema,is_active,source_type,created_at,updated_at) VALUES ('news-id','news','News','{}',1,NULL,1,1)").run()
+    // Collections are code-only now (no DB table) — register in the in-memory registry.
+    getCollectionRegistry().register([{ name: 'news', displayName: 'News', schema: {} }])
     const svc = new DocumentsService(db, { tenantId: 'default', queryableFields: [] })
     await svc.create({ typeId: 'news', tenantId: 'default', title: 'Published News', slug: 'pub-news', data: { category: 'tech' }, publishOnCreate: true })
     await svc.create({ typeId: 'news', tenantId: 'default', title: 'Draft News', slug: 'draft-news', data: { category: 'tech' } }) // not published
     app = buildApp(db)
   })
-  afterEach(() => db.close())
+  afterEach(() => { db.close(); resetCollectionRegistry() })
 
   async function get(path: string) {
     const res = await app.request(path)
@@ -56,7 +58,7 @@ describe('public content API → documents (decommission step 2)', () => {
     const item = body.data[0]
     expect(item.title).toBe('Published News')
     expect(item.slug).toBe('pub-news')
-    expect(item.collectionId).toBe('news-id') // collection db id preserved
+    expect(item.collectionId).toBe('news') // code-only collection: id === name
     expect(item.data.category).toBe('tech')
     expect(typeof item.id).toBe('string') // == document root id
   })

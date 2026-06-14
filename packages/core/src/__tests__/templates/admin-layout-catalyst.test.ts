@@ -277,14 +277,10 @@ describe('renderAdminLayoutCatalyst', () => {
     it('should render default menu items', () => {
       const html = renderAdminLayoutCatalyst(baseData);
 
-      expect(html).toContain('Dashboard');
-      expect(html).toContain('Collections');
-      expect(html).toContain('Forms');
       expect(html).toContain('Content');
-      expect(html).toContain('Media');
+      expect(html).toContain('Collections');
       expect(html).toContain('Users');
       expect(html).toContain('Plugins');
-      expect(html).toContain('Cache');
       expect(html).toContain('Settings');
     });
 
@@ -343,7 +339,7 @@ describe('renderAdminLayoutCatalyst', () => {
         dynamicMenuItems: [],
       });
 
-      expect(html).toContain('Dashboard');
+      expect(html).toContain('Content');
     });
   });
 

@@ -6,15 +6,20 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import apiRoutes from '../../routes/api'
-import { AuthManager } from '../../middleware/auth'
 import { createTestD1 } from '../utils/d1-sqlite'
 import { DocumentsService } from '../../services/documents'
+import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
+
+// In production app.ts mounts a global Better Auth session middleware that populates c.get('user').
+// optionalAuth() is a no-op, so this harness must inject the caller the same way.
+let testUser: { userId: string; email: string; role: string } | undefined
 
 function buildApp(db: any) {
   const app = new Hono()
   app.use('*', async (c, next) => {
     ;(c as any).env = { DB: db, KV: {} }
     c.set('startTime', Date.now())
+    if (testUser) c.set('user', testUser)
     await next()
   })
   app.route('/api', apiRoutes)
@@ -27,19 +32,17 @@ describe('Public content API status policy (documents-backed)', () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks()
+    testUser = undefined
     db = createTestD1()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,schema,is_active,source_type,created_at,updated_at) VALUES ('pages-collection','pages','Pages','{}',1,NULL,1,1)").run()
+    getCollectionRegistry().register([{ name: 'pages', displayName: 'Pages', schema: {} }])
     const svc = new DocumentsService(db, { tenantId: 'default', queryableFields: [] })
     await svc.create({ typeId: 'pages', tenantId: 'default', title: 'Published', slug: 'published', data: {}, publishOnCreate: true })
     await svc.create({ typeId: 'pages', tenantId: 'default', title: 'Draft', slug: 'draft', data: {} })
     app = buildApp(db)
   })
-  afterEach(() => db.close())
+  afterEach(() => { db.close(); resetCollectionRegistry(); testUser = undefined })
 
-  const authAs = (role: string) =>
-    vi.spyOn(AuthManager, 'verifyToken').mockResolvedValue({
-      userId: 'u', email: 'e@f.g', role, exp: Math.floor(Date.now() / 1000) + 3600, iat: Math.floor(Date.now() / 1000),
-    } as any)
+  const authAs = (role: string) => { testUser = { userId: 'u', email: 'e@f.g', role } }
 
   const slugs = (body: any) => (body.data ?? []).map((d: any) => d.slug).sort()
 

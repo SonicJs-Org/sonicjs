@@ -7,7 +7,7 @@ test.describe('Health Checks', () => {
 
     expect(health).toHaveProperty('name', 'SonicJS AI');
     expect(health).toHaveProperty('version'); // Version comes from @sonicjs-cms/core package
-    expect(health.version).toMatch(/^\d+\.\d+\.\d+$/); // Verify semver format
+    expect(health.version).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/); // semver, incl. prerelease (e.g. 3.0.0-beta.2)
     expect(health).toHaveProperty('status', 'running');
     expect(health).toHaveProperty('timestamp');
   });

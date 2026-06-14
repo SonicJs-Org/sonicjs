@@ -2,6 +2,9 @@ import Database from 'better-sqlite3'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import type { D1Database } from '@cloudflare/workers-types'
+import type { QueryableField } from '../../schemas/document'
+import { ensureScalarSchema } from '../../services/document-scalar-schema'
 
 // Real-SQLite test harness. Wraps better-sqlite3 in the subset of the D1Database
 // interface the document services use (prepare/bind/run/all/first + batch) and applies
@@ -63,6 +66,13 @@ class TestStatement {
 export interface TestD1 {
   prepare(sql: string): TestStatement
   batch(statements: TestStatement[]): Promise<Array<{ success: boolean; results: unknown[] }>>
+  /**
+   * Add the VIRTUAL generated columns + indexes for a type's scalar queryable fields,
+   * mirroring what DocumentTypeRegistry.register() / ensureDocumentGeneratedColumns()
+   * do at runtime. Migrations only ship the base `documents` schema, so a test that
+   * filters/selects `q_*` columns must call this for its type first.
+   */
+  applyScalarSchema(typeId: string, fields: QueryableField[]): Promise<string[]>
   /** Direct better-sqlite3 handle for test assertions (synchronous). */
   raw: Database.Database
   close(): void
@@ -81,6 +91,9 @@ export function createTestD1(): TestD1 {
   return {
     prepare(sql: string) {
       return new TestStatement(sqlite, sql)
+    },
+    applyScalarSchema(typeId: string, fields: QueryableField[]) {
+      return ensureScalarSchema(this as unknown as D1Database, typeId, fields)
     },
     async batch(statements: TestStatement[]) {
       // D1 batches are atomic + sequential under a single writer. Mirror with a transaction.

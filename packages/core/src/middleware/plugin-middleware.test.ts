@@ -51,7 +51,9 @@ describe('isPluginActive', () => {
 
     expect(result).toBe(true)
     expect(mockDb._mocks.prepare).toHaveBeenCalledWith(
-      'SELECT status FROM plugins WHERE id = ?'
+      `SELECT json_extract(data, '$.status') as status FROM documents
+         WHERE slug = ? AND type_id = 'plugin' AND tenant_id = 'default'
+           AND is_current_draft = 1 AND deleted_at IS NULL`
     )
     expect(mockDb._mocks.bind).toHaveBeenCalledWith('my-plugin')
   })
@@ -225,9 +227,10 @@ describe('getActivePlugins', () => {
 
     expect(result).toEqual(mockPlugins)
     expect(mockDb._mocks.prepare).toHaveBeenCalledWith(
-      'SELECT * FROM plugins WHERE status = ?'
+      `SELECT slug as id, json_extract(data, '$.status') as status, data FROM documents
+         WHERE type_id = 'plugin' AND tenant_id = 'default'
+           AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
     )
-    expect(mockDb._mocks.bind).toHaveBeenCalledWith('active')
   })
 
   it('should return empty array when no active plugins', async () => {

@@ -6,28 +6,21 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787';
 // Test data
 let testCollectionId: string;
 let testContentId: string;
-let authToken: string;
-let csrfToken: string;
+// Full Better Auth session cookie string captured from an authenticated context (the old
+// auth_token/JWT cookie no longer exists — auth is session-based now).
+let cookieHeader = '';
 
 test.describe('Content API CRUD Operations', () => {
   test.beforeAll(async ({ browser }) => {
-    // Get auth token
     const context = await browser.newContext();
     const page = await context.newPage();
 
     await ensureAdminUserExists(page);
     await loginAsAdmin(page);
 
-    // Extract token from cookie or localStorage
+    // Capture the whole authenticated cookie jar (Better Auth session token).
     const cookies = await context.cookies();
-    const authCookie = cookies.find(c => c.name === 'auth_token' || c.name === 'token');
-    if (authCookie) {
-      authToken = authCookie.value;
-    }
-    const csrfCookie = cookies.find(c => c.name === 'csrf_token');
-    if (csrfCookie) {
-      csrfToken = csrfCookie.value;
-    }
+    cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
     await context.close();
   });
@@ -61,7 +54,7 @@ test.describe('Content API CRUD Operations', () => {
         data: newContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -119,7 +112,7 @@ test.describe('Content API CRUD Operations', () => {
         data: invalidContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -143,7 +136,7 @@ test.describe('Content API CRUD Operations', () => {
         data: newContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -159,7 +152,7 @@ test.describe('Content API CRUD Operations', () => {
         // Cleanup
         if (responseData.data.id) {
           await request.delete(`${BASE_URL}/api/content/${responseData.data.id}`, {
-            headers: { ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {}) }
+            headers: { 'Cookie': cookieHeader, 'Origin': BASE_URL }
           });
         }
       }
@@ -180,7 +173,7 @@ test.describe('Content API CRUD Operations', () => {
         data: firstContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -204,7 +197,7 @@ test.describe('Content API CRUD Operations', () => {
         data: secondContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -216,7 +209,7 @@ test.describe('Content API CRUD Operations', () => {
 
       // Cleanup
       await request.delete(`${BASE_URL}/api/content/${firstId}`, {
-        headers: { ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {}) }
+        headers: { 'Cookie': cookieHeader, 'Origin': BASE_URL }
       });
     });
   });
@@ -240,7 +233,7 @@ test.describe('Content API CRUD Operations', () => {
         data: newContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -255,7 +248,7 @@ test.describe('Content API CRUD Operations', () => {
       // Cleanup
       if (contentToUpdate) {
         await request.delete(`${BASE_URL}/api/content/${contentToUpdate}`, {
-          headers: { ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {}) }
+          headers: { 'Cookie': cookieHeader, 'Origin': BASE_URL }
         });
       }
     });
@@ -279,7 +272,7 @@ test.describe('Content API CRUD Operations', () => {
         data: updates,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -308,7 +301,7 @@ test.describe('Content API CRUD Operations', () => {
         data: { title: 'Updated' },
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -338,8 +331,10 @@ test.describe('Content API CRUD Operations', () => {
         return;
       }
 
-      // Get original content
-      const getResponse = await request.get(`${BASE_URL}/api/content/${contentToUpdate}`);
+      // Get original content (authenticated — drafts are hidden from anonymous callers).
+      const getResponse = await request.get(`${BASE_URL}/api/content/${contentToUpdate}`, {
+        headers: { 'Cookie': cookieHeader, 'Origin': BASE_URL }
+      });
       const originalData = await getResponse.json();
       const originalTitle = originalData.data.title;
 
@@ -352,7 +347,7 @@ test.describe('Content API CRUD Operations', () => {
         data: updates,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -385,7 +380,7 @@ test.describe('Content API CRUD Operations', () => {
         data: newContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -404,7 +399,7 @@ test.describe('Content API CRUD Operations', () => {
 
       const response = await request.delete(`${BASE_URL}/api/content/${contentToDelete}`, {
         headers: {
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -435,7 +430,7 @@ test.describe('Content API CRUD Operations', () => {
 
       const response = await request.delete(`${BASE_URL}/api/content/${fakeId}`, {
         headers: {
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -462,7 +457,7 @@ test.describe('Content API CRUD Operations', () => {
       // Cleanup if delete test failed
       if (contentToDelete) {
         await request.delete(`${BASE_URL}/api/content/${contentToDelete}`, {
-          headers: { ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {}) }
+          headers: { 'Cookie': cookieHeader, 'Origin': BASE_URL }
         }).catch(() => {});
       }
     });
@@ -485,7 +480,7 @@ test.describe('Content API CRUD Operations', () => {
         data: newContent,
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -498,8 +493,10 @@ test.describe('Content API CRUD Operations', () => {
       const contentId = createdData.data.id;
       console.log(`✓ Created content: ${contentId}`);
 
-      // READ
-      const readResponse = await request.get(`${BASE_URL}/api/content/${contentId}`);
+      // READ (authenticated — the doc was created as a draft, hidden from anonymous callers).
+      const readResponse = await request.get(`${BASE_URL}/api/content/${contentId}`, {
+        headers: { 'Cookie': cookieHeader, 'Origin': BASE_URL }
+      });
       expect(readResponse.ok()).toBeTruthy();
       const readData = await readResponse.json();
       expect(readData.data.title).toBe(newContent.title);
@@ -513,7 +510,7 @@ test.describe('Content API CRUD Operations', () => {
         },
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 
@@ -526,7 +523,7 @@ test.describe('Content API CRUD Operations', () => {
       // DELETE
       const deleteResponse = await request.delete(`${BASE_URL}/api/content/${contentId}`, {
         headers: {
-          ...(authToken ? { 'Cookie': `auth_token=${authToken}${csrfToken ? `; csrf_token=${csrfToken}` : ''}`, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) } : {})
+          'Cookie': cookieHeader, 'Origin': BASE_URL
         }
       });
 

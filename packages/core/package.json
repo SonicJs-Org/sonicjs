@@ -67,9 +67,9 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "test": "echo 'Tests disabled during v3 migration' && exit 0",
-    "test:cov": "echo 'Tests disabled during v3 migration' && exit 0",
-    "test:watch": "echo 'Tests disabled during v3 migration' && exit 0",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build"
   },

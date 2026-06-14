@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, navigateToAdminSection, waitForHTMX, ensureTestContentExists } from './utils/test-helpers';
+import { loginAsAdmin, waitForHTMX } from './utils/test-helpers';
 
 test.describe('Content Management', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
-    await ensureTestContentExists(page);
-    await navigateToAdminSection(page, 'content');
+    // Content is seeded (a published welcome blog post), so navigate straight to the list —
+    // the legacy createTestContent UI flow is unnecessary and predates the collection-dropdown redesign.
+    await page.goto('/admin/content');
+    await page.waitForLoadState('networkidle');
   });
 
   test('should display content list', async ({ page }) => {
@@ -100,23 +102,22 @@ test.describe('Content Management', () => {
   });
 
   test('should navigate to new content form', async ({ page }) => {
-    await page.click('a[href="/admin/content/new"]');
-    
-    // Wait for navigation to complete
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
-    
+    // The content list's "New Content" is a per-collection dropdown now (#885); the full-page
+    // collection selector still lives at /admin/content/new.
+    await page.goto('/admin/content/new');
+
     // Should show collection selection page
     await expect(page.locator('h1')).toContainText('Create New Content');
-    await expect(page.locator('text=Select a collection to create content in:')).toBeVisible();
-    
+    await expect(page.locator('text=Select a collection')).toBeVisible();
+
     // Should have at least one collection to select
     const collectionLinks = page.locator('a[href^="/admin/content/new?collection="]');
     const count = await collectionLinks.count();
     expect(count).toBeGreaterThan(0);
-    
+
     // Click on the first collection
     await collectionLinks.first().click();
-    
+
     // Should now be on the actual content creation form
     await expect(page.locator('form')).toBeVisible();
   });

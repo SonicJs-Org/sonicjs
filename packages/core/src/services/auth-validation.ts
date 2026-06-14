@@ -24,22 +24,41 @@ export interface AuthSettings {
  * @returns true if registration is enabled, false if disabled
  */
 export async function isRegistrationEnabled(db: D1Database): Promise<boolean> {
+  // Plugin settings live on the plugin's document (type_id='plugin', slug=pluginId) since the
+  // document-model migration — the legacy `plugins` table no longer exists on greenfield. The
+  // /admin/plugins/core-auth/settings write goes through PluginService.updatePluginSettings (doc model),
+  // so the read must come from the same place or "disable registration" silently no-ops.
+  try {
+    const row = await db
+      .prepare(
+        "SELECT data FROM documents WHERE slug = 'core-auth' AND type_id = 'plugin' AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL",
+      )
+      .first() as { data: string } | null
+    if (row?.data) {
+      const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+      const enabled = data?.settings?.registration?.enabled
+      return enabled !== false && enabled !== 0
+    }
+  } catch {
+    // fall through to the legacy table for installs that still have it
+  }
+
+  // Legacy fallback: the dropped `plugins` table (guarded — absent on greenfield).
   try {
     const plugin = await db.prepare('SELECT settings FROM plugins WHERE id = ?')
       .bind('core-auth')
       .first() as { settings: string } | null
-
     if (plugin?.settings) {
-      // Parse settings and check registration.enabled
-      // SQLite stores booleans as 0/1, so check for both false and 0
+      // SQLite stores booleans as 0/1, so check for both false and 0.
       const settings = JSON.parse(plugin.settings)
       const enabled = settings?.registration?.enabled
       return enabled !== false && enabled !== 0
     }
-    return true // Default to enabled if no settings
   } catch {
-    return true // Default to enabled on error
+    // no legacy table either
   }
+
+  return true // Default to enabled when no setting is found
 }
 
 /**

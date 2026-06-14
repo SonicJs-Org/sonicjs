@@ -582,7 +582,7 @@ describe('renderDynamicField - Quill Editor Fields', () => {
     });
 
     expect(html).toContain('<textarea');
-    expect(html).toContain('TinyMCE plugin is inactive');
+    expect(html).toContain('No rich text editor plugin is active');
     expect(html).not.toContain('data-editor-provider="tinymce"');
   });
 });

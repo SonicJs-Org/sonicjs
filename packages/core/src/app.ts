@@ -536,10 +536,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Core routes
   // Routes are being imported incrementally from routes/*
   // Each route is tested and migrated one-by-one
-  app.route('/api', apiRoutes)
+  // Dedicated /api sub-routers MUST be registered before the bare `/api` router,
+  // whose `/:collection` wildcard otherwise shadows them (e.g. GET /api/documents
+  // matched `/:collection`='documents' → 404 "Collection not found").
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
+  app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
   // Testimonials admin (document-backed). The plugin adds the sidebar item to /admin/testimonials,
   // but the HTML router itself must be mounted here like the other core admin routers — it was missing,

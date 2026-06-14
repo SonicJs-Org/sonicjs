@@ -27,7 +27,7 @@ function count(db, sql, ...args) {
 
 describe('DocumentsService — real SQLite (migration 037)', () => {
   let db
-  beforeEach(() => {
+  beforeEach(async () => {
     db = createTestD1()
     db.raw
       .prepare(
@@ -35,6 +35,8 @@ describe('DocumentsService — real SQLite (migration 037)', () => {
          VALUES ('testimonial','testimonial','Testimonial','{}','[]','{}','system',1,1,1,1,1)`,
       )
       .run()
+    // Migrations ship only the base documents schema; add this type's q_* generated columns.
+    await db.applyScalarSchema('testimonial', TST_FIELDS)
   })
   afterEach(() => db.close())
 
@@ -159,7 +161,7 @@ describe('DocumentsService — real SQLite (migration 037)', () => {
 
 describe('DocumentRepository.list — filters / facet / sort / tenant (D10)', () => {
   let db
-  beforeEach(() => {
+  beforeEach(async () => {
     db = createTestD1()
     db.raw
       .prepare(
@@ -167,6 +169,8 @@ describe('DocumentRepository.list — filters / facet / sort / tenant (D10)', ()
          VALUES ('testimonial','testimonial','Testimonial','{}','[]','{}','system',1,1,1,1,1)`,
       )
       .run()
+    // Migrations ship only the base documents schema; add this type's q_* generated columns.
+    await db.applyScalarSchema('testimonial', TST_FIELDS)
   })
   afterEach(() => db.close())
 
@@ -209,7 +213,13 @@ describe('DocumentRepository.list — filters / facet / sort / tenant (D10)', ()
 
 describe('Blog posts document-backed (Option B, migration 044)', () => {
   let db
-  beforeEach(() => {
+
+  const BLOG_FIELDS = [
+    { name: 'difficulty', kind: 'scalar', type: 'text', column: 'q_blog_difficulty' },
+    { name: 'author', kind: 'scalar', type: 'text', column: 'q_blog_author' },
+  ]
+
+  beforeEach(async () => {
     db = createTestD1()
     db.raw
       .prepare(
@@ -217,13 +227,10 @@ describe('Blog posts document-backed (Option B, migration 044)', () => {
          VALUES ('blog_post','blog_post','Blog Posts','{}','[]','{}','system',1,1,1,1,1)`,
       )
       .run()
+    // Migrations ship only the base documents schema; add this type's q_* generated columns.
+    await db.applyScalarSchema('blog_post', BLOG_FIELDS)
   })
   afterEach(() => db.close())
-
-  const BLOG_FIELDS = [
-    { name: 'difficulty', kind: 'scalar', type: 'text', column: 'q_blog_difficulty' },
-    { name: 'author', kind: 'scalar', type: 'text', column: 'q_blog_author' },
-  ]
 
   it('create populates q_blog_* generated columns and filters via repo.list', async () => {
     const s = new DocumentsService(db, { queryableFields: BLOG_FIELDS, tenantId: 'default' })

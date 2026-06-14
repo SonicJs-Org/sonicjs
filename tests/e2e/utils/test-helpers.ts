@@ -1,5 +1,10 @@
 import { Page, expect } from '@playwright/test';
 
+// Better Auth enforces CSRF by rejecting a missing/null/untrusted Origin (MISSING_OR_NULL_ORIGIN).
+// Playwright's page.request from about:blank sends a null Origin, so every auth API call below must
+// send the server origin explicitly. Matches the baseURL resolution in tests/playwright.config.ts.
+export const TEST_ORIGIN = process.env.BASE_URL || 'http://localhost:8787';
+
 // Default admin credentials for testing
 export const ADMIN_CREDENTIALS = {
   email: 'admin@sonicjs.com',
@@ -316,24 +321,12 @@ export async function createTestContent(page: Page, contentData?: {
 /**
  * Ensure test collection exists
  */
-export async function ensureTestCollectionExists(page: Page) {
-  try {
-    // First check if collection already exists
-    await page.goto('/admin/collections');
-    
-    const collectionExists = await page.locator('td').filter({ hasText: TEST_DATA.collection.name }).first().isVisible({ timeout: 2000 });
-    
-    if (!collectionExists) {
-      await createTestCollection(page);
-    }
-  } catch (error) {
-    // Try to create collection anyway
-    try {
-      await createTestCollection(page);
-    } catch (createError) {
-      console.log('Failed to create test collection:', createError);
-    }
-  }
+export async function ensureTestCollectionExists(_page: Page) {
+  // Collections are code-only now (no DB table, no creation UI — see drop-db-collections plan).
+  // The seeded `blog_post` collection always exists, so there is nothing to create. This is a no-op;
+  // the old version drove /admin/collections/new (which is now instructional), hanging for ~60s
+  // and timing out every caller (createTestContent → 05/11/12/42 cascades).
+  return;
 }
 
 /**
@@ -346,7 +339,7 @@ export async function loginAsAdmin(page: Page) {
   // Use Better Auth's sign-in/email API — sets session cookie in the page context
   const res = await page.request.post('/auth/sign-in/email', {
     data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
   });
 
   if (!res.ok()) {
@@ -511,7 +504,7 @@ export async function isAuthenticated(page: Page): Promise<boolean> {
  */
 export async function logout(page: Page) {
   // Better Auth sign-out via API — must send JSON body {}
-  await page.request.post('/auth/sign-out', { data: {}, headers: { 'Content-Type': 'application/json' } });
+  await page.request.post('/auth/sign-out', { data: {}, headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN } });
   await page.goto('/auth/login');
   await page.waitForURL(/\/auth\/login/);
   // Wait a moment for cookies to be cleared

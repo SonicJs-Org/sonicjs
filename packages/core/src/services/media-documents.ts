@@ -32,7 +32,7 @@ export interface MediaUrlOptions {
 }
 
 // media_asset queryable fields — mirror migration 043 (q_media_*) + the document type registration.
-const MEDIA_QUERYABLE: QueryableField[] = [
+export const MEDIA_QUERYABLE: QueryableField[] = [
   { name: 'mimeType', kind: 'scalar', type: 'text', column: 'q_media_mime' },
   { name: 'folder', kind: 'scalar', type: 'text', column: 'q_media_folder' },
   { name: 'size', kind: 'scalar', type: 'integer', column: 'q_media_size' },
@@ -216,11 +216,75 @@ export class MediaDocumentService {
     }
   }
 
+  /** Fetch the current-draft media_asset document by its root id (tenant-scoped). Null if absent/deleted. */
+  async getByRootId(rootId: string): Promise<Document | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND type_id = 'media_asset' AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL")
+      .bind(rootId, this.tenantId)
+      .first<Record<string, any>>()
+    return row ? rowToMinimalDoc(row) : null
+  }
+
+  /**
+   * Soft-delete every version row of a media_asset root (sets deleted_at). The library list and
+   * getByRootId both filter `deleted_at IS NULL`, so the asset disappears from reads but the rows
+   * (and R2 object lifecycle) remain for audit. Returns true if any row was updated.
+   */
+  async softDelete(rootId: string): Promise<boolean> {
+    const res = await this.db
+      .prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND type_id = 'media_asset' AND tenant_id = ? AND deleted_at IS NULL")
+      .bind(Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000), rootId, this.tenantId)
+      .run()
+    return (res.meta?.changes ?? 0) > 0
+  }
+
+  /**
+   * In-place metadata edit of the current media_asset row (alt / caption / folder). Uses json_set so the
+   * q_media_* generated columns recompute; media metadata is not versioned content, so this avoids draft
+   * churn. (tags faceting is owned by the create path — not updated here.) Returns true if a row changed.
+   */
+  async updateMetadata(rootId: string, patch: Record<string, any>): Promise<boolean> {
+    const allowed = ['alt', 'caption', 'folder']
+    const sets: string[] = []
+    const binds: (string | number)[] = []
+    for (const k of allowed) {
+      if (k in patch && patch[k] != null) {
+        sets.push(`'$.${k}', ?`)
+        binds.push(String(patch[k]))
+      }
+    }
+    if (sets.length === 0) return false
+    const res = await this.db
+      .prepare(
+        `UPDATE documents SET data = json_set(data, ${sets.join(', ')}), updated_at = ?
+         WHERE root_id = ? AND type_id = 'media_asset' AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL`,
+      )
+      .bind(...binds, Math.floor(Date.now() / 1000), rootId, this.tenantId)
+      .run()
+    return (res.meta?.changes ?? 0) > 0
+  }
+
   /** Reference-aware delete: strong inbound references block hard-delete (offer archive instead). */
   async getDeleteImpact(mediaRootId: string): Promise<MediaDeleteImpact> {
     const refs = await new DocumentRepository(this.db, this.tenantId).getInboundReferences(mediaRootId)
     const strongRefs = refs.filter(r => r.refStrength === 'strong').map(r => ({ fromDocumentId: r.fromDocumentId, fieldName: r.fieldName }))
     const weakRefs = refs.filter(r => r.refStrength !== 'strong').map(r => ({ fromDocumentId: r.fromDocumentId, fieldName: r.fieldName }))
     return { canHardDelete: strongRefs.length === 0, strongRefs, weakRefs }
+  }
+}
+
+/**
+ * Whether the legacy `media` table still exists. The greenfield (document-model) schema never creates
+ * it, so every legacy `media` read/write must be guarded with this — media is authoritative in
+ * `documents` (media_asset). Legacy writes are best-effort dual-writes only where the table is present.
+ */
+export async function legacyMediaTableExists(db: D1Database): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'media'")
+      .first()
+    return !!row
+  } catch {
+    return false
   }
 }

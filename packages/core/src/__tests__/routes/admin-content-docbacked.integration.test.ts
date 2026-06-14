@@ -14,6 +14,7 @@ vi.mock('../../middleware/auth', () => ({
 }))
 
 import adminContentRoutes from '../../routes/admin-content'
+import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
 
 const BLOG_SCHEMA = JSON.stringify({
   type: 'object',
@@ -55,13 +56,12 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
 
   beforeEach(async () => {
     db = createTestD1()
-    db.raw.prepare("INSERT INTO users (id,email,first_name,last_name,role,is_active,created_at,updated_at) VALUES ('u1','a@b.c','Ada','Lovelace','admin',1,1,1)").run()
-    db.raw.prepare("INSERT INTO collections (id,name,display_name,description,schema,is_active,managed,created_at,updated_at) VALUES (?,?,?,?,?,1,1,1,1)")
-      .run(COLL, 'blog_post', 'Blog Posts', 'Blog', BLOG_SCHEMA)
+    // Collections are code-only now (id === name) — register in the in-memory registry.
+    getCollectionRegistry().register([{ name: 'blog_post', displayName: 'Blog Posts', description: 'Blog', schema: JSON.parse(BLOG_SCHEMA) }])
     await bootstrapDocumentTypes(db) // registers the blog_post document type
     app = buildApp(db)
   })
-  afterEach(() => db.close())
+  afterEach(() => { db.close(); resetCollectionRegistry() })
 
   async function createPost(slug: string, status = 'published') {
     return app.request('/admin/content', {
@@ -92,7 +92,8 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
     expect(doc.is_published).toBe(1)
     expect(doc.d).toBe('advanced')
     expect(doc.a).toBe('Ada')
-    expect(db.raw.prepare('SELECT COUNT(*) AS count FROM content').get().count).toBe(0)
+    // The document-model schema has no legacy `content` table at all — its absence is the proof the write went to documents.
+    expect(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='content'").get()).toBeFalsy()
   })
 
   it('list (model=blog_post) reads from documents and shows the post', async () => {
@@ -142,7 +143,32 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
     expect(res.status).toBe(200)
     const htmlText = await res.text()
     expect(htmlText).toContain('Post inall') // blog document
-    expect(db.raw.prepare('SELECT COUNT(*) AS count FROM content').get().count).toBe(0)
+    // The document-model schema has no legacy `content` table at all — its absence is the proof the write went to documents.
+    expect(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='content'").get()).toBeFalsy()
+  })
+
+  it('does NOT offer internal/auth-owned types as content models in the filter dropdown', async () => {
+    const res = await app.request('/admin/content')
+    expect(res.status).toBe(200)
+    const htmlText = await res.text()
+    // User-defined collection IS selectable.
+    expect(htmlText).toContain('value="blog_post"')
+    // Internal (settings.internal) / auth-owned (isAuth) types seeded by bootstrapDocumentTypes must NOT leak in.
+    for (const internal of ['user_profile', 'site_settings', 'plugin', 'tenant', 'media_asset']) {
+      expect(htmlText).not.toContain(`value="${internal}"`)
+    }
+  })
+
+  it('does NOT offer internal/auth-owned types on the new-content collection selector', async () => {
+    const res = await app.request('/admin/content/new')
+    expect(res.status).toBe(200)
+    const htmlText = await res.text()
+    // The user-defined collection IS offered.
+    expect(htmlText).toContain('/admin/content/new?collection=blog_post')
+    // Internal/auth types must NOT appear as create-new-content options.
+    for (const internal of ['user_profile', 'site_settings', 'plugin', 'tenant', 'media_asset', 'rbac_role']) {
+      expect(htmlText).not.toContain(`?collection=${internal}`)
+    }
   })
 
   // ── D33: bulk actions must operate on document-backed root ids, not silently no-op ──────────

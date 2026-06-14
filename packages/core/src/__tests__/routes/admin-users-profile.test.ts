@@ -86,18 +86,23 @@ vi.mock('../../plugins/core-plugins/user-profiles', () => ({
 import { userRoutes } from '../../routes/admin-users'
 
 // Create call-order based D1 mock
-// Each db.prepare() call returns a distinct mock chain based on call index
+// Each db.prepare() call returns a distinct mock chain based on call index.
+// The prepared statement supports both the `.bind(...).first()/.run()/.all()`
+// chain and the un-bound `.first()/.run()/.all()` shorthand (the edit handler's
+// multi-tenant probe calls `.first()` directly without `.bind()`).
 const createOrderedMockDb = (results: Array<{ first?: any; run?: any; all?: any }>) => {
   let callIndex = 0
   return {
     prepare: vi.fn().mockImplementation(() => {
       const result = results[callIndex++] || {}
+      const terminals = {
+        first: vi.fn().mockResolvedValue(result.first ?? null),
+        run: vi.fn().mockResolvedValue(result.run ?? { success: true }),
+        all: vi.fn().mockResolvedValue(result.all ?? { results: [] })
+      }
       return {
-        bind: vi.fn().mockReturnValue({
-          first: vi.fn().mockResolvedValue(result.first ?? null),
-          run: vi.fn().mockResolvedValue(result.run ?? { success: true }),
-          all: vi.fn().mockResolvedValue(result.all ?? { results: [] })
-        })
+        bind: vi.fn().mockReturnValue(terminals),
+        ...terminals
       }
     })
   }
@@ -151,7 +156,8 @@ describe('Admin Users - Profile on Edit Page', () => {
       vi.mocked(readProfileData).mockResolvedValue({ ...mockProfileData })
 
       mockDb = createOrderedMockDb([
-        { first: mockUserRecord },    // call 0: SELECT FROM users (profile comes from readProfileData)
+        { first: mockUserRecord },    // call 0: SELECT FROM auth_user (profile comes from readProfileData)
+        { first: null },              // call 1: multi-tenant plugin probe — inactive
       ])
 
       app = createApp(mockDb)
@@ -167,14 +173,10 @@ describe('Admin Users - Profile on Edit Page', () => {
       const body = await res.text()
       const data = JSON.parse(body)
 
-      // Verify profile data is mapped to camelCase interface
+      // The edit page maps only displayName onto the UserProfileData interface;
+      // the rest of the document data is not surfaced on this page.
       expect(data.userToEdit.profile).toBeDefined()
       expect(data.userToEdit.profile.displayName).toBe('Test Display')
-      expect(data.userToEdit.profile.bio).toBe('A test bio')
-      expect(data.userToEdit.profile.company).toBe('Test Corp')
-      expect(data.userToEdit.profile.jobTitle).toBe('Engineer')
-      expect(data.userToEdit.profile.website).toBe('https://example.com')
-      expect(data.userToEdit.profile.location).toBe('San Francisco')
 
       // Profile read is delegated to the document store, not a raw SQL query.
       expect(readProfileData).toHaveBeenCalledWith(mockDb, 'user-123')
@@ -185,7 +187,8 @@ describe('Admin Users - Profile on Edit Page', () => {
       vi.mocked(readProfileData).mockResolvedValue({ custom: {} })
 
       mockDb = createOrderedMockDb([
-        { first: mockUserRecord },  // call 0: SELECT FROM users
+        { first: mockUserRecord },  // call 0: SELECT FROM auth_user
+        { first: null },            // call 1: multi-tenant plugin probe — inactive
       ])
 
       app = createApp(mockDb)
@@ -279,8 +282,7 @@ describe('Admin Users - Profile on Edit Page', () => {
 
       const body = createFormBody({
         ...baseUserFields,
-        profile_display_name: 'Updated Name',
-        profile_company: 'New Corp'
+        profile_display_name: 'Updated Name'
       })
 
       const res = await app.request('/admin/users/user-123', {
@@ -299,12 +301,13 @@ describe('Admin Users - Profile on Edit Page', () => {
       const data = JSON.parse(responseBody)
       expect(data.type).toBe('success')
 
-      // Profile persisted via the document store with the submitted typed fields.
+      // Profile persisted via the document store. The edit form only feeds the
+      // typed `displayName` field into the patch (other profile columns were
+      // dropped from the UserProfileData interface).
       expect(writeProfileData).toHaveBeenCalledTimes(1)
       const [, userIdArg, patch] = vi.mocked(writeProfileData).mock.calls[0] as any[]
       expect(userIdArg).toBe('user-123')
       expect(patch.displayName).toBe('Updated Name')
-      expect(patch.company).toBe('New Corp')
     })
 
     it('should skip the profile write when no profile fields are submitted', async () => {

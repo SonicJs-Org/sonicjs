@@ -1,53 +1,77 @@
 {
   "id": "email",
   "name": "Email",
-  "version": "1.0.0-beta.1",
-  "description": "Send transactional emails using Resend",
+  "version": "1.0.0",
+  "description": "Send transactional emails via Cloudflare Email Service. Subscribes to auth lifecycle events (welcome, password reset, password changed) and runs a 5-minute reconciliation cron against the CF GraphQL Activity Log.",
   "author": "SonicJS Team",
-  "homepage": "https://sonicjs.com/plugins/email",
-  "repository": "https://github.com/lane711/sonicjs-ai/tree/main/src/plugins/core-plugins/email-plugin",
+  "homepage": "https://github.com/sonicjs/sonicjs-ai",
+  "repository": "https://github.com/sonicjs/sonicjs-ai",
   "license": "MIT",
   "category": "utilities",
   "tags": [
     "email",
-    "resend",
+    "cloudflare-email",
     "transactional",
     "notifications"
   ],
   "dependencies": [],
-  "settings": {
-    "apiKey": {
-      "type": "string",
-      "label": "Resend API Key",
-      "required": true,
-      "secret": true
-    },
+  "capabilities": [
+    "email:send",
+    "hooks.cron:register",
+    "hooks.auth:register"
+  ],
+  "crons": [
+    {
+      "schedule": "*/5 * * * *",
+      "hookFamily": "email-reconciliation"
+    }
+  ],
+  "configSchema": {
     "fromEmail": {
       "type": "string",
       "label": "From Email",
-      "required": true
+      "format": "email",
+      "required": true,
+      "placeholder": "noreply@yourdomain.com",
+      "description": "Must be a verified sender address in your Cloudflare account"
     },
     "fromName": {
       "type": "string",
       "label": "From Name",
-      "required": true
+      "required": true,
+      "placeholder": "Your App Name"
     },
     "replyTo": {
       "type": "string",
       "label": "Reply-To Email",
-      "required": false
+      "format": "email",
+      "required": false,
+      "placeholder": "support@yourdomain.com"
     },
     "logoUrl": {
       "type": "string",
       "label": "Logo URL",
-      "required": false
+      "format": "url",
+      "required": false,
+      "placeholder": "https://yourdomain.com/logo.png",
+      "description": "Logo to display in email templates"
+    },
+    "cfAccountId": {
+      "type": "string",
+      "label": "CF Account ID",
+      "required": false,
+      "placeholder": "f61c658f...",
+      "description": "Reconciliation credential (delivery-sync cron). Found in the Cloudflare dashboard right sidebar"
+    },
+    "cfEmailApiToken": {
+      "type": "string",
+      "label": "CF Email API Token",
+      "sensitive": true,
+      "required": false,
+      "placeholder": "••••••••",
+      "description": "Reconciliation credential. API token with Email Routing read permission"
     }
   },
-  "hooks": {
-    "onActivate": "activate",
-    "onDeactivate": "deactivate"
-  },
-  "routes": [],
   "permissions": {
     "email:manage": "Manage email settings",
     "email:send": "Send emails",
@@ -60,12 +84,13 @@
     "order": 80
   },
   "iconEmoji": "📧",
-  "is_core": false,
+  "is_core": true,
   "defaultSettings": {
-    "apiKey": "",
     "fromEmail": "",
     "fromName": "",
     "replyTo": "",
-    "logoUrl": ""
+    "logoUrl": "",
+    "cfAccountId": "",
+    "cfEmailApiToken": ""
   }
 }

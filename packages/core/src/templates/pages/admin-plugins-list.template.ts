@@ -396,15 +396,49 @@ export function renderPluginsListPage(data: PluginsListPageData): string {
         window.location.href = \`/admin/plugins/\${pluginId}\`;
       }
       
+      function updateURL() {
+        const params = new URLSearchParams();
+        Array.from(document.querySelectorAll('input[name="category"]:checked'))
+          .forEach(cb => params.append('category', cb.value));
+        Array.from(document.querySelectorAll('input[name="status"]:checked'))
+          .forEach(cb => params.append('status', cb.value));
+        const search = document.getElementById('search-input').value;
+        if (search) params.set('search', search);
+        const sort = document.getElementById('sort-filter').value;
+        if (sort && sort !== 'name-asc') params.set('sort', sort);
+        const url = new URL(window.location.href);
+        url.search = params.toString();
+        history.replaceState(null, '', url.toString());
+      }
+
+      function initFiltersFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        params.getAll('category').forEach(cat => {
+          const cb = document.getElementById('category-' + cat);
+          if (cb) cb.checked = true;
+        });
+        params.getAll('status').forEach(status => {
+          const cb = document.getElementById('status-' + status);
+          if (cb) cb.checked = true;
+        });
+        const search = params.get('search');
+        if (search) document.getElementById('search-input').value = search;
+        const sort = params.get('sort');
+        if (sort) document.getElementById('sort-filter').value = sort;
+        if (params.toString()) filterAndSortPlugins();
+      }
+
+      document.addEventListener('DOMContentLoaded', initFiltersFromURL);
+
       function filterAndSortPlugins() {
         // Get checked categories
         const checkedCategories = Array.from(document.querySelectorAll('input[name="category"]:checked'))
           .map(cb => cb.value.toLowerCase());
-          
+
         // Get checked statuses
         const checkedStatuses = Array.from(document.querySelectorAll('input[name="status"]:checked'))
           .map(cb => cb.value.toLowerCase());
-          
+
         const searchInput = document.getElementById('search-input').value.toLowerCase();
         const sortValue = document.getElementById('sort-filter').value;
 
@@ -483,6 +517,7 @@ export function renderPluginsListPage(data: PluginsListPageData): string {
             pluginsGrid.appendChild(card); // Re-appending moves it to the end, effectively sorting
           });
         }
+        updateURL();
       }
     </script>
 

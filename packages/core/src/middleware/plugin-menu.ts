@@ -5,10 +5,11 @@ import { PLUGIN_REGISTRY } from '../plugins/manifest-registry'
 // Build menu plugin data from the auto-generated registry.
 // Any plugin with an adminMenu entry in its manifest.json will
 // automatically appear in the sidebar when active.
+// `id` matches the `slug` column in the documents table (how plugins are stored).
 const REGISTRY_MENU_PLUGINS = Object.values(PLUGIN_REGISTRY)
   .filter(p => p.adminMenu !== null)
   .map(p => ({
-    codeName: p.codeName,
+    id: p.id,
     label: p.adminMenu!.label,
     path: p.adminMenu!.path,
     icon: p.adminMenu!.icon,
@@ -78,17 +79,17 @@ export function pluginMenuMiddleware() {
     let activeMenuItems: Array<{ label: string; path: string; icon?: string; order: number }> = []
     try {
       const db = c.env.DB
-      const pluginCodeNames = REGISTRY_MENU_PLUGINS.map(p => p.codeName)
-      if (pluginCodeNames.length > 0) {
-        const placeholders = pluginCodeNames.map(() => '?').join(',')
+      const pluginIds = REGISTRY_MENU_PLUGINS.map(p => p.id)
+      if (pluginIds.length > 0) {
+        const placeholders = pluginIds.map(() => '?').join(',')
         const result = await db.prepare(
           `SELECT slug FROM documents WHERE type_id = 'plugin' AND tenant_id = 'default' AND slug IN (${placeholders}) AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
-        ).bind(...pluginCodeNames).all()
+        ).bind(...pluginIds).all()
 
-        const activeNames = new Set((result.results || []).map((r: any) => r.slug))
+        const activeIds = new Set((result.results || []).map((r: any) => r.slug))
 
         for (const plugin of REGISTRY_MENU_PLUGINS) {
-          if (activeNames.has(plugin.codeName)) {
+          if (activeIds.has(plugin.id)) {
             activeMenuItems.push({
               label: plugin.label,
               path: plugin.path,

@@ -34,11 +34,9 @@ export class SiteConfigService {
   async load(): Promise<SiteContext> {
     const settings = new SettingsService(this.db)
     const general = await settings.getGeneralSettings()
-    const raw = await settings.getCategorySettings('general')
 
-    /* v8 ignore next 2 -- fallback branches only reachable in unconfigured envs */
-    const siteUrlSetting = typeof raw.siteUrl === 'string' ? raw.siteUrl.trim() : ''
-    const siteUrl = siteUrlSetting || this.env.PUBLIC_URL || 'http://localhost:8787'
+    /* v8 ignore next -- fallback branch only reachable in unconfigured envs */
+    const siteUrl = this.env.PUBLIC_URL || 'http://localhost:8787'
 
     return {
       siteName: general.siteName,

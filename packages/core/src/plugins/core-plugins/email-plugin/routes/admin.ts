@@ -1,20 +1,19 @@
 /**
- * Admin routes for the v3 email-plugin — mounted at `/admin/email/*` (per Q1
- * Option A v3-init refactor). Two endpoints:
+ * Admin routes for the v3 email-plugin — mounted at `/admin/email/*`.
  *
- *   - `POST /admin/email/settings` — update the D1-stored plugin settings JSON
- *     (`fromEmail`, `fromName`, `replyTo`, `logoUrl`)
- *   - `POST /admin/email/test`     — send a test email confirming the CF
- *     Email Service binding is wired end-to-end
+ *   - `POST /admin/email/settings` — update D1-stored plugin settings JSON
+ *   - `POST /admin/email/test`     — send a test email end-to-end
  *
- * Both routes are admin-only. Auth is enforced by `requireAuth()` middleware
- * applied to the sub-app (same pattern as adminPluginRoutes). Settings are stored
- * as a JSON string in `plugins.settings` for plugin id `'email'`.
+ * Adapted from mmcintosh/sonicjs-infowall-merge:
+ * - Auth check uses `c.get('user')?.role` (our `Variables.user` shape)
+ * - `getEmailService()` path corrected to `services/email/email-service-singleton`
+ * - `send()` call uses our `EmailMessage` shape (flow not purpose)
+ * - `result.ok` instead of `result.status === 'submitted'`
  */
 import { Hono } from 'hono'
 import type { Bindings, Variables } from '../../../../app'
 import { requireAuth } from '../../../../middleware'
-import { getEmailService } from '../../../../services/email-service-singleton'
+import { getEmailService } from '../../../../services/email/email-service-singleton'
 import { renderTestEmail } from '../templates/test-email'
 import { EmailSettingsService } from '../services/settings.service'
 import { SiteConfigService } from '../services/site-config.service'
@@ -38,8 +37,7 @@ export const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }
 adminRoutes.use('*', requireAuth())
 
 adminRoutes.post('/settings', async (c) => {
-  const permissions = c.get('permissions')
-  if (!permissions?.hasRole('admin')) {
+  if (c.get('user')?.role !== 'admin') {
     return c.json({ error: 'admin role required' }, 403)
   }
 
@@ -66,49 +64,42 @@ adminRoutes.post('/settings', async (c) => {
 })
 
 adminRoutes.post('/test', async (c) => {
-  const user = c.var.user
-  const permissions = c.get('permissions')
-  if (!permissions?.hasRole('admin')) {
+  const user = c.get('user')
+  if (user?.role !== 'admin') {
     return c.json({ error: 'admin role required' }, 403)
   }
 
   const body = (await c.req.json().catch(() => null)) as TestBody | null
   const settings = new EmailSettingsService(c.env.DB)
-  const settingsLoaded = await settings.load()
   const to = body?.to?.trim() || user?.email
   if (!to) {
-    return c.json({ error: 'no recipient — pass `to` in body or attach a user with an email' }, 400)
+    return c.json({ error: 'no recipient — pass `to` in body or sign in with an email account' }, 400)
   }
 
-  const siteConfig = new SiteConfigService(c.env.DB, c.env)
+  const siteConfig = new SiteConfigService(c.env.DB, { PUBLIC_URL: (c.env as unknown as Record<string, string | undefined>).PUBLIC_URL })
   const { siteName } = await siteConfig.load()
 
   const { subject, html, text } = renderTestEmail({ siteName })
 
   try {
+    const settingsLoaded = await settings.load()
     const result = await getEmailService().send({
       to,
       subject,
       html,
       text,
-      from: settingsLoaded.fromEmail,
-      fromName: settingsLoaded.fromName,
-      replyTo: settingsLoaded.replyTo,
-      purpose: 'test',
-      userId: user?.userId,
-      templateName: 'admin.test',
+      from: settingsLoaded.fromEmail || undefined,
+      replyTo: settingsLoaded.replyTo || undefined,
+      flow: 'test',
     })
 
     return c.json({
-      success: result.status === 'submitted',
+      success: result.ok,
       result,
     })
   } catch (err) {
-    // Validation errors (missing from, etc.) — return 400 with detail.
     return c.json(
-      {
-        error: err instanceof Error ? err.message : String(err),
-      },
+      { error: err instanceof Error ? err.message : String(err) },
       400,
     )
   }

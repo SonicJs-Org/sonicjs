@@ -1,13 +1,12 @@
 /**
- * `auth:password-reset:completed` hook handler — sends the
- * password-changed confirmation email.
+ * `auth:password-reset:completed` hook handler — sends the password-changed
+ * confirmation email. Factory pattern: closes over `env` from boot context.
  *
- * The dispatcher fires AFTER the user's password has been updated; this
- * handler is informational ("your password just changed; if it wasn't you,
- * contact support").
+ * Adapted from mmcintosh/sonicjs-infowall-merge for our hook signature
+ * and our EmailMessage/SendResult shapes.
  */
-import type { SonicHookHandler } from '../../../sdk/types'
-import { getEmailService } from '../../../../services/email-service-singleton'
+import type { AuthPasswordResetCompletedPayload } from '../../../hooks/catalog'
+import { getEmailService } from '../../../../services/email/email-service-singleton'
 import { SiteConfigService } from '../services/site-config.service'
 import { renderPasswordChangedEmail } from '../templates/password-changed'
 
@@ -17,54 +16,44 @@ interface UserRow {
   first_name: string | null
 }
 
-export const onPasswordResetCompleted: SonicHookHandler<'auth:password-reset:completed'> = async (
-  ctx,
-  event,
-) => {
-  const user = await ctx.env.DB
-    .prepare('SELECT id, email, first_name FROM users WHERE id = ?')
-    .bind(event.userId)
-    .first<UserRow>()
+export function makeOnPasswordResetCompleted(env: Record<string, unknown>) {
+  const db = env.DB as D1Database
+  return async (payload: AuthPasswordResetCompletedPayload): Promise<void> => {
+    const user = await db
+      .prepare('SELECT id, email, first_name FROM users WHERE id = ?')
+      .bind(payload.user.id)
+      .first<UserRow>()
 
-  if (!user) {
-    console.warn('[email-plugin] auth:password-reset:completed: user not found', {
-      userId: event.userId,
-    })
-    return
-  }
+    if (!user) {
+      console.warn('[email-plugin] auth:password-reset:completed: user not found', {
+        userId: payload.user.id,
+      })
+      return
+    }
 
-  const siteConfig = new SiteConfigService(ctx.env.DB, ctx.env)
-  const { siteName, supportEmail } = await siteConfig.load()
+    const siteConfig = new SiteConfigService(db, env as { PUBLIC_URL?: string })
+    const { siteName, supportEmail } = await siteConfig.load()
 
-  const { subject, html, text } = renderPasswordChangedEmail({
-    user: { firstName: user.first_name ?? undefined, email: user.email },
-    siteName,
-    supportEmail,
-    when: event.timestamp,
-  })
-
-  const result = await getEmailService().send({
-    to: user.email,
-    subject,
-    html,
-    text,
-    purpose: 'password_changed',
-    userId: user.id,
-    templateName: 'auth.password-changed',
-    templateVariables: {
-      firstName: user.first_name,
+    const { subject, html, text } = renderPasswordChangedEmail({
+      user: { firstName: user.first_name ?? undefined, email: user.email },
       siteName,
-      when: event.timestamp,
-    },
-  })
-
-  if (result.status === 'failed_at_send') {
-    console.warn('[email-plugin] auth:password-reset:completed: send failed', {
-      event: event.type,
-      purpose: 'password_changed',
-      userId: event.userId,
-      errorCode: result.errorCode,
-      errorMessage: result.errorMessage,
+      supportEmail,
+      when: Date.now(),
     })
+
+    const result = await getEmailService().send({
+      to: user.email,
+      subject,
+      html,
+      text,
+      flow: 'password_changed',
+    })
+
+    if (!result.ok) {
+      console.warn('[email-plugin] auth:password-reset:completed: send failed', {
+        userId: payload.user.id,
+        error: result.error,
+      })
+    }
   }
 }

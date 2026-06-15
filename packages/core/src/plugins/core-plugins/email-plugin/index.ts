@@ -5,42 +5,48 @@
  * SonicPlugin shape. The plugin:
  *
  *   - Subscribes to three auth lifecycle events (`auth:registration:completed`,
- *     `auth:password-reset:requested`, `auth:password-reset:completed`) +
- *     the cron family `email-reconciliation` (via `cron:tick`).
- *   - Mounts admin routes at `/admin/email/*` (POST /settings + POST /test)
- *     via synchronous `register(app)` (Phase B.0 Option A constraint —
- *     register MUST run at construction time before Hono's matcher locks).
+ *     `auth:password-reset:requested`, `auth:password-reset:completed`) via
+ *     `onBoot`, which closes over `ctx.env` so handlers have D1 + env access.
+ *   - Mounts admin routes at `/admin/email/*` via synchronous `register(app)`.
  *   - Declares one cron schedule (every 5 minutes) for the reconciliation
- *     family.
+ *     family, handled via `onCronTick`.
  *
- * The host (`createSonicJSApp`) constructs `EmailServiceImpl` lazily on
- * first request and calls `setEmailService(...)`. This plugin's handlers
- * consume the service via `getEmailService()` from the singleton.
- *
- * Note: the legacy `emailPlugin` + `createEmailPlugin` exports are REMOVED
- * — `createSonicJSApp` no longer imports them; `routes/admin-plugins.ts`
- * reads the manifest.json directly via its standard plugin enumeration.
+ * Hook handlers are factory functions (`makeOn*`) that capture env at boot
+ * time — required because our TypedHookContext doesn't carry env, but
+ * DefinedPluginContext does.
  */
 import { definePlugin } from '../../sdk'
 import { adminRoutes } from './routes/admin'
-import { onRegistrationCompleted } from './hooks/on-registration-completed'
-import { onPasswordResetRequested } from './hooks/on-password-reset-requested'
-import { onPasswordResetCompleted } from './hooks/on-password-reset-completed'
+import { makeOnRegistrationCompleted } from './hooks/on-registration-completed'
+import { makeOnPasswordResetRequested } from './hooks/on-password-reset-requested'
+import { makeOnPasswordResetCompleted } from './hooks/on-password-reset-completed'
 import { onCronTick } from './hooks/on-cron-tick'
 
 export const emailPluginV3 = definePlugin({
   id: 'email',
   version: '1.0.0',
-  displayName: 'Email',
-  capabilities: ['email:send', 'hooks.cron:register', 'hooks.auth:register'] as const,
+  name: 'Email',
+  capabilities: ['email:send', 'cron:register', 'hooks.auth:subscribe'] as const,
   crons: [{ schedule: '*/5 * * * *', hookFamily: 'email-reconciliation' }],
   register: (app) => {
     app.route('/admin/email', adminRoutes)
   },
-  hooks: {
-    'auth:registration:completed': onRegistrationCompleted,
-    'auth:password-reset:requested': onPasswordResetRequested,
-    'auth:password-reset:completed': onPasswordResetCompleted,
-    'cron:tick': onCronTick,
+  onBoot(ctx) {
+    const env = (ctx.env ?? {}) as Record<string, unknown>
+    ctx.hooks.on('auth:registration:completed', makeOnRegistrationCompleted(env))
+    ctx.hooks.on('auth:password-reset:requested', makeOnPasswordResetRequested(env))
+    ctx.hooks.on('auth:password-reset:completed', makeOnPasswordResetCompleted(env))
   },
+  onCronTick,
 })
+
+// Re-export template helpers for use by other plugins (e.g. OTP, magic-link)
+export { renderWelcomeEmail } from './templates/welcome'
+export { renderPasswordResetEmail } from './templates/password-reset'
+export { renderPasswordChangedEmail } from './templates/password-changed'
+export { renderOtpEmail } from './templates/otp'
+export { renderVerificationEmail } from './templates/verification'
+export { renderInvitationEmail } from './templates/invitation'
+export { renderTestEmail } from './templates/test-email'
+export { renderEmailLayout, renderPrimaryButton, renderTextLink, renderCodeBlock } from './templates/_layout'
+export type { RenderedEmail } from './templates/welcome'

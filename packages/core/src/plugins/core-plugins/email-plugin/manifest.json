@@ -12,7 +12,8 @@
     "email",
     "cloudflare-email",
     "transactional",
-    "notifications"
+    "notifications",
+    "templates"
   ],
   "dependencies": [],
   "capabilities": [

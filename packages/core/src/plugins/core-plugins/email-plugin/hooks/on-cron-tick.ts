@@ -21,13 +21,13 @@
  * errors) are surfaced in the `RunOutcome` returned by
  * `ReconciliationService.run` — this handler logs them but doesn't throw.
  */
-import type { SonicHookHandler } from '../../../sdk/types'
+import type { CronTickEvent } from '../../../cron'
 import { CfGraphqlClient } from '../services/cf-graphql-client'
 import { EmailLogService } from '../services/email-log.service'
 import { EmailSettingsService } from '../services/settings.service'
 import { ReconciliationService } from '../services/reconciliation'
 
-export const onCronTick: SonicHookHandler<'cron:tick'> = async (ctx, event) => {
+export const onCronTick = async (event: CronTickEvent, ctx: { env?: Record<string, unknown> }): Promise<void> => {
   if (event.hookFamily !== 'email-reconciliation') {
     return
   }
@@ -39,12 +39,13 @@ export const onCronTick: SonicHookHandler<'cron:tick'> = async (ctx, event) => {
   // a `cfZoneId` field to EmailSettings as a follow-up if per-tenant zone
   // overrides become needed (today CF_ZONE_ID is provisioned per env at
   // deploy time, which is the normal case).
-  let zoneId = ctx.env.CF_ZONE_ID
-  let apiToken = ctx.env.EMAIL_API_TOKEN
+  const env = ctx.env ?? {}
+  let zoneId = env.CF_ZONE_ID as string | undefined
+  let apiToken = env.EMAIL_API_TOKEN as string | undefined
 
   if (!apiToken) {
     try {
-      const s = await new EmailSettingsService(ctx.env.DB as D1Database).load()
+      const s = await new EmailSettingsService(env.DB as D1Database).load()
       if (!apiToken && s.cfEmailApiToken) {
         apiToken = s.cfEmailApiToken
         console.debug('[email-plugin] reconciliation cron: EMAIL_API_TOKEN read from D1 settings')
@@ -66,7 +67,7 @@ export const onCronTick: SonicHookHandler<'cron:tick'> = async (ctx, event) => {
 
   try {
     const graphql = new CfGraphqlClient(zoneId, apiToken)
-    const emailLog = new EmailLogService(ctx.env.DB)
+    const emailLog = new EmailLogService(env.DB as D1Database)
     const reconciliation = new ReconciliationService(graphql, emailLog)
 
     const outcome = await reconciliation.run({ windowHours: 24 })

@@ -36,6 +36,7 @@ export type FieldType =
   | 'tinymce'
   | 'quill'
   | 'easymde'
+  | 'user'
 
 export interface BlockDefinition {
   label?: string

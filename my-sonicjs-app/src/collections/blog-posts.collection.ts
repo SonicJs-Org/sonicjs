@@ -44,7 +44,7 @@ export default {
         title: "Featured Image",
       },
       author: {
-        type: "string",
+        type: "user",
         title: "Author",
         required: true,
       },

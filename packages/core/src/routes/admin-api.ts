@@ -470,4 +470,82 @@ adminApiRoutes.get('/migrations/validate', async (c) => {
   }
 })
 
+adminApiRoutes.get('/users/search', async (c) => {
+  try {
+    const db = c.env.DB
+    const q = (c.req.query('q') || '').trim()
+    if (!q) {
+      return c.json({ users: [] })
+    }
+    const like = `%${q}%`
+    const stmt = db.prepare(
+      `SELECT id, first_name, last_name, email FROM auth_user
+       WHERE is_active = 1
+         AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)
+       ORDER BY first_name, last_name
+       LIMIT 10`
+    )
+    const { results } = await stmt.bind(like, like, like).all()
+    const users = (results as any[]).map((u) => ({
+      id: u.id,
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
+      email: u.email,
+    }))
+    return c.json({ users })
+  } catch (error) {
+    console.error('Error searching users:', error)
+    return c.json({ users: [] }, 500)
+  }
+})
+
+adminApiRoutes.get('/users/search-html', async (c) => {
+  try {
+    const db = c.env.DB
+    const q = (c.req.query('q') || '').trim()
+    const fieldId = (c.req.query('fieldId') || '').replace(/[^a-zA-Z0-9_-]/g, '')
+    if (!q || !fieldId) {
+      return c.html('')
+    }
+    const like = `%${q}%`
+    const stmt = db.prepare(
+      `SELECT id, first_name, last_name, email FROM auth_user
+       WHERE is_active = 1
+         AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)
+       ORDER BY first_name, last_name
+       LIMIT 10`
+    )
+    const { results } = await stmt.bind(like, like, like).all()
+    if (!results.length) return c.html('')
+    const items = (results as any[]).map((u) => {
+      const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
+      const safeName = name.replace(/'/g, "\\'")
+      const safeEmail = (u.email as string).replace(/'/g, "\\'")
+      return `<button type="button"
+        class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-700 border-b border-white/10 last:border-0 flex justify-between items-center"
+        onclick="sonicSelectUser('${fieldId}','${u.id}','${safeName}')"
+      ><span class="font-medium text-white">${name}</span><span class="text-xs text-zinc-400 ml-2">${u.email}</span></button>`
+    }).join('')
+    return c.html(items)
+  } catch (error) {
+    console.error('Error searching users (html):', error)
+    return c.html('')
+  }
+})
+
+adminApiRoutes.get('/users/:id', async (c) => {
+  try {
+    const db = c.env.DB
+    const id = c.req.param('id')
+    const result = await db.prepare(
+      `SELECT id, first_name, last_name, email FROM auth_user WHERE id = ? AND is_active = 1 LIMIT 1`
+    ).bind(id).first()
+    if (!result) return c.json({ error: 'Not found' }, 404)
+    const u = result as any
+    const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
+    return c.json({ id: u.id, name, email: u.email })
+  } catch (error) {
+    return c.json({ error: 'Failed' }, 500)
+  }
+})
+
 export default adminApiRoutes

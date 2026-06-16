@@ -44,6 +44,11 @@ export interface PluginSettingsPageData {
     permissions?: string[]
     isCore?: boolean
     settings?: PluginSettings
+    /** Live user-profile config (user-profiles plugin only) — null when defineUserProfile() not called. */
+    profileConfig?: {
+      fields: Array<{ name: string; label: string; type: string; required: boolean }>
+      registrationFields: string[]
+    } | null
   }
   activity?: PluginActivity[]
   user?: {
@@ -551,6 +556,11 @@ function renderTurnstileSettingsForm(settings: any): string {
 }
 
 function renderNoSettings(plugin: any): string {
+  // User Profiles plugin — profile fields are a code-defined data model, not UI settings.
+  if (plugin.id === 'user-profiles' || plugin.name === 'user-profiles') {
+    return renderUserProfilesSettingsContent(plugin)
+  }
+
   // Special handling for seed-data plugin
   if (plugin.id === 'seed-data' || plugin.name === 'seed-data') {
     return `
@@ -1348,6 +1358,112 @@ function renderEmailSettingsContent(_plugin: any, settings: PluginSettings): str
         });
       })();
     </script>
+  `
+}
+
+/**
+ * User Profiles plugin settings content.
+ *
+ * Profile fields are a CODE-DEFINED data model (declared via defineUserProfile()
+ * in the app entry point) — not editable through the admin UI. This page explains
+ * where to define them and shows the current configured state.
+ */
+function renderUserProfilesSettingsContent(plugin: any): string {
+  const config = plugin.profileConfig as PluginSettingsPageData['plugin']['profileConfig']
+  const fields = config?.fields ?? []
+  const registrationFields = config?.registrationFields ?? []
+  const isConfigured = fields.length > 0
+
+  const codeExample = `import { defineUserProfile } from '@sonicjs-cms/core'
+
+defineUserProfile({
+  fields: [
+    { name: 'bio', label: 'Bio', type: 'textarea' },
+    { name: 'company', label: 'Company', type: 'text' },
+    { name: 'jobTitle', label: 'Job Title', type: 'text' },
+  ],
+  // Field names shown on the "Create User" form (optional):
+  registrationFields: ['company'],
+})`
+
+  const statusBanner = isConfigured
+    ? `
+      <div class="bg-green-500/20 border border-green-500/30 rounded-lg p-4">
+        <p class="text-green-200 text-sm">
+          <strong>✅ Profile fields configured.</strong>
+          ${fields.length} field${fields.length !== 1 ? 's' : ''} defined — the
+          <span class="font-medium">Profile Information</span> section now appears on the user create/edit pages.
+        </p>
+      </div>`
+    : `
+      <div class="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4">
+        <p class="text-yellow-200 text-sm">
+          <strong>⚠️ No profile fields defined yet.</strong>
+          The <span class="font-medium">Profile Information</span> section stays hidden on the user
+          create/edit pages until you declare fields in code with <code>defineUserProfile()</code>.
+        </p>
+      </div>`
+
+  const fieldsTable = isConfigured
+    ? `
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Configured Fields</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="text-gray-400 border-b border-white/10">
+                <th class="py-2 pr-4 font-medium">Name</th>
+                <th class="py-2 pr-4 font-medium">Label</th>
+                <th class="py-2 pr-4 font-medium">Type</th>
+                <th class="py-2 pr-4 font-medium">Required</th>
+                <th class="py-2 font-medium">On signup</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${fields.map(f => `
+                <tr class="border-b border-white/5 text-gray-200">
+                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtmlAttr(f.name)}</td>
+                  <td class="py-2 pr-4">${escapeHtmlAttr(f.label)}</td>
+                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtmlAttr(f.type)}</td>
+                  <td class="py-2 pr-4">${f.required ? 'Yes' : 'No'}</td>
+                  <td class="py-2">${registrationFields.includes(f.name) ? 'Yes' : 'No'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`
+    : ''
+
+  return `
+    <div class="space-y-6">
+      ${statusBanner}
+
+      <!-- Where to edit -->
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+          <span>🧩</span> Define profile fields in code
+        </h3>
+        <p class="text-gray-300 text-sm mb-4">
+          User profile fields are part of your application's data model, so they live in code — not in this admin UI.
+          Add or change fields by calling <code class="text-blue-300">defineUserProfile()</code> in your app entry point,
+          then redeploy.
+        </p>
+        <div class="bg-black/40 border border-white/10 rounded-lg p-3 mb-4">
+          <p class="text-xs text-gray-400 mb-1">Edit this file:</p>
+          <code class="text-sm text-blue-300 font-mono">my-sonicjs-app/src/index.ts</code>
+        </div>
+        <p class="text-xs text-gray-400 mb-2">Example — add this near your <code>registerCollections([...])</code> call:</p>
+        <pre class="bg-black/60 border border-white/10 rounded-lg p-4 overflow-x-auto"><code class="text-sm text-gray-200 font-mono whitespace-pre">${escapeHtmlAttr(codeExample)}</code></pre>
+        <p class="text-xs text-gray-400 mt-4">
+          Supported field types: <code>text</code>, <code>textarea</code>, <code>number</code>, <code>boolean</code>,
+          <code>select</code>, <code>date</code>. Use <code>options</code> for <code>select</code> and
+          <code>required</code> / <code>validation</code> to enforce input rules.
+        </p>
+      </div>
+
+      ${fieldsTable}
+    </div>
   `
 }
 

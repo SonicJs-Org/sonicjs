@@ -110,6 +110,25 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     queryableFields: [],
   })
 
+  // Plugin activity log (document-backed; replaces legacy plugin_activity_log table which was never migrated)
+  await registry.register({
+    id: 'plugin_activity',
+    name: 'plugin_activity',
+    displayName: 'Plugin Activity',
+    description: 'Plugin lifecycle event log (installed/activated/deactivated/settings_updated/error)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+    queryableFields: [
+      { name: 'pluginId', kind: 'scalar', type: 'text', column: 'q_plugin_activity_plugin_id' },
+      { name: 'action',   kind: 'scalar', type: 'text', column: 'q_plugin_activity_action' },
+    ],
+  })
+
   // ── RBAC (auth-owned). 3 document types replace 4 relational tables: ──────────
   //   rbac_role        slug = roleId,  data.grants[] embedded (replaces role_grants)
   //   rbac_verb        slug = verbId

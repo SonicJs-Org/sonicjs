@@ -600,7 +600,7 @@ function renderActivityTab(activity: PluginActivity[]): string {
                   <span class="text-sm font-medium text-white">${item.action}</span>
                   <span class="text-xs text-gray-400">${formatTimestamp(item.timestamp)}</span>
                 </div>
-                <p class="text-sm text-gray-300 mt-1">${item.message}</p>
+                ${item.message ? `<p class="text-sm text-gray-300 mt-1">${item.message}</p>` : ''}
                 ${item.user ? `<p class="text-xs text-gray-400 mt-1">by ${item.user}</p>` : ''}
               </div>
             </div>

@@ -216,9 +216,9 @@ adminPluginRoutes.get('/:id', async (c) => {
     const templateActivity = (activity || []).map(item => ({
       id: item.id,
       action: item.action,
-      message: item.message,
+      message: item.details ? JSON.stringify(item.details) : '',
       timestamp: item.timestamp,
-      user: item.user_email
+      user: item.userId || null
     }))
 
     const pageData: PluginSettingsPageData = {

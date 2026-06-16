@@ -245,18 +245,25 @@ export class PluginService {
   async getPluginActivity(pluginId: string, limit: number = 10): Promise<any[]> {
     try {
       const { results } = await this.db.prepare(`
-        SELECT * FROM plugin_activity_log
-        WHERE plugin_id = ?
-        ORDER BY timestamp DESC
+        SELECT id, data, created_at FROM documents
+        WHERE type_id = 'plugin_activity'
+          AND tenant_id = ?
+          AND is_current_draft = 1
+          AND deleted_at IS NULL
+          AND json_extract(data, '$.pluginId') = ?
+        ORDER BY created_at DESC
         LIMIT ?
-      `).bind(pluginId, limit).all()
-      return (results || []).map((row: any) => ({
-        id: row.id,
-        action: row.action,
-        userId: row.user_id,
-        details: row.details ? JSON.parse(row.details) : null,
-        timestamp: row.timestamp,
-      }))
+      `).bind(TENANT, pluginId, limit).all()
+      return (results || []).map((row: any) => {
+        const d = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {})
+        return {
+          id: row.id,
+          action: d.action,
+          userId: d.userId || null,
+          details: d.details || null,
+          timestamp: row.created_at,
+        }
+      })
     } catch {
       return []
     }
@@ -315,12 +322,22 @@ export class PluginService {
   }
 
   private async logActivity(pluginId: string, action: string, userId: string | null, details?: any): Promise<void> {
-    const id = `activity-${Date.now()}`
     try {
+      const docId = crypto.randomUUID()
+      const now = Math.floor(Date.now() / 1000)
+      // R5: 17 columns, 7 ? binds (docId×2, slug, title, data, now×2), 10 literals — verified
+      const data = JSON.stringify({ pluginId, action, userId, details: details || null })
       await this.db.prepare(`
-        INSERT INTO plugin_activity_log (id, plugin_id, action, user_id, details)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(id, pluginId, action, userId, details ? JSON.stringify(details) : null).run()
+        INSERT INTO documents (
+          id, root_id, type_id, version_number, is_current_draft, is_published, status,
+          parent_root_id, slug, title, tenant_id, locale, translation_group_id,
+          data, metadata, created_at, updated_at
+        ) VALUES (
+          ?, ?, 'plugin_activity', 1, 1, 1, 'published',
+          '', ?, ?, 'default', 'default', '',
+          ?, '{}', ?, ?
+        )
+      `).bind(docId, docId, docId, action, data, now, now).run()
     } catch {
       // Activity logging is best-effort; don't fail the main operation
     }

@@ -32,7 +32,6 @@ import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
-import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPluginV3 as emailPlugin } from './plugins/core-plugins/email-plugin'
 import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
@@ -572,7 +571,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/admin/settings', adminSettingsRoutes)
   app.route('/admin/api-reference', adminApiReferenceRoutes)
   app.route('/admin/database-tools', createDatabaseToolsAdminRoutes())
-  app.route('/admin/seed-data', createSeedDataAdminRoutes())
   app.route('/admin/content', adminContentRoutes)
   app.route('/admin/media', adminMediaRoutes)
   // Security audit middleware - logs auth events (login, register, logout)

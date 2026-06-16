@@ -13,7 +13,6 @@ export { analyticsPlugin, createAnalyticsPlugin } from './analytics'
 export { testimonialsPlugin, createTestimonialPlugin } from './testimonials'
 export { demoLoginPlugin } from './demo-login'
 export { workflowPlugin, createWorkflowPlugin } from './workflow-plugin'
-export { seedDataPlugin, createSeedDataPlugin } from './seed-data-plugin'
 export { databaseToolsPlugin } from './database-tools-plugin'
 export { helloWorldPlugin, createHelloWorldPlugin } from './hello-world-plugin'
 export { quillEditorPlugin, createQuillEditorPlugin } from './quill-editor'
@@ -53,7 +52,6 @@ export const CORE_PLUGIN_IDS = [
   'testimonials-plugin',
   'demo-login-plugin',
   'workflow-plugin',
-  'seed-data',
   'database-tools',
   'hello-world',
   'quill-editor',

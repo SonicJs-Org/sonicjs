@@ -208,10 +208,10 @@ await cache.invalidateTag(`category:${categoryId}`)
 Invalidate on specific events:
 
 ```typescript
-// TODO: verify hook event name 'content:afterSave' for v3
+// TODO: verify hook event name 'content:save' for v3
 definePlugin({
   onBoot(ctx) {
-    ctx.hooks.on('content:afterSave', async (content) => {
+    ctx.hooks.on('content:save', async (content) => {
       await cache.invalidate(`posts:${content.id}`)
       await cache.invalidate('posts:list')
     })

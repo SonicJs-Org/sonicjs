@@ -189,7 +189,7 @@ import { definePlugin } from '@sonicjs-cms/core'
 const personalizationPlugin = definePlugin({
   name: 'personalization',
   hooks: {
-    'content:beforeReturn': async (post, ctx) => {
+    'content:read': async (post, ctx) => {
       const country = ctx.request.cf?.country
       if (country === 'DE' && post.translations?.de) {
         return { ...post, content: post.translations.de }
@@ -273,7 +273,7 @@ import { definePlugin } from '@sonicjs-cms/core'
 const newsletterPlugin = definePlugin({
   name: 'newsletter',
   hooks: {
-    'content:afterPublish': async (post, ctx) => {
+    'content:publish': async (post, ctx) => {
       if (post.collection !== 'posts') return
       if (post.visibility === 'paid') return // gate as needed
 

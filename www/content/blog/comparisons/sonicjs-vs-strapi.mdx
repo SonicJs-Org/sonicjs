@@ -241,7 +241,7 @@ import { definePlugin } from '@sonicjs-cms/core'
 const myPlugin = definePlugin({
   name: 'my-plugin',
   register(app) { app.get('/custom', handler) },
-  hooks: { 'content:beforeSave': transform },
+  hooks: { 'content:save': transform },
 })
 ```
 

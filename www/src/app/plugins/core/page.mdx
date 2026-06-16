@@ -91,17 +91,14 @@ The authentication plugin provides comprehensive user authentication and session
 <CodeGroup title="Plugin Configuration">
 
 ```typescript
-{
-  name: 'core-auth',
-  version: '1.0.0-beta.1',
-  settings: {
-    tokenExpiration: 3600,      // Token TTL in seconds (1 hour)
-    refreshExpiration: 604800,   // Refresh token TTL (7 days)
-    sessionTracking: true,       // Enable session tracking
-    rateLimitWindow: 900,        // Rate limit window (15 minutes)
-    rateLimitMaxAttempts: 5      // Max login attempts per window
-  }
-}
+// Auth is configured via env vars, not plugin settings:
+// JWT_SECRET        — signing secret for API tokens
+// JWT_EXPIRES_IN    — token TTL (default: '1h')
+// ADMIN_EMAIL       — bootstrap admin email
+// ADMIN_PASSWORD    — bootstrap admin password
+//
+// Better Auth session uses its own cookie (better-auth.session_token).
+// RBAC roles are seeded by RbacService into rbac_role/rbac_verb/rbac_user_roles.
 ```
 
 </CodeGroup>
@@ -132,7 +129,9 @@ const response = await fetch('http://localhost:8787/api/auth/login', {
   })
 })
 
-const { token, refreshToken, user } = await response.json()
+const { token, user } = await response.json()
+// token = JWT for Bearer auth; no separate refreshToken field
+// use POST /auth/refresh with the token to extend within grace window
 ```
 
 </CodeGroup>

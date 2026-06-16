@@ -36,7 +36,14 @@ The main configuration object passed when creating your SonicJS application.
 interface SonicJSConfig {
   // Collections configuration
   collections?: {
-    autoSync?: boolean     // Auto-sync collection schemas on startup
+    directory?: string     // Path to scan for collection config files
+    autoSync?: boolean     // Auto-register collections on startup
+  }
+
+  // Plugins configuration
+  plugins?: {
+    register?: Plugin[]    // Plugins to register (definePlugin() instances)
+    disableAll?: boolean   // Disable all plugins including core plugins
   }
 
   // Custom routes
@@ -50,6 +57,9 @@ interface SonicJSConfig {
     beforeAuth?: Middleware[]   // Run before authentication
     afterAuth?: Middleware[]    // Run after authentication
   }
+
+  // Admin access control
+  adminAccessRoles?: string[]  // Roles allowed to access /admin (default: ['admin'])
 
   // App metadata
   version?: string         // Application version

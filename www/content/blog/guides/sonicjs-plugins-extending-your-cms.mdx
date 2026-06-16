@@ -95,7 +95,7 @@ const myPlugin = definePlugin({
 
   // Boot-time: hooks, document-type registration, etc.
   onBoot(ctx) {
-    ctx.hooks.on('content:beforeSave', async (data) => {
+    ctx.hooks.on('content:save', async (data) => {
       // transform or validate
       return data
     })

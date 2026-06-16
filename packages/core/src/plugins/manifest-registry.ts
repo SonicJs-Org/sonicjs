@@ -697,24 +697,6 @@ export const PLUGIN_REGISTRY: Record<string, PluginRegistryEntry> = {
     }
   },
 
-  'testimonials-plugin': {
-    "id": "testimonials-plugin",
-    "codeName": "testimonials-plugin",
-    "displayName": "Testimonials",
-    "description": "Customer testimonials and reviews management with display widgets and ratings",
-    "version": "1.0.0-beta.1",
-    "author": "SonicJS Team",
-    "category": "content",
-    "iconEmoji": "💬",
-    "is_core": false,
-    "permissions": [
-      "testimonials:manage"
-    ],
-    "dependencies": [],
-    "defaultSettings": {},
-    "adminMenu": null
-  },
-
   'tinymce-plugin': {
     "id": "tinymce-plugin",
     "codeName": "tinymce-plugin",

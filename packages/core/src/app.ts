@@ -24,7 +24,6 @@ import {
   adminApiReferenceRoutes,
   apiDocumentsRoutes,
   adminDocumentsRoutes,
-  adminTestimonialsRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
@@ -42,7 +41,6 @@ import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
-import { testimonialsPlugin } from './plugins/core-plugins/testimonials'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole, requireRbac } from './middleware/auth'
 import { createAuth } from './auth/config'
@@ -554,15 +552,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
-  // Testimonials admin (document-backed). The plugin adds the sidebar item to /admin/testimonials,
-  // but the HTML router itself must be mounted here like the other core admin routers — it was missing,
-  // so the Testimonials page and "add testimonial" form (hx-post /admin/testimonials) 404'd.
-  app.route('/admin/testimonials', adminTestimonialsRoutes)
-  // Testimonials PUBLIC API (/api/testimonials). After the definePlugin port,
-  // the plugin uses register(app) instead of routes[]; call registerPluginRoutes
-  // so the API routes are actually mounted.
-  registerPluginRoutes(app, [testimonialsPlugin as any], { source: 'core' })
-
   // Forms (admin builder, public rendering, API submission). Same as above —
   // routes[] was replaced with register(app) in the definePlugin port.
   registerPluginRoutes(app, [formsPlugin as any], { source: 'core' })
@@ -636,7 +625,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   if (!config.plugins?.disableAll) {
     const allMountedPlugins: any[] = [
       ...corePluginsBeforeCatchAll,
-      testimonialsPlugin,
       formsPlugin,
       ...corePluginsAfterCatchAll,
       ...(config.plugins?.register ?? []),

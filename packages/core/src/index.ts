@@ -180,7 +180,6 @@ export {
   adminLogsRoutes,
   adminPluginRoutes,
   adminCheckboxRoutes,
-  adminTestimonialsRoutes,
   adminDashboardRoutes,
   adminCollectionsRoutes,
   adminSettingsRoutes,

@@ -10,7 +10,6 @@
 export { authPlugin, createAuthPlugin } from './auth'
 export { mediaPlugin, createMediaPlugin } from './media'
 export { analyticsPlugin, createAnalyticsPlugin } from './analytics'
-export { testimonialsPlugin, createTestimonialPlugin } from './testimonials'
 export { demoLoginPlugin } from './demo-login'
 export { workflowPlugin, createWorkflowPlugin } from './workflow-plugin'
 export { seedDataPlugin, createSeedDataPlugin } from './seed-data-plugin'
@@ -50,7 +49,6 @@ export const CORE_PLUGIN_IDS = [
   'core-auth',
   'core-media',
   'core-analytics',
-  'testimonials-plugin',
   'demo-login-plugin',
   'workflow-plugin',
   'seed-data',

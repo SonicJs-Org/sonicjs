@@ -28,13 +28,29 @@
     }
   ],
   "configSchema": {
+    "provider": {
+      "type": "select",
+      "label": "Email Provider",
+      "required": true,
+      "options": ["resend", "cloudflare"],
+      "description": "Select your email transport. Env var RESEND_API_KEY forces Resend; EMAIL CF binding enables Cloudflare Email Service."
+    },
+    "resendApiKey": {
+      "type": "string",
+      "label": "Resend API Key",
+      "sensitive": true,
+      "required": false,
+      "placeholder": "re_...",
+      "description": "Required when provider is Resend. Overridden by RESEND_API_KEY env var.",
+      "dependsOn": { "field": "provider", "value": "resend" }
+    },
     "fromEmail": {
       "type": "string",
       "label": "From Email",
       "format": "email",
       "required": true,
       "placeholder": "noreply@yourdomain.com",
-      "description": "Must be a verified sender address in your Cloudflare account"
+      "description": "Sender address. Must be verified with your provider."
     },
     "fromName": {
       "type": "string",
@@ -62,7 +78,8 @@
       "label": "CF Account ID",
       "required": false,
       "placeholder": "f61c658f...",
-      "description": "Reconciliation credential (delivery-sync cron). Found in the Cloudflare dashboard right sidebar"
+      "description": "Reconciliation cron credential. Overridden by CF_ACCOUNT_ID env var.",
+      "dependsOn": { "field": "provider", "value": "cloudflare" }
     },
     "cfEmailApiToken": {
       "type": "string",
@@ -70,7 +87,8 @@
       "sensitive": true,
       "required": false,
       "placeholder": "••••••••",
-      "description": "Reconciliation credential. API token with Email Routing read permission"
+      "description": "API token with Email Routing read permission. Overridden by EMAIL_API_TOKEN env var.",
+      "dependsOn": { "field": "provider", "value": "cloudflare" }
     }
   },
   "permissions": {
@@ -81,12 +99,14 @@
   "adminMenu": {
     "label": "Email",
     "icon": "envelope",
-    "path": "/admin/plugins/email/settings",
+    "path": "/admin/plugins/email",
     "order": 80
   },
   "iconEmoji": "📧",
   "is_core": true,
   "defaultSettings": {
+    "provider": "cloudflare",
+    "resendApiKey": "",
     "fromEmail": "",
     "fromName": "",
     "replyTo": "",

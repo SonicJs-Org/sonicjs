@@ -1166,102 +1166,107 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
 /**
  * Email plugin settings content
  */
-function renderEmailSettingsContent(plugin: any, settings: PluginSettings): string {
-  const apiKey = settings.apiKey || ''
+function renderEmailSettingsContent(_plugin: any, settings: PluginSettings): string {
+  const provider = (settings.provider as string) || 'cloudflare'
+  const resendApiKey = settings.resendApiKey || ''
   const fromEmail = settings.fromEmail || ''
   const fromName = settings.fromName || ''
   const replyTo = settings.replyTo || ''
   const logoUrl = settings.logoUrl || ''
+  const cfAccountId = settings.cfAccountId || ''
+  const cfEmailApiToken = settings.cfEmailApiToken || ''
+
+  const inputClass = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white'
+  const selectClass = 'w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 focus:border-blue-500 focus:outline-none text-white [&>option]:bg-zinc-800'
+  const hintClass = 'text-xs text-gray-500 mt-1'
+  const envNote = (varName: string) =>
+    `<p class="${hintClass} text-amber-400/80">⚡ <code>${varName}</code> env var overrides this field when set.</p>`
 
   return `
     <div class="space-y-6">
-      <!-- Resend Configuration -->
+      <!-- Provider + Settings Form -->
       <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
-        <h3 class="text-lg font-semibold text-white mb-4">Resend Configuration</h3>
+        <h3 class="text-lg font-semibold text-white mb-4">Email Configuration</h3>
 
-        <form id="settings-form" class="space-y-4">
-          <!-- API Key -->
+        <form id="settings-form" class="space-y-5">
+
+          <!-- Provider selector -->
           <div>
-            <label for="setting_apiKey" class="block text-sm font-medium text-gray-300 mb-2">
-              Resend API Key <span class="text-red-500">*</span>
+            <label for="setting_provider" class="block text-sm font-medium text-gray-300 mb-2">
+              Email Provider <span class="text-red-500">*</span>
             </label>
-            <input
-              type="password"
-              id="setting_apiKey"
-              name="setting_apiKey"
-              value="${escapeHtmlAttr(apiKey)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="re_..."
-              required
-            />
-            <p class="text-xs text-gray-500 mt-1">
-              Get your API key from <a href="https://resend.com/api-keys" target="_blank" class="text-blue-400 hover:underline">resend.com/api-keys</a>
-            </p>
+            <select id="setting_provider" name="setting_provider" class="${selectClass}">
+              <option value="cloudflare" ${provider === 'cloudflare' ? 'selected' : ''}>Cloudflare Email Service</option>
+              <option value="resend" ${provider === 'resend' ? 'selected' : ''}>Resend</option>
+            </select>
+            ${envNote('RESEND_API_KEY')}
           </div>
 
-          <!-- From Email -->
+          <!-- Resend fields (visible when provider=resend) -->
+          <div id="resend-fields" class="space-y-4" style="${provider !== 'resend' ? 'display:none' : ''}">
+            <div>
+              <label for="setting_resendApiKey" class="block text-sm font-medium text-gray-300 mb-2">
+                Resend API Key <span class="text-red-500">*</span>
+              </label>
+              <input type="password" id="setting_resendApiKey" name="setting_resendApiKey"
+                value="${escapeHtmlAttr(resendApiKey)}" placeholder="re_..." class="${inputClass}" />
+              ${envNote('RESEND_API_KEY')}
+              <p class="${hintClass}">Get your key at resend.com/api-keys</p>
+            </div>
+          </div>
+
+          <!-- CF Email fields (visible when provider=cloudflare) -->
+          <div id="cf-fields" class="space-y-4" style="${provider !== 'cloudflare' ? 'display:none' : ''}">
+            <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-200">
+              Requires a <code>send_email</code> binding named <code>EMAIL</code> in your <code>wrangler.toml</code>.
+              No API key needed — auth is via the binding.
+            </div>
+            <div>
+              <label for="setting_cfAccountId" class="block text-sm font-medium text-gray-300 mb-2">CF Account ID</label>
+              <input type="text" id="setting_cfAccountId" name="setting_cfAccountId"
+                value="${escapeHtmlAttr(cfAccountId)}" placeholder="f61c658f..." class="${inputClass}" />
+              ${envNote('CF_ACCOUNT_ID')}
+              <p class="${hintClass}">Used by the delivery-sync cron. Found in Cloudflare dashboard sidebar.</p>
+            </div>
+            <div>
+              <label for="setting_cfEmailApiToken" class="block text-sm font-medium text-gray-300 mb-2">CF Email API Token</label>
+              <input type="password" id="setting_cfEmailApiToken" name="setting_cfEmailApiToken"
+                value="${escapeHtmlAttr(cfEmailApiToken)}" placeholder="••••••••" class="${inputClass}" />
+              ${envNote('EMAIL_API_TOKEN')}
+              <p class="${hintClass}">API token with Email Routing read permission.</p>
+            </div>
+          </div>
+
+          <!-- Common fields -->
           <div>
             <label for="setting_fromEmail" class="block text-sm font-medium text-gray-300 mb-2">
               From Email <span class="text-red-500">*</span>
             </label>
-            <input
-              type="email"
-              id="setting_fromEmail"
-              name="setting_fromEmail"
-              value="${escapeHtmlAttr(fromEmail)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="noreply@yourdomain.com"
-              required
-            />
-            <p class="text-xs text-gray-500 mt-1">Must be a verified domain in Resend</p>
+            <input type="email" id="setting_fromEmail" name="setting_fromEmail"
+              value="${escapeHtmlAttr(fromEmail)}" placeholder="noreply@yourdomain.com" class="${inputClass}" required />
           </div>
 
-          <!-- From Name -->
           <div>
             <label for="setting_fromName" class="block text-sm font-medium text-gray-300 mb-2">
               From Name <span class="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              id="setting_fromName"
-              name="setting_fromName"
-              value="${escapeHtmlAttr(fromName)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="Your App Name"
-              required
-            />
+            <input type="text" id="setting_fromName" name="setting_fromName"
+              value="${escapeHtmlAttr(fromName)}" placeholder="Your App Name" class="${inputClass}" required />
           </div>
 
-          <!-- Reply To -->
           <div>
-            <label for="setting_replyTo" class="block text-sm font-medium text-gray-300 mb-2">
-              Reply-To Email
-            </label>
-            <input
-              type="email"
-              id="setting_replyTo"
-              name="setting_replyTo"
-              value="${escapeHtmlAttr(replyTo)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="support@yourdomain.com"
-            />
+            <label for="setting_replyTo" class="block text-sm font-medium text-gray-300 mb-2">Reply-To Email</label>
+            <input type="email" id="setting_replyTo" name="setting_replyTo"
+              value="${escapeHtmlAttr(replyTo)}" placeholder="support@yourdomain.com" class="${inputClass}" />
           </div>
 
-          <!-- Logo URL -->
           <div>
-            <label for="setting_logoUrl" class="block text-sm font-medium text-gray-300 mb-2">
-              Logo URL
-            </label>
-            <input
-              type="url"
-              id="setting_logoUrl"
-              name="setting_logoUrl"
-              value="${escapeHtmlAttr(logoUrl)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="https://yourdomain.com/logo.png"
-            />
-            <p class="text-xs text-gray-500 mt-1">Logo to display in email templates</p>
+            <label for="setting_logoUrl" class="block text-sm font-medium text-gray-300 mb-2">Logo URL</label>
+            <input type="url" id="setting_logoUrl" name="setting_logoUrl"
+              value="${escapeHtmlAttr(logoUrl)}" placeholder="https://yourdomain.com/logo.png" class="${inputClass}" />
+            <p class="${hintClass}">Logo shown in email templates.</p>
           </div>
+
         </form>
       </div>
 
@@ -1269,72 +1274,79 @@ function renderEmailSettingsContent(plugin: any, settings: PluginSettings): stri
       <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
         <h3 class="text-lg font-semibold text-white mb-4">Send Test Email</h3>
         <div class="flex gap-3">
-          <input
-            type="email"
-            id="testEmailAddress"
-            placeholder="Enter email address"
-            class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-          />
-          <button
-            type="button"
-            id="testEmailBtn"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all"
-          >
+          <input type="email" id="testEmailAddress" placeholder="Enter email address"
+            class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white" />
+          <button type="button" id="testEmailBtn"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all">
             Send Test
           </button>
         </div>
         <div id="testEmailResult" class="hidden mt-4 rounded-lg p-4"></div>
       </div>
 
-      <!-- Info Card -->
+      <!-- Templates info -->
       <div class="backdrop-blur-md bg-blue-500/10 border border-blue-500/20 rounded-xl p-6">
         <h3 class="font-semibold text-blue-400 mb-3">📧 Email Templates Included</h3>
         <ul class="text-sm text-blue-200 space-y-2">
-          <li>✓ Registration confirmation</li>
+          <li>✓ Welcome / registration confirmation</li>
           <li>✓ Email verification</li>
           <li>✓ Password reset</li>
           <li>✓ One-time code (2FA)</li>
+          <li>✓ Invitation</li>
         </ul>
         <p class="text-xs text-blue-300 mt-4">
-          Templates are code-based and can be customized by editing the plugin files.
+          Templates are code-based — customize by editing the plugin files.
         </p>
       </div>
     </div>
 
     <script>
-      document.getElementById('testEmailBtn').addEventListener('click', async () => {
-        const email = document.getElementById('testEmailAddress').value;
-        if (!email) {
-          alert('Please enter an email address');
-          return;
+      (function () {
+        const providerSel = document.getElementById('setting_provider');
+        const resendFields = document.getElementById('resend-fields');
+        const cfFields = document.getElementById('cf-fields');
+
+        function updateVisibility() {
+          const v = providerSel.value;
+          resendFields.style.display = v === 'resend' ? '' : 'none';
+          cfFields.style.display = v === 'cloudflare' ? '' : 'none';
         }
 
-        const resultEl = document.getElementById('testEmailResult');
-        resultEl.className = 'mt-4 rounded-lg p-4 bg-blue-500/20 border border-blue-500/30';
-        resultEl.innerHTML = '📧 Sending test email...';
-        resultEl.classList.remove('hidden');
+        providerSel.addEventListener('change', updateVisibility);
 
-        try {
-          const response = await fetch('/admin/plugins/email/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ toEmail: email })
-          });
+        document.getElementById('testEmailBtn').addEventListener('click', async () => {
+          const email = document.getElementById('testEmailAddress').value;
+          if (!email) { alert('Please enter an email address'); return; }
 
-          const data = await response.json();
+          const resultEl = document.getElementById('testEmailResult');
+          resultEl.className = 'mt-4 rounded-lg p-4 bg-blue-500/20 border border-blue-500/30';
+          resultEl.innerHTML = '📧 Sending test email...';
+          resultEl.classList.remove('hidden');
 
-          if (response.ok) {
-            resultEl.className = 'mt-4 rounded-lg p-4 bg-green-500/20 border border-green-500/30';
-            resultEl.innerHTML = '<p class="text-green-200">✅ ' + (data.message || 'Test email sent! Check your inbox.') + '</p>';
-          } else {
+          try {
+            const response = await fetch('/admin/email/test', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to: email })
+            });
+            const data = await response.json();
+            if (response.ok && data.success && !data.warning) {
+              resultEl.className = 'mt-4 rounded-lg p-4 bg-green-500/20 border border-green-500/30';
+              resultEl.innerHTML = '<p class="text-green-200">✅ Test email sent via <strong>' + data.provider + '</strong>. Check your inbox.</p>';
+            } else if (response.ok && data.warning) {
+              resultEl.className = 'mt-4 rounded-lg p-4 bg-yellow-500/20 border border-yellow-500/30';
+              resultEl.innerHTML = '<p class="text-yellow-200">⚠️ ' + data.warning + '</p>';
+            } else {
+              resultEl.className = 'mt-4 rounded-lg p-4 bg-red-500/20 border border-red-500/30';
+              const errMsg = data.error || data.result?.error || 'Failed to send test email.';
+              resultEl.innerHTML = '<p class="text-red-200">❌ ' + errMsg + '</p>';
+            }
+          } catch {
             resultEl.className = 'mt-4 rounded-lg p-4 bg-red-500/20 border border-red-500/30';
-            resultEl.innerHTML = '<p class="text-red-200">❌ ' + (data.error || 'Failed to send test email.') + '</p>';
+            resultEl.innerHTML = '<p class="text-red-200">❌ Network error. Please try again.</p>';
           }
-        } catch (error) {
-          resultEl.className = 'mt-4 rounded-lg p-4 bg-red-500/20 border border-red-500/30';
-          resultEl.innerHTML = '<p class="text-red-200">❌ Network error. Please try again.</p>';
-        }
-      });
+        });
+      })();
     </script>
   `
 }

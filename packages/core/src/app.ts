@@ -68,6 +68,7 @@ import { resolveEmailProvider, type BuiltInProviderName } from './services/email
 import { loadDbEmailSettings, dbSettingsFrom } from './services/email/db-settings'
 import { setEmailService, getEmailService, hasEmailService } from './services/email/email-service-singleton'
 import type { EmailProvider } from './services/email/types'
+import { CloudflareEmailProvider } from './plugins/core-plugins/email-plugin/services/cf-email-provider'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
 import { setPluginMenu } from './services/plugin-menu-singleton'
@@ -335,17 +336,29 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     } else {
       // No config/env provider — fall back to admin-UI email settings if present.
       const dbSettings = await loadDbEmailSettings(env.DB as never)
-      if (dbSettings?.apiKey) {
-        // Route the admin-UI key through resolveEmailProvider (consistent provider
-        // selection + degrade-to-console safety) instead of hardcoding Resend.
-        provider = resolveEmailProvider({
-          providerName: 'resend',
-          env: { ...env, RESEND_API_KEY: dbSettings.apiKey },
-        })
+      // Effective Resend key: new field takes priority, legacy apiKey for compat.
+      const resendKey = (dbSettings?.resendApiKey || dbSettings?.apiKey) || undefined
+      // CF Email binding is an object with .send(); a string var is NOT a binding.
+      const cfBinding = (typeof env.EMAIL === 'object' && env.EMAIL !== null) ? env.EMAIL : undefined
+
+      if (dbSettings?.provider === 'cloudflare' && cfBinding) {
+        provider = new CloudflareEmailProvider(cfBinding as never)
         defaultFrom = defaultFrom || dbSettingsFrom(dbSettings)
         defaultReplyTo = dbSettings.replyTo
+        console.log('[email] provider: cloudflare (DB setting + binding)')
+      } else if (resendKey) {
+        provider = resolveEmailProvider({ providerName: 'resend', env: { ...env, RESEND_API_KEY: resendKey } })
+        defaultFrom = defaultFrom || dbSettingsFrom(dbSettings!)
+        defaultReplyTo = dbSettings!.replyTo
+        console.log('[email] provider: resend (DB resendApiKey)')
+      } else if (cfBinding && dbSettings?.provider !== 'resend') {
+        provider = new CloudflareEmailProvider(cfBinding as never)
+        defaultFrom = defaultFrom || (dbSettings ? dbSettingsFrom(dbSettings) : undefined)
+        defaultReplyTo = dbSettings?.replyTo
+        console.log('[email] provider: cloudflare (binding auto-detect)')
       } else {
-        provider = resolveEmailProvider({ env }) // → console fallback, with its warning
+        provider = resolveEmailProvider({ env })
+        console.log('[email] provider: fallback (console/env). EMAIL binding type:', typeof env.EMAIL, '| DB provider:', dbSettings?.provider ?? 'unset')
       }
     }
 

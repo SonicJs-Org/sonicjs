@@ -9,24 +9,17 @@
 
 /**
  * Shape of the JSON stored in `plugins.settings` for plugin id `'email'`.
- * Loaded on every send via `settings.service.ts` (Decision 7 — no caching
- * in the first iteration; ~1ms parse per send is acceptable).
  *
- * Fields:
- *   - `fromEmail` / `fromName` — required for sending. If absent and the
- *     caller didn't supply `from` on `SendEmailOptions`, `EmailServiceImpl`
- *     throws `EmailValidationError`.
- *   - `replyTo` — optional. Sent as the `reply_to` field on the CF Email
- *     Service request when set.
- *   - `logoUrl` — optional. Used by template helpers (rendered into the
- *     email HTML body); not part of the SMTP envelope.
- *
- * Legacy `apiKey` field (Resend era) is intentionally absent — Cloudflare
- * Email Service auth is via the bound `EMAIL` send_email binding, not a
- * settings-stored API key. The admin settings UI no longer accepts apiKey;
- * existing rows with apiKey survive in D1 but are ignored.
+ * `provider` selects the transport. Env vars always win over DB values:
+ *   - `RESEND_API_KEY` env → forces Resend regardless of `provider` field
+ *   - `EMAIL` CF binding present → enables Cloudflare Email Service option
+ *   - `CF_ACCOUNT_ID` / `EMAIL_API_TOKEN` env → override reconciliation creds
  */
 export interface EmailSettings {
+  /** Which email transport to use. Defaults to 'cloudflare' when EMAIL binding is present, else 'resend'. */
+  provider?: 'resend' | 'cloudflare'
+  /** Resend API key. Env RESEND_API_KEY takes priority. */
+  resendApiKey?: string
   fromEmail?: string
   fromName?: string
   replyTo?: string

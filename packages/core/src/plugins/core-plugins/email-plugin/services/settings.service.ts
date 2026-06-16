@@ -26,9 +26,15 @@ export class EmailSettingsService {
   constructor(private readonly db: D1Database) {}
 
   async load(): Promise<EmailSettings> {
-    const row = await this.db
-      .prepare(`SELECT settings FROM plugins WHERE id = 'email'`)
-      .first<PluginSettingsRow>()
+    let row: PluginSettingsRow | null = null
+    try {
+      row = await this.db
+        .prepare(`SELECT settings FROM plugins WHERE id = 'email'`)
+        .first<PluginSettingsRow>()
+    } catch {
+      // Table missing (pre-migration) or other D1 error — return empty defaults.
+      return {}
+    }
 
     if (!row?.settings) {
       return {}
@@ -41,9 +47,6 @@ export class EmailSettingsService {
       }
       return parsed as EmailSettings
     } catch {
-      // Malformed JSON — log nothing here (the admin UI surfaces parse errors
-      // separately); return empty so the caller's "missing fromEmail" branch
-      // fires with a clear EmailValidationError.
       return {}
     }
   }

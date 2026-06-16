@@ -20,6 +20,8 @@ import { SiteConfigService } from '../services/site-config.service'
 import type { EmailSettings } from '../types'
 
 interface SettingsBody {
+  provider?: string
+  resendApiKey?: string
   fromEmail?: string
   fromName?: string
   replyTo?: string
@@ -47,6 +49,8 @@ adminRoutes.post('/settings', async (c) => {
   }
 
   const cleaned: EmailSettings = {}
+  if (body.provider === 'resend' || body.provider === 'cloudflare') cleaned.provider = body.provider
+  if (typeof body.resendApiKey === 'string') cleaned.resendApiKey = body.resendApiKey.trim()
   if (typeof body.fromEmail === 'string') cleaned.fromEmail = body.fromEmail.trim()
   if (typeof body.fromName === 'string') cleaned.fromName = body.fromName.trim()
   if (typeof body.replyTo === 'string') cleaned.replyTo = body.replyTo.trim()
@@ -93,8 +97,14 @@ adminRoutes.post('/test', async (c) => {
       flow: 'test',
     })
 
+    const isConsole = result.provider === 'console'
     return c.json({
       success: result.ok,
+      provider: result.provider,
+      error: result.ok ? undefined : (result.error ?? 'Send failed — check wrangler logs for details'),
+      warning: isConsole
+        ? 'Email logged to console only — no provider configured. Set RESEND_API_KEY env var or configure a provider in Email settings.'
+        : undefined,
       result,
     })
   } catch (err) {

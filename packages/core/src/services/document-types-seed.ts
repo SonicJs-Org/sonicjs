@@ -129,6 +129,28 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     ],
   })
 
+  // Analytics event (document-backed; replaces legacy analytics_events table)
+  await registry.register({
+    id: 'analytics_event',
+    name: 'analytics_event',
+    displayName: 'Analytics Event',
+    description: 'Tracked analytics event (page view, user action, custom event)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+    queryableFields: [
+      { name: 'event',     kind: 'scalar', type: 'text',    column: 'q_evt_event' },
+      { name: 'category',  kind: 'scalar', type: 'text',    column: 'q_evt_category' },
+      { name: 'userId',    kind: 'scalar', type: 'text',    column: 'q_evt_user_id' },
+      { name: 'sessionId', kind: 'scalar', type: 'text',    column: 'q_evt_session_id' },
+      { name: 'path',      kind: 'scalar', type: 'text',    column: 'q_evt_path' },
+    ],
+  })
+
   // ── RBAC (auth-owned). 3 document types replace 4 relational tables: ──────────
   //   rbac_role        slug = roleId,  data.grants[] embedded (replaces role_grants)
   //   rbac_verb        slug = verbId

@@ -24,7 +24,8 @@ import {
   adminApiReferenceRoutes,
   apiDocumentsRoutes,
   adminDocumentsRoutes,
-  adminTestimonialsRoutes
+  adminTestimonialsRoutes,
+  adminDashboardRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
@@ -539,19 +540,18 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Dedicated /api sub-routers MUST be registered before the bare `/api` router,
   // whose `/:collection` wildcard otherwise shadows them (e.g. GET /api/documents
   // matched `/:collection`='documents' → 404 "Collection not found").
+  // Plugin API routes that live under /api/* must also go here for the same reason.
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
+  // Testimonials PUBLIC API (/api/testimonials) — must precede the bare /api router.
+  registerPluginRoutes(app, [testimonialsPlugin as any], { source: 'core' })
   app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
   // Testimonials admin (document-backed). The plugin adds the sidebar item to /admin/testimonials,
   // but the HTML router itself must be mounted here like the other core admin routers — it was missing,
   // so the Testimonials page and "add testimonial" form (hx-post /admin/testimonials) 404'd.
   app.route('/admin/testimonials', adminTestimonialsRoutes)
-  // Testimonials PUBLIC API (/api/testimonials). After the definePlugin port,
-  // the plugin uses register(app) instead of routes[]; call registerPluginRoutes
-  // so the API routes are actually mounted.
-  registerPluginRoutes(app, [testimonialsPlugin as any], { source: 'core' })
 
   // Forms (admin builder, public rendering, API submission). Same as above —
   // routes[] was replaced with register(app) in the definePlugin port.
@@ -592,6 +592,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Public event tracking API — POST /api/events (open), GET /api/events (admin)
   app.route('/api/events', eventsApiRoutes)
 
+  app.route('/admin/dashboard', adminDashboardRoutes)
   app.route('/admin/plugins', adminPluginRoutes)
   app.route('/admin/logs', adminLogsRoutes)
   app.route('/admin/rbac', adminRbacRoutes)

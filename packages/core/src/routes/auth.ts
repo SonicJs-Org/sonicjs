@@ -259,7 +259,7 @@ authRoutes.post('/register',
   }
 )
 
-// Login user
+// Login user — delegates to Better Auth sign-in/email, returns JSON with session cookie.
 authRoutes.post('/login',
   rateLimit({ max: 30, windowMs: 60 * 1000, keyPrefix: 'login' }),
   async (c) => {
@@ -270,82 +270,45 @@ authRoutes.post('/login',
         return c.json({ error: 'Validation failed', details: validation.error.issues }, 400)
       }
       const { email, password } = validation.data
-      const db = c.env.DB
-      
-      // Normalize email to lowercase
       const normalizedEmail = email.toLowerCase()
-      
-      // Find user with caching
-      const cache = getCacheService(CACHE_CONFIGS.user!)
-      let user = await cache.get<any>(cache.generateKey('user', `email:${normalizedEmail}`))
 
-      if (!user) {
-        user = await db.prepare('SELECT * FROM auth_user WHERE email = ? AND is_active = 1')
-          .bind(normalizedEmail)
-          .first() as any
+      const { createAuth } = await import('../auth/config')
+      const auth = createAuth(c.env)
 
-        if (user) {
-          // Cache the user for faster subsequent lookups
-          await cache.set(cache.generateKey('user', `email:${normalizedEmail}`), user)
-          await cache.set(cache.generateKey('user', user.id), user)
-        }
-      }
-
-      if (!user) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-      
-      // Verify password
-      const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-      if (!isValidPassword) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-
-      // Transparent password hash migration: re-hash legacy SHA-256 to PBKDF2
-      if (AuthManager.isLegacyHash(user.password_hash)) {
-        try {
-          const newHash = await AuthManager.hashPassword(password)
-          await db.prepare('UPDATE auth_user SET password_hash = ?, updated_at = ? WHERE id = ?')
-            .bind(newHash, Date.now(), user.id)
-            .run()
-        } catch (rehashError) {
-          console.error('Password rehash failed (non-fatal):', rehashError)
-        }
-      }
-
-      // Generate JWT token
-      const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-      const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl)
-
-      // Set HTTP-only cookie
-      setCookie(c, 'auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: tokenTtl
+      const baReq = new Request(new URL('/auth/sign-in/email', c.req.url).href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin },
+        body: JSON.stringify({ email: normalizedEmail, password }),
       })
+      const baRes = await auth.handler(baReq)
 
-      // Set CSRF cookie for browser sessions
+      if (!baRes.ok) {
+        return c.json({ error: 'Invalid email or password' }, 401)
+      }
+
+      // Forward BA session cookie(s) to client.
+      const rawSetCookie = baRes.headers.get('set-cookie')
+      if (rawSetCookie) {
+        c.res.headers.append('Set-Cookie', rawSetCookie)
+      } else if ((baRes.headers as any).getSetCookie) {
+        for (const sc of (baRes.headers as any).getSetCookie()) {
+          c.res.headers.append('Set-Cookie', sc)
+        }
+      }
+
       await setCsrfCookie(c)
 
-      // Update last login
-      await db.prepare('UPDATE auth_user SET last_login_at = ? WHERE id = ?')
-        .bind(new Date().getTime(), user.id)
-        .run()
-
-      // Invalidate user cache on login
-      await cache.delete(cache.generateKey('user', user.id))
-      await cache.delete(cache.generateKey('user', `email:${normalizedEmail}`))
+      const baBody = await baRes.json() as any
+      const user = baBody.user ?? {}
 
       return c.json({
         user: {
           id: user.id,
           email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role
-        },
-        token
+          firstName: user.name?.split(' ')[0] ?? '',
+          lastName: user.name?.split(' ').slice(1).join(' ') ?? '',
+          role: user.role ?? 'viewer',
+        }
       })
     } catch (error) {
       console.error('Login error:', error)

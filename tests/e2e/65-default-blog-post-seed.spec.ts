@@ -8,11 +8,13 @@ test.describe('default content seed', () => {
     const body = await response.json()
     const collections = body.data ?? []
     const names = collections.map((collection: any) => collection.name)
+    // Core collections expected on a fresh install
     expect(names).toContain('blog_post')
+    expect(names).toContain('page_blocks')
+    // Legacy collections from old DB schema must not appear
     expect(names).not.toContain('pages')
     expect(names).not.toContain('news')
     expect(names).not.toContain('contact_messages')
-    expect(names).not.toContain('page_blocks')
   })
 
   test('seeds one published welcome blog post', async ({ request }) => {

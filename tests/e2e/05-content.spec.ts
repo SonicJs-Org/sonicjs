@@ -119,7 +119,7 @@ test.describe('Content Management', () => {
     await collectionLinks.first().click();
 
     // Should now be on the actual content creation form
-    await expect(page.locator('form')).toBeVisible();
+    await expect(page.locator('form#content-form')).toBeVisible();
   });
 
   test('should display content actions', async ({ page }) => {

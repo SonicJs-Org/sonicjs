@@ -27,7 +27,7 @@ userRoutes.use('/activity-logs/*', requireRole(['admin']))
 
 // Redirect /admin to /admin/content
 userRoutes.get('/', (c) => {
-  return c.redirect('/admin/content')
+  return c.redirect('/admin/dashboard')
 })
 
 // Timezone options for profile form

@@ -195,4 +195,84 @@ app.post('/test-cleanup/content', async (c: Context) => {
   }
 })
 
+/**
+ * Re-seed default content required by E2E specs.
+ * POST /test-seed-defaults
+ *
+ * Idempotent: creates the welcome blog post if absent or soft-deleted,
+ * skips if already present. Should be called from global-setup after cleanup.
+ */
+app.post('/test-seed-defaults', async (c: Context) => {
+  if (!cleanupAllowed(c)) return denyResponse(c)
+  const db = c.env.DB as D1Database
+
+  try {
+    const BLOG_POST_TYPE = 'blog_post'
+    const WELCOME_SLUG = 'welcome-to-sonicjs'
+
+    const existing = await db
+      .prepare(
+        `SELECT id, deleted_at FROM documents
+         WHERE type_id = ? AND tenant_id = 'default' AND slug = ? AND is_current_draft = 1`,
+      )
+      .bind(BLOG_POST_TYPE, WELCOME_SLUG)
+      .first() as any
+
+    if (existing && !existing.deleted_at) {
+      return c.json({ success: true, action: 'skipped', message: 'Welcome post already exists' })
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000)
+
+    if (existing && existing.deleted_at) {
+      // Restore soft-deleted post
+      await db
+        .prepare(
+          `UPDATE documents SET deleted_at = NULL, updated_at = ?, is_published = 1, is_current_draft = 1
+           WHERE id = ?`,
+        )
+        .bind(nowSec, existing.id)
+        .run()
+      return c.json({ success: true, action: 'restored', message: 'Welcome post restored' })
+    }
+
+    // Ensure blog_post document type exists
+    const typeExists = await db
+      .prepare(`SELECT id FROM document_types WHERE id = ? AND tenant_id = 'default'`)
+      .bind(BLOG_POST_TYPE)
+      .first()
+    if (!typeExists) {
+      return c.json({ success: false, error: 'blog_post document type not seeded yet' }, 500)
+    }
+
+    const id = `blog-post-welcome-seed`
+    const dataJson = JSON.stringify({
+      title: 'Welcome to SonicJS',
+      slug: WELCOME_SLUG,
+      excerpt: 'Start building with the Cloudflare-native SonicJS CMS.',
+      content: '<p>Welcome to SonicJS. This first post confirms your default blog content is ready.</p>',
+      author: 'SonicJS',
+      status: 'published',
+      difficulty: 'beginner',
+      tags: 'welcome,sonicjs',
+    })
+
+    await db
+      .prepare(
+        `INSERT INTO documents
+           (id, root_id, version_number, type_id, tenant_id, locale, slug, title,
+            data, sort_order, visible, is_current_draft, is_published, status,
+            created_at, updated_at, deleted_at)
+         VALUES (?, ?, 1, ?, 'default', 'default', ?, ?, ?, 0, 1, 1, 1, 'published', ?, ?, NULL)`,
+      )
+      .bind(id, id, BLOG_POST_TYPE, WELCOME_SLUG, 'Welcome to SonicJS', dataJson, nowSec, nowSec)
+      .run()
+
+    return c.json({ success: true, action: 'created', message: 'Welcome post created' })
+  } catch (error) {
+    console.error('Seed defaults error:', error)
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+  }
+})
+
 export default app

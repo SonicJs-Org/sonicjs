@@ -136,14 +136,21 @@ test.describe('Slug Generation', () => {
     
     await page.fill('input[name="title"]', 'Test Duplicate Page')
     await page.waitForTimeout(1000)
-    
+
     const slugField = page.locator('input[name="slug"]')
     await expect(slugField).toHaveValue('test-duplicate-page')
-    
+
+    // Fill required fields before saving
+    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => {
+      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      if (el) el.value = 'Test content'
+    })
+
     // Save the content
     await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
-    
+
     // Now try to create another with same slug
     await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
@@ -213,13 +220,20 @@ test.describe('Slug Generation', () => {
     
     await page.fill('input[name="title"]', 'Edit Mode Test Page')
     await page.waitForTimeout(1000)
-    
+
     const originalSlug = 'edit-mode-test-page'
     await expect(page.locator('input[name="slug"]')).toHaveValue(originalSlug)
-    
+
+    // Fill required fields before saving
+    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => {
+      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      if (el) el.value = 'Test content'
+    })
+
     await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
-    
+
     // Navigate to content list and find the item
     await page.goto('/admin/content?collection=blog_post')
     await page.waitForTimeout(1000)
@@ -252,7 +266,14 @@ test.describe('Slug Generation', () => {
     
     await page.fill('input[name="title"]', 'Regen Test Page')
     await page.waitForTimeout(1000)
-    
+
+    // Fill required fields before saving
+    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => {
+      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      if (el) el.value = 'Test content'
+    })
+
     await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
     
@@ -319,6 +340,14 @@ test.describe('Slug Generation', () => {
     
     await page.fill('input[name="title"]', 'Submission Test Original')
     await page.waitForTimeout(1000)
+
+    // Fill required fields before saving
+    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => {
+      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      if (el) el.value = 'Test content'
+    })
+
     await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
     

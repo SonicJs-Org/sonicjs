@@ -127,7 +127,9 @@ test.describe('Better Auth — seed-admin creates credentials', () => {
     const res = await request.post('/auth/seed-admin');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    expect(body.user).toHaveProperty('role', 'admin');
+    expect(body.message).toBe('Seed complete');
+    const adminEntry = (body.users ?? []).find((u: any) => u.email === ADMIN_CREDENTIALS.email);
+    expect(adminEntry).toBeDefined();
 
     // Verify BA sign-in works (proves auth_account was created correctly)
     const signIn = await request.post('/auth/sign-in/email', {

@@ -18,12 +18,14 @@ import type { SonicJSConfig } from '@sonicjs-cms/core'
 
 // Import code-defined collections
 import blogPostsCollection from './collections/blog-posts.collection'
+import pageBlocksCollection from './collections/page-blocks.collection'
 import { siteSettingsCollection } from '@sonicjs-cms/core'
 
 // Register collections so they appear in admin UI
 registerCollections([
   siteSettingsCollection,
-  blogPostsCollection
+  blogPostsCollection,
+  pageBlocksCollection,
 ])
 
 const config: SonicJSConfig = {

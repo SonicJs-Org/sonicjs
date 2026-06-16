@@ -56,7 +56,7 @@ test.describe('Settings - General Tab', () => {
     );
 
     // Click save button
-    await page.locator('button:has-text("Save All Changes")').click();
+    await page.locator('button:has-text("Save Changes")').click();
 
     // Wait for the save to complete
     const response = await responsePromise;
@@ -96,7 +96,7 @@ test.describe('Settings - General Tab', () => {
     await maintenanceModeCheckbox.click();
 
     // Save settings
-    await page.locator('button:has-text("Save All Changes")').click();
+    await page.locator('button:has-text("Save Changes")').click();
     await page.waitForTimeout(1000);
 
     // Reload and verify
@@ -116,7 +116,7 @@ test.describe('Settings - General Tab', () => {
     await page.locator('textarea[name="siteDescription"]').fill('');
 
     // Try to save
-    await page.locator('button:has-text("Save All Changes")').click();
+    await page.locator('button:has-text("Save Changes")').click();
     await page.waitForTimeout(1000);
 
     // Should show an error (either validation message or notification)
@@ -139,7 +139,7 @@ test.describe('Settings - General Tab', () => {
     const newAdminEmail = `admin-${Date.now()}@example.com`;
 
     await page.locator('input[name="adminEmail"]').fill(newAdminEmail);
-    await page.locator('button:has-text("Save All Changes")').click();
+    await page.locator('button:has-text("Save Changes")').click();
     await page.waitForTimeout(1000);
 
     // Reload and verify
@@ -175,7 +175,7 @@ test.describe('Settings - General Tab', () => {
     const uniqueSiteName = `Test Save Loading ${Date.now()}`;
     await page.locator('input[name="siteName"]').fill(uniqueSiteName);
 
-    const saveButton = page.locator('button:has-text("Save All Changes")');
+    const saveButton = page.locator('button:has-text("Save Changes")');
 
     // Wait for the response
     const responsePromise = page.waitForResponse(response =>
@@ -191,6 +191,6 @@ test.describe('Settings - General Tab', () => {
 
     // Button should return to normal state (not disabled)
     await expect(saveButton).toBeEnabled();
-    await expect(saveButton).toContainText(/Save All Changes/i);
+    await expect(saveButton).toContainText(/Save Changes/i);
   });
 });

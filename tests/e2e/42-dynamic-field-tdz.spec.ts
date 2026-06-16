@@ -95,8 +95,8 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
     const blocksField = page.locator('.blocks-field[data-field-name="body"]')
     await expect(blocksField).toBeVisible()
 
-    // Verify we can interact with the object field subfields
-    const seoTitleInput = seoField.locator('input').first()
+    // Verify we can interact with the object field subfields (skip hidden storage input)
+    const seoTitleInput = seoField.locator('input:not([type="hidden"])').first()
     await expect(seoTitleInput).toBeVisible()
 
     // Verify the add block button is visible (array field rendered correctly)
@@ -109,10 +109,10 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
 
     // Verify hidden inputs for structured fields exist (they store JSON data)
     const seoHiddenInput = seoField.locator('input[type="hidden"][name="seo"]')
-    await expect(seoHiddenInput).toBeVisible()
+    await expect(seoHiddenInput).toHaveCount(1)
 
     const blocksHiddenInput = blocksField.locator('input[type="hidden"][name="body"]')
-    await expect(blocksHiddenInput).toBeVisible()
+    await expect(blocksHiddenInput).toHaveCount(1)
   })
 
   test('should allow adding blocks to array field without errors', async ({ page }) => {

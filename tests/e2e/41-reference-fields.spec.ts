@@ -3,7 +3,12 @@ import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 
-test.describe('Reference Fields', () => {
+// Collections are now code-only (CollectionRegistry, no DB table).
+// The field-editor UI (Add Field modal, field type dropdown) is no longer
+// exposed for code-defined collections — fields are declared in TypeScript.
+// These tests tested a removed feature; skip until a runtime field-editor
+// is re-introduced.
+test.describe.skip('Reference Fields', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

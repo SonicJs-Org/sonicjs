@@ -16,19 +16,41 @@ async function globalSetup(config: FullConfig) {
 
     console.log(`Using base URL: ${baseURL}`);
 
-    // Call the cleanup endpoint (public, no auth required)
-    const response = await page.request.post(`${baseURL}/test-cleanup`, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
+    // Clean up test data from prior runs
+    const cleanupResponse = await page.request.post(`${baseURL}/test-cleanup`, {
+      headers: { 'Content-Type': 'application/json' }
     });
-
-    if (response.ok()) {
-      const result = await response.json();
-      console.log(`✓ Test cleanup successful: ${result.deletedCount} items removed\n`);
+    if (cleanupResponse.ok()) {
+      const result = await cleanupResponse.json();
+      console.log(`✓ Test cleanup successful: ${result.deletedCount} items removed`);
     } else {
-      console.log(`⚠ Test cleanup returned status: ${response.status()}\n`);
+      console.log(`⚠ Test cleanup returned status: ${cleanupResponse.status()}`);
     }
+
+    // Ensure admin user exists (idempotent)
+    try {
+      await page.request.post(`${baseURL}/auth/seed-admin`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      console.log('✓ Admin user seeded');
+    } catch {
+      // Non-fatal
+    }
+
+    // Restore default seed content (welcome blog post may have been soft-deleted)
+    try {
+      const seedRes = await page.request.post(`${baseURL}/test-seed-defaults`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (seedRes.ok()) {
+        const r = await seedRes.json() as any;
+        console.log(`✓ Default content: ${r.message ?? r.action}`);
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    console.log('');
   } catch (error) {
     console.log(`⚠ Test cleanup failed: ${error}\n`);
   } finally {

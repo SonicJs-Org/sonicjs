@@ -182,7 +182,6 @@ export {
   adminDesignRoutes,
   adminCheckboxRoutes,
   adminTestimonialsRoutes,
-  adminCodeExamplesRoutes,
   adminDashboardRoutes,
   adminCollectionsRoutes,
   adminSettingsRoutes,

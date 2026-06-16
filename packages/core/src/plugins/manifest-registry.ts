@@ -70,24 +70,6 @@ export const PLUGIN_REGISTRY: Record<string, PluginRegistryEntry> = {
     }
   },
 
-  'code-examples-plugin': {
-    "id": "code-examples-plugin",
-    "codeName": "code-examples-plugin",
-    "displayName": "Code Examples",
-    "description": "Code snippets and examples library with syntax highlighting and categorization",
-    "version": "1.0.0-beta.1",
-    "author": "SonicJS Team",
-    "category": "content",
-    "iconEmoji": "💻",
-    "is_core": false,
-    "permissions": [
-      "code-examples:manage"
-    ],
-    "dependencies": [],
-    "defaultSettings": {},
-    "adminMenu": null
-  },
-
   'core-analytics': {
     "id": "core-analytics",
     "codeName": "core-analytics",

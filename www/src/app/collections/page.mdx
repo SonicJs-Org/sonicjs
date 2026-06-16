@@ -1,15 +1,6 @@
 export const sections = [
   { title: 'Overview', id: 'overview' },
   { title: 'Creating Collections', id: 'creating-collections' },
-  {
-    title: 'Creating via Admin UI',
-    id: 'option-1-creating-collections-via-admin-ui',
-  },
-  {
-    title: 'Creating with Code',
-    id: 'option-2-creating-collections-with-code',
-  },
-  { title: 'When to Use Each Approach', id: 'when-to-use-each-approach' },
   { title: 'Field Types', id: 'field-types' },
   { title: 'Validation', id: 'validation' },
   { title: 'Examples', id: 'examples' },
@@ -21,197 +12,20 @@ Define content types with TypeScript schemas and field validation. Collections a
 
 ## Overview
 
-<div className="not-prose mb-8 rounded-2xl border border-emerald-500/20 bg-emerald-50/50 p-5 dark:border-emerald-500/30 dark:bg-emerald-500/5">
-  <div className="flex gap-4">
-    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-xl">
-      ✨
-    </span>
-    <div>
-      <h4 className="mb-1 font-semibold text-emerald-900 dark:text-emerald-200">
-        Unique Flexibility
-      </h4>
-      <span className="text-sm text-emerald-800 dark:text-emerald-300">
-        Unlike most headless CMS platforms that only support one approach,
-        SonicJS lets you create collections <strong>both</strong> through the
-        admin UI and with code. Start prototyping in the UI, then migrate to
-        code for production—or use both simultaneously.
-      </span>
-    </div>
-  </div>
-</div>
-
 Collections define your content types using TypeScript schemas. Each collection automatically gets:
 
-- Type-safe database schema
 - Automatic API endpoints
 - Admin UI for content management
 - Field validation and constraints
 - Version control through git
 
-### Two Types of Collections
-
-<div className="not-prose my-8 grid gap-6 sm:grid-cols-2">
-  <div className="relative rounded-2xl border border-violet-500/20 bg-violet-50/50 p-6 dark:border-violet-500/30 dark:bg-violet-500/5">
-    <div className="flex items-center gap-3 mb-4">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/10 text-xl">
-        💻
-      </span>
-      <h4 className="font-semibold text-violet-900 dark:text-violet-200">Code-Based Collections</h4>
-    </div>
-    <ul className="space-y-2 text-sm text-violet-800 dark:text-violet-300">
-      <li className="flex items-start gap-2">
-        <span className="text-violet-500 mt-0.5">✓</span>
-        <span>Defined in TypeScript files (<code className="text-xs bg-violet-100 dark:bg-violet-900/50 px-1 rounded">src/collections/*.collection.ts</code>)</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-violet-500 mt-0.5">✓</span>
-        <span>Version controlled with your codebase</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-violet-500 mt-0.5">✓</span>
-        <span>Automatically synced on app startup</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-violet-500 mt-0.5">✓</span>
-        <span>Read-only in admin UI (marked with "Config" badge)</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-violet-500 mt-0.5">✓</span>
-        <span>Full TypeScript support with IDE autocomplete</span>
-      </li>
-    </ul>
-    <div className="mt-4 pt-4 border-t border-violet-200 dark:border-violet-800">
-      <span className="text-xs font-medium text-violet-600 dark:text-violet-400">Best for: Production apps, teams, CI/CD</span>
-    </div>
-  </div>
-
-  <div className="relative rounded-2xl border border-amber-500/20 bg-amber-50/50 p-6 dark:border-amber-500/30 dark:bg-amber-500/5">
-    <div className="flex items-center gap-3 mb-4">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-xl">
-        🖱️
-      </span>
-      <h4 className="font-semibold text-amber-900 dark:text-amber-200">UI-Created Collections</h4>
-    </div>
-    <ul className="space-y-2 text-sm text-amber-800 dark:text-amber-300">
-      <li className="flex items-start gap-2">
-        <span className="text-amber-500 mt-0.5">✓</span>
-        <span>Created and edited through the admin interface</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-amber-500 mt-0.5">✓</span>
-        <span>Stored directly in the database</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-amber-500 mt-0.5">✓</span>
-        <span>Fully editable in the UI anytime</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-amber-500 mt-0.5">✓</span>
-        <span>No code or deployment required</span>
-      </li>
-      <li className="flex items-start gap-2">
-        <span className="text-amber-500 mt-0.5">✓</span>
-        <span>Great for rapid prototyping</span>
-      </li>
-    </ul>
-    <div className="mt-4 pt-4 border-t border-amber-200 dark:border-amber-800">
-      <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Best for: Prototyping, non-developers, quick iterations</span>
-    </div>
-  </div>
-</div>
-
 ---
 
 ## Creating Collections
 
-SonicJS offers two ways to create collections: through the admin UI or with code. Each approach has its own advantages depending on your workflow and requirements.
+Collections are defined in TypeScript and registered in code. The `/admin/collections` page is read-only — it shows all registered collections but does not allow creating or editing them.
 
-### Comparison: UI vs Code-Based Collections
-
-| Aspect              | Admin UI                                            | Code-Based                                    |
-| ------------------- | --------------------------------------------------- | --------------------------------------------- |
-| **Best for**        | Rapid prototyping, non-developers, quick iterations | Production apps, team collaboration, CI/CD    |
-| **Version control** | Not version controlled                              | Full git history                              |
-| **Editing**         | Fully editable in admin                             | Read-only in admin (edit code instead)        |
-| **Type safety**     | None                                                | Full TypeScript support with IDE autocomplete |
-| **Deployment**      | Manual recreation per environment                   | Automatic sync across environments            |
-| **Field types**     | Limited to active editor plugins                    | All 30+ field types available                 |
-
----
-
-### Option 1: Creating Collections via Admin UI
-
-The admin UI provides a visual interface for creating and managing collections without writing code.
-
-#### Step 1: Access Collections
-
-Navigate to `/admin/collections` in your browser. You'll see a list of all existing collections.
-
-#### Step 2: Create New Collection
-
-Click the **"New Collection"** button in the top right corner.
-
-#### Step 3: Fill in Collection Details
-
-<CodeGroup title="Collection Form Fields">
-
-```
-Display Name: Blog Posts
-Collection Name: blog_posts (lowercase, numbers, underscores only)
-Description: Manage your blog content (optional)
-```
-
-</CodeGroup>
-
-Click **"Create Collection"** to save. You'll be redirected to the collection edit page.
-
-#### Step 4: Add Fields
-
-On the collection edit page, click **"Add Field"** to open the field modal. Configure each field with:
-
-- **Field Name** - Machine name (lowercase, underscores)
-- **Field Type** - Choose from: text, richtext, number, boolean, date, select, media
-- **Field Label** - Human-readable display name
-- **Required** - Whether the field must have a value
-- **Searchable** - Include in content search results
-- **Field Options** - JSON configuration for field-specific settings
-
-<CodeGroup title="Example Field Options">
-
-```json
-// For select fields
-{"options": ["draft", "published", "archived"]}
-
-// For media fields
-{"accept": "image/*", "maxSize": "10MB"}
-
-// For text fields
-{"maxLength": 200, "placeholder": "Enter title..."}
-```
-
-</CodeGroup>
-
-#### Step 5: Manage Fields
-
-After adding fields, you can:
-
-- **Reorder** fields using drag handles
-- **Edit** field settings by clicking the edit button
-- **Delete** fields using the delete button
-
-<Callout type="warning" title="UI-Created Collection Limitations">
-  Collections created via UI have fewer field types available compared to
-  code-based collections. Rich text editors (TinyMCE, Quill, EasyMDX) are only
-  available if the corresponding plugin is active.
-</Callout>
-
----
-
-### Option 2: Creating Collections with Code
-
-Code-based collections provide type safety, version control, and the full range of field types.
-
-#### Step 1: Create Collection File
+### Step 1: Create Collection File
 
 Create a new file in `src/collections/` with a `.collection.ts` extension:
 
@@ -289,7 +103,7 @@ export default {
 
 </CodeGroup>
 
-#### Step 2: Register the Collection
+### Step 2: Register the Collection
 
 In your application entry point, register your collections:
 
@@ -304,61 +118,21 @@ import blogPostsCollection from './collections/blog-posts.collection'
 registerCollections([blogPostsCollection])
 
 // Create and export the app
-export default createSonicJSApp({
-  collections: {
-    autoSync: true,
-  },
-})
+export default createSonicJSApp({})
 ```
 
 </CodeGroup>
 
-#### Step 3: Sync Collections
+### Step 3: Restart Dev Server
 
-Collections are automatically synced on server startup. You can also manually sync:
-
-<CodeGroup title="Sync Collections">
+Collections are registered at bootstrap. Restart the dev server to pick up new collections:
 
 ```bash
-# Collections auto-sync on server restart
 npm run dev
-
-# Or manually sync
-npm run sync-collections
 ```
 
-</CodeGroup>
-
-<Callout type="info" title="Config Badge in Admin UI">
-  Code-based collections appear in the admin UI with a purple **"Config"** badge
-  and are read-only. To modify them, edit the TypeScript file and restart the
-  server.
-</Callout>
-
----
-
-### When to Use Each Approach
-
-**Use the Admin UI when:**
-
-- Prototyping a new content model quickly
-- Non-developers need to create collections
-- You need to iterate on schema design rapidly
-- Building a one-off project without deployment concerns
-
-**Use Code-Based collections when:**
-
-- Building production applications
-- Working with a team (version control is essential)
-- You need type safety and IDE autocomplete
-- Deploying across multiple environments (staging, production)
-- Using CI/CD pipelines
-- You need advanced field types or validation
-
-<Callout type="tip" title="Migration Path">
-  You can start with UI-created collections for prototyping, then convert them
-  to code-based collections for production. Export the schema JSON from the
-  database and convert it to a TypeScript collection file.
+<Callout type="info" title="Admin UI">
+  Registered collections appear in the admin UI at `/admin/collections` (read-only). Content is stored in the shared `documents` table — no per-collection DB table is created.
 </Callout>
 
 ---
@@ -776,72 +550,41 @@ export const eventsCollection: CollectionConfig = {
 
 ## Using Collections
 
-### Query Content
-
-<CodeGroup title="Fetch Collection Content">
-
-```typescript
-// Get all content from a collection
-const posts = await db
-  .select()
-  .from(content)
-  .where(eq(content.collection_id, 'blog_posts'))
-  .orderBy(desc(content.created_at))
-  .limit(10)
-
-// Get single content item
-const post = await db.select().from(content).where(eq(content.id, postId)).get()
-
-// Search content
-const results = await db
-  .select()
-  .from(content)
-  .where(
-    and(
-      eq(content.collection_id, 'blog_posts'),
-      like(content.title, '%search%'),
-    ),
-  )
-  .all()
-```
-
-</CodeGroup>
-
 ### API Endpoints
 
 Collections automatically get REST API endpoints:
 
 <ApiEndpoint
   method="GET"
-  path="/api/collections/{collection}/content"
-  description="Get all content from a collection"
+  path="/api/{collection}"
+  description="List all content in a collection"
   auth={false}
 />
 
 <ApiEndpoint
   method="GET"
-  path="/api/content/{id}"
+  path="/api/{collection}/{id}"
   description="Get single content item"
   auth={false}
 />
 
 <ApiEndpoint
   method="POST"
-  path="/admin/content"
+  path="/api/{collection}"
   description="Create new content"
   auth={true}
 />
 
 <ApiEndpoint
   method="PUT"
-  path="/admin/content/{id}"
+  path="/api/{collection}/{id}"
   description="Update content"
   auth={true}
 />
 
 <ApiEndpoint
   method="DELETE"
-  path="/admin/content/{id}"
+  path="/api/{collection}/{id}"
   description="Delete content"
   auth={true}
 />

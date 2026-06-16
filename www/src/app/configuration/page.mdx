@@ -36,15 +36,7 @@ The main configuration object passed when creating your SonicJS application.
 interface SonicJSConfig {
   // Collections configuration
   collections?: {
-    directory?: string     // Path to collection definitions
-    autoSync?: boolean     // Auto-sync collections on startup
-  }
-
-  // Plugins configuration
-  plugins?: {
-    directory?: string     // Path to custom plugins
-    autoLoad?: boolean     // Auto-load plugins from directory
-    disableAll?: boolean   // Disable all plugins (including core)
+    autoSync?: boolean     // Auto-sync collection schemas on startup
   }
 
   // Custom routes
@@ -58,9 +50,6 @@ interface SonicJSConfig {
     beforeAuth?: Middleware[]   // Run before authentication
     afterAuth?: Middleware[]    // Run after authentication
   }
-
-  // Admin access control
-  adminAccessRoles?: string[]  // Roles that can access /admin (default: ['admin'])
 
   // App metadata
   version?: string         // Application version
@@ -76,36 +65,23 @@ interface SonicJSConfig {
 
 ```typescript
 import { createSonicJSApp } from '@sonicjs-cms/core'
+import { registerPlugins } from '@sonicjs-cms/core'
+import { registerCollections } from '@sonicjs-cms/core'
 
+// Minimal required config
 const app = createSonicJSApp({
-  name: 'My CMS',
-  version: '1.0.0',
   collections: {
-    directory: './src/collections',
     autoSync: true
-  },
-  plugins: {
-    directory: './src/plugins',
-    autoLoad: true
   }
 })
 
+// Register plugins separately
+registerPlugins(app, [plugin1, plugin2], { hookSystem, env })
+
+// Register collections separately
+registerCollections([collection1, collection2])
+
 export default app
-```
-
-</CodeGroup>
-
-### Admin Access Control
-
-By default, only users with the `admin` role can access the `/admin` panel. To allow additional roles, use `adminAccessRoles`:
-
-<CodeGroup title="Admin Access Roles">
-
-```typescript
-const app = createSonicJSApp({
-  // Allow both admin and editor roles to access the admin panel
-  adminAccessRoles: ['admin', 'editor']
-})
 ```
 
 </CodeGroup>
@@ -277,28 +253,30 @@ Configuration for content collections.
 <CodeGroup title="Collections Configuration">
 
 ```typescript
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+
 const app = createSonicJSApp({
   collections: {
-    // Directory containing collection definition files
-    directory: './src/collections',
-
     // Automatically sync collection schemas on startup
     autoSync: true
   }
 })
+
+// Collections are registered separately via registerCollections()
+registerCollections([blogPostsCollection, categoriesCollection])
 ```
 
 </CodeGroup>
 
-### Collection File Structure
+### Collection Definition
 
 <CodeGroup title="Collection Definition">
 
 ```typescript
 // src/collections/blog-posts.ts
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export default defineCollection({
+export const blogPostsCollection: CollectionConfig = {
   name: 'blog_posts',
   displayName: 'Blog Posts',
   description: 'Blog articles and posts',
@@ -335,19 +313,13 @@ export default defineCollection({
     }
   },
 
-  // Workflow settings
-  workflow: {
-    enabled: true,
-    requireApproval: true
-  },
-
   // API settings
   api: {
     enabled: true,
     publicRead: true,
     publicCreate: false
   }
-})
+}
 ```
 
 </CodeGroup>
@@ -358,46 +330,45 @@ export default defineCollection({
 
 Configuration for SonicJS plugins.
 
-### Global Plugin Settings
+### Registering Plugins
 
-<CodeGroup title="Plugin Configuration">
+<CodeGroup title="Plugin Registration">
 
 ```typescript
-const app = createSonicJSApp({
-  plugins: {
-    // Directory for custom plugins
-    directory: './src/plugins',
+import { registerPlugins } from '@sonicjs-cms/core'
+import { aiSearchPlugin } from '@sonicjs-cms/plugin-ai-search'
+import { turnstilePlugin } from '@sonicjs-cms/plugin-turnstile'
 
-    // Auto-load plugins from directory
-    autoLoad: true,
-
-    // Disable all plugins (useful for testing)
-    disableAll: false
-  }
-})
+registerPlugins(app, [aiSearchPlugin, turnstilePlugin], { hookSystem, env })
 ```
 
 </CodeGroup>
 
 ### Individual Plugin Settings
 
-Each plugin has its own settings stored in the database:
+Each plugin declares its settings schema via a Zod `configSchema` in `definePlugin`. Settings are validated at registration time — there is no DB settings store.
 
-<CodeGroup title="Plugin Settings Storage">
+<CodeGroup title="Plugin Settings via configSchema">
 
-```sql
--- Plugin settings are stored in the plugins table
-SELECT id, settings FROM plugins WHERE id = 'ai-search';
+```typescript
+import { definePlugin } from '@sonicjs-cms/core'
+import { z } from 'zod'
 
--- Settings are JSON:
--- {
---   "enabled": true,
---   "ai_mode_enabled": true,
---   "selected_collections": ["1", "2"],
---   "autocomplete_enabled": true,
---   "cache_duration": 1,
---   "results_limit": 20
--- }
+export const myPlugin = definePlugin({
+  id: 'my-plugin',
+  name: 'My Plugin',
+  configSchema: z.object({
+    enabled: z.boolean().default(true),
+    apiKey: z.string().optional(),
+    resultsLimit: z.number().default(20)
+  }),
+  onBoot: async ({ config, env }) => {
+    // config is typed and validated
+    if (config.enabled) {
+      // initialize plugin
+    }
+  }
+})
 ```
 
 </CodeGroup>

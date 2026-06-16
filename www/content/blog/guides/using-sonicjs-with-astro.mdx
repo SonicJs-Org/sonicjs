@@ -70,7 +70,7 @@ If you don't already have a SonicJS instance running, let's set one up quickly.
 
 ```bash
 # Create a new SonicJS application
-npx create-sonicjs my-cms
+npx create-sonicjs@latest my-cms
 
 # Navigate to your project
 cd my-cms
@@ -93,7 +93,7 @@ Your SonicJS API is now running at `http://localhost:8787`.
 
 ### Blog Posts Collection
 
-> **Note:** The `create-sonicjs` scaffolding already includes a Blog Posts collection at `src/collections/blog-posts.collection.ts`. This guide uses that existing collection — no need to create one manually. The collection is registered in `src/index.ts` and auto-synced to the database on startup.
+> **Note:** The `create-sonicjs` scaffolding already includes a Blog Posts collection at `src/collections/blog-posts.collection.ts`. This guide uses that existing collection — no need to create one manually. The collection is registered in `src/index.ts` via `registerCollections()` and stored in the in-memory CollectionRegistry; `autoRegisterCollectionDocumentTypes` registers a `document_type` row per collection at bootstrap.
 
 Here's what the scaffolded collection looks like:
 
@@ -102,69 +102,18 @@ Here's what the scaffolded collection looks like:
 import type { CollectionConfig } from '@sonicjs-cms/core'
 
 export default {
-  name: 'blog-posts',
-  displayName: 'Blog Posts',
-  description: 'Manage your blog posts',
-  icon: '📝',
-
+  name: 'blog_post',
+  slug: 'blog-posts',
   schema: {
     type: 'object',
     properties: {
-      title: {
-        type: 'string',
-        title: 'Title',
-        required: true,
-        maxLength: 200
-      },
-      slug: {
-        type: 'slug',
-        title: 'URL Slug',
-        required: true,
-        maxLength: 200
-      },
-      excerpt: {
-        type: 'textarea',
-        title: 'Excerpt',
-        maxLength: 500
-      },
-      content: {
-        type: 'quill',
-        title: 'Content',
-        required: true
-      },
-      featuredImage: {
-        type: 'media',
-        title: 'Featured Image'
-      },
-      author: {
-        type: 'string',
-        title: 'Author',
-        required: true
-      },
-      publishedAt: {
-        type: 'datetime',
-        title: 'Published Date'
-      },
-      status: {
-        type: 'select',
-        title: 'Status',
-        enum: ['draft', 'published', 'archived'],
-        enumLabels: ['Draft', 'Published', 'Archived'],
-        default: 'draft'
-      },
-      tags: {
-        type: 'string',
-        title: 'Tags',
-        helpText: 'Comma-separated tags'
-      }
+      title: { type: 'string' },
+      content: { type: 'lexical' },
+      author: { type: 'user' }
     },
-    required: ['title', 'slug', 'content', 'author']
+    required: ['title']
   },
-
-  listFields: ['title', 'author', 'status', 'publishedAt'],
-  searchFields: ['title', 'excerpt', 'author'],
-  defaultSort: 'createdAt',
-  defaultSortOrder: 'desc'
+  managed: true
 } satisfies CollectionConfig
 ```
 
@@ -217,9 +166,6 @@ Create a `.env` file in your Astro project root:
 # .env
 SONICJS_API_URL=http://localhost:8787
 SONICJS_API_TOKEN=your-api-token-here
-# NOTE: API token management is not yet available in v.2.8.0.
-# For local development, you can omit this variable.
-# The public content API does not require authentication for read access.
 ```
 
 Update `astro.config.mjs` to load environment variables:
@@ -273,7 +219,6 @@ interface BlogPost {
 }
 
 // Fetch all blog posts
-// Add client-side filtering since server-side filters don't work in v.2.8.0 (yet!).
 export async function getBlogPosts(): Promise<BlogPost[]> {
   const response = await fetch(
     `${API_URL}/api/collections/blog-posts/content?filter[status][equals]=published&sort=-created_at`
@@ -949,13 +894,6 @@ Set your environment variables in the Cloudflare Pages dashboard:
 ---
 
 ## Troubleshooting
-
-### API Filters Not Working
-
-As of v2.8.0, server-side filter parameters (e.g., `filter[slug][equals]`)
-are not yet implemented. The API returns all content items regardless of
-filter params. Use client-side filtering as shown in the API client above.
-
 
 ### CORS Issues
 

@@ -148,7 +148,7 @@ const posts = defineCollection({
 **SonicJS**: Get started in under 5 minutes:
 
 ```bash
-npm create sonicjs-app my-cms
+npx create-sonicjs@latest my-cms
 cd my-cms
 npm run dev
 ```
@@ -236,12 +236,13 @@ Both support relationships between content types. SonicJS handles this at the ed
 SonicJS has a growing plugin system that runs at the edge:
 
 ```typescript
-import { PluginBuilder } from '@sonicjs-cms/core'
+import { definePlugin } from '@sonicjs-cms/core'
 
-const myPlugin = PluginBuilder.create('my-plugin')
-  .addRoute('GET', '/custom', handler)
-  .addHook('content:beforeSave', transform)
-  .build()
+const myPlugin = definePlugin({
+  name: 'my-plugin',
+  register(app) { app.get('/custom', handler) },
+  hooks: { 'content:beforeSave': transform },
+})
 ```
 
 The ecosystem is newer but growing rapidly.

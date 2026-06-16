@@ -178,7 +178,7 @@ This is one place WordPress's ecosystem cuts both ways.
 | Core security | Solid, well-audited | Solid, smaller surface area |
 | Plugin/theme vulnerabilities | The #1 attack vector — 90%+ of WP exploits trace back to plugins/themes | No PHP plugin runtime; plugins run typed, sandboxed code |
 | Auto-updates | Yes (core), plugins optional | Deploy-driven (`wrangler deploy`) |
-| Admin brute-force | Common attack target | JWT + KV-cached verification, [rate-limited auth](/authentication) |
+| Admin brute-force | Common attack target | Session-based auth (Better Auth) with rate limiting and account lockout |
 | DDoS / WAF | Add-on (Cloudflare, Sucuri, Wordfence) | Cloudflare WAF + bot management built-in |
 | Default password hashing | phpass (legacy bcrypt-style) | PBKDF2 100k iterations, SHA-256 |
 | File uploads | PHP file system, often misconfigured | R2 bucket, signed URLs |
@@ -305,7 +305,7 @@ app.get('/api/latest-posts', async (c) => {
 export default app
 ```
 
-You also get the auto-generated `GET /api/content/posts` endpoint for free without writing any code. See the [API reference](/api).
+You also get the auto-generated `GET /api/posts` endpoint for free without writing any code. See the [API reference](/api).
 
 ### TypeScript & types
 
@@ -386,7 +386,7 @@ If you're considering a move from WordPress to SonicJS:
 3. **Re-host media.** Move uploads to R2 (or keep them on the original origin and let the URLs follow).
 4. **Rebuild the frontend.** Most teams take this opportunity to move from a WP theme to Next.js / Astro.
 5. **Set up redirects** so old `/category/foo/` URLs land on the new equivalents.
-6. **Cut over auth and forms.** WordPress's wp_users + wp_usermeta map to SonicJS's typed users + JWT auth model.
+6. **Cut over auth and forms.** WordPress's wp_users + wp_usermeta map to SonicJS's users + session-based Better Auth model (JWT API tokens also available).
 
 Plan for a phased migration if your site is large — many teams run WordPress and SonicJS side-by-side for a few weeks during cutover.
 

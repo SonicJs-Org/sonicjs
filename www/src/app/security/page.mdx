@@ -73,9 +73,9 @@ SonicJS enforces role-based permissions across all routes:
 
 ### Security Headers
 Every response includes:
-- `Content-Security-Policy` — restricts resource loading
+- `Content-Security-Policy` — restricts resource loading (not set by default; configure via middleware if needed)
 - `X-Content-Type-Options: nosniff` — prevents MIME sniffing
-- `X-Frame-Options: DENY` — prevents clickjacking
+- `X-Frame-Options: SAMEORIGIN` — prevents clickjacking, allows same-origin iframe embedding
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Strict-Transport-Security` (HSTS) — enforces HTTPS in production
 
@@ -142,6 +142,7 @@ All security audit data is available via authenticated admin API endpoints:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v3.0.0-beta | Jun 2026 | Better Auth session hardening, document-backed RBAC, HTTP-only auth_token cookie |
 | v2.16.1 | Apr 2026 | Admin panel restricted to admin role by default, configurable `adminAccessRoles` |
 | v2.16.0 | Apr 2026 | BruteForceDetector KV resilience, CSRF exempt path expansion, Authorization header bypass for API clients |
 | v2.9.0 | Apr 2026 | RBAC enforcement on all admin routes |

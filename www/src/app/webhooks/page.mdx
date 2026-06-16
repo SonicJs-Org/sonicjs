@@ -13,6 +13,10 @@ export const sections = [
 
 Register and consume webhooks to integrate your SonicJS application with external services. Webhooks notify your app in real time when content is created, workflows transition, users are added, and more. {{ className: 'lead' }}
 
+<div className="p-4 mb-6 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
+  <strong>⚠️ Legacy / Experimental in v3</strong> — The Workflow plugin (which powers webhooks) is currently inactive in v3. <code>WebhookService</code> is not exported from <code>@sonicjs-cms/core</code>. This documentation describes the intended architecture for reference; webhook functionality requires the workflow plugin to be re-enabled.
+</div>
+
 ---
 
 ## Overview

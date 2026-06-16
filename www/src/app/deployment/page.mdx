@@ -152,7 +152,7 @@ Apply all database migrations to production:
 
 ```bash {{ title: 'Using npm script' }}
 # Apply migrations to production
-npm run db:migrate:prod
+npm run db:migrate
 ```
 
 ```bash {{ title: 'Using Wrangler' }}
@@ -177,15 +177,18 @@ wrangler d1 execute sonicjs-ai --env production \
   --command="SELECT name FROM sqlite_master WHERE type='table';"
 
 # Expected tables:
-# - users
-# - collections
-# - content
-# - content_versions
-# - media
-# - api_tokens
-# - plugins
-# - plugin_routes
-# - plugin_hooks
+# - auth_user
+# - auth_session
+# - auth_account
+# - auth_verification
+# - document_types
+# - documents
+# - document_references
+# - document_facets
+# - document_permissions
+# - rbac_role
+# - rbac_verb
+# - rbac_user_roles
 ```
 
 ### Seed Initial Data
@@ -195,20 +198,14 @@ Create an admin user and initial collections:
 <CodeGroup title="Seed Data">
 
 ```bash {{ title: 'Create Admin User' }}
-wrangler d1 execute sonicjs-ai --env production --command="
-INSERT INTO users (id, email, username, first_name, last_name, role, is_active, created_at, updated_at)
-VALUES (
-  'admin-' || lower(hex(randomblob(16))),
-  'admin@yourdomain.com',
-  'admin',
-  'Admin',
-  'User',
-  'admin',
-  1,
-  strftime('%s', 'now') * 1000,
-  strftime('%s', 'now') * 1000
-);
-"
+# Admin user is created automatically at bootstrap.
+# Set these secrets before first deploy:
+echo "admin@yourdomain.com" | wrangler secret put ADMIN_EMAIL --env production
+echo "your-secure-password" | wrangler secret put ADMIN_PASSWORD --env production
+
+# If using the seed script, demo credentials are:
+# Email:    admin@sonicjs.com
+# Password: sonicjs!
 ```
 
 ```bash {{ title: 'From SQL File' }}

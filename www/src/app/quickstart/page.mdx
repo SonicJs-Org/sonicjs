@@ -32,7 +32,7 @@ Create a new SonicJS application with a single command. The setup is fully autom
 
 ```bash
 # Create a new SonicJS application
-npx create-sonicjs my-app
+npx create-sonicjs@latest my-app
 
 # Navigate to your project
 cd my-app
@@ -77,7 +77,7 @@ The admin interface provides:
 
 **Via Admin UI:**
 
-1. Navigate to **Content** → **New Content**
+1. Navigate to **Content**, then pick a collection from the **New Content** dropdown
 2. Select a collection (e.g., "Blog Posts")
 3. Fill in the fields and click **Save**
 
@@ -92,17 +92,14 @@ curl -X POST http://localhost:8787/auth/login \
   -d '{"email":"admin@sonicjs.com","password":"sonicjs!"}'
 
 # Create content
-curl -X POST http://localhost:8787/admin/content \
+curl -X POST http://localhost:8787/api/blog_posts \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
-    "collection": "blog_posts",
     "title": "My First Post",
-    "data": {
-      "slug": "my-first-post",
-      "content": "<p>Hello World!</p>",
-      "status": "published"
-    }
+    "slug": "my-first-post",
+    "content": "<p>Hello World!</p>",
+    "status": "published"
   }'
 ```
 
@@ -119,20 +116,17 @@ const authResponse = await fetch('http://localhost:8787/auth/login', {
 const { token } = await authResponse.json();
 
 // Create content
-const response = await fetch('http://localhost:8787/admin/content', {
+const response = await fetch('http://localhost:8787/api/blog_posts', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`
   },
   body: JSON.stringify({
-    collection: 'blog_posts',
     title: 'My First Post',
-    data: {
-      slug: 'my-first-post',
-      content: '<p>Hello World!</p>',
-      status: 'published'
-    }
+    slug: 'my-first-post',
+    content: '<p>Hello World!</p>',
+    status: 'published'
   })
 });
 ```
@@ -151,7 +145,7 @@ curl http://localhost:8787/api/content
 curl http://localhost:8787/api/collections/blog_posts/content
 
 # Get single content item
-curl http://localhost:8787/api/content/:id
+curl http://localhost:8787/api/blog_posts/:id
 ```
 
 ```javascript

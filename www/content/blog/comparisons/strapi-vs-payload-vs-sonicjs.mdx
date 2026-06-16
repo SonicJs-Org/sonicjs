@@ -371,7 +371,7 @@ We've been critical of Strapi and Payload. It's only fair we're honest about our
 
 **GraphQL Support**: Currently REST-only. GraphQL is on our roadmap but not yet implemented. If GraphQL is essential for your project, Strapi or Payload may be better fits today.
 
-**Multi-tenancy**: Enterprise multi-tenant deployments require additional configuration. We're working on first-class multi-tenant support.
+**Multi-tenancy**: First-class multi-tenant support (tenant switcher, role-based membership, email invitations) ships in v3.
 
 **Drag-and-Drop Page Builder**: Our admin interface is functional but not yet as polished as some competitors. A visual page builder is in active development.
 
@@ -383,10 +383,9 @@ We've been critical of Strapi and Payload. It's only fair we're honest about our
 
 These aren't "someday" items—they're actively being developed:
 
-- **Q1 2025**: Enhanced drag-and-drop page builder
-- **Q1 2025**: GraphQL API layer
-- **Q2 2025**: Multi-tenant administration
-- **Q2 2025**: Expanded third-party integrations (Stripe, Auth0, etc.)
+- **GraphQL API layer**
+- **Enhanced drag-and-drop page builder**
+- **Expanded third-party integrations (Stripe, Auth0, etc.)**
 - **Ongoing**: Performance optimization and plugin ecosystem growth
 
 ### When SonicJS Isn't the Right Choice
@@ -472,9 +471,9 @@ const articles = defineCollection({
 
 **API Compatibility:**
 Both use REST patterns, so frontend migration is straightforward. Replace:
-- `GET /api/articles` → `GET /api/content/articles`
-- `POST /api/articles` → `POST /api/content/articles`
-- `PUT /api/articles/:id` → `PUT /api/content/articles/:id`
+- `GET /api/articles` → `GET /api/articles`
+- `POST /api/articles` → `POST /api/articles`
+- `PUT /api/articles/:id` → `PUT /api/articles/:id`
 
 ### Coming from Payload
 
@@ -676,7 +675,7 @@ Yes. Both use REST APIs with similar patterns, making frontend migration straigh
 
 ### Does SonicJS support GraphQL?
 
-Not yet. SonicJS is currently REST-only. GraphQL support is on our Q1 2025 roadmap. If GraphQL is essential today, consider Strapi or Payload.
+Not yet. SonicJS is currently REST-only. GraphQL support is on our roadmap. If GraphQL is essential today, consider Strapi or Payload.
 
 ### How does SonicJS pricing compare?
 

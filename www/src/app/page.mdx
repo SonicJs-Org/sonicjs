@@ -20,7 +20,7 @@ import { HeroPattern } from '@/components/HeroPattern'
 
   <div className="mb-8 max-w-md mx-auto">
     ```bash
-    npx create-sonicjs my-app
+    npx create-sonicjs@latest my-app
     ```
   </div>
 
@@ -212,7 +212,7 @@ import { HeroPattern } from '@/components/HeroPattern'
   <a href="/plugins" className="group relative overflow-hidden border border-purple-200/50 dark:border-purple-700/50 bg-gradient-to-br from-purple-50/50 via-violet-50/30 to-indigo-50/50 dark:from-purple-900/20 dark:via-violet-900/10 dark:to-indigo-900/20 rounded-xl p-6 hover:shadow-xl hover:scale-105 transition-all duration-300 no-underline">
     <div className="text-5xl mb-4 transform group-hover:scale-110 transition-transform duration-300">🧩</div>
     <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">Plugin Architecture</h3>
-    <div className="text-gray-600 dark:text-gray-300 text-sm">15+ core plugins included. Build your own with the fluent PluginBuilder SDK.</div>
+    <div className="text-gray-600 dark:text-gray-300 text-sm">25+ core plugins included. Build your own with the <code>definePlugin()</code> SDK.</div>
     <div className="absolute top-0 right-0 w-20 h-20 bg-purple-400/10 dark:bg-purple-400/5 rounded-full -mr-10 -mt-10"></div>
   </a>
 
@@ -223,7 +223,7 @@ import { HeroPattern } from '@/components/HeroPattern'
     <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-400/10 dark:bg-cyan-400/5 rounded-full -mr-10 -mt-10"></div>
   </a>
 
-  <a href="/contacts" className="group relative overflow-hidden border border-pink-200/50 dark:border-pink-700/50 bg-gradient-to-br from-pink-50/50 via-rose-50/30 to-red-50/50 dark:from-pink-900/20 dark:via-rose-900/10 dark:to-red-900/20 rounded-xl p-6 hover:shadow-xl hover:scale-105 transition-all duration-300 no-underline">
+  <a href="/forms" className="group relative overflow-hidden border border-pink-200/50 dark:border-pink-700/50 bg-gradient-to-br from-pink-50/50 via-rose-50/30 to-red-50/50 dark:from-pink-900/20 dark:via-rose-900/10 dark:to-red-900/20 rounded-xl p-6 hover:shadow-xl hover:scale-105 transition-all duration-300 no-underline">
     <div className="text-5xl mb-4 transform group-hover:scale-110 transition-transform duration-300">📝</div>
     <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">Form Builder</h3>
     <div className="text-gray-600 dark:text-gray-300 text-sm">Drag-and-drop form builder with Turnstile bot protection and Google Maps.</div>
@@ -336,7 +336,7 @@ GET /api/products?category=electronics&sort=-price`}</pre>
 
 ```bash {{ title: 'Installation' }}
 # Create a new SonicJS application
-npx create-sonicjs my-app
+npx create-sonicjs@latest my-app
 cd my-app
 
 # Start the development server
@@ -476,11 +476,49 @@ Join thousands of developers building the future of web APIs
   </div>
 
   <div className="space-y-6">
-    {/* v2.19.0 - Latest Release */}
+    {/* v3.0.0-beta - Latest Release */}
+    <div className="border-l-4 border-purple-500 dark:border-purple-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">v3.0.0-beta</span>
+        <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-300 font-bold">LATEST</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-15</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Document Model data layer</strong> — All content lives in 5 unified tables (<code>documents</code>, <code>document_types</code>, <code>document_references</code>, <code>document_facets</code>, <code>document_permissions</code>) with queryable scalar fields as JSON virtual generated columns</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Better Auth + JWT hybrid</strong> — Session-cookie auth for admin UI, JWT API tokens for programmatic access, document-backed RBAC (<code>rbac_role</code>, <code>rbac_verb</code>, <code>rbac_user_roles</code>)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Code-only Collections</strong> — <code>registerCollections([...CollectionConfig])</code>; no DB table per collection, no UI creation, <code>/admin/collections</code> is read-only</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>New Plugin SDK</strong> — <code>definePlugin()</code> + <code>registerPlugins()</code>; legacy <code>PluginBuilder</code> class removed; ~28 core plugins</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Multi-tenant support</strong> — Tenant switcher, role-based membership, email invitations, <code>is_super_admin</code></span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>Lexical as default editor</strong> — Rich text via the <code>lexical-editor</code> plugin; TinyMCE/Quill/MDX optional</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-purple-600 dark:text-purple-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300"><strong>create-sonicjs scaffold</strong> — <code>npx create-sonicjs@latest my-app</code></span>
+        </div>
+      </div>
+    </div>
+
+    {/* v2.19.0 */}
     <div className="border-l-4 border-emerald-500 dark:border-emerald-400 pl-4 py-1">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">v2.19.0</span>
-        <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-300 font-bold">LATEST</span>
         <span className="text-sm text-gray-500 dark:text-gray-400">2026-05-28</span>
       </div>
       <div className="text-sm space-y-1">

@@ -116,45 +116,38 @@ Create a fully-featured blog with categories, tags, authors, and SEO optimizatio
 
 ```typescript
 import { Hono } from 'hono'
+import { DocumentRepository } from '@sonicjs-cms/core'
 
 const blog = new Hono()
 
 // Get all published posts with pagination
+// Uses the SonicJS public API — GET /api/blog_posts?status=published
 blog.get('/posts', async (c) => {
   const page = parseInt(c.req.query('page') || '1')
   const limit = parseInt(c.req.query('limit') || '10')
   const category = c.req.query('category')
   const tag = c.req.query('tag')
 
-  const db = c.env.DB
+  const repo = new DocumentRepository(c.env.DB, 'default')
 
-  let query = `
-    SELECT p.*, a.name as author_name, a.avatar as author_avatar
-    FROM blog_posts p
-    JOIN authors a ON p.author_id = a.id
-    WHERE p.status = 'published'
-    AND p.published_at <= datetime('now')
-  `
+  const filters: Record<string, string> = { status: 'published' }
+  if (category) filters.category = category
+  if (tag) filters.tag = tag
 
-  if (category) {
-    query += ` AND p.categories LIKE '%${category}%'`
-  }
-
-  if (tag) {
-    query += ` AND p.tags LIKE '%${tag}%'`
-  }
-
-  query += ` ORDER BY p.published_at DESC LIMIT ${limit} OFFSET ${(page - 1) * limit}`
-
-  const posts = await db.prepare(query).all()
+  const posts = await repo.list({
+    type: 'blog_posts',
+    filters,
+    limit,
+    offset: (page - 1) * limit,
+  })
 
   return c.json({
     success: true,
-    data: posts.results,
+    data: posts.items,
     pagination: {
       page,
       limit,
-      total: posts.results.length
+      total: posts.total
     }
   })
 })
@@ -162,27 +155,20 @@ blog.get('/posts', async (c) => {
 // Get single post by slug
 blog.get('/posts/:slug', async (c) => {
   const slug = c.req.param('slug')
-  const db = c.env.DB
 
-  const post = await db
-    .prepare(`
-      SELECT p.*, a.name as author_name, a.bio as author_bio
-      FROM blog_posts p
-      JOIN authors a ON p.author_id = a.id
-      WHERE p.slug = ? AND p.status = 'published'
-    `)
-    .bind(slug)
-    .first()
+  const repo = new DocumentRepository(c.env.DB, 'default')
+
+  const results = await repo.list({
+    type: 'blog_posts',
+    filters: { slug, status: 'published' },
+    limit: 1,
+  })
+
+  const post = results.items[0]
 
   if (!post) {
     return c.json({ error: 'Post not found' }, 404)
   }
-
-  // Increment view count
-  await db
-    .prepare('UPDATE blog_posts SET views = views + 1 WHERE id = ?')
-    .bind(post.id)
-    .run()
 
   return c.json({
     success: true,
@@ -193,21 +179,17 @@ blog.get('/posts/:slug', async (c) => {
 // Get posts by category
 blog.get('/categories/:slug/posts', async (c) => {
   const slug = c.req.param('slug')
-  const db = c.env.DB
 
-  const posts = await db
-    .prepare(`
-      SELECT p.* FROM blog_posts p
-      WHERE p.categories LIKE '%' || ? || '%'
-      AND p.status = 'published'
-      ORDER BY p.published_at DESC
-    `)
-    .bind(slug)
-    .all()
+  const repo = new DocumentRepository(c.env.DB, 'default')
+
+  const posts = await repo.list({
+    type: 'blog_posts',
+    filters: { category: slug, status: 'published' },
+  })
 
   return c.json({
     success: true,
-    data: posts.results
+    data: posts.items
   })
 })
 
@@ -406,81 +388,51 @@ Build a product catalog with categories, variants, and inventory management.
 
 ```typescript
 import { Hono } from 'hono'
+import { DocumentRepository } from '@sonicjs-cms/core'
 
 const shop = new Hono()
 
 // Get all products with filtering
+// Equivalent public API: GET /api/products?status=active&category=<slug>
 shop.get('/products', async (c) => {
   const category = c.req.query('category')
   const minPrice = c.req.query('minPrice')
   const maxPrice = c.req.query('maxPrice')
   const inStock = c.req.query('inStock') === 'true'
-  const sort = c.req.query('sort') || 'name_asc'
 
-  const db = c.env.DB
+  const repo = new DocumentRepository(c.env.DB, 'default')
 
-  let query = `
-    SELECT p.*, c.name as category_name
-    FROM products p
-    JOIN categories c ON p.category_id = c.id
-    WHERE p.status = 'active'
-  `
+  const filters: Record<string, string> = { status: 'active' }
+  if (category) filters.category = category
+  if (minPrice) filters.minPrice = minPrice
+  if (maxPrice) filters.maxPrice = maxPrice
+  if (inStock) filters.inStock = 'true'
 
-  const params = []
-
-  if (category) {
-    query += ` AND c.slug = ?`
-    params.push(category)
-  }
-
-  if (minPrice) {
-    query += ` AND p.price >= ?`
-    params.push(parseFloat(minPrice))
-  }
-
-  if (maxPrice) {
-    query += ` AND p.price <= ?`
-    params.push(parseFloat(maxPrice))
-  }
-
-  if (inStock) {
-    query += ` AND p.stock > 0`
-  }
-
-  // Sorting
-  const [field, direction] = sort.split('_')
-  query += ` ORDER BY p.${field} ${direction.toUpperCase()}`
-
-  const products = await db.prepare(query).bind(...params).all()
+  const products = await repo.list({ type: 'products', filters })
 
   return c.json({
     success: true,
-    data: products.results
+    data: products.items
   })
 })
 
 // Get single product
 shop.get('/products/:slug', async (c) => {
   const slug = c.req.param('slug')
-  const db = c.env.DB
 
-  const product = await db
-    .prepare(`
-      SELECT p.*, c.name as category_name, c.slug as category_slug
-      FROM products p
-      JOIN categories c ON p.category_id = c.id
-      WHERE p.slug = ? AND p.status = 'active'
-    `)
-    .bind(slug)
-    .first()
+  const repo = new DocumentRepository(c.env.DB, 'default')
+
+  const results = await repo.list({
+    type: 'products',
+    filters: { slug, status: 'active' },
+    limit: 1,
+  })
+
+  const product = results.items[0]
 
   if (!product) {
     return c.json({ error: 'Product not found' }, 404)
   }
-
-  // Parse JSON fields
-  product.variants = JSON.parse(product.variants || '[]')
-  product.images = JSON.parse(product.images || '[]')
 
   return c.json({
     success: true,
@@ -492,30 +444,33 @@ shop.get('/products/:slug', async (c) => {
 shop.get('/products/:slug/availability', async (c) => {
   const slug = c.req.param('slug')
   const variantId = c.req.query('variantId')
-  const db = c.env.DB
 
-  const product = await db
-    .prepare('SELECT * FROM products WHERE slug = ?')
-    .bind(slug)
-    .first()
+  const repo = new DocumentRepository(c.env.DB, 'default')
+
+  const results = await repo.list({
+    type: 'products',
+    filters: { slug, status: 'active' },
+    limit: 1,
+  })
+
+  const product = results.items[0]
 
   if (!product) {
     return c.json({ error: 'Product not found' }, 404)
   }
 
-  const variants = JSON.parse(product.variants || '[]')
+  const variants: Array<{ id: string; stock: number }> = product.data?.variants ?? []
   const variant = variants.find(v => v.id === variantId)
 
-  const available = variant
-    ? variant.stock > 0
-    : product.stock > 0
+  const stock = variant?.stock ?? product.data?.stock ?? 0
+  const available = stock > 0
 
   return c.json({
     success: true,
     data: {
       available,
-      stock: variant?.stock || product.stock,
-      lowStock: (variant?.stock || product.stock) < product.low_stock_threshold
+      stock,
+      lowStock: stock < (product.data?.low_stock_threshold ?? 10)
     }
   })
 })
@@ -785,16 +740,15 @@ app.use('*', tenantMiddleware())
 // Get tenant content
 app.get('/content', async (c) => {
   const tenant = c.get('tenant')
-  const db = c.env.DB
 
-  const content = await db
-    .prepare('SELECT * FROM content WHERE tenant_id = ? ORDER BY created_at DESC')
-    .bind(tenant.id)
-    .all()
+  // DocumentRepository is scoped to tenant_id — passes tenant.id as tenantId
+  const repo = new DocumentRepository(c.env.DB, tenant.id)
+
+  const results = await repo.list({ filters: { status: 'published' } })
 
   return c.json({
     success: true,
-    data: content.results,
+    data: results.items,
     tenant: {
       id: tenant.id,
       name: tenant.name
@@ -806,23 +760,19 @@ app.get('/content', async (c) => {
 app.post('/content', async (c) => {
   const tenant = c.get('tenant')
   const body = await c.req.json()
-  const db = c.env.DB
 
-  const result = await db
-    .prepare(`
-      INSERT INTO content (tenant_id, title, body, created_at)
-      VALUES (?, ?, ?, ?)
-    `)
-    .bind(tenant.id, body.title, body.body, Date.now())
-    .run()
+  // DocumentsService.create() handles raw prepare/bind/batch (R1) scoped to tenant
+  const { DocumentsService } = await import('@sonicjs-cms/core')
+  const svc = new DocumentsService(c.env.DB, tenant.id)
+
+  const doc = await svc.create({
+    type: body.type || 'content',
+    data: body,
+  })
 
   return c.json({
     success: true,
-    data: {
-      id: result.lastInsertRowid,
-      ...body,
-      tenant_id: tenant.id
-    }
+    data: doc
   })
 })
 
@@ -860,6 +810,7 @@ Use SonicJS as a headless CMS for any frontend framework.
 ```typescript
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { getCollectionRegistry, DocumentRepository } from '@sonicjs-cms/core'
 
 const api = new Hono()
 
@@ -869,49 +820,37 @@ api.use('*', cors())
 // Generic content endpoint
 api.get('/:collection', async (c) => {
   const collection = c.req.param('collection')
-  const db = c.env.DB
 
-  // Validate collection exists
-  const collectionExists = await db
-    .prepare('SELECT * FROM collections WHERE id = ?')
-    .bind(collection)
-    .first()
+  // Collections are code-defined in-memory — no DB table
+  const registry = getCollectionRegistry()
+  const collectionExists = registry.listActive().find(col => col.id === collection)
 
   if (!collectionExists) {
     return c.json({ error: 'Collection not found' }, 404)
   }
 
-  // Get content with pagination
+  // Get content with pagination using DocumentRepository
   const page = parseInt(c.req.query('page') || '1')
   const limit = Math.min(parseInt(c.req.query('limit') || '10'), 100)
   const offset = (page - 1) * limit
 
-  const content = await db
-    .prepare(`
-      SELECT * FROM content
-      WHERE collection = ? AND status = 'published'
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `)
-    .bind(collection, limit, offset)
-    .all()
+  const repo = new DocumentRepository(c.env.DB, 'default')
 
-  const total = await db
-    .prepare('SELECT COUNT(*) as count FROM content WHERE collection = ? AND status = "published"')
-    .bind(collection)
-    .first()
+  const results = await repo.list({
+    type: collection,
+    filters: { status: 'published' },
+    limit,
+    offset,
+  })
 
   return c.json({
     success: true,
-    data: content.results.map(item => ({
-      ...item,
-      data: JSON.parse(item.data)
-    })),
+    data: results.items,
     pagination: {
       page,
       limit,
-      total: total.count,
-      pages: Math.ceil(total.count / limit)
+      total: results.total,
+      pages: Math.ceil(results.total / limit)
     }
   })
 })
@@ -920,15 +859,21 @@ api.get('/:collection', async (c) => {
 api.get('/:collection/:id', async (c) => {
   const collection = c.req.param('collection')
   const id = c.req.param('id')
-  const db = c.env.DB
 
-  const content = await db
-    .prepare(`
-      SELECT * FROM content
-      WHERE collection = ? AND (id = ? OR slug = ?) AND status = 'published'
-    `)
-    .bind(collection, id, id)
-    .first()
+  const repo = new DocumentRepository(c.env.DB, 'default')
+
+  // Try by id first, fall back to slug
+  const byId = await repo.list({
+    type: collection,
+    filters: { id, status: 'published' },
+    limit: 1,
+  })
+
+  const bySlug = byId.items.length === 0
+    ? await repo.list({ type: collection, filters: { slug: id, status: 'published' }, limit: 1 })
+    : byId
+
+  const content = byId.items[0] ?? bySlug.items[0]
 
   if (!content) {
     return c.json({ error: 'Content not found' }, 404)
@@ -936,10 +881,7 @@ api.get('/:collection/:id', async (c) => {
 
   return c.json({
     success: true,
-    data: {
-      ...content,
-      data: JSON.parse(content.data)
-    }
+    data: content
   })
 })
 
@@ -1061,9 +1003,9 @@ Implement a custom content approval workflow with multiple stages.
 <CodeGroup title="Workflow Implementation">
 
 ```typescript
-import { PluginBuilder } from '@sonicjs-cms/core'
+import { definePlugin, DocumentsService } from '@sonicjs-cms/core'
 
-const workflow = PluginBuilder.create({
+const workflow = definePlugin({
   name: 'content-workflow',
   version: '1.0.0',
   description: 'Multi-stage content approval workflow'
@@ -1085,26 +1027,22 @@ const routes = new Hono()
 routes.post('/submit/:contentId', async (c) => {
   const contentId = c.req.param('contentId')
   const user = c.get('user')
-  const db = c.env.DB
 
-  // Update content status
-  await db
-    .prepare(`
-      UPDATE content
-      SET status = ?, submitted_by = ?, submitted_at = ?
-      WHERE id = ?
-    `)
-    .bind(STAGES.REVIEW, user.userId, Date.now(), contentId)
-    .run()
+  // Update document status via DocumentsService (raw prepare/bind/batch — R1)
+  const svc = new DocumentsService(c.env.DB, 'default')
+  await svc.saveDraft(contentId, {
+    status: STAGES.REVIEW,
+    submitted_by: user.userId,
+    submitted_at: Math.floor(Date.now() / 1000),
+  })
 
   // Create workflow entry
-  await db
-    .prepare(`
-      INSERT INTO workflow_history
-      (content_id, from_stage, to_stage, user_id, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `)
-    .bind(contentId, STAGES.DRAFT, STAGES.REVIEW, user.userId, Date.now())
+  await c.env.DB.prepare(`
+    INSERT INTO workflow_history
+    (content_id, from_stage, to_stage, user_id, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `)
+    .bind(contentId, STAGES.DRAFT, STAGES.REVIEW, user.userId, Math.floor(Date.now() / 1000))
     .run()
 
   return c.json({
@@ -1118,29 +1056,25 @@ routes.post('/approve/:contentId', async (c) => {
   const contentId = c.req.param('contentId')
   const user = c.get('user')
   const { comments } = await c.req.json()
-  const db = c.env.DB
 
   // Check permissions
-  if (!user.role === 'editor' && !user.role === 'admin') {
+  if (user.role !== 'editor' && user.role !== 'admin') {
     return c.json({ error: 'Insufficient permissions' }, 403)
   }
 
-  await db
-    .prepare(`
-      UPDATE content
-      SET status = ?, approved_by = ?, approved_at = ?
-      WHERE id = ?
-    `)
-    .bind(STAGES.APPROVED, user.userId, Date.now(), contentId)
-    .run()
+  const svc = new DocumentsService(c.env.DB, 'default')
+  await svc.saveDraft(contentId, {
+    status: STAGES.APPROVED,
+    approved_by: user.userId,
+    approved_at: Math.floor(Date.now() / 1000),
+  })
 
-  await db
-    .prepare(`
-      INSERT INTO workflow_history
-      (content_id, from_stage, to_stage, user_id, comments, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    .bind(contentId, STAGES.REVIEW, STAGES.APPROVED, user.userId, comments, Date.now())
+  await c.env.DB.prepare(`
+    INSERT INTO workflow_history
+    (content_id, from_stage, to_stage, user_id, comments, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `)
+    .bind(contentId, STAGES.REVIEW, STAGES.APPROVED, user.userId, comments, Math.floor(Date.now() / 1000))
     .run()
 
   return c.json({
@@ -1154,24 +1088,16 @@ routes.post('/reject/:contentId', async (c) => {
   const contentId = c.req.param('contentId')
   const user = c.get('user')
   const { reason } = await c.req.json()
-  const db = c.env.DB
 
-  await db
-    .prepare(`
-      UPDATE content
-      SET status = ?
-      WHERE id = ?
-    `)
-    .bind(STAGES.REJECTED, contentId)
-    .run()
+  const svc = new DocumentsService(c.env.DB, 'default')
+  await svc.saveDraft(contentId, { status: STAGES.REJECTED })
 
-  await db
-    .prepare(`
-      INSERT INTO workflow_history
-      (content_id, from_stage, to_stage, user_id, comments, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    .bind(contentId, STAGES.REVIEW, STAGES.REJECTED, user.userId, reason, Date.now())
+  await c.env.DB.prepare(`
+    INSERT INTO workflow_history
+    (content_id, from_stage, to_stage, user_id, comments, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `)
+    .bind(contentId, STAGES.REVIEW, STAGES.REJECTED, user.userId, reason, Math.floor(Date.now() / 1000))
     .run()
 
   return c.json({
@@ -1183,9 +1109,8 @@ routes.post('/reject/:contentId', async (c) => {
 // Get workflow history
 routes.get('/history/:contentId', async (c) => {
   const contentId = c.req.param('contentId')
-  const db = c.env.DB
 
-  const history = await db
+  const history = await c.env.DB
     .prepare(`
       SELECT wh.*, u.name as user_name
       FROM workflow_history wh
@@ -1204,7 +1129,7 @@ routes.get('/history/:contentId', async (c) => {
 
 workflow.addRoute('/api/workflow', routes)
 
-export default workflow.build()
+export default workflow
 ```
 
 </CodeGroup>

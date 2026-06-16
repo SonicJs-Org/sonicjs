@@ -29,7 +29,7 @@ featuredImage:
 # Getting Started with SonicJS: Complete Beginner's Guide
 
 <TLDRBox>
-**TL;DR** — SonicJS is an edge-first headless CMS that runs on Cloudflare Workers. Create a project with `npm create sonicjs-app`, define your content collections in TypeScript, and deploy globally with a single command.
+**TL;DR** — SonicJS is an edge-first headless CMS that runs on Cloudflare Workers. Create a project with `npx create-sonicjs@latest`, define your content collections in TypeScript, and deploy globally with a single command.
 
 **Key Stats:**
 - Under 5 minutes to get a fully functional CMS running
@@ -65,7 +65,7 @@ The fastest way to get started is using the create-sonicjs-app CLI:
 
 ```bash
 # Create a new SonicJS project
-npm create sonicjs-app my-cms
+npx create-sonicjs@latest my-cms
 
 # Navigate to your project
 cd my-cms
@@ -103,24 +103,13 @@ my-cms/
 Open `src/index.ts` to see how SonicJS is configured:
 
 ```typescript
-import { Hono } from 'hono'
-import { createSonicJS } from '@sonicjs-cms/core'
-import { authPlugin } from '@sonicjs-cms/core/plugins'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
 import { postsCollection } from './collections/posts'
 import { usersCollection } from './collections/users'
 
-const app = new Hono<{ Bindings: Env }>()
+registerCollections([postsCollection, usersCollection])
 
-// Initialize SonicJS
-const cms = createSonicJS({
-  collections: [postsCollection, usersCollection],
-  plugins: [authPlugin()],
-})
-
-// Mount the CMS
-app.route('/', cms.app)
-
-export default app
+export default createSonicJSApp({ collections: { autoSync: true } })
 ```
 
 ## Step 3: Define Your Content Collections
@@ -130,47 +119,48 @@ Collections are the heart of SonicJS. They define your content structure with fu
 Create a new collection in `src/collections/posts.ts`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export const postsCollection = defineCollection({
+export const postsCollection: CollectionConfig = {
   name: 'posts',
   slug: 'posts',
-  fields: {
-    title: {
-      type: 'string',
-      required: true,
-      maxLength: 200,
+  schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        maxLength: 200,
+      },
+      slug: {
+        type: 'string',
+      },
+      content: {
+        type: 'lexical',
+      },
+      excerpt: {
+        type: 'string',
+        maxLength: 500,
+      },
+      featuredImage: {
+        type: 'string',
+      },
+      author: {
+        type: 'reference',
+        collection: 'users',
+      },
+      status: {
+        type: 'string',
+        enum: ['draft', 'published', 'archived'],
+        default: 'draft',
+      },
+      publishedAt: {
+        type: 'string',
+        format: 'date-time',
+      },
     },
-    slug: {
-      type: 'string',
-      required: true,
-      unique: true,
-    },
-    content: {
-      type: 'richtext',
-      required: true,
-    },
-    excerpt: {
-      type: 'text',
-      maxLength: 500,
-    },
-    featuredImage: {
-      type: 'media',
-    },
-    author: {
-      type: 'relation',
-      collection: 'users',
-    },
-    status: {
-      type: 'select',
-      options: ['draft', 'published', 'archived'],
-      default: 'draft',
-    },
-    publishedAt: {
-      type: 'datetime',
-    },
+    required: ['title', 'slug', 'content'],
   },
-})
+}
 ```
 
 ## Step 4: Set Up Your Database
@@ -204,12 +194,8 @@ binding = "DB"
 database_name = "my-cms-db"
 database_id = "your-database-id"
 
-[[kv_namespaces]]
-binding = "CACHE"
-id = "your-kv-namespace-id"
-
 [[r2_buckets]]
-binding = "STORAGE"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-cms-storage"
 ```
 
@@ -218,14 +204,11 @@ bucket_name = "my-cms-storage"
 Generate and run database migrations:
 
 ```bash
-# Generate migrations from your collections
-npm run db:generate
-
 # Apply migrations locally
 npm run db:migrate:local
 
 # Apply migrations to production
-npm run db:migrate:prod
+npm run db:migrate
 ```
 
 ## Step 5: Start Development
@@ -242,8 +225,8 @@ Your CMS is now running at `http://localhost:8787`!
 
 Open `http://localhost:8787/admin` to access the built-in admin interface. The default credentials are:
 
-- **Email**: admin@example.com
-- **Password**: admin123
+- **Email**: admin@sonicjs.com
+- **Password**: sonicjs!
 
 > Make sure to change these credentials before deploying to production!
 
@@ -254,7 +237,7 @@ SonicJS automatically generates RESTful API endpoints for your collections.
 ### Create Content
 
 ```bash
-curl -X POST http://localhost:8787/api/content/posts \
+curl -X POST http://localhost:8787/api/posts \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -269,22 +252,22 @@ curl -X POST http://localhost:8787/api/content/posts \
 
 ```bash
 # Get all posts
-curl http://localhost:8787/api/content/posts
+curl http://localhost:8787/api/posts
 
 # Get a single post by ID
-curl http://localhost:8787/api/content/posts/123
+curl http://localhost:8787/api/posts/123
 
 # Filter posts
-curl "http://localhost:8787/api/content/posts?status=published"
+curl "http://localhost:8787/api/posts?status=published"
 
 # Pagination
-curl "http://localhost:8787/api/content/posts?limit=10&offset=0"
+curl "http://localhost:8787/api/posts?limit=10&offset=0"
 ```
 
 ### Update Content
 
 ```bash
-curl -X PUT http://localhost:8787/api/content/posts/123 \
+curl -X PUT http://localhost:8787/api/posts/123 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -295,7 +278,7 @@ curl -X PUT http://localhost:8787/api/content/posts/123 \
 ### Delete Content
 
 ```bash
-curl -X DELETE http://localhost:8787/api/content/posts/123 \
+curl -X DELETE http://localhost:8787/api/posts/123 \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -314,7 +297,7 @@ That's it! Your CMS is now live and running on Cloudflare's global network.
 
 ```bash
 # Test your production API
-curl https://my-cms.your-subdomain.workers.dev/api/content/posts
+curl https://my-cms.your-subdomain.workers.dev/api/posts
 ```
 
 ## Next Steps

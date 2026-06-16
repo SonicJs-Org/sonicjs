@@ -81,7 +81,7 @@ Before you deploy, make sure you have:
 - **Node.js 20+** and npm
 - **Wrangler CLI** v4 or later (`npm install -g wrangler`)
 - A **Cloudflare account** — the free tier is enough to ship; D1, KV, and R2 all have generous free allowances
-- A working SonicJS project (`npm create sonicjs-app my-cms`)
+- A working SonicJS project (`npx create-sonicjs@latest my-cms`)
 
 ```bash
 # Verify the prerequisites
@@ -119,7 +119,7 @@ migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 
 # R2 Bucket for media storage
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media"
 
 # Environment variables
@@ -178,11 +178,11 @@ wrangler d1 execute my-sonicjs-db \
   --command="SELECT name FROM sqlite_master WHERE type='table';"
 ```
 
-You should see `users`, `collections`, `content`, `content_versions`, `media`, `api_tokens`, and the plugin tables. For a deeper look at the schema and how Drizzle generates migrations, read the [database documentation](/database).
+You should see `auth_user`, `auth_session`, `document_types`, `documents`, `document_references`, `document_facets`, `document_permissions`, and the plugin tables. For a deeper look at the schema and how Drizzle generates migrations, read the [database documentation](/database).
 
-## Step 3: Create the KV Namespace
+## Step 3: Create the KV Namespace (Optional)
 
-KV holds SonicJS's edge cache — API responses, collection metadata, and verified JWTs. Create the namespace:
+KV is not required by default. Only set it up if you are using a caching plugin that relies on KV storage. If you are, create the namespace:
 
 ```bash
 wrangler kv namespace create CACHE_KV
@@ -216,7 +216,7 @@ The starter `wrangler.toml` already has the binding:
 
 ```toml
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media"
 ```
 
@@ -316,7 +316,7 @@ Open the URL. You should see the SonicJS admin login. Hit the health endpoint to
 
 ```bash
 curl https://my-sonicjs-app.your-subdomain.workers.dev/api/health
-# { "status": "healthy", "schemas": ["users", "collections", "content", ...] }
+# { "status": "healthy", "schemas": ["auth_user", "documents", "document_types", ...] }
 ```
 
 If the health check returns `unhealthy`, the most common cause is missing migrations on the remote D1. Run `npm run db:migrate` again and retry.
@@ -342,7 +342,7 @@ binding = "CACHE_KV"
 id = "preview-kv-namespace-id"
 
 [[env.preview.r2_buckets]]
-binding = "BUCKET"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media-preview"
 ```
 
@@ -473,7 +473,7 @@ Hit all ten and you're production-ready.
 
 ## Troubleshooting Common Issues
 
-**`D1_ERROR: no such table: users`** — Migrations haven't run on the remote DB. Run `npm run db:migrate` (which is `wrangler d1 migrations apply DB`).
+**`D1_ERROR: no such table: auth_user`** — Migrations haven't run on the remote DB. Run `npm run db:migrate` (which is `wrangler d1 migrations apply DB`).
 
 **`JWT_SECRET is not defined`** — Secret missing in this environment. Confirm with `wrangler secret list --env production`, then `echo "..." | wrangler secret put JWT_SECRET --env production`.
 
@@ -505,7 +505,7 @@ database_id = "your-d1-id"
 migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media"
 
 [[kv_namespaces]]
@@ -534,7 +534,7 @@ database_id = "your-d1-id"
 migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 
 [[env.production.r2_buckets]]
-binding = "BUCKET"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media"
 
 [[env.production.kv_namespaces]]

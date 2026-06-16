@@ -270,14 +270,21 @@ Visual editor primarily, JSON schema under the hood:
 TypeScript-native, full type safety:
 
 ```typescript
-const posts = defineCollection({
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+const posts: CollectionConfig = {
   name: 'posts',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
-    author: { type: 'relation', collection: 'users' },
+  slug: 'posts',
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'lexical' },
+      author: { type: 'user' },
+    },
+    required: ['title'],
   },
-})
+}
 ```
 
 ## Data Ownership & Lock-in

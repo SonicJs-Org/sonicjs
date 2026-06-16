@@ -275,13 +275,21 @@ const Posts: CollectionConfig = {
 
 **SonicJS**: Full type safety from schema to API:
 ```typescript
-const posts = defineCollection({
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+const posts: CollectionConfig = {
   name: 'posts',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
+  slug: 'posts',
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'lexical' },
+    },
+    required: ['title'],
   },
-})
+}
+// Types automatically inferred
 // Types automatically inferred
 ```
 

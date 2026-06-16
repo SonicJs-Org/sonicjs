@@ -129,6 +129,29 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     ],
   })
 
+  // Security audit event (document-backed; replaces legacy security_events table)
+  await registry.register({
+    id: 'security_event',
+    name: 'security_event',
+    displayName: 'Security Event',
+    description: 'Security audit event (login attempts, lockouts, suspicious activity)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+    queryableFields: [
+      { name: 'eventType',  kind: 'scalar', type: 'text',    column: 'q_sa_event_type' },
+      { name: 'severity',   kind: 'scalar', type: 'text',    column: 'q_sa_severity' },
+      { name: 'userId',     kind: 'scalar', type: 'text',    column: 'q_sa_user_id' },
+      { name: 'email',      kind: 'scalar', type: 'text',    column: 'q_sa_email' },
+      { name: 'ipAddress',  kind: 'scalar', type: 'text',    column: 'q_sa_ip_address' },
+      { name: 'blocked',    kind: 'scalar', type: 'integer', column: 'q_sa_blocked' },
+    ],
+  })
+
   // Analytics event (document-backed; replaces legacy analytics_events table)
   await registry.register({
     id: 'analytics_event',

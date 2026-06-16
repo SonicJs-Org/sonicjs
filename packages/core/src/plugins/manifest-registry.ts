@@ -272,33 +272,6 @@ export const PLUGIN_REGISTRY: Record<string, PluginRegistryEntry> = {
     "adminMenu": null
   },
 
-  'design': {
-    "id": "design",
-    "codeName": "design",
-    "displayName": "Design System",
-    "description": "Design system management including themes, components, and UI customization. Provides a visual interface for managing design tokens, typography, colors, and component library.",
-    "version": "1.0.0-beta.1",
-    "author": "SonicJS",
-    "category": "utilities",
-    "iconEmoji": "🎨",
-    "is_core": false,
-    "permissions": [
-      "design.view",
-      "design.edit"
-    ],
-    "dependencies": [],
-    "defaultSettings": {
-      "defaultTheme": "light",
-      "customCSS": ""
-    },
-    "adminMenu": {
-      "label": "Design",
-      "icon": "palette",
-      "path": "/admin/design",
-      "order": 80
-    }
-  },
-
   'easy-mdx': {
     "id": "easy-mdx",
     "codeName": "easy-mdx",

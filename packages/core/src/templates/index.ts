@@ -38,8 +38,6 @@ export type { AdminLayoutCatalystData } from './layouts/admin-layout-catalyst.te
 export { renderLogo } from './components/logo.template'
 
 // Page templates - Admin
-export { renderDesignPage } from './pages/admin-design.template'
-export type { DesignPageData } from './pages/admin-design.template'
 export { renderCheckboxPage } from './pages/admin-checkboxes.template'
 export type { CheckboxPageData } from './pages/admin-checkboxes.template'
 export { renderTestimonialsList } from './pages/admin-testimonials-list.template'

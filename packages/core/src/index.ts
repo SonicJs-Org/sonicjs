@@ -179,7 +179,6 @@ export {
   adminMediaRoutes,
   adminLogsRoutes,
   adminPluginRoutes,
-  adminDesignRoutes,
   adminCheckboxRoutes,
   adminTestimonialsRoutes,
   adminCodeExamplesRoutes,

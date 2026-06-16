@@ -1,7 +1,6 @@
 // Export all page templates
 export * from './pages/admin-cache.template'
 export * from './pages/admin-database-table.template'
-export * from './pages/admin-design.template'
 export * from './pages/admin-content-edit.template'
 export * from './pages/admin-content-new.template'
 export * from './pages/admin-checkboxes.template'

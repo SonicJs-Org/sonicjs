@@ -39,6 +39,15 @@ export const h2 = function H2(
   return <Heading level={2} {...props} />
 }
 
+export const h3 = function H3(
+  props: Omit<
+    React.ComponentPropsWithoutRef<typeof Heading>,
+    'level' | 'anchor'
+  >,
+) {
+  return <Heading level={3} anchor={false} {...props} />
+}
+
 function InfoIcon(props: React.ComponentPropsWithoutRef<'svg'>) {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>

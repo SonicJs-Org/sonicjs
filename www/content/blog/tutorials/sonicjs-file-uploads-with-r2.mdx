@@ -343,10 +343,9 @@ export async function uploadAvatar(file: File) {
     throw new Error(upload.error ?? 'Upload failed')
   }
 
-  // TODO: verify current user-profile update endpoint
-  // Save the media reference on the current user's profile
-  await fetch('/api/users/me', {
-    method: 'PATCH',
+  // Save the media reference on the current user's profile via user-profiles plugin
+  await fetch(`/api/user-profiles/${userId}`, {
+    method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ avatar: upload.file.id }),

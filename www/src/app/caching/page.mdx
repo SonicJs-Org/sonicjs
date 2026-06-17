@@ -1,22 +1,200 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'Built-in Cache Service', id: 'cache-service' },
+  { title: 'Cache Configurations', id: 'cache-configs' },
+  { title: 'KV Bindings', id: 'kv-bindings' },
+  { title: 'Cache Invalidation', id: 'invalidation' },
+  { title: 'API Response Caching', id: 'api-caching' },
+  { title: 'Best Practices', id: 'best-practices' },
+]
+
 # Caching
 
-## Coming Soon
+SonicJS uses an in-memory `CacheService` for API responses plus Cloudflare KV for auth sessions and rate limiting. {{ className: 'lead' }}
 
-This page is currently under construction. We're working on comprehensive documentation about SonicJS's powerful three-tier caching system.
+---
 
-### What to Expect
+## Overview
 
-- **Three-tier caching architecture** - Understanding the caching layers
-- **Cache configuration** - How to configure caching for your needs
-- **Performance optimization** - Best practices for maximum performance
-- **Cache invalidation strategies** - Managing cache updates effectively
+SonicJS caches at two levels:
 
-### In the Meantime
+| Level | What | Binding | Default TTL |
+|-------|------|---------|-------------|
+| **In-memory** | API responses, content queries | None (Worker memory) | 5–10 min |
+| **Cloudflare KV** | Auth sessions, rate-limit counters | `CACHE_KV` | Varies |
 
-Check out our other documentation sections:
+The in-memory cache is per-Worker-instance (not globally shared) and resets on cold start. KV is globally shared across all Workers in the same Cloudflare account.
 
-- [Architecture](/architecture) - Learn about the overall system design
-- [Database](/database) - Understand data persistence
-- [API Reference](/api) - Explore the API endpoints
+---
 
-For immediate help, visit our [Community](/community) page or check the [FAQ](/faq).
+## Built-in Cache Service
+
+`CacheService` is a lightweight in-memory cache backed by a `Map`. Import it from `@sonicjs-cms/core`:
+
+<CodeGroup title="Using CacheService">
+
+```typescript
+import { getCacheService, CACHE_CONFIGS } from '@sonicjs-cms/core'
+
+// Get a shared cache instance for API responses
+const cache = getCacheService(CACHE_CONFIGS.api)
+
+// Read
+const cached = await cache.get<MyData>('my-key')
+
+// Write (TTL in seconds, defaults to config.ttl)
+await cache.set('my-key', data, 300)
+
+// Read-or-set (compute only on miss)
+const result = await cache.getOrSet('my-key', async () => {
+  return await fetchExpensiveData()
+}, 300)
+
+// Invalidate by key pattern
+await cache.invalidate('content-filtered:*')
+```
+
+</CodeGroup>
+
+### CacheService API
+
+```typescript
+class CacheService {
+  generateKey(type: string, identifier?: string): string
+  get<T>(key: string): Promise<T | null>
+  getWithSource<T>(key: string): Promise<{ hit: boolean; data: T | null; source: string; ttl?: number }>
+  set(key: string, value: any, ttl?: number): Promise<void>
+  invalidate(pattern: string): Promise<void>
+  getOrSet<T>(key: string, callback: () => Promise<T>, ttl?: number): Promise<T>
+}
+```
+
+---
+
+## Cache Configurations
+
+Pre-defined configurations exported from `@sonicjs-cms/core`:
+
+| Name | Key prefix | Default TTL | Used for |
+|------|-----------|-------------|----------|
+| `CACHE_CONFIGS.api` | `api` | 300s (5 min) | API list/filter responses |
+| `CACHE_CONFIGS.user` | `user` | 600s (10 min) | User lookups |
+| `CACHE_CONFIGS.content` | `content` | 300s (5 min) | Content queries |
+| `CACHE_CONFIGS.collection` | `collection` | 600s (10 min) | Collection metadata |
+
+<CodeGroup title="Custom CacheService">
+
+```typescript
+import { CacheService } from '@sonicjs-cms/core'
+
+// Create a custom cache with a 1-minute TTL
+const myCache = new CacheService({
+  ttl: 60,
+  keyPrefix: 'my-plugin'
+})
+```
+
+</CodeGroup>
+
+---
+
+## KV Bindings
+
+The `CACHE_KV` KV namespace is used for:
+
+- **Auth sessions** — Better Auth stores sessions in KV so `getSession` skips a D1 read on hot paths
+- **Rate limiting** — the rate-limit middleware counts requests per IP in KV
+- **Security plugin** — brute-force detection stores attempt counters in KV
+
+Add the binding to `wrangler.toml`:
+
+```toml
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-namespace-id"
+```
+
+Create the namespace:
+
+```bash
+# Development
+npx wrangler kv:namespace create "CACHE_KV"
+
+# Production
+npx wrangler kv:namespace create "CACHE_KV" --env production
+```
+
+---
+
+## Cache Invalidation
+
+`CacheService.invalidate(pattern)` supports glob-style patterns:
+
+```typescript
+// Invalidate all content-filtered keys
+await cache.invalidate('content-filtered:*')
+
+// Invalidate a single key
+await cache.invalidate('api:blog-posts:abc123')
+
+// Invalidate all collection content for one type
+await cache.invalidate('collection-content-filtered:blog_posts*')
+```
+
+Content write routes in `api-content-crud.ts` automatically invalidate `content-filtered:*` and `collection-content-filtered:*` on create, update, and delete.
+
+---
+
+## API Response Caching
+
+The `/api/:collection` and `/api/content` routes cache filtered list responses in memory:
+
+```typescript
+// Simplified view of how API routes cache responses
+const cache = getCacheService(CACHE_CONFIGS.api)
+const cacheKey = cache.generateKey('content-filtered', JSON.stringify({ filter, query }))
+
+const cached = await cache.get(cacheKey)
+if (cached) return c.json(cached)
+
+const result = await executeQuery(filter)
+await cache.set(cacheKey, result)
+return c.json(result)
+```
+
+Cache headers on responses:
+
+```http
+X-Cache-Status: HIT
+X-Cache-Source: memory
+X-Cache-TTL: 287
+```
+
+---
+
+## Best Practices
+
+**Cold-start aware** — Workers can spin up new instances at any time; in-memory cache starts empty on each new isolate. For data that must survive cold starts, use KV or D1.
+
+**Invalidate on write** — always call `cache.invalidate(pattern)` in write handlers so stale data doesn't serve for up to TTL seconds.
+
+**Key namespacing** — use `cache.generateKey(type, id)` rather than raw strings to avoid collisions between plugins.
+
+**KV not required for dev** — `CACHE_KV` is optional locally; auth and rate-limiting gracefully skip if the binding is absent.
+
+---
+
+## Next Steps
+
+<div className="not-prose">
+  <Button href="/api" variant="text" arrow="right">
+    <>API Reference — see cache response headers</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/configuration" variant="text" arrow="right">
+    <>Configuration — KV binding setup</>
+  </Button>
+</div>

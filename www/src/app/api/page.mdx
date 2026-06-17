@@ -414,7 +414,7 @@ Retrieve all content items for a collection with pagination and filtering.
 **Query Parameters:**
 - `limit` - Maximum items to return (default: 50, max: 100)
 - `offset` - Number of items to skip for pagination
-- `sort` - Sort field (prefix with `-` for descending)
+- `sort` - JSON array of sort objects: `[{"field":"created_at","order":"desc"}]`
 - `filter` - Advanced filtering (see [Filtering & Querying](#filtering))
 
 <CodeGroup title="List Content">
@@ -916,14 +916,20 @@ filter[created_at][less_than]=2025-12-31"
 
 ### Sorting
 
-Sort results by any field. Prefix with `-` for descending order.
+Pass `sort` as a URL-encoded JSON array of `{field, order}` objects. `order` is `"asc"` or `"desc"`.
 
 ```bash
 # Sort by created_at descending
-curl "http://localhost:8787/api/content?sort=-created_at"
+curl "http://localhost:8787/api/content?sort=%5B%7B%22field%22%3A%22created_at%22%2C%22order%22%3A%22desc%22%7D%5D"
 
 # Sort by title ascending
-curl "http://localhost:8787/api/content?sort=title"
+curl "http://localhost:8787/api/content?sort=%5B%7B%22field%22%3A%22title%22%2C%22order%22%3A%22asc%22%7D%5D"
+```
+
+```js
+// JavaScript — construct and encode the sort param
+const sort = JSON.stringify([{ field: 'created_at', order: 'desc' }])
+const url = `/api/blog-posts?sort=${encodeURIComponent(sort)}`
 ```
 
 ### Pagination

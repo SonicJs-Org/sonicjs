@@ -41,8 +41,7 @@ openGraph:
 **Key Stats:**
 - 4 built-in auth methods: password, OAuth, magic link, OTP
 - 100,000 PBKDF2 iterations for password hashing (SHA-256)
-- 5-minute KV cache for token verification — verify in under 5ms
-- 30-day default JWT TTL with sliding 7-day refresh window
+- 7-day default JWT TTL (`JWT_SECRET` env var required)
 - 4 built-in RBAC roles: `admin`, `editor`, `author`, `viewer`
 </TLDRBox>
 
@@ -175,11 +174,11 @@ JWT_EXPIRES_IN = "30d"
 JWT_REFRESH_GRACE_SECONDS = "604800"  # 7 days
 ```
 
-### KV-Cached Verification
+### JWT Verification
 
-JWTs are stateless, so you *could* verify them on every request with no external state. SonicJS goes one better: verified tokens are cached in **Cloudflare KV** for 5 minutes under the key `auth:{token_prefix}`. The result is sub-millisecond auth checks for hot tokens, with fallback to full cryptographic verification on cache miss.
+JWTs are verified on every request by `requireAuth()` in `packages/core/src/middleware/auth.ts`. SonicJS signs and verifies tokens with `hono/jwt` using the `JWT_SECRET` env var. No external session store is needed for JWT verification.
 
-This pattern — stateless verification + edge cache — is what lets SonicJS handle a global audience without a central session store. For a deeper dive into the same trick applied to content reads, see our [caching strategy guide](/blog/sonicjs-caching-strategy).
+Better Auth sessions (for the admin UI) are stored in Cloudflare KV (`CACHE_KV`) as secondary storage so `getSession()` skips a D1 read on hot paths — but this does not apply to the JWT Bearer path used by the API.
 
 > **Note:** The admin UI uses a separate **Better Auth session cookie** (`better-auth.session_token`) for browser-based authentication. The JWT path described above is for programmatic/API access; both mechanisms coexist in the same SonicJS instance.
 
@@ -344,32 +343,27 @@ Putting it all together, here's a minimal SonicJS project with all four auth met
 
 ```typescript
 // src/index.ts
-import { Hono } from 'hono'
-import { registerPlugins } from '@sonicjs-cms/core'
+import { createSonicJSApp, registerCollections, registerPlugins, getHookSystem } from '@sonicjs-cms/core'
 import {
   authPlugin,
-  oauthPlugin,
-  magicLinkPlugin,
+  oauthProvidersPlugin,
   otpLoginPlugin,
-} from '@sonicjs-cms/core/plugins'
+} from '@sonicjs-cms/core'
 import { postsCollection } from './collections/posts'
 
-const app = new Hono<{ Bindings: Env }>()
+registerCollections([postsCollection])
+
+const app = createSonicJSApp({
+  plugins: { register: [], disableAll: false }
+})
 
 registerPlugins(app, [
-  authPlugin(),
-  oauthPlugin({ providers: ['github', 'google'] }),
-  magicLinkPlugin(),
-  otpLoginPlugin({
-    codeLength: 6,
-    codeExpiryMinutes: 15,
-    maxAttempts: 3,
-    rateLimitPerHour: 5,
-    allowNewUserRegistration: true,
-  }),
-], { hookSystem, env })
+  authPlugin,
+  oauthProvidersPlugin,
+  otpLoginPlugin,
+], { hookSystem: getHookSystem(), env })
 
-export default app
+export default { fetch: app.fetch }
 ```
 
 Each plugin only activates the routes it owns, so you pay zero cost for methods you don't enable.

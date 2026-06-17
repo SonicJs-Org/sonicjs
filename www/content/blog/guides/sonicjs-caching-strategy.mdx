@@ -133,52 +133,40 @@ async function updateContent(key: string, data: any) {
 
 ### Basic Setup
 
+SonicJS exposes a `CacheService` from `@sonicjs-cms/core`. Built-in pre-configured instances cover the most common namespaces:
+
 ```typescript
-import { Hono } from 'hono'
-import { registerPlugins } from '@sonicjs-cms/core'
-import { cachePlugin } from '@sonicjs-cms/core/plugins'
+import { getCacheService, CACHE_CONFIGS, CacheService } from '@sonicjs-cms/core'
 
-const app = new Hono()
+// Use a pre-configured instance (api: 5min TTL, content: 5min, collection: 10min)
+const cache = getCacheService(CACHE_CONFIGS.api)
 
-registerPlugins(app, [
-  cachePlugin({
-    defaultTTL: 3600, // 1 hour default
-  }),
-], { hookSystem, env })
+// Or create a custom instance
+const myCache = new CacheService({ ttl: 3600, keyPrefix: 'my-plugin' })
 ```
 
-### Route-Specific TTLs
+### Content-Specific TTLs
+
+Configure TTL per `CacheService` instance:
 
 ```typescript
-cachePlugin({
-  defaultTTL: 3600,
-  patterns: {
-    // Frequently updated content
-    '/api/posts': { ttl: 60 },
+import { CacheService } from '@sonicjs-cms/core'
 
-    // Rarely changed content
-    '/api/categories': { ttl: 86400 },
+// Short TTL for frequently updated content
+const postsCache = new CacheService({ ttl: 60, keyPrefix: 'posts' })
 
-    // Individual posts can cache longer
-    '/api/posts/*': { ttl: 3600 },
-
-    // Never cache user-specific data
-    '/api/users/*': { ttl: 0 },
-  },
-})
+// Long TTL for rarely changed reference data
+const categoriesCache = new CacheService({ ttl: 86400, keyPrefix: 'categories' })
 ```
 
 ### Cache Headers
 
-SonicJS automatically sets appropriate cache headers:
+API responses include cache status headers set by the route handler:
 
-```typescript
-cachePlugin({
-  headers: {
-    'Cache-Control': 'public, max-age=3600, s-maxage=86400',
-    'CDN-Cache-Control': 'max-age=86400',
-  },
-})
+```http
+X-Cache-Status: HIT
+X-Cache-Source: memory
+X-Cache-TTL: 287
 ```
 
 ## Cache Invalidation Strategies
@@ -191,29 +179,31 @@ The simplest approach - content expires after a set time:
 { ttl: 300 } // Cache for 5 minutes
 ```
 
-### Tag-Based
+### Pattern-Based
 
-Invalidate groups of related content:
+`cache.invalidate(pattern)` matches keys by glob-style pattern:
 
 ```typescript
-// When saving a post
-await cache.tag(postId, ['posts', `category:${categoryId}`])
+// Invalidate all content-filtered keys
+await cache.invalidate('content-filtered:*')
 
-// Invalidate all posts in a category
-await cache.invalidateTag(`category:${categoryId}`)
+// Invalidate a specific key
+await cache.invalidate('api:blog-posts:abc123')
 ```
 
 ### Event-Based
 
-Invalidate on specific events:
+Invalidate on content write events using the `content:save` hook:
 
 ```typescript
-// TODO: verify hook event name 'content:save' for v3
-definePlugin({
+import { definePlugin, getCacheService, CACHE_CONFIGS } from '@sonicjs-cms/core'
+
+const cache = getCacheService(CACHE_CONFIGS.content)
+
+export const myPlugin = definePlugin({
   onBoot(ctx) {
     ctx.hooks.on('content:save', async (content) => {
-      await cache.invalidate(`posts:${content.id}`)
-      await cache.invalidate('posts:list')
+      await cache.invalidate(`content-filtered:*`)
     })
   },
 })
@@ -252,15 +242,16 @@ Typical hit rates for well-configured caching:
 '/api/analytics': { ttl: 0 },
 ```
 
-### 2. Use Stale-While-Revalidate
+### 2. Use getOrSet for Computed Values
 
-Serve stale content while refreshing in the background:
+`CacheService.getOrSet` reads from cache and computes on miss — no stale-while-revalidate but zero boilerplate:
 
 ```typescript
-cachePlugin({
-  staleWhileRevalidate: true,
-  staleTime: 60, // Serve stale for up to 60s while revalidating
-})
+const result = await cache.getOrSet(
+  cache.generateKey('posts', slug),
+  async () => await fetchFromDb(slug),
+  300 // TTL in seconds
+)
 ```
 
 ### 3. Warm Critical Caches
@@ -279,19 +270,14 @@ async function warmCache() {
 
 ### 4. Monitor Cache Performance
 
-Track cache effectiveness:
+Use `getWithSource` to track cache effectiveness in custom routes:
 
 ```typescript
-cachePlugin({
-  metrics: true,
-  onCacheHit: (key, tier) => {
-    console.log(`Cache hit: ${key} from ${tier}`)
-  },
-  onCacheMiss: (key) => {
-    console.log(`Cache miss: ${key}`)
-  },
-})
+const { hit, data, source, ttl } = await cache.getWithSource<Post[]>(key)
+console.log(`Cache ${hit ? 'HIT' : 'MISS'} from ${source}, TTL: ${ttl}s`)
 ```
+
+API responses also emit `X-Cache-Status`, `X-Cache-Source`, and `X-Cache-TTL` headers automatically.
 
 ## Debugging Cache Issues
 
@@ -299,18 +285,12 @@ cachePlugin({
 
 API responses include cache metadata:
 
-```json
-{
-  "data": [...],
-  "meta": {
-    "cache": {
-      "hit": true,
-      "source": "kv",
-      "age": 45,
-      "ttl": 3600
-    }
-  }
-}
+Cache status is in response headers:
+
+```http
+X-Cache-Status: HIT
+X-Cache-Source: memory
+X-Cache-TTL: 3555
 ```
 
 ### Force Cache Bypass
@@ -331,35 +311,22 @@ wrangler kv:key list --namespace-id YOUR_KV_ID
 
 ## Advanced Patterns
 
-### Regional Caching
-
-Adjust TTLs based on region:
-
-```typescript
-cachePlugin({
-  ttlByRegion: {
-    'North America': 3600,
-    'Europe': 3600,
-    'Asia': 1800, // Lower TTL for faster propagation
-  },
-})
-```
-
 ### Content-Aware Caching
 
-Cache based on content type:
+Use separate `CacheService` instances with different TTLs per content type:
 
 ```typescript
-// TODO: verify hook event name 'content:beforeCache' for v3
-definePlugin({
-  onBoot(ctx) {
-    ctx.hooks.on('content:beforeCache', (content, options) => {
-      if (content.type === 'breaking-news') {
-        options.ttl = 30 // Very short TTL
-      }
-    })
-  },
-})
+import { CacheService } from '@sonicjs-cms/core'
+
+const newsCache = new CacheService({ ttl: 30, keyPrefix: 'news' })
+const pageCache = new CacheService({ ttl: 86400, keyPrefix: 'pages' })
+
+// In a plugin route:
+const result = await newsCache.getOrSet(
+  newsCache.generateKey('article', id),
+  () => fetchArticle(id),
+  30
+)
 ```
 
 ## Key Takeaways

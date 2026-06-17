@@ -174,6 +174,27 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     ],
   })
 
+  // Media asset: every file upload creates a media_asset document (document-authoritative).
+  // File bytes stay in R2; this document holds intrinsic metadata (dimensions, mime, r2Key…).
+  await registry.register({
+    id: 'media_asset',
+    name: 'media_asset',
+    displayName: 'Media Asset',
+    description: 'Media file metadata (R2 object key + intrinsic properties; URL derived at read time)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      baseGrants: { public: ['read'], admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'], editor: ['read', 'create', 'update'] },
+      maxVersionsPerRoot: 5,
+    },
+    queryableFields: [
+      { name: 'mimeType', kind: 'scalar', type: 'text',    column: 'q_media_mime' },
+      { name: 'folder',   kind: 'scalar', type: 'text',    column: 'q_media_folder' },
+      { name: 'size',     kind: 'scalar', type: 'integer', column: 'q_media_size' },
+      { name: 'tags',     kind: 'facet',  type: 'text' },
+    ],
+  })
+
   // ── RBAC (auth-owned). 3 document types replace 4 relational tables: ──────────
   //   rbac_role        slug = roleId,  data.grants[] embedded (replaces role_grants)
   //   rbac_verb        slug = verbId

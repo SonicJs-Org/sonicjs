@@ -125,6 +125,7 @@ export interface MediaListOptions {
   type?: 'all' | 'images' | 'videos' | 'documents' | string
   limit?: number
   offset?: number
+  search?: string
 }
 
 export interface MediaListResult {
@@ -192,6 +193,11 @@ export class MediaDocumentService {
       else if (opts.type === 'videos') where.push("q_media_mime LIKE 'video/%'")
       else if (opts.type === 'documents') where.push("q_media_mime IN ('application/pdf', 'text/plain', 'application/msword')")
     }
+    if (opts.search?.trim()) {
+      const term = `%${opts.search.trim()}%`
+      where.push("(json_extract(data, '$.filename') LIKE ? OR json_extract(data, '$.originalName') LIKE ? OR json_extract(data, '$.alt') LIKE ?)")
+      params.push(term, term, term)
+    }
 
     const listed = await this.db
       .prepare(`SELECT * FROM documents WHERE ${where.join(' AND ')} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
@@ -214,6 +220,35 @@ export class MediaDocumentService {
       folders: (folderAgg.results ?? []).map(f => ({ folder: f.folder, count: f.count, totalSize: f.totalSize ?? 0 })),
       types: (typeAgg.results ?? []).map(t => ({ type: t.type, count: t.count })),
     }
+  }
+
+  /** Fetch current draft of a single media_asset by rootId. Returns null if not found. */
+  async getByRootId(rootId: string): Promise<Document | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND tenant_id = ? AND type_id = 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL")
+      .bind(rootId, this.tenantId)
+      .first<Record<string, any>>()
+    return row ? rowToMinimalDoc(row) : null
+  }
+
+  /** Soft-delete all version rows for a media_asset root (sets deleted_at; excludes from list). */
+  async softDeleteRoot(rootId: string): Promise<void> {
+    const now = Math.floor(Date.now() / 1000)
+    await this.db
+      .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?')
+      .bind(now, now, rootId, this.tenantId)
+      .run()
+  }
+
+  /** Update alt/caption/tags on a media_asset document (saveDraft + publish atomically). */
+  async updateMetadata(
+    rootId: string,
+    meta: { alt?: string | null; caption?: string | null; tags?: string[] },
+    updatedBy?: string,
+  ): Promise<Document> {
+    const svc = new DocumentsService(this.db, { queryableFields: MEDIA_QUERYABLE, tenantId: this.tenantId, maxVersionsPerRoot: 5 })
+    const newDraft = await svc.saveDraft(rootId, { data: meta }, updatedBy)
+    return svc.publish(newDraft.id, updatedBy)
   }
 
   /** Reference-aware delete: strong inbound references block hard-delete (offer archive instead). */

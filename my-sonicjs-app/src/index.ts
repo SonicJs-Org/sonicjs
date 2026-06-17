@@ -17,6 +17,9 @@ import {
 } from '@sonicjs-cms/core'
 import type { SonicJSConfig } from '@sonicjs-cms/core'
 
+// User profile model — uncomment defineUserProfile() in this file to add custom fields
+import './user-profile.model'
+
 // Import code-defined collections
 import blogPostsCollection from './collections/blog-posts.collection'
 import { siteSettingsCollection } from '@sonicjs-cms/core'

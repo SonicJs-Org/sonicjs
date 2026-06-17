@@ -24,7 +24,6 @@ import {
   adminApiReferenceRoutes,
   apiDocumentsRoutes,
   adminDocumentsRoutes,
-  adminTestimonialsRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
@@ -32,7 +31,6 @@ import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
-import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
 import { emailPluginV3 as emailPlugin } from './plugins/core-plugins/email-plugin'
 import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
@@ -40,9 +38,8 @@ import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
-import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
+import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
-import { testimonialsPlugin } from './plugins/core-plugins/testimonials'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole, requireRbac } from './middleware/auth'
 import { createAuth } from './auth/config'
@@ -546,6 +543,11 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     }
   })
 
+  // Plugin-specific API routes that would otherwise be shadowed by the generic
+  // /api/:collection/:id catch-all must be mounted BEFORE app.route('/api', apiRoutes).
+  app.route('/api/security-audit', securityAuditApiRoutes as any)
+  app.route('/admin/plugins/security-audit', securityAuditAdminRoutes as any)
+
   // Core routes
   // Routes are being imported incrementally from routes/*
   // Each route is tested and migrated one-by-one
@@ -554,15 +556,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
-  // Testimonials admin (document-backed). The plugin adds the sidebar item to /admin/testimonials,
-  // but the HTML router itself must be mounted here like the other core admin routers — it was missing,
-  // so the Testimonials page and "add testimonial" form (hx-post /admin/testimonials) 404'd.
-  app.route('/admin/testimonials', adminTestimonialsRoutes)
-  // Testimonials PUBLIC API (/api/testimonials). After the definePlugin port,
-  // the plugin uses register(app) instead of routes[]; call registerPluginRoutes
-  // so the API routes are actually mounted.
-  registerPluginRoutes(app, [testimonialsPlugin as any], { source: 'core' })
-
   // Forms (admin builder, public rendering, API submission). Same as above —
   // routes[] was replaced with register(app) in the definePlugin port.
   registerPluginRoutes(app, [formsPlugin as any], { source: 'core' })
@@ -572,7 +565,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/admin/settings', adminSettingsRoutes)
   app.route('/admin/api-reference', adminApiReferenceRoutes)
   app.route('/admin/database-tools', createDatabaseToolsAdminRoutes())
-  app.route('/admin/seed-data', createSeedDataAdminRoutes())
   app.route('/admin/content', adminContentRoutes)
   app.route('/admin/media', adminMediaRoutes)
   // Security audit middleware - logs auth events (login, register, logout)
@@ -636,7 +628,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   if (!config.plugins?.disableAll) {
     const allMountedPlugins: any[] = [
       ...corePluginsBeforeCatchAll,
-      testimonialsPlugin,
       formsPlugin,
       ...corePluginsAfterCatchAll,
       ...(config.plugins?.register ?? []),

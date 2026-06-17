@@ -28,6 +28,8 @@ export interface UserEditPageData {
   roles: Array<{ value: string; label: string }>
   error?: string
   success?: string
+  /** True only when developer has called defineUserProfile() in the app entry point. */
+  hasProfilePlugin?: boolean
   customProfileFieldsHtml?: string
   /** When the multi-tenant plugin is active: inline membership matrix data. */
   tenantMemberships?: {
@@ -244,7 +246,8 @@ export function renderUserEditPage(data: UserEditPageData): string {
                 </div>
               </div>
 
-              <!-- Profile Information -->
+              ${data.hasProfilePlugin ? `
+              <!-- Profile Information (shown when defineUserProfile() is configured) -->
               <div class="mb-8">
                 <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-4">Profile Information</h3>
                 <div class="mb-4">
@@ -257,10 +260,9 @@ export function renderUserEditPage(data: UserEditPageData): string {
                     class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                   />
                 </div>
-                ${renderAlert({ type: 'info', dismissible: true, message: 'To add more profile fields, edit: packages/core/src/templates/pages/admin-user-edit.template.ts' })}
+                ${data.customProfileFieldsHtml || ''}
               </div>
-
-              ${data.customProfileFieldsHtml || ''}
+              ` : ''}
 
 
               <!-- Set Password -->

@@ -158,7 +158,7 @@ import {
   renderInlineTurnstile,
   renderExplicitTurnstile,
   getTurnstileScript
-} from '@sonicjs-cms/core/plugins'
+} from '@sonicjs-cms/core'
 
 // Full widget with settings from database
 const widget = renderTurnstileWidget(settings, 'my-form-turnstile')
@@ -186,8 +186,8 @@ const script = getTurnstileScript()
 
 ```typescript
 // In your route handler
-import { renderTurnstileWidget } from '@sonicjs-cms/core/plugins'
-import { TurnstileService } from '@sonicjs-cms/core/plugins'
+import { renderTurnstileWidget } from '@sonicjs-cms/core'
+import { TurnstileService } from '@sonicjs-cms/core'
 
 app.get('/contact', async (c) => {
   const turnstile = new TurnstileService(c.env.DB)
@@ -215,7 +215,7 @@ For simple cases where you just need a widget with a site key:
 <CodeGroup title="renderInlineTurnstile">
 
 ```typescript
-import { renderInlineTurnstile } from '@sonicjs-cms/core/plugins'
+import { renderInlineTurnstile } from '@sonicjs-cms/core'
 
 const widget = renderInlineTurnstile('YOUR_SITE_KEY', {
   theme: 'auto',
@@ -240,7 +240,7 @@ For full control over when the widget renders:
 <CodeGroup title="renderExplicitTurnstile">
 
 ```typescript
-import { renderExplicitTurnstile } from '@sonicjs-cms/core/plugins'
+import { renderExplicitTurnstile } from '@sonicjs-cms/core'
 
 const widget = renderExplicitTurnstile('YOUR_SITE_KEY', {
   theme: 'dark',
@@ -269,7 +269,7 @@ Verify tokens server-side before processing form submissions:
 <CodeGroup title="Manual Verification">
 
 ```typescript
-import { TurnstileService } from '@sonicjs-cms/core/plugins'
+import { TurnstileService } from '@sonicjs-cms/core'
 
 app.post('/api/contact', async (c) => {
   const body = await c.req.parseBody()
@@ -338,7 +338,7 @@ Use the `verifyTurnstile` middleware to automatically verify requests:
 <CodeGroup title="Middleware Usage">
 
 ```typescript
-import { verifyTurnstile } from '@sonicjs-cms/core/plugins'
+import { verifyTurnstile } from '@sonicjs-cms/core'
 import { Hono } from 'hono'
 
 const app = new Hono()
@@ -371,7 +371,7 @@ Create custom middleware with additional options:
 <CodeGroup title="Custom Middleware">
 
 ```typescript
-import { createTurnstileMiddleware } from '@sonicjs-cms/core/plugins'
+import { createTurnstileMiddleware } from '@sonicjs-cms/core'
 
 // Custom middleware with options
 const customTurnstile = createTurnstileMiddleware({
@@ -399,7 +399,7 @@ When building plugins, use the middleware factory:
 
 ```javascript
 import { definePlugin } from '@sonicjs-cms/core'
-import { verifyTurnstile } from '@sonicjs-cms/core/plugins'
+import { verifyTurnstile } from '@sonicjs-cms/core'
 
 const myPlugin = definePlugin({
   name: 'my-plugin',

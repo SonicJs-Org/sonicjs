@@ -128,7 +128,7 @@ Track page views programmatically:
 <CodeGroup title="Track Page View">
 
 ```typescript
-import { analyticsService } from '@sonicjs-cms/core/plugins'
+import { analyticsService } from '@sonicjs-cms/core'
 
 // Track a page view
 const result = await analyticsService.trackPageView({
@@ -171,7 +171,7 @@ interface AnalyticsEvent {
 <CodeGroup title="Track Events">
 
 ```typescript
-import { analyticsService } from '@sonicjs-cms/core/plugins'
+import { analyticsService } from '@sonicjs-cms/core'
 
 // Track a conversion event
 await analyticsService.trackEvent({

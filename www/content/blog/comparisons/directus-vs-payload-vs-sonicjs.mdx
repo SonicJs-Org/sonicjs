@@ -189,9 +189,9 @@ SonicJS runs on Cloudflare Workers globally:
 
 ```typescript
 // sonic.config.ts
-import { createSonicJS } from '@sonicjs-cms/core'
+import { createSonicJSApp } from '@sonicjs-cms/core'
 
-const cms = createSonicJS({
+const app = createSonicJSApp({
   database: env.DB,     // D1 at the edge
   cache: env.CACHE,     // KV for instant reads
   storage: env.STORAGE, // R2 for files

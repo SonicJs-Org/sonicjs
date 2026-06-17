@@ -201,9 +201,9 @@ SonicJS runs natively on Cloudflare Workers—300+ data centers worldwide, servi
 
 ```typescript
 // SonicJS runs at the edge by default
-import { createSonicJS } from '@sonicjs-cms/core'
+import { createSonicJSApp } from '@sonicjs-cms/core'
 
-const cms = createSonicJS({
+const app = createSonicJSApp({
   collections: [posts, authors, categories],
   plugins: [auth, cache, aiSearch],
 })
@@ -295,14 +295,20 @@ SonicJS uses TypeScript schemas that compile to edge-optimized queries:
 
 ```typescript
 // SonicJS collection definition
-const articles = defineCollection({
+import { CollectionConfig } from '@sonicjs-cms/core'
+
+const articles: CollectionConfig = {
   name: 'articles',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
-    author: { type: 'reference', collection: 'users' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'string' },
+      author: { type: 'string' },
+    },
+    required: ['title'],
   },
-})
+}
 ```
 
 **Pros**: Type-safe, edge-optimized, globally distributed

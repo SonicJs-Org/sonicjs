@@ -63,9 +63,9 @@ SonicJS is built from the ground up to run on Cloudflare Workers. This means you
 
 ```typescript
 // SonicJS runs at the edge by default
-import { createSonicJS } from '@sonicjs-cms/core'
+import { createSonicJSApp } from '@sonicjs-cms/core'
 
-const cms = createSonicJS({
+const app = createSonicJSApp({
   collections: [...],
   plugins: [...],
 })
@@ -130,15 +130,19 @@ SonicJS's edge-first architecture means consistent sub-50ms response times globa
 
 ```typescript
 // SonicJS: Full TypeScript support
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-const posts = defineCollection({
+const posts: CollectionConfig = {
   name: 'posts',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'string' },
+    },
+    required: ['title'],
   },
-})
+}
 ```
 
 **Strapi**: TypeScript support added in v4, but the codebase is JavaScript-first. Type definitions are available but not as comprehensive.
@@ -183,15 +187,21 @@ Both CMS platforms offer flexible content modeling, but with different approache
 
 **SonicJS**:
 ```typescript
-const article = defineCollection({
+import { CollectionConfig } from '@sonicjs-cms/core'
+
+const article: CollectionConfig = {
   name: 'articles',
-  fields: {
-    title: { type: 'string', required: true },
-    body: { type: 'richtext' },
-    author: { type: 'relation', collection: 'users' },
-    tags: { type: 'array', of: 'string' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      body: { type: 'string' },
+      author: { type: 'string' },
+      tags: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['title'],
   },
-})
+}
 ```
 
 **Strapi**:

@@ -53,7 +53,7 @@ This guide walks through the plugin system as it actually exists in `packages/co
 
 ## Why the Plugin Model Matters
 
-A plugin in SonicJS is a plain TypeScript object that conforms to the `Plugin` interface. There is no compiled DSL, no YAML, no separate runtime. You build a plugin, hand it to `createSonicJS({ plugins: [...] })`, and it gets wired into the same Hono app that serves the rest of the CMS.
+A plugin in SonicJS is a plain TypeScript object that conforms to the `Plugin` interface. There is no compiled DSL, no YAML, no separate runtime. You build a plugin and register it with `registerPlugins(app, [myPlugin], { hookSystem, env })` after calling `createSonicJSApp(config)`, and it gets wired into the same Hono app that serves the rest of the CMS.
 
 Three properties make the model worth using:
 

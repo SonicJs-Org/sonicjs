@@ -177,10 +177,11 @@ enum WorkflowAction {
 
 ### Performing Actions
 
+{/* Note: workflow plugin is experimental in v3 — API subject to change */}
 <CodeGroup title="Perform Workflow Action">
 
 ```typescript
-import { WorkflowManager, WorkflowAction, ContentStatus } from '@sonicjs-cms/core/plugins'
+import { WorkflowManager, WorkflowAction, ContentStatus } from '@sonicjs-cms/core'
 
 // Initialize manager
 const workflowManager = new WorkflowManager(db)
@@ -247,7 +248,7 @@ Schedule content to publish, unpublish, or archive at specific times.
 <CodeGroup title="Schedule Publishing">
 
 ```typescript
-import { SchedulerService } from '@sonicjs-cms/core/plugins'
+import { SchedulerService } from '@sonicjs-cms/core'
 
 const scheduler = new SchedulerService(db)
 
@@ -376,7 +377,7 @@ Authors have special permissions for their own content:
 <CodeGroup title="Custom Permissions">
 
 ```typescript
-import { WorkflowManager, WorkflowPermissions } from '@sonicjs-cms/core/plugins'
+import { WorkflowManager, WorkflowPermissions } from '@sonicjs-cms/core'
 
 // Define custom permissions
 const customPermissions: WorkflowPermissions = {
@@ -399,7 +400,7 @@ const manager = new WorkflowManager(db, customPermissions)
 <CodeGroup title="Check Permissions">
 
 ```typescript
-import { ContentWorkflow, WorkflowAction, ContentStatus } from '@sonicjs-cms/core/plugins'
+import { ContentWorkflow, WorkflowAction, ContentStatus } from '@sonicjs-cms/core'
 
 // Check if user can perform action
 const canPublish = ContentWorkflow.canPerformAction(
@@ -436,7 +437,7 @@ Core workflow state management:
 <CodeGroup title="WorkflowEngine">
 
 ```typescript
-import { WorkflowEngine } from '@sonicjs-cms/core/plugins'
+import { WorkflowEngine } from '@sonicjs-cms/core'
 
 const engine = new WorkflowEngine(db)
 
@@ -483,7 +484,7 @@ Content scheduling:
 <CodeGroup title="SchedulerService">
 
 ```typescript
-import { SchedulerService } from '@sonicjs-cms/core/plugins'
+import { SchedulerService } from '@sonicjs-cms/core'
 
 const scheduler = new SchedulerService(db)
 
@@ -511,7 +512,7 @@ High-level workflow operations with permission checking:
 <CodeGroup title="WorkflowManager">
 
 ```typescript
-import { WorkflowManager } from '@sonicjs-cms/core/plugins'
+import { WorkflowManager } from '@sonicjs-cms/core'
 
 const manager = new WorkflowManager(db)
 
@@ -609,7 +610,7 @@ const workflowPlugin = definePlugin({
 
 ```typescript
 import { Hono } from 'hono'
-import { WorkflowManager, WorkflowAction } from '@sonicjs-cms/core/plugins'
+import { WorkflowManager, WorkflowAction } from '@sonicjs-cms/core'
 
 const app = new Hono()
 
@@ -651,7 +652,7 @@ app.post('/api/content/:id/publish', async (c) => {
 <CodeGroup title="Generate Status Badge">
 
 ```typescript
-import { ContentWorkflow, ContentStatus } from '@sonicjs-cms/core/plugins'
+import { ContentWorkflow, ContentStatus } from '@sonicjs-cms/core'
 
 // Generate status badge HTML
 const badge = ContentWorkflow.generateStatusBadge(ContentStatus.REVIEW)

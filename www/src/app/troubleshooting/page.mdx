@@ -309,7 +309,7 @@ if (!result) {
 <CodeGroup title="Manual Cache Invalidation">
 
 ```typescript
-import { CacheInvalidationService } from '@sonicjs-cms/core/plugins'
+import { CacheInvalidationService } from '@sonicjs-cms/core'
 
 const invalidation = new CacheInvalidationService(env.CACHE_KV)
 
@@ -451,7 +451,7 @@ await db
 <CodeGroup title="Validate Plugin">
 
 ```typescript
-import { PluginValidator } from '@sonicjs-cms/core/plugins'
+import { PluginValidator } from '@sonicjs-cms/core'
 
 const validation = PluginValidator.validate(myPlugin)
 

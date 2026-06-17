@@ -119,18 +119,22 @@ This is the single biggest divergence. Ghost has **one content type**: a post (w
 In SonicJS, [collections](/collections) are the core primitive:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-const recipes = defineCollection({
+const recipes: CollectionConfig = {
   name: 'recipes',
-  fields: {
-    title: { type: 'string', required: true },
-    cookTimeMinutes: { type: 'number' },
-    ingredients: { type: 'array', of: 'string' },
-    steps: { type: 'richtext' },
-    cuisine: { type: 'reference', collection: 'cuisines' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      cookTimeMinutes: { type: 'number' },
+      ingredients: { type: 'array', items: { type: 'string' } },
+      steps: { type: 'string' },
+      cuisine: { type: 'string' },
+    },
+    required: ['title'],
   },
-})
+}
 ```
 
 You get a typed REST [API](/api), admin CRUD UI, validation, and relations — for any content shape you can describe. Ghost cannot do this.
@@ -222,23 +226,27 @@ If you love Ghost's *features* but want SonicJS's *flexibility*, here's how to b
 ### 1. A Posts Collection
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export const posts = defineCollection({
+export const posts: CollectionConfig = {
   name: 'posts',
-  fields: {
-    title: { type: 'string', required: true },
-    slug: { type: 'string', required: true, unique: true },
-    excerpt: { type: 'string' },
-    content: { type: 'richtext' },
-    featureImage: { type: 'media' },
-    author: { type: 'reference', collection: 'users' },
-    tags: { type: 'array', of: 'string' },
-    status: { type: 'enum', values: ['draft', 'scheduled', 'published'] },
-    publishedAt: { type: 'datetime' },
-    visibility: { type: 'enum', values: ['public', 'members', 'paid'] },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      slug: { type: 'string' },
+      excerpt: { type: 'string' },
+      content: { type: 'string' },
+      featureImage: { type: 'string' },
+      author: { type: 'string' },
+      tags: { type: 'array', items: { type: 'string' } },
+      status: { type: 'string', enum: ['draft', 'scheduled', 'published'] },
+      publishedAt: { type: 'string' },
+      visibility: { type: 'string', enum: ['public', 'members', 'paid'] },
+    },
+    required: ['title', 'slug'],
   },
-})
+}
 ```
 
 That's the Ghost post model in 12 lines of TypeScript — except now you can add custom fields (a "reading time," a "sponsor," a "podcast embed") without forking anything.
@@ -248,17 +256,21 @@ That's the Ghost post model in 12 lines of TypeScript — except now you can add
 Ghost's membership system is a `members` table with subscription state. The SonicJS equivalent:
 
 ```typescript
-export const members = defineCollection({
+export const members: CollectionConfig = {
   name: 'members',
-  fields: {
-    email: { type: 'string', required: true, unique: true },
-    name: { type: 'string' },
-    tier: { type: 'enum', values: ['free', 'paid', 'premium'] },
-    stripeCustomerId: { type: 'string' },
-    subscriptionStatus: { type: 'string' },
-    subscribedAt: { type: 'datetime' },
+  schema: {
+    type: 'object',
+    properties: {
+      email: { type: 'string' },
+      name: { type: 'string' },
+      tier: { type: 'string', enum: ['free', 'paid', 'premium'] },
+      stripeCustomerId: { type: 'string' },
+      subscriptionStatus: { type: 'string' },
+      subscribedAt: { type: 'string' },
+    },
+    required: ['email'],
   },
-})
+}
 ```
 
 Pair it with the [authentication](/authentication) plugin (magic link works beautifully for newsletter signups) and you have signup, login, and gated content. Stripe webhooks land via a custom plugin route that updates the `tier` field. That's the whole thing.

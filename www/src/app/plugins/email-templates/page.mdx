@@ -263,17 +263,10 @@ Thank you for shopping with {{storeName}}!
 <CodeGroup title="Send Email">
 
 ```typescript
-import { createEmailService } from '@sonicjs-cms/core/plugins'
-
-// Create service instance
-const emailService = createEmailService({
-  SENDGRID_API_KEY: env.SENDGRID_API_KEY,
-  DEFAULT_FROM_EMAIL: env.DEFAULT_FROM_EMAIL,
-  DB: env.DB
-})
+import { emailPlugin } from '@sonicjs-cms/core'
 
 // Send raw email
-const result = await emailService.sendEmail({
+const result = await emailPlugin.sendEmail({
   to: 'user@example.com',
   subject: 'Hello from SonicJS',
   html: '<h1>Hello!</h1><p>This is a test email.</p>',

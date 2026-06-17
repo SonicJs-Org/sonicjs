@@ -226,9 +226,9 @@ SonicJS isn't a traditional CMS ported to run at the edge. It was designed from 
 
 ```typescript
 // SonicJS runs natively on Cloudflare Workers
-import { createSonicJS } from '@sonicjs-cms/core'
+import { createSonicJSApp } from '@sonicjs-cms/core'
 
-const cms = createSonicJS({
+const app = createSonicJSApp({
   collections: [posts, authors, media],
   plugins: [auth, cache, aiSearch],
 })
@@ -302,15 +302,21 @@ Like Payload, we're TypeScript-native. But we go further with full [type-safe co
 
 ```typescript
 // Full type inference from schema to API response
-const posts = defineCollection({
+import { CollectionConfig } from '@sonicjs-cms/core'
+
+const posts: CollectionConfig = {
   name: 'posts',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
-    author: { type: 'reference', collection: 'users' },
-    tags: { type: 'array', of: 'string' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'string' },
+      author: { type: 'string' },
+      tags: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['title'],
   },
-})
+}
 
 // TypeScript knows the shape of your content
 const post = await cms.content.get<typeof posts>('posts', 'my-post-id')
@@ -459,14 +465,18 @@ If you're facing the v4→v5 migration and questioning whether it's worth 40+ ho
 }
 
 // SonicJS equivalent (TypeScript)
-const articles = defineCollection({
+const articles: CollectionConfig = {
   name: 'articles',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
-    author: { type: 'reference', collection: 'users' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'string' },
+      author: { type: 'string' },
+    },
+    required: ['title'],
   },
-})
+}
 ```
 
 **API Compatibility:**
@@ -490,14 +500,18 @@ const Articles: CollectionConfig = {
 }
 
 // SonicJS equivalent
-const articles = defineCollection({
+const articles: CollectionConfig = {
   name: 'articles',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
-    author: { type: 'reference', collection: 'users' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'string' },
+      author: { type: 'string' },
+    },
+    required: ['title'],
   },
-})
+}
 ```
 
 The patterns are similar—both are TypeScript-native with configuration-as-code. Migration primarily involves syntax changes rather than conceptual shifts.

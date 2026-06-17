@@ -105,10 +105,10 @@ SonicJS runs on Cloudflare Workers using V8 isolates. There is no origin server 
 
 ```typescript
 // SonicJS: a Worker handles every request at the nearest POP
-import { createSonicJS } from '@sonicjs-cms/core'
+import { createSonicJSApp } from '@sonicjs-cms/core'
 import { posts } from './collections/posts'
 
-const cms = createSonicJS({
+const app = createSonicJSApp({
   collections: [posts],
   plugins: [/* auth, cache, ai-search, ... */],
 })
@@ -214,19 +214,23 @@ It's flexible, and Gutenberg has made structured editing significantly better. B
 SonicJS collections are TypeScript-native and strongly typed end-to-end. Schemas live in code, get type-checked at build time, and produce typed REST endpoints automatically.
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export const products = defineCollection({
+export const products: CollectionConfig = {
   name: 'products',
-  fields: {
-    title: { type: 'string', required: true },
-    slug:  { type: 'slug', source: 'title', unique: true },
-    price: { type: 'number', required: true },
-    body:  { type: 'richtext' },
-    images: { type: 'array', of: { type: 'media' } },
-    category: { type: 'reference', collection: 'categories' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      slug:  { type: 'string' },
+      price: { type: 'number' },
+      body:  { type: 'string' },
+      images: { type: 'array', items: { type: 'string' } },
+      category: { type: 'string' },
+    },
+    required: ['title', 'price'],
   },
-})
+}
 ```
 
 See the full options in the [collections guide](/collections).

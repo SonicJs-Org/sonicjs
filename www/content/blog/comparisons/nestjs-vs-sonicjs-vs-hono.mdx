@@ -180,19 +180,23 @@ SonicJS occupies a unique position: it's a headless CMS built on Hono, running n
 
 ```typescript
 // SonicJS - CMS features with edge performance
-import { createSonicJS } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-const posts = defineCollection({
+const posts: CollectionConfig = {
   name: 'posts',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext' },
-    author: { type: 'reference', collection: 'users' },
-    publishedAt: { type: 'date' },
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'string' },
+      author: { type: 'string' },
+      publishedAt: { type: 'string' },
+    },
+    required: ['title'],
   },
-})
+}
 
-const cms = createSonicJS({
+const cms = createSonicJSApp({
   collections: [posts, users, media],
   plugins: [auth, cache, aiSearch],
 })
@@ -379,19 +383,19 @@ export default app
 
 ```typescript
 // collections/users.ts
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export const users = defineCollection({
+export const users: CollectionConfig = {
   name: 'users',
-  fields: {
-    name: { type: 'string', required: true, min: 2 },
-    email: { type: 'string', required: true, format: 'email' },
+  schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      email: { type: 'string' },
+    },
+    required: ['name', 'email'],
   },
-  access: {
-    read: ({ auth }) =&gt; auth.isAuthenticated,
-    create: ({ auth }) =&gt; auth.hasRole('admin'),
-  },
-})
+}
 
 // That's it. API endpoints are auto-generated:
 // GET /api/users

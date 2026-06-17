@@ -66,7 +66,7 @@ Add the Global Variables plugin to your SonicJS configuration:
 <CodeGroup title="Register Plugin">
 
 ```typescript
-import { globalVariablesPlugin } from '@sonicjs-cms/core/plugins'
+import { globalVariablesPlugin } from '@sonicjs-cms/core'
 
 export default {
   plugins: [
@@ -373,7 +373,7 @@ You can use the variable resolver directly in your own code without going throug
 import {
   resolveVariables,
   resolveVariablesInObject,
-} from '@sonicjs-cms/core/plugins'
+} from '@sonicjs-cms/core'
 
 // Resolve tokens in a single string
 const variables = new Map([
@@ -409,7 +409,7 @@ For resolving variables in custom route handlers using the database:
 <CodeGroup title="Database Resolution">
 
 ```typescript
-import { resolveContentVariables } from '@sonicjs-cms/core/plugins'
+import { resolveContentVariables } from '@sonicjs-cms/core'
 
 app.get('/api/custom-endpoint', async (c) => {
   const db = c.env.DB
@@ -433,7 +433,7 @@ app.get('/api/custom-endpoint', async (c) => {
 <CodeGroup title="Cache Management">
 
 ```typescript
-import { invalidateCache } from '@sonicjs-cms/core/plugins'
+import { invalidateCache } from '@sonicjs-cms/core'
 
 // Force the variable cache to refresh on the next content read
 invalidateCache()

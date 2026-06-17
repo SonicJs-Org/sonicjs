@@ -388,13 +388,11 @@ export default async function BlogPage() {
 ### Enable Aggressive Caching
 
 ```typescript
-cachePlugin({
-  defaultTTL: 3600,
-  patterns: {
-    '/api/posts': { ttl: 60 },      // List updates quickly
-    '/api/posts/*': { ttl: 3600 },  // Individual posts cache longer
-  },
-})
+import { CacheService } from '@sonicjs-cms/core'
+
+// Short TTL for post lists, longer for individual posts
+const postsListCache = new CacheService({ ttl: 60, keyPrefix: 'posts-list' })
+const postsCache = new CacheService({ ttl: 3600, keyPrefix: 'posts' })
 ```
 
 ### Use ISR in Next.js

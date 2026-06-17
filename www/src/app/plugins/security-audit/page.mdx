@@ -262,7 +262,7 @@ Active lockouts can be viewed and released from the admin dashboard or via the A
 <CodeGroup title="Lockout Management">
 
 ```typescript
-import { BruteForceDetector } from '@sonicjs-cms/core/plugins'
+import { BruteForceDetector } from '@sonicjs-cms/core'
 
 const detector = new BruteForceDetector(env.CACHE_KV, settings.bruteForce)
 
@@ -544,7 +544,7 @@ If you need to apply the middleware manually (e.g., in a custom app setup):
 <CodeGroup title="Manual Middleware">
 
 ```typescript
-import { securityAuditMiddleware } from '@sonicjs-cms/core/plugins'
+import { securityAuditMiddleware } from '@sonicjs-cms/core'
 
 const app = new Hono()
 
@@ -565,7 +565,7 @@ Use the `SecurityAuditService` to log events from your own code:
 <CodeGroup title="Custom Event Logging">
 
 ```typescript
-import { SecurityAuditService } from '@sonicjs-cms/core/plugins'
+import { SecurityAuditService } from '@sonicjs-cms/core'
 
 // In a route handler
 app.post('/api/admin/dangerous-action', async (c) => {
@@ -593,7 +593,7 @@ app.post('/api/admin/dangerous-action', async (c) => {
 <CodeGroup title="Query Events">
 
 ```typescript
-import { SecurityAuditService } from '@sonicjs-cms/core/plugins'
+import { SecurityAuditService } from '@sonicjs-cms/core'
 
 const service = new SecurityAuditService(env.DB)
 

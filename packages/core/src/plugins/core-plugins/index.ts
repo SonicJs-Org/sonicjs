@@ -49,7 +49,6 @@ export const CORE_PLUGIN_IDS = [
   'core-media',
   'core-analytics',
   'demo-login-plugin',
-  'workflow-plugin',
   'database-tools',
   'hello-world',
   'quill-editor',

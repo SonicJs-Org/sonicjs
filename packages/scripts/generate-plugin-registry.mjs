@@ -45,6 +45,10 @@ async function loadManifest(manifestPath) {
       console.warn(`  SKIP ${manifestPath} (no id)`)
       return null
     }
+    if (manifest.hidden === true) {
+      console.warn(`  SKIP ${manifestPath} (hidden)`)
+      return null
+    }
     return { path: manifestPath, manifest, id }
   } catch (error) {
     console.error(`  ERROR ${manifestPath}:`, error.message)

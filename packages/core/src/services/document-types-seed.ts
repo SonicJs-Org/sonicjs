@@ -238,6 +238,7 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
             viewer: ['read'],
           },
           maxVersionsPerRoot: 50,
+          ...(collection.versioning ? { versioning: true } : {}),
         },
         queryableFields: [],
       })

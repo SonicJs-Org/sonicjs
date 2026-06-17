@@ -21,12 +21,14 @@ import './user-profile.model'
 
 // Import code-defined collections
 import blogPostsCollection from './collections/blog-posts.collection'
+import faqCollection from './collections/faq.collection'
 import { siteSettingsCollection } from '@sonicjs-cms/core'
 
 // Register collections so they appear in admin UI
 registerCollections([
   siteSettingsCollection,
-  blogPostsCollection
+  blogPostsCollection,
+  faqCollection,
 ])
 
 const config: SonicJSConfig = {

@@ -35,6 +35,7 @@ interface Collection {
   managed?: boolean
   source_type?: string | null
   internal?: boolean
+  versioning?: boolean
 }
 
 interface CollectionFormData {
@@ -128,7 +129,7 @@ adminCollectionsRoutes.get('/', async (c) => {
     let results: any[] = []
     try {
       const stmt = db.prepare(
-        "SELECT id, name, display_name, description, created_at, schema, source, queryable_fields FROM document_types WHERE is_active = 1 ORDER BY created_at DESC"
+        "SELECT id, name, display_name, description, created_at, schema, source, queryable_fields, settings FROM document_types WHERE is_active = 1 ORDER BY created_at DESC"
       )
       const queryResults = await stmt.all()
       results = queryResults.results ?? []
@@ -152,6 +153,7 @@ adminCollectionsRoutes.get('/', async (c) => {
           managed: cfg.managed !== false,
           source_type: 'code',
           internal: isCodeCollectionInternal(cfg),
+          versioning: cfg.versioning === true,
         } as Collection]
       })
     )
@@ -173,6 +175,13 @@ adminCollectionsRoutes.get('/', async (c) => {
             if (Array.isArray(qf)) fieldCount = qf.length
           } catch {}
         }
+        let dbVersioning = false
+        if (row.settings) {
+          try {
+            const s = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings
+            dbVersioning = s?.versioning === true
+          } catch {}
+        }
         return {
           id: String(row.id || ''),
           name: String(row.name || ''),
@@ -184,6 +193,7 @@ adminCollectionsRoutes.get('/', async (c) => {
           managed: false,
           source_type: (row.source === 'code' || row.source === 'system' || row.source === 'plugin') ? 'code' : 'user',
           internal: isDbDocTypeInternal(row.source),
+          versioning: dbVersioning,
         }
       })
 
@@ -200,6 +210,7 @@ adminCollectionsRoutes.get('/', async (c) => {
         source_type: 'code',
         formattedDate: 'Code-defined',
         internal: codeCol.internal,
+        versioning: codeCol.versioning ?? col.versioning,
       } : col)
     })
 

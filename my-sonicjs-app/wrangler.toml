@@ -13,8 +13,8 @@ workers_dev = true
 # Note: database_name and database_id are automatically updated by GitHub Actions
 [[d1_databases]]
 binding = "DB"
-database_name = "sonicjs-worktree-lane711-email-plugin-infowall-merge"
-database_id = "913474f5-ffe7-45d9-b81a-da07ca9fd3a1"
+database_name = "sonicjs-worktree-lane711-versioning-plugin-opt-in"
+database_id = "793cc444-7e9d-41b9-8dda-d48b467cc53a"
 migrations_dir = "./migrations"
 
 # R2 Bucket for media storage (using CI bucket)
@@ -28,10 +28,9 @@ binding = "CACHE_KV"
 id = "a16f8246fc294d809c90b0fb2df6d363"
 
 # Cloudflare Email Service binding (send_email)
-# destination_address restricts delivery in dev — remove for prod
+# remote = true requires valid Cloudflare auth; omit for local dev
 [[send_email]]
 name = "EMAIL"
-remote = true
 
 # Environment variables
 [vars]

@@ -12,6 +12,7 @@ export interface Collection {
   managed?: boolean
   source_type?: string | null
   internal?: boolean
+  versioning?: boolean
 }
 
 export interface CollectionsListPageData {
@@ -89,48 +90,23 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
         }
       },
       {
-        key: 'managed',
-        label: 'Source',
+        key: 'versioning',
+        label: 'Versioning',
         sortable: true,
         sortType: 'string',
         render: (_value: any, collection: any) => {
-          if (collection.source_type === 'code' || collection.managed) {
+          if (collection.versioning) {
             return `
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              <span class="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-600/20 dark:ring-emerald-400/20">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">Code</span>
-              </div>
-            `
-          } else if (collection.source_type === 'form') {
-            return `
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm0 2h10a1 1 0 011 1v1H4V7a1 1 0 011-1zm-1 5v2a1 1 0 001 1h10a1 1 0 001-1v-2H4z" clip-rule="evenodd"/>
-                </svg>
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">Form</span>
-              </div>
-            `
-          } else {
-            return `
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z"/>
-                  <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z"/>
-                  <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z"/>
-                </svg>
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">Database</span>
-              </div>
+                On
+              </span>
             `
           }
+          return `<span class="text-xs text-zinc-400 dark:text-zinc-500">Off</span>`
         }
-      },
-      {
-        key: 'formattedDate',
-        label: 'Created',
-        sortable: true,
-        sortType: 'date'
       },
       {
         key: 'actions',

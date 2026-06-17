@@ -18,7 +18,8 @@ const TST_FIELDS = [
 ]
 
 function svc(db, tenantId = 'default') {
-  return new DocumentsService(db, { queryableFields: TST_FIELDS, tenantId, typeSchemaVersion: 1 })
+  // Existing tests were written against the versioned (new-row) path; keep versioning:true here.
+  return new DocumentsService(db, { queryableFields: TST_FIELDS, tenantId, typeSchemaVersion: 1, versioning: true })
 }
 
 function count(db, sql, ...args) {
@@ -292,5 +293,121 @@ describe('Document ACL — isAllowed against real document_permissions (D5/D11)'
     await perms.grantPermission({ tenantId: 'tenantA', rootId: 'root1', principalType: 'public', principalId: '*', permission: 'read', effect: 'deny' })
     const repoB = new DocumentRepository(db, 'tenantB')
     expect(await repoB.isAllowed([{ type: 'public', id: '*' }], 'root1', 'read', PUBLIC_READ)).toBe(true)
+  })
+})
+
+describe('versioning off', () => {
+  let db
+  const VERSIONING_FIELDS = [
+    { name: 'rating', kind: 'scalar', type: 'integer', column: 'q_tst_rating' },
+    { name: 'tags', kind: 'facet', type: 'text' },
+  ]
+
+  function vSvc(db, versioning = false) {
+    return new DocumentsService(db, { queryableFields: VERSIONING_FIELDS, tenantId: 'default', typeSchemaVersion: 1, versioning })
+  }
+
+  beforeEach(() => {
+    db = createTestD1()
+    db.raw
+      .prepare(
+        `INSERT INTO document_types (id,name,display_name,schema,queryable_fields,settings,source,schema_version,is_system,is_active,created_at,updated_at)
+         VALUES ('verstest','verstest','VersionTest','{}','[]','{}','system',1,1,1,1,1)`,
+      )
+      .run()
+  })
+  afterEach(() => db.close())
+
+  it('1. in-place edit keeps one row — version_number and id unchanged', async () => {
+    const s = vSvc(db, false)
+    const doc = await s.create({ typeId: 'verstest', tenantId: 'default', data: { rating: 1 } })
+    const origId = doc.id
+    const origVersion = doc.versionNumber
+
+    await s.saveDraft(doc.rootId, { data: { rating: 2 } })
+    await s.saveDraft(doc.rootId, { data: { rating: 3 } })
+
+    const cnt = db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(doc.rootId)
+    expect(cnt.n).toBe(1)
+
+    const row = db.raw.prepare('SELECT id, version_number, data FROM documents WHERE root_id=?').get(doc.rootId)
+    expect(row.id).toBe(origId)
+    expect(row.version_number).toBe(origVersion)
+    expect(JSON.parse(row.data).rating).toBe(3)
+  })
+
+  it('2. derived rows rebuilt on in-place edit — facets match new tags, no stale rows', async () => {
+    const s = vSvc(db, false)
+    const doc = await s.create({ typeId: 'verstest', tenantId: 'default', data: { rating: 1, tags: ['a', 'b'] } })
+
+    await s.saveDraft(doc.rootId, { data: { tags: ['c'] } })
+
+    const facets = db.raw
+      .prepare('SELECT value_text FROM document_facets WHERE document_id=? ORDER BY ordinal')
+      .all(doc.id)
+    expect(facets.map((f) => f.value_text)).toEqual(['c'])
+  })
+
+  it('3. publish deletes superseded row — no FK error, at most 2 rows', async () => {
+    const s = vSvc(db, false)
+    const doc = await s.create({ typeId: 'verstest', tenantId: 'default', data: { rating: 1 } })
+    await s.publish(doc.id)
+
+    // saveDraft on published row creates a new draft (published row stays live)
+    const draft = await s.saveDraft(doc.rootId, { data: { rating: 2 } })
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(doc.rootId).n).toBe(2)
+
+    // publish again — old published row should be deleted
+    await expect(s.publish(draft.id)).resolves.not.toThrow()
+
+    const rows = db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(doc.rootId)
+    expect(rows.n).toBeLessThanOrEqual(2)
+
+    const pubRows = db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=? AND is_published=1').get(doc.rootId)
+    expect(pubRows.n).toBe(1)
+  })
+
+  it('4. draft-while-published still works — published data unchanged', async () => {
+    const s = vSvc(db, false)
+    const doc = await s.create({ typeId: 'verstest', tenantId: 'default', data: { rating: 1 } })
+    await s.publish(doc.id)
+
+    // saveDraft on the live published row creates a new draft row
+    const draft = await s.saveDraft(doc.rootId, { data: { rating: 99 } })
+    expect(draft.isCurrentDraft).toBe(true)
+    expect(draft.isPublished).toBe(false)
+
+    // Original published row data unchanged
+    const pubRow = db.raw.prepare('SELECT data FROM documents WHERE root_id=? AND is_published=1').get(doc.rootId)
+    expect(JSON.parse(pubRow.data).rating).toBe(1)
+  })
+
+  it('5. regression: versioning:true accumulates history rows', async () => {
+    const s = vSvc(db, true)
+    const doc = await s.create({ typeId: 'verstest', tenantId: 'default', data: { rating: 1 } })
+    await s.saveDraft(doc.rootId, { data: { rating: 2 } })
+    await s.saveDraft(doc.rootId, { data: { rating: 3 } })
+
+    const cnt = db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(doc.rootId)
+    expect(cnt.n).toBe(3)
+
+    const maxV = db.raw.prepare('SELECT MAX(version_number) m FROM documents WHERE root_id=?').get(doc.rootId)
+    expect(maxV.m).toBe(3)
+  })
+
+  it('6. maxVersionsPerRoot irrelevant when versioning off — 60 saves leave <= 2 rows', async () => {
+    const s = new DocumentsService(db, {
+      queryableFields: VERSIONING_FIELDS,
+      tenantId: 'default',
+      typeSchemaVersion: 1,
+      versioning: false,
+      maxVersionsPerRoot: 1,
+    })
+    const doc = await s.create({ typeId: 'verstest', tenantId: 'default', data: { rating: 0 } })
+    for (let i = 1; i <= 60; i++) {
+      await s.saveDraft(doc.rootId, { data: { rating: i } })
+    }
+    const cnt = db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(doc.rootId)
+    expect(cnt.n).toBeLessThanOrEqual(2)
   })
 })

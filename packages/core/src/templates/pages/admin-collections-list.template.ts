@@ -96,16 +96,9 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
         sortType: 'string',
         render: (_value: any, collection: any) => {
           if (collection.versioning) {
-            return `
-              <span class="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-600/20 dark:ring-emerald-400/20">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                On
-              </span>
-            `
+            return `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20">On</span>`
           }
-          return `<span class="text-xs text-zinc-400 dark:text-zinc-500">Off</span>`
+          return `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20">Off</span>`
         }
       },
       {

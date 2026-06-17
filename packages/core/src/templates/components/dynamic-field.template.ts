@@ -524,7 +524,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           value="${value}"
           min="${opts.min || ''}"
           max="${opts.max || ''}"
-          class="${baseClasses} ${errorClasses}"
+          class="${baseClasses} ${errorClasses} !w-auto dark:[color-scheme:dark]"
           ${required}
           ${disabled ? 'disabled' : ''}
         >
@@ -540,7 +540,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           value="${value}"
           min="${opts.min || ''}"
           max="${opts.max || ''}"
-          class="${baseClasses} ${errorClasses}"
+          class="${baseClasses} ${errorClasses} !w-auto dark:[color-scheme:dark]"
           ${required}
           ${disabled ? 'disabled' : ''}
         >

@@ -6,49 +6,44 @@
  * hook bus wired before dispatching.
  */
 
+import type { SonicJSConfig } from '@sonicjs-cms/core';
 import {
-  createSonicJSApp,
-  registerCollections,
-  createScheduledHandler,
-  getHookSystem,
-  emailReconciliationPlugin,
   collectCronSchedules,
-} from '@sonicjs-cms/core'
-import type { SonicJSConfig } from '@sonicjs-cms/core'
+  createScheduledHandler,
+  createSonicJSApp,
+  emailReconciliationPlugin,
+  getHookSystem,
+  registerCollections,
+} from '@sonicjs-cms/core';
 
 // User profile model — uncomment defineUserProfile() in this file to add custom fields
-import './user-profile.model'
+import './user-profile.model';
 
 // Import code-defined collections
-import blogPostsCollection from './collections/blog-posts.collection'
-import faqCollection from './collections/faq.collection'
-import { siteSettingsCollection } from '@sonicjs-cms/core'
+import { siteSettingsCollection } from '@sonicjs-cms/core';
+import blogPostsCollection from './collections/blog-posts.collection';
 
 // Register collections so they appear in admin UI
-registerCollections([
-  siteSettingsCollection,
-  blogPostsCollection,
-  faqCollection,
-])
+registerCollections([siteSettingsCollection, blogPostsCollection]);
 
 const config: SonicJSConfig = {
   plugins: {
     register: [],
     disableAll: false,
-  }
-}
+  },
+};
 
 // Create the core application (includes boot() for cron cold-start wiring)
-const app = createSonicJSApp(config)
+const app = createSonicJSApp(config);
 
 // All plugins that declare crons, for the scheduled handler.
 // Core crons (emailReconciliationPlugin) are wired automatically by createSonicJSApp.
-const allCronPlugins = [emailReconciliationPlugin, ...(config.plugins?.register ?? [])]
+const allCronPlugins = [emailReconciliationPlugin, ...(config.plugins?.register ?? [])];
 
 // Log declared schedules at startup so wrangler.toml can be kept in sync.
-const schedules = collectCronSchedules(allCronPlugins)
+const schedules = collectCronSchedules(allCronPlugins);
 if (schedules.length > 0) {
-  console.log('[cron] Declared schedules:', schedules.join(', '))
+  console.log('[cron] Declared schedules:', schedules.join(', '));
 }
 
 export default {
@@ -58,4 +53,4 @@ export default {
     getHooks: getHookSystem,
     boot: app.boot,
   }),
-}
+};

@@ -72,7 +72,7 @@ export interface ContentFormData {
   version?: string
 }
 
-export function renderContentFormPage(data: ContentFormData): string {
+export function renderContentFormPage(data: ContentFormData, opts?: { partialOnly?: boolean }): string {
   const isEdit = data.isEdit || !!data.id
   const title = isEdit ? `Edit: ${data.title || 'Content'}` : `New ${data.collection.display_name}`
   const hasValidationErrors = Boolean(data.validationErrors && Object.keys(data.validationErrors).length > 0)
@@ -134,7 +134,7 @@ export function renderContentFormPage(data: ContentFormData): string {
     }))
 
   const pageContent = `
-    <div class="space-y-6">
+    <div id="content-form-page" class="space-y-6">
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -191,17 +191,15 @@ export function renderContentFormPage(data: ContentFormData): string {
             <input type="hidden" name="collection_id" value="${data.collection.id}">
             ${isEdit ? `<input type="hidden" name="id" value="${data.id}">` : ''}
             ${data.referrerParams ? `<input type="hidden" name="referrer_params" value="${data.referrerParams}">` : ''}
-            
+
             <!-- Core Fields -->
             ${renderFieldGroup('Basic Information', coreFieldsHTML)}
-            
+
             <!-- Content Fields -->
             ${contentFields.length > 0 ? renderFieldGroup('Content Details', contentFieldsHTML) : ''}
-            
+
             <!-- SEO & Meta Fields -->
             ${metaFields.length > 0 ? renderFieldGroup('SEO & Metadata', metaFieldsHTML, true) : ''}
-            
-            <div id="form-messages"></div>
           </form>
         </div>
 
@@ -1529,6 +1527,10 @@ export function renderContentFormPage(data: ContentFormData): string {
   }) : ''}
     </script>
   `
+
+  if (opts?.partialOnly) {
+    return pageContent
+  }
 
   const layoutData: AdminLayoutCatalystData = {
     title: title,

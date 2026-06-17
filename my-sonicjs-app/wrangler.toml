@@ -13,8 +13,8 @@ workers_dev = true
 # Note: database_name and database_id are automatically updated by GitHub Actions
 [[d1_databases]]
 binding = "DB"
-database_name = "sonicjs-worktree-lane711-email-plugin-infowall-merge"
-database_id = "913474f5-ffe7-45d9-b81a-da07ca9fd3a1"
+database_name = "sonicjs-worktree-lane711-delete-unused-plugins"
+database_id = "78faf642-61d1-4add-a057-b2be60f353cb"
 migrations_dir = "./migrations"
 
 # R2 Bucket for media storage (using CI bucket)

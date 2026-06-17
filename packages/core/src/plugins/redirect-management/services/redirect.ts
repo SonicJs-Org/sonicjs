@@ -5,6 +5,80 @@ import { normalizeUrl } from '../utils/url-normalizer'
 import { validateRedirect, type ValidationResult } from '../utils/validator'
 import { invalidateRedirectCache } from '../middleware/redirect'
 import { CloudflareBulkService, isEligibleForSync } from './cloudflare-bulk'
+import { DocumentsService } from '../../../services/documents'
+import type { QueryableField } from '../../../schemas/document'
+import { nanoid } from 'nanoid'
+
+const TYPE_ID = 'redirect'
+const TENANT = 'default'
+
+export const REDIRECT_QUERYABLE_FIELDS: QueryableField[] = [
+  { name: 'source',      kind: 'scalar', type: 'text',    column: 'q_redir_source' },
+  { name: 'destination', kind: 'scalar', type: 'text',    column: 'q_redir_destination' },
+  { name: 'statusCode',  kind: 'scalar', type: 'integer', column: 'q_redir_status_code' },
+  { name: 'isActive',    kind: 'scalar', type: 'integer', column: 'q_redir_is_active' },
+  { name: 'matchType',   kind: 'scalar', type: 'integer', column: 'q_redir_match_type' },
+]
+
+function docToRedirect(row: any): Redirect {
+  const data = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data ?? {})
+  return {
+    id: row.root_id ?? row.id,
+    source: data.source ?? '',
+    destination: data.destination ?? '',
+    matchType: (data.matchType ?? 0) as MatchType,
+    statusCode: (data.statusCode ?? 301) as StatusCode,
+    isActive: data.isActive === true || data.isActive === 1,
+    preserveQueryString: data.preserveQueryString ?? false,
+    includeSubdomains: data.includeSubdomains ?? false,
+    subpathMatching: data.subpathMatching ?? false,
+    preservePathSuffix: data.preservePathSuffix ?? true,
+    sourcePlugin: data.sourcePlugin ?? null,
+    createdBy: row.created_by ?? '',
+    createdAt: (row.created_at ?? 0) * 1000,
+    updatedAt: (row.updated_at ?? 0) * 1000,
+    updatedBy: row.updated_by ?? undefined,
+    hitCount: data.hitCount ?? 0,
+    lastHitAt: data.lastHitAt ?? null,
+    createdByName: row.created_by_name ?? undefined,
+    updatedByName: row.updated_by_name ?? undefined,
+  }
+}
+
+function buildListConditions(filter?: RedirectFilter): { conditions: string[]; params: (string | number)[] } {
+  const conditions = [
+    'type_id = ?', 'tenant_id = ?', 'is_current_draft = 1', 'deleted_at IS NULL',
+  ]
+  const params: (string | number)[] = [TYPE_ID, TENANT]
+
+  if (filter?.isActive !== undefined) {
+    conditions.push('q_redir_is_active = ?')
+    params.push(filter.isActive ? 1 : 0)
+  }
+  if (filter?.statusCode !== undefined) {
+    conditions.push('q_redir_status_code = ?')
+    params.push(filter.statusCode)
+  }
+  if (filter?.matchType !== undefined) {
+    conditions.push('q_redir_match_type = ?')
+    params.push(filter.matchType)
+  }
+  if (filter?.search) {
+    conditions.push('(q_redir_source LIKE ? OR q_redir_destination LIKE ?)')
+    const pat = `%${filter.search}%`
+    params.push(pat, pat)
+  }
+  if (filter?.sourcePlugin !== undefined) {
+    if (filter.sourcePlugin === null) {
+      conditions.push("json_extract(data, '$.sourcePlugin') IS NULL")
+    } else {
+      conditions.push("json_extract(data, '$.sourcePlugin') = ?")
+      params.push(filter.sourcePlugin)
+    }
+  }
+
+  return { conditions, params }
+}
 
 export class RedirectService {
   private cloudflareService: CloudflareBulkService | null = null
@@ -15,9 +89,14 @@ export class RedirectService {
     }
   }
 
-  /**
-   * Get plugin settings from the database
-   */
+  private getDocService(): DocumentsService {
+    return new DocumentsService(this.db, {
+      queryableFields: REDIRECT_QUERYABLE_FIELDS,
+      maxVersionsPerRoot: 1,
+      tenantId: TENANT,
+    })
+  }
+
   async getSettings(): Promise<{ status: string; data: RedirectSettings }> {
     try {
       const record = await this.db
@@ -26,49 +105,28 @@ export class RedirectService {
         .first()
 
       if (!record) {
-        return {
-          status: 'inactive',
-          data: this.getDefaultSettings()
-        }
+        return { status: 'inactive', data: this.getDefaultSettings() }
       }
 
       return {
         status: (record?.status as string) || 'inactive',
         data: record?.settings ? JSON.parse(record.settings as string) : this.getDefaultSettings()
       }
-    } catch (error) {
-      console.error('Error getting redirect management settings:', error)
-      return {
-        status: 'inactive',
-        data: this.getDefaultSettings()
-      }
+    } catch {
+      return { status: 'inactive', data: this.getDefaultSettings() }
     }
   }
 
-  /**
-   * Get default settings
-   */
   getDefaultSettings(): RedirectSettings {
-    return {
-      enabled: true,
-      autoOffloadEnabled: false
-    }
+    return { enabled: true, autoOffloadEnabled: false }
   }
 
-  /**
-   * Check if Cloudflare auto-offload is enabled and configured
-   */
   private async shouldSyncToCloudflare(): Promise<boolean> {
-    if (!this.cloudflareService?.isConfigured()) {
-      return false
-    }
+    if (!this.cloudflareService?.isConfigured()) return false
     const { data: settings } = await this.getSettings()
     return settings.autoOffloadEnabled === true
   }
 
-  /**
-   * Sync redirect to Cloudflare if enabled (fire-and-forget)
-   */
   private async syncToCloudflareIfEnabled(redirect: Redirect): Promise<void> {
     try {
       const shouldSync = await this.shouldSyncToCloudflare()
@@ -79,14 +137,10 @@ export class RedirectService {
         }
       }
     } catch (error) {
-      // Log but don't throw - Cloudflare sync failures shouldn't block D1 operations
       console.error('[RedirectService] Cloudflare sync error:', error)
     }
   }
 
-  /**
-   * Remove redirect from Cloudflare if enabled (fire-and-forget)
-   */
   private async removeFromCloudflareIfEnabled(sourceUrl: string): Promise<void> {
     try {
       const shouldSync = await this.shouldSyncToCloudflare()
@@ -101,18 +155,9 @@ export class RedirectService {
     }
   }
 
-  // CRUD Operations
-
-  /**
-   * Create a new redirect with validation
-   */
   async create(input: CreateRedirectInput, userId: string): Promise<RedirectOperationResult> {
     try {
-      // Generate unique ID
-      const id = crypto.randomUUID()
-
-      // Set defaults for optional fields
-      const matchType = input.matchType ?? 0 // MatchType.EXACT
+      const matchType = input.matchType ?? 0
       const statusCode = input.statusCode ?? 301
       const isActive = input.isActive ?? true
       const preserveQueryString = input.preserveQueryString ?? false
@@ -121,70 +166,51 @@ export class RedirectService {
       const preservePathSuffix = input.preservePathSuffix ?? true
       const sourcePlugin = input.sourcePlugin ?? null
 
-      // Load existing redirects for circular detection
+      const normalizedSource = normalizeUrl(input.source)
       const existingMap = await this.getAllSourceDestinationMap()
 
-      // Validate redirect
+      if (existingMap.has(normalizedSource)) {
+        return { success: false, redirect: undefined, error: 'A redirect with this source URL already exists', warning: undefined }
+      }
+
       const validation = validateRedirect(input.source, input.destination, existingMap)
       if (!validation.isValid) {
-        return {
-          success: false,
-          redirect: undefined,
-          error: validation.error,
-          warning: undefined
-        }
+        return { success: false, redirect: undefined, error: validation.error, warning: undefined }
       }
 
-      // Normalize source URL for storage (lowercase, no trailing slash)
-      const normalizedSource = normalizeUrl(input.source)
-      const now = Date.now()
-
-      // Insert into database
-      // NOTE: Migration 036 adds Cloudflare-aligned columns
-      await this.db
-        .prepare(`
-          INSERT INTO redirects (
-            id, source, destination, match_type, status_code, is_active,
-            preserve_query_string, include_subdomains, subpath_matching, preserve_path_suffix,
-            source_plugin, created_by, created_at, updated_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .bind(
-          id,
-          normalizedSource,
-          input.destination,
-          matchType,
+      const svc = this.getDocService()
+      const doc = await svc.create({
+        typeId: TYPE_ID,
+        title: normalizedSource,
+        publishOnCreate: true,
+        tenantId: TENANT,
+        locale: 'default',
+        parentRootId: '',
+        sortOrder: 0,
+        visible: true,
+        metadata: {},
+        data: {
+          source: normalizedSource,
+          destination: input.destination,
           statusCode,
-          isActive ? 1 : 0,
-          preserveQueryString ? 1 : 0,
-          includeSubdomains ? 1 : 0,
-          subpathMatching ? 1 : 0,
-          preservePathSuffix ? 1 : 0,
+          matchType,
+          isActive,
+          preserveQueryString,
+          includeSubdomains,
+          subpathMatching,
+          preservePathSuffix,
           sourcePlugin,
-          userId,
-          now,
-          now
-        )
-        .run()
+          hitCount: 0,
+          lastHitAt: null,
+        },
+      }, userId)
 
-      // Fetch the created redirect
-      const redirect = await this.getById(id)
-
-      // Invalidate cache after successful creation
+      const redirect = docToRedirect({ ...doc, data: doc.data })
       invalidateRedirectCache()
 
-      // Sync to Cloudflare if enabled (async, non-blocking)
-      if (redirect) {
-        this.syncToCloudflareIfEnabled(redirect)
-      }
+      this.syncToCloudflareIfEnabled(redirect)
 
-      return {
-        success: true,
-        redirect: redirect!,
-        error: undefined,
-        warning: validation.warning
-      }
+      return { success: true, redirect, error: undefined, warning: validation.warning }
     } catch (error) {
       console.error('Error creating redirect:', error)
       return {
@@ -196,224 +222,118 @@ export class RedirectService {
     }
   }
 
-  /**
-   * Batch create redirects (for CSV import)
-   * Uses D1 batch API for performance
-   */
   async batchCreate(rows: ValidatedRedirectRow[], userId: string): Promise<number> {
-    const now = Date.now()
+    const now = Math.floor(Date.now() / 1000)
 
-    // D1 has 100 parameter limit per statement
-    // With 13 columns, max ~7 rows per INSERT
-    const BATCH_SIZE = 7
-    const statements = []
+    const statements = rows.map(r => {
+      const id = nanoid()
+      const data = JSON.stringify({
+        source: r.source,
+        destination: r.destination,
+        statusCode: r.statusCode,
+        matchType: r.matchType,
+        isActive: r.isActive,
+        preserveQueryString: r.preserveQueryString ?? false,
+        includeSubdomains: r.includeSubdomains ?? false,
+        subpathMatching: r.subpathMatching ?? false,
+        preservePathSuffix: r.preservePathSuffix ?? true,
+        sourcePlugin: null,
+        hitCount: 0,
+        lastHitAt: null,
+      })
 
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE)
-
-      const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
-      const values = batch.flatMap(r => [
-        crypto.randomUUID(),
-        r.source,
-        r.destination,
-        r.matchType,
-        r.statusCode,
-        r.isActive ? 1 : 0,
-        r.preserveQueryString ? 1 : 0,
-        r.includeSubdomains ? 1 : 0,
-        r.subpathMatching ? 1 : 0,
-        r.preservePathSuffix ? 1 : 0,
-        userId,
-        now,
-        now
-      ])
-
-      statements.push(
-        this.db.prepare(`
-          INSERT INTO redirects (
-            id, source, destination, match_type, status_code, is_active,
-            preserve_query_string, include_subdomains, subpath_matching, preserve_path_suffix,
-            created_by, created_at, updated_at
-          ) VALUES ${placeholders}
-        `).bind(...values)
+      return this.db.prepare(
+        `INSERT INTO documents (
+          id, root_id, type_id, type_version, version_of_id, version_number,
+          is_current_draft, is_published, status, parent_root_id, slug, path, title, zone,
+          sort_order, visible, published_at, scheduled_at, expires_at, deleted_at,
+          tenant_id, locale, translation_group_id, data, metadata,
+          owner_id, created_by, updated_by, created_at, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).bind(
+        id, id, TYPE_ID, 1, null, 1,
+        1, 1, 'published', '', null, null, r.source, null,
+        0, 1, now, null, null, null,
+        TENANT, 'default', '', data, '{}',
+        null, userId, userId, now, now
       )
-    }
+    })
 
-    // Execute all INSERTs in single batch (transaction)
     await this.db.batch(statements)
-
-    // Invalidate cache
     invalidateRedirectCache()
-
-    // Note: Cloudflare sync for batch imports should be done via manual "Sync Now" button
-    // to avoid rate limiting and performance issues
-
     return rows.length
   }
 
-  /**
-   * Get redirect by ID
-   */
   async getById(id: string): Promise<Redirect | null> {
     try {
-      const row = await this.db
-        .prepare(`
-          SELECT
-            r.id, r.source, r.destination, r.match_type, r.status_code, r.is_active,
-            COALESCE(r.preserve_query_string, 0) as preserve_query_string,
-            COALESCE(r.include_subdomains, 0) as include_subdomains,
-            COALESCE(r.subpath_matching, 0) as subpath_matching,
-            COALESCE(r.preserve_path_suffix, 1) as preserve_path_suffix,
-            r.source_plugin,
-            r.created_by, r.created_at, r.updated_at, r.updated_by,
-            COALESCE(a.hit_count, 0) as hit_count,
-            a.last_hit_at,
-            creator.first_name || ' ' || creator.last_name as created_by_name,
-            updater.first_name || ' ' || updater.last_name as updated_by_name
-          FROM redirects r
-          LEFT JOIN redirect_analytics a ON r.id = a.redirect_id
-          LEFT JOIN auth_user creator ON r.created_by = creator.id
-          LEFT JOIN auth_user updater ON r.updated_by = updater.id
-          WHERE r.id = ? AND r.deleted_at IS NULL
-        `)
-        .bind(id)
-        .first()
+      const row = await this.db.prepare(`
+        SELECT d.*,
+          creator.first_name || ' ' || creator.last_name as created_by_name,
+          updater.first_name || ' ' || updater.last_name as updated_by_name
+        FROM documents d
+        LEFT JOIN auth_user creator ON d.created_by = creator.id
+        LEFT JOIN auth_user updater ON d.updated_by = updater.id
+        WHERE d.root_id = ? AND d.tenant_id = ? AND d.is_current_draft = 1 AND d.deleted_at IS NULL
+      `).bind(id, TENANT).first()
 
-      if (!row) {
-        return null
-      }
-
-      return this.mapRowToRedirect(row)
+      if (!row) return null
+      return docToRedirect(row)
     } catch (error) {
       console.error('Error getting redirect by ID:', error)
       return null
     }
   }
 
-  /**
-   * Update an existing redirect
-   */
   async update(id: string, input: UpdateRedirectInput, userId?: string): Promise<RedirectOperationResult> {
     try {
-      // Fetch existing redirect
       const existing = await this.getById(id)
       if (!existing) {
-        return {
-          success: false,
-          redirect: undefined,
-          error: 'Redirect not found',
-          warning: undefined
-        }
+        return { success: false, redirect: undefined, error: 'Redirect not found', warning: undefined }
       }
 
-      // If source or destination changed, validate
       let validation: ValidationResult | undefined
-      if (input.source || input.destination) {
+      if (input.source !== undefined || input.destination !== undefined) {
         const newSource = input.source ?? existing.source
         const newDestination = input.destination ?? existing.destination
-
-        // Build map excluding current redirect (so we don't detect self as circular)
         const existingMap = await this.getAllSourceDestinationMap()
         existingMap.delete(normalizeUrl(existing.source))
-
         validation = validateRedirect(newSource, newDestination, existingMap)
         if (!validation.isValid) {
-          return {
-            success: false,
-            redirect: undefined,
-            error: validation.error,
-            warning: undefined
-          }
+          return { success: false, redirect: undefined, error: validation.error, warning: undefined }
         }
       }
 
-      // Build update query dynamically based on provided fields
-      const updates: string[] = []
-      const bindings: any[] = []
-
-      if (input.source !== undefined) {
-        updates.push('source = ?')
-        bindings.push(normalizeUrl(input.source))
-      }
-      if (input.destination !== undefined) {
-        updates.push('destination = ?')
-        bindings.push(input.destination)
-      }
-      if (input.matchType !== undefined) {
-        updates.push('match_type = ?')
-        bindings.push(input.matchType)
-      }
-      if (input.statusCode !== undefined) {
-        updates.push('status_code = ?')
-        bindings.push(input.statusCode)
-      }
-      if (input.isActive !== undefined) {
-        updates.push('is_active = ?')
-        bindings.push(input.isActive ? 1 : 0)
-      }
-      if (input.preserveQueryString !== undefined) {
-        updates.push('preserve_query_string = ?')
-        bindings.push(input.preserveQueryString ? 1 : 0)
-      }
-      if (input.includeSubdomains !== undefined) {
-        updates.push('include_subdomains = ?')
-        bindings.push(input.includeSubdomains ? 1 : 0)
-      }
-      if (input.subpathMatching !== undefined) {
-        updates.push('subpath_matching = ?')
-        bindings.push(input.subpathMatching ? 1 : 0)
-      }
-      if (input.preservePathSuffix !== undefined) {
-        updates.push('preserve_path_suffix = ?')
-        bindings.push(input.preservePathSuffix ? 1 : 0)
+      const newData = {
+        source: input.source !== undefined ? normalizeUrl(input.source) : existing.source,
+        destination: input.destination ?? existing.destination,
+        statusCode: input.statusCode ?? existing.statusCode,
+        matchType: input.matchType ?? existing.matchType,
+        isActive: input.isActive ?? existing.isActive,
+        preserveQueryString: input.preserveQueryString ?? existing.preserveQueryString,
+        includeSubdomains: input.includeSubdomains ?? existing.includeSubdomains,
+        subpathMatching: input.subpathMatching ?? existing.subpathMatching,
+        preservePathSuffix: input.preservePathSuffix ?? existing.preservePathSuffix,
+        sourcePlugin: existing.sourcePlugin ?? null,
+        hitCount: existing.hitCount ?? 0,
+        lastHitAt: existing.lastHitAt ?? null,
       }
 
-      // Track who made this update
-      if (userId) {
-        updates.push('updated_by = ?')
-        bindings.push(userId)
-      }
+      const now = Math.floor(Date.now() / 1000)
 
-      // Always update updated_at
-      updates.push('updated_at = ?')
-      bindings.push(Date.now())
+      await this.db.prepare(`
+        UPDATE documents
+        SET data = ?, title = ?, updated_at = ?, updated_by = ?
+        WHERE root_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+      `).bind(JSON.stringify(newData), newData.source, now, userId ?? null, id, TENANT).run()
 
-      // Add ID to bindings
-      bindings.push(id)
-
-      if (updates.length === 1) {
-        // Only updated_at would change, nothing to do
-        return {
-          success: true,
-          redirect: existing,
-          error: undefined,
-          warning: undefined
-        }
-      }
-
-      // Execute update
-      await this.db
-        .prepare(`UPDATE redirects SET ${updates.join(', ')} WHERE id = ?`)
-        .bind(...bindings)
-        .run()
-
-      // Fetch updated redirect
       const updated = await this.getById(id)
-
-      // Invalidate cache after successful update
       invalidateRedirectCache()
 
-      // Sync to Cloudflare if enabled (async, non-blocking)
       if (updated) {
         this.syncToCloudflareIfEnabled(updated)
       }
 
-      return {
-        success: true,
-        redirect: updated!,
-        error: undefined,
-        warning: validation?.warning
-      }
+      return { success: true, redirect: updated!, error: undefined, warning: validation?.warning }
     } catch (error) {
       console.error('Error updating redirect:', error)
       return {
@@ -425,42 +345,24 @@ export class RedirectService {
     }
   }
 
-  /**
-   * Delete a redirect (soft delete - sets deleted_at timestamp)
-   */
   async delete(id: string): Promise<RedirectOperationResult> {
     try {
-      // Get redirect before deleting (for Cloudflare sync)
       const redirect = await this.getById(id)
+      const now = Math.floor(Date.now() / 1000)
 
-      const now = Date.now()
-      const result = await this.db
-        .prepare(`UPDATE redirects SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`)
-        .bind(now, id)
-        .run()
+      const result = await this.db.prepare(`
+        UPDATE documents SET deleted_at = ?
+        WHERE root_id = ? AND tenant_id = ? AND deleted_at IS NULL
+      `).bind(now, id, TENANT).run()
 
       if (result.meta.changes > 0) {
-        // Invalidate cache after successful deletion
         invalidateRedirectCache()
-
-        // Remove from Cloudflare if enabled (async, non-blocking)
         if (redirect) {
           this.removeFromCloudflareIfEnabled(redirect.source)
         }
-
-        return {
-          success: true,
-          redirect: undefined,
-          error: undefined,
-          warning: undefined
-        }
+        return { success: true, redirect: undefined, error: undefined, warning: undefined }
       } else {
-        return {
-          success: false,
-          redirect: undefined,
-          error: 'Redirect not found',
-          warning: undefined
-        }
+        return { success: false, redirect: undefined, error: 'Redirect not found', warning: undefined }
       }
     } catch (error) {
       console.error('Error deleting redirect:', error)
@@ -473,121 +375,38 @@ export class RedirectService {
     }
   }
 
-  /**
-   * List redirects with optional filtering and pagination
-   */
   async list(filter?: RedirectFilter): Promise<Redirect[]> {
     try {
-      const conditions: string[] = ['r.deleted_at IS NULL']
-      const bindings: any[] = []
-
-      // Build WHERE clause from filters
-      if (filter?.isActive !== undefined) {
-        conditions.push('r.is_active = ?')
-        bindings.push(filter.isActive ? 1 : 0)
-      }
-      if (filter?.statusCode !== undefined) {
-        conditions.push('r.status_code = ?')
-        bindings.push(filter.statusCode)
-      }
-      if (filter?.matchType !== undefined) {
-        conditions.push('r.match_type = ?')
-        bindings.push(filter.matchType)
-      }
-      if (filter?.search) {
-        conditions.push('(r.source LIKE ? OR r.destination LIKE ?)')
-        const searchPattern = `%${filter.search}%`
-        bindings.push(searchPattern, searchPattern)
-      }
-      if (filter?.sourcePlugin !== undefined) {
-        if (filter.sourcePlugin === null) {
-          conditions.push('r.source_plugin IS NULL')
-        } else {
-          conditions.push('r.source_plugin = ?')
-          bindings.push(filter.sourcePlugin)
-        }
-      }
-
-      const whereClause = `WHERE ${conditions.join(' AND ')}`
-
-      // Build query with pagination
+      const { conditions, params } = buildListConditions(filter)
       const limit = filter?.limit ?? 50
       const offset = filter?.offset ?? 0
 
-      const query = `
-        SELECT
-          r.id, r.source, r.destination, r.match_type, r.status_code, r.is_active,
-          COALESCE(r.preserve_query_string, 0) as preserve_query_string,
-          COALESCE(r.include_subdomains, 0) as include_subdomains,
-          COALESCE(r.subpath_matching, 0) as subpath_matching,
-          COALESCE(r.preserve_path_suffix, 1) as preserve_path_suffix,
-          r.source_plugin,
-          r.created_by, r.created_at, r.updated_at, r.updated_by,
-          COALESCE(a.hit_count, 0) as hit_count,
-          a.last_hit_at,
+      const { results } = await this.db.prepare(`
+        SELECT d.*,
           creator.first_name || ' ' || creator.last_name as created_by_name,
           updater.first_name || ' ' || updater.last_name as updated_by_name
-        FROM redirects r
-        LEFT JOIN redirect_analytics a ON r.id = a.redirect_id
-        LEFT JOIN auth_user creator ON r.created_by = creator.id
-        LEFT JOIN auth_user updater ON r.updated_by = updater.id
-        ${whereClause}
-        ORDER BY r.created_at DESC
-        LIMIT ? OFFSET ?
-      `
+        FROM documents d
+        LEFT JOIN auth_user creator ON d.created_by = creator.id
+        LEFT JOIN auth_user updater ON d.updated_by = updater.id
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY d.created_at DESC LIMIT ? OFFSET ?
+      `).bind(...params, limit, offset).all()
 
-      bindings.push(limit, offset)
-
-      const result = await this.db.prepare(query).bind(...bindings).all()
-
-      return result.results.map(row => this.mapRowToRedirect(row))
+      return (results ?? []).map(docToRedirect)
     } catch (error) {
       console.error('Error listing redirects:', error)
       return []
     }
   }
 
-  /**
-   * Count redirects matching filter (for pagination)
-   */
   async count(filter?: RedirectFilter): Promise<number> {
     try {
-      const conditions: string[] = ['deleted_at IS NULL']
-      const bindings: any[] = []
+      const { conditions, params } = buildListConditions(filter)
 
-      // Build WHERE clause from filters (same as list())
-      if (filter?.isActive !== undefined) {
-        conditions.push('is_active = ?')
-        bindings.push(filter.isActive ? 1 : 0)
-      }
-      if (filter?.statusCode !== undefined) {
-        conditions.push('status_code = ?')
-        bindings.push(filter.statusCode)
-      }
-      if (filter?.matchType !== undefined) {
-        conditions.push('match_type = ?')
-        bindings.push(filter.matchType)
-      }
-      if (filter?.search) {
-        conditions.push('(source LIKE ? OR destination LIKE ?)')
-        const searchPattern = `%${filter.search}%`
-        bindings.push(searchPattern, searchPattern)
-      }
-      if (filter?.sourcePlugin !== undefined) {
-        if (filter.sourcePlugin === null) {
-          conditions.push('source_plugin IS NULL')
-        } else {
-          conditions.push('source_plugin = ?')
-          bindings.push(filter.sourcePlugin)
-        }
-      }
-
-      const whereClause = `WHERE ${conditions.join(' AND ')}`
-
-      const result = await this.db
-        .prepare(`SELECT COUNT(*) as count FROM redirects ${whereClause}`)
-        .bind(...bindings)
-        .first()
+      const result = await this.db.prepare(`
+        SELECT COUNT(*) as count FROM documents
+        WHERE ${conditions.join(' AND ')}
+      `).bind(...params).first()
 
       return (result?.count as number) ?? 0
     } catch (error) {
@@ -596,54 +415,37 @@ export class RedirectService {
     }
   }
 
-  /**
-   * Lookup redirect by source URL (used by middleware)
-   */
   async lookupBySource(normalizedSource: string): Promise<Redirect | null> {
     try {
-      const row = await this.db
-        .prepare(`
-          SELECT
-            id, source, destination, match_type, status_code, is_active,
-            COALESCE(preserve_query_string, 0) as preserve_query_string,
-            COALESCE(include_subdomains, 0) as include_subdomains,
-            COALESCE(subpath_matching, 0) as subpath_matching,
-            COALESCE(preserve_path_suffix, 1) as preserve_path_suffix,
-            created_by, created_at, updated_at
-          FROM redirects
-          WHERE LOWER(source) = ? AND is_active = 1 AND deleted_at IS NULL
-          LIMIT 1
-        `)
-        .bind(normalizedSource.toLowerCase())
-        .first()
+      const row = await this.db.prepare(`
+        SELECT * FROM documents
+        WHERE type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+          AND LOWER(q_redir_source) = ? AND q_redir_is_active = 1
+        LIMIT 1
+      `).bind(TYPE_ID, TENANT, normalizedSource.toLowerCase()).first()
 
-      if (!row) {
-        return null
-      }
-
-      return this.mapRowToRedirect(row)
+      if (!row) return null
+      return docToRedirect(row)
     } catch (error) {
       console.error('Error looking up redirect by source:', error)
       return null
     }
   }
 
-  /**
-   * Get all source->destination mappings for circular detection
-   * @internal Helper method for validation
-   */
   async getAllSourceDestinationMap(): Promise<Map<string, string>> {
     try {
-      const result = await this.db
-        .prepare(`SELECT source, destination FROM redirects WHERE is_active = 1 AND deleted_at IS NULL`)
-        .all()
+      const { results } = await this.db.prepare(`
+        SELECT q_redir_source as source, q_redir_destination as destination
+        FROM documents
+        WHERE type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+          AND q_redir_is_active = 1
+      `).bind(TYPE_ID, TENANT).all()
 
       const map = new Map<string, string>()
-      for (const row of result.results) {
+      for (const row of results) {
         const normalizedSource = normalizeUrl(row.source as string)
         map.set(normalizedSource, row.destination as string)
       }
-
       return map
     } catch (error) {
       console.error('Error getting source-destination map:', error)
@@ -651,66 +453,14 @@ export class RedirectService {
     }
   }
 
-  /**
-   * Map database row to Redirect type
-   * @internal Helper method for type conversion
-   */
-  private mapRowToRedirect(row: any): Redirect {
-    const redirect: Redirect = {
-      id: row.id as string,
-      source: row.source as string,
-      destination: row.destination as string,
-      matchType: row.match_type as MatchType,
-      statusCode: row.status_code as StatusCode,
-      isActive: row.is_active === 1,
-      preserveQueryString: (row.preserve_query_string ?? 0) === 1,
-      includeSubdomains: (row.include_subdomains ?? 0) === 1,
-      subpathMatching: (row.subpath_matching ?? 0) === 1,
-      preservePathSuffix: (row.preserve_path_suffix ?? 1) === 1,
-      createdBy: row.created_by as string,
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number
-    }
-
-    // Add optional analytics fields if present
-    if (row.hit_count !== undefined) {
-      redirect.hitCount = (row.hit_count ?? 0) as number
-    }
-    if (row.last_hit_at !== undefined) {
-      redirect.lastHitAt = row.last_hit_at as number | null
-    }
-    if (row.created_by_name) {
-      redirect.createdByName = row.created_by_name as string
-    }
-    if (row.updated_by_name) {
-      redirect.updatedByName = row.updated_by_name as string
-    }
-    if (row.updated_by !== undefined) {
-      redirect.updatedBy = row.updated_by as string
-    }
-    if (row.source_plugin !== undefined) {
-      redirect.sourcePlugin = row.source_plugin as string | null
-    }
-    if (row.deleted_at !== undefined) {
-      redirect.deletedAt = row.deleted_at as number | null
-    }
-
-    return redirect
-  }
-
-  /**
-   * Sync all eligible redirects to Cloudflare (manual sync)
-   */
   async syncAllToCloudflare(): Promise<{ success: boolean; itemsAdded?: number; error?: string }> {
     if (!this.cloudflareService?.isConfigured()) {
       return { success: false, error: 'Cloudflare not configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID environment variables.' }
     }
 
     try {
-      // Fetch all active redirects
       const redirects = await this.list({ isActive: true, limit: 10000 })
-      const result = await this.cloudflareService.syncAll(redirects)
-      return result
+      return this.cloudflareService.syncAll(redirects)
     } catch (error) {
       console.error('[RedirectService] Full Cloudflare sync error:', error)
       return {
@@ -720,164 +470,54 @@ export class RedirectService {
     }
   }
 
-  /**
-   * Check if Cloudflare integration is configured
-   */
   isCloudflareConfigured(): boolean {
     return this.cloudflareService?.isConfigured() ?? false
   }
 
-  /**
-   * Save plugin settings to the database
-   */
   async saveSettings(settings: RedirectSettings): Promise<void> {
     try {
-      console.log('[RedirectService.saveSettings] Starting save for plugin:', manifest.id)
-      console.log('[RedirectService.saveSettings] Settings:', JSON.stringify(settings))
-
-      // Check if plugin row exists
       const existing = await this.db
-        .prepare(`SELECT id, status FROM plugins WHERE id = ?`)
+        .prepare(`SELECT id FROM plugins WHERE id = ?`)
         .bind(manifest.id)
         .first()
 
-      console.log('[RedirectService.saveSettings] Existing row:', JSON.stringify(existing))
-
       if (existing) {
-        // Update existing row
-        console.log('[RedirectService.saveSettings] Updating existing row...')
-        const result = await this.db
+        await this.db
           .prepare(`UPDATE plugins SET settings = ?, last_updated = ? WHERE id = ?`)
           .bind(JSON.stringify(settings), Date.now(), manifest.id)
           .run()
-        console.log('[RedirectService.saveSettings] UPDATE result:', JSON.stringify(result))
-        console.log('[RedirectService.saveSettings] Successfully updated')
       } else {
-        // Insert new row
-        console.log('[RedirectService.saveSettings] No existing row, inserting new...')
-        const result = await this.db
+        await this.db
           .prepare(`
             INSERT INTO plugins (id, name, display_name, description, version, author, category, status, settings, installed_at, last_updated)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'inactive', ?, ?, ?)
           `)
           .bind(
-            manifest.id,
-            manifest.id,
-            manifest.name,
-            manifest.description || '',
-            manifest.version || '1.0.0',
-            manifest.author || 'Unknown',
-            manifest.category || 'other',
-            JSON.stringify(settings),
-            Date.now(),
-            Date.now()
+            manifest.id, manifest.id, manifest.name,
+            manifest.description || '', manifest.version || '1.0.0',
+            manifest.author || 'Unknown', manifest.category || 'other',
+            JSON.stringify(settings), Date.now(), Date.now()
           )
           .run()
-        console.log('[RedirectService.saveSettings] INSERT result:', JSON.stringify(result))
-        console.log('[RedirectService.saveSettings] Successfully inserted')
       }
-      console.log('[RedirectService.saveSettings] Settings saved successfully')
     } catch (error) {
-      console.error('[RedirectService.saveSettings] ERROR:', error)
-      console.error('[RedirectService.saveSettings] Error message:', error instanceof Error ? error.message : String(error))
-      console.error('[RedirectService.saveSettings] Error stack:', error instanceof Error ? error.stack : 'No stack')
       throw new Error(`Failed to save redirect management settings: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  // Lifecycle methods
-  /**
-   * Install the plugin (create database entry)
-   */
   async install(): Promise<void> {
-    try {
-      const defaultSettings = this.getDefaultSettings()
-      await this.db
-        .prepare(`
-          INSERT INTO plugins (
-            id, name, display_name, description, version, author,
-            category, status, settings, installed_at, last_updated
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'inactive', ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            display_name = excluded.display_name,
-            description = excluded.description,
-            version = excluded.version,
-            updated_at = excluded.last_updated
-        `)
-        .bind(
-          manifest.id,
-          manifest.id,
-          manifest.name,
-          manifest.description,
-          manifest.version,
-          manifest.author,
-          manifest.category,
-          JSON.stringify(defaultSettings),
-          Date.now(),
-          Date.now()
-        )
-        .run()
-      console.log('Redirect management plugin installed successfully')
-    } catch (error) {
-      console.error('Error installing redirect management plugin:', error)
-      throw new Error('Failed to install redirect management plugin')
-    }
+    console.log('Redirect management plugin installed (document-model backed)')
   }
 
-  /**
-   * Activate the plugin
-   */
   async activate(): Promise<void> {
-    try {
-      await this.db
-        .prepare(`
-          UPDATE plugins
-          SET status = 'active', last_updated = ?
-          WHERE id = ?
-        `)
-        .bind(Date.now(), manifest.id)
-        .run()
-      console.log('Redirect management plugin activated')
-    } catch (error) {
-      console.error('Error activating redirect management plugin:', error)
-      throw new Error('Failed to activate redirect management plugin')
-    }
+    console.log('Redirect management plugin activated')
   }
 
-  /**
-   * Deactivate the plugin
-   */
   async deactivate(): Promise<void> {
-    try {
-      await this.db
-        .prepare(`
-          UPDATE plugins
-          SET status = 'inactive', last_updated = ?
-          WHERE id = ?
-        `)
-        .bind(Date.now(), manifest.id)
-        .run()
-      console.log('Redirect management plugin deactivated')
-    } catch (error) {
-      console.error('Error deactivating redirect management plugin:', error)
-      throw new Error('Failed to deactivate redirect management plugin')
-    }
+    console.log('Redirect management plugin deactivated')
   }
 
-  /**
-   * Uninstall the plugin (remove database entry)
-   */
   async uninstall(): Promise<void> {
-    try {
-      await this.db
-        .prepare(`DELETE FROM plugins WHERE id = ?`)
-        .bind(manifest.id)
-        .run()
-      console.log('Redirect management plugin uninstalled')
-    } catch (error) {
-      console.error('Error uninstalling redirect management plugin:', error)
-      throw new Error('Failed to uninstall redirect management plugin')
-    }
+    console.log('Redirect management plugin uninstalled')
   }
 }

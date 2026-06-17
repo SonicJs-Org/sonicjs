@@ -131,27 +131,20 @@ export function createRedirectMiddleware(options: RedirectMiddlewareOptions = {}
 function recordHitAsync(db: D1Database | undefined, redirectId: string): void {
   if (!db) return
 
-  // Use waitUntil if available (Cloudflare Workers), otherwise fire-and-forget
+  const now = Date.now()
   void db
     .prepare(`
-      INSERT INTO redirect_analytics (id, redirect_id, hit_count, last_hit_at, created_at, updated_at)
-      VALUES (?, ?, 1, ?, ?, ?)
-      ON CONFLICT(redirect_id) DO UPDATE SET
-        hit_count = hit_count + 1,
-        last_hit_at = excluded.last_hit_at,
-        updated_at = excluded.updated_at
+      UPDATE documents
+      SET data = json_set(
+        data,
+        '$.hitCount', COALESCE(json_extract(data, '$.hitCount'), 0) + 1,
+        '$.lastHitAt', ?
+      )
+      WHERE root_id = ? AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL
     `)
-    .bind(
-      crypto.randomUUID(),
-      redirectId,
-      Date.now(),
-      Date.now(),
-      Date.now()
-    )
+    .bind(now, redirectId)
     .run()
     .catch(err => console.error('[RedirectMiddleware] Hit recording error:', err))
-
-  // Don't await - let it run in background
 }
 
 // Cache invalidation function (call from service layer)
@@ -170,16 +163,20 @@ export async function warmRedirectCache(db: D1Database): Promise<number> {
   try {
     const { results } = await db
       .prepare(`
-        SELECT r.id, r.source, r.destination, r.status_code, r.is_active,
-               r.match_type,
-               COALESCE(r.preserve_query_string, 0) as preserve_query_string,
-               COALESCE(r.include_subdomains, 0) as include_subdomains,
-               COALESCE(r.subpath_matching, 0) as subpath_matching,
-               COALESCE(r.preserve_path_suffix, 1) as preserve_path_suffix,
-               COALESCE(a.hit_count, 0) as hit_count
-        FROM redirects r
-        LEFT JOIN redirect_analytics a ON r.id = a.redirect_id
-        WHERE r.is_active = 1 AND r.deleted_at IS NULL
+        SELECT
+          root_id as id,
+          q_redir_source as source,
+          q_redir_destination as destination,
+          q_redir_status_code as status_code,
+          q_redir_match_type as match_type,
+          json_extract(data, '$.preserveQueryString') as preserve_query_string,
+          json_extract(data, '$.includeSubdomains') as include_subdomains,
+          json_extract(data, '$.subpathMatching') as subpath_matching,
+          json_extract(data, '$.preservePathSuffix') as preserve_path_suffix,
+          COALESCE(json_extract(data, '$.hitCount'), 0) as hit_count
+        FROM documents
+        WHERE type_id = 'redirect' AND tenant_id = 'default'
+          AND is_current_draft = 1 AND deleted_at IS NULL AND q_redir_is_active = 1
         ORDER BY hit_count DESC
         LIMIT 1000
       `)

@@ -46,7 +46,7 @@
     "social:post": "node scripts/social/post-both.js",
     "social:promote-blog": "node scripts/social/promote-blog.js",
     "db:reset": "npm run setup:db --workspace=my-sonicjs-app",
-    "workspace": "npm install && npm run db:reset",
+    "reset": "npm install && npm run db:reset",
     "kill": "pkill workerd && npm run dev --workspace=my-sonicjs-app"
   },
   "dependencies": {

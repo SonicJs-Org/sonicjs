@@ -13,6 +13,7 @@ import {
   getHookSystem,
   emailReconciliationPlugin,
   collectCronSchedules,
+  redirectPlugin,
 } from '@sonicjs-cms/core'
 import type { SonicJSConfig } from '@sonicjs-cms/core'
 
@@ -28,7 +29,7 @@ registerCollections([
 
 const config: SonicJSConfig = {
   plugins: {
-    register: [],
+    register: [redirectPlugin],
     disableAll: false,
   }
 }

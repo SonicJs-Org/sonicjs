@@ -839,7 +839,8 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     // Generate cache key
     const cacheEnabled = c.get('cacheEnabled')
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql })}`)
+    const includeCollection = queryParams.include?.split(',').map(s => s.trim()).includes('collection')
+    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
 
     // Only check cache if plugin is enabled
     if (cacheEnabled) {
@@ -887,7 +888,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     const responseData = {
       data: transformedResults,
       meta: addTimingMeta(c, {
-        collection: collectionRecordToRow(record),
+        ...(includeCollection ? { collection: collectionRecordToRow(record) } : {}),
         count: results.length,
         timestamp: new Date().toISOString(),
         // D44: echo the caller's filter with the access policy applied (status=published forced for

@@ -741,7 +741,8 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     // Generate cache key
     const cacheEnabled = c.get('cacheEnabled')
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql })}`)
+    const includeCollection = queryParams.include?.split(',').map(s => s.trim()).includes('collection')
+    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
 
     // Only check cache if plugin is enabled
     if (cacheEnabled) {
@@ -798,10 +799,12 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     const responseData = {
       data: transformedResults,
       meta: addTimingMeta(c, {
-        collection: {
-          ...(collectionResult as any),
-          schema: (collectionResult as any).schema ? JSON.parse((collectionResult as any).schema) : {}
-        },
+        ...(includeCollection ? {
+          collection: {
+            ...(collectionResult as any),
+            schema: (collectionResult as any).schema ? JSON.parse((collectionResult as any).schema) : {}
+          }
+        } : {}),
         count: results.length,
         timestamp: new Date().toISOString(),
         filter: normalizedFilter,

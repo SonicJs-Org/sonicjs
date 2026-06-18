@@ -205,16 +205,6 @@ async function getProjectDetails(initialName) {
     }
   })
 
-  // Include example collection (only ask if neither flag is set)
-  if (!flags.skipExample && !flags.includeExample) {
-    questions.push({
-      type: 'confirm',
-      name: 'includeExample',
-      message: 'Include example blog collection?',
-      initial: true
-    })
-  }
-
   // Create Cloudflare resources
   if (!flags.skipCloudflare) {
     questions.push({
@@ -249,7 +239,7 @@ async function getProjectDetails(initialName) {
     seedAdmin: answers.seedAdmin !== undefined ? answers.seedAdmin : true,
     adminEmail: answers.adminEmail,
     adminPassword: answers.adminPassword,
-    includeExample: flags.skipExample ? false : (flags.includeExample ? true : (answers.includeExample !== undefined ? answers.includeExample : true)),
+    includeExample: true,
     createResources: flags.skipCloudflare ? false : answers.createResources,
     runMigrations: true, // Always run migrations automatically
     initGit: flags.skipGit ? false : answers.initGit,
@@ -509,8 +499,8 @@ async function seed() {
     // Hash password using SHA-256 (same as SonicJS auth system)
     const data = '${password}' + 'salt-change-in-production'
     const passwordHash = crypto.createHash('sha256').update(data).digest('hex')
-    const now = Date.now()
-    const odid = \`admin-\${now}-\${Math.random().toString(36).substr(2, 9)}\`
+    const now = new Date()
+    const odid = \`admin-\${now.getTime()}-\${Math.random().toString(36).substr(2, 9)}\`
 
     // Create admin user
     await db
@@ -774,49 +764,25 @@ function printSuccessMessage(answers) {
   console.log()
   console.log(kleur.bold().green('🎉 Success!'))
   console.log()
-  console.log(kleur.bold('Next steps:'))
+  console.log(kleur.bold('Get started:'))
   console.log()
   console.log(kleur.cyan(`  cd ${projectName}`))
 
   if (skipInstall) {
     console.log(kleur.cyan('  npm install'))
     console.log()
-    console.log(kleur.yellow('⚠ Important: After npm install, copy migrations:'))
+    console.log(kleur.yellow('⚠ After npm install, copy migrations:'))
     console.log(kleur.dim('  cp -r node_modules/@sonicjs-cms/core/migrations ./'))
   }
 
-  // Show resource creation steps if they weren't created or failed
-  if (!createResources || !resourcesCreated) {
-    console.log()
-    console.log(kleur.bold('Create Cloudflare resources:'))
-    if (!databaseIdSet) {
-      console.log(kleur.cyan(`  wrangler d1 create ${answers.databaseName}`))
-      console.log(kleur.dim('  # Copy database_id to wrangler.toml'))
-    }
-    console.log(kleur.cyan(`  wrangler r2 bucket create ${answers.bucketName}`))
+  if (!migrationsRan) {
+    console.log(kleur.cyan('  npm run db:migrate:local'))
   }
 
-  // Only show migration/seed steps if they weren't completed (shouldn't normally happen)
-  const needsMigrations = !migrationsRan
-  const needsSeeding = seedAdmin && !adminSeeded
-
-  if (needsMigrations || needsSeeding) {
-    console.log()
-    console.log(kleur.bold('Complete setup:'))
-    if (needsMigrations) {
-      console.log(kleur.cyan('  npm run db:migrate:local'))
-    }
-    if (needsSeeding) {
-      console.log(kleur.cyan('  npm run seed'))
-    }
+  if (seedAdmin && !adminSeeded) {
+    console.log(kleur.cyan('  npm run seed'))
   }
 
-  console.log()
-  if (migrationsRan && (!seedAdmin || adminSeeded)) {
-    console.log(kleur.bold().green('✓ Database is ready! Start development:'))
-  } else {
-    console.log(kleur.bold('Start development:'))
-  }
   console.log(kleur.cyan('  npm run dev'))
 
   if (seedAdmin && answers.adminEmail) {
@@ -826,14 +792,19 @@ function printSuccessMessage(answers) {
     console.log(kleur.dim(`  Password: [as entered]`))
   }
 
-  if (migrationsRan && (!seedAdmin || adminSeeded)) {
-    console.log()
-    console.log(kleur.green('✓ Everything is set up! Just run npm run dev and login.'))
-  }
-
   console.log()
   console.log(kleur.bold('Visit:'))
   console.log(kleur.cyan('  http://localhost:8787/admin'))
+
+  if (!createResources || !resourcesCreated) {
+    console.log()
+    console.log(kleur.bold('Deploy to Cloudflare (when ready):'))
+    if (!databaseIdSet) {
+      console.log(kleur.cyan(`  wrangler d1 create ${answers.databaseName}`))
+      console.log(kleur.dim('  # Copy database_id to wrangler.toml'))
+    }
+    console.log(kleur.cyan(`  wrangler r2 bucket create ${answers.bucketName}`))
+  }
 
   console.log()
   console.log(kleur.dim('Need help? Visit https://sonicjs.com'))

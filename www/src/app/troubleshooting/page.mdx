@@ -64,7 +64,7 @@ fetch('/api/content', {
 
 **Causes:**
 - Token's `exp` timestamp has passed
-- Default token lifetime is 24 hours
+- Default token lifetime is 30 days (overridable via `JWT_EXPIRES_IN` env var)
 
 **Solutions:**
 

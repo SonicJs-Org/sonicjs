@@ -42,9 +42,12 @@ interface SonicJSConfig {
 
   // Plugins configuration
   plugins?: {
-    directory?: string     // Path to custom plugins
-    autoLoad?: boolean     // Auto-load plugins from directory
+    register?: Plugin[]    // User plugins (default export from PluginBuilder.build())
     disableAll?: boolean   // Disable all plugins (including core)
+    /** @deprecated no-op; pass plugins via `register` */
+    directory?: string
+    /** @deprecated no-op; pass plugins via `register` */
+    autoLoad?: boolean
   }
 
   // Custom routes
@@ -76,6 +79,7 @@ interface SonicJSConfig {
 
 ```typescript
 import { createSonicJSApp } from '@sonicjs-cms/core'
+import myPlugin from './plugins/my-plugin'
 
 const app = createSonicJSApp({
   name: 'My CMS',
@@ -85,8 +89,7 @@ const app = createSonicJSApp({
     autoSync: true
   },
   plugins: {
-    directory: './src/plugins',
-    autoLoad: true
+    register: [myPlugin]
   }
 })
 
@@ -363,19 +366,27 @@ Configuration for SonicJS plugins.
 <CodeGroup title="Plugin Configuration">
 
 ```typescript
+import contactFormPlugin from './plugins/contact-form'
+import weatherPlugin from './plugins/weather'
+
 const app = createSonicJSApp({
   plugins: {
-    // Directory for custom plugins
-    directory: './src/plugins',
+    // Register your custom plugins (each is the default export from
+    // PluginBuilder.build()). Routes and middleware are mounted in order
+    // before the core /admin/* catch-all routes, so plugin admin pages
+    // are not shadowed.
+    register: [contactFormPlugin, weatherPlugin],
 
-    // Auto-load plugins from directory
-    autoLoad: true,
-
-    // Disable all plugins (useful for testing)
+    // Disable all plugins, including core (useful for testing/stats workers)
     disableAll: false
   }
 })
 ```
+
+> **Note:** The previous `directory` / `autoLoad` options are no-ops kept
+> only for backwards compatibility. Filesystem autoloading is incompatible
+> with Cloudflare Workers (no runtime `fs`); register plugins explicitly
+> via the `register` array instead.
 
 </CodeGroup>
 

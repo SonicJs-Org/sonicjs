@@ -8,7 +8,7 @@ import {
 // Use environment variable for port or default to 8787
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 
-test.describe.skip('Plugin Management', () => {
+test.describe('Plugin Management', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await ensureWorkflowTablesExist(page)

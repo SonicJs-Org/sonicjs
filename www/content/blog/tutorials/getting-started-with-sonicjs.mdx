@@ -103,75 +103,106 @@ my-cms/
 Open `src/index.ts` to see how SonicJS is configured:
 
 ```typescript
-import { Hono } from 'hono'
-import { createSonicJS } from '@sonicjs-cms/core'
-import { authPlugin } from '@sonicjs-cms/core/plugins'
-import { postsCollection } from './collections/posts'
-import { usersCollection } from './collections/users'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
 
-const app = new Hono<{ Bindings: Env }>()
+import postsCollection from './collections/posts.collection'
 
-// Initialize SonicJS
-const cms = createSonicJS({
-  collections: [postsCollection, usersCollection],
-  plugins: [authPlugin()],
-})
+// Register your custom collections before creating the app so they sync
+// to the database on startup.
+registerCollections([postsCollection])
 
-// Mount the CMS
-app.route('/', cms.app)
+const config: SonicJSConfig = {
+  collections: { autoSync: true },
+  plugins: {
+    // Add your own plugins here. Core plugins (auth, media, cache,
+    // analytics, OAuth, OTP login, etc.) are mounted automatically.
+    register: [],
+  },
+}
 
-export default app
+export default createSonicJSApp(config)
 ```
+
+`createSonicJSApp` returns a Hono app — export it directly. There's no extra `Hono()` wrapper, no `cms.app` accessor, and no need to register core plugins manually; they ship with the framework and mount themselves.
 
 ## Step 3: Define Your Content Collections
 
 Collections are the heart of SonicJS. They define your content structure with full TypeScript support.
 
-Create a new collection in `src/collections/posts.ts`:
+Create a new collection in `src/collections/posts.collection.ts`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export const postsCollection = defineCollection({
+export default {
   name: 'posts',
-  slug: 'posts',
-  fields: {
-    title: {
-      type: 'string',
-      required: true,
-      maxLength: 200,
+  displayName: 'Posts',
+  description: 'Blog posts and articles',
+  icon: '📝',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        title: 'Title',
+        required: true,
+        maxLength: 200,
+      },
+      slug: {
+        type: 'slug',
+        title: 'URL Slug',
+        required: true,
+        maxLength: 200,
+      },
+      excerpt: {
+        type: 'textarea',
+        title: 'Excerpt',
+        maxLength: 500,
+      },
+      content: {
+        type: 'quill',
+        title: 'Content',
+        required: true,
+      },
+      featuredImage: {
+        type: 'media',
+        title: 'Featured Image',
+      },
+      author: {
+        type: 'string',
+        title: 'Author',
+        required: true,
+      },
+      status: {
+        type: 'select',
+        title: 'Status',
+        enum: ['draft', 'published', 'archived'],
+        enumLabels: ['Draft', 'Published', 'Archived'],
+        default: 'draft',
+      },
+      publishedAt: {
+        type: 'datetime',
+        title: 'Published Date',
+      },
     },
-    slug: {
-      type: 'string',
-      required: true,
-      unique: true,
-    },
-    content: {
-      type: 'richtext',
-      required: true,
-    },
-    excerpt: {
-      type: 'text',
-      maxLength: 500,
-    },
-    featuredImage: {
-      type: 'media',
-    },
-    author: {
-      type: 'relation',
-      collection: 'users',
-    },
-    status: {
-      type: 'select',
-      options: ['draft', 'published', 'archived'],
-      default: 'draft',
-    },
-    publishedAt: {
-      type: 'datetime',
-    },
+    required: ['title', 'slug', 'content', 'author'],
   },
-})
+
+  // List view configuration for the admin UI
+  listFields: ['title', 'author', 'status', 'publishedAt'],
+  searchFields: ['title', 'excerpt', 'author'],
+  defaultSort: 'createdAt',
+  defaultSortOrder: 'desc',
+
+  // Mark as a code-managed collection (vs. one created in the admin UI)
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
 ```
+
+A SonicJS collection is a plain object that conforms to the `CollectionConfig` type. Use `satisfies CollectionConfig` to get type checking without losing literal types in the schema. The `schema` is JSON-Schema-shaped (`type: 'object'`, `properties: {...}`, `required: [...]`) which is how the auto-generated REST API and admin form derive their validation.
 
 ## Step 4: Set Up Your Database
 
@@ -198,35 +229,38 @@ Add the database configuration to your `wrangler.toml`:
 name = "my-cms"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "my-cms-db"
 database_id = "your-database-id"
+migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 
 [[kv_namespaces]]
-binding = "CACHE"
+binding = "CACHE_KV"
 id = "your-kv-namespace-id"
 
 [[r2_buckets]]
-binding = "STORAGE"
-bucket_name = "my-cms-storage"
+binding = "MEDIA_BUCKET"
+bucket_name = "my-cms-media"
 ```
+
+The binding names matter — `DB`, `CACHE_KV`, and `MEDIA_BUCKET` are the names SonicJS reads from `c.env`. If you rename them in `wrangler.toml`, the framework can't find them.
 
 ### Run Migrations
 
-Generate and run database migrations:
+The framework ships with its own migrations under `node_modules/@sonicjs-cms/core/migrations`, which is why `migrations_dir` points there. Apply them to your D1 database:
 
 ```bash
-# Generate migrations from your collections
-npm run db:generate
-
 # Apply migrations locally
 npm run db:migrate:local
 
-# Apply migrations to production
-npm run db:migrate:prod
+# Apply migrations to production (after wrangler login)
+npm run db:migrate
 ```
+
+You don't generate migrations from your collection definitions — the SonicJS bootstrap middleware syncs your collection schemas into a `collections` table on first request when `collections.autoSync: true`.
 
 ## Step 5: Start Development
 
@@ -249,55 +283,53 @@ Open `http://localhost:8787/admin` to access the built-in admin interface. The d
 
 ## Step 6: Using the Content API
 
-SonicJS automatically generates RESTful API endpoints for your collections.
+SonicJS automatically generates RESTful API endpoints for your collections under `/api/collections/<name>/content`.
+
+### Read Content
+
+```bash
+# List all posts (public, paginated)
+curl http://localhost:8787/api/collections/posts/content
+
+# Filter and paginate
+curl "http://localhost:8787/api/collections/posts/content?status=published&limit=10&offset=0"
+
+# Get a single content item by ID
+curl http://localhost:8787/api/content/abc123
+```
 
 ### Create Content
 
 ```bash
-curl -X POST http://localhost:8787/api/content/posts \
+curl -X POST http://localhost:8787/api/collections/posts/content \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
     "title": "My First Post",
     "slug": "my-first-post",
     "content": "<p>Hello, world!</p>",
-    "status": "published"
+    "status": "published",
+    "author": "Me"
   }'
-```
-
-### Read Content
-
-```bash
-# Get all posts
-curl http://localhost:8787/api/content/posts
-
-# Get a single post by ID
-curl http://localhost:8787/api/content/posts/123
-
-# Filter posts
-curl "http://localhost:8787/api/content/posts?status=published"
-
-# Pagination
-curl "http://localhost:8787/api/content/posts?limit=10&offset=0"
 ```
 
 ### Update Content
 
 ```bash
-curl -X PUT http://localhost:8787/api/content/posts/123 \
+curl -X PUT http://localhost:8787/api/content/abc123 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "title": "Updated Title"
-  }'
+  -d '{ "title": "Updated Title" }'
 ```
 
 ### Delete Content
 
 ```bash
-curl -X DELETE http://localhost:8787/api/content/posts/123 \
+curl -X DELETE http://localhost:8787/api/content/abc123 \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
+
+Get a token by signing in (`POST /auth/login` or `POST /auth/otp/verify`); the response includes a JWT you can pass as `Authorization: Bearer <token>`.
 
 ## Step 7: Deploy to Production
 
@@ -314,7 +346,7 @@ That's it! Your CMS is now live and running on Cloudflare's global network.
 
 ```bash
 # Test your production API
-curl https://my-cms.your-subdomain.workers.dev/api/content/posts
+curl https://my-cms.your-subdomain.workers.dev/api/collections/posts/content
 ```
 
 ## Next Steps

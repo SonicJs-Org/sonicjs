@@ -21,13 +21,13 @@ export function renderCheckboxPage(data: CheckboxPageData): string {
         </div>
         <div class="mt-4 sm:mt-0">
           <a
-            href="/admin/design"
+            href="/admin"
             class="inline-flex items-center gap-x-2 rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-700 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 transition-colors shadow-sm"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
             </svg>
-            Back to Design System
+            Back to Admin
           </a>
         </div>
       </div>

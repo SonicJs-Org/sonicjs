@@ -8,7 +8,7 @@ import { renderUserEditPage, type UserEditPageData, type UserEditData, type User
 import { renderUserNewPage, type UserNewPageData } from '../templates/pages/admin-user-new.template'
 import { renderUsersListPage, type UsersListPageData, type User } from '../templates/pages/admin-users-list.template'
 import type { Bindings, Variables } from '../app'
-import { getUserProfileConfig, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData, readProfileData, writeProfileData } from '../plugins/core-plugins/user-profiles'
+import { getUserProfileConfig, getRegistrationFields, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData, readProfileData, writeProfileData } from '../plugins/core-plugins/user-profiles'
 import { TenantService, VALID_MEMBER_ROLES } from '../plugins/core-plugins/multi-tenant-plugin/services/tenant-service'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -614,8 +614,25 @@ userRoutes.get('/users/new', async (c) => {
   const user = c.get('user')
 
   try {
+    const db = c.env.DB
+    const profileConfig = getUserProfileConfig()
+    const upRow = profileConfig
+      ? await db.prepare(
+          `SELECT 1 FROM documents WHERE type_id = 'plugin' AND slug = 'user-profiles'
+             AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+        ).first().catch(() => null)
+      : null
+    const regFieldNames = profileConfig?.registrationFields ?? []
+    const regFields = profileConfig && upRow
+      ? (regFieldNames.length > 0 ? profileConfig.fields.filter(f => regFieldNames.includes(f.name)) : profileConfig.fields)
+      : []
+    const registrationFieldsHtml = regFields.length > 0
+      ? renderCustomProfileSection({ fields: regFields }, {})
+      : undefined
+
     const pageData: UserNewPageData = {
       roles: ROLES,
+      registrationFieldsHtml,
       user: {
         name: user!.email.split('@')[0] || user!.email,
         email: user!.email,
@@ -658,6 +675,24 @@ userRoutes.post('/users/new', async (c) => {
     const confirmPassword = formData.get('confirm_password')?.toString() || ''
     const isActive = formData.get('is_active') === '1'
     const emailVerified = formData.get('email_verified') === '1'
+
+    // Validate + extract registration profile fields (if profile plugin is configured)
+    const profileConfig = getUserProfileConfig()
+    const regFieldNames = profileConfig?.registrationFields ?? []
+    const regFields = profileConfig
+      ? (regFieldNames.length > 0 ? profileConfig.fields.filter(f => regFieldNames.includes(f.name)) : profileConfig.fields)
+      : []
+    let sanitizedRegistrationCustom: Record<string, any> | null = null
+    if (regFields.length > 0) {
+      const rawCustom = extractCustomFieldsFromForm(formData, { fields: regFields })
+      const sanitized = sanitizeCustomData(rawCustom, profileConfig!)
+      const validation = validateCustomData(sanitized, profileConfig!)
+      if (!validation.valid) {
+        const errorMessages = Object.values(validation.errors).join(', ')
+        return c.html(renderAlert({ type: 'error', message: errorMessages, dismissible: true }), 400)
+      }
+      sanitizedRegistrationCustom = sanitized
+    }
 
     // Validate required fields
     if (!firstName || !lastName || !email || !password) {
@@ -727,6 +762,11 @@ userRoutes.post('/users/new', async (c) => {
       passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
       Date.now(), Date.now()
     ).run()
+
+    // Save registration profile fields if profile plugin is configured
+    if (sanitizedRegistrationCustom !== null && Object.keys(sanitizedRegistrationCustom).length > 0) {
+      await writeProfileData(db, userId, { custom: sanitizedRegistrationCustom }, user!.userId)
+    }
 
     // Log the activity
     await logActivity(
@@ -870,6 +910,12 @@ userRoutes.get('/users/:id/edit', async (c) => {
       profile
     }
 
+    // User-profiles plugin active in DB?
+    const upRow = await db.prepare(
+      `SELECT 1 FROM documents WHERE type_id = 'plugin' AND slug = 'user-profiles'
+         AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+    ).first().catch(() => null)
+
     // Multi-tenant plugin active? Fetch memberships inline for the matrix section.
     const mtRow = await db.prepare(
       `SELECT 1 FROM documents WHERE type_id = 'plugin' AND slug = 'multi-tenant'
@@ -899,6 +945,7 @@ userRoutes.get('/users/:id/edit', async (c) => {
     const pageData: UserEditPageData = {
       userToEdit: editData,
       roles: ROLES,
+      hasProfilePlugin: profileConfig !== null && upRow !== null,
       customProfileFieldsHtml,
       tenantMemberships,
       ...(queryMessage && queryType === 'error' ? { error: queryMessage } : {}),

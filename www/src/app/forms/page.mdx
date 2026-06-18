@@ -3,7 +3,7 @@ export const sections = [
   { title: 'Creating Forms', id: 'creating-forms' },
   { title: 'How It Works', id: 'how-it-works' },
   { title: 'Submissions', id: 'submissions' },
-  { title: 'Content API', id: 'content-api' },
+  { title: 'Form Submissions API', id: 'form-submissions-api' },
   { title: 'Public Form Endpoints', id: 'public-form-endpoints' },
   { title: 'Security', id: 'security' },
 ]
@@ -157,9 +157,9 @@ The title is automatically derived from submission data using this priority: nam
 
 ---
 
-## Content API
+## Form Submissions API
 
-Form submissions are queryable through the standard Content API. Shadow collections are hidden from the regular content admin UI but fully accessible via the API.
+> **Note (v3):** The `contentId` field is no longer populated. Form submissions are standalone documents; the shadow collection / Content API integration described below is not available in v3. Use `/api/form_submissions` to access submission records.
 
 ### List Submissions
 
@@ -194,9 +194,7 @@ curl "http://localhost:8787/api/collections/form_contact/content?sort=-created_a
 
 ### Get Single Submission
 
-```bash
-curl "http://localhost:8787/api/content/{contentId}"
-```
+> **Note (v3):** The `contentId` field is no longer populated. Form submissions are standalone documents; cross-referencing via the Content API is not available. Access individual submissions via `/api/form_submissions`.
 
 ### List Form Collections
 
@@ -266,7 +264,7 @@ const response = await fetch('/api/forms/contact/submit', {
   }),
 })
 
-const { success, submissionId, contentId } = await response.json()
+const { success, submissionId } = await response.json()
 ```
 
 </CodeGroup>

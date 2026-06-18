@@ -205,6 +205,7 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
         typeSchemaVersion: backing.docType.schemaVersion ?? 1,
         maxVersionsPerRoot: backing.docType.settings?.maxVersionsPerRoot ?? 50,
         tenantId,
+        versioning: backing.docType.settings?.versioning ?? false,
       })
       const doc = await svc.create(
         createDocumentSchema.parse({
@@ -280,6 +281,7 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
         typeSchemaVersion: docType?.schemaVersion ?? 1,
         maxVersionsPerRoot: docType?.settings?.maxVersionsPerRoot ?? 50,
         tenantId,
+        versioning: docType?.settings?.versioning ?? false,
       })
       const input: any = {}
       if (body.title !== undefined) input.title = body.title

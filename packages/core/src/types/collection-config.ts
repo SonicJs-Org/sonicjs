@@ -36,6 +36,7 @@ export type FieldType =
   | 'tinymce'
   | 'quill'
   | 'easymde'
+  | 'user'
 
 export interface BlockDefinition {
   label?: string
@@ -174,6 +175,14 @@ export interface CollectionConfig {
    * e.g., slug: 'blog-posts' → GET /api/blog-posts
    */
   slug?: string
+
+  /**
+   * Opt this collection into version history. Default false.
+   * When true: each saveDraft creates a new version row; the versioning-plugin
+   * surfaces history/restore UI on the edit form.
+   * When false: saveDraft updates the single draft row in place (no history).
+   */
+  versioning?: boolean
 }
 
 export interface CollectionConfigModule {

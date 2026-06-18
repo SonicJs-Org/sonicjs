@@ -55,18 +55,18 @@ Before we write any code, here's what SonicJS auto-generates the moment you regi
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/collections/:name/content` | `GET` | Optional | List items with filter/sort/pagination |
-| `/api/content/:id` | `GET` | Optional | Get one item by ID |
-| `/api/content` | `POST` | Required | Create an item |
-| `/api/content/:id` | `PUT` | Required | Update an item |
-| `/api/content/:id` | `DELETE` | Required | Delete an item |
+| `/api/:collection` | `GET` | Optional | List items with filter/sort/pagination |
+| `/api/:collection/:id` | `GET` | Optional | Get one item by ID |
+| `/api/:collection` | `POST` | Required | Create an item |
+| `/api/:collection/:id` | `PUT` | Required | Update an item |
+| `/api/:collection/:id` | `DELETE` | Required | Delete an item |
 
 Plus a few you'll appreciate as your project grows:
 
 - `/api/` — OpenAPI 3.0 spec for the entire CMS
 - `/api/health` — health check with database and KV status
 - `/api/collections` — list every active collection and its schema
-- `/api/content/check-slug` — slug uniqueness check (great for admin UIs)
+- `/api/check-slug` — slug uniqueness check (great for admin UIs)
 
 The reads run through a [three-tiered cache](/caching) (in-memory → Cloudflare KV → D1), and the writes invalidate the cache automatically.
 
@@ -89,7 +89,7 @@ If you've never deployed a Cloudflare Worker before, our [Getting Started guide]
 ## Step 1: Scaffold the Project
 
 ```bash
-npm create sonicjs-app my-api
+npx create-sonicjs@latest my-api
 cd my-api
 npm install
 ```
@@ -196,7 +196,7 @@ export default {
 
 A few details worth calling out:
 
-- **`name`** is what shows up in the URL — `/api/collections/blog_posts/content`. Stick to snake_case.
+- **`name`** is what shows up in the URL — `/api/blog_posts`. Stick to snake_case.
 - **`required`** at the field level enforces required-ness at the schema layer. The top-level `required` array is for JSON-schema compatibility.
 - **`type: 'slug'`** auto-generates a URL-safe slug from the title in the admin UI.
 - **`listFields`** controls which columns show up in the admin list view; **`searchFields`** drives the admin search box.
@@ -227,7 +227,7 @@ id = "your-kv-id"
 Then run the migrations and deploy:
 
 ```bash
-npm run db:migrate:prod
+npm run db:migrate
 npm run deploy
 ```
 
@@ -244,7 +244,7 @@ curl https://my-api.your-subdomain.workers.dev/api/
 You'll get the full OpenAPI 3.0 spec back as JSON. Now list your (empty) collection:
 
 ```bash
-curl https://my-api.your-subdomain.workers.dev/api/collections/blog_posts/content
+curl https://my-api.your-subdomain.workers.dev/api/blog_posts
 ```
 
 ```json
@@ -269,26 +269,23 @@ Writes require an authenticated request. Grab a JWT by logging in as the admin u
 ```bash
 TOKEN=$(curl -s -X POST https://my-api.your-subdomain.workers.dev/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@example.com","password":"admin123"}' | jq -r .token)
+  -d '{"email":"admin@sonicjs.com","password":"sonicjs!"}' | jq -r .token)
 ```
 
 ### Create (POST)
 
 ```bash
-curl -X POST https://my-api.your-subdomain.workers.dev/api/content \
+curl -X POST https://my-api.your-subdomain.workers.dev/api/blog_posts \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
-    "collectionId": "blog_posts",
     "title": "Hello, edge",
     "slug": "hello-edge",
     "status": "published",
-    "data": {
-      "author": "Jane",
-      "excerpt": "First post on the edge.",
-      "content": "<p>Welcome.</p>",
-      "publishedAt": "2026-05-04T12:00:00Z"
-    }
+    "author": "Jane",
+    "excerpt": "First post on the edge.",
+    "content": "<p>Welcome.</p>",
+    "publishedAt": "2026-05-04T12:00:00Z"
   }'
 ```
 
@@ -301,8 +298,7 @@ The response is a `201 Created` with the full content row, including the auto-ge
     "title": "Hello, edge",
     "slug": "hello-edge",
     "status": "published",
-    "collectionId": "blog_posts",
-    "data": { "author": "Jane", ... },
+    "author": "Jane",
     "created_at": 1730732400000,
     "updated_at": 1730732400000
   }
@@ -313,16 +309,16 @@ The response is a `201 Created` with the full content row, including the auto-ge
 
 ```bash
 # By ID
-curl https://my-api.your-subdomain.workers.dev/api/content/9f1c2b1a-...
+curl https://my-api.your-subdomain.workers.dev/api/blog_posts/9f1c2b1a-...
 
 # Whole collection
-curl https://my-api.your-subdomain.workers.dev/api/collections/blog_posts/content
+curl https://my-api.your-subdomain.workers.dev/api/blog_posts
 ```
 
 ### Update (PUT)
 
 ```bash
-curl -X PUT https://my-api.your-subdomain.workers.dev/api/content/9f1c2b1a-... \
+curl -X PUT https://my-api.your-subdomain.workers.dev/api/blog_posts/9f1c2b1a-... \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"title": "Hello, edge — revised"}'
@@ -333,7 +329,7 @@ PUT requests are partial updates — send only the fields that changed. SonicJS 
 ### Delete (DELETE)
 
 ```bash
-curl -X DELETE https://my-api.your-subdomain.workers.dev/api/content/9f1c2b1a-... \
+curl -X DELETE https://my-api.your-subdomain.workers.dev/api/blog_posts/9f1c2b1a-... \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -349,10 +345,10 @@ The two most common filters are exposed as plain query params:
 
 ```bash
 # Status filter
-curl "https://my-api.../api/collections/blog_posts/content?status=published"
+curl "https://my-api.../api/blog_posts?status=published"
 
 # Pagination
-curl "https://my-api.../api/collections/blog_posts/content?limit=10&offset=20"
+curl "https://my-api.../api/blog_posts?limit=10&offset=20"
 ```
 
 `limit` is capped at **1000** — request more and SonicJS clamps it silently.
@@ -363,16 +359,16 @@ For anything beyond `status`, use `filter[field][operator]=value`:
 
 ```bash
 # Find posts whose title contains "edge"
-curl "https://my-api.../api/collections/blog_posts/content?filter[title][contains]=edge"
+curl "https://my-api.../api/blog_posts?filter[title][contains]=edge"
 
 # Posts created after a timestamp
-curl "https://my-api.../api/collections/blog_posts/content?filter[created_at][greater_than]=1730000000000"
+curl "https://my-api.../api/blog_posts?filter[created_at][greater_than]=1730000000000"
 
 # Posts whose slug starts with "hello-"
-curl "https://my-api.../api/collections/blog_posts/content?filter[slug][starts_with]=hello-"
+curl "https://my-api.../api/blog_posts?filter[slug][starts_with]=hello-"
 
 # Multiple statuses at once
-curl "https://my-api.../api/collections/blog_posts/content?filter[status][in]=published,archived"
+curl "https://my-api.../api/blog_posts?filter[status][in]=published,archived"
 ```
 
 The full operator list, all 16 of them: `equals`, `not_equals`, `greater_than`, `greater_than_equal`, `less_than`, `less_than_equal`, `like`, `contains`, `starts_with`, `ends_with`, `in`, `not_in`, `all`, `exists`, `near`, `within`, `intersects`.
@@ -382,7 +378,7 @@ The full operator list, all 16 of them: `equals`, `not_equals`, `greater_than`, 
 For boolean logic that doesn't fit query strings, pass a JSON `where` blob:
 
 ```bash
-curl -G "https://my-api.../api/collections/blog_posts/content" \
+curl -G "https://my-api.../api/blog_posts" \
   --data-urlencode 'where={"or":[{"field":"status","operator":"equals","value":"published"},{"field":"status","operator":"equals","value":"archived"}]}'
 ```
 
@@ -392,11 +388,11 @@ curl -G "https://my-api.../api/collections/blog_posts/content" \
 
 ```bash
 # Sort by published date descending
-curl -G "https://my-api.../api/collections/blog_posts/content" \
+curl -G "https://my-api.../api/blog_posts" \
   --data-urlencode 'sort=[{"field":"publishedAt","order":"desc"}]'
 
 # Multi-column sort
-curl -G "https://my-api.../api/collections/blog_posts/content" \
+curl -G "https://my-api.../api/blog_posts" \
   --data-urlencode 'sort=[{"field":"status","order":"asc"},{"field":"created_at","order":"desc"}]'
 ```
 
@@ -439,7 +435,7 @@ async function getRecentPosts(page = 0, perPage = 10) {
   })
 
   const res = await fetch(
-    `https://my-api.example.com/api/collections/blog_posts/content?${params}`,
+    `https://my-api.example.com/api/blog_posts?${params}`,
     { headers: { 'Accept': 'application/json' } }
   )
 

@@ -28,6 +28,13 @@ export interface DocumentTypeSettings {
    * everything else. See `effectiveTenantForType` (services/document-request-context.ts).
    */
   global?: boolean
+  /**
+   * Retain historical version rows for this type. Default false.
+   * When false: saveDraft updates the working draft row in place and publish deletes the
+   * superseded published row (at most ~2 rows per root, no history accumulation).
+   * When true: new row per saveDraft + prune to maxVersionsPerRoot (the versioning-plugin opts types in).
+   */
+  versioning?: boolean
 }
 
 export interface PluginDocumentType {

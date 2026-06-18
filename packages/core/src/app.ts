@@ -24,7 +24,6 @@ import {
   adminApiReferenceRoutes,
   apiDocumentsRoutes,
   adminDocumentsRoutes,
-  adminTestimonialsRoutes,
   adminDashboardRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
@@ -33,17 +32,15 @@ import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
-import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
-import { emailPlugin } from './plugins/core-plugins/email-plugin'
+import { emailPluginV3 as emailPlugin } from './plugins/core-plugins/email-plugin'
 import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
 import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
-import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
+import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
-import { testimonialsPlugin } from './plugins/core-plugins/testimonials'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole, requireRbac } from './middleware/auth'
 import { createAuth } from './auth/config'
@@ -56,6 +53,7 @@ import { shortcodesPlugin } from './plugins/core-plugins/shortcodes-plugin'
 import { helloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
 import { multiTenantPlugin } from './plugins/core-plugins/multi-tenant-plugin'
 import { lexicalEditorPlugin } from './plugins/core-plugins/lexical-editor'
+import { versioningPlugin } from './plugins/core-plugins/versioning-plugin'
 import { tenantMiddleware } from './middleware/tenant'
 import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
@@ -69,6 +67,7 @@ import { resolveEmailProvider, type BuiltInProviderName } from './services/email
 import { loadDbEmailSettings, dbSettingsFrom } from './services/email/db-settings'
 import { setEmailService, getEmailService, hasEmailService } from './services/email/email-service-singleton'
 import type { EmailProvider } from './services/email/types'
+import { CloudflareEmailProvider } from './plugins/core-plugins/email-plugin/services/cf-email-provider'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
 import { setPluginMenu } from './services/plugin-menu-singleton'
@@ -292,6 +291,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     helloWorldPlugin,
     multiTenantPlugin,
     lexicalEditorPlugin,
+    versioningPlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
@@ -336,17 +336,29 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     } else {
       // No config/env provider — fall back to admin-UI email settings if present.
       const dbSettings = await loadDbEmailSettings(env.DB as never)
-      if (dbSettings?.apiKey) {
-        // Route the admin-UI key through resolveEmailProvider (consistent provider
-        // selection + degrade-to-console safety) instead of hardcoding Resend.
-        provider = resolveEmailProvider({
-          providerName: 'resend',
-          env: { ...env, RESEND_API_KEY: dbSettings.apiKey },
-        })
+      // Effective Resend key: new field takes priority, legacy apiKey for compat.
+      const resendKey = (dbSettings?.resendApiKey || dbSettings?.apiKey) || undefined
+      // CF Email binding is an object with .send(); a string var is NOT a binding.
+      const cfBinding = (typeof env.EMAIL === 'object' && env.EMAIL !== null) ? env.EMAIL : undefined
+
+      if (dbSettings?.provider === 'cloudflare' && cfBinding) {
+        provider = new CloudflareEmailProvider(cfBinding as never)
         defaultFrom = defaultFrom || dbSettingsFrom(dbSettings)
         defaultReplyTo = dbSettings.replyTo
+        console.log('[email] provider: cloudflare (DB setting + binding)')
+      } else if (resendKey) {
+        provider = resolveEmailProvider({ providerName: 'resend', env: { ...env, RESEND_API_KEY: resendKey } })
+        defaultFrom = defaultFrom || dbSettingsFrom(dbSettings!)
+        defaultReplyTo = dbSettings!.replyTo
+        console.log('[email] provider: resend (DB resendApiKey)')
+      } else if (cfBinding && dbSettings?.provider !== 'resend') {
+        provider = new CloudflareEmailProvider(cfBinding as never)
+        defaultFrom = defaultFrom || (dbSettings ? dbSettingsFrom(dbSettings) : undefined)
+        defaultReplyTo = dbSettings?.replyTo
+        console.log('[email] provider: cloudflare (binding auto-detect)')
       } else {
-        provider = resolveEmailProvider({ env }) // → console fallback, with its warning
+        provider = resolveEmailProvider({ env })
+        console.log('[email] provider: fallback (console/env). EMAIL binding type:', typeof env.EMAIL, '| DB provider:', dbSettings?.provider ?? 'unset')
       }
     }
 
@@ -534,6 +546,11 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     }
   })
 
+  // Plugin-specific API routes that would otherwise be shadowed by the generic
+  // /api/:collection/:id catch-all must be mounted BEFORE app.route('/api', apiRoutes).
+  app.route('/api/security-audit', securityAuditApiRoutes as any)
+  app.route('/admin/plugins/security-audit', securityAuditAdminRoutes as any)
+
   // Core routes
   // Routes are being imported incrementally from routes/*
   // Each route is tested and migrated one-by-one
@@ -544,14 +561,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
-  // Testimonials PUBLIC API (/api/testimonials) — must precede the bare /api router.
-  registerPluginRoutes(app, [testimonialsPlugin as any], { source: 'core' })
   app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
-  // Testimonials admin (document-backed). The plugin adds the sidebar item to /admin/testimonials,
-  // but the HTML router itself must be mounted here like the other core admin routers — it was missing,
-  // so the Testimonials page and "add testimonial" form (hx-post /admin/testimonials) 404'd.
-  app.route('/admin/testimonials', adminTestimonialsRoutes)
+
 
   // Forms (admin builder, public rendering, API submission). Same as above —
   // routes[] was replaced with register(app) in the definePlugin port.
@@ -562,7 +574,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/admin/settings', adminSettingsRoutes)
   app.route('/admin/api-reference', adminApiReferenceRoutes)
   app.route('/admin/database-tools', createDatabaseToolsAdminRoutes())
-  app.route('/admin/seed-data', createSeedDataAdminRoutes())
   app.route('/admin/content', adminContentRoutes)
   app.route('/admin/media', adminMediaRoutes)
   // Security audit middleware - logs auth events (login, register, logout)
@@ -627,7 +638,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   if (!config.plugins?.disableAll) {
     const allMountedPlugins: any[] = [
       ...corePluginsBeforeCatchAll,
-      testimonialsPlugin,
       formsPlugin,
       ...corePluginsAfterCatchAll,
       ...(config.plugins?.register ?? []),

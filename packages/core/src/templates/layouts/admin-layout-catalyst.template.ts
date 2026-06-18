@@ -1,6 +1,5 @@
 import { HtmlEscapedString } from "hono/utils/html";
 import { renderLogo } from "../components/logo.template";
-import { resolvePluginMenuItems } from "../../services/plugin-menu-singleton";
 
 // Catalyst Checkbox Component (HTML implementation)
 export interface CatalystCheckboxProps {
@@ -574,12 +573,9 @@ function renderCatalystSidebar(
   enableExperimentalFeatures?: boolean
 ): string {
   // Fall back to the declarative plugin menu singleton when no explicit
-  // dynamicMenuItems were passed in. The singleton is populated by
-  // registerPlugins() collecting each plugin's `menu: [...]` entries.
-  const resolvedMenuItems =
-    dynamicMenuItems && dynamicMenuItems.length > 0
-      ? dynamicMenuItems
-      : resolvePluginMenuItems(user);
+  // Active plugin nav items injected by pluginMenuMiddleware via dynamicMenuItems.
+  // When not provided, the marker below is replaced by the middleware post-render.
+  const resolvedMenuItems = dynamicMenuItems ?? [];
   let baseMenuItems = [
     {
       label: "Content",

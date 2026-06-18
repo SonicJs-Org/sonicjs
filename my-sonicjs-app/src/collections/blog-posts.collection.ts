@@ -4,85 +4,52 @@
  * Example collection configuration for blog posts
  */
 
-import type { CollectionConfig } from "@sonicjs-cms/core";
+import type { CollectionConfig } from '@sonicjs-cms/core';
 
 export default {
-  name: "blog_post",
-  displayName: "Blog Post",
-  slug: "blog-posts",
-  description: "Manage your blog posts",
-  icon: "📝",
+  name: 'blog_post',
+  displayName: 'Blog Post',
+  slug: 'blog-posts',
+  description: 'Manage your blog posts',
+  icon: '📝',
 
   schema: {
-    type: "object",
+    type: 'object',
     properties: {
       title: {
-        type: "string",
-        title: "Title",
+        type: 'string',
+        title: 'Title',
         required: true,
         maxLength: 200,
       },
       slug: {
-        type: "slug",
-        title: "URL Slug",
+        type: 'slug',
+        title: 'URL Slug',
         required: true,
         maxLength: 200,
       },
-      excerpt: {
-        type: "textarea",
-        title: "Excerpt",
-        maxLength: 500,
-        helpText: "A short summary of the post",
-      },
       content: {
-        type: "lexical",
-        title: "Content",
+        type: 'lexical',
+        title: 'Content',
         required: true,
       },
-      featuredImage: {
-        type: "media",
-        title: "Featured Image",
-      },
       author: {
-        type: "string",
-        title: "Author",
+        type: 'user',
+        title: 'Author',
         required: true,
       },
       publishedAt: {
-        type: "datetime",
-        title: "Published Date",
-      },
-      status: {
-        type: "select",
-        title: "Status",
-        enum: ["draft", "published", "archived"],
-        enumLabels: ["Draft", "Published", "Archived"],
-        default: "draft",
-      },
-      difficulty: {
-        type: "select",
-        title: "Difficulty",
-        enum: ["beginner", "intermediate", "advanced"],
-        enumLabels: ["Beginner", "Intermediate", "Advanced"],
-        required: true,
-        default: "beginner",
-      },
-      tags: {
-        type: "string",
-        title: "Tags",
-        helpText: "Comma-separated tags",
+        type: 'datetime',
+        title: 'Published Date',
       },
     },
-    required: ["title", "slug", "content", "author", "difficulty"],
+    required: ['title', 'slug', 'content', 'author'],
   },
 
   // List view configuration
-  listFields: ["title", "author", "difficulty", "status", "publishedAt"],
-  searchFields: ["title", "excerpt", "author"],
-  defaultSort: "createdAt",
-  defaultSortOrder: "desc",
-
-  // Mark as config-managed (code-based) collection
-  managed: true,
+  listFields: ['title', 'author', 'status', 'publishedAt'],
+  searchFields: ['title', 'content', 'author'],
+  defaultSort: 'createdAt',
+  defaultSortOrder: 'desc',
   isActive: true,
 } satisfies CollectionConfig;

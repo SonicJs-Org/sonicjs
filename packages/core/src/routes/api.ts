@@ -1068,7 +1068,7 @@ apiRoutes.post('/:collection', requireAuth(), requireRole(['admin', 'editor', 'a
       return c.json({ error: 'Write cancelled by plugin', details: String(err) }, 400)
     }
 
-    const svc = new DocumentsService(db, { queryableFields: backing.docType.queryableFields ?? [], typeSchemaVersion: backing.docType.schemaVersion ?? 1, maxVersionsPerRoot: backing.docType.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default' })
+    const svc = new DocumentsService(db, { queryableFields: backing.docType.queryableFields ?? [], typeSchemaVersion: backing.docType.schemaVersion ?? 1, maxVersionsPerRoot: backing.docType.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default', versioning: backing.docType.settings?.versioning ?? false })
     const doc = await svc.create(createDocumentSchema.parse({ typeId: backing.coll.name, tenantId: 'default', locale: 'default', title, slug: finalSlug, data: hookData, publishOnCreate: (status || 'draft') === 'published' }), user?.userId)
 
     const cache = getCacheService(CACHE_CONFIGS.api!)
@@ -1111,7 +1111,7 @@ apiRoutes.put('/:collection/:id', requireAuth(), requireRole(['admin', 'editor',
     }
 
     const docType = await new DocumentTypeRegistry(db).findById(docRow.type_id)
-    const svc = new DocumentsService(db, { queryableFields: docType?.queryableFields ?? [], typeSchemaVersion: docType?.schemaVersion ?? 1, maxVersionsPerRoot: docType?.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default' })
+    const svc = new DocumentsService(db, { queryableFields: docType?.queryableFields ?? [], typeSchemaVersion: docType?.schemaVersion ?? 1, maxVersionsPerRoot: docType?.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default', versioning: docType?.settings?.versioning ?? false })
     const input: any = {}
     if (body.title !== undefined) input.title = body.title
     if (body.slug !== undefined) input.slug = slugify(body.slug)

@@ -105,30 +105,28 @@ SonicJS treats media references as a first-class [field type](/field-types). You
 
 ```typescript
 // src/collections/posts.ts
-import { defineCollection } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export const postsCollection = defineCollection({
+export const postsCollection: CollectionConfig = {
   name: 'posts',
   slug: 'posts',
-  fields: {
-    title: { type: 'string', required: true, maxLength: 200 },
-    slug: { type: 'string', required: true, unique: true },
-    body: { type: 'richtext' },
+  schema: {
+    properties: {
+      title: { type: 'string', required: true, maxLength: 200 },
+      slug: { type: 'string', required: true, unique: true },
+      body: { type: 'richtext' },
 
-    // Single hero image
-    heroImage: {
-      type: 'media',
-      title: 'Hero image',
-      helpText: 'Recommended: 1792 × 1024 PNG or JPEG',
-    },
+      // Single hero image
+      heroImage: { type: 'media' },
 
-    // A gallery of additional shots
-    gallery: {
-      type: 'array',
-      items: { type: 'media' },
+      // A gallery of additional shots
+      gallery: {
+        type: 'array',
+        items: { type: 'media' },
+      },
     },
   },
-})
+}
 ```
 
 The `media` field stores the media record's ID. When you query a post via the [content API](/api), SonicJS resolves that ID into the full asset object — including `publicUrl`, `mimeType`, dimensions, and alt text — so frontends don't need to make a second round trip.
@@ -345,8 +343,9 @@ export async function uploadAvatar(file: File) {
     throw new Error(upload.error ?? 'Upload failed')
   }
 
+  // TODO: verify current user-profile update endpoint
   // Save the media reference on the current user's profile
-  await fetch('/api/content/users/me', {
+  await fetch('/api/users/me', {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

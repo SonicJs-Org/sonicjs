@@ -62,11 +62,14 @@ export interface DocumentsServiceOptions {
   maxVersionsPerRoot?: number
   /** Tenant this service operates within. Every root-keyed lookup is scoped to it (R3). POC default: 'default'. */
   tenantId?: string
+  /** Retain version history (new row per saveDraft, supersede-as-history). Default false (in-place). */
+  versioning?: boolean
 }
 
 export class DocumentsService {
   private projection: DocumentProjection
   private tenantId: string
+  private versioning: boolean
 
   constructor(
     private db: D1Database,
@@ -74,6 +77,7 @@ export class DocumentsService {
   ) {
     this.projection = new DocumentProjection(db)
     this.tenantId = opts.tenantId ?? 'default'
+    this.versioning = opts.versioning ?? false
   }
 
   // ─── Create ───────────────────────────────────────────────────────────────
@@ -192,6 +196,12 @@ export class DocumentsService {
 
     const prevIsPublished = prevDraftRow.is_published === 1
 
+    // Versioning off + the working draft is a pure draft (not the live published row):
+    // update it in place. No new row, no history accumulation. (R7: rebuild derived rows.)
+    if (!this.versioning && !prevIsPublished) {
+      return this.updateInPlace(prevDraft, input, now, updatedBy)
+    }
+
     const statements: D1PreparedStatement[] = [
       // 1. Demote previous current draft FIRST (unique index: never two current drafts mid-batch).
       this.db.prepare('UPDATE documents SET is_current_draft = 0, updated_at = ? WHERE id = ? AND tenant_id = ?')
@@ -253,6 +263,56 @@ export class DocumentsService {
     return rowToDocument(saved!)
   }
 
+  // In-place draft update (versioning off). Mutates the existing draft row; preserves id/root_id/
+  // version_number/version_of_id and the is_current_draft/is_published flags. Rebuilds derived rows.
+  private async updateInPlace(
+    prevDraft: Document,
+    input: UpdateDocumentInput,
+    now: number,
+    updatedBy?: string,
+  ): Promise<Document> {
+    const mergedData = { ...prevDraft.data, ...(input.data ?? {}) }
+    const mergedMeta = { ...prevDraft.metadata, ...(input.metadata ?? {}) }
+
+    const updated: Document = {
+      ...prevDraft,
+      slug: input.slug !== undefined ? input.slug ?? null : prevDraft.slug,
+      title: input.title !== undefined ? input.title ?? null : prevDraft.title,
+      zone: input.zone !== undefined ? input.zone ?? null : prevDraft.zone,
+      sortOrder: input.sortOrder ?? prevDraft.sortOrder,
+      visible: input.visible ?? prevDraft.visible,
+      scheduledAt: input.scheduledAt !== undefined ? input.scheduledAt : prevDraft.scheduledAt,
+      expiresAt: input.expiresAt !== undefined ? input.expiresAt : prevDraft.expiresAt,
+      data: mergedData,
+      metadata: mergedMeta,
+      updatedBy: updatedBy ?? prevDraft.updatedBy,
+      updatedAt: now,
+    }
+
+    const statements: D1PreparedStatement[] = [
+      // R5: 11 SET '?' + 2 WHERE '?' (id, tenant_id) = 13 binds, matching .bind() below.
+      this.db.prepare(
+        `UPDATE documents SET
+           slug = ?, title = ?, zone = ?, sort_order = ?, visible = ?,
+           scheduled_at = ?, expires_at = ?, data = ?, metadata = ?, updated_by = ?, updated_at = ?
+         WHERE id = ? AND tenant_id = ?`,
+      ).bind(
+        updated.slug, updated.title, updated.zone, updated.sortOrder, updated.visible ? 1 : 0,
+        updated.scheduledAt, updated.expiresAt, JSON.stringify(updated.data), JSON.stringify(updated.metadata),
+        updated.updatedBy, now,
+        updated.id, this.tenantId,
+      ),
+      // R7: derived rows track the new data — delete then reinsert for this row.
+      ...this.projection.buildDerivedDeleteStatements(updated.id),
+      ...this.projection.buildDerivedInsertStatements(updated, this.opts.queryableFields ?? [], now),
+    ]
+
+    await this.db.batch(statements)
+
+    const saved = await this.db.prepare('SELECT * FROM documents WHERE id = ?').bind(updated.id).first<DocumentRow>()
+    return rowToDocument(saved!)
+  }
+
   // ─── Publish ──────────────────────────────────────────────────────────────
 
   async publish(documentId: string, publishedBy?: string): Promise<Document> {
@@ -273,14 +333,25 @@ export class DocumentsService {
     const statements: D1PreparedStatement[] = []
 
     if (prevPublishedRow) {
-      // Clear published flag on the old published row.
-      statements.push(
-        this.db.prepare('UPDATE documents SET is_published = 0, updated_at = ? WHERE id = ?')
-          .bind(now, prevPublishedRow.id),
-      )
-      // If the old published row is not the current draft, remove its derived rows.
-      if (prevPublishedRow.is_current_draft !== 1) {
+      if (!this.versioning && prevPublishedRow.is_current_draft !== 1) {
+        // Versioning off: old published row is pure history — remove it + its derived rows.
+        // First null any version_of_id pointing at it (the target draft may chain off it) so the
+        // delete can't trip the FK RESTRICT on documents.version_of_id (plan risk #1; the chain is
+        // unused when versioning is off). Tenant-scoped (R3).
+        statements.push(this.db.prepare('UPDATE documents SET version_of_id = NULL WHERE version_of_id = ? AND tenant_id = ?')
+          .bind(prevPublishedRow.id, this.tenantId))
         statements.push(...this.projection.buildDerivedDeleteStatements(prevPublishedRow.id))
+        statements.push(this.db.prepare('DELETE FROM documents WHERE id = ? AND tenant_id = ?')
+          .bind(prevPublishedRow.id, this.tenantId))
+      } else {
+        // existing behavior: clear is_published, drop derived rows if not the current draft
+        statements.push(
+          this.db.prepare('UPDATE documents SET is_published = 0, updated_at = ? WHERE id = ?')
+            .bind(now, prevPublishedRow.id),
+        )
+        if (prevPublishedRow.is_current_draft !== 1) {
+          statements.push(...this.projection.buildDerivedDeleteStatements(prevPublishedRow.id))
+        }
       }
     }
 

@@ -524,7 +524,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           value="${value}"
           min="${opts.min || ''}"
           max="${opts.max || ''}"
-          class="${baseClasses} ${errorClasses}"
+          class="${baseClasses} ${errorClasses} !w-auto dark:[color-scheme:dark]"
           ${required}
           ${disabled ? 'disabled' : ''}
         >
@@ -540,7 +540,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           value="${value}"
           min="${opts.min || ''}"
           max="${opts.max || ''}"
-          class="${baseClasses} ${errorClasses}"
+          class="${baseClasses} ${errorClasses} !w-auto dark:[color-scheme:dark]"
           ${required}
           ${disabled ? 'disabled' : ''}
         >
@@ -975,6 +975,90 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       }
       // Regular structured array field
       return renderStructuredArrayField(field, options, baseClasses, errorClasses)
+
+    case 'user': {
+      const idValue = typeof value === 'string' ? value : (value?.id || value || '')
+      // If value is object with name use it; if just an ID string, show ID now and replace on load
+      const displayValue = typeof value === 'object' && value?.name ? value.name : (typeof value === 'string' ? value : '')
+      fieldHTML = `
+        <div class="user-search-field-container" style="position:relative;">
+          <input
+            type="text"
+            id="${fieldId}-display"
+            name="q"
+            class="${baseClasses} ${errorClasses}"
+            placeholder="${opts.placeholder || 'Search by name...'}"
+            autocomplete="off"
+            value="${escapeHtml(displayValue)}"
+            hx-get="/admin/api/users/search-html?fieldId=${fieldId}"
+            hx-trigger="keyup delay:300ms"
+            hx-target="#${fieldId}-dropdown"
+            hx-swap="innerHTML"
+            hx-include="this"
+            ${disabled ? 'disabled' : ''}
+          >
+          <input
+            type="hidden"
+            id="${fieldId}"
+            name="${fieldName}"
+            value="${escapeHtml(idValue)}"
+            ${required}
+          >
+          <div
+            id="${fieldId}-dropdown"
+            class="user-search-dropdown"
+            style="position:absolute;z-index:50;top:100%;left:0;right:0;background:#27272a;border-radius:0.5rem;box-shadow:0 4px 12px rgba(0,0,0,0.4);max-height:200px;overflow-y:auto;"
+          ></div>
+        </div>
+        <script>
+          if (typeof sonicSelectUser === 'undefined') {
+            window.sonicSelectUser = function(fieldId, userId, userName) {
+              var d = document.getElementById(fieldId + '-display');
+              var h = document.getElementById(fieldId);
+              var dd = document.getElementById(fieldId + '-dropdown');
+              if (d) { d.value = userName; d.dataset.linkedName = userName; }
+              if (h) h.value = userId;
+              if (dd) dd.innerHTML = '';
+            };
+            document.addEventListener('click', function(e) {
+              document.querySelectorAll('.user-search-dropdown').forEach(function(dd) {
+                if (!dd.contains(e.target) && !dd.previousElementSibling?.contains(e.target)) {
+                  dd.innerHTML = '';
+                }
+              });
+            });
+            // Before form submit: if display was changed from linked user name, treat as custom text
+            document.addEventListener('submit', function(e) {
+              document.querySelectorAll('.user-search-field-container').forEach(function(container) {
+                var display = container.querySelector('input[type="text"]');
+                var hidden = container.querySelector('input[type="hidden"]');
+                if (!display || !hidden) return;
+                var linkedName = display.dataset.linkedName;
+                // Custom name: no linked user, or user cleared/changed the display value
+                if (!linkedName || display.value !== linkedName) {
+                  hidden.value = display.value;
+                }
+              });
+            }, true);
+          }
+          // On load: if hidden input has a user ID, fetch display name and mark as linked
+          (function() {
+            var userId = ${JSON.stringify(idValue)};
+            if (!userId) return;
+            fetch('/admin/api/users/' + encodeURIComponent(userId))
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.name) {
+                  var d = document.getElementById(${JSON.stringify(fieldId + '-display')});
+                  if (d) { d.value = data.name; d.dataset.linkedName = data.name; }
+                }
+              })
+              .catch(function() {});
+          })();
+        </script>
+      `
+      break
+    }
 
     default:
       fieldHTML = `

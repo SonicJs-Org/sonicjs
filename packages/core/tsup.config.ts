@@ -75,6 +75,9 @@ export default defineConfig({
   // TypeScript options
   tsconfig: './tsconfig.json',
 
+  // Suppress chunk output during watch
+  silent: true,
+
   // Build hooks
   onSuccess: async () => {
     const fs = await import('fs')

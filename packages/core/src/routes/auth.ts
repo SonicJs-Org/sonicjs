@@ -554,6 +554,10 @@ authRoutes.post('/register/form',
       }
     }
 
+    // Assign RBAC role so the new user passes requireRbac('portal', 'access')
+    const rbacService = new RbacService(db)
+    await rbacService.addUserRoleByName(userId, role)
+
     // Fire auth:registration:completed (fire-and-forget — does not block the response)
     dispatchHookEvent(
       c,

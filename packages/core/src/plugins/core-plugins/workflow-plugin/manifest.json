@@ -41,6 +41,7 @@
   },
   "iconEmoji": "🔄",
   "is_core": false,
+  "hidden": true,
   "defaultSettings": {
     "enableApprovalChains": true,
     "enableScheduling": true,

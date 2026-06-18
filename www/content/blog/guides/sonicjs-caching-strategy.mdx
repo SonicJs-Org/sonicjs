@@ -134,16 +134,17 @@ async function updateContent(key: string, data: any) {
 ### Basic Setup
 
 ```typescript
-import { createSonicJS } from '@sonicjs-cms/core'
+import { Hono } from 'hono'
+import { registerPlugins } from '@sonicjs-cms/core'
 import { cachePlugin } from '@sonicjs-cms/core/plugins'
 
-const cms = createSonicJS({
-  plugins: [
-    cachePlugin({
-      defaultTTL: 3600, // 1 hour default
-    }),
-  ],
-})
+const app = new Hono()
+
+registerPlugins(app, [
+  cachePlugin({
+    defaultTTL: 3600, // 1 hour default
+  }),
+], { hookSystem, env })
 ```
 
 ### Route-Specific TTLs
@@ -153,13 +154,13 @@ cachePlugin({
   defaultTTL: 3600,
   patterns: {
     // Frequently updated content
-    '/api/content/posts': { ttl: 60 },
+    '/api/posts': { ttl: 60 },
 
     // Rarely changed content
-    '/api/content/categories': { ttl: 86400 },
+    '/api/categories': { ttl: 86400 },
 
     // Individual posts can cache longer
-    '/api/content/posts/*': { ttl: 3600 },
+    '/api/posts/*': { ttl: 3600 },
 
     // Never cache user-specific data
     '/api/users/*': { ttl: 0 },
@@ -207,9 +208,14 @@ await cache.invalidateTag(`category:${categoryId}`)
 Invalidate on specific events:
 
 ```typescript
-cms.on('content:afterSave', async (content) => {
-  await cache.invalidate(`posts:${content.id}`)
-  await cache.invalidate('posts:list')
+// TODO: verify hook event name 'content:save' for v3
+definePlugin({
+  onBoot(ctx) {
+    ctx.hooks.on('content:save', async (content) => {
+      await cache.invalidate(`posts:${content.id}`)
+      await cache.invalidate('posts:list')
+    })
+  },
 })
 ```
 
@@ -237,10 +243,10 @@ Typical hit rates for well-configured caching:
 
 ```typescript
 // Static content: Long TTL
-'/api/content/pages': { ttl: 86400 }, // 24 hours
+'/api/pages': { ttl: 86400 }, // 24 hours
 
 // Dynamic listings: Short TTL
-'/api/content/posts': { ttl: 60 }, // 1 minute
+'/api/posts': { ttl: 60 }, // 1 minute
 
 // Real-time data: No caching
 '/api/analytics': { ttl: 0 },
@@ -344,10 +350,15 @@ cachePlugin({
 Cache based on content type:
 
 ```typescript
-cms.on('content:beforeCache', (content, options) => {
-  if (content.type === 'breaking-news') {
-    options.ttl = 30 // Very short TTL
-  }
+// TODO: verify hook event name 'content:beforeCache' for v3
+definePlugin({
+  onBoot(ctx) {
+    ctx.hooks.on('content:beforeCache', (content, options) => {
+      if (content.type === 'breaking-news') {
+        options.ttl = 30 // Very short TTL
+      }
+    })
+  },
 })
 ```
 

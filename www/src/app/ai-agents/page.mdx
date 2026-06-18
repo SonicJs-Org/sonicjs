@@ -164,60 +164,6 @@ Handles problematic pull requests including fork PRs that need cherry-picking, D
 
 ---
 
-### PR Maker Agent
-
-**Command:** `/sonicjs-pr-maker`
-
-Creates Pull Requests, monitors CI/CD pipelines, analyzes failures, and automatically fixes issues including unit test, build, and E2E test failures. This agent automates the entire PR lifecycle from creation to passing CI.
-
-<div className="not-prose mb-6">
-  <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-    <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 border-b border-zinc-200 dark:border-zinc-700">
-      <span className="font-mono text-sm">Capabilities</span>
-    </div>
-    <div className="p-4 space-y-2 text-sm">
-      <div className="flex items-start gap-2"><span className="text-emerald-500">▸</span><strong>Create PRs:</strong> Generate well-formatted PRs with proper titles and descriptions</div>
-      <div className="flex items-start gap-2"><span className="text-emerald-500">▸</span><strong>Monitor CI/CD:</strong> Watch PR checks in real-time until completion</div>
-      <div className="flex items-start gap-2"><span className="text-emerald-500">▸</span><strong>Analyze Failures:</strong> Parse CI logs to identify unit test, build, or E2E failures</div>
-      <div className="flex items-start gap-2"><span className="text-emerald-500">▸</span><strong>Auto-Fix:</strong> Automatically fix issues and push updates (up to 3 attempts)</div>
-    </div>
-  </div>
-</div>
-
-<div className="not-prose mb-6">
-  <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-    <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 border-b border-zinc-200 dark:border-zinc-700">
-      <span className="font-mono text-sm">CI/CD Pipeline Steps</span>
-    </div>
-    <div className="p-4 space-y-2 text-sm">
-      <div className="flex items-start gap-2"><span className="text-blue-500">1.</span>Unit tests with coverage</div>
-      <div className="flex items-start gap-2"><span className="text-blue-500">2.</span>Build core package</div>
-      <div className="flex items-start gap-2"><span className="text-blue-500">3.</span>Create D1 database</div>
-      <div className="flex items-start gap-2"><span className="text-blue-500">4.</span>Deploy to Cloudflare Preview</div>
-      <div className="flex items-start gap-2"><span className="text-blue-500">5.</span>Run E2E tests against preview</div>
-    </div>
-  </div>
-</div>
-
-**Usage:**
-```bash
-/sonicjs-pr-maker                # Create PR and monitor until CI passes
-/sonicjs-pr-maker create         # Create PR only (no monitoring)
-/sonicjs-pr-maker monitor 558    # Monitor existing PR checks
-/sonicjs-pr-maker fix 558        # Analyze and fix failing PR
-```
-
-**Workflow Example:**
-1. Agent analyzes your branch changes
-2. Creates PR with conventional commit title (feat:, fix:, etc.)
-3. Monitors CI checks every 30 seconds
-4. If checks fail, downloads logs and artifacts
-5. Identifies failure type and applies fix
-6. Pushes fix and resumes monitoring
-7. Reports success when all checks pass
-
----
-
 ## Release & DevOps Agents
 
 ### Release Engineer Agent
@@ -495,7 +441,7 @@ Agents are defined as Markdown files in `.claude/commands/`:
 If you have questions about using the AI agents:
 
 1. **Check the agent file** - Each `.claude/commands/*.md` file has detailed instructions
-2. **Ask in [Discord](https://discord.gg/SJArGfJgPJ)** - Our community can help
+2. **Ask in [Discord](https://discord.gg/8bMy6bv3sZ)** - Our community can help
 3. **Open an issue** - For bugs or feature requests
 
 <div className="not-prose mt-8">

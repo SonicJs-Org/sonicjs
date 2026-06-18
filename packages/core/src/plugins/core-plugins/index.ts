@@ -10,18 +10,15 @@
 export { authPlugin, createAuthPlugin } from './auth'
 export { mediaPlugin, createMediaPlugin } from './media'
 export { analyticsPlugin, createAnalyticsPlugin } from './analytics'
-export { testimonialsPlugin, createTestimonialPlugin } from './testimonials'
-export { codeExamplesPlugin, createCodeExamplesPlugin } from './code-examples'
 export { demoLoginPlugin } from './demo-login'
 export { workflowPlugin, createWorkflowPlugin } from './workflow-plugin'
-export { seedDataPlugin, createSeedDataPlugin } from './seed-data-plugin'
 export { databaseToolsPlugin } from './database-tools-plugin'
 export { helloWorldPlugin, createHelloWorldPlugin } from './hello-world-plugin'
 export { quillEditorPlugin, createQuillEditorPlugin } from './quill-editor'
 export { lexicalEditorPlugin, createLexicalEditorPlugin } from './lexical-editor'
 export { getLexicalStyles, getLexicalImportMap, getLexicalLoaderScript, getLexicalInitScript, renderLexicalField } from './lexical-editor'
 export type { LexicalOptions, LexicalToolbarItem } from './lexical-editor'
-export { emailPlugin, createEmailPlugin } from './email-plugin'
+export { emailPluginV3 as emailPlugin } from './email-plugin'
 export { otpLoginPlugin, createOTPLoginPlugin } from './otp-login-plugin'
 export { turnstilePlugin } from './turnstile-plugin'
 export { TurnstileService, verifyTurnstile, createTurnstileMiddleware } from './turnstile-plugin'
@@ -45,17 +42,14 @@ export type { ProfileFieldDefinition, UserProfileConfig } from './user-profiles'
 export { stripePlugin, createStripePlugin, SubscriptionService, StripeAPI, requireSubscription } from './stripe-plugin'
 export { dashboardPlugin, createDashboardPlugin } from './dashboard-plugin'
 export { multiTenantPlugin, createMultiTenantPlugin, TenantService } from './multi-tenant-plugin'
+export { versioningPlugin, createVersioningPlugin } from './versioning-plugin'
 
 // Core plugins list - now imported from auto-generated registry
 export const CORE_PLUGIN_IDS = [
   'core-auth',
   'core-media',
   'core-analytics',
-  'testimonials-plugin',
-  'code-examples-plugin',
   'demo-login-plugin',
-  'workflow-plugin',
-  'seed-data',
   'database-tools',
   'hello-world',
   'quill-editor',
@@ -70,7 +64,8 @@ export const CORE_PLUGIN_IDS = [
   'security-audit',
   'user-profiles',
   'stripe',
-  'multi-tenant'
+  'multi-tenant',
+  'versioning'
 ] as const
 
 export type CorePluginNames = (typeof CORE_PLUGIN_IDS)[number]

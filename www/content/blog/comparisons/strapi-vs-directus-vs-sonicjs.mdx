@@ -243,7 +243,7 @@ Request → Memory Cache (1-2ms) → KV Cache (5-10ms) → D1 Database (50-100ms
 | Content versioning | Paid | Free | Free |
 | Live preview | Paid | Free | Free |
 | AI-powered search | N/A | N/A | Free |
-| SSO/SAML | Paid | Paid | Roadmap |
+| SSO/SAML | Paid | Paid | OAuth/OIDC (partial) |
 
 We believe core CMS features shouldn't require enterprise pricing.
 
@@ -439,10 +439,9 @@ We've been critical of Strapi and Directus. Here's what SonicJS doesn't do (yet)
 
 ### Our Roadmap
 
-- **Q1 2025**: GraphQL API layer
-- **Q1 2025**: Enhanced visual page builder
-- **Q2 2025**: Multi-tenant administration
-- **Q2 2025**: Expanded third-party integrations
+- GraphQL API layer
+- Enhanced visual page builder
+- Expanded third-party integrations
 
 ---
 
@@ -451,7 +450,7 @@ We've been critical of Strapi and Directus. Here's what SonicJS doesn't do (yet)
 ### Coming from Strapi
 
 Both use REST APIs with similar patterns:
-- `GET /api/articles` → `GET /api/content/articles`
+- `GET /api/articles` → `GET /api/articles`
 - Content model concepts map directly
 
 See our [Strapi migration guide](/docs/migration/from-strapi).
@@ -510,7 +509,7 @@ No. Unlike Directus, SonicJS is purpose-built for Cloudflare D1 (SQLite at the e
 
 ### Does SonicJS support GraphQL?
 
-Not yet. GraphQL support is on our Q1 2025 roadmap. Currently, we offer a comprehensive REST API.
+Not yet. GraphQL support is on our roadmap. Currently, we offer a comprehensive REST API.
 
 ### How does pricing compare?
 

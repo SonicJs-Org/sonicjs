@@ -6,6 +6,7 @@ import { SettingsService } from '../services/settings'
 import { PluginService } from '../services'
 import { PLUGIN_REGISTRY, findPluginByCodeName } from '../plugins/manifest-registry'
 import { getPluginDefinition } from '../services/plugin-definition-registry'
+import { getUserProfileConfig } from '../plugins/core-plugins/user-profiles'
 import {
   renderSchemaFields,
   parseFormDataToSettings,
@@ -192,6 +193,23 @@ adminPluginRoutes.get('/:id', async (c) => {
       }
     }
 
+    // For User Profiles plugin, surface the code-defined field config (defineUserProfile()).
+    let profileConfig: PluginSettingsPageData['plugin']['profileConfig'] = undefined
+    if (pluginId === 'user-profiles') {
+      const cfg = getUserProfileConfig()
+      profileConfig = cfg
+        ? {
+            fields: cfg.fields.map(f => ({
+              name: f.name,
+              label: f.label,
+              type: String(f.type),
+              required: f.required ?? false,
+            })),
+            registrationFields: cfg.registrationFields ?? [],
+          }
+        : null
+    }
+
     // Map plugin data to template format
     const templatePlugin = {
       id: plugin.id,
@@ -209,16 +227,17 @@ adminPluginRoutes.get('/:id', async (c) => {
       dependencies: plugin.dependencies,
       permissions: plugin.permissions,
       isCore: plugin.is_core,
-      settings: enrichedSettings
+      settings: enrichedSettings,
+      profileConfig
     }
 
     // Map activity data
     const templateActivity = (activity || []).map(item => ({
       id: item.id,
       action: item.action,
-      message: item.message,
+      message: item.details ? JSON.stringify(item.details) : '',
       timestamp: item.timestamp,
-      user: item.user_email
+      user: item.userId || null
     }))
 
     const pageData: PluginSettingsPageData = {

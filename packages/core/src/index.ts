@@ -88,6 +88,7 @@ export type { EmailLogRow } from './services/email/types'
 
 // Core plugins exported for use in Worker entries and custom scheduled handlers
 export { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
+export { redirectPlugin, createRedirectPlugin } from './plugins/redirect-management'
 
 // ============================================================================
 // Placeholders - To be populated in Phase 2
@@ -179,10 +180,7 @@ export {
   adminMediaRoutes,
   adminLogsRoutes,
   adminPluginRoutes,
-  adminDesignRoutes,
   adminCheckboxRoutes,
-  adminTestimonialsRoutes,
-  adminCodeExamplesRoutes,
   adminDashboardRoutes,
   adminCollectionsRoutes,
   adminSettingsRoutes,

@@ -108,11 +108,9 @@ if (response.ok) {
 // Available roles (most to least privileged)
 const roles = ['admin', 'editor', 'author', 'viewer']
 
-// Create user with specific role
-await db.prepare(`
-  INSERT INTO users (email, password, role)
-  VALUES (?, ?, ?)
-`).bind(email, hashedPassword, 'editor').run()
+// Admin user is created via bootstrap using ADMIN_EMAIL/ADMIN_PASSWORD env vars
+// Demo credentials: admin@sonicjs.com / sonicjs!
+// Additional users are created through the admin UI or Better Auth registration flow
 ```
 
 </CodeGroup>
@@ -546,16 +544,20 @@ hooks.register('content:save', async (data, context) => {
 <CodeGroup title="Valid Collection Config">
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { registerCollections } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export default defineCollection({
+export const blogPostsCollection: CollectionConfig = {
   name: 'blog_posts',          // Required
   displayName: 'Blog Posts',   // Required
   schema: {                    // Required
     title: { type: 'string', required: true },
     content: { type: 'richtext' }
   }
-})
+}
+
+// Register in your app entry point (my-sonicjs-app/src/index.ts)
+registerCollections([blogPostsCollection])
 ```
 
 </CodeGroup>
@@ -612,8 +614,8 @@ import { runMigrations } from '@sonicjs-cms/core'
 // Re-run migrations
 await runMigrations(db)
 
-// Re-sync collections
-await collectionSync.syncAll()
+// Collections are code-only via registerCollections() — no DB sync needed
+// Ensure registerCollections([...]) is called in your app entry point
 ```
 
 </CodeGroup>
@@ -629,7 +631,7 @@ await collectionSync.syncAll()
 ```bash
 # Set initial admin via environment
 # wrangler.toml or secrets
-ADMIN_EMAIL=admin@example.com
+ADMIN_EMAIL=admin@sonicjs.com
 ADMIN_PASSWORD=your-secure-password
 ```
 
@@ -643,7 +645,7 @@ Or create via API (if registration is enabled):
 curl -X POST https://your-app.workers.dev/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "admin@example.com",
+    "email": "admin@sonicjs.com",
     "password": "your-secure-password",
     "username": "admin"
   }'

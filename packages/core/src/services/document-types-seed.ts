@@ -140,6 +140,70 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     ],
   })
 
+  // Plugin activity log (document-backed; replaces legacy plugin_activity_log table which was never migrated)
+  await registry.register({
+    id: 'plugin_activity',
+    name: 'plugin_activity',
+    displayName: 'Plugin Activity',
+    description: 'Plugin lifecycle event log (installed/activated/deactivated/settings_updated/error)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+    queryableFields: [
+      { name: 'pluginId', kind: 'scalar', type: 'text', column: 'q_plugin_activity_plugin_id' },
+      { name: 'action',   kind: 'scalar', type: 'text', column: 'q_plugin_activity_action' },
+    ],
+  })
+
+  // Security audit event (document-backed; replaces legacy security_events table)
+  await registry.register({
+    id: 'security_event',
+    name: 'security_event',
+    displayName: 'Security Event',
+    description: 'Security audit event (login attempts, lockouts, suspicious activity)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+    queryableFields: [
+      { name: 'eventType',  kind: 'scalar', type: 'text',    column: 'q_sa_event_type' },
+      { name: 'severity',   kind: 'scalar', type: 'text',    column: 'q_sa_severity' },
+      { name: 'userId',     kind: 'scalar', type: 'text',    column: 'q_sa_user_id' },
+      { name: 'email',      kind: 'scalar', type: 'text',    column: 'q_sa_email' },
+      { name: 'ipAddress',  kind: 'scalar', type: 'text',    column: 'q_sa_ip_address' },
+      { name: 'blocked',    kind: 'scalar', type: 'integer', column: 'q_sa_blocked' },
+    ],
+  })
+
+  // Analytics event (document-backed; replaces legacy analytics_events table)
+  await registry.register({
+    id: 'analytics_event',
+    name: 'analytics_event',
+    displayName: 'Analytics Event',
+    description: 'Tracked analytics event (page view, user action, custom event)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+    queryableFields: [
+      { name: 'event',     kind: 'scalar', type: 'text',    column: 'q_evt_event' },
+      { name: 'category',  kind: 'scalar', type: 'text',    column: 'q_evt_category' },
+      { name: 'userId',    kind: 'scalar', type: 'text',    column: 'q_evt_user_id' },
+      { name: 'sessionId', kind: 'scalar', type: 'text',    column: 'q_evt_session_id' },
+      { name: 'path',      kind: 'scalar', type: 'text',    column: 'q_evt_path' },
+    ],
+  })
+
   // ── RBAC (auth-owned). 3 document types replace 4 relational tables: ──────────
   //   rbac_role        slug = roleId,  data.grants[] embedded (replaces role_grants)
   //   rbac_verb        slug = verbId
@@ -204,6 +268,7 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
             viewer: ['read'],
           },
           maxVersionsPerRoot: 50,
+          ...(collection.versioning ? { versioning: true } : {}),
         },
         queryableFields: [],
       })

@@ -157,7 +157,7 @@ apiRoutes.use('*', cors({
 
 ## Authentication {{ id: 'authentication' }}
 
-Most API endpoints require authentication. SonicJS uses JWT (JSON Web Tokens) with HTTP-only cookies for web clients and Bearer tokens for API clients.
+Most API endpoints require authentication. SonicJS uses Better Auth for session management. Programmatic API clients (scripts, external apps) authenticate with a JWT/API-token Bearer header; browser and admin UI sessions use a Better Auth session cookie set automatically on login.
 
 ### Login
 
@@ -210,7 +210,6 @@ token = data['token']
   "user": {
     "id": "admin-user-id",
     "email": "admin@sonicjs.com",
-    "username": "admin",
     "firstName": "Admin",
     "lastName": "User",
     "role": "admin"
@@ -405,9 +404,9 @@ data = response.json()
 
 ## Content Management {{ id: 'content-management' }}
 
-### List All Content
+### List Content
 
-Retrieve all content items with pagination and filtering.
+Retrieve all content items for a collection with pagination and filtering.
 
 **Authentication:** None required
 **Cache:** 5 minutes
@@ -421,43 +420,21 @@ Retrieve all content items with pagination and filtering.
 <CodeGroup title="List Content">
 
 ```bash {{ title: 'cURL' }}
-curl -X GET "http://localhost:8787/api/content?limit=10"
+curl -X GET "http://localhost:8787/api/blog-posts?limit=10"
 ```
 
 ```js {{ title: 'JavaScript' }}
-const response = await fetch('http://localhost:8787/api/content?limit=10');
+const response = await fetch('http://localhost:8787/api/blog-posts?limit=10');
 const { data, meta } = await response.json();
 ```
 
 ```python {{ title: 'Python' }}
 import requests
 
-response = requests.get('http://localhost:8787/api/content', params={
+response = requests.get('http://localhost:8787/api/blog-posts', params={
     'limit': 10
 })
 data = response.json()
-```
-
-</CodeGroup>
-
-### Get Content by Collection
-
-Retrieve content for a specific collection.
-
-**Authentication:** None required
-**Cache:** 5 minutes
-
-<CodeGroup title="Get Collection Content">
-
-```bash {{ title: 'cURL' }}
-curl -X GET "http://localhost:8787/api/collections/blog-posts/content?limit=25"
-```
-
-```js {{ title: 'JavaScript' }}
-const response = await fetch(
-  'http://localhost:8787/api/collections/blog-posts/content?limit=25'
-);
-const { data, meta } = await response.json();
 ```
 
 </CodeGroup>
@@ -472,11 +449,11 @@ Retrieve a specific content item by ID.
 <CodeGroup title="Get Content">
 
 ```bash {{ title: 'cURL' }}
-curl -X GET "http://localhost:8787/api/content/{id}"
+curl -X GET "http://localhost:8787/api/blog-posts/{id}"
 ```
 
 ```js {{ title: 'JavaScript' }}
-const response = await fetch(`http://localhost:8787/api/content/${id}`);
+const response = await fetch(`http://localhost:8787/api/blog-posts/${id}`);
 const { data } = await response.json();
 ```
 
@@ -484,47 +461,37 @@ const { data } = await response.json();
 
 ### Create Content
 
-Create a new content item.
+Create a new content item. The request body is the field data for the collection directly — no wrapper object needed.
 
 **Authentication:** Required
-**Permissions:** Editor or Admin role
+**Permissions:** Admin, Editor, or Author role
 
 <CodeGroup title="Create Content">
 
 ```bash {{ title: 'cURL' }}
-curl -X POST "http://localhost:8787/api/content" \
+curl -X POST "http://localhost:8787/api/blog-posts" \
   -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json" \
   -d '{
-    "collectionId": "blog-posts-collection-id",
     "title": "My New Blog Post",
     "slug": "my-new-blog-post",
-    "status": "draft",
-    "data": {
-      "title": "My New Blog Post",
-      "content": "<p>This is my blog post content...</p>",
-      "excerpt": "A brief description"
-    }
+    "content": "<p>This is my blog post content...</p>",
+    "excerpt": "A brief description"
   }'
 ```
 
 ```js {{ title: 'JavaScript' }}
-const response = await fetch('http://localhost:8787/api/content', {
+const response = await fetch('http://localhost:8787/api/blog-posts', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    collectionId: 'blog-posts-collection-id',
     title: 'My New Blog Post',
     slug: 'my-new-blog-post',
-    status: 'draft',
-    data: {
-      title: 'My New Blog Post',
-      content: '<p>This is my blog post content...</p>',
-      excerpt: 'A brief description',
-    },
+    content: '<p>This is my blog post content...</p>',
+    excerpt: 'A brief description',
   }),
 });
 
@@ -538,26 +505,22 @@ const { data } = await response.json();
 Update an existing content item.
 
 **Authentication:** Required
-**Permissions:** Content owner, Editor, or Admin role
+**Permissions:** Admin, Editor, or Author role
 
 <CodeGroup title="Update Content">
 
 ```bash {{ title: 'cURL' }}
-curl -X PUT "http://localhost:8787/api/content/{id}" \
+curl -X PUT "http://localhost:8787/api/blog-posts/{id}" \
   -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Updated Blog Post Title",
-    "status": "published",
-    "data": {
-      "title": "Updated Blog Post Title",
-      "content": "<p>Updated content...</p>"
-    }
+    "content": "<p>Updated content...</p>"
   }'
 ```
 
 ```js {{ title: 'JavaScript' }}
-const response = await fetch(`http://localhost:8787/api/content/${id}`, {
+const response = await fetch(`http://localhost:8787/api/blog-posts/${id}`, {
   method: 'PUT',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -565,11 +528,7 @@ const response = await fetch(`http://localhost:8787/api/content/${id}`, {
   },
   body: JSON.stringify({
     title: 'Updated Blog Post Title',
-    status: 'published',
-    data: {
-      title: 'Updated Blog Post Title',
-      content: '<p>Updated content...</p>',
-    },
+    content: '<p>Updated content...</p>',
   }),
 });
 
@@ -583,17 +542,17 @@ const { data } = await response.json();
 Delete a content item.
 
 **Authentication:** Required
-**Permissions:** Content owner, Editor, or Admin role
+**Permissions:** Admin, Editor, or Author role
 
 <CodeGroup title="Delete Content">
 
 ```bash {{ title: 'cURL' }}
-curl -X DELETE "http://localhost:8787/api/content/{id}" \
+curl -X DELETE "http://localhost:8787/api/blog-posts/{id}" \
   -H "Authorization: Bearer {token}"
 ```
 
 ```js {{ title: 'JavaScript' }}
-const response = await fetch(`http://localhost:8787/api/content/${id}`, {
+const response = await fetch(`http://localhost:8787/api/blog-posts/${id}`, {
   method: 'DELETE',
   headers: {
     'Authorization': `Bearer ${token}`,

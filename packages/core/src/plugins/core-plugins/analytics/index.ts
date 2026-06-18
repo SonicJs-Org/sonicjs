@@ -1,84 +1,15 @@
 /**
- * Core Analytics Plugin — Payload-shaped port.
+ * Core Analytics Plugin — document-model backed.
  *
- * Stub-grade analytics tracking + reporting routes. Legacy non-typed hooks
- * (request:start, request:end, user:login, content:view) subscribe via the
- * raw bus in onBoot. Service/middleware/model declarations from the old
- * PluginBuilder shape are dropped; they were stubs the runtime never wired.
+ * Events are stored as `analytics_event` documents. Stub-only hardcoded
+ * `/api/analytics/*` routes removed; real event tracking lives at `/api/events`.
+ * Legacy non-typed hooks (request:start, request:end, user:login, content:view)
+ * subscribe via the raw bus in onBoot.
  */
 
-import { Hono } from 'hono'
 import { definePlugin } from '../../sdk/define-plugin'
 import { analyticsAdminRoutes } from './routes/admin'
-
-const analyticsAPI = new Hono()
-
-analyticsAPI.get('/stats', async (c) => {
-  const timeRange = c.req.query('range') || '7d'
-  return c.json({
-    message: 'Analytics stats',
-    data: {
-      pageviews: 12500,
-      uniqueVisitors: 3200,
-      sessions: 4800,
-      avgSessionDuration: 245,
-      bounceRate: 0.35,
-      topPages: [
-        { path: '/', views: 3200 },
-        { path: '/about', views: 1800 },
-        { path: '/contact', views: 950 },
-      ],
-      timeRange,
-    },
-  })
-})
-
-analyticsAPI.post('/track', async (c) => {
-  const event = await c.req.json()
-  console.info('Analytics event tracked:', event)
-  return c.json({ message: 'Event tracked successfully', eventId: `event-${Date.now()}` })
-})
-
-analyticsAPI.get('/reports', async (c) => {
-  const reportType = c.req.query('type') || 'traffic'
-  const startDate = c.req.query('start')
-  const endDate = c.req.query('end')
-  return c.json({
-    message: 'Analytics report',
-    data: { reportType, dateRange: { start: startDate, end: endDate }, data: [] },
-  })
-})
-
-analyticsAPI.get('/realtime', async (c) => {
-  return c.json({
-    message: 'Real-time analytics',
-    data: {
-      activeUsers: 23,
-      activePages: [
-        { path: '/', users: 8 },
-        { path: '/blog', users: 5 },
-        { path: '/products', users: 4 },
-      ],
-      recentEvents: [],
-    },
-  })
-})
-
-const trackRequestStart = async (data: any) => {
-  data.analytics = {
-    startTime: Date.now(),
-    sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-  }
-  return data
-}
-
-const trackRequestEnd = async (data: any) => {
-  if (data.analytics) {
-    const duration = Date.now() - data.analytics.startTime
-    console.debug(`Request completed in ${duration}ms`)
-  }
-  return data
-}
+import { eventsApiRoutes } from './routes/api'
 
 export const analyticsPlugin = definePlugin({
   id: 'core-analytics',
@@ -89,7 +20,7 @@ export const analyticsPlugin = definePlugin({
   author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
 
   register(app) {
-    app.route('/api/analytics', analyticsAPI)
+    app.route('/api/events', eventsApiRoutes as any)
     app.route('/admin/analytics', analyticsAdminRoutes as any)
   },
 
@@ -106,8 +37,20 @@ export const analyticsPlugin = definePlugin({
   async onBoot(ctx) {
     const hooks = (ctx.raw as any)?.hooks
     if (!hooks?.register) return
-    hooks.register('request:start', trackRequestStart, 1)
-    hooks.register('request:end', trackRequestEnd, 1)
+    hooks.register('request:start', async (data: any) => {
+      data.analytics = {
+        startTime: Date.now(),
+        sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      }
+      return data
+    }, 1)
+    hooks.register('request:end', async (data: any) => {
+      if (data.analytics) {
+        const duration = Date.now() - data.analytics.startTime
+        console.debug(`Request completed in ${duration}ms`)
+      }
+      return data
+    }, 1)
     hooks.register('user:login', async (data: any, context: any) => {
       await context.services?.analyticsService?.trackEvent({
         eventType: 'auth',

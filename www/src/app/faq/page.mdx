@@ -39,7 +39,7 @@ SonicJS offers several unique advantages:
 
 **Developer Experience**
 - TypeScript-first with full type safety
-- Modern tech stack (Hono, Drizzle ORM, React)
+- Modern tech stack (Hono.js, Document Model on D1, HTMX admin UI)
 - Intuitive plugin architecture
 - Comprehensive API
 
@@ -103,13 +103,13 @@ Initial setup takes **under 5 minutes**:
 <CodeGroup title="Quick Setup">
 
 ```bash
-# Clone and install (2 minutes)
-git clone https://github.com/lane711/sonicjs.git
-cd sonicjs
+# Create a new SonicJS app (2 minutes)
+npx create-sonicjs@latest my-app
+cd my-app
 npm install
 
 # Run migrations (1 minute)
-npm run db:migrate
+npm run db:migrate:local
 
 # Start development server (instant)
 npm run dev
@@ -179,11 +179,11 @@ Yes! SonicJS includes a modern admin interface with:
 
 - **Content Editor** - Rich text editing with markdown support
 - **Media Library** - Drag-and-drop file management
-- **Collection Builder** - Visual collection definition
+- **Collection Registry** - code-defined via registerCollections() (read-only list at /admin/collections)
 - **Dashboard** - Analytics and system overview
 - **User Management** - Role-based access control
 
-The admin interface is built with React and accessible at `/admin`.
+The admin interface is built with HTMX and server-rendered templates and accessible at `/admin`.
 
 ### Can I customize the admin interface?
 
@@ -196,7 +196,7 @@ Add custom admin pages and menu items via plugins.
 Customize colors, fonts, and styles through CSS variables.
 
 **Component Overrides:**
-Replace built-in components with your own React components.
+Override admin templates / add admin pages via plugins.
 
 **Custom Pages:**
 Create entirely custom admin pages for specific workflows.
@@ -251,35 +251,21 @@ Simply consume the REST API from your frontend framework.
 
 ### How do I create a custom plugin?
 
-Creating a plugin is straightforward with the Plugin Builder SDK:
+Creating a plugin is straightforward with `definePlugin` and `registerPlugins`:
 
 <CodeGroup title="Basic Plugin">
 
 ```typescript
-import { PluginBuilder } from '@sonicjs-cms/core'
-import { Hono } from 'hono'
+import { definePlugin, registerPlugins } from '@sonicjs-cms/core'
 
-// Create plugin
-const plugin = PluginBuilder.create({
+const myPlugin = definePlugin({
   name: 'my-plugin',
-  version: '1.0.0',
-  description: 'My custom plugin'
-})
-
-// Add routes
-const routes = new Hono()
-routes.get('/hello', (c) => c.json({ message: 'Hello!' }))
-plugin.addRoute('/api/my-plugin', routes)
-
-// Add lifecycle hooks
-plugin.lifecycle({
-  activate: async (context) => {
-    console.log('Plugin activated!')
+  register(app) {
+    app.get('/custom', (c) => c.json({ message: 'Hello!' }))
   }
 })
 
-// Export
-export default plugin.build()
+registerPlugins(app, [myPlugin], { hookSystem, env })
 ```
 
 </CodeGroup>
@@ -307,13 +293,15 @@ SonicJS provides built-in authentication through the core auth plugin:
 <CodeGroup title="Auth in Plugins">
 
 ```typescript
-// Require authentication for routes
-plugin.addRoute('/api/protected', routes, {
-  requiresAuth: true
+import { requireAuth } from '@sonicjs-cms/core'
+
+// Require authentication for routes using middleware
+app.get('/api/protected', requireAuth, async (c) => {
+  // handler here
 })
 
-// Access authenticated user
-routes.get('/me', async (c) => {
+// Access authenticated user — c.get('user') = { userId, email, role }
+app.get('/me', requireAuth, async (c) => {
   const user = c.get('user')
   return c.json({
     userId: user.userId,
@@ -323,7 +311,7 @@ routes.get('/me', async (c) => {
 })
 
 // Check permissions
-routes.post('/admin-action', async (c) => {
+app.post('/admin-action', requireAuth, async (c) => {
   const user = c.get('user')
 
   if (user.role !== 'admin') {

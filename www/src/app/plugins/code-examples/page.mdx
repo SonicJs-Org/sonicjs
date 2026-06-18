@@ -394,19 +394,22 @@ The plugin implements install, uninstall, activate, and deactivate lifecycle hoo
 <CodeGroup title="Lifecycle Hooks">
 
 ```typescript
+import { definePlugin } from '@sonicjs-cms/core'
+
 // Install: creates the code_examples table and indexes
 // Uninstall: drops the code_examples table
 // Activate / Deactivate: logging only
 
-builder.lifecycle({
-  install: async (context) => {
-    await context.db.prepare(codeExampleMigration).run()
+const codeExamplesPlugin = definePlugin({
+  // ... other fields ...
+  install: async (ctx) => {
+    await ctx.db.prepare(codeExampleMigration).run()
   },
-  uninstall: async (context) => {
-    await context.db.prepare('DROP TABLE IF EXISTS code_examples').run()
+  uninstall: async (ctx) => {
+    await ctx.db.prepare('DROP TABLE IF EXISTS code_examples').run()
   },
-  activate: async () => { /* logs activation */ },
-  deactivate: async () => { /* logs deactivation */ },
+  activate: async (ctx) => { /* logs activation */ },
+  deactivate: async (ctx) => { /* logs deactivation */ },
 })
 ```
 

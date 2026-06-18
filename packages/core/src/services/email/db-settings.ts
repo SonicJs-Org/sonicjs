@@ -12,7 +12,12 @@
 import type { EmailLogDb } from './email-service'
 
 export interface DbEmailSettings {
+  /** Selected transport ('resend' | 'cloudflare'). */
+  provider?: string
+  /** Legacy Resend key (old apiKey field — kept for backward compat). */
   apiKey?: string
+  /** Current Resend key field from the provider selector UI. */
+  resendApiKey?: string
   fromEmail?: string
   fromName?: string
   replyTo?: string

@@ -15,7 +15,7 @@ tags:
   - "hooks"
   - "cloudflare"
   - "architecture"
-publishedAt: "2026-05-20"
+publishedAt: "2026-06-15"
 author:
   name: "SonicJS Team"
   twitter: "sonicjs"
@@ -35,21 +35,21 @@ openGraph:
 # SonicJS Plugins: How to Extend Your CMS
 
 <TLDRBox>
-**TL;DR** — SonicJS ships with a fluent `PluginBuilder` SDK and 21 first-party plugins you can study or fork. Plugins register custom routes, middleware, admin pages, menu items, and event hooks. Settings persist as JSON in a `plugins` table, lifecycle hooks (`install` / `activate` / `deactivate` / `uninstall`) run on demand, and the same plugin shape works whether you're tweaking your own app or publishing to npm.
+**TL;DR** — SonicJS v3 ships with `definePlugin` and 28 first-party plugins you can study or fork. Plugins register custom routes, admin menu items, and event hooks via `onBoot`. Settings are typed with Zod `configSchema`. Plugin data lives in the document repository — no new tables. `registerPlugins(app, [...], { hookSystem, env })` wires everything in.
 
 **Key Stats:**
-- 21 first-party core plugins shipped in `@sonicjs-cms/core`
-- 5 lifecycle hooks per plugin: `install`, `activate`, `configure`, `deactivate`, `uninstall`
+- 28 first-party core plugins shipped in `@sonicjs-cms/core`
+- `onBoot(ctx)` lifecycle for hooks and document-type registration
 - 20+ standard event hooks across auth, content, media, and request lifecycles
-- 8 plugin extension points: routes, middleware, models, services, admin pages, components, menu items, hooks
-- 1 source of truth — `manifest.json` drives discovery, admin UI, and bootstrap
+- Extension points: routes, admin menu items, document types, event hooks
+- No manifest.json — plugins are pure TypeScript objects registered in code
 </TLDRBox>
 
 Most CMS platforms treat extensibility as an afterthought — a webhook here, a "custom field" dropdown there. SonicJS takes the opposite stance: **plugins are how features get built**. Authentication, OAuth, OTP login, analytics, Stripe, the rich-text editors, even the demo seed data — all plugins. The same SDK you'd use to add a side feature is the one the core team uses to build the platform.
 
-That has a useful side effect: when you write your own plugin, you're not on a private side road. You're using the same lifecycle hooks, the same context object, and the same registration entry point as 21 first-party plugins you can read end-to-end.
+That has a useful side effect: when you write your own plugin, you're not on a private side road. You're using the same lifecycle hooks, the same context object, and the same registration entry point as 28 first-party plugins you can read end-to-end.
 
-This guide walks through the plugin system as it actually exists in `packages/core/src/plugins`: how a plugin is shaped, how it registers, how to expose routes, how settings persist, and how to publish your work to npm. Every example maps to real code from the SonicJS repo.
+This guide walks through the plugin system as it actually exists in `packages/core/src/plugins`: how a plugin is shaped, how it registers, how to expose routes, how settings persist via typed config schemas, and how to publish your work to npm. Every example maps to real code from the SonicJS repo.
 
 ## Why the Plugin Model Matters
 
@@ -65,38 +65,45 @@ For a high-level catalog of what already exists, see the [plugins index](/plugin
 
 ## The Plugin Interface
 
-Every plugin implements the `Plugin` interface from `@sonicjs-cms/core`:
+Every plugin is a plain object created with `definePlugin` from `@sonicjs-cms/core`:
 
 ```typescript
-export interface Plugin {
-  name: string
-  version: string
-  description?: string
-  author?: { name: string; email?: string; url?: string }
-  dependencies?: string[]
-  compatibility?: string
-  license?: string
+import { definePlugin } from '@sonicjs-cms/core'
+import { z } from 'zod'
 
-  // Extension points
-  routes?: PluginRoutes[]
-  middleware?: PluginMiddleware[]
-  models?: PluginModel[]
-  services?: PluginService[]
-  adminPages?: PluginAdminPage[]
-  adminComponents?: PluginComponent[]
-  menuItems?: PluginMenuItem[]
-  hooks?: PluginHook[]
+const myPlugin = definePlugin({
+  id: 'my-plugin',
+  name: 'My Plugin',
+  version: '1.0.0',
+  description?: 'Optional description',
 
-  // Lifecycle hooks
-  install?: (context: PluginContext) => Promise<void>
-  uninstall?: (context: PluginContext) => Promise<void>
-  activate?: (context: PluginContext) => Promise<void>
-  deactivate?: (context: PluginContext) => Promise<void>
-  configure?: (config: PluginConfig) => Promise<void>
-}
+  // Typed config schema (replaces plugins-table JSON)
+  configSchema: z.object({
+    apiKey: z.string(),
+    webhookUrl: z.string().url().optional(),
+  }),
+
+  // Routes registered directly on the Hono app
+  register(app) {
+    app.get('/my-route', handler)
+  },
+
+  // Admin sidebar entries
+  menu: [
+    { label: 'My Page', path: '/admin/my-page', icon: 'IconName', order: 100 }
+  ],
+
+  // Boot-time: hooks, document-type registration, etc.
+  onBoot(ctx) {
+    ctx.hooks.on('content:save', async (data) => {
+      // transform or validate
+      return data
+    })
+  },
+})
 ```
 
-You can build that object by hand, or — much more commonly — use the fluent `PluginBuilder` SDK that ships with the core package.
+`definePlugin` is a lightweight identity function — it returns the object as-is with full TypeScript inference. No builder chain, no compilation step.
 
 ## A Minimal "Hello Plugin"
 
@@ -104,107 +111,50 @@ The smallest meaningful plugin in the SonicJS repo is the `hello-world-plugin`. 
 
 ```typescript
 // src/plugins/hello-world/index.ts
-import { Hono } from 'hono'
 import { html } from 'hono/html'
-import { PluginBuilder } from '@sonicjs-cms/core'
-import type { Plugin } from '@sonicjs-cms/core'
+import { definePlugin } from '@sonicjs-cms/core'
 
-export function createHelloWorldPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'hello-world',
-    version: '1.0.0',
-    description: 'A simple Hello World plugin demonstration',
-  })
+export const helloWorldPlugin = definePlugin({
+  id: 'hello-world',
+  name: 'Hello World',
+  version: '1.0.0',
+  description: 'A simple Hello World plugin demonstration',
 
-  builder.metadata({
-    author: { name: 'You', email: 'you@example.com' },
-    license: 'MIT',
-    compatibility: '^2.0.0',
-  })
-
-  const routes = new Hono()
-  routes.get('/', async (c: any) => {
-    const user = c.get('user') as { email?: string } | undefined
-    return c.html(html`<h1>Hello, ${user?.email ?? 'world'}!</h1>`)
-  })
-
-  builder.addRoute('/admin/hello-world', routes, {
-    description: 'Hello World page',
-    requiresAuth: true,
-    priority: 90,
-  })
-
-  builder.addMenuItem('Hello World', '/admin/hello-world', {
-    icon: 'hand-raised',
-    order: 90,
-    permissions: ['hello-world:view'],
-  })
-
-  builder.lifecycle({
-    activate: async () => console.info('hello-world activated'),
-    deactivate: async () => console.info('hello-world deactivated'),
-  })
-
-  return builder.build()
-}
-
-export const helloWorldPlugin = createHelloWorldPlugin()
-```
-
-Five things are happening:
-
-1. **Identity** — `name` + `version` are the only required fields; `metadata()` fills in author, license, and the SonicJS version range you support.
-2. **Route** — a Hono router is mounted at `/admin/hello-world` and gated by `requiresAuth: true`.
-3. **Menu item** — appears in the admin sidebar with a Heroicon and ordering.
-4. **Permissions** — the `hello-world:view` permission is the contract; you'll declare it in `manifest.json` (next section).
-5. **Lifecycle hooks** — `activate` and `deactivate` run when an admin toggles the plugin in the UI.
-
-Drop this file into `src/plugins/hello-world/index.ts` and re-export it from `src/plugins/index.ts`. SonicJS picks it up at boot.
-
-## The Manifest: Single Source of Truth
-
-The companion to your `index.ts` is a `manifest.json` next to it. The manifest is what the SonicJS bootstrapper actually scans to discover plugins, populate the admin UI, and seed the `plugins` table:
-
-```json
-{
-  "id": "hello-world",
-  "name": "Hello World",
-  "version": "1.0.0",
-  "description": "A simple Hello World plugin demonstration",
-  "author": "Your Name",
-  "license": "MIT",
-  "category": "utilities",
-  "iconEmoji": "👋",
-  "is_core": false,
-  "defaultSettings": {},
-  "permissions": {
-    "hello-world:view": "View Hello World page"
+  register(app) {
+    app.get('/admin/hello-world', async (c: any) => {
+      const user = c.get('user') as { email?: string } | undefined
+      return c.html(html`<h1>Hello, ${user?.email ?? 'world'}!</h1>`)
+    })
   },
-  "adminMenu": {
-    "label": "Hello World",
-    "icon": "hand-raised",
-    "path": "/admin/hello-world",
-    "order": 90
-  }
-}
+
+  menu: [
+    { label: 'Hello World', path: '/admin/hello-world', icon: 'HandRaisedIcon', order: 90 },
+  ],
+
+  onBoot(ctx) {
+    ctx.logger?.info('hello-world booted')
+  },
+})
 ```
 
-A few notes that will save you time:
+Four things are happening:
 
-- `id` must match the `name` you pass to `PluginBuilder.create()`.
-- `category` is one of `utilities`, `security`, `communication`, `content`, `editor`, `analytics`, `payments`, etc. The admin UI groups by it.
-- `defaultSettings` is what gets written into the `plugins.settings` JSON column on first install.
-- `is_core: true` flags a plugin as part of the platform (it cannot be uninstalled). For your code, leave it `false`.
+1. **Identity** — `id`, `name`, and `version` are the required fields.
+2. **Route** — the handler is registered directly on the Hono app inside `register(app)`.
+3. **Menu item** — appears in the admin sidebar with an icon and ordering.
+4. **`onBoot`** — runs at bootstrap; use it for hook registration, document-type registration, or any one-time setup.
 
-## Registering Plugins with `createSonicJS`
+Drop this file into `src/plugins/hello-world/index.ts` and pass it to `registerPlugins`. SonicJS picks it up at boot.
 
-Plugins compose into a SonicJS app the way middleware composes into Express:
+## Registering Plugins with `registerPlugins`
+
+Plugins compose into a SonicJS app via `registerPlugins`. There is no `manifest.json` and no auto-discovery — plugins are plain TypeScript objects you hand to the function:
 
 ```typescript
 // src/index.ts
 import { Hono } from 'hono'
 import {
-  createSonicJS,
+  registerPlugins,
   authPlugin,
   oauthProvidersPlugin,
   otpLoginPlugin,
@@ -216,136 +166,108 @@ import { postsCollection } from './collections/posts'
 
 const app = new Hono<{ Bindings: Env }>()
 
-const cms = createSonicJS({
-  collections: [postsCollection],
-  plugins: [
-    // First-party plugins
-    authPlugin(),
-    emailPlugin(),
-    oauthProvidersPlugin(),
-    otpLoginPlugin({ codeLength: 6, codeExpiryMinutes: 10 }),
-    analyticsPlugin(),
+// registerPlugins wires routes, menu items, and onBoot callbacks
+registerPlugins(app, [
+  // First-party plugins
+  authPlugin,
+  emailPlugin,
+  oauthProvidersPlugin,
+  otpLoginPlugin,
+  analyticsPlugin,
 
-    // Your own plugins
-    helloWorldPlugin,
-  ],
-})
+  // Your own plugins
+  helloWorldPlugin,
+], { hookSystem, env })
 
-app.route('/', cms.app)
 export default app
 ```
 
-Plugins load in order. If a plugin declares `dependencies: ['email-plugin']`, the registry resolves load order automatically — email is initialized first. Authentication-aware plugins like OTP login and magic link rely on this mechanism so they can refuse to start if the email plugin isn't configured.
+`registerPlugins` iterates the array in order: calls `register(app)` for routes, merges `menu` entries into the sidebar, then calls `onBoot(ctx)` for each plugin. No manifest scanning, no database lookup at startup.
 
 ## Plugin with Custom Routes
 
-Routes are the most common extension point. The `PluginRoutes` definition takes a Hono app, a path prefix, and a few options:
+Routes are the most common extension point. Register them directly on the Hono `app` inside `register(app)`:
 
 ```typescript
-import { Hono } from 'hono'
 import { z } from 'zod'
-import { PluginBuilder, requireAuth, requireRole } from '@sonicjs-cms/core'
-import type { Plugin } from '@sonicjs-cms/core'
+import { definePlugin, requireAuth, requireRole } from '@sonicjs-cms/core'
 
 const newsletterSchema = z.object({
   email: z.string().email(),
   source: z.string().max(50).optional(),
 })
 
-export function createNewsletterPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'newsletter',
-    version: '0.1.0',
-    description: 'Lightweight email signup list',
-  })
+export const newsletterPlugin = definePlugin({
+  id: 'newsletter',
+  name: 'Newsletter',
+  version: '0.1.0',
+  description: 'Lightweight email signup list',
 
-  // Public API: anyone can subscribe
-  const publicAPI = new Hono()
-  publicAPI.post('/subscribe', async (c: any) => {
-    const body = await c.req.json()
-    const parsed = newsletterSchema.safeParse(body)
-    if (!parsed.success) {
-      return c.json({ error: 'Invalid', details: parsed.error.issues }, 400)
-    }
-    await c.env.DB.prepare(
-      'INSERT OR IGNORE INTO newsletter_subscribers (email, source, created_at) VALUES (?, ?, ?)'
-    )
-      .bind(parsed.data.email, parsed.data.source ?? null, Math.floor(Date.now() / 1000))
-      .run()
-    return c.json({ success: true })
-  })
+  register(app) {
+    // Public API: anyone can subscribe
+    app.post('/api/newsletter/subscribe', async (c: any) => {
+      const body = await c.req.json()
+      const parsed = newsletterSchema.safeParse(body)
+      if (!parsed.success) {
+        return c.json({ error: 'Invalid', details: parsed.error.issues }, 400)
+      }
+      // Store as a document instead of a custom table
+      const repo = c.get('documentRepository')
+      await repo.create({
+        type: 'newsletter-subscriber',
+        data: { email: parsed.data.email, source: parsed.data.source ?? null },
+      })
+      return c.json({ success: true })
+    })
 
-  // Admin API: only admins can list
-  const adminAPI = new Hono()
-  adminAPI.get('/list', requireAuth(), requireRole('admin'), async (c: any) => {
-    const { results } = await c.env.DB.prepare(
-      'SELECT email, source, created_at FROM newsletter_subscribers ORDER BY created_at DESC LIMIT 200'
-    ).all()
-    return c.json({ data: results })
-  })
-
-  builder.addRoute('/api/newsletter', publicAPI, { description: 'Public signup' })
-  builder.addRoute('/api/admin/newsletter', adminAPI, {
-    description: 'Admin-only list',
-    requiresAuth: true,
-    roles: ['admin'],
-  })
-
-  return builder.build()
-}
+    // Admin API: only admins can list
+    app.get('/api/admin/newsletter/list', requireAuth(), requireRole('admin'), async (c: any) => {
+      const repo = c.get('documentRepository')
+      const { data } = await repo.list({ type: 'newsletter-subscriber' })
+      return c.json({ data })
+    })
+  },
+})
 ```
 
-Two routers, two privacy levels, one plugin. The `requireAuth()` and `requireRole()` middleware are the same ones documented in the [SonicJS authentication guide](/authentication) — your plugin gets the platform's auth model for free.
+Two routes, two privacy levels, one plugin. The `requireAuth()` and `requireRole()` middleware are the same ones documented in the [SonicJS authentication guide](/authentication) — your plugin gets the platform's auth model for free. Subscriber records live in the document repository; no custom table needed.
 
-## Plugin with Settings (DB-Backed JSON)
+## Plugin with Settings (Zod `configSchema`)
 
-The most underappreciated piece of the plugin system is **settings persistence**. SonicJS keeps a `plugins` table where every row has a `settings TEXT` column holding a JSON blob. Your plugin owns the shape of that JSON; the platform handles persistence, the admin UI form, and reload across requests.
+The most underappreciated piece of the plugin system is **typed settings**. Instead of a free-form JSON blob in a `plugins` table, v3 plugins declare a Zod `configSchema`. The platform validates config at boot, surfaces a typed settings form in the admin UI, and passes the parsed config into your handlers.
 
 This is the pattern used by the OTP login and OAuth providers plugins:
 
 ```typescript
-// 1. Define the shape
-interface NewsletterSettings {
-  doubleOptIn: boolean
-  fromAddress: string
-  welcomeSubject: string
-  rateLimitPerHour: number
-}
+import { definePlugin } from '@sonicjs-cms/core'
+import { z } from 'zod'
 
-const DEFAULT_SETTINGS: NewsletterSettings = {
-  doubleOptIn: true,
-  fromAddress: 'hello@example.com',
-  welcomeSubject: 'Welcome!',
-  rateLimitPerHour: 30,
-}
+export const newsletterPlugin = definePlugin({
+  id: 'newsletter',
+  name: 'Newsletter',
+  version: '0.1.0',
 
-// 2. Load settings inside a route
-async function loadSettings(db: any): Promise<NewsletterSettings> {
-  const row = await db
-    .prepare(`SELECT settings FROM plugins WHERE id = 'newsletter'`)
-    .first() as { settings: string | null } | null
+  // 1. Declare the shape — platform validates + generates the admin form
+  configSchema: z.object({
+    doubleOptIn: z.boolean().default(true),
+    fromAddress: z.string().email().default('hello@example.com'),
+    welcomeSubject: z.string().default('Welcome!'),
+    rateLimitPerHour: z.number().int().positive().default(30),
+  }),
 
-  if (!row?.settings) return DEFAULT_SETTINGS
-
-  try {
-    const saved = JSON.parse(row.settings)
-    return { ...DEFAULT_SETTINGS, ...saved }
-  } catch {
-    return DEFAULT_SETTINGS
-  }
-}
-
-// 3. Use them in your handler
-publicAPI.post('/subscribe', async (c: any) => {
-  const settings = await loadSettings(c.env.DB)
-  // ...rate-limit by settings.rateLimitPerHour, send welcome email
-  //   from settings.fromAddress, etc.
+  register(app) {
+    app.post('/api/newsletter/subscribe', async (c: any) => {
+      // 2. Config is already validated — access via c.get('pluginConfig')
+      const config = c.get('pluginConfig') as { fromAddress: string; rateLimitPerHour: number }
+      // ...rate-limit by config.rateLimitPerHour, send welcome email from config.fromAddress
+    })
+  },
 })
 ```
 
-The `defaultSettings` field in your `manifest.json` seeds the row on first install. After that, admins edit settings through the auto-generated form on the plugin's admin page (`/admin/plugins/newsletter`), and changes are written straight back to the same JSON column.
+Admins edit settings through the auto-generated form at `/admin/plugins/newsletter`. No `plugins` table to query, no JSON.parse/merge boilerplate — the platform handles validation and persistence.
 
-This is exactly how `otp-login-plugin/index.ts` loads its `OTPSettings` and how `oauth-providers/index.ts` loads its `OAuthPluginSettings`. No bespoke schema, no extra migrations — just a JSON blob with sensible defaults.
+This is exactly how `otp-login-plugin` types its `OTPSettings` and how `oauth-providers` types its `OAuthPluginSettings`. No bespoke schema, no extra migrations.
 
 ## Hooking Into Auth and Content Events
 
@@ -365,131 +287,102 @@ HOOKS.REQUEST_START   // 'request:start'
 // ...and a dozen more
 ```
 
-A plugin registers handlers with `builder.addHook()`. Handlers receive the event payload, can mutate it, and return the (possibly modified) data:
+Register handlers inside `onBoot(ctx)`. Handlers receive the event payload, can mutate it, and return the (possibly modified) data:
 
 ```typescript
-// Auto-tag posts with publish timestamp
-builder.addHook('content:publish', async (data, context) => {
-  context.logger.info(`Publishing ${data.collection}/${data.id}`)
-  data.publishedAt = data.publishedAt ?? Math.floor(Date.now() / 1000)
-  return data
-})
+import { definePlugin } from '@sonicjs-cms/core'
 
-// Mirror new users into a CRM on register
-builder.addHook('auth:register', async (data) => {
-  await fetch('https://crm.example.com/contacts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: data.email, source: 'sonicjs' }),
-  })
-  return data
+export const auditPlugin = definePlugin({
+  id: 'audit',
+  name: 'Audit',
+  version: '0.1.0',
+
+  onBoot(ctx) {
+    // Auto-tag posts with publish timestamp
+    ctx.hooks.on('content:publish', async (data) => {
+      data.publishedAt = data.publishedAt ?? Math.floor(Date.now() / 1000)
+      return data
+    })
+
+    // Mirror new users into a CRM on register
+    ctx.hooks.on('auth:register', async (data) => {
+      await fetch('https://crm.example.com/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email, source: 'sonicjs' }),
+      })
+      return data
+    })
+  },
 })
 ```
 
 If you need to push events out of your CMS rather than handle them in-process, that's the [webhooks](/webhooks) system — different wiring, same vocabulary of event names.
 
-You can also define **custom hooks** to let other plugins extend yours. Pick a name (`my-plugin:before-send`) and call `context.hooks.execute('my-plugin:before-send', payload)`. Any handler registered for that name participates.
+You can also define **custom hooks** to let other plugins extend yours. Pick a name (`my-plugin:before-send`) and call `ctx.hooks.emit('my-plugin:before-send', payload)`. Any handler registered for that name participates.
 
 ## A More Complete Plugin: Routes + Settings + Hooks
 
-Putting the three pieces together, here's a `plugin that hooks into auth events, exposes a route, and reads settings from the DB:
+Putting the three pieces together, here's a plugin that hooks into auth events, exposes a route, and reads a typed config — all without creating any new tables:
 
 ```typescript
-import { Hono } from 'hono'
-import { PluginBuilder, requireAuth } from '@sonicjs-cms/core'
-import type { Plugin } from '@sonicjs-cms/core'
+import { definePlugin, requireAuth } from '@sonicjs-cms/core'
+import { z } from 'zod'
 
-interface AuditSettings {
-  logFailedLogins: boolean
-  logSuccessfulLogins: boolean
-  retentionDays: number
-}
+export const loginAuditPlugin = definePlugin({
+  id: 'login-audit',
+  name: 'Login Audit',
+  version: '0.1.0',
+  description: 'Append-only log of every login attempt',
 
-const DEFAULTS: AuditSettings = {
-  logFailedLogins: true,
-  logSuccessfulLogins: false,
-  retentionDays: 90,
-}
+  configSchema: z.object({
+    logFailedLogins: z.boolean().default(true),
+    logSuccessfulLogins: z.boolean().default(false),
+    retentionDays: z.number().int().positive().default(90),
+  }),
 
-async function loadSettings(db: any): Promise<AuditSettings> {
-  const row = await db
-    .prepare(`SELECT settings FROM plugins WHERE id = 'login-audit'`)
-    .first() as { settings: string | null } | null
-  if (!row?.settings) return DEFAULTS
-  try {
-    return { ...DEFAULTS, ...JSON.parse(row.settings) }
-  } catch {
-    return DEFAULTS
-  }
-}
+  onBoot(ctx) {
+    // Register a document type to store audit entries
+    ctx.documentTypeRegistry.register({
+      id: 'login-audit-entry',
+      name: 'Login Audit Entry',
+      source: 'system',
+      settings: { baseGrants: { public: [] } },
+    })
 
-export function createLoginAuditPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'login-audit',
-    version: '0.1.0',
-    description: 'Append-only log of every login attempt',
-  })
+    // Hook: capture every login attempt
+    ctx.hooks.on('auth:login', async (data) => {
+      const config = ctx.getConfig() as { logSuccessfulLogins: boolean; logFailedLogins: boolean }
+      const success = !!data.userId
 
-  // Hook: capture every login attempt
-  builder.addHook('auth:login', async (data, context) => {
-    const settings = await loadSettings(context.db)
-    const success = !!data.userId
+      if (success && !config.logSuccessfulLogins) return data
+      if (!success && !config.logFailedLogins) return data
 
-    if (success && !settings.logSuccessfulLogins) return data
-    if (!success && !settings.logFailedLogins) return data
+      await ctx.documentService.create({
+        type: 'login-audit-entry',
+        data: { email: data.email, success, ip: data.ip ?? null },
+      })
 
-    await context.db
-      .prepare(
-        `INSERT INTO login_audit_log (email, success, ip, ts)
-         VALUES (?, ?, ?, ?)`
-      )
-      .bind(data.email, success ? 1 : 0, data.ip ?? null, Math.floor(Date.now() / 1000))
-      .run()
+      return data
+    })
+  },
 
-    return data
-  })
+  register(app) {
+    // Admin route: read the log from the document repository
+    app.get('/api/admin/login-audit', requireAuth(), async (c: any) => {
+      const repo = c.get('documentRepository')
+      const { data } = await repo.list({ type: 'login-audit-entry' })
+      return c.json({ data })
+    })
+  },
 
-  // Admin route: read the log
-  const adminAPI = new Hono()
-  adminAPI.get('/', requireAuth(), async (c: any) => {
-    const { results } = await c.env.DB.prepare(
-      `SELECT email, success, ip, ts FROM login_audit_log
-       ORDER BY ts DESC LIMIT 500`
-    ).all()
-    return c.json({ data: results })
-  })
-  builder.addRoute('/api/admin/login-audit', adminAPI, {
-    description: 'Login audit log',
-    requiresAuth: true,
-    roles: ['admin'],
-  })
-
-  // Lifecycle: provision and clean up the table
-  builder.lifecycle({
-    install: async (context) => {
-      await context.db.exec(`
-        CREATE TABLE IF NOT EXISTS login_audit_log (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          email TEXT NOT NULL,
-          success INTEGER NOT NULL,
-          ip TEXT,
-          ts INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_login_audit_ts ON login_audit_log(ts);
-      `)
-    },
-    uninstall: async (context) => {
-      await context.db.exec('DROP TABLE IF EXISTS login_audit_log')
-    },
-  })
-
-  return builder.build()
-}
-
-export const loginAuditPlugin = createLoginAuditPlugin()
+  menu: [
+    { label: 'Login Audit', path: '/admin/login-audit', icon: 'ShieldCheckIcon', order: 80 },
+  ],
+})
 ```
 
-That's a fully production-shaped plugin in under 70 lines: settings, a hook, a protected route, table provisioning, and clean uninstall. Compare it to `packages/core/src/plugins/core-plugins/security-audit-plugin/` and you'll recognize the shape.
+That's a fully production-shaped plugin in under 60 lines: typed config schema, an `onBoot` hook with document-type registration, a protected route, and no `CREATE TABLE` or `DROP TABLE` anywhere. Compare it to `packages/core/src/plugins/core-plugins/security-audit-plugin/` and you'll recognize the shape.
 
 ## Publishing Your Plugin to npm
 
@@ -503,8 +396,7 @@ my-org-sonicjs-newsletter/
 ├── tsconfig.json
 ├── README.md
 └── src/
-    ├── index.ts
-    └── manifest.json
+    └── index.ts
 ```
 
 `package.json` should declare `@sonicjs-cms/core` as a peer dependency so consumers don't double-install:
@@ -516,13 +408,12 @@ my-org-sonicjs-newsletter/
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "src/manifest.json"],
+  "files": ["dist"],
   "exports": {
-    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" },
-    "./manifest.json": "./src/manifest.json"
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
   },
   "peerDependencies": {
-    "@sonicjs-cms/core": "^2.0.0",
+    "@sonicjs-cms/core": "^3.0.0",
     "hono": "^4.0.0"
   },
   "scripts": {
@@ -548,37 +439,34 @@ npm install @my-org/sonicjs-newsletter
 ```typescript
 import { newsletterPlugin } from '@my-org/sonicjs-newsletter'
 
-const cms = createSonicJS({
-  collections: [...],
-  plugins: [authPlugin(), newsletterPlugin],
-})
+registerPlugins(app, [authPlugin, newsletterPlugin], { hookSystem, env })
 ```
 
 Two conventions worth following:
 
-- **Export both the factory and an instance** — `createNewsletterPlugin()` for users who need configuration, `newsletterPlugin` for the zero-config path.
-- **Ship `manifest.json` in the published package**. The SonicJS plugin discovery system can read it from `node_modules` so your plugin shows up in the admin UI without any wiring on the consumer's side.
+- **Export a configured factory and a zero-config instance** — `createNewsletterPlugin({ fromAddress: '...' })` for users who need customization, `newsletterPlugin` for the zero-config path.
+- **No manifest.json needed.** The plugin object is the contract — everything the platform needs is declared on it (`id`, `configSchema`, `menu`, `register`, `onBoot`).
 
 ## Best Practices
 
 A short list of things that separate a hobby plugin from one you'd run in production:
 
-- **Validate everything with Zod.** Every route input. Every settings load. Every hook payload you emit. The first-party plugins do this without exception.
-- **Always provide `DEFAULT_SETTINGS`** and merge them into whatever you load from the DB. Schema drift is real; your plugin should keep working when an old install upgrades.
-- **Use lifecycle hooks for side effects.** Tables get created in `install`, indexes in `install`, hook handlers registered in `activate`, and everything torn down in `deactivate` / `uninstall`.
-- **Scope your DB tables.** Prefix table names with your plugin id (`newsletter_subscribers`, not `subscribers`). Two plugins should never collide on a name.
-- **Prefer named Heroicons** for menu items (`puzzle-piece`, `chart-bar`, `cog`). The admin sidebar resolves them automatically.
-- **Don't ship secrets.** Settings are admin-editable but they're not secrets storage. Real secrets belong in Cloudflare Worker secrets, surfaced via env bindings.
-- **Document the settings shape** in your README. The auto-generated admin form is convenient but not self-documenting.
+- **Validate everything with Zod.** Every route input. Every `configSchema`. Every hook payload you emit. The first-party plugins do this without exception.
+- **Declare `configSchema` with `.default()` on every field.** The platform validates on boot — a plugin without defaults will fail if an admin hasn't configured it yet.
+- **Use `onBoot` for side effects.** Register document types, subscribe to hooks, and initialize in-memory state here. `register(app)` is for routes only.
+- **Store data in the document repository, not new tables.** Register a `document_type` in `onBoot` and use `DocumentRepository`/`DocumentsService` for reads and writes (R4). No `CREATE TABLE`, no `DROP TABLE`.
+- **Prefer named icon components** for menu items (`ShieldCheckIcon`, `ChartBarIcon`, `CogIcon`). The admin sidebar resolves them automatically.
+- **Don't ship secrets.** Config schema fields are admin-editable but they're not secrets storage. Real secrets belong in Cloudflare Worker secrets, surfaced via env bindings.
+- **Document the configSchema** in your README. The auto-generated admin form is convenient but not self-documenting.
 
 For configuration patterns, the [code examples plugin](/plugins/code-examples) is the easiest first-party plugin to read end-to-end — it covers the same ground as a CRUD plugin you might write yourself.
 
 ## Next Steps
 
-You now have the full picture: the `Plugin` interface, the `PluginBuilder` SDK, route registration, DB-backed settings, lifecycle hooks, event hooks, and the npm publish path. Where to go from here:
+You now have the full picture: `definePlugin`, `registerPlugins`, route registration, `configSchema`-typed settings, `onBoot` hooks, event hooks, and the npm publish path. Where to go from here:
 
-- **[Plugin development guide](/plugins/development)** — full API reference for every builder method
-- **[Plugins catalog](/plugins)** — 21 first-party plugins to read or fork
+- **[Plugin development guide](/plugins/development)** — full API reference for `definePlugin` and `registerPlugins`
+- **[Plugins catalog](/plugins)** — 28 first-party plugins to read or fork
 - **[OAuth plugin internals](/plugins/oauth)** — production-grade plugin with multi-provider settings and KV-cached state
 - **[Code examples plugin](/plugins/code-examples)** — minimal CRUD plugin walkthrough
 - **[Hooks reference](/hooks)** — every standard event name and payload shape
@@ -587,11 +475,11 @@ You now have the full picture: the `Plugin` interface, the `PluginBuilder` SDK, 
 
 ## Key Takeaways
 
-- A SonicJS plugin is a plain TypeScript object that conforms to the `Plugin` interface — built fluently with `PluginBuilder` or hand-rolled.
+- A SonicJS plugin is a plain TypeScript object created with `definePlugin` — no builder chain, no YAML, no manifest.
 - The same shape works for **internal plugins** (`src/plugins/`) and **published packages** on npm; only the import path changes.
-- **`manifest.json`** is the discovery contract. Get it right and your plugin shows up everywhere automatically.
-- **DB-backed JSON settings** in the `plugins.settings` column give you persistent, admin-editable configuration with zero migrations.
-- **Lifecycle hooks** (`install` / `activate` / `configure` / `deactivate` / `uninstall`) keep your plugin a good citizen of the platform.
+- **No `manifest.json`** — plugins are registered in code via `registerPlugins(app, [...], { hookSystem, env })`.
+- **Typed `configSchema`** (Zod) replaces free-form JSON in a `plugins` table — the platform validates on boot and generates the admin form.
+- **`onBoot(ctx)`** is the single lifecycle hook for side effects: document-type registration, hook subscriptions, in-memory init.
 - **Event hooks** like `content:publish` and `auth:login` let plugins compose without coupling to one another.
 
 Have an idea for a plugin or want feedback on one you're building? Join us on [Discord](https://discord.gg/sonicjs) or open a discussion on [GitHub](https://github.com/lane711/sonicjs).

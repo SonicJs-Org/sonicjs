@@ -13,7 +13,7 @@ import type { Context } from 'hono'
 
 // Phase 2b — per-document ACL on admin mutations (defense-in-depth on top of the route role guards).
 // Returns a 403 Response when denied, else null. rootId '' performs a base-grant-only check (create).
-async function denyIfNotAllowed(
+export async function denyIfNotAllowed(
   c: Context,
   db: D1Database,
   rootId: string,
@@ -39,7 +39,7 @@ async function denyIfNotAllowed(
  * `tenant_id !== effectiveTenant`, so it resolves to null (→ 404) exactly as the old
  * `AND tenant_id = ?` filter did. Returns null when missing or out-of-scope.
  */
-async function resolveDocScope(
+export async function resolveDocScope(
   c: Context,
   db: D1Database,
   by: { id: string } | { rootId: string },
@@ -269,6 +269,7 @@ adminDocumentsRoutes.post('/', async (c) => {
       typeSchemaVersion: docType.schemaVersion,
       maxVersionsPerRoot: docType.settings.maxVersionsPerRoot,
       tenantId,
+      versioning: docType.settings?.versioning ?? false,
     })
 
     // Inject the resolved (effective) tenant; never trust a body-supplied tenant.
@@ -316,6 +317,7 @@ adminDocumentsRoutes.put('/:rootId', async (c) => {
       typeSchemaVersion: docType?.schemaVersion,
       maxVersionsPerRoot: docType?.settings.maxVersionsPerRoot,
       tenantId: scope.tenantId,
+      versioning: docType?.settings?.versioning ?? false,
     })
 
     const doc = await svc.saveDraft(rootId, validation.data, user.userId)
@@ -345,6 +347,7 @@ adminDocumentsRoutes.post('/:id/publish', async (c) => {
       queryableFields: docType?.queryableFields ?? [],
       typeSchemaVersion: docType?.schemaVersion,
       tenantId: scope.tenantId,
+      versioning: docType?.settings?.versioning ?? false,
     })
 
     const doc = await svc.publish(id, user.userId)

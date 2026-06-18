@@ -64,7 +64,7 @@ This post is an honest comparison. Where Ghost is better, we'll say so. Where So
 | **Content model** | Built-in: posts, pages, tags, authors | Unlimited custom collections |
 | **Membership / paid subs** | Built-in (Stripe) | Plugin / custom (Stripe-friendly) |
 | **Newsletter** | Built-in (Mailgun) | Plugin / external (Resend, Postmark, etc.) |
-| **Editor** | Polished Lexical editor with cards | HTMX admin + rich text fields |
+| **Editor** | Polished Lexical editor with cards | HTMX admin + Lexical rich text editor |
 | **Themes** | Handlebars themes ecosystem | Headless: bring your own frontend |
 | **API** | REST Content + Admin API | REST + auto-generated CRUD |
 | **TypeScript** | Partial (admin client) | Native, first-class |
@@ -184,17 +184,20 @@ Want to gate content based on a custom rule? Run an A/B test? Personalize based 
 SonicJS [plugins](/plugins) let you hook into the request lifecycle, add custom routes, and run code at the edge alongside your content:
 
 ```typescript
-import { PluginBuilder } from '@sonicjs-cms/core'
+import { definePlugin } from '@sonicjs-cms/core'
 
-const personalizationPlugin = PluginBuilder.create('personalization')
-  .addHook('content:beforeReturn', async (post, ctx) => {
-    const country = ctx.request.cf?.country
-    if (country === 'DE' && post.translations?.de) {
-      return { ...post, content: post.translations.de }
-    }
-    return post
-  })
-  .build()
+const personalizationPlugin = definePlugin({
+  name: 'personalization',
+  hooks: {
+    'content:read': async (post, ctx) => {
+      const country = ctx.request.cf?.country
+      if (country === 'DE' && post.translations?.de) {
+        return { ...post, content: post.translations.de }
+      }
+      return post
+    },
+  },
+})
 ```
 
 That hook runs in the same edge process as the content read — no extra hop, no extra service.
@@ -265,33 +268,36 @@ Pair it with the [authentication](/authentication) plugin (magic link works beau
 SonicJS doesn't ship a newsletter sender today, but a 60-line plugin gets you the Ghost flow (publish → email):
 
 ```typescript
-import { PluginBuilder } from '@sonicjs-cms/core'
+import { definePlugin } from '@sonicjs-cms/core'
 
-const newsletterPlugin = PluginBuilder.create('newsletter')
-  .addHook('content:afterPublish', async (post, ctx) => {
-    if (post.collection !== 'posts') return
-    if (post.visibility === 'paid') return // gate as needed
+const newsletterPlugin = definePlugin({
+  name: 'newsletter',
+  hooks: {
+    'content:publish': async (post, ctx) => {
+      if (post.collection !== 'posts') return
+      if (post.visibility === 'paid') return // gate as needed
 
-    const subscribers = await ctx.db
-      .from('members')
-      .where('subscribedAt', 'is not', null)
-      .all()
+      const subscribers = await ctx.db
+        .from('members')
+        .where('subscribedAt', 'is not', null)
+        .all()
 
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${ctx.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'newsletter@yourdomain.com',
-        to: subscribers.map((s) => s.email),
-        subject: post.title,
-        html: renderEmailTemplate(post),
-      }),
-    })
-  })
-  .build()
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ctx.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'newsletter@yourdomain.com',
+          to: subscribers.map((s) => s.email),
+          subject: post.title,
+          html: renderEmailTemplate(post),
+        }),
+      })
+    },
+  },
+})
 ```
 
 Swap Resend for Postmark, Mailgun, or any provider you prefer. You're not locked into one vendor the way Ghost is to Mailgun.
@@ -302,7 +308,7 @@ Use SonicJS's built-in [authentication](/authentication) and RBAC. The default `
 
 ### 5. Content API for Your Frontend
 
-You already have it. The auto-generated [REST API](/api) gives you `GET /api/content/posts`, `GET /api/content/posts/:slug`, filtering, pagination, and field selection — same patterns as Ghost's Content API. Plug it into Astro, Next.js, or whatever you prefer.
+You already have it. The auto-generated [REST API](/api) gives you `GET /api/posts`, `GET /api/posts/:slug`, filtering, pagination, and field selection — same patterns as Ghost's Content API. Plug it into Astro, Next.js, or whatever you prefer.
 
 ---
 
@@ -345,7 +351,7 @@ If you're already on Ghost and considering a move, the migration is genuinely tr
 
 1. **Export Ghost content** via Settings → Labs → Export. You'll get a JSON file with posts, pages, tags, and users.
 2. **Define the equivalent SonicJS collection** (the schema above gets you 90% there).
-3. **Run a one-time import script** that walks the Ghost JSON and POSTs to `/api/content/posts`. Most Ghost exports import in under 5 minutes.
+3. **Run a one-time import script** that walks the Ghost JSON and POSTs to `/api/posts`. Most Ghost exports import in under 5 minutes.
 4. **Migrate members** via Ghost's members CSV export → SonicJS members collection.
 5. **Re-point your frontend** to the SonicJS API (same REST patterns, mostly mechanical).
 6. **Wire newsletter sends** via the plugin pattern above.
@@ -414,7 +420,7 @@ If you're genuinely on the fence, ask yourself one question: *"In two years, wil
 
 ```bash
 # Spin up a SonicJS project
-npx create-sonicjs-app my-cms
+npx create-sonicjs@latest my-cms
 cd my-cms
 npm run dev
 

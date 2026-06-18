@@ -36,4 +36,6 @@ export function createSecurityAuditPlugin() {
 export { SecurityAuditService } from './services/security-audit-service'
 export { BruteForceDetector } from './services/brute-force-detector'
 export { securityAuditMiddleware } from './middleware/audit-middleware'
+export { securityAuditAdminRoutes } from './routes/admin'
+export { securityAuditApiRoutes } from './routes/api'
 export default securityAuditPlugin

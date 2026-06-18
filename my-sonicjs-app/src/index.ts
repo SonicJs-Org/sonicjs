@@ -13,6 +13,7 @@ import {
   createSonicJSApp,
   emailReconciliationPlugin,
   getHookSystem,
+  redirectPlugin,
   registerCollections,
 } from '@sonicjs-cms/core';
 
@@ -28,7 +29,7 @@ registerCollections([siteSettingsCollection, blogPostsCollection]);
 
 const config: SonicJSConfig = {
   plugins: {
-    register: [],
+    register: [redirectPlugin],
     disableAll: false,
   },
 };

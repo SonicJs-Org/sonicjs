@@ -1186,6 +1186,11 @@ adminContentRoutes.post('/', async (c) => {
           role: user.role
         } : undefined
       }
+      if (c.req.header('HX-Request') === 'true') {
+        c.header('HX-Retarget', '#content-form-page')
+        c.header('HX-Reswap', 'outerHTML')
+        return c.html(renderContentFormPage(formDataWithErrors, { partialOnly: true }))
+      }
       return c.html(renderContentFormPage(formDataWithErrors))
     }
 
@@ -1346,12 +1351,18 @@ adminContentRoutes.put('/:id', async (c) => {
         const { data, errors } = extractFieldData(fields, formData)
         if (Object.keys(errors).length > 0) {
           const flags = await loadContentEditorFlags(db)
-          return c.html(renderContentFormPage({
+          const errFormData = {
             id, collection: dcoll, fields, data, validationErrors: errors,
             error: 'Please fix the validation errors below.', isEdit: true,
             user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
             ...flags,
-          } as ContentFormData))
+          } as ContentFormData
+          if (c.req.header('HX-Request') === 'true') {
+            c.header('HX-Retarget', '#content-form-page')
+            c.header('HX-Reswap', 'outerHTML')
+            return c.html(renderContentFormPage(errFormData, { partialOnly: true }))
+          }
+          return c.html(renderContentFormPage(errFormData))
         }
         const slug = slugify(data.slug || data.title)
         let status = formData.get('status') as string || 'draft'
@@ -1418,6 +1429,11 @@ adminContentRoutes.put('/:id', async (c) => {
           email: user!.email,
           role: user!.role
         } : undefined
+      }
+      if (c.req.header('HX-Request') === 'true') {
+        c.header('HX-Retarget', '#content-form-page')
+        c.header('HX-Reswap', 'outerHTML')
+        return c.html(renderContentFormPage(formDataWithErrors, { partialOnly: true }))
       }
       return c.html(renderContentFormPage(formDataWithErrors))
     }

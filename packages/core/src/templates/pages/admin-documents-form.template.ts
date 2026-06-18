@@ -13,6 +13,7 @@ export interface DocumentFormData {
   messageType?: 'success' | 'error' | 'warning' | 'info'
   user?: { name: string; email: string; role: string }
   version?: string
+  versioningEnabled?: boolean // Whether versioning is opt-in for this document type
 }
 
 function inputClass(error?: string): string {
@@ -164,8 +165,8 @@ export function renderDocumentFormPage(data: DocumentFormData): string {
           ${isEdit && doc ? `<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">v${doc.versionNumber} · root: <code class="font-mono">${escapeHtml(doc.rootId)}</code></p>` : ''}
         </div>
 
-        <!-- Publish controls (edit mode only) -->
-        ${isEdit && doc && isEditor ? `
+        <!-- Publish controls (edit mode, versioning types only) -->
+        ${isEdit && doc && isEditor && data.versioningEnabled ? `
         <div class="mt-4 sm:mt-0 flex gap-2">
           ${!doc.isPublished ? `
           <form method="POST" action="/admin/content/documents/${escapeHtml(docType.id)}/${escapeHtml(doc.id)}/publish">
@@ -235,7 +236,7 @@ export function renderDocumentFormPage(data: DocumentFormData): string {
               <div class="flex gap-3">
                 <button type="submit"
                   class="inline-flex items-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm">
-                  ${isEdit ? 'Save Draft' : 'Create'}
+                  ${isEdit ? (data.versioningEnabled ? 'Save Draft' : 'Update') : 'Create'}
                 </button>
               </div>
             </div>
@@ -243,8 +244,8 @@ export function renderDocumentFormPage(data: DocumentFormData): string {
         </div>
       </form>
 
-      <!-- Version history (edit mode) -->
-      ${isEdit && doc ? `
+      <!-- Version history (edit mode, versioning opt-in only) -->
+      ${isEdit && doc && data.versioningEnabled ? `
       <details class="group">
         <summary class="cursor-pointer text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white flex items-center gap-2 py-2">
           <svg class="h-4 w-4 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor">
@@ -254,7 +255,7 @@ export function renderDocumentFormPage(data: DocumentFormData): string {
         </summary>
         <div class="mt-3 rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 overflow-hidden">
           <div id="version-history-placeholder" class="px-6 py-4 text-sm text-zinc-500 dark:text-zinc-400"
-               hx-get="/admin/content/documents/${escapeHtml(docType.id)}/${escapeHtml(doc.rootId)}/versions"
+               hx-get="/admin/versioning/${escapeHtml(doc.rootId)}"
                hx-trigger="revealed"
                hx-swap="outerHTML">
             Loading version history…

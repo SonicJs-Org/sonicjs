@@ -52,6 +52,7 @@ import { shortcodesPlugin } from './plugins/core-plugins/shortcodes-plugin'
 import { helloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
 import { multiTenantPlugin } from './plugins/core-plugins/multi-tenant-plugin'
 import { lexicalEditorPlugin } from './plugins/core-plugins/lexical-editor'
+import { versioningPlugin } from './plugins/core-plugins/versioning-plugin'
 import { tenantMiddleware } from './middleware/tenant'
 import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
@@ -289,6 +290,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     helloWorldPlugin,
     multiTenantPlugin,
     lexicalEditorPlugin,
+    versioningPlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 

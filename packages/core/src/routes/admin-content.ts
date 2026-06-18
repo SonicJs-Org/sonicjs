@@ -6,7 +6,6 @@ import { requireAuth, requireRole } from '../middleware'
 import { isPluginActive } from '../middleware/plugin-middleware'
 import { CACHE_CONFIGS, getCacheService } from '../services/cache'
 import { PluginService } from '../services/plugin-service'
-import { ContentVersion, renderVersionHistory, VersionHistoryData } from '../templates/components/version-history.template'
 import { ContentFormData, renderContentFormPage } from '../templates/pages/admin-content-form.template'
 import { ContentListPageData, renderContentListPage } from '../templates/pages/admin-content-list.template'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
@@ -420,6 +419,7 @@ function makeDocService(db: D1Database, docType: any, tenantId: string) {
     typeSchemaVersion: docType.schemaVersion ?? 1,
     maxVersionsPerRoot: docType.settings?.maxVersionsPerRoot ?? 50,
     tenantId,
+    versioning: docType.settings?.versioning ?? false,
   })
 }
 
@@ -986,6 +986,7 @@ adminContentRoutes.get('/:id/edit', async (c) => {
           fields,
           isEdit: true,
           referrerParams,
+          versioningEnabled: docType?.settings?.versioning === true,
           user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
           version: c.get('appVersion'),
           ...flags,
@@ -1185,6 +1186,11 @@ adminContentRoutes.post('/', async (c) => {
           role: user.role
         } : undefined
       }
+      if (c.req.header('HX-Request') === 'true') {
+        c.header('HX-Retarget', '#content-form-page')
+        c.header('HX-Reswap', 'outerHTML')
+        return c.html(renderContentFormPage(formDataWithErrors, { partialOnly: true }))
+      }
       return c.html(renderContentFormPage(formDataWithErrors))
     }
 
@@ -1345,12 +1351,18 @@ adminContentRoutes.put('/:id', async (c) => {
         const { data, errors } = extractFieldData(fields, formData)
         if (Object.keys(errors).length > 0) {
           const flags = await loadContentEditorFlags(db)
-          return c.html(renderContentFormPage({
+          const errFormData = {
             id, collection: dcoll, fields, data, validationErrors: errors,
             error: 'Please fix the validation errors below.', isEdit: true,
             user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
             ...flags,
-          } as ContentFormData))
+          } as ContentFormData
+          if (c.req.header('HX-Request') === 'true') {
+            c.header('HX-Retarget', '#content-form-page')
+            c.header('HX-Reswap', 'outerHTML')
+            return c.html(renderContentFormPage(errFormData, { partialOnly: true }))
+          }
+          return c.html(renderContentFormPage(errFormData))
         }
         const slug = slugify(data.slug || data.title)
         let status = formData.get('status') as string || 'draft'
@@ -1417,6 +1429,11 @@ adminContentRoutes.put('/:id', async (c) => {
           email: user!.email,
           role: user!.role
         } : undefined
+      }
+      if (c.req.header('HX-Request') === 'true') {
+        c.header('HX-Retarget', '#content-form-page')
+        c.header('HX-Reswap', 'outerHTML')
+        return c.html(renderContentFormPage(formDataWithErrors, { partialOnly: true }))
       }
       return c.html(renderContentFormPage(formDataWithErrors))
     }
@@ -1925,148 +1942,6 @@ adminContentRoutes.delete('/:id', async (c) => {
   }
 })
 
-// Get version history
-adminContentRoutes.get('/:id/versions', async (c) => {
-  try {
-    const id = c.req.param('id')
-    const db = c.env.DB
-
-    return c.html('<p>Content not found</p>', 404)
-
-    // Get current content
-    const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
-    const content = await contentStmt.bind(id).first() as any
-
-    if (!content) {
-      return c.html('<p>Content not found</p>')
-    }
-
-    // Get all versions with author info
-    const versionsStmt = db.prepare(`
-      SELECT cv.*, u.first_name, u.last_name, u.email
-      FROM content_versions cv
-      LEFT JOIN auth_user u ON cv.author_id = u.id
-      WHERE cv.content_id = ?
-      ORDER BY cv.version DESC
-    `)
-    const { results } = await versionsStmt.bind(id).all()
-
-    const versions: ContentVersion[] = (results || []).map((row: any) => ({
-      id: row.id,
-      version: row.version,
-      data: JSON.parse(row.data || '{}'),
-      author_id: row.author_id,
-      author_name: row.first_name && row.last_name ? `${row.first_name} ${row.last_name}` : row.email,
-      created_at: row.created_at,
-      is_current: false // Will be set below
-    }))
-
-    // Mark the latest version as current
-    if (versions.length > 0) {
-      versions[0]!.is_current = true
-    }
-
-    const data: VersionHistoryData = {
-      contentId: id,
-      versions,
-      currentVersion: versions.length > 0 ? versions[0]!.version : 1
-    }
-
-    return c.html(renderVersionHistory(data))
-  } catch (error) {
-    console.error('Error loading version history:', error)
-    return c.html('<p>Error loading version history</p>')
-  }
-})
-
-// Restore version
-adminContentRoutes.post('/:id/restore/:version', async (c) => {
-  try {
-    const id = c.req.param('id')
-    const version = parseInt(c.req.param('version') || '0')
-    const user = c.get('user')
-    const db = c.env.DB
-
-    return c.json({ success: false, error: 'Version not found' }, 404)
-
-    // Get the specific version
-    const versionStmt = db.prepare(`
-      SELECT * FROM content_versions 
-      WHERE content_id = ? AND version = ?
-    `)
-    const versionData = await versionStmt.bind(id, version).first() as any
-
-    if (!versionData) {
-      return c.json({ success: false, error: 'Version not found' })
-    }
-
-    // Get current content
-    const contentStmt = db.prepare('SELECT * FROM content WHERE id = ?')
-    const currentContent = await contentStmt.bind(id).first() as any
-
-    if (!currentContent) {
-      return c.json({ success: false, error: 'Content not found' })
-    }
-
-    const restoredData = JSON.parse(versionData.data)
-    const now = Date.now()
-
-    // Update content with restored data
-    const updateStmt = db.prepare(`
-      UPDATE content SET
-        title = ?, data = ?, updated_at = ?
-      WHERE id = ?
-    `)
-
-    await updateStmt.bind(
-      restoredData.title || 'Untitled',
-      versionData.data,
-      now,
-      id
-    ).run()
-
-    // Create new version for the restoration
-    const nextVersionStmt = db.prepare('SELECT MAX(version) as max_version FROM content_versions WHERE content_id = ?')
-    const nextVersionResult = await nextVersionStmt.bind(id).first() as any
-    const nextVersion = (nextVersionResult?.max_version || 0) + 1
-
-    const newVersionStmt = db.prepare(`
-      INSERT INTO content_versions (id, content_id, version, data, author_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-
-    await newVersionStmt.bind(
-      crypto.randomUUID(),
-      id,
-      nextVersion,
-      versionData.data,
-      user?.userId || 'unknown',
-      now
-    ).run()
-
-    // Log workflow action
-    const workflowStmt = db.prepare(`
-      INSERT INTO workflow_history (id, content_id, action, from_status, to_status, user_id, comment, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    await workflowStmt.bind(
-      crypto.randomUUID(),
-      id,
-      'version_restored',
-      currentContent.status,
-      currentContent.status,
-      user?.userId || 'unknown',
-      `Restored to version ${version}`,
-      now
-    ).run()
-
-    return c.json({ success: true })
-  } catch (error) {
-    console.error('Error restoring version:', error)
-    return c.json({ success: false, error: 'Failed to restore version' })
-  }
-})
 
 // Preview specific version
 adminContentRoutes.get('/:id/version/:version/preview', requireRole(['admin', 'editor', 'author']), async (c) => {
@@ -2191,6 +2066,7 @@ async function getDocService(db: D1Database, typeId: string, tenantId: string) {
     typeSchemaVersion: docType?.schemaVersion ?? 1,
     maxVersionsPerRoot: docType?.settings?.maxVersionsPerRoot ?? 50,
     tenantId,
+    versioning: docType?.settings?.versioning ?? false,
   })
   return { svc, docType }
 }
@@ -2265,7 +2141,7 @@ adminContentRoutes.get('/documents/:typeId/:rootId/edit', async (c) => {
     createdAt: draftRow.created_at, updatedAt: draftRow.updated_at,
   } as any
 
-  return c.html(renderDocumentFormPage({ docType, doc, publishedDoc, isEdit: true, message, user: userCtx(c) }))
+  return c.html(renderDocumentFormPage({ docType, doc, publishedDoc, isEdit: true, message, user: userCtx(c), versioningEnabled: docType?.settings?.versioning === true }))
 })
 
 // ─── Save draft ───────────────────────────────────────────────────────────────

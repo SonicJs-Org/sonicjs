@@ -28,10 +28,9 @@ binding = "CACHE_KV"
 id = "a16f8246fc294d809c90b0fb2df6d363"
 
 # Cloudflare Email Service binding (send_email)
-# destination_address restricts delivery in dev — remove for prod
+# remote = true requires valid Cloudflare auth; omit for local dev
 [[send_email]]
 name = "EMAIL"
-remote = true
 
 # Environment variables
 [vars]

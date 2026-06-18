@@ -952,9 +952,13 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
       return c.json({ error: 'Invalid filter parameters', details: queryResult.errors }, 400)
     }
 
-    const cacheEnabled = c.get('cacheEnabled')
+    // Per-collection cache override — collection config can disable caching or set a custom TTL.
+    const collectionCache = (record as any).cache as { enabled?: boolean; ttl?: number } | undefined
+    const collectionCacheDisabled = collectionCache?.enabled === false
+    const cacheEnabled = c.get('cacheEnabled') && !collectionCacheDisabled
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql })}`)
+    const includeCollection = queryParams.include?.split(',').map(s => s.trim()).includes('collection')
+    const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
 
     if (cacheEnabled) {
       const cacheResult = await cache.getWithSource<any>(cacheKey)
@@ -977,7 +981,7 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     const responseData = {
       data: transformedResults,
       meta: addTimingMeta(c, {
-        collection: collectionRecordToRow(record),
+        ...(includeCollection ? { collection: collectionRecordToRow(record) } : {}),
         count: results.length,
         timestamp: new Date().toISOString(),
         filter: normalizePublicContentFilter(filter, role),
@@ -985,7 +989,11 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
       }, executionStart)
     }
 
-    if (cacheEnabled) await cache.set(cacheKey, responseData)
+    if (cacheEnabled) {
+      const customTtl = typeof collectionCache?.ttl === 'number' ? collectionCache.ttl : undefined
+      await cache.set(cacheKey, responseData, customTtl)
+      if (customTtl) c.header('X-Cache-TTL', customTtl.toString())
+    }
     return c.json(responseData)
   } catch (error) {
     console.error('Error fetching collection content:', error)

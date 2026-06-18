@@ -91,7 +91,10 @@ async function warmRecentContent(db: D1Database, limit: number = 50): Promise<nu
 
   try {
     // Content is document-backed now — warm recent current-draft documents (decommission of `content`).
-    const stmt = db.prepare(`SELECT * FROM documents WHERE is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
+    // Exclude media_asset (warmed separately by warmRecentMedia). Tenant-scoped per R3.
+    const stmt = db
+      .prepare(`SELECT * FROM documents WHERE tenant_id = ? AND type_id != 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
+      .bind('default')
     const { results } = await stmt.all()
 
     for (const content of results as any[]) {
@@ -122,11 +125,14 @@ async function warmRecentMedia(db: D1Database, limit: number = 50): Promise<numb
   let count = 0
 
   try {
-    const stmt = db.prepare(`SELECT * FROM media WHERE deleted_at IS NULL ORDER BY uploaded_at DESC LIMIT ${limit}`)
+    // Media is document-backed (type_id = 'media_asset'). Tenant-scoped per R3.
+    const stmt = db
+      .prepare(`SELECT * FROM documents WHERE tenant_id = ? AND type_id = 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
+      .bind('default')
     const { results } = await stmt.all()
 
     for (const media of results as any[]) {
-      const key = mediaCache.generateKey('item', media.id)
+      const key = mediaCache.generateKey('item', (media as any).root_id ?? media.id)
       await mediaCache.set(key, media)
       count++
     }

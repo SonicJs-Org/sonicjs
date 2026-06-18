@@ -5,8 +5,8 @@ import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-type
 import { requireAuth, requireRole } from '../middleware'
 import { renderMediaLibraryPage, MediaLibraryPageData, FolderStats, TypeStats } from '../templates/pages/admin-media-library.template'
 import { renderMediaFileDetails, MediaFileDetailsData } from '../templates/components/media-file-details.template'
-import { MediaFile, renderMediaFileCard } from '../templates/components/media-grid.template'
-import { MediaDocumentService, mediaDocToRecord, legacyMediaTableExists } from '../services/media-documents'
+import { MediaFile } from '../templates/components/media-grid.template'
+import { MediaDocumentService, mediaDocToFile } from '../services/media-documents'
 import { getRequestTenant } from '../services/document-request-context'
 import { PluginService } from '../services/plugin-service'
 import type { Bindings, Variables } from '../app'
@@ -48,43 +48,17 @@ adminMediaRoutes.get('/', async (c) => {
     const type = searchParams.get('type') || 'all'
     const view = searchParams.get('view') || 'grid'
     const page = parseInt(searchParams.get('page') || '1')
-    const _cacheBust = searchParams.get('t') // Cache-busting parameter
     const limit = 24
     const offset = (page - 1) * limit
 
-    const db = c.env.DB
-
-    // Media is document-authoritative (media_asset documents). The library reads through
-    // MediaDocumentService; legacy `media`-table reads were removed in the read-flip.
-    const listResult = await new MediaDocumentService(db, getRequestTenant(c)).list({ folder, type, limit, offset })
-
-    // Map media_asset documents → MediaFile view-model with LOCAL serving URLs (/files/<r2Key>).
-    const mediaFiles: MediaFile[] = listResult.files.map((doc) => {
-      const r = mediaDocToRecord(doc)
-      return {
-        id: r.id,
-        filename: r.filename,
-        original_name: r.original_name,
-        mime_type: r.mime_type,
-        size: r.size,
-        public_url: `/files/${r.r2_key}`,
-        thumbnail_url: r.mime_type.startsWith('image/') ? `/files/${r.r2_key}` : undefined,
-        alt: r.alt ?? undefined,
-        caption: r.caption ?? undefined,
-        tags: r.tags,
-        uploaded_at: new Date((r.uploaded_at ?? 0) * 1000).toISOString(),
-        fileSize: formatFileSize(r.size),
-        uploadedAt: new Date((r.uploaded_at ?? 0) * 1000).toLocaleDateString(),
-        isImage: r.mime_type.startsWith('image/'),
-        isVideo: r.mime_type.startsWith('video/'),
-        isDocument: !r.mime_type.startsWith('image/') && !r.mime_type.startsWith('video/')
-      }
-    })
-
+    const mediaSvc = new MediaDocumentService(c.env.DB, getRequestTenant(c))
+    const { files, folders: folderAgg, types: typeAgg } = await mediaSvc.list({ folder, type, limit, offset })
+    const mediaFiles: MediaFile[] = files.map(doc => mediaDocToFile(doc))
+    
     const pageData: MediaLibraryPageData = {
       files: mediaFiles,
-      folders: listResult.folders as FolderStats[],
-      types: listResult.types as TypeStats[],
+      folders: folderAgg.map(f => ({ folder: f.folder, count: f.count, totalSize: f.totalSize })) as FolderStats[],
+      types: typeAgg.map(t => ({ type: t.type, count: t.count })) as TypeStats[],
       currentFolder: folder,
       currentType: type,
       currentView: view as 'grid' | 'list',
@@ -129,30 +103,9 @@ adminMediaRoutes.get('/selector', async (c) => {
       `)
     }
 
-    // Read from media_asset documents (authoritative); filter by search in JS (small result set).
-    const listed = await new MediaDocumentService(db, getRequestTenant(c)).list({ limit: 200 })
-    const term = search.trim().toLowerCase()
-    const mediaFiles = listed.files
-      .map((doc) => mediaDocToRecord(doc))
-      .filter((r) => !term || `${r.filename} ${r.original_name} ${r.alt ?? ''}`.toLowerCase().includes(term))
-      .slice(0, 24)
-      .map((r: any) => ({
-        id: r.id,
-        filename: r.filename,
-        original_name: r.original_name,
-        mime_type: r.mime_type,
-        size: r.size,
-        public_url: `/files/${r.r2_key}`,
-        thumbnail_url: r.mime_type.startsWith('image/') ? `/files/${r.r2_key}` : undefined,
-        alt: r.alt,
-        tags: r.tags,
-        uploaded_at: r.uploaded_at,
-        fileSize: formatFileSize(r.size),
-        uploadedAt: new Date((r.uploaded_at ?? 0) * 1000).toLocaleDateString(),
-        isImage: r.mime_type.startsWith('image/'),
-        isVideo: r.mime_type.startsWith('video/'),
-        isDocument: !r.mime_type.startsWith('image/') && !r.mime_type.startsWith('video/')
-      }))
+    const mediaSvc = new MediaDocumentService(db, getRequestTenant(c))
+    const { files } = await mediaSvc.list({ search: search.trim() || undefined, limit: 24 })
+    const mediaFiles = files.map(doc => mediaDocToFile(doc))
 
     // Render media selector grid
     return c.html(html`
@@ -247,24 +200,9 @@ adminMediaRoutes.get('/search', async (c) => {
     const type = searchParams.get('type') || 'all'
     const db = c.env.DB
     
-    // Read media_asset documents (folder/type filters via the service), then text-search in JS.
-    const listed = await new MediaDocumentService(db, getRequestTenant(c)).list({ folder, type, limit: 200 })
-    const term = search.trim().toLowerCase()
-    const mediaFiles = listed.files
-      .map((doc) => mediaDocToRecord(doc))
-      .filter((r) => !term || `${r.filename} ${r.original_name} ${r.alt ?? ''}`.toLowerCase().includes(term))
-      .slice(0, 24)
-      .map((row: any) => ({
-        ...row,
-        public_url: `/files/${row.r2_key}`,
-        thumbnail_url: row.mime_type.startsWith('image/') ? `/files/${row.r2_key}` : undefined,
-        tags: row.tags,
-        uploadedAt: new Date((row.uploaded_at ?? 0) * 1000).toLocaleDateString(),
-        fileSize: formatFileSize(row.size),
-        isImage: row.mime_type.startsWith('image/'),
-        isVideo: row.mime_type.startsWith('video/'),
-        isDocument: !row.mime_type.startsWith('image/') && !row.mime_type.startsWith('video/')
-      }))
+    const mediaSvc = new MediaDocumentService(db, getRequestTenant(c))
+    const { files } = await mediaSvc.list({ folder, type, search: search.trim() || undefined, limit: 24 })
+    const mediaFiles = files.map(doc => mediaDocToFile(doc))
     
     const gridHTML = mediaFiles.map(file => generateMediaItemHTML(file)).join('')
     
@@ -279,39 +217,24 @@ adminMediaRoutes.get('/search', async (c) => {
 adminMediaRoutes.get('/:id/details', async (c) => {
   try {
     const id = c.req.param('id')
-    const db = c.env.DB
+    const mediaSvc = new MediaDocumentService(c.env.DB, getRequestTenant(c))
+    const doc = await mediaSvc.getByRootId(id)
 
-    const doc = await new MediaDocumentService(db, getRequestTenant(c)).getByRootId(id)
     if (!doc) {
       return c.html('<div class="text-red-500">File not found</div>')
     }
-    const result = mediaDocToRecord(doc)
 
+    const d = doc.data as Record<string, any>
+    const base = mediaDocToFile(doc)
     const file: MediaFile & { width?: number; height?: number; folder: string; uploadedAt: string } = {
-      id: result.id,
-      filename: result.filename,
-      original_name: result.original_name,
-      mime_type: result.mime_type,
-      size: result.size,
-      public_url: `/files/${result.r2_key}`,
-      thumbnail_url: result.mime_type.startsWith('image/') ? `/files/${result.r2_key}` : undefined,
-      alt: result.alt ?? undefined,
-      caption: result.caption ?? undefined,
-      tags: result.tags,
-      uploaded_at: new Date((result.uploaded_at ?? 0) * 1000).toISOString(),
-      fileSize: formatFileSize(result.size),
-      uploadedAt: new Date((result.uploaded_at ?? 0) * 1000).toLocaleString(),
-      isImage: result.mime_type.startsWith('image/'),
-      isVideo: result.mime_type.startsWith('video/'),
-      isDocument: !result.mime_type.startsWith('image/') && !result.mime_type.startsWith('video/'),
-      width: result.width ?? undefined,
-      height: result.height ?? undefined,
-      folder: result.folder
+      ...base,
+      uploadedAt: new Date((doc.createdAt ?? 0) * 1000).toLocaleString(),
+      width: d.width ?? undefined,
+      height: d.height ?? undefined,
+      folder: d.folder ?? 'uploads',
     }
-    
-    const detailsData: MediaFileDetailsData = { file }
-    
-    return c.html(renderMediaFileDetails(detailsData))
+
+    return c.html(renderMediaFileDetails({ file }))
   } catch (error) {
     console.error('Error fetching file details:', error)
     return c.html('<div class="text-red-500">Error loading file details</div>')
@@ -375,10 +298,10 @@ adminMediaRoutes.post('/upload', async (c) => {
           continue
         }
 
-        // Generate unique filename and R2 key
-        const fileId = crypto.randomUUID()
+        // Generate unique filename and R2 key (fileId assigned from doc.rootId after document creation below)
         const fileExtension = file.name.split('.').pop() || ''
-        const filename = `${fileId}.${fileExtension}`
+        const tempId = crypto.randomUUID()
+        const filename = `${tempId}.${fileExtension}`
         const folder = formData.get('folder') as string || 'uploads'
         const r2Key = `${folder}/${filename}`
 
@@ -418,32 +341,30 @@ adminMediaRoutes.post('/upload', async (c) => {
           }
         }
 
-        // Generate URLs - use public serving route
-        const publicUrl = `/files/${r2Key}`
-        const thumbnailUrl = file.type.startsWith('image/') ? publicUrl : null
-
-        // Authoritative media_asset document; the root id becomes the public media id.
-        const mediaDoc = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).createFromUpload(
+        // Create media_asset document (primary — rootId becomes the canonical file ID).
+        const doc = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).createFromUpload(
           { filename, originalName: file.name, mimeType: file.type, size: file.size, width, height, folder, r2Key },
           user!.userId,
         )
-        const mediaId = mediaDoc.rootId
+        const fileId = doc.rootId
 
-        // Best-effort legacy dual-write — only where the legacy `media` table still exists.
-        if (await legacyMediaTableExists(c.env.DB)) {
+        // R12: also write legacy media row (decommission after read-flip is stable).
+        const publicUrl = `/files/${r2Key}`
+        const thumbnailUrl = file.type.startsWith('image/') ? publicUrl : null
+        try {
           await c.env.DB.prepare(`
             INSERT INTO media (
               id, filename, original_name, mime_type, size, width, height,
               folder, r2_key, public_url, thumbnail_url, uploaded_by, uploaded_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
-            mediaId, filename, file.name, file.type, file.size, width, height,
-            folder, r2Key, publicUrl, thumbnailUrl, user!.userId, Math.floor(Date.now() / 1000),
+            fileId, filename, file.name, file.type, file.size, width, height,
+            folder, r2Key, publicUrl, thumbnailUrl, user!.userId, Math.floor(Date.now() / 1000)
           ).run()
-        }
+        } catch { /* legacy table absent on fresh installs — non-fatal */ }
 
         uploadResults.push({
-          id: mediaId,
+          id: fileId,
           filename: filename,
           originalName: file.name,
           mimeType: file.type,
@@ -458,38 +379,6 @@ adminMediaRoutes.post('/upload', async (c) => {
       }
     }
 
-    // TODO: Cache invalidation removed during migration
-
-    // Fetch updated media list to include in response
-    let mediaGridHTML = ''
-    if (uploadResults.length > 0) {
-      try {
-        const listed = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).list({ limit: 24 })
-        const mediaFiles = listed.files.map((doc) => {
-          const row: any = mediaDocToRecord(doc)
-          return {
-            id: row.id,
-            filename: row.filename,
-            original_name: row.original_name,
-            mime_type: row.mime_type,
-            size: row.size,
-            public_url: `/files/${row.r2_key}`,
-            thumbnail_url: row.mime_type.startsWith('image/') ? `/files/${row.r2_key}` : undefined,
-            tags: row.tags,
-            uploaded_at: row.uploaded_at,
-            fileSize: formatFileSize(row.size),
-            uploadedAt: new Date((row.uploaded_at ?? 0) * 1000).toLocaleDateString(),
-            isImage: row.mime_type.startsWith('image/'),
-            isVideo: row.mime_type.startsWith('video/'),
-            isDocument: !row.mime_type.startsWith('image/') && !row.mime_type.startsWith('video/')
-          }
-        })
-
-        mediaGridHTML = mediaFiles.map(file => renderMediaFileCard(file, 'grid', true)).join('')
-      } catch (error) {
-        console.error('Error fetching updated media list:', error)
-      }
-    }
 
     // Return HTMX response with results
     return c.html(html`
@@ -565,12 +454,13 @@ adminMediaRoutes.get('/file/*', async (c) => {
 adminMediaRoutes.put('/:id', async (c) => {
   try {
     const user = c.get('user')
-    const fileId = c.req.param('id')
+    const rootId = c.req.param('id')
     const formData = await c.req.formData()
-    const svc = new MediaDocumentService(c.env.DB, getRequestTenant(c))
+    const tenantId = getRequestTenant(c)
 
-    // Resolve the media_asset document (public id == root id).
-    const doc = await svc.getByRootId(fileId)
+    const mediaSvc = new MediaDocumentService(c.env.DB, tenantId)
+    const doc = await mediaSvc.getByRootId(rootId)
+
     if (!doc) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -578,10 +468,8 @@ adminMediaRoutes.put('/:id', async (c) => {
         </div>
       `)
     }
-    const fileRecord = mediaDocToRecord(doc)
 
-    // Check permissions (only allow updates by uploader or admin)
-    if (fileRecord.uploaded_by !== user!.userId && user!.role !== 'admin') {
+    if (doc.ownerId !== user!.userId && user!.role !== 'admin') {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -589,20 +477,19 @@ adminMediaRoutes.put('/:id', async (c) => {
       `)
     }
 
-    // Extract form data
     const alt = formData.get('alt') as string || null
     const caption = formData.get('caption') as string || null
+    const tagsString = formData.get('tags') as string || ''
+    const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(t => t) : []
 
-    // Update the media_asset document (alt/caption); best-effort legacy mirror.
-    await svc.updateMetadata(fileId, { alt, caption })
-    if (await legacyMediaTableExists(c.env.DB)) {
-      const tagsString = formData.get('tags') as string || ''
-      const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : []
+    await mediaSvc.updateMetadata(rootId, { alt, caption, tags }, user!.userId)
+
+    // R12: keep legacy media row in sync
+    try {
       await c.env.DB.prepare('UPDATE media SET alt = ?, caption = ?, tags = ?, updated_at = ? WHERE id = ?')
-        .bind(alt, caption, JSON.stringify(tags), Math.floor(Date.now() / 1000), fileId).run()
-    }
-
-    // TODO: Cache invalidation removed during migration
+        .bind(alt, caption, JSON.stringify(tags), Math.floor(Date.now() / 1000), rootId)
+        .run()
+    } catch { /* legacy table may not have this row */ }
 
     return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -630,12 +517,9 @@ adminMediaRoutes.delete('/cleanup', requireRole('admin'), async (c) => {
   try {
     const db = c.env.DB
 
-    // Find all media files (media_asset documents).
-    const listed = await new MediaDocumentService(db, getRequestTenant(c)).list({ limit: 1000 })
-    const allMedia = listed.files.map((doc) => {
-      const r = mediaDocToRecord(doc)
-      return { id: r.id, r2_key: r.r2_key, filename: r.filename }
-    })
+    // Find all media files
+    const allMediaStmt = db.prepare('SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL')
+    const { results: allMedia } = await allMediaStmt.all<{ id: string; r2_key: string; filename: string }>()
 
     // Find media files referenced in document content.
     const contentStmt = db.prepare("SELECT data FROM documents WHERE tenant_id = ? AND deleted_at IS NULL").bind(getRequestTenant(c))
@@ -675,18 +559,14 @@ adminMediaRoutes.delete('/cleanup', requireRole('admin'), async (c) => {
     let deletedCount = 0
     const errors = []
 
-    const cleanupSvc = new MediaDocumentService(db, getRequestTenant(c))
-    const hasLegacy = await legacyMediaTableExists(db)
     for (const file of unusedFiles) {
       try {
         // Delete from R2
         await c.env.MEDIA_BUCKET.delete(file.r2_key)
 
-        // Soft-delete the media_asset document; best-effort legacy mirror.
-        await cleanupSvc.softDelete(file.id)
-        if (hasLegacy) {
-          await db.prepare('UPDATE media SET deleted_at = ? WHERE id = ?').bind(Math.floor(Date.now() / 1000), file.id).run()
-        }
+        // Soft delete in database
+        const deleteStmt = db.prepare('UPDATE media SET deleted_at = ? WHERE id = ?')
+        await deleteStmt.bind(Math.floor(Date.now() / 1000), file.id).run()
 
         deletedCount++
       } catch (error) {
@@ -739,12 +619,12 @@ adminMediaRoutes.delete('/cleanup', requireRole('admin'), async (c) => {
 adminMediaRoutes.delete('/:id', async (c) => {
   try {
     const user = c.get('user')
-    const fileId = c.req.param('id')
+    const rootId = c.req.param('id')
     const tenantId = getRequestTenant(c)
-    const svc = new MediaDocumentService(c.env.DB, tenantId)
 
-    // Resolve the media_asset document (public id == root id).
-    const doc = await svc.getByRootId(fileId)
+    const mediaSvc = new MediaDocumentService(c.env.DB, tenantId)
+    const doc = await mediaSvc.getByRootId(rootId)
+
     if (!doc) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -752,10 +632,8 @@ adminMediaRoutes.delete('/:id', async (c) => {
         </div>
       `)
     }
-    const fileRecord = mediaDocToRecord(doc)
 
-    // Check permissions (only allow deletion by uploader or admin)
-    if (fileRecord.uploaded_by !== user!.userId && user!.role !== 'admin') {
+    if (doc.ownerId !== user!.userId && user!.role !== 'admin') {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -763,8 +641,8 @@ adminMediaRoutes.delete('/:id', async (c) => {
       `)
     }
 
-    // Reference-aware delete: a strong inbound reference blocks the hard-delete.
-    const impact = await svc.getDeleteImpact(fileId)
+    // Reference-aware delete: block if any strong inbound refs exist.
+    const impact = await mediaSvc.getDeleteImpact(rootId)
     if (!impact.canHardDelete) {
       return c.html(html`
         <div class="bg-amber-100 border border-amber-400 text-amber-800 px-4 py-3 rounded mb-4">
@@ -773,22 +651,27 @@ adminMediaRoutes.delete('/:id', async (c) => {
       `)
     }
 
-    // Delete from R2 (best-effort).
+    const r2Key = (doc.data as Record<string, any>).r2Key as string | undefined
+
+    // Delete from R2
+    if (r2Key) {
+      try {
+        await c.env.MEDIA_BUCKET.delete(r2Key)
+      } catch (e) {
+        console.warn('Failed to delete from R2:', e)
+      }
+    }
+
+    // Soft-delete document (all version rows for this root).
+    await mediaSvc.softDeleteRoot(rootId)
+
+    // R12: also soft-delete legacy media row (matched by id = rootId).
     try {
-      await c.env.MEDIA_BUCKET.delete(fileRecord.r2_key)
-    } catch (error) {
-      console.warn('Failed to delete from R2:', error)
-    }
+      await c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?')
+        .bind(Math.floor(Date.now() / 1000), rootId)
+        .run()
+    } catch { /* legacy table may not have this row */ }
 
-    // Soft-delete the document; best-effort legacy mirror.
-    await svc.softDelete(fileId)
-    if (await legacyMediaTableExists(c.env.DB)) {
-      await c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?').bind(Math.floor(Date.now() / 1000), fileId).run()
-    }
-
-    // TODO: Cache invalidation removed during migration
-
-    // Return HTMX response that redirects to media library
     return c.html(html`
       <script>
         // Close modal if open

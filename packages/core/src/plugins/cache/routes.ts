@@ -10,7 +10,8 @@ import { getAllCacheStats, clearAllCaches, getCacheService } from './services/ca
 import { CACHE_CONFIGS, parseCacheKey } from './services/cache-config.js'
 import { getRecentInvalidations, getCacheInvalidationStats } from './services/cache-invalidation.js'
 import { warmCommonCaches, warmNamespace } from './services/cache-warming.js'
-import { renderCacheDashboard, CacheDashboardData } from '../../templates/pages/admin-cache.template'
+import { renderCacheDashboard, CacheDashboardData, CollectionCacheConfig } from '../../templates/pages/admin-cache.template'
+import { getCollectionRegistry } from '../../services/collection-registry.js'
 
 const app = new Hono()
 
@@ -38,6 +39,24 @@ app.get('/', async (c: Context) => {
   const totalRequests = totalHits + totalMisses
   const overallHitRate = totalRequests > 0 ? (totalHits / totalRequests) * 100 : 0
 
+  const DEFAULT_TTL = CACHE_CONFIGS.api?.ttl ?? 300
+  const collections: CollectionCacheConfig[] = getCollectionRegistry()
+    .listActive()
+    .filter(r => !r.internal)
+    .map(r => {
+      const cacheOverride = (r as any).cache as { enabled?: boolean; ttl?: number } | undefined
+      const cacheEnabled = cacheOverride?.enabled !== false
+      const hasCustomTtl = typeof cacheOverride?.ttl === 'number'
+      return {
+        name: r.name,
+        displayName: r.displayName ?? r.name,
+        slug: r.slug ?? r.name,
+        cacheEnabled,
+        cacheTtl: hasCustomTtl ? cacheOverride!.ttl! : DEFAULT_TTL,
+        ttlSource: hasCustomTtl ? 'collection' : 'default',
+      } satisfies CollectionCacheConfig
+    })
+
   const dashboardData: CacheDashboardData = {
     stats,
     totals: {
@@ -49,6 +68,7 @@ app.get('/', async (c: Context) => {
       entryCount: totalEntries
     },
     namespaces: Object.keys(stats),
+    collections,
     user: user ? {
       name: user.email,
       email: user.email,

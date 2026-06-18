@@ -32,7 +32,7 @@ export interface MediaUrlOptions {
 }
 
 // media_asset queryable fields — mirror migration 043 (q_media_*) + the document type registration.
-export const MEDIA_QUERYABLE: QueryableField[] = [
+const MEDIA_QUERYABLE: QueryableField[] = [
   { name: 'mimeType', kind: 'scalar', type: 'text', column: 'q_media_mime' },
   { name: 'folder', kind: 'scalar', type: 'text', column: 'q_media_folder' },
   { name: 'size', kind: 'scalar', type: 'integer', column: 'q_media_size' },
@@ -125,6 +125,7 @@ export interface MediaListOptions {
   type?: 'all' | 'images' | 'videos' | 'documents' | string
   limit?: number
   offset?: number
+  search?: string
 }
 
 export interface MediaListResult {
@@ -192,6 +193,11 @@ export class MediaDocumentService {
       else if (opts.type === 'videos') where.push("q_media_mime LIKE 'video/%'")
       else if (opts.type === 'documents') where.push("q_media_mime IN ('application/pdf', 'text/plain', 'application/msword')")
     }
+    if (opts.search?.trim()) {
+      const term = `%${opts.search.trim()}%`
+      where.push("(json_extract(data, '$.filename') LIKE ? OR json_extract(data, '$.originalName') LIKE ? OR json_extract(data, '$.alt') LIKE ?)")
+      params.push(term, term, term)
+    }
 
     const listed = await this.db
       .prepare(`SELECT * FROM documents WHERE ${where.join(' AND ')} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
@@ -216,52 +222,33 @@ export class MediaDocumentService {
     }
   }
 
-  /** Fetch the current-draft media_asset document by its root id (tenant-scoped). Null if absent/deleted. */
+  /** Fetch current draft of a single media_asset by rootId. Returns null if not found. */
   async getByRootId(rootId: string): Promise<Document | null> {
     const row = await this.db
-      .prepare("SELECT * FROM documents WHERE root_id = ? AND type_id = 'media_asset' AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL")
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND tenant_id = ? AND type_id = 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL")
       .bind(rootId, this.tenantId)
       .first<Record<string, any>>()
     return row ? rowToMinimalDoc(row) : null
   }
 
-  /**
-   * Soft-delete every version row of a media_asset root (sets deleted_at). The library list and
-   * getByRootId both filter `deleted_at IS NULL`, so the asset disappears from reads but the rows
-   * (and R2 object lifecycle) remain for audit. Returns true if any row was updated.
-   */
-  async softDelete(rootId: string): Promise<boolean> {
-    const res = await this.db
-      .prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND type_id = 'media_asset' AND tenant_id = ? AND deleted_at IS NULL")
-      .bind(Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000), rootId, this.tenantId)
+  /** Soft-delete all version rows for a media_asset root (sets deleted_at; excludes from list). */
+  async softDeleteRoot(rootId: string): Promise<void> {
+    const now = Math.floor(Date.now() / 1000)
+    await this.db
+      .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?')
+      .bind(now, now, rootId, this.tenantId)
       .run()
-    return (res.meta?.changes ?? 0) > 0
   }
 
-  /**
-   * In-place metadata edit of the current media_asset row (alt / caption / folder). Uses json_set so the
-   * q_media_* generated columns recompute; media metadata is not versioned content, so this avoids draft
-   * churn. (tags faceting is owned by the create path — not updated here.) Returns true if a row changed.
-   */
-  async updateMetadata(rootId: string, patch: Record<string, any>): Promise<boolean> {
-    const allowed = ['alt', 'caption', 'folder']
-    const sets: string[] = []
-    const binds: (string | number)[] = []
-    for (const k of allowed) {
-      if (k in patch && patch[k] != null) {
-        sets.push(`'$.${k}', ?`)
-        binds.push(String(patch[k]))
-      }
-    }
-    if (sets.length === 0) return false
-    const res = await this.db
-      .prepare(
-        `UPDATE documents SET data = json_set(data, ${sets.join(', ')}), updated_at = ?
-         WHERE root_id = ? AND type_id = 'media_asset' AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL`,
-      )
-      .bind(...binds, Math.floor(Date.now() / 1000), rootId, this.tenantId)
-      .run()
-    return (res.meta?.changes ?? 0) > 0
+  /** Update alt/caption/tags on a media_asset document (saveDraft + publish atomically). */
+  async updateMetadata(
+    rootId: string,
+    meta: { alt?: string | null; caption?: string | null; tags?: string[] },
+    updatedBy?: string,
+  ): Promise<Document> {
+    const svc = new DocumentsService(this.db, { queryableFields: MEDIA_QUERYABLE, tenantId: this.tenantId, maxVersionsPerRoot: 5 })
+    const newDraft = await svc.saveDraft(rootId, { data: meta }, updatedBy)
+    return svc.publish(newDraft.id, updatedBy)
   }
 
   /** Reference-aware delete: strong inbound references block hard-delete (offer archive instead). */
@@ -270,21 +257,5 @@ export class MediaDocumentService {
     const strongRefs = refs.filter(r => r.refStrength === 'strong').map(r => ({ fromDocumentId: r.fromDocumentId, fieldName: r.fieldName }))
     const weakRefs = refs.filter(r => r.refStrength !== 'strong').map(r => ({ fromDocumentId: r.fromDocumentId, fieldName: r.fieldName }))
     return { canHardDelete: strongRefs.length === 0, strongRefs, weakRefs }
-  }
-}
-
-/**
- * Whether the legacy `media` table still exists. The greenfield (document-model) schema never creates
- * it, so every legacy `media` read/write must be guarded with this — media is authoritative in
- * `documents` (media_asset). Legacy writes are best-effort dual-writes only where the table is present.
- */
-export async function legacyMediaTableExists(db: D1Database): Promise<boolean> {
-  try {
-    const row = await db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'media'")
-      .first()
-    return !!row
-  } catch {
-    return false
   }
 }

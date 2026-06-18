@@ -44,7 +44,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
             onclick="copyToClipboard('${file.public_url}')"
             class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
           >
-            Copy URL
+            Copy Relative URL
           </button>
           <a
             href="${file.public_url}"
@@ -90,6 +90,17 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
         <div>
           <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1">Folder</label>
           <p class="text-sm text-zinc-500 dark:text-zinc-400">${file.folder}</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1">URL</label>
+          <a
+            href="${file.public_url}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-sm text-blue-600 dark:text-blue-400 hover:underline break-all"
+            onclick="event.stopPropagation()"
+          >${file.public_url}</a>
         </div>
 
         <div>

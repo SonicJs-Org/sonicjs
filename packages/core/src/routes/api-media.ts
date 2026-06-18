@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAuth } from '../middleware'
 import type { Bindings, Variables } from '../app'
-import { MediaDocumentService, legacyMediaTableExists, mediaDocToRecord } from '../services/media-documents'
+import { MediaDocumentService } from '../services/media-documents'
 import { getRequestTenant } from '../services/document-request-context'
 
 // Helper function to generate short IDs (replacement for nanoid)
@@ -120,10 +120,17 @@ apiMediaRoutes.post('/upload', async (c) => {
       thumbnailUrl = `https://imagedelivery.net/${c.env.IMAGES_ACCOUNT_ID}/${r2Key}/thumbnail`
     }
 
-    // Save to database
+    // Create media_asset document (primary — rootId is the canonical file ID).
+    const doc = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).createFromUpload(
+      { filename, originalName: file.name, mimeType: file.type, size: file.size, width, height, folder, r2Key },
+      user.userId,
+    )
+    const canonicalId = doc.rootId
+
+    // R12: also write legacy media row (non-fatal if table absent on fresh installs).
     const mediaRecord = {
-      id: fileId,
-      filename: filename,
+      id: canonicalId,
+      filename,
       original_name: file.name,
       mime_type: file.type,
       size: file.size,
@@ -135,48 +142,27 @@ apiMediaRoutes.post('/upload', async (c) => {
       thumbnail_url: thumbnailUrl,
       uploaded_by: user.userId,
       uploaded_at: Math.floor(Date.now() / 1000),
-      created_at: Math.floor(Date.now() / 1000)
     }
-
-    // Write the media_asset document — the authoritative record (greenfield has no `media` table).
-    const mediaDoc = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).createFromUpload(
-      {
-        filename: mediaRecord.filename,
-        originalName: mediaRecord.original_name,
-        mimeType: mediaRecord.mime_type,
-        size: mediaRecord.size,
-        width: mediaRecord.width,
-        height: mediaRecord.height,
-        folder: mediaRecord.folder,
-        r2Key: mediaRecord.r2_key,
-      },
-      user.userId,
-    )
-    // The document root id is the public media id (reads/deletes resolve against `documents`).
-    mediaRecord.id = mediaDoc.rootId
-
-    // Best-effort legacy dual-write — only where the legacy `media` table still exists.
-    if (await legacyMediaTableExists(c.env.DB)) {
+    try {
       await c.env.DB.prepare(`
         INSERT INTO media (
           id, filename, original_name, mime_type, size, width, height,
           folder, r2_key, public_url, thumbnail_url, uploaded_by, uploaded_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        mediaRecord.id, mediaRecord.filename, mediaRecord.original_name, mediaRecord.mime_type,
-        mediaRecord.size, mediaRecord.width, mediaRecord.height, mediaRecord.folder,
-        mediaRecord.r2_key, mediaRecord.public_url, mediaRecord.thumbnail_url,
-        mediaRecord.uploaded_by, mediaRecord.uploaded_at,
+        mediaRecord.id, mediaRecord.filename, mediaRecord.original_name,
+        mediaRecord.mime_type, mediaRecord.size, mediaRecord.width, mediaRecord.height,
+        mediaRecord.folder, mediaRecord.r2_key, mediaRecord.public_url,
+        mediaRecord.thumbnail_url, mediaRecord.uploaded_by, mediaRecord.uploaded_at
       ).run()
-    }
+    } catch { /* legacy table absent — non-fatal */ }
 
-    // Emit media upload event
-    await emitEvent('media.upload', { id: mediaRecord.id, filename: mediaRecord.filename })
+    await emitEvent('media.upload', { id: canonicalId, filename })
 
     return c.json({
       success: true,
       file: {
-        id: mediaRecord.id,
+        id: canonicalId,
         filename: mediaRecord.filename,
         originalName: mediaRecord.original_name,
         mimeType: mediaRecord.mime_type,
@@ -288,10 +274,17 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
           thumbnailUrl = `https://imagedelivery.net/${c.env.IMAGES_ACCOUNT_ID}/${r2Key}/thumbnail`
         }
 
-        // Save to database
+        // Create media_asset document (primary).
+        const doc = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).createFromUpload(
+          { filename, originalName: file.name, mimeType: file.type, size: file.size, width, height, folder, r2Key },
+          user.userId,
+        )
+        const canonicalId = doc.rootId
+
+        // R12: also write legacy media row (non-fatal if table absent).
         const mediaRecord = {
-          id: fileId,
-          filename: filename,
+          id: canonicalId,
+          filename,
           original_name: file.name,
           mime_type: file.type,
           size: file.size,
@@ -302,42 +295,24 @@ apiMediaRoutes.post('/upload-multiple', async (c) => {
           public_url: publicUrl,
           thumbnail_url: thumbnailUrl,
           uploaded_by: user.userId,
-          uploaded_at: Math.floor(Date.now() / 1000)
+          uploaded_at: Math.floor(Date.now() / 1000),
         }
-
-        // Authoritative media_asset document; the root id becomes the public media id.
-        const mediaDoc = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).createFromUpload(
-          {
-            filename: mediaRecord.filename,
-            originalName: mediaRecord.original_name,
-            mimeType: mediaRecord.mime_type,
-            size: mediaRecord.size,
-            width: mediaRecord.width,
-            height: mediaRecord.height,
-            folder: mediaRecord.folder,
-            r2Key: mediaRecord.r2_key,
-          },
-          user.userId,
-        )
-        mediaRecord.id = mediaDoc.rootId
-
-        // Best-effort legacy dual-write — only where the legacy `media` table still exists.
-        if (await legacyMediaTableExists(c.env.DB)) {
+        try {
           await c.env.DB.prepare(`
             INSERT INTO media (
               id, filename, original_name, mime_type, size, width, height,
               folder, r2_key, public_url, thumbnail_url, uploaded_by, uploaded_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
-            mediaRecord.id, mediaRecord.filename, mediaRecord.original_name, mediaRecord.mime_type,
-            mediaRecord.size, mediaRecord.width, mediaRecord.height, mediaRecord.folder,
-            mediaRecord.r2_key, mediaRecord.public_url, mediaRecord.thumbnail_url,
-            mediaRecord.uploaded_by, mediaRecord.uploaded_at,
+            mediaRecord.id, mediaRecord.filename, mediaRecord.original_name,
+            mediaRecord.mime_type, mediaRecord.size, mediaRecord.width, mediaRecord.height,
+            mediaRecord.folder, mediaRecord.r2_key, mediaRecord.public_url,
+            mediaRecord.thumbnail_url, mediaRecord.uploaded_by, mediaRecord.uploaded_at
           ).run()
-        }
+        } catch { /* legacy table absent — non-fatal */ }
 
         uploadResults.push({
-          id: mediaRecord.id,
+          id: canonicalId,
           filename: mediaRecord.filename,
           originalName: mediaRecord.original_name,
           mimeType: mediaRecord.mime_type,
@@ -397,53 +372,39 @@ apiMediaRoutes.post('/bulk-delete', async (c) => {
 
     const results = []
     const errors = []
+
     const tenantId = getRequestTenant(c)
-    const svc = new MediaDocumentService(c.env.DB, tenantId)
-    const hasLegacy = await legacyMediaTableExists(c.env.DB)
+    const mediaSvc = new MediaDocumentService(c.env.DB, tenantId)
 
     for (const fileId of fileIds) {
       try {
-        // Resolve the media_asset document (public id == root id).
-        const doc = await svc.getByRootId(fileId)
+        const doc = await mediaSvc.getByRootId(fileId)
+
         if (!doc) {
           errors.push({ fileId, error: 'File not found' })
           continue
         }
-        const rec = mediaDocToRecord(doc)
 
-        // Check permissions (only allow deletion by uploader or admin)
-        if (rec.uploaded_by !== user.userId && user.role !== 'admin') {
+        if (doc.ownerId !== user.userId && user.role !== 'admin') {
           errors.push({ fileId, error: 'Permission denied' })
           continue
         }
 
-        // Reference-aware: a strong inbound reference blocks hard-delete.
-        const impact = await svc.getDeleteImpact(fileId)
-        if (!impact.canHardDelete) {
-          errors.push({ fileId, error: 'File is in use and cannot be deleted' })
-          continue
+        const r2Key = (doc.data as Record<string, any>).r2Key as string | undefined
+        if (r2Key) {
+          try { await c.env.MEDIA_BUCKET.delete(r2Key) } catch (e) { console.warn(`R2 delete failed for ${fileId}:`, e) }
         }
 
-        // Delete from R2 (best-effort).
+        await mediaSvc.softDeleteRoot(fileId)
         try {
-          await c.env.MEDIA_BUCKET.delete(rec.r2_key)
-        } catch (error) {
-          console.warn(`Failed to delete from R2 for file ${fileId}:`, error)
-        }
+          await c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?')
+            .bind(Math.floor(Date.now() / 1000), fileId).run()
+        } catch { /* R12 */ }
 
-        // Soft-delete the document; best-effort legacy mirror.
-        await svc.softDelete(fileId)
-        if (hasLegacy) {
-          await c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?').bind(Math.floor(Date.now() / 1000), fileId).run()
-        }
-
-        results.push({ fileId, filename: rec.original_name, success: true })
+        const d = doc.data as Record<string, any>
+        results.push({ fileId, filename: d.originalName ?? d.filename ?? fileId, success: true })
       } catch (error) {
-        errors.push({
-          fileId,
-          error: 'Delete failed',
-          details: error instanceof Error ? error.message : 'Unknown error'
-        })
+        errors.push({ fileId, error: 'Delete failed', details: error instanceof Error ? error.message : 'Unknown error' })
       }
     }
 
@@ -487,11 +448,9 @@ apiMediaRoutes.post('/create-folder', async (c) => {
       }, 400)
     }
 
-    // Check if the folder already has media (folders are implicit — derived from media_asset docs).
-    const checkStmt = c.env.DB.prepare(
-      "SELECT COUNT(*) as count FROM documents WHERE type_id = 'media_asset' AND tenant_id = ? AND q_media_folder = ? AND is_current_draft = 1 AND deleted_at IS NULL",
-    )
-    const existingFolder = await checkStmt.bind(getRequestTenant(c), folderName).first() as any
+    // Check if folder already exists in the database
+    const checkStmt = c.env.DB.prepare('SELECT COUNT(*) as count FROM media WHERE folder = ? AND deleted_at IS NULL')
+    const existingFolder = await checkStmt.bind(folderName).first() as any
 
     if (existingFolder && existingFolder.count > 0) {
       return c.json({
@@ -537,19 +496,17 @@ apiMediaRoutes.post('/bulk-move', async (c) => {
 
     const results = []
     const errors = []
-    const tenantId = getRequestTenant(c)
-    const svc = new MediaDocumentService(c.env.DB, tenantId)
-    const hasLegacy = await legacyMediaTableExists(c.env.DB)
 
     for (const fileId of fileIds) {
       try {
-        // Resolve the media_asset document (public id == root id).
-        const doc = await svc.getByRootId(fileId)
-        if (!doc) {
+        // Get file record
+        const stmt = c.env.DB.prepare('SELECT * FROM media WHERE id = ? AND deleted_at IS NULL')
+        const fileRecord = await stmt.bind(fileId).first() as any
+
+        if (!fileRecord) {
           errors.push({ fileId, error: 'File not found' })
           continue
         }
-        const fileRecord = mediaDocToRecord(doc)
 
         // Check permissions (only allow move by uploader or admin)
         if (fileRecord.uploaded_by !== user.userId && user.role !== 'admin') {
@@ -598,20 +555,22 @@ apiMediaRoutes.post('/bulk-move', async (c) => {
           continue
         }
 
-        // Update the media_asset document: folder + r2Key (public_url is derived from r2Key on read).
-        const now = Math.floor(Date.now() / 1000)
-        await c.env.DB.prepare(
-          `UPDATE documents SET data = json_set(data, '$.folder', ?, '$.r2Key', ?), updated_at = ?
-           WHERE root_id = ? AND type_id = 'media_asset' AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL`,
-        ).bind(targetFolder, newR2Key, now, fileId, tenantId).run()
+        // Update database with new folder and R2 key
+        const bucketName = c.env.BUCKET_NAME || 'sonicjs-media-dev'
+        const newPublicUrl = `https://pub-${bucketName}.r2.dev/${newR2Key}`
 
-        // Best-effort legacy mirror.
-        if (hasLegacy) {
-          const bucketName = c.env.BUCKET_NAME || 'sonicjs-media-dev'
-          const newPublicUrl = `https://pub-${bucketName}.r2.dev/${newR2Key}`
-          await c.env.DB.prepare('UPDATE media SET folder = ?, r2_key = ?, public_url = ?, updated_at = ? WHERE id = ?')
-            .bind(targetFolder, newR2Key, newPublicUrl, now, fileId).run()
-        }
+        const updateStmt = c.env.DB.prepare(`
+          UPDATE media
+          SET folder = ?, r2_key = ?, public_url = ?, updated_at = ?
+          WHERE id = ?
+        `)
+        await updateStmt.bind(
+          targetFolder,
+          newR2Key,
+          newPublicUrl,
+          Math.floor(Date.now() / 1000),
+          fileId
+        ).run()
 
         results.push({
           fileId,
@@ -649,46 +608,36 @@ apiMediaRoutes.post('/bulk-move', async (c) => {
   }
 })
 
-// Delete file (document-authoritative, reference-aware)
+// Delete file
 apiMediaRoutes.delete('/:id', async (c) => {
   try {
     const user = c.get('user')!
-    const fileId = c.req.param('id')
+    const rootId = c.req.param('id')
     const tenantId = getRequestTenant(c)
-    const svc = new MediaDocumentService(c.env.DB, tenantId)
 
-    // Resolve the media_asset document (the public id is its root id).
-    const doc = await svc.getByRootId(fileId)
+    const mediaSvc = new MediaDocumentService(c.env.DB, tenantId)
+    const doc = await mediaSvc.getByRootId(rootId)
+
     if (!doc) {
       return c.json({ error: 'File not found' }, 404)
     }
-    const rec = mediaDocToRecord(doc)
 
-    // Check permissions (only allow deletion by uploader or admin)
-    if (rec.uploaded_by !== user.userId && user.role !== 'admin') {
+    if (doc.ownerId !== user.userId && user.role !== 'admin') {
       return c.json({ error: 'Permission denied' }, 403)
     }
 
-    // Reference-aware: a strong inbound reference blocks hard-delete.
-    const impact = await svc.getDeleteImpact(fileId)
-    if (!impact.canHardDelete) {
-      return c.json({ error: 'File is in use and cannot be deleted', strongRefs: impact.strongRefs }, 409)
+    const r2Key = (doc.data as Record<string, any>).r2Key as string | undefined
+    if (r2Key) {
+      try { await c.env.MEDIA_BUCKET.delete(r2Key) } catch (e) { console.warn('R2 delete failed:', e) }
     }
 
-    // Delete from R2 (best-effort).
+    await mediaSvc.softDeleteRoot(rootId)
     try {
-      await c.env.MEDIA_BUCKET.delete(rec.r2_key)
-    } catch (error) {
-      console.warn('Failed to delete from R2:', error)
-    }
+      await c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?')
+        .bind(Math.floor(Date.now() / 1000), rootId).run()
+    } catch { /* R12 legacy row may not exist */ }
 
-    // Soft-delete the document; best-effort legacy mirror where the table still exists.
-    await svc.softDelete(fileId)
-    if (await legacyMediaTableExists(c.env.DB)) {
-      await c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?').bind(Math.floor(Date.now() / 1000), fileId).run()
-    }
-
-    await emitEvent('media.delete', { id: fileId })
+    await emitEvent('media.delete', { id: rootId })
     return c.json({ success: true, message: 'File deleted successfully' })
   } catch (error) {
     console.error('Delete error:', error)
@@ -700,43 +649,48 @@ apiMediaRoutes.delete('/:id', async (c) => {
 apiMediaRoutes.patch('/:id', async (c) => {
   try {
     const user = c.get('user')!
-    const fileId = c.req.param('id')
+    const rootId = c.req.param('id')
     const body = await c.req.json()
     const tenantId = getRequestTenant(c)
-    const svc = new MediaDocumentService(c.env.DB, tenantId)
 
-    // Resolve the media_asset document (public id == root id).
-    const doc = await svc.getByRootId(fileId)
+    const mediaSvc = new MediaDocumentService(c.env.DB, tenantId)
+    const doc = await mediaSvc.getByRootId(rootId)
+
     if (!doc) {
       return c.json({ error: 'File not found' }, 404)
     }
-    const fileRecord = mediaDocToRecord(doc)
 
-    // Check permissions (only allow updates by uploader or admin)
-    if (fileRecord.uploaded_by !== user.userId && user.role !== 'admin') {
+    if (doc.ownerId !== user.userId && user.role !== 'admin') {
       return c.json({ error: 'Permission denied' }, 403)
     }
 
-    const allowedFields = ['alt', 'caption', 'folder']
-    const patch: Record<string, any> = {}
-    for (const [key, value] of Object.entries(body)) {
-      if (allowedFields.includes(key)) patch[key] = value
-    }
-    if (Object.keys(patch).length === 0) {
+    const { alt, caption, tags } = body as { alt?: string; caption?: string; tags?: string[] }
+    const meta: { alt?: string | null; caption?: string | null; tags?: string[] } = {}
+    if (alt !== undefined) meta.alt = alt ?? null
+    if (caption !== undefined) meta.caption = caption ?? null
+    if (tags !== undefined) meta.tags = Array.isArray(tags) ? tags : []
+
+    if (Object.keys(meta).length === 0) {
       return c.json({ error: 'No valid fields to update' }, 400)
     }
 
-    await svc.updateMetadata(fileId, patch)
+    await mediaSvc.updateMetadata(rootId, meta, user.userId)
 
-    // Best-effort legacy mirror.
-    if (await legacyMediaTableExists(c.env.DB)) {
-      const sets = Object.keys(patch).map(k => `${k} = ?`)
-      sets.push('updated_at = ?')
-      await c.env.DB.prepare(`UPDATE media SET ${sets.join(', ')} WHERE id = ?`)
-        .bind(...Object.values(patch), Math.floor(Date.now() / 1000), fileId).run()
-    }
+    // R12: keep legacy media row in sync
+    try {
+      const legacyUpdates: string[] = []
+      const legacyValues: unknown[] = []
+      if (meta.alt !== undefined) { legacyUpdates.push('alt = ?'); legacyValues.push(meta.alt) }
+      if (meta.caption !== undefined) { legacyUpdates.push('caption = ?'); legacyValues.push(meta.caption) }
+      if (meta.tags !== undefined) { legacyUpdates.push('tags = ?'); legacyValues.push(JSON.stringify(meta.tags)) }
+      if (legacyUpdates.length > 0) {
+        legacyUpdates.push('updated_at = ?')
+        legacyValues.push(Math.floor(Date.now() / 1000), rootId)
+        await c.env.DB.prepare(`UPDATE media SET ${legacyUpdates.join(', ')} WHERE id = ?`).bind(...legacyValues).run()
+      }
+    } catch { /* R12 */ }
 
-    await emitEvent('media.update', { id: fileId })
+    await emitEvent('media.update', { id: rootId })
     return c.json({ success: true, message: 'File updated successfully' })
   } catch (error) {
     console.error('Update error:', error)

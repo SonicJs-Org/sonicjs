@@ -120,6 +120,21 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
       const migrationService = new MigrationService(c.env.DB);
       await migrationService.ensureSchemaCompatibility();
 
+      // 1a. Wire the CACHE_KV binding into the cache plugin's singleton store so
+      // cache writes survive isolate evictions. Memory-only cache is per-isolate
+      // and ephemeral, which makes /admin/cache appear "empty" after restarts.
+      try {
+        const kv = (c.env as any).CACHE_KV;
+        if (kv) {
+          const { setGlobalKVNamespace } = await import(
+            "../plugins/cache/services/cache"
+          );
+          setGlobalKVNamespace(kv);
+        }
+      } catch (error) {
+        console.error("[Bootstrap] Error wiring CACHE_KV namespace:", error);
+      }
+
       // 2. Populate the in-memory collection registry from code-defined configs.
       // This is the source of truth going forward; the DB `collections` table is
       // being decommissioned (see docs/ai/plans/drop-db-collections-plan.md).

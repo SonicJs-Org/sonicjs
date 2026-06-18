@@ -183,6 +183,17 @@ export interface CollectionConfig {
    * When false: saveDraft updates the single draft row in place (no history).
    */
   versioning?: boolean
+
+  /**
+   * Optional per-collection cache config.
+   * Overrides the cache plugin's default TTL for this collection's API responses.
+   * `enabled: false` disables caching for the collection entirely.
+   * `ttl` is in seconds.
+   */
+  cache?: {
+    enabled?: boolean
+    ttl?: number
+  }
 }
 
 export interface CollectionConfigModule {

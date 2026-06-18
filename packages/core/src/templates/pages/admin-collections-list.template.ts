@@ -103,15 +103,20 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
       },
       {
         key: 'actions',
-        label: 'Content',
+        label: 'Actions',
         sortable: false,
         render: (_value: any, collection: any) => {
           if (!collection || !collection.id) return '<span class="text-zinc-500 dark:text-zinc-400">-</span>'
           return `
             <div class="flex items-center space-x-2">
-              <a href="/admin/content?model=${collection.name}" class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors">
+              <a href="/admin/content?model=${collection.name}" class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors" title="View content">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+              </a>
+              <a href="/api/${collection.name}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg bg-cyan-600 dark:bg-cyan-500 text-white hover:bg-cyan-700 dark:hover:bg-cyan-600 transition-colors" title="Open API endpoint">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                 </svg>
               </a>
             </div>

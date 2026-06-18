@@ -51,5 +51,15 @@ export default {
   searchFields: ['title', 'content', 'author'],
   defaultSort: 'createdAt',
   defaultSortOrder: 'desc',
+
+  // Mark as config-managed (code-based) collection
+  managed: true,
   isActive: true,
+
+  // Per-collection cache override. TTL in seconds; falls back to the cache plugin
+  // default (CACHE_CONFIGS.api.ttl, currently 300s) if unset.
+  cache: {
+    enabled: true,
+    ttl: 5,
+  },
 } satisfies CollectionConfig;

@@ -4,11 +4,12 @@
  * Example collection configuration for blog posts
  */
 
-import type { CollectionConfig } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core';
 
 export default {
-  name: 'blog-posts',
-  displayName: 'Blog Posts',
+  name: 'blog_post',
+  displayName: 'Blog Post',
+  slug: 'blog-posts',
   description: 'Manage your blog posts',
   icon: '📝',
 
@@ -19,57 +20,46 @@ export default {
         type: 'string',
         title: 'Title',
         required: true,
-        maxLength: 200
+        maxLength: 200,
       },
       slug: {
         type: 'slug',
         title: 'URL Slug',
         required: true,
-        maxLength: 200
-      },
-      excerpt: {
-        type: 'textarea',
-        title: 'Excerpt',
-        maxLength: 500,
-        helpText: 'A short summary of the post'
+        maxLength: 200,
       },
       content: {
-        type: 'quill',
+        type: 'lexical',
         title: 'Content',
-        required: true
-      },
-      featuredImage: {
-        type: 'media',
-        title: 'Featured Image'
+        required: true,
       },
       author: {
-        type: 'string',
+        type: 'user',
         title: 'Author',
-        required: true
+        required: true,
       },
       publishedAt: {
         type: 'datetime',
-        title: 'Published Date'
+        title: 'Published Date',
       },
-      status: {
-        type: 'select',
-        title: 'Status',
-        enum: ['draft', 'published', 'archived'],
-        enumLabels: ['Draft', 'Published', 'Archived'],
-        default: 'draft'
-      },
-      tags: {
-        type: 'string',
-        title: 'Tags',
-        helpText: 'Comma-separated tags'
-      }
     },
-    required: ['title', 'slug', 'content', 'author']
+    required: ['title', 'slug', 'content', 'author'],
   },
 
   // List view configuration
   listFields: ['title', 'author', 'status', 'publishedAt'],
-  searchFields: ['title', 'excerpt', 'author'],
+  searchFields: ['title', 'content', 'author'],
   defaultSort: 'createdAt',
-  defaultSortOrder: 'desc'
-} satisfies CollectionConfig
+  defaultSortOrder: 'desc',
+
+  // Mark as config-managed (code-based) collection
+  managed: true,
+  isActive: true,
+
+  // Per-collection cache override. TTL in seconds; falls back to the cache plugin
+  // default (CACHE_CONFIGS.api.ttl, currently 300s) if unset.
+  cache: {
+    enabled: true,
+    ttl: 5,
+  },
+} satisfies CollectionConfig;

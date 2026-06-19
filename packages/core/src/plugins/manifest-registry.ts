@@ -165,7 +165,7 @@ export const PLUGIN_REGISTRY: Record<string, PluginRegistryEntry> = {
     "category": "system",
     "iconEmoji": "⚡",
     "is_core": true,
-    "defaultActive": true,
+    "defaultActive": false,
     "permissions": [
       "cache.view",
       "cache.clear",

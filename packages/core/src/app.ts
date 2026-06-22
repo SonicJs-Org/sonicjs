@@ -46,8 +46,6 @@ import { requireAuth, requireRole, requireRbac } from './middleware/auth'
 import { createAuth } from './auth/config'
 import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
-import { menuMiddleware } from './middleware/menu'
-import { menuPlugin } from './plugins/core-plugins/menu-plugin'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
@@ -294,7 +292,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     multiTenantPlugin,
     lexicalEditorPlugin,
     versioningPlugin,
-    menuPlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
@@ -484,9 +481,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())
-
-  // Data-driven sidebar from menu-plugin (replaces hardcoded nav items when menu_item docs exist)
-  app.use('/admin/*', menuMiddleware())
 
   // RBAC-aware admin shell. Computes the signed-in user's effective permission
   // set once, then (1) redirects the dashboard landing to the first section the

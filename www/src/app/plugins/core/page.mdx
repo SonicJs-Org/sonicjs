@@ -76,7 +76,21 @@ Core plugins extend SonicJS with critical features like authentication, media ma
 
 ## Authentication Plugin
 
-The authentication plugin provides comprehensive user authentication and session management functionality.
+The authentication plugin provides comprehensive user authentication and session management functionality, built on [Better Auth](https://www.better-auth.com) — a TypeScript-first authentication framework designed for modern full-stack applications.
+
+### Why Better Auth?
+
+SonicJS evaluated several auth libraries and chose Better Auth for a few reasons that matter specifically in the Cloudflare Workers context:
+
+**Edge-compatible by design.** Most auth libraries assume a Node.js runtime. Better Auth is built from the ground up to run on edge runtimes — no `fs`, no `crypto` polyfills, no Node-specific dependencies. It runs natively on Cloudflare Workers without shims.
+
+**TypeScript-first.** Better Auth exposes fully typed APIs for sessions, users, and plugins. This aligns with SonicJS's TypeScript-first philosophy and lets the compiler catch auth bugs at build time.
+
+**Works with D1 / SQLite.** Better Auth ships a database adapter that works with any SQL database. SonicJS wires it directly to Cloudflare D1 — sessions and user records live in the same D1 instance as your content, no separate auth service required.
+
+**Pluggable auth strategies.** Email/password, OAuth providers, and magic links are all first-class citizens in Better Auth's plugin model. SonicJS's Magic Link Auth plugin is a thin wrapper on top — the session lifecycle is handled by Better Auth, not by custom JWT logic.
+
+**Active maintenance and security posture.** Better Auth follows a responsible-disclosure process and releases patches quickly. Rolling your own session management in a CMS is a high-risk trade-off; delegating it to a focused library reduces the attack surface.
 
 ### Features
 

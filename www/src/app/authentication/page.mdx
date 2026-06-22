@@ -254,43 +254,59 @@ CREATE TABLE otp_codes (
 );
 ```
 
-### Magic Link Authentication Plugin
+### Magic Link Authentication
 
-The **Magic Link Plugin** enables passwordless login via email links.
+Magic link auth is built into SonicJS via **Better Auth's native `magicLink` plugin**. No separate plugin activation is needed.
+
+**Prerequisites:**
+
+1. `BETTER_AUTH_SECRET` set as a Wrangler secret (required for all Better Auth features)
+2. Email plugin configured with a valid Resend API key (Admin → Plugins → Email Plugin)
+
+Once both are in place, magic link is live — no admin panel toggle required.
 
 **Features:**
-- One-click email authentication
-- No password required
-- Secure token-based links
-- Optional user registration
-
-**Installation:**
-
-1. Navigate to **Admin** → **Plugins**
-2. Find **Magic Link Auth** plugin
-3. Click **Activate**
-4. Configure email settings (requires Email Plugin)
+- Always active when email is configured
+- One-time token stored in `auth_verification` (managed by Better Auth)
+- Creates a full Better Auth session (`better-auth.session_token` cookie)
+- 15-minute link expiry
+- No user enumeration — same `{ status: true }` response for any valid email
 
 **API Usage:**
 
 <CodeGroup title="Magic Link Flow">
 
 ```bash {{title:'Request Magic Link'}}
-# Step 1: Request magic link
-curl -X POST http://localhost:8787/auth/magic-link/request \
+# Step 1: Send magic link to email
+curl -X POST http://localhost:8787/auth/sign-in/magic-link \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com"
-  }'
+  -d '{ "email": "user@example.com" }'
 
-# Response: { "message": "Magic link sent to email" }
+# Response: { "status": true }
 ```
 
 ```bash {{title:'Verify Magic Link'}}
-# Step 2: User clicks link in email
-# GET /auth/magic-link/verify?token=abc123...
+# Step 2: User clicks link in email — Better Auth handles this automatically
+# GET /auth/magic-link/verify?token=<token>&callbackURL=/admin/dashboard
 
-# Automatically redirects to admin with auth cookie set
+# On success: redirects to callbackURL with better-auth.session_token cookie set
+# On failure: redirects with ?error= param
+```
+
+```typescript {{title:'Better Auth Client'}}
+import { createAuthClient } from 'better-auth/client'
+import { magicLinkClient } from 'better-auth/client/plugins'
+
+const client = createAuthClient({
+  baseURL: 'https://your-app.workers.dev',
+  plugins: [magicLinkClient()]
+})
+
+// Request magic link
+await client.signIn.magicLink({
+  email: 'user@example.com',
+  callbackURL: '/admin/dashboard'
+})
 ```
 
 </CodeGroup>

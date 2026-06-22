@@ -1,0 +1,22 @@
+{
+  "id": "core-menu",
+  "name": "Menu Manager",
+  "version": "1.0.0",
+  "description": "Manages the admin sidebar navigation. Admins can reorder, rename, hide built-in items, and add custom links.",
+  "author": "SonicJS Team",
+  "license": "MIT",
+  "category": "admin",
+  "tags": ["menu", "navigation", "admin", "sidebar"],
+  "dependencies": [],
+  "routes": [],
+  "permissions": {},
+  "adminMenu": {
+    "label": "Menu",
+    "icon": "bars-3",
+    "path": "/admin/menu",
+    "order": 90
+  },
+  "iconEmoji": "📋",
+  "is_core": true,
+  "defaultSettings": {}
+}

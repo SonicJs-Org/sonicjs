@@ -34,6 +34,12 @@ jobs:
       - name: Type check stats
         run: cd packages/stats && npx tsc --noEmit
 
+      - name: Apply D1 migrations (production)
+        run: cd packages/stats && npx wrangler d1 migrations apply DB --env production --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy stats to Cloudflare Workers (production)
         run: cd packages/stats && npx wrangler deploy --env production
         env:

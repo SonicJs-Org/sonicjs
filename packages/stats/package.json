@@ -11,6 +11,8 @@
     "deploy:production": "wrangler deploy --env production",
     "db:migrate": "wrangler d1 migrations apply DB",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
+    "db:reset:local": "wrangler d1 execute DB --local --command 'DROP TABLE IF EXISTS documents; DROP TABLE IF EXISTS document_types; DROP TABLE IF EXISTS document_references; DROP TABLE IF EXISTS document_facets; DROP TABLE IF EXISTS document_permissions; DROP TABLE IF EXISTS session; DROP TABLE IF EXISTS account; DROP TABLE IF EXISTS user; DROP TABLE IF EXISTS verification;' && wrangler d1 migrations apply DB --local",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,8 +21,6 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250620.0",
     "@types/node": "^20.19.1",
-    "drizzle-kit": "^0.31.8",
-    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.26",
     "typescript": "^5.8.3",
     "wrangler": "^4.78.0"

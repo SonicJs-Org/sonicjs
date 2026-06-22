@@ -31,7 +31,7 @@ Core plugins extend SonicJS with critical features like authentication, media ma
     {
       icon: '📧',
       title: 'Email',
-      description: 'Transactional email sending via Resend with pre-built templates',
+      description: 'Transactional email sending via Resend or Cloudflare Email with pre-built templates',
     },
     {
       icon: '🔗',
@@ -183,32 +183,66 @@ const authService = {
 
 ## Email Plugin
 
-The email plugin provides transactional email functionality using Resend, with pre-built templates for common authentication and notification scenarios.
+The email plugin provides transactional email functionality using either **Resend** or **Cloudflare Email**, with pre-built templates for common authentication and notification scenarios.
 
 ### Features
 
-- **Resend Integration** - Send emails via the Resend API
+- **Resend Integration** - Send emails via the Resend API (API key required)
+- **Cloudflare Email** - Send via the Cloudflare `send_email` Workers binding (no API key needed)
 - **Email Templates** - Pre-built templates for registration, verification, password reset, and one-time codes
 - **Template Customization** - Code-based templates that can be customized
 - **Logo Support** - Add your company logo to email templates
 - **Settings Management** - Admin UI for configuring email settings
 - **Test Email** - Send test emails to verify configuration
+- **Console Fallback** - Zero-config dev mode logs emails to the console instead of delivering them
+
+### Providers
+
+| Provider | How to enable |
+|---|---|
+| **Resend** | Set `RESEND_API_KEY` env var, or configure in Admin → Email settings |
+| **Cloudflare Email** | Add an `EMAIL` Workers binding (`send_email`) in `wrangler.toml` |
+| **Console** | Automatic fallback when no provider is configured (dev only) |
+
+Provider resolution order at boot:
+1. `RESEND_API_KEY` env var → Resend (wins regardless of DB setting)
+2. DB `provider=resend` + saved API key → Resend
+3. `EMAIL` Workers binding present, provider not forced to resend → Cloudflare Email
+4. Auto-detect from env, then Console fallback
 
 ### Configuration
 
-<CodeGroup title="Plugin Configuration">
+<CodeGroup title="Resend — env var (recommended)">
+
+```bash
+# wrangler.toml or .dev.vars
+RESEND_API_KEY=re_...
+```
+
+</CodeGroup>
+
+<CodeGroup title="Cloudflare Email — wrangler.toml binding">
+
+```toml
+[[send_email]]
+name = "EMAIL"
+```
+
+</CodeGroup>
+
+<CodeGroup title="Admin UI settings shape">
 
 ```typescript
+// POST /admin/email/settings
 {
-  name: 'email',
-  version: '1.0.0-beta.1',
-  settings: {
-    apiKey: 're_...',              // Resend API key
-    fromEmail: 'noreply@yourdomain.com',  // From email address
-    fromName: 'Your App Name',     // From name
-    replyTo: 'support@yourdomain.com',    // Reply-to address (optional)
-    logoUrl: 'https://yourdomain.com/logo.png'  // Logo URL (optional)
-  }
+  provider: 'resend' | 'cloudflare',
+  resendApiKey: 're_...',              // Resend API key (if not in env)
+  fromEmail: 'noreply@yourdomain.com',
+  fromName: 'Your App Name',
+  replyTo: 'support@yourdomain.com',   // optional
+  logoUrl: 'https://yourdomain.com/logo.png', // optional
+  cfAccountId: '...',                  // optional — for delivery reconciliation
+  cfEmailApiToken: '...',              // optional — for delivery reconciliation
 }
 ```
 
@@ -216,10 +250,17 @@ The email plugin provides transactional email functionality using Resend, with p
 
 ### Setup
 
-1. Sign up for [Resend](https://resend.com) and get your API key
-2. Navigate to `/admin/plugins/email/settings` in your SonicJS admin
-3. Configure your Resend API key and email settings
-4. Send a test email to verify configuration
+**Option A — Resend**
+1. Sign up at [resend.com](https://resend.com) and get your API key
+2. Set `RESEND_API_KEY` in your env, or navigate to `/admin/email/settings` and enter it there
+3. Verify your sending domain in Resend
+4. Send a test email from `/admin/email/settings`
+
+**Option B — Cloudflare Email**
+1. Add a `send_email` binding named `EMAIL` in `wrangler.toml`
+2. Configure Cloudflare Email Routing in your Cloudflare dashboard
+3. No API key required — the Workers binding handles auth
+4. Send a test email from `/admin/email/settings`
 
 ### Included Email Templates
 
@@ -232,39 +273,29 @@ Sent to verify user email addresses
 **Password Reset**
 Sent when users request to reset their password
 
-**One-Time Code (2FA)**
-Sent for two-factor authentication codes
+**One-Time Code (OTP/2FA)**
+Sent for one-time passwords and two-factor authentication codes
 
 ### API Usage
 
 <CodeGroup title="Sending Emails">
 
 ```typescript
-// Get email plugin instance
-const emailPlugin = context.plugins.get('email')
+import { getEmailService } from '@sonicjs-cms/core'
 
 // Send a custom email
-await emailPlugin.sendEmail({
+await getEmailService().send({
   to: 'user@example.com',
   subject: 'Welcome to SonicJS',
-  html: '<h1>Welcome!</h1><p>Thanks for signing up.</p>'
+  html: '<h1>Welcome!</h1><p>Thanks for signing up.</p>',
+  flow: 'welcome', // recorded in email_log for observability
 })
 
-// Send using built-in templates
-await emailPlugin.sendVerificationEmail({
-  to: 'user@example.com',
-  verificationUrl: 'https://yoursite.com/verify?token=...'
-})
-
-await emailPlugin.sendPasswordResetEmail({
-  to: 'user@example.com',
-  resetUrl: 'https://yoursite.com/reset?token=...'
-})
-
-await emailPlugin.sendOneTimeCodeEmail({
-  to: 'user@example.com',
-  code: '123456',
-  expiryMinutes: 10
+// Send to multiple recipients
+await getEmailService().send({
+  to: ['alice@example.com', 'bob@example.com'],
+  subject: 'Team notification',
+  html: '<p>Hello team!</p>',
 })
 ```
 
@@ -272,11 +303,7 @@ await emailPlugin.sendOneTimeCodeEmail({
 
 ### Admin Pages
 
-- **/admin/plugins/email/settings** - Configure Resend API and email settings
-
-<Note>
-The email plugin requires a Resend API key. You must verify your domain in Resend before sending emails from it.
-</Note>
+- **/admin/email/settings** - Configure provider, API keys, and sender identity
 
 ---
 
@@ -438,7 +465,7 @@ The magic link email includes:
 - Modern, responsive design
 
 <Note>
-The Magic Link Auth plugin requires the Email plugin to be installed and configured. Make sure to set up Resend before enabling magic link authentication.
+The Magic Link Auth plugin requires the Email plugin to be installed and configured with a working provider (Resend or Cloudflare Email) before enabling magic link authentication.
 </Note>
 
 ---

@@ -1,6 +1,6 @@
 name = "sonicjs-stats"
 main = "src/index.ts"
-compatibility_date = "2024-09-23"
+compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat"]
 
 # Cloudflare Workers settings

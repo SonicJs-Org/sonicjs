@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "build": "echo 'Worker build is handled by wrangler during deployment'",
     "deploy": "wrangler deploy",
+    "deploy:production": "wrangler deploy --env production",
     "db:migrate": "wrangler d1 migrations apply DB",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "type-check": "tsc --noEmit"

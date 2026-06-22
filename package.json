@@ -18,6 +18,7 @@
     "build:core": "npm run plugins:generate && npm run build --workspace=@sonicjs-cms/core",
     "deploy": "npm run deploy --workspace=my-sonicjs-app",
     "deploy:www": "npm run deploy --workspace=www",
+    "deploy:stats": "npm run deploy:production --workspace=sonicjs-stats",
     "test": "npm run test --workspace=@sonicjs-cms/core",
     "test:cov": "npm run test:cov --workspace=@sonicjs-cms/core",
     "test:watch": "npm run test:watch --workspace=@sonicjs-cms/core",

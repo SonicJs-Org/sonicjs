@@ -113,6 +113,19 @@ const ACCORDION_SCRIPT = `
   })
 </script>`
 
+async function isMenuPluginActive(db: any): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare(`SELECT status FROM plugins WHERE id = 'menu' LIMIT 1`)
+      .first() as { status: string } | null
+    // Not yet in DB (never installed) → treat as active so onBoot seeding works
+    if (!row) return true
+    return row.status === 'active'
+  } catch {
+    return true
+  }
+}
+
 export function menuMiddleware() {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const path = new URL(c.req.url).pathname
@@ -123,6 +136,9 @@ export function menuMiddleware() {
     await next()
 
     if (!c.res.headers.get('content-type')?.includes('text/html')) return
+
+    // Revert to hardcoded sidebar when plugin is explicitly disabled
+    if (!(await isMenuPluginActive(c.env.DB))) return
 
     let items: Awaited<ReturnType<typeof listMenuItems>> = []
     try {

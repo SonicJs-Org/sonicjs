@@ -62,14 +62,18 @@ adminPluginRoutes.get('/', async (c) => {
       // Continue with empty data
     }
 
+    // Filter out DB records whose IDs no longer exist in the registry (e.g. renamed plugins)
+    const registryIds = new Set(AVAILABLE_PLUGINS.map(p => p.id))
+    const validInstalledPlugins = installedPlugins.filter(p => registryIds.has(p.id))
+
     // Get list of installed plugin IDs
-    const installedPluginIds = new Set(installedPlugins.map(p => p.id))
+    const installedPluginIds = new Set(validInstalledPlugins.map(p => p.id))
 
     // Find uninstalled plugins
     const uninstalledPlugins = AVAILABLE_PLUGINS.filter(p => !installedPluginIds.has(p.id))
 
     // Map installed plugins to template format
-    const templatePlugins: Plugin[] = installedPlugins.map(p => ({
+    const templatePlugins: Plugin[] = validInstalledPlugins.map(p => ({
       id: p.id,
       name: p.name,
       displayName: p.display_name,
@@ -111,7 +115,7 @@ adminPluginRoutes.get('/', async (c) => {
 
     // Update stats with uninstalled count
     stats.uninstalled = uninstalledPlugins.length
-    stats.total = installedPlugins.length + uninstalledPlugins.length
+    stats.total = validInstalledPlugins.length + uninstalledPlugins.length
 
     const pageData: PluginsListPageData = {
       plugins: allPlugins,

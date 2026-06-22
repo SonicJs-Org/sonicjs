@@ -12,7 +12,8 @@
     "db:migrate": "wrangler d1 migrations apply DB",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
-    "db:reset:local": "wrangler d1 execute DB --local --command 'DROP TABLE IF EXISTS documents; DROP TABLE IF EXISTS document_types; DROP TABLE IF EXISTS document_references; DROP TABLE IF EXISTS document_facets; DROP TABLE IF EXISTS document_permissions; DROP TABLE IF EXISTS session; DROP TABLE IF EXISTS account; DROP TABLE IF EXISTS user; DROP TABLE IF EXISTS verification;' && wrangler d1 migrations apply DB --local",
+    "db:reset:local": "rm -rf .wrangler/state/v3/d1 && wrangler d1 migrations apply DB --local && node scripts/seed-local.mjs",
+    "setup:db": "npm run db:reset:local",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

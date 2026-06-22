@@ -39,6 +39,7 @@ import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
 import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
+import aiSearchApiRoutes from './plugins/core-plugins/ai-search-plugin/routes/api'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
 import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
@@ -628,6 +629,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
+  // ai-search plugin API (POST /api/search, GET /api/search/suggest|analytics) — must be mounted
+  // here, before the /api/:collection catch-all, or it is shadowed (the plugin's register() runs
+  // after this line, so it cannot mount /api/search itself).
+  app.route('/api/search', aiSearchApiRoutes)
   app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
 

@@ -10,12 +10,7 @@
   "dependencies": [],
   "routes": [],
   "permissions": {},
-  "adminMenu": {
-    "label": "Menu",
-    "icon": "bars-3",
-    "path": "/admin/menu",
-    "order": 90
-  },
+  "adminMenu": null,
   "iconEmoji": "📋",
   "is_core": true,
   "defaultSettings": {}

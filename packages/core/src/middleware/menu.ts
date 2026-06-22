@@ -115,10 +115,17 @@ const ACCORDION_SCRIPT = `
 
 async function isMenuPluginActive(db: any): Promise<boolean> {
   try {
+    // Plugins live in documents (type_id='plugin', slug=pluginId) — not the legacy plugins table
     const row = await db
-      .prepare(`SELECT status FROM plugins WHERE id = 'menu' LIMIT 1`)
+      .prepare(
+        `SELECT json_extract(data, '$.status') AS status
+         FROM documents
+         WHERE slug = 'menu' AND type_id = 'plugin' AND tenant_id = 'default'
+           AND is_current_draft = 1 AND deleted_at IS NULL
+         LIMIT 1`,
+      )
       .first() as { status: string } | null
-    // Not yet in DB (never installed) → treat as active so onBoot seeding works
+    // Not yet in DB (never installed/auto-registered) → treat as active
     if (!row) return true
     return row.status === 'active'
   } catch {

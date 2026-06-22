@@ -46,6 +46,7 @@ import { requireAuth, requireRole, requireRbac } from './middleware/auth'
 import { createAuth } from './auth/config'
 import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
+import { menuPlugin } from './plugins/core-plugins/menu-plugin'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
@@ -292,6 +293,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     multiTenantPlugin,
     lexicalEditorPlugin,
     versioningPlugin,
+    menuPlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 

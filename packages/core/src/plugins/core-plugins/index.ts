@@ -67,6 +67,7 @@ export const CORE_PLUGIN_IDS = [
   'stripe',
   'multi-tenant',
   'versioning',
+  'menu',
 ] as const
 
 export type CorePluginNames = (typeof CORE_PLUGIN_IDS)[number]

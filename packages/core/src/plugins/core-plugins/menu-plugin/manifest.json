@@ -1,5 +1,5 @@
 {
-  "id": "core-menu",
+  "id": "menu",
   "name": "Menu Manager",
   "version": "1.0.0",
   "description": "Manages the admin sidebar navigation. Admins can reorder, rename, hide built-in items, and add custom links.",

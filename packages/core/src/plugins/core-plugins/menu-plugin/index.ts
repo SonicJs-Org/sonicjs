@@ -9,7 +9,7 @@ import { z } from 'zod'
 import type { D1Database } from '@cloudflare/workers-types'
 
 export const menuPlugin = definePlugin({
-  id: 'core-menu',
+  id: 'menu',
   version: '1.0.0',
   name: 'Menu Manager',
   description: 'Admin sidebar navigation manager.',
@@ -36,7 +36,7 @@ export const menuPlugin = definePlugin({
         displayName: 'Menu Item',
         description: 'Admin sidebar navigation item',
         schema: z.object({}),
-        pluginId: 'core-menu',
+        pluginId: 'menu',
         source: 'plugin',
         queryableFields: [
           { name: 'parent', path: '$.parent', kind: 'scalar', type: 'text', column: 'q_menu_parent' },

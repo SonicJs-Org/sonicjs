@@ -131,6 +131,9 @@ adminPluginRoutes.get('/', async (c) => {
   }
 })
 
+// Menu plugin settings page redirects to the dedicated menu editor
+adminPluginRoutes.get('/menu', (c) => c.redirect('/admin/menu'))
+
 // Get plugin settings page
 adminPluginRoutes.get('/:id', async (c) => {
   try {

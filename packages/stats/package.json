@@ -12,7 +12,7 @@
     "db:migrate": "wrangler d1 migrations apply DB",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
-    "db:reset:local": "rm -rf .wrangler/state/v3/d1 && wrangler d1 migrations apply DB --local && node scripts/seed-local.mjs",
+    "db:reset:local": "bash scripts/setup-local.sh",
     "setup:db": "npm run db:reset:local",
     "type-check": "tsc --noEmit"
   },

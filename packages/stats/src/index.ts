@@ -12,6 +12,9 @@ import type { SonicJSConfig } from '@sonicjs-cms/core'
 import installsCollection from './collections/installs.collection'
 import eventsCollection from './collections/events.collection'
 
+// Import plugins
+import { statsDashboardPlugin } from './plugins/stats-dashboard'
+
 // Register collections
 registerCollections([
   installsCollection,
@@ -25,7 +28,8 @@ const config: SonicJSConfig = {
   },
   plugins: {
     autoLoad: false,
-    disableAll: true  // No plugins needed for stats collector
+    disableAll: true,  // Disable core plugins — stats-only worker
+    register: [statsDashboardPlugin],
   }
 }
 

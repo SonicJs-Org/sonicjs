@@ -6,7 +6,6 @@ export const sections = [
   { title: 'Media Plugin', id: 'media-plugin' },
   { title: 'Cache Plugin', id: 'cache-plugin' },
   { title: 'Database Tools', id: 'database-tools' },
-  { title: 'Seed Data Plugin', id: 'seed-data-plugin' },
   { title: 'QR Code Generator', id: 'qr-code-generator' },
   { title: 'Redirect Management', id: 'redirect-management' },
 ]
@@ -52,11 +51,6 @@ Core plugins extend SonicJS with critical features like authentication, media ma
       icon: '🛠️',
       title: 'Database Tools',
       description: 'Database administration, migrations, and query tools',
-    },
-    {
-      icon: '🌱',
-      title: 'Seed Data',
-      description: 'Sample data generation for development and testing',
     },
     {
       icon: '📱',
@@ -865,102 +859,6 @@ const databaseService = {
 
 <Note>
 The database tools plugin is restricted to admin users only for security. Never expose database query capabilities to untrusted users.
-</Note>
-
----
-
-## Seed Data Plugin
-
-The seed data plugin generates sample data for development and testing purposes.
-
-### Features
-
-- **Sample Content** - Generate blog posts, pages, and articles
-- **Test Users** - Create user accounts with various roles
-- **Media Files** - Generate placeholder images and files
-- **Collections** - Populate custom collections with data
-- **Relationships** - Create related data (users, posts, comments)
-- **Customizable** - Configure data generation parameters
-
-### Configuration
-
-<CodeGroup title="Plugin Configuration">
-
-```typescript
-{
-  name: 'seed-data-plugin',
-  version: '1.0.0',
-  settings: {
-    enabled: false,               // Disable in production
-    autoSeed: false,             // Auto-seed on first run
-    contentCount: 50,            // Number of content items
-    userCount: 10,               // Number of test users
-    mediaCount: 20               // Number of media files
-  }
-}
-```
-
-</CodeGroup>
-
-### API Endpoints
-
-**POST /admin/seed-data/generate**
-Generate seed data
-
-<CodeGroup title="Generate Seed Data">
-
-```bash {{ title: 'cURL' }}
-curl -X POST http://localhost:8787/admin/seed-data/generate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${token}" \
-  -d '{
-    "contentCount": 50,
-    "userCount": 10,
-    "mediaCount": 20,
-    "clearExisting": false
-  }'
-```
-
-</CodeGroup>
-
-**POST /admin/seed-data/clear**
-Clear all seed data
-
-**GET /admin/seed-data/status**
-Check seed data status
-
-### Usage
-
-<CodeGroup title="Seed Data Generation">
-
-```typescript
-import { generateSeedData } from '@sonicjs-cms/core'
-
-// Generate seed data programmatically
-await generateSeedData({
-  content: {
-    count: 50,
-    collections: ['blog_posts', 'pages']
-  },
-  users: {
-    count: 10,
-    roles: ['admin', 'editor', 'author']
-  },
-  media: {
-    count: 20,
-    types: ['image', 'video', 'document']
-  }
-})
-```
-
-</CodeGroup>
-
-### Admin Pages
-
-- **/admin/seed-data** - Seed data generator interface
-
-<Note>
-The seed data plugin should be disabled in production environments. It's designed for development and testing only.
 </Note>
 
 ---

@@ -60,6 +60,9 @@ adminRoutes.get('/', async (c) => {
     templateR,
     installFailR,
     runtimeErrR,
+    snapshotCollectionsR,
+    snapshotPluginsR,
+    snapshotFieldTypesR,
   ] = await Promise.all([
     // 1. Weekly funnel: started/completed/failed counts per week (keyed to Monday date)
     db.prepare(
@@ -138,6 +141,27 @@ adminRoutes.get('/', async (c) => {
        FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='error_occurred'
        GROUP BY err, version ORDER BY count DESC LIMIT 25`
     ).all(),
+    // 11. Top collections from project_snapshot (aggregate doc counts across installations)
+    db.prepare(
+      `SELECT key AS collection, SUM(CAST(value AS INTEGER)) AS total_docs, COUNT(DISTINCT json_extract(data,'$.properties.installation_id')) AS installations
+       FROM documents, json_each(json_extract(data,'$.properties.collection_counts'))
+       WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+       GROUP BY key ORDER BY total_docs DESC LIMIT 20`
+    ).all(),
+    // 12. Top plugins from project_snapshot (count appearances across installations)
+    db.prepare(
+      `SELECT value AS plugin, COUNT(DISTINCT json_extract(data,'$.properties.installation_id')) AS installations
+       FROM documents, json_each(json_extract(data,'$.properties.active_plugins'))
+       WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+       GROUP BY value ORDER BY installations DESC LIMIT 20`
+    ).all(),
+    // 13. Field type histogram aggregated across all snapshots
+    db.prepare(
+      `SELECT key AS field_type, SUM(CAST(value AS INTEGER)) AS total_fields
+       FROM documents, json_each(json_extract(data,'$.properties.field_type_histogram'))
+       WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+       GROUP BY key ORDER BY total_fields DESC`
+    ).all(),
   ])
 
   // ── Funnel aggregation ──────────────────────────────────────────────────
@@ -205,6 +229,12 @@ adminRoutes.get('/', async (c) => {
   const installFailRows = rowsOf(installFailR) as { err: string; step: string; count: number }[]
   const runtimeErrRows = rowsOf(runtimeErrR) as { err: string; version: string; count: number }[]
 
+  // ── Project snapshot breakdowns ─────────────────────────────────────────
+  const snapshotCollectionRows = rowsOf(snapshotCollectionsR) as { collection: string; total_docs: number; installations: number }[]
+  const snapshotPluginRows = rowsOf(snapshotPluginsR) as { plugin: string; installations: number }[]
+  const snapshotFieldTypeRows = rowsOf(snapshotFieldTypesR) as { field_type: string; total_fields: number }[]
+  const hasSnapshotData = snapshotCollectionRows.length > 0 || snapshotPluginRows.length > 0
+
   // ── Chart datasets (serialized) ─────────────────────────────────────────
   const charts = {
     trend: { labels: trendLabels.map(fmtWeekDate), weekly: trendCounts, cumulative: trendCumulative },
@@ -214,6 +244,9 @@ adminRoutes.get('/', async (c) => {
     os: { labels: osRows.map((r) => r.os), data: osRows.map((r) => Number(r.count)) },
     node: { labels: nodeRows.map((r) => r.v), data: nodeRows.map((r) => r.count) },
     template: { labels: templateRows.map((r) => r.t), data: templateRows.map((r) => Number(r.count)) },
+    collections: { labels: snapshotCollectionRows.map((r) => r.collection), docs: snapshotCollectionRows.map((r) => Number(r.total_docs)), installs: snapshotCollectionRows.map((r) => Number(r.installations)) },
+    plugins: { labels: snapshotPluginRows.map((r) => r.plugin), data: snapshotPluginRows.map((r) => Number(r.installations)) },
+    fieldTypes: { labels: snapshotFieldTypeRows.map((r) => r.field_type), data: snapshotFieldTypeRows.map((r) => Number(r.total_fields)) },
   }
 
   // ── KPI card markup ─────────────────────────────────────────────────────
@@ -311,6 +344,37 @@ adminRoutes.get('/', async (c) => {
     ${card('Install Failures', 'installation_failed grouped by error + step', errTable(installFailRows.map((r) => ({ err: r.err, sub: r.step, count: Number(r.count) })), 'Step', 'No failures recorded.'))}
     ${card('Runtime Errors', 'error_occurred grouped by error + version', errTable(runtimeErrRows.map((r) => ({ err: r.err, sub: r.version, count: Number(r.count) })), 'Version', 'No runtime errors recorded.'))}
   </div>
+
+  <!-- What people build (project_snapshot data) -->
+  ${hasSnapshotData ? `
+  <div>
+    <h2 class="text-xl font-semibold text-zinc-950 dark:text-white">What People Build</h2>
+    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Aggregated from <code>project_snapshot</code> events — requires running SonicJS instances with v3 telemetry</p>
+  </div>
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    ${card('Top Collections', 'Total docs across all installations reporting this collection', '<canvas id="chartCollections" height="280"></canvas>')}
+    ${card('Active Plugins', 'Installations using each plugin', '<canvas id="chartPlugins" height="280"></canvas>')}
+  </div>
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    ${card('Field Types Used', 'Aggregate field type count across all schemas', '<canvas id="chartFieldTypes" height="260"></canvas>')}
+    ${card('Top Collections by Installs', 'Which collections appear most across projects', `
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <tr><th class="py-2 text-left font-medium">Collection</th><th class="py-2 text-right font-medium">Total Docs</th><th class="py-2 text-right font-medium">Installations</th></tr>
+        </thead>
+        <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+        ${snapshotCollectionRows.slice(0, 15).map((r) => `<tr>
+          <td class="py-2 font-mono text-zinc-700 dark:text-zinc-300">${esc(r.collection)}</td>
+          <td class="py-2 text-right font-semibold text-zinc-900 dark:text-white">${Number(r.total_docs).toLocaleString()}</td>
+          <td class="py-2 text-right text-zinc-500 dark:text-zinc-400">${Number(r.installations).toLocaleString()}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    `)}
+  </div>` : `
+  <div class="rounded-lg bg-white dark:bg-zinc-800 p-8 ring-1 ring-zinc-950/5 dark:ring-white/10 text-center">
+    <p class="text-zinc-500 dark:text-zinc-400 text-sm">No <code>project_snapshot</code> data yet — requires SonicJS installations running v3 with telemetry enabled</p>
+  </div>`}
 </div>
 
 <script>
@@ -376,6 +440,22 @@ adminRoutes.get('/', async (c) => {
 
   // Node version horizontal bar
   bar('chartNode', D.node.labels, [{ label: 'Installs', data: D.node.data, backgroundColor: P[5] }], { horizontal: true, legend: false });
+
+  // What people build — project_snapshot charts (only rendered when data exists)
+  if (D.collections && D.collections.labels.length) {
+    bar('chartCollections', D.collections.labels, [
+      { label: 'Total Docs', data: D.collections.docs, backgroundColor: P[0] },
+      { label: 'Installations', data: D.collections.installs, backgroundColor: P[1] }
+    ], { horizontal: true });
+  }
+  if (D.plugins && D.plugins.labels.length) {
+    bar('chartPlugins', D.plugins.labels, [
+      { label: 'Installations', data: D.plugins.data, backgroundColor: P[4] }
+    ], { horizontal: true, legend: false });
+  }
+  if (D.fieldTypes && D.fieldTypes.labels.length) {
+    doughnut('chartFieldTypes', D.fieldTypes.labels, D.fieldTypes.data);
+  }
 })();
 </script>`
 

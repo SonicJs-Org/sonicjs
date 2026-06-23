@@ -30,6 +30,9 @@ export type TelemetryEvent =
   | 'migration_run'
   | 'deployment_triggered'
 
+  // Runtime snapshot (emitted on bootstrap)
+  | 'project_snapshot'
+
 export interface TelemetryProperties {
   // System Information (no PII)
   os?: 'darwin' | 'linux' | 'win32' | string

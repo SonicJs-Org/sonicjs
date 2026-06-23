@@ -26,8 +26,8 @@ export default {
         type: "select",
         title: "Event Type",
         required: true,
-        enum: ["installation_started", "installation_completed", "installation_failed"],
-        enumLabels: ["Installation Started", "Installation Completed", "Installation Failed"],
+        enum: ["installation_started", "installation_completed", "installation_failed", "error_occurred", "project_snapshot"],
+        enumLabels: ["Installation Started", "Installation Completed", "Installation Failed", "Error Occurred", "Project Snapshot"],
       },
       error_code: {
         type: "string",

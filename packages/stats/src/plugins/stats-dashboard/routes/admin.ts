@@ -35,6 +35,13 @@ function jsonForScript(v: unknown): string {
 interface Row { [k: string]: any }
 const rowsOf = (r: { results?: unknown[] } | null): Row[] => (r?.results ?? []) as Row[]
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function fmtWeekDate(iso: string): string {
+  const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return iso
+  return `${MONTHS[parseInt(m[2], 10) - 1]} ${parseInt(m[3], 10)}`
+}
+
 // Shared chart palette
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#14b8a6', '#a855f7', '#64748b']
 
@@ -54,9 +61,9 @@ adminRoutes.get('/', async (c) => {
     installFailR,
     runtimeErrR,
   ] = await Promise.all([
-    // 1. Weekly funnel: started/completed/failed counts per ISO week
+    // 1. Weekly funnel: started/completed/failed counts per week (keyed to Monday date)
     db.prepare(
-      `SELECT strftime('%Y-%W', datetime(created_at, 'unixepoch')) AS week,
+      `SELECT date(datetime(created_at, 'unixepoch'), '-' || CAST((strftime('%w', datetime(created_at, 'unixepoch')) + 6) % 7 AS TEXT) || ' days') AS week,
               json_extract(data, '$.event_type') AS event_type,
               COUNT(*) AS count
        FROM documents WHERE ${EVENTS_WHERE}
@@ -79,9 +86,9 @@ adminRoutes.get('/', async (c) => {
               SUM(CASE WHEN json_extract(data,'$.last_seen') > json_extract(data,'$.first_seen') THEN 1 ELSE 0 END) AS multi_session
        FROM documents WHERE ${INSTALLS_WHERE}`
     ).first(),
-    // 4. New installs per week (cohort by first_seen)
+    // 4. New installs per week (cohort by first_seen, keyed to Monday date)
     db.prepare(
-      `SELECT strftime('%Y-%W', json_extract(data,'$.first_seen')) AS week, COUNT(*) AS count
+      `SELECT date(json_extract(data,'$.first_seen'), '-' || CAST((strftime('%w', json_extract(data,'$.first_seen')) + 6) % 7 AS TEXT) || ' days') AS week, COUNT(*) AS count
        FROM documents WHERE ${INSTALLS_WHERE} AND json_extract(data,'$.first_seen') IS NOT NULL
        GROUP BY week ORDER BY week ASC`
     ).all(),
@@ -200,8 +207,8 @@ adminRoutes.get('/', async (c) => {
 
   // ── Chart datasets (serialized) ─────────────────────────────────────────
   const charts = {
-    trend: { labels: trendLabels, weekly: trendCounts, cumulative: trendCumulative },
-    funnel: { labels: recentWeeks, started: funnelStarted, completed: funnelCompleted, failed: funnelFailed },
+    trend: { labels: trendLabels.map(fmtWeekDate), weekly: trendCounts, cumulative: trendCumulative },
+    funnel: { labels: recentWeeks.map(fmtWeekDate), started: funnelStarted, completed: funnelCompleted, failed: funnelFailed },
     churn: { active7, active30minus7: Math.max(0, active30 - active7), churned },
     lifespan: { labels: lifeOrder.map((k) => lifeLabels[k]), data: lifespanData },
     os: { labels: osRows.map((r) => r.os), data: osRows.map((r) => Number(r.count)) },
@@ -291,7 +298,7 @@ adminRoutes.get('/', async (c) => {
       </thead>
       <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
       ${tableWeeks.map((r) => `<tr>
-        <td class="py-2 font-mono text-zinc-700 dark:text-zinc-300">${r.week}</td>
+        <td class="py-2 font-mono text-zinc-700 dark:text-zinc-300">${fmtWeekDate(r.week)}</td>
         <td class="py-2 text-right text-zinc-700 dark:text-zinc-300">${r.started.toLocaleString()}</td>
         <td class="py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">${r.completed.toLocaleString()}</td>
         <td class="py-2 text-right ${r.failed > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'}">${r.failed.toLocaleString()}</td>

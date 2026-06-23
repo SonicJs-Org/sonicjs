@@ -76,6 +76,8 @@ async function initTelemetry() {
   }
 }
 
+const pendingRequests = []
+
 /**
  * Track an event using custom SonicJS stats endpoint
  */
@@ -105,12 +107,13 @@ async function track(event, properties = {}) {
       }
     }
 
-    // Fire and forget - don't block on response
-    fetch(`${TELEMETRY_ENDPOINT}/v1/events`, {
+    const req = fetch(`${TELEMETRY_ENDPOINT}/v1/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    }).catch(() => {}) // Silent fail
+    }).catch(() => {})
+
+    pendingRequests.push(req)
 
     if (DEBUG) {
       console.log('[Telemetry] Tracked:', event, payload)
@@ -124,10 +127,12 @@ async function track(event, properties = {}) {
 }
 
 /**
- * Shutdown telemetry (no-op for fetch-based telemetry)
+ * Shutdown telemetry — flush pending requests (max 3s wait)
  */
 async function shutdown() {
-  // No-op - fetch requests are fire and forget
+  if (pendingRequests.length === 0) return
+  const timeout = new Promise(resolve => setTimeout(resolve, 3000))
+  await Promise.race([Promise.all(pendingRequests), timeout])
 }
 
 /**

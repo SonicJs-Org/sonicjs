@@ -28,7 +28,6 @@ const config: SonicJSConfig = {
   },
   plugins: {
     autoLoad: false,
-    disableAll: true,  // Disable core plugins — stats-only worker
     register: [statsDashboardPlugin],
   }
 }

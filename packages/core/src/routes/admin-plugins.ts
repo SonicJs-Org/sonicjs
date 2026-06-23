@@ -12,6 +12,7 @@ import {
   parseFormDataToSettings,
   applySchemaDefaults,
 } from '../plugins/sdk/config-schema'
+import { reconcileMenuFromPlugins } from '../plugins/core-plugins/menu-plugin/services/menu-reconcile'
 import type { Bindings, Variables } from '../app'
 
 const adminPluginRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -366,6 +367,7 @@ adminPluginRoutes.post('/:id/activate', async (c) => {
 
     const pluginService = new PluginService(db)
     await pluginService.activatePlugin(pluginId)
+    await reconcileMenuFromPlugins(db)
 
     return c.json({ success: true })
   } catch (error) {
@@ -389,6 +391,7 @@ adminPluginRoutes.post('/:id/deactivate', async (c) => {
 
     const pluginService = new PluginService(db)
     await pluginService.deactivatePlugin(pluginId)
+    await reconcileMenuFromPlugins(db)
 
     return c.json({ success: true })
   } catch (error) {

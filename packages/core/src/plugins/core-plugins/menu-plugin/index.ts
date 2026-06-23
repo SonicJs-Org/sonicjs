@@ -1,10 +1,11 @@
 import { definePlugin } from '../../sdk'
 import { DocumentTypeRegistry } from '../../../services/document-type-registry'
 import { SYSTEM_MENU_ITEMS } from './services/menu-defaults'
-import { upsertSystemItem } from './services/menu-repository'
+import { upsertSystemItem, listMenuItems } from './services/menu-repository'
 import { reconcileMenuFromPlugins } from './services/menu-reconcile'
 import { adminMenuRoutes } from './routes/admin-menu'
 import { menuMiddleware } from '../../../middleware/menu'
+import { renderMenuSettingsContent } from './templates/admin-menu-list.template'
 import { z } from 'zod'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -72,6 +73,17 @@ export const menuPlugin = definePlugin({
     } catch {
       // DB might not be ready (pre-migration) — skip silently
     }
+  },
+
+  settingsTabContent: {
+    async loadData(db: any) {
+      const items = await listMenuItems(db)
+      return { items }
+    },
+    render({ data }) {
+      const items = data?.items ?? []
+      return renderMenuSettingsContent(items)
+    },
   },
 })
 

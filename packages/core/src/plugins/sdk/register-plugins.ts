@@ -81,6 +81,11 @@ export interface RegisterablePlugin extends MountablePlugin, WirablePlugin {
   crons?: CronDeclaration[]
   /** Schema-driven settings — the admin route reads this via getPluginDefinition(id). */
   configSchema?: ConfigSchema
+  /** Custom settings-tab renderer — loadData runs server-side, render produces the tab HTML. */
+  settingsTabContent?: {
+    loadData?: (db: any) => Promise<any>
+    render: (props: { plugin: any; settings: any; data?: any }) => string
+  }
 }
 
 // ── Host context ─────────────────────────────────────────────────────────────

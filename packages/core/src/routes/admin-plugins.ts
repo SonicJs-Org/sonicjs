@@ -135,9 +135,6 @@ adminPluginRoutes.get('/', async (c) => {
   }
 })
 
-// Menu plugin settings page redirects to the dedicated menu editor
-adminPluginRoutes.get('/menu', (c) => c.redirect('/admin/menu'))
-
 // Get plugin settings page
 adminPluginRoutes.get('/:id', async (c) => {
   try {
@@ -247,6 +244,17 @@ adminPluginRoutes.get('/:id', async (c) => {
       user: item.userId || null
     }))
 
+    // Load plugin-specific settings tab data if the plugin definition declares loadData
+    const pluginDef = getPluginDefinition(pluginId)
+    let settingsTabData: any = undefined
+    if (pluginDef?.settingsTabContent?.loadData) {
+      try {
+        settingsTabData = await pluginDef.settingsTabContent.loadData(db)
+      } catch (e) {
+        console.error(`settingsTabContent.loadData failed for plugin "${pluginId}":`, e)
+      }
+    }
+
     const pageData: PluginSettingsPageData = {
       plugin: templatePlugin,
       activity: templateActivity,
@@ -254,7 +262,8 @@ adminPluginRoutes.get('/:id', async (c) => {
         name: user?.email || 'User',
         email: user?.email || '',
         role: user?.role || 'user'
-      }
+      },
+      settingsTabData,
     }
 
     return c.html(renderPluginSettingsPage(pageData))

@@ -1,6 +1,7 @@
 import { renderAdminLayout, AdminLayoutData } from '../layouts/admin-layout-v2.template'
 import { renderAuthSettingsForm } from '../components/auth-settings-form.template'
 import type { AuthSettings } from '../../services/auth-validation'
+import { getPluginDefinition } from '../../services/plugin-definition-registry'
 
 /**
  * Escape HTML attribute values to prevent XSS
@@ -56,10 +57,12 @@ export interface PluginSettingsPageData {
     email: string
     role: string
   }
+  /** Data returned by the plugin's settingsTabContent.loadData(), if defined. */
+  settingsTabData?: any
 }
 
 export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
-  const { plugin, activity = [], user } = data
+  const { plugin, activity = [], user, settingsTabData } = data
   
   const pageContent = `
     <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
@@ -126,7 +129,7 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
       <div id="tab-content">
         <!-- Settings Tab -->
         <div id="settings-content" class="tab-content">
-          ${renderSettingsTab(plugin)}
+          ${renderSettingsTab(plugin, settingsTabData)}
         </div>
 
         <!-- Activity Tab -->
@@ -342,11 +345,17 @@ function renderToggleButton(plugin: any): string {
     : `<button onclick="togglePlugin('${plugin.id}', 'activate')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Activate</button>`
 }
 
-function renderSettingsTab(plugin: any): string {
+function renderSettingsTab(plugin: any, settingsTabData?: any): string {
   const settings = plugin.settings || {}
   const pluginId = plugin.id || plugin.name
 
-  // Check for custom settings component first
+  // Check plugin definition registry first (plugins self-register via definePlugin settingsTabContent)
+  const pluginDef = getPluginDefinition(pluginId)
+  if (pluginDef?.settingsTabContent) {
+    return pluginDef.settingsTabContent.render({ plugin, settings, data: settingsTabData })
+  }
+
+  // Legacy: hardcoded per-plugin renderers
   const customRenderer = pluginSettingsComponents[pluginId]
   if (customRenderer) {
     return `

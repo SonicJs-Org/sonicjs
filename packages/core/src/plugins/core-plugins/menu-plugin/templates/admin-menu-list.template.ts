@@ -5,11 +5,19 @@ import type { MenuItem, SidebarItem } from '../services/menu-repository'
 interface MenuListPageData {
   items: MenuItem[]
   tree: SidebarItem[]
+  pluginStatuses?: Record<string, 'active' | 'inactive'>
   user?: { name?: string; email?: string; role?: string }
   currentPath?: string
   version?: string
   dynamicMenuItems?: Array<{ label: string; path: string; icon: string }>
   message?: string
+}
+
+function pluginStatusBadge(status: 'active' | 'inactive'): string {
+  if (status === 'inactive') {
+    return `<span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20 ml-1">disabled</span>`
+  }
+  return `<span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20 ml-1">enabled</span>`
 }
 
 function sourceBadge(source: string): string {
@@ -38,6 +46,7 @@ export function renderMenuListPage(data: MenuListPageData): string {
       </div>`
     : ''
 
+  const pluginStatuses = data.pluginStatuses ?? {}
   const rows = data.items.map((item, index) => {
     const isFirst = index === 0
     const isLast = index === data.items.length - 1
@@ -90,6 +99,7 @@ export function renderMenuListPage(data: MenuListPageData): string {
         </td>
         <td class="px-4 py-3">
           ${sourceBadge(item.source)}
+          ${item.source === 'plugin' && item.pluginId ? pluginStatusBadge(pluginStatuses[item.pluginId] ?? 'active') : ''}
         </td>
         <td class="px-4 py-3">
           <form method="POST" action="/admin/menu/${escapeHtml(item.id)}/visibility" class="inline">
@@ -183,7 +193,7 @@ export function renderMenuListPage(data: MenuListPageData): string {
  * Renders just the menu items table for embedding in the plugin settings tab.
  * No layout wrapper — called from the plugin's settingsTabContent.render().
  */
-export function renderMenuSettingsContent(items: MenuItem[], message?: string): string {
+export function renderMenuSettingsContent(items: MenuItem[], pluginStatuses: Record<string, 'active' | 'inactive'> = {}, message?: string): string {
   const messageBanner = message
     ? `<div class="mb-4 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-700 px-4 py-3 text-sm text-cyan-800 dark:text-cyan-200">${escapeHtml(message)}</div>`
     : ''
@@ -227,7 +237,7 @@ export function renderMenuSettingsContent(items: MenuItem[], message?: string): 
         <td class="px-4 py-3 max-w-[200px]">
           <span class="text-sm text-zinc-500 dark:text-zinc-400 truncate block">${escapeHtml(item.url)}</span>
         </td>
-        <td class="px-4 py-3">${sourceBadge(item.source)}</td>
+        <td class="px-4 py-3">${sourceBadge(item.source)}${item.source === 'plugin' && item.pluginId ? pluginStatusBadge(pluginStatuses[item.pluginId] ?? 'active') : ''}</td>
         <td class="px-4 py-3">
           <form method="POST" action="/admin/menu/${escapeHtml(item.id)}/visibility" class="inline">
             <label class="relative inline-flex items-center cursor-pointer">

@@ -9,6 +9,7 @@ import {
   deleteItem,
   toggleVisibility,
   reorderItems,
+  fetchPluginStatuses,
 } from '../services/menu-repository'
 import { nanoid } from 'nanoid'
 import { D1Database } from '@cloudflare/workers-types'
@@ -26,9 +27,12 @@ adminMenuRoutes.get('/', async (c) => {
   const user = c.get('user')
   const items = await listMenuItems(db)
   const tree = buildSidebarTree(items)
+  const pluginIds = [...new Set(items.filter(i => i.pluginId).map(i => i.pluginId as string))]
+  const pluginStatuses = await fetchPluginStatuses(db, pluginIds)
   return c.html(renderMenuListPage({
     items,
     tree,
+    pluginStatuses,
     user,
     currentPath: '/admin/menu',
     version: c.get('appVersion'),

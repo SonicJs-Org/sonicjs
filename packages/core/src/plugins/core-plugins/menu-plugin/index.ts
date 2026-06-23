@@ -1,7 +1,7 @@
 import { definePlugin } from '../../sdk'
 import { DocumentTypeRegistry } from '../../../services/document-type-registry'
 import { SYSTEM_MENU_ITEMS } from './services/menu-defaults'
-import { upsertSystemItem, listMenuItems } from './services/menu-repository'
+import { upsertSystemItem, listMenuItems, fetchPluginStatuses } from './services/menu-repository'
 import { reconcileMenuFromPlugins } from './services/menu-reconcile'
 import { adminMenuRoutes } from './routes/admin-menu'
 import { menuMiddleware } from '../../../middleware/menu'
@@ -78,11 +78,14 @@ export const menuPlugin = definePlugin({
   settingsTabContent: {
     async loadData(db: any) {
       const items = await listMenuItems(db)
-      return { items }
+      const pluginIds = [...new Set(items.filter(i => i.pluginId).map(i => i.pluginId as string))]
+      const pluginStatuses = await fetchPluginStatuses(db, pluginIds)
+      return { items, pluginStatuses }
     },
     render({ data }) {
       const items = data?.items ?? []
-      return renderMenuSettingsContent(items)
+      const pluginStatuses = data?.pluginStatuses ?? {}
+      return renderMenuSettingsContent(items, pluginStatuses)
     },
   },
 })

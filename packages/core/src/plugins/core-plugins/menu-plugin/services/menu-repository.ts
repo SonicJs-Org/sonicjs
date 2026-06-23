@@ -80,6 +80,39 @@ export async function listMenuItems(
   }
 }
 
+/**
+ * Returns a map of pluginId → 'active'|'inactive' for the given plugin IDs.
+ * Plugins not yet in the DB (never installed) are treated as 'active'.
+ */
+export async function fetchPluginStatuses(
+  db: D1Database,
+  pluginIds: string[],
+): Promise<Record<string, 'active' | 'inactive'>> {
+  if (pluginIds.length === 0) return {}
+  try {
+    const placeholders = pluginIds.map(() => '?').join(',')
+    const rows = await db
+      .prepare(
+        `SELECT slug, json_extract(data, '$.status') AS status
+         FROM documents
+         WHERE type_id = 'plugin' AND tenant_id = 'default'
+           AND is_current_draft = 1 AND deleted_at IS NULL
+           AND slug IN (${placeholders})`,
+      )
+      .bind(...pluginIds)
+      .all<{ slug: string; status: string | null }>()
+
+    const result: Record<string, 'active' | 'inactive'> = {}
+    for (const id of pluginIds) result[id] = 'active' // default: active
+    for (const row of rows.results ?? []) {
+      result[row.slug] = row.status === 'inactive' ? 'inactive' : 'active'
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
 export function buildSidebarTree(items: MenuItem[]): SidebarItem[] {
   const visible = items.filter((i) => i.visible)
   visible.sort((a, b) => a.sortOrder - b.sortOrder)

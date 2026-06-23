@@ -25,7 +25,7 @@ Core plugins extend SonicJS with critical features like authentication, media ma
     {
       icon: '🔐',
       title: 'Authentication',
-      description: 'JWT-based authentication with session management and token refresh',
+      description: 'Better Auth session management with RBAC, JWT API tokens, and magic links',
     },
     {
       icon: '📧',
@@ -88,11 +88,11 @@ SonicJS evaluated several auth libraries and chose Better Auth for a few reasons
 
 ### Features
 
-- **JWT Token Authentication** - Secure token-based authentication
-- **Session Management** - Track and manage active user sessions
-- **Token Refresh** - Automatic token renewal without re-authentication
+- **Session Authentication** - Cookie-based sessions via Better Auth (`better-auth.session_token`)
+- **RBAC** - Role-based access control seeded into `rbac_role` / `rbac_verb` / `rbac_user_roles`
+- **JWT API Tokens** - Signed tokens for programmatic API access (separate from the session cookie)
 - **Rate Limiting** - Protect authentication endpoints from abuse
-- **User Context** - Inject authenticated user data into request context
+- **User Context** - Inject authenticated user data into request context via `c.get('user')`
 
 ### Configuration
 
@@ -153,28 +153,27 @@ Get current authenticated user information
 **POST /api/auth/refresh**
 Refresh an expired access token
 
-### Services
+### Auth Context
 
-<CodeGroup title="Auth Service">
+SonicJS injects the authenticated user into every request via `c.get('user')`:
+
+<CodeGroup title="Auth Context">
 
 ```typescript
-// Available auth service methods
-const authService = {
-  // Validate JWT token
-  validateToken(token: string): { valid: boolean; userId: number }
+// In any route handler:
+const user = c.get('user')
+// user: { userId: string, email: string, role: string } | null
 
-  // Generate new JWT token
-  generateToken(userId: number): string
+// Better Auth also exposes its full API via the auth instance:
+import { auth } from '@sonicjs-cms/core'
 
-  // Hash password for storage
-  hashPassword(password: string): string
-
-  // Verify password against hash
-  verifyPassword(password: string, hash: string): boolean
-}
+// Verify a session from within a Worker:
+const session = await auth.api.getSession({ headers: request.headers })
 ```
 
 </CodeGroup>
+
+Session management (sign-in, sign-out, session tokens) is handled by Better Auth. See the [Better Auth docs](https://www.better-auth.com/docs) for the full API surface.
 
 ### Hooks
 
@@ -184,8 +183,7 @@ const authService = {
 
 ### Admin Pages
 
-- **/admin/auth/sessions** - View and manage active sessions
-- **/admin/auth/tokens** - Manage API tokens and access keys
+- **/admin/auth/sessions** - View and manage active Better Auth sessions
 
 ---
 
@@ -317,125 +315,89 @@ await getEmailService().send({
 
 ## Magic Link Auth
 
-The magic link auth plugin provides passwordless authentication via secure, one-time email links. Users can sign in without remembering passwords.
+Magic link authentication is powered by **Better Auth's native `magicLink` plugin** — it is always active when the Email plugin is configured. No separate plugin activation is required.
 
-### Features
+Users receive a one-time sign-in link via email. Clicking it creates a full Better Auth session (cookie: `better-auth.session_token`).
 
-- **Passwordless Authentication** - No passwords required
-- **Secure One-Time Links** - Links expire after 15 minutes and can only be used once
-- **Rate Limiting** - Prevent abuse with configurable rate limits
-- **Email Integration** - Works with the Email plugin for sending magic links
-- **Auto User Creation** - Optionally create new users when they request a magic link
-- **Security Tracking** - Logs IP addresses and user agents for security auditing
+### Prerequisites
+
+1. **Better Auth secret** — set `BETTER_AUTH_SECRET` via `wrangler secret put BETTER_AUTH_SECRET` (or in `.dev.vars` for local dev). This is required for all Better Auth features.
+2. **Email plugin configured** — go to **Admin → Plugins → Email Plugin** and enter a valid Resend API key and verified sender address. Without a working email service, magic links are logged to the console only.
+
+No plugin activation step is needed. Once the two prerequisites above are met, magic link is live.
 
 ### How It Works
 
-1. User enters their email address
-2. System generates a secure, random token
-3. Email is sent with a magic link containing the token
-4. User clicks the link to authenticate
-5. Token is validated and marked as used
-6. User is signed in with a JWT session
-
-### Configuration
-
-<CodeGroup title="Plugin Configuration">
-
-```typescript
-{
-  name: 'magic-link-auth',
-  version: '1.0.0',
-  dependencies: ['email'],
-  settings: {
-    linkExpiryMinutes: 15,         // Magic link expiry time
-    rateLimitPerHour: 5,           // Max requests per hour per email
-    allowNewUsers: false,          // Auto-create users who don't exist
-    requireEmailVerification: true // Require verified emails
-  }
-}
-```
-
-</CodeGroup>
+1. User submits their email to `POST /auth/sign-in/magic-link`
+2. Better Auth generates a secure one-time token and stores it in `auth_verification`
+3. Email is delivered via the Email plugin (Resend)
+4. User clicks the link — `GET /auth/magic-link/verify?token=...`
+5. Better Auth validates the token, marks it used, and creates a session
+6. User is redirected with `better-auth.session_token` cookie set
 
 ### API Endpoints
 
-**POST /auth/magic-link/request**
-Request a magic link to be sent via email
+**POST /auth/sign-in/magic-link**
+
+Send a magic link to an email address.
 
 <CodeGroup title="Request Magic Link">
 
 ```bash {{ title: 'cURL' }}
-curl -X POST http://localhost:8787/auth/magic-link/request \
+curl -X POST http://localhost:8787/auth/sign-in/magic-link \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com"
-  }'
+  -d '{ "email": "user@example.com" }'
 ```
 
-```javascript
-const response = await fetch('http://localhost:8787/auth/magic-link/request', {
+```javascript {{ title: 'fetch' }}
+const response = await fetch('/auth/sign-in/magic-link', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    email: 'user@example.com'
-  })
+  body: JSON.stringify({ email: 'user@example.com' })
 })
 
 const result = await response.json()
-// result: { message: 'If an account exists...' }
+// result: { status: true }
 ```
 
 ```json {{ title: 'Response' }}
-{
-  "message": "If an account exists for this email, you will receive a magic link shortly."
-}
+{ "status": true }
 ```
 
 </CodeGroup>
 
-**GET /auth/magic-link/verify?token=...**
-Verify magic link token and sign in the user
+Better Auth does not reveal whether the email belongs to an existing user — the response is always `{ status: true }` for any valid email format.
 
-### Database Schema
+**GET /auth/magic-link/verify?token=...&callbackURL=/admin/dashboard**
 
-<CodeGroup title="Magic Links Table">
+Better Auth handles this automatically. On success it creates a session and redirects to `callbackURL` (defaults to `/`). On failure it redirects with an `?error=` param.
 
-```sql
-CREATE TABLE magic_links (
-  id TEXT PRIMARY KEY,
-  user_email TEXT NOT NULL,
-  token TEXT NOT NULL UNIQUE,
-  expires_at INTEGER NOT NULL,
-  used INTEGER DEFAULT 0,
-  used_at INTEGER,
-  created_at INTEGER NOT NULL,
-  ip_address TEXT,
-  user_agent TEXT
-)
+### Better Auth Client (recommended for frontend)
+
+<CodeGroup title="Better Auth Client">
+
+```typescript {{ title: 'Setup' }}
+import { createAuthClient } from 'better-auth/client'
+import { magicLinkClient } from 'better-auth/client/plugins'
+
+const client = createAuthClient({
+  baseURL: 'https://your-app.workers.dev',
+  plugins: [magicLinkClient()]
+})
+```
+
+```typescript {{ title: 'Send magic link' }}
+await client.signIn.magicLink({
+  email: 'user@example.com',
+  callbackURL: '/admin/dashboard'  // optional
+})
 ```
 
 </CodeGroup>
 
-### Security Features
+### Plain HTML Example
 
-**Token Generation**
-Tokens are generated using crypto.randomUUID() twice and concatenated for maximum entropy
-
-**Rate Limiting**
-Limits users to 5 magic link requests per hour to prevent abuse
-
-**Expiration**
-Links automatically expire after 15 minutes
-
-**One-Time Use**
-Each link can only be used once - it's marked as used immediately after verification
-
-**IP Tracking**
-IP addresses and user agents are logged for security auditing
-
-### Usage Example
-
-<CodeGroup title="Adding Magic Link to Login Page">
+<CodeGroup title="Magic Link Form">
 
 ```html
 <form id="magicLinkForm">
@@ -449,7 +411,7 @@ document.getElementById('magicLinkForm').addEventListener('submit', async (e) =>
   e.preventDefault()
   const email = new FormData(e.target).get('email')
 
-  const response = await fetch('/auth/magic-link/request', {
+  const response = await fetch('/auth/sign-in/magic-link', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email })
@@ -464,16 +426,35 @@ document.getElementById('magicLinkForm').addEventListener('submit', async (e) =>
 
 </CodeGroup>
 
-### Email Template
+### Security
 
-The magic link email includes:
-- A prominent "Sign In" button with the magic link
-- Expiration time warning
-- Security notice if the user didn't request it
-- Modern, responsive design
+- **One-time use** — token is invalidated immediately after first click
+- **15-minute expiry** — configurable via `expiresIn` in `auth/config.ts`
+- **No user enumeration** — always returns `{ status: true }` for valid email format
+- **Better Auth session** — creates a proper session entry, not a stateless JWT
+- **No custom DB table** — token state lives in `auth_verification` managed by Better Auth
+
+### Extending the Configuration
+
+Magic link options live in `packages/core/src/auth/config.ts` inside the `plugins` array. To change expiry or add custom email templates, extend via `config.auth.extendBetterAuth` in `createSonicJSApp()`:
+
+```typescript
+createSonicJSApp({
+  auth: {
+    extendBetterAuth: (opts) => ({
+      ...opts,
+      plugins: opts.plugins?.map((p: any) =>
+        p.id === 'magic-link'
+          ? { ...p, options: { ...p.options, expiresIn: 30 * 60 } } // 30 min
+          : p
+      )
+    })
+  }
+})
+```
 
 <Note>
-The Magic Link Auth plugin requires the Email plugin to be installed and configured with a working provider (Resend or Cloudflare Email) before enabling magic link authentication.
+Magic link requires the Email plugin (Admin → Plugins → Email Plugin) to be configured with a valid Resend API key. In local dev without email configured, the link is printed to the Workers console instead of being sent.
 </Note>
 
 ---

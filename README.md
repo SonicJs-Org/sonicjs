@@ -241,8 +241,7 @@ sonicjs-ai/
 │                          # Used for testing the published package
 │
 ├── www/                   # 🌐 Marketing website
-├── tests/e2e/             # End-to-end test suites
-└── drizzle/               # Database migrations
+└── tests/e2e/             # End-to-end test suites
 ```
 
 ### Important Notes
@@ -256,32 +255,52 @@ sonicjs-ai/
 ## 🔧 Content Management
 
 ### Creating Collections
-SonicJS uses a dynamic field system. Create collections through the admin interface or define them in the database:
 
-```sql
--- Example: Blog Posts collection with custom fields
-INSERT INTO collections (id, name, display_name, description, schema) VALUES (
-  'blog-posts', 'blog_posts', 'Blog Posts', 'Article content collection',
-  '{"type":"object","properties":{"title":{"type":"string","required":true}}}'
-);
+Collections are TypeScript config objects registered at app startup — no database table required.
 
--- Add dynamic fields
-INSERT INTO content_fields (collection_id, field_name, field_type, field_label, field_options) VALUES
-  ('blog-posts', 'title', 'text', 'Title', '{"maxLength": 200, "required": true}'),
-  ('blog-posts', 'content', 'richtext', 'Content', '{"toolbar": "full", "height": 400}'),
-  ('blog-posts', 'excerpt', 'text', 'Excerpt', '{"maxLength": 500, "rows": 3}'),
-  ('blog-posts', 'featured_image', 'media', 'Featured Image', '{"accept": "image/*"}'),
-  ('blog-posts', 'publish_date', 'date', 'Publish Date', '{"defaultToday": true}'),
-  ('blog-posts', 'is_featured', 'boolean', 'Featured Post', '{"default": false}');
+```typescript
+// src/collections/blog-posts.collection.ts
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export default {
+  name: 'blog_post',
+  displayName: 'Blog Post',
+  slug: 'blog-posts',
+  description: 'Article content collection',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', title: 'Title', required: true, maxLength: 200 },
+      content: { type: 'lexical', title: 'Content', required: true },
+      publishedAt: { type: 'datetime', title: 'Published Date' },
+    },
+    required: ['title', 'content'],
+  },
+
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
+```
+
+```typescript
+// src/index.ts — register before createSonicJSApp
+import { registerCollections, createSonicJSApp } from '@sonicjs-cms/core'
+import blogPostsCollection from './collections/blog-posts.collection'
+
+registerCollections([blogPostsCollection])
+export default createSonicJSApp({ plugins: { register: [] } })
 ```
 
 ### Field Types
-- **text**: Single-line text with validation
-- **richtext**: WYSIWYG editor with TinyMCE
+- **string**: Single-line text with validation
+- **lexical**: Rich text editor
 - **number**: Numeric input with min/max constraints
 - **boolean**: Checkbox with custom labels
-- **date**: Date picker with format options
+- **datetime**: Date/time picker
 - **select**: Dropdown with single/multi-select
+- **slug**: URL slug with auto-generation
+- **user**: User reference picker
 - **media**: File picker with preview
 
 ## 🌐 API Endpoints
@@ -373,17 +392,21 @@ Create plugins for extending SonicJS functionality:
 
 ```typescript
 // src/plugins/my-plugin/index.ts
-import { Plugin } from '@sonicjs-cms/core'
+import type { Plugin, PluginContext } from '@sonicjs-cms/core'
 
 export default {
   name: 'my-plugin',
-  hooks: {
-    'content:beforeCreate': async (content) => {
-      // Plugin logic here
-      return content
-    }
-  }
-} as Plugin
+  version: '1.0.0',
+  description: 'My custom plugin',
+
+  async activate(context: PluginContext) {
+    // Runs when the plugin is activated
+  },
+
+  async install(context: PluginContext) {
+    // Runs once on install — migrations, seed data, etc.
+  },
+} satisfies Plugin
 ```
 
 ## 📄 License
@@ -411,9 +434,9 @@ SonicJS is 100% open source and free forever. If you find it useful, please cons
 
 ## 📞 Support
 
-- [GitHub Issues](https://github.com/lane711/sonicjs-ai/issues)
+- [GitHub Issues](https://github.com/lane711/sonicjs/issues)
 - [Documentation](docs/)
-- [Community Discussions](https://github.com/lane711/sonicjs-ai/discussions)
+- [Community Discussions](https://github.com/lane711/sonicjs/discussions)
 
 ---
 

@@ -7,6 +7,7 @@ import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes } from "../
 import { getHookSystem, hasHookSystem } from "../plugins/hooks/hook-system-singleton";
 import { getTelemetryService } from "../services/telemetry-service";
 import type { SonicJSConfig } from "../app";
+import { setBranchLabel } from "../templates/layouts/admin-layout-catalyst.template";
 
 type Bindings = {
   DB: D1Database;
@@ -111,6 +112,12 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
     ) {
       return next();
     }
+
+    // Show branch label automatically on localhost — no env var needed
+    const host = c.req.header('host') || '';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+    const gitBranch = (c.env as any).GIT_BRANCH as string | undefined;
+    setBranchLabel(isLocalhost && gitBranch ? gitBranch : undefined);
 
     try {
       console.log("[Bootstrap] Starting system initialization...");

@@ -82,7 +82,8 @@ export async function listMenuItems(
 
 /**
  * Returns a map of pluginId → 'active'|'inactive' for the given plugin IDs.
- * Fetches all inactive plugin slugs from the DB; anything not found defaults to 'active'.
+ * Uses the same query as PluginService.getAllPlugins — reads all plugin documents
+ * and maps slug → status, defaulting unrecognised slugs to 'active'.
  */
 export async function fetchPluginStatuses(
   db: D1Database,
@@ -92,18 +93,23 @@ export async function fetchPluginStatuses(
   try {
     const rows = await db
       .prepare(
-        `SELECT slug
+        `SELECT slug, json_extract(data, '$.status') AS status
          FROM documents
          WHERE type_id = 'plugin' AND tenant_id = 'default'
-           AND is_current_draft = 1 AND deleted_at IS NULL
-           AND json_extract(data, '$.status') = 'inactive'`,
+           AND is_current_draft = 1 AND deleted_at IS NULL`,
       )
-      .all<{ slug: string }>()
+      .all<{ slug: string; status: string | null }>()
 
-    const inactiveSlugs = new Set((rows.results ?? []).map((r) => r.slug))
+    const statusMap = new Map<string, string>()
+    for (const row of rows.results ?? []) {
+      statusMap.set(row.slug, row.status ?? 'inactive')
+    }
+
     const result: Record<string, 'active' | 'inactive'> = {}
     for (const id of pluginIds) {
-      result[id] = inactiveSlugs.has(id) ? 'inactive' : 'active'
+      const s = statusMap.get(id)
+      // Plugin not yet in DB → treat as active (same as "uninstalled" in list page)
+      result[id] = s === 'inactive' ? 'inactive' : 'active'
     }
     return result
   } catch {

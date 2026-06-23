@@ -97,9 +97,9 @@ export function renderMenuListPage(data: MenuListPageData): string {
               <input
                 type="checkbox"
                 name="visible"
-                value="1"
+                value="true"
                 ${item.visible ? 'checked' : ''}
-                onchange="this.form.submit()"
+                onchange="this.form.requestSubmit()"
                 class="sr-only peer"
               >
               <div class="w-9 h-5 bg-zinc-200 dark:bg-zinc-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
@@ -231,7 +231,7 @@ export function renderMenuSettingsContent(items: MenuItem[], message?: string): 
         <td class="px-4 py-3">
           <form method="POST" action="/admin/menu/${escapeHtml(item.id)}/visibility" class="inline">
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" name="visible" value="1" ${item.visible ? 'checked' : ''} onchange="this.form.submit()" class="sr-only peer">
+              <input type="checkbox" name="visible" value="true" ${item.visible ? 'checked' : ''} onchange="this.form.requestSubmit()" class="sr-only peer">
               <div class="w-9 h-5 bg-zinc-200 dark:bg-zinc-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
             </label>
           </form>
@@ -250,6 +250,26 @@ export function renderMenuSettingsContent(items: MenuItem[], message?: string): 
     : ''
 
   return `
+    <script>
+      (function() {
+        function getCsrfToken() {
+          var c = document.cookie.split('; ').find(function(r) { return r.startsWith('csrf_token='); });
+          return c ? c.substring(c.indexOf('=') + 1) : '';
+        }
+        document.addEventListener('submit', function(e) {
+          var form = e.target;
+          if (!form || form.tagName !== 'FORM') return;
+          if ((form.method || 'GET').toUpperCase() === 'GET') return;
+          if (!form.querySelector('input[name="_csrf"]')) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = '_csrf';
+            input.value = getCsrfToken();
+            form.appendChild(input);
+          }
+        });
+      })();
+    </script>
     <div>
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-zinc-500 dark:text-zinc-400">Manage navigation links and their order in the sidebar.</p>

@@ -164,14 +164,13 @@ export function menuMiddleware() {
     const headers = new Headers(c.res.headers)
     const html = await c.res.text()
 
-    const startIdx = html.indexOf(MARKER_START)
-    const endIdx = html.indexOf(MARKER_END)
-
-    if (startIdx !== -1 && endIdx !== -1) {
-      const newHtml =
-        html.slice(0, startIdx) +
-        navItemsHtml +
-        html.slice(endIdx + MARKER_END.length)
+    // Replace ALL occurrences of the marker pair (desktop + mobile sidebars both use it)
+    const markerRegex = /<!-- ADMIN_SIDEBAR_NAV_ITEMS -->[\s\S]*?<!-- \/ADMIN_SIDEBAR_NAV_ITEMS -->/g
+    if (markerRegex.test(html)) {
+      const newHtml = html.replace(
+        /<!-- ADMIN_SIDEBAR_NAV_ITEMS -->[\s\S]*?<!-- \/ADMIN_SIDEBAR_NAV_ITEMS -->/g,
+        navItemsHtml,
+      )
       c.res = new Response(newHtml, { status, headers })
     } else {
       c.res = new Response(html, { status, headers })

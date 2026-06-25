@@ -108,8 +108,8 @@ export async function fetchPluginStatuses(
     const result: Record<string, 'active' | 'inactive'> = {}
     for (const id of pluginIds) {
       const s = statusMap.get(id)
-      // Plugin not yet in DB → treat as active (same as "uninstalled" in list page)
-      result[id] = s === 'inactive' ? 'inactive' : 'active'
+      // Only explicitly active in DB → enabled; uninstalled/inactive → disabled
+      result[id] = s === 'active' ? 'active' : 'inactive'
     }
     return result
   } catch {

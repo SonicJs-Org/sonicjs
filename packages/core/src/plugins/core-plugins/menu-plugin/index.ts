@@ -4,7 +4,6 @@ import { SYSTEM_MENU_ITEMS } from './services/menu-defaults'
 import { upsertSystemItem, listMenuItems, fetchPluginStatuses } from './services/menu-repository'
 import { reconcileMenuFromPlugins } from './services/menu-reconcile'
 import { adminMenuRoutes } from './routes/admin-menu'
-import { menuMiddleware } from '../../../middleware/menu'
 import { renderMenuSettingsContent } from './templates/admin-menu-list.template'
 import { z } from 'zod'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -18,8 +17,6 @@ export const menuPlugin = definePlugin({
   author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
 
   register(app) {
-    // Mount sidebar replacement middleware only when this plugin is active
-    app.use('/admin/*', menuMiddleware())
     app.route('/admin/menu', adminMenuRoutes as any)
   },
 

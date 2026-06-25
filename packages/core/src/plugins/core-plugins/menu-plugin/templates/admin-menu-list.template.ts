@@ -118,7 +118,7 @@ export function renderMenuListPage(data: MenuListPageData): string {
         </td>
         <td class="px-4 py-3">
           <div class="flex items-center gap-2">
-            <a href="/admin/menu/${escapeHtml(item.id)}/edit" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-md text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 ring-1 ring-inset ring-zinc-300/50 dark:ring-zinc-600/50 transition-colors">
+            <a href="/admin/menu/${escapeHtml(item.id)}" class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-md text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 ring-1 ring-inset ring-zinc-300/50 dark:ring-zinc-600/50 transition-colors">
               Edit
             </a>
             ${deleteButton}

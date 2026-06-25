@@ -79,7 +79,7 @@ export const SYSTEM_MENU_ITEMS: readonly SystemMenuItem[] = [
     id: 'menu:system:plugins',
     label: 'Plugins',
     url: '/admin/plugins',
-    icon: 'puzzle-piece',
+    icon: 'collection',
     target: '_self',
     isExternal: false,
     visible: true,

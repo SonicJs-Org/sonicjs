@@ -120,8 +120,9 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
       body: form({ _method: 'PUT', collection_id: COLL, title: 'Post updateme v2', slug: 'updateme', content: '<p>v2</p>', author: 'Ada', difficulty: 'beginner', status: 'published' }),
     })
     expect([200, 302]).toContain(res.status)
-    // A new version exists and exactly one published row, now at v2.
-    expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=?").get(rootId).n).toBe(2)
+    // With versioning off (default), publish() deletes the old published row when it is no longer
+    // the current draft — so only v2 survives. The version_number still advances to 2.
+    expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=?").get(rootId).n).toBe(1)
     expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=? AND is_published=1").get(rootId).n).toBe(1)
     expect(db.raw.prepare("SELECT version_number v FROM documents WHERE root_id=? AND is_published=1").get(rootId).v).toBe(2)
   })

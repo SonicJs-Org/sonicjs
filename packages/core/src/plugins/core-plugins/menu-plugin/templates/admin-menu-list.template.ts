@@ -80,7 +80,7 @@ export function renderMenuListPage(data: MenuListPageData): string {
       : ''
 
     return `
-      <tr class="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+      <tr class="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors cursor-pointer" onclick="if(!event.target.closest('a,button,input,form')){window.location='/admin/menu/${escapeHtml(item.id)}'}">
         <td class="px-4 py-3 w-16">
           <div class="flex items-center gap-0.5">
             ${moveUpForm}
@@ -225,7 +225,7 @@ export function renderMenuSettingsContent(items: MenuItem[], pluginStatuses: Rec
       : ''
 
     return `
-      <tr class="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+      <tr class="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors cursor-pointer" onclick="if(!event.target.closest('a,button,input,form')){window.location='/admin/menu/${escapeHtml(item.id)}'}">
         <td class="px-4 py-3 w-16">
           <div class="flex items-center gap-0.5">${moveUpForm}${moveDownForm}</div>
         </td>

@@ -235,7 +235,7 @@ adminRbacRoutes.get('/', async (c) => {
             <input form="roles-bulk-form" type="checkbox" name="portal_${esc(r.id)}" value="1" ${portalChecked ? 'checked' : ''} ${
               portalDisabled ? 'disabled' : ''
             } class="h-3.5 w-3.5 rounded border-zinc-400 text-cyan-600 focus:ring-cyan-500">
-            Access portal
+            Admin Panel
           </label>
           <a href="/admin/tenants/roles/${esc(r.name)}" data-role-tenants="${esc(r.name)}" class="text-xs text-cyan-600 dark:text-cyan-400 hover:underline" title="Per-tenant assignments of this role">tenants</a>
           ${
@@ -369,7 +369,7 @@ adminRbacRoutes.get('/', async (c) => {
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
       <div class="${card}">
         <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-3">Roles</h3>
-        <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Access portal</strong> to allow a role into the admin backend. Resource permissions are configured in the <strong>Matrix</strong> tab.</p>
+        <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Use <strong>Admin Panel</strong> to allow a role into the admin backend. Resource permissions are configured in the <strong>Matrix</strong> tab.</p>
         ${roleList}
       </div>
       <div class="${card}">

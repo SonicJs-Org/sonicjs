@@ -5,6 +5,7 @@
  */
 
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import type { Context } from 'hono'
 import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-types'
 import {
@@ -419,6 +420,20 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     // Logging logic here
     await next()
   })
+
+  // Global CORS middleware — covers /auth/*, /v1/*, and all other routes.
+  // Set CORS_ORIGINS in wrangler.toml (comma-separated) to allow cross-origin requests.
+  app.use('*', cors({
+    origin: (origin, c) => {
+      const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
+      if (!allowed) return null
+      const list = allowed.split(',').map((s: string) => s.trim())
+      return list.includes(origin) ? origin : null
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+    credentials: true,
+  }))
 
   // Security middleware
   app.use('*', securityHeadersMiddleware())

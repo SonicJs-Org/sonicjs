@@ -35,7 +35,7 @@ name = "EMAIL"
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
-CORS_ORIGINS = "http://localhost:8787"
+CORS_ORIGINS = "http://localhost:8787,http://localhost:4321"
 DEFAULT_FROM_EMAIL = "lane@sonicjs.com"
 
 # Observability

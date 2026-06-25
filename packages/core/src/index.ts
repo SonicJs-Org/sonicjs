@@ -202,6 +202,8 @@ export {
   getConfirmationDialogScript,
   // Filter bar templates
   renderFilterBar,
+  // Admin layout (catalyst)
+  renderAdminLayoutCatalyst,
 } from './templates'
 
 export type {
@@ -215,6 +217,7 @@ export type {
   FilterBarData,
   Filter,
   FilterOption,
+  AdminLayoutCatalystData,
 } from './templates'
 
 // Types - Week 1 (COMPLETED)

@@ -65,6 +65,11 @@ export default {
         enumLabels: ["List", "Grid", "Card"],
         default: "list",
       },
+      metadata: {
+        type: "json",
+        title: "Metadata",
+        helpText: "JSON object for arbitrary structured data",
+      },
       richContent: {
         type: "lexical",
         title: "Rich Content",
@@ -174,4 +179,8 @@ export default {
 
   managed: true,
   isActive: true,
+
+  access: {
+    public: ['read'],
+  },
 } satisfies CollectionConfig;

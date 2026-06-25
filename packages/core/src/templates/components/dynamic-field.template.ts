@@ -1060,6 +1060,85 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       break
     }
 
+    case 'json': {
+      const jsonParsedValue =
+        value !== null && value !== undefined && typeof value !== 'string'
+          ? value
+          : typeof value === 'string' && value !== ''
+            ? (() => { try { return JSON.parse(value) } catch { return value } })()
+            : null
+      const jsonDisplayValue =
+        jsonParsedValue !== null && typeof jsonParsedValue !== 'string'
+          ? JSON.stringify(jsonParsedValue, null, 2)
+          : typeof jsonParsedValue === 'string'
+            ? jsonParsedValue
+            : ''
+      const viewerId = `${fieldId}-viewer`
+      const textareaId = `${fieldId}-textarea`
+      const jsonDataAttr = escapeHtml(JSON.stringify(jsonParsedValue ?? null))
+      const isEmpty = jsonParsedValue === null || jsonDisplayValue === ''
+
+      if (disabled) {
+        fieldHTML = `
+          <div
+            id="${viewerId}"
+            class="json-viewer-host rounded-lg px-3 py-2 text-xs bg-white dark:bg-zinc-800 shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 min-h-[2.5rem] overflow-auto"
+            data-json-viewer
+            data-json="${jsonDataAttr}"
+            data-open="${opts.open ?? 2}"
+          >${isEmpty ? '<span class="text-zinc-400 dark:text-zinc-500 italic">empty</span>' : ''}</div>
+          ${getJsonViewerScript()}
+        `
+      } else {
+        fieldHTML = `
+          <div class="json-field-wrapper space-y-2">
+            <div class="flex items-center justify-end">
+              <button
+                type="button"
+                id="${fieldId}-toggle"
+                class="text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 underline transition-colors"
+                data-json-toggle
+                data-viewer="${viewerId}"
+                data-textarea="${textareaId}"
+                data-hidden-input="${fieldId}"
+              >Edit JSON</button>
+            </div>
+
+            <div
+              id="${viewerId}"
+              class="json-viewer-host rounded-lg px-3 py-2 text-xs bg-white dark:bg-zinc-800 shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 min-h-[2.5rem] overflow-auto"
+              data-json-viewer
+              data-json="${jsonDataAttr}"
+              data-open="${opts.open ?? 2}"
+            >${isEmpty ? '<span class="text-zinc-400 dark:text-zinc-500 italic">empty — click &quot;Edit JSON&quot; to add data</span>' : ''}</div>
+
+            <textarea
+              id="${textareaId}"
+              rows="${opts.rows || 8}"
+              placeholder="${opts.placeholder || '{}'}"
+              class="${baseClasses} ${errorClasses} resize-y font-mono text-xs hidden"
+              aria-label="${escapeHtml(field.field_label)}"
+              data-json-edit-area
+              data-viewer="${viewerId}"
+              data-hidden-input="${fieldId}"
+            >${escapeHtml(jsonDisplayValue)}</textarea>
+
+            <input
+              type="hidden"
+              id="${fieldId}"
+              name="${fieldName}"
+              value="${escapeHtml(jsonDisplayValue)}"
+              ${required}
+            >
+
+            <div id="${fieldId}-json-error" class="text-xs text-pink-500 dark:text-pink-400 hidden"></div>
+          </div>
+          ${getJsonViewerScript()}
+        `
+      }
+      break
+    }
+
     default:
       fieldHTML = `
         <input
@@ -1733,6 +1812,121 @@ function normalizeBlockField(fieldConfig: any, fieldName: string) {
     defaultValue: fieldConfig?.default,
     options,
   }
+}
+
+function getJsonViewerScript(): string {
+  return `
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/json-formatter-js@2.5.23/dist/json-formatter.min.css" id="json-formatter-css" onload="this.removeAttribute('onload')" onerror="">
+    <script>
+      (function() {
+        var JS_URL = 'https://cdn.jsdelivr.net/npm/json-formatter-js@2.5.23/dist/json-formatter.umd.min.js';
+
+        function isDark() {
+          return document.documentElement.classList.contains('dark') ||
+                 document.documentElement.dataset.theme === 'dark' ||
+                 window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+
+        function initViewer(el) {
+          var raw = el.dataset.json;
+          var open = parseInt(el.dataset.open || '2', 10);
+          if (!raw || raw === 'null') return;
+          var data;
+          try { data = JSON.parse(raw); } catch(e) { el.textContent = raw; return; }
+          var fmt = new JSONFormatter(data, open, {
+            hoverPreviewEnabled: true,
+            hoverPreviewArrayCount: 5,
+            hoverPreviewFieldCount: 5,
+            theme: isDark() ? 'dark' : '',
+            animateOpen: true,
+            animateClose: true,
+          });
+          el.innerHTML = '';
+          el.appendChild(fmt.render());
+        }
+
+        function initAllViewers() {
+          document.querySelectorAll('[data-json-viewer]').forEach(function(el) { initViewer(el); });
+        }
+
+        function ensureLoaded(cb) {
+          if (window.JSONFormatter) { cb(); return; }
+          if (window.__jsonFormatterCallbacks) { window.__jsonFormatterCallbacks.push(cb); return; }
+          window.__jsonFormatterCallbacks = [cb];
+          var s = document.createElement('script');
+          s.src = JS_URL;
+          s.onload = function() {
+            (window.__jsonFormatterCallbacks || []).forEach(function(fn) { fn(); });
+            window.__jsonFormatterCallbacks = null;
+          };
+          document.head.appendChild(s);
+        }
+
+        if (!window.__sonicJsonViewerInit) {
+          window.__sonicJsonViewerInit = true;
+
+          // Toggle between viewer and edit textarea
+          document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-json-toggle]');
+            if (!btn) return;
+            var viewerId = btn.dataset.viewer;
+            var textareaId = btn.dataset.textarea;
+            var hiddenId = btn.dataset.hiddenInput;
+            var viewer = document.getElementById(viewerId);
+            var textarea = document.getElementById(textareaId);
+            var hidden = document.getElementById(hiddenId);
+            var errorEl = hidden ? document.getElementById(hiddenId + '-json-error') : null;
+            if (!viewer || !textarea) return;
+            var isEditing = !textarea.classList.contains('hidden');
+            if (isEditing) {
+              // Switching back to viewer — validate + refresh
+              var raw = textarea.value.trim();
+              if (raw) {
+                try {
+                  var parsed = JSON.parse(raw);
+                  if (hidden) hidden.value = raw;
+                  viewer.dataset.json = JSON.stringify(parsed);
+                  ensureLoaded(function() { initViewer(viewer); });
+                  if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+                } catch(ex) {
+                  if (errorEl) { errorEl.textContent = 'Invalid JSON: ' + ex.message; errorEl.classList.remove('hidden'); }
+                  return;
+                }
+              } else {
+                if (hidden) hidden.value = '';
+                viewer.innerHTML = '<span class="text-zinc-400 dark:text-zinc-500 italic">empty</span>';
+              }
+              textarea.classList.add('hidden');
+              viewer.classList.remove('hidden');
+              btn.textContent = 'Edit JSON';
+            } else {
+              // Switching to edit — populate textarea from hidden input
+              if (hidden && hidden.value) {
+                try {
+                  textarea.value = JSON.stringify(JSON.parse(hidden.value), null, 2);
+                } catch(e) {
+                  textarea.value = hidden.value;
+                }
+              }
+              viewer.classList.add('hidden');
+              textarea.classList.remove('hidden');
+              btn.textContent = 'Preview';
+            }
+          });
+        }
+
+        function run() {
+          ensureLoaded(initAllViewers);
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', run);
+        } else {
+          run();
+        }
+      })();
+    <\/script>
+  `
 }
 
 function getStructuredFieldScript(): string {

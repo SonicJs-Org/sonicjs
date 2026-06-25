@@ -4,6 +4,8 @@ compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat"]
 
 # Cloudflare Workers settings
+# NOTE: stats.sonicjs.com is bound to this default worker (sonicjs-stats), NOT
+# the [env.production] entry (sonicjs-stats-production). Deploy with no --env flag.
 workers_dev = true
 
 # D1 Database
@@ -23,6 +25,12 @@ ENVIRONMENT = "development"
 [env.production]
 name = "sonicjs-stats-production"
 vars = { ENVIRONMENT = "production" }
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "sonicjs-stats-db"
+database_id = "93150491-63c3-4b9a-ac9a-792ba416a240"
+migrations_dir = "./migrations"
 
 # Observability
 [observability]

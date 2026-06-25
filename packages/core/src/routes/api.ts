@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
 import { schemaDefinitions } from '../schemas'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import { QueryFilterBuilder, QueryFilter } from '../utils'
@@ -146,18 +145,6 @@ apiRoutes.use('*', async (c, next) => {
   c.set('cacheEnabled', cacheEnabled)
   await next()
 })
-
-// Add CORS middleware
-apiRoutes.use('*', cors({
-  origin: (origin, c) => {
-    const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
-    if (!allowed) return null // No env var = reject cross-origin (secure default)
-    const list = allowed.split(',').map((s: string) => s.trim())
-    return list.includes(origin) ? origin : null
-  },
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
-}))
 
 // Helper function to add timing metadata
 function addTimingMeta(c: any, meta: any = {}, executionStartTime?: number) {

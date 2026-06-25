@@ -2,6 +2,7 @@ import { D1Database } from '@cloudflare/workers-types'
 import { z } from 'zod'
 import { DocumentTypeRegistry } from './document-type-registry'
 import { getCollectionRegistry } from './collection-registry'
+import type { Permission } from '../schemas/document'
 
 // Passthrough schema: accepts any JSON object for POC types.
 // Individual fields are validated at the queryable-field level; the full
@@ -274,6 +275,15 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
     if (collection.name === 'blog_post') continue
 
     try {
+      const defaultGrants: Record<string, Permission[]> = {
+        admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'],
+        editor: ['read', 'create', 'update', 'publish'],
+        viewer: ['read'],
+      }
+      const baseGrants: Record<string, Permission[]> = collection.access
+        ? { ...defaultGrants, ...collection.access }
+        : defaultGrants
+
       await registry.register({
         id: collection.name,
         name: collection.name,
@@ -282,12 +292,7 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
         source: 'system',
         schema: anyObject,
         settings: {
-          baseGrants: {
-            public: ['read'],
-            admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'],
-            editor: ['read', 'create', 'update', 'publish'],
-            viewer: ['read'],
-          },
+          baseGrants,
           maxVersionsPerRoot: 50,
           ...(collection.versioning ? { versioning: true } : {}),
         },

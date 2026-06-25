@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "npm run dev:build && npm run dev:watch",
     "dev:build": "cd ../packages/core && npm run build",
-    "dev:watch": "npm run dev:core & npx wait-on ../packages/core/dist/index.js && PORT=$(($(echo -n \"$(basename $(cd .. && pwd))\" | cksum | cut -d' ' -f1) % 1000 + 9000)) && echo \"Dev server: http://localhost:$PORT\" && wrangler dev --port $PORT --local 2>&1 | grep -v '\\[wrangler:inf\\]'",
+    "dev:watch": "npm run dev:core & npx wait-on ../packages/core/dist/index.js && PORT=$(($(echo -n \"$(basename $(cd .. && pwd))\" | cksum | cut -d' ' -f1) % 1000 + 9000)) && GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '') && echo \"Dev server: http://localhost:$PORT\" && wrangler dev --port $PORT --local --var GIT_BRANCH:$GIT_BRANCH 2>&1 | grep -v '\\[wrangler:inf\\]'",
     "dev:core": "cd ../packages/core && npm run dev",
     "build": "echo 'Worker build is handled by wrangler during deployment'",
     "deploy": "wrangler deploy",

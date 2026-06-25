@@ -11,16 +11,17 @@
     "deploy:production": "wrangler deploy --env production",
     "db:migrate": "wrangler d1 migrations apply DB",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
+    "db:reset:local": "bash scripts/setup-local.sh",
+    "setup:db": "npm run db:reset:local",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@sonicjs-cms/core": "^3.0.0-beta.0"
+    "@sonicjs-cms/core": "*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250620.0",
     "@types/node": "^20.19.1",
-    "drizzle-kit": "^0.31.8",
-    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.26",
     "typescript": "^5.8.3",
     "wrangler": "^4.78.0"

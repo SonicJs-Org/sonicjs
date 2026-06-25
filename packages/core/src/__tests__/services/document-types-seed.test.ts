@@ -79,4 +79,37 @@ describe('autoRegisterCollectionDocumentTypes', () => {
     const registered = await autoRegisterCollectionDocumentTypes(db)
     expect(registered).toEqual([])
   })
+
+  it('defaults to deny-public (no public grants) when access is omitted', async () => {
+    getCollectionRegistry().register([
+      { name: 'private_coll', displayName: 'Private', schema: { type: 'object', properties: {} } },
+    ])
+
+    await autoRegisterCollectionDocumentTypes(db)
+    const registry = new DocumentTypeRegistry(db)
+    const dt = await registry.findById('private_coll')
+    const grants = dt.settings.baseGrants ?? {}
+    expect(grants.public).toBeUndefined()
+    expect(grants.admin).toBeDefined()
+    expect(grants.editor).toBeDefined()
+  })
+
+  it('merges collection access config into baseGrants', async () => {
+    getCollectionRegistry().register([
+      {
+        name: 'public_blog',
+        displayName: 'Public Blog',
+        schema: { type: 'object', properties: {} },
+        access: { public: ['read'] },
+      },
+    ])
+
+    await autoRegisterCollectionDocumentTypes(db)
+    const registry = new DocumentTypeRegistry(db)
+    const dt = await registry.findById('public_blog')
+    const grants = dt.settings.baseGrants ?? {}
+    expect(grants.public).toEqual(['read'])
+    expect(grants.admin).toBeDefined()
+    expect(grants.editor).toBeDefined()
+  })
 })

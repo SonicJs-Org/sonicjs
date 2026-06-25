@@ -56,6 +56,12 @@ export default {
   managed: true,
   isActive: true,
 
+  // Opt in to public read access. Without this, only authenticated users
+  // (admin/editor) can read content via the API. See docs/authentication.md.
+  access: {
+    public: ['read'],
+  },
+
   // Per-collection cache override. TTL in seconds; falls back to the cache plugin
   // default (CACHE_CONFIGS.api.ttl, currently 300s) if unset.
   cache: {

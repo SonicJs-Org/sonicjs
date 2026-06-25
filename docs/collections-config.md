@@ -182,8 +182,81 @@ interface CollectionConfig {
    * Additional custom metadata
    */
   metadata?: Record<string, any>
+
+  /**
+   * Per-collection access control. Maps principal keys to allowed permissions.
+   *
+   * Without this property, the collection defaults to deny for public access.
+   * Only admin, editor, and viewer roles get grants automatically.
+   *
+   * To make content publicly readable, explicitly opt in:
+   *   access: { public: ['read'] }
+   *
+   * Keys: 'public' (unauthenticated), or any RBAC role name.
+   * Values: arrays of 'read' | 'create' | 'update' | 'delete' | 'publish' | 'manage'.
+   *
+   * Entries merge on top of built-in defaults (admin, editor, viewer grants).
+   */
+  access?: Record<string, Permission[]>
+
+  /**
+   * Per-collection cache config
+   */
+  cache?: { enabled?: boolean; ttl?: number }
+
+  /**
+   * Enable version history for this collection
+   */
+  versioning?: boolean
 }
 ```
+
+### Access Control
+
+Collections default to **deny** for public access. To make content readable by unauthenticated visitors, add the `access` property:
+
+```typescript
+export default {
+  name: 'blog_post',
+  displayName: 'Blog Post',
+  schema: { /* ... */ },
+
+  // Allow public read access
+  access: {
+    public: ['read'],
+  },
+} satisfies CollectionConfig
+```
+
+**Built-in defaults** (always applied unless overridden):
+
+| Principal | Default Grants |
+|-----------|---------------|
+| `admin` | `read`, `create`, `update`, `delete`, `publish`, `manage` |
+| `editor` | `read`, `create`, `update`, `publish` |
+| `viewer` | `read` |
+| `public` | *(none — must opt in)* |
+
+**Override examples:**
+
+```typescript
+// Public blog with restricted editor
+access: {
+  public: ['read'],
+  editor: ['read'],         // override: read-only (no create/update)
+}
+
+// Internal content — no public access (this is the default when access is omitted)
+// access: {}
+
+// Custom role grants
+access: {
+  public: ['read'],
+  contributor: ['read', 'create'],
+}
+```
+
+See [Authentication > Content Access Control](authentication.md#content-access-control) for the full ACL model.
 
 ### CollectionSchema Interface
 

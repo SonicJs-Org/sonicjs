@@ -188,6 +188,35 @@ export class TelemetryService {
   }
 
   /**
+   * Track project snapshot — fired on bootstrap to capture runtime project shape.
+   * Arrays serialized as JSON strings (sanitizeProperties strips objects/arrays).
+   */
+  async trackProjectSnapshot(data: {
+    installation_id: string
+    collection_names: string[]
+    collection_counts: Record<string, number>
+    active_plugins: string[]
+    field_type_histogram: Record<string, number>
+    doc_total: number
+    sonicjs_version: string
+  }): Promise<void> {
+    // Temporarily set identity so track() sends the event even if not initialized
+    if (!this.identity) {
+      this.identity = { installationId: data.installation_id }
+      this.isInitialized = true
+    }
+    await this.track('project_snapshot', {
+      installation_id: data.installation_id,
+      collection_names: JSON.stringify(data.collection_names),
+      collection_counts: JSON.stringify(data.collection_counts),
+      active_plugins: JSON.stringify(data.active_plugins),
+      field_type_histogram: JSON.stringify(data.field_type_histogram),
+      doc_total: data.doc_total,
+      sonicjs_version: data.sonicjs_version,
+    })
+  }
+
+  /**
    * Flush queued events
    */
   private async flushQueue(): Promise<void> {

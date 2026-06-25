@@ -5,7 +5,10 @@ import { MigrationService } from "../services/migrations";
 import { PluginBootstrapService } from "../services/plugin-bootstrap";
 import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes } from "../services/document-types-seed";
 import { getHookSystem, hasHookSystem } from "../plugins/hooks/hook-system-singleton";
+import { getTelemetryService } from "../services/telemetry-service"
+import { SONICJS_VERSION } from "../utils/version";
 import type { SonicJSConfig } from "../app";
+import { setBranchLabel } from "../templates/layouts/admin-layout-catalyst.template";
 
 type Bindings = {
   DB: D1Database;
@@ -111,6 +114,12 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
       return next();
     }
 
+    // Show branch label automatically on localhost — no env var needed
+    const host = c.req.header('host') || '';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+    const gitBranch = (c.env as any).GIT_BRANCH as string | undefined;
+    setBranchLabel(isLocalhost && gitBranch ? gitBranch : undefined);
+
     try {
       console.log("[Bootstrap] Starting system initialization...");
 
@@ -196,6 +205,61 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
       // Mark bootstrap as complete for this worker instance
       bootstrapComplete = true;
       console.log("[Bootstrap] System initialization completed");
+
+      // Fire project snapshot telemetry (fire-and-forget, never blocks boot)
+      try {
+        const registry = getCollectionRegistry();
+        const collections = registry.listActive();
+
+        // Count docs per collection type from D1
+        const countResult = await c.env.DB.prepare(
+          `SELECT type_id, COUNT(*) AS cnt FROM documents
+           WHERE is_current_draft = 1 AND deleted_at IS NULL GROUP BY type_id`
+        ).all<{ type_id: string; cnt: number }>();
+        const countMap: Record<string, number> = {};
+        let docTotal = 0;
+        for (const row of (countResult.results ?? [])) {
+          countMap[row.type_id] = row.cnt;
+          docTotal += row.cnt;
+        }
+
+        // Field type histogram across all collection schemas
+        const fieldTypeHistogram: Record<string, number> = {};
+        for (const col of collections) {
+          const props = (col.schema as any)?.properties ?? {};
+          for (const field of Object.values(props) as any[]) {
+            const ft: string = field?.type ?? 'unknown';
+            fieldTypeHistogram[ft] = (fieldTypeHistogram[ft] ?? 0) + 1;
+          }
+        }
+
+        // Plugin names from config
+        const activePlugins = (config.plugins?.register ?? []).map((p: any) => p.name ?? 'unknown');
+
+        // Stable installation ID via KV (generated once, persisted)
+        let installationId = 'unknown';
+        try {
+          const kv = c.env.KV as KVNamespace | undefined;
+          if (kv) {
+            installationId = (await kv.get('_sonicjs_installation_id')) ?? '';
+            if (!installationId) {
+              installationId = crypto.randomUUID();
+              await kv.put('_sonicjs_installation_id', installationId);
+            }
+          }
+        } catch { /* KV not available */ }
+
+        const telemetry = getTelemetryService();
+        await telemetry.trackProjectSnapshot({
+          installation_id: installationId,
+          collection_names: collections.map(c => c.name),
+          collection_counts: countMap,
+          active_plugins: activePlugins,
+          field_type_histogram: fieldTypeHistogram,
+          doc_total: docTotal,
+          sonicjs_version: SONICJS_VERSION,
+        });
+      } catch { /* silent — telemetry must never break boot */ }
     } catch (error) {
       console.error("[Bootstrap] Error during system initialization:", error);
       // Don't prevent the app from starting, but log the error

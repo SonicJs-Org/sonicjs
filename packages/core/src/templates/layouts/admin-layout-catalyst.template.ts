@@ -1,6 +1,36 @@
 import { HtmlEscapedString } from "hono/utils/html";
 import { renderLogo } from "../components/logo.template";
 
+// Dev-only branch label — set via setBranchLabel() at bootstrap when BRANCH_LABEL env var is present
+let _branchLabel: string | undefined;
+
+export function setBranchLabel(label: string | undefined): void {
+  _branchLabel = label;
+}
+
+const BRANCH_COLORS = [
+  { bg: "bg-rose-500",    text: "text-white" },
+  { bg: "bg-orange-500",  text: "text-white" },
+  { bg: "bg-amber-400",   text: "text-zinc-900" },
+  { bg: "bg-lime-500",    text: "text-zinc-900" },
+  { bg: "bg-emerald-500", text: "text-white" },
+  { bg: "bg-teal-500",    text: "text-white" },
+  { bg: "bg-cyan-500",    text: "text-zinc-900" },
+  { bg: "bg-sky-500",     text: "text-white" },
+  { bg: "bg-blue-600",    text: "text-white" },
+  { bg: "bg-violet-500",  text: "text-white" },
+  { bg: "bg-fuchsia-500", text: "text-white" },
+  { bg: "bg-pink-500",    text: "text-white" },
+];
+
+function branchColor(label: string): { bg: string; text: string } {
+  let hash = 5381;
+  for (let i = 0; i < label.length; i++) {
+    hash = ((hash << 5) + hash) ^ label.charCodeAt(i);
+  }
+  return BRANCH_COLORS[Math.abs(hash) % BRANCH_COLORS.length] ?? { bg: "bg-zinc-500", text: "text-white" };
+}
+
 // Catalyst Checkbox Component (HTML implementation)
 export interface CatalystCheckboxProps {
   id: string;
@@ -669,6 +699,7 @@ function renderCatalystSidebar(
       <!-- Sidebar Header -->
       <div class="flex w-full flex-col border-b border-zinc-950/5 p-4 dark:border-white/5">
         ${renderLogo({ size: "md", showText: true, variant: "white", version, href: "/admin/content" })}
+        ${_branchLabel ? (() => { const col = branchColor(_branchLabel!); const short = _branchLabel!.split('/').pop() || _branchLabel!; return `<div class="mt-2 flex items-center justify-center"><span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${col.bg} ${col.text} max-w-full truncate" title="${_branchLabel}">${short}</span></div>`; })() : ""}
       </div>
 
       <!-- Tenant switcher (injected by tenantMiddleware when the multi-tenant plugin is active) -->

@@ -58,7 +58,7 @@ const T_USER_ROLES = 'rbac_user_roles'
 
 const SYSTEM_RESOURCES: RbacResource[] = [
   { key: '*', label: 'All resources', group: 'system' },
-  { key: 'portal', label: 'Admin Portal', group: 'system' },
+  { key: 'portal', label: 'Admin Panel', group: 'system' },
   { key: 'dashboard', label: 'Dashboard', group: 'system' },
   { key: 'rbac', label: 'Roles & Permissions', group: 'system' },
   { key: 'documents', label: 'Documents', group: 'system' as const },
@@ -474,6 +474,12 @@ export class RbacService {
           { resource: 'document_type:*', verb: 'delete' },
           { resource: 'settings', verb: 'read' },
         ] },
+      { id: 'role-authenticated', name: 'authenticated', displayName: 'Authenticated', description: 'Signed-in users with no Admin Panel access', isSystem: false,
+        grants: [
+          { resource: 'document_type:*', verb: 'read' },
+        ] },
+      { id: 'role-public', name: 'public', displayName: 'Public', description: 'Unauthenticated visitors — read-only public content', isSystem: false,
+        grants: [] },
     ]
     const verbs: Array<VerbData & { id: string }> = [
       { id: 'verb-access', name: 'access', description: 'Enter or use a portal/resource', isSystem: true, sortOrder: 5 },

@@ -110,14 +110,18 @@ export function pluginMenuMiddleware() {
 
     await next()
 
-    // Inject menu items into HTML response by replacing the marker
-    if (activeMenuItems.length > 0 && c.res.headers.get('content-type')?.includes('text/html')) {
+    // Inject menu items into HTML response by replacing the marker.
+    // Read from context var (not activeMenuItems) so plugins that self-inject
+    // via app.use('/admin/*', ...) pre-next are included even when they're not
+    // in the compiled manifest registry (e.g. external/stats plugin).
+    const finalItems = (c.get('pluginMenuItems') as Array<{ label: string; path: string; icon: string }>) ?? []
+    if (finalItems.length > 0 && c.res.headers.get('content-type')?.includes('text/html')) {
       const status = c.res.status
       const headers = new Headers(c.res.headers)
       const html = await c.res.text()
 
       if (html.includes(MARKER)) {
-        const renderedItems = activeMenuItems.map(item => renderMenuItem(item, path)).join('')
+        const renderedItems = finalItems.map(item => renderMenuItem(item, path)).join('')
         const newHtml = html.split(MARKER).join(renderedItems)
         c.res = new Response(newHtml, { status, headers })
       } else {

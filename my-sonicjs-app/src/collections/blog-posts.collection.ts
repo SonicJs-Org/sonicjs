@@ -56,6 +56,10 @@ export default {
   managed: true,
   isActive: true,
 
+  access: {
+    public: ['read'],
+  },
+
   // Per-collection cache override. TTL in seconds; falls back to the cache plugin
   // default (CACHE_CONFIGS.api.ttl, currently 300s) if unset.
   cache: {

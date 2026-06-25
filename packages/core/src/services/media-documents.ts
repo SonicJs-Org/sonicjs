@@ -32,7 +32,7 @@ export interface MediaUrlOptions {
 }
 
 // media_asset queryable fields — mirror migration 043 (q_media_*) + the document type registration.
-const MEDIA_QUERYABLE: QueryableField[] = [
+export const MEDIA_QUERYABLE: QueryableField[] = [
   { name: 'mimeType', kind: 'scalar', type: 'text', column: 'q_media_mime' },
   { name: 'folder', kind: 'scalar', type: 'text', column: 'q_media_folder' },
   { name: 'size', kind: 'scalar', type: 'integer', column: 'q_media_size' },

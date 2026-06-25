@@ -181,6 +181,15 @@ adminMenuRoutes.delete('/:id', async (c) => {
   return c.redirect('/admin/menu?message=Item+deleted')
 })
 
+// HTML form fallback: browsers can't send DELETE from a form
+adminMenuRoutes.post('/:id/delete', async (c) => {
+  const db = c.env.DB
+  const id = c.req.param('id')
+  const result = await deleteItem(db, id)
+  if (!result.ok) return c.json({ error: result.reason }, 403)
+  return c.redirect('/admin/menu?message=Item+deleted')
+})
+
 adminMenuRoutes.post('/:id/move-up', async (c) => {
   const db = c.env.DB
   const id = c.req.param('id')

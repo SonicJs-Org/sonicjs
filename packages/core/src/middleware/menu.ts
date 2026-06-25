@@ -125,8 +125,8 @@ async function isMenuPluginActive(db: any): Promise<boolean> {
          LIMIT 1`,
       )
       .first() as { status: string } | null
-    // Not yet in DB (never installed/auto-registered) → treat as active
-    if (!row) return true
+    // Not yet in DB (never installed/activated) → off by default
+    if (!row) return false
     return row.status === 'active'
   } catch {
     return true

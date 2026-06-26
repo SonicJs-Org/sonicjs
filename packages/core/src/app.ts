@@ -41,6 +41,7 @@ import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
+import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole, requireRbac } from './middleware/auth'
@@ -279,6 +280,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
+    apiKeysPlugin,
     aiSearchPlugin,
     oauthProvidersPlugin,
     userProfilesPlugin,
@@ -476,6 +478,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     }
     await next()
   })
+
+  // API-key auth: if no session resolved a user, accept a programmatic key from
+  // `x-api-key` / `Authorization: Bearer sk_…`. Provided by the api-keys plugin;
+  // gated on that plugin being active. Runs right after the session middleware
+  // so it sits ahead of every route guard, like the security-audit middleware.
+  app.use('*', apiKeyAuthMiddleware())
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {

@@ -67,7 +67,8 @@ describe('api-content-crud → documents (decommission step)', () => {
     const created = (await (await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'V1', slug: 'v', status: 'published', data: {} }))).json()).data
     const res = await app.request(`/api/content/${created.id}`, json('PUT', { data: { body: 'v2' }, status: 'published' }))
     expect(res.status).toBe(200)
-    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(created.id).n).toBe(2)
+    // With versioning off (default), publish() deletes the old published row — only v2 survives.
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(created.id).n).toBe(1)
     expect(db.raw.prepare('SELECT version_number v FROM documents WHERE root_id=? AND is_published=1').get(created.id).v).toBe(2)
   })
 

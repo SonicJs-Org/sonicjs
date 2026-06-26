@@ -1,6 +1,6 @@
 import type { Context, Next } from 'hono'
 import type { Bindings, Variables } from '../app'
-import { listMenuItems, buildSidebarTree, fetchPluginStatuses } from '../plugins/core-plugins/menu-plugin/services/menu-repository'
+import { listMenuItems, buildSidebarTree } from '../plugins/core-plugins/menu-plugin/services/menu-repository'
 import type { SidebarItem } from '../plugins/core-plugins/menu-plugin/services/menu-repository'
 import { resolveIcon } from '../services/menu-icons'
 import { escapeHtml } from '../utils/sanitize'
@@ -156,12 +156,7 @@ export function menuMiddleware() {
 
     if (items.length === 0) return
 
-    // Filter out plugin-sourced items whose plugin is inactive
-    const pluginIds = [...new Set(items.filter(i => i.source === 'plugin' && i.pluginId).map(i => i.pluginId as string))]
-    const pluginStatuses = await fetchPluginStatuses(c.env.DB, pluginIds)
-    const visibleItems = items.filter(i => i.source !== 'plugin' || pluginStatuses[i.pluginId ?? ''] === 'active')
-
-    const tree = buildSidebarTree(visibleItems)
+    const tree = buildSidebarTree(items)
     const renderedItems = tree.map((item) => renderTopLevelItem(item, path)).join('')
     const navItemsHtml = renderedItems + ACCORDION_SCRIPT
 

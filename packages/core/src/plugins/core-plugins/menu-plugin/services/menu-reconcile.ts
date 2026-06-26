@@ -15,6 +15,7 @@ async function upsertPluginRow(
   db: D1Database,
   slug: string,
   entry: ActivePluginEntry,
+  visible: boolean,
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000)
 
@@ -47,7 +48,7 @@ async function upsertPluginRow(
     icon: entry.icon,
     target: '_self',
     isExternal: false,
-    visible: true,
+    visible,
     parent: null,
     source: 'plugin',
     pluginId: entry.pluginId,
@@ -69,7 +70,7 @@ async function upsertPluginRow(
     .bind(
       id, id, 'menu_item', 1, null, 1,
       1, 0, 'draft', '', slug, null, entry.label, null,
-      entry.sortOrder, 1, null, null, null, null,
+      entry.sortOrder, visible ? 1 : 0, null, null, null, null,
       'default', 'default', '', data, '{}',
       null, null, null, now, now,
     )
@@ -108,7 +109,7 @@ async function deactivateStalePluginRows(
       db
         .prepare(
           `UPDATE documents
-           SET data = json_set(data, '$.visible', 0), updated_at = ?
+           SET data = json_set(data, '$.visible', 0), visible = 0, updated_at = ?
            WHERE id = ? AND tenant_id = 'default'`,
         )
         .bind(now, row.id),
@@ -116,14 +117,14 @@ async function deactivateStalePluginRows(
   )
 }
 
-async function fetchInactivePluginIds(db: D1Database): Promise<Set<string>> {
+async function fetchActivePluginIds(db: D1Database): Promise<Set<string>> {
   try {
     const rows = await db
       .prepare(
         `SELECT slug FROM documents
          WHERE type_id = 'plugin' AND tenant_id = 'default'
            AND is_current_draft = 1 AND deleted_at IS NULL
-           AND json_extract(data, '$.status') = 'inactive'`,
+           AND json_extract(data, '$.status') = 'active'`,
       )
       .all<{ slug: string }>()
     return new Set((rows.results ?? []).map((r) => r.slug))
@@ -178,21 +179,18 @@ export async function reconcileMenuFromPlugins(db: D1Database): Promise<void> {
       })
     })
 
-    // Exclude plugins explicitly disabled in the DB — their menu rows will be
-    // hidden by deactivateStalePluginRows below (same path as removed plugins).
-    const inactiveIds = await fetchInactivePluginIds(db)
-    for (const id of inactiveIds) {
-      byPluginId.delete(id)
-    }
+    // Only plugins explicitly active in DB get visible=true on first insert.
+    // Plugins not yet in DB (never installed) default to visible=false.
+    const activeIds = await fetchActivePluginIds(db)
 
-    // Upsert each active plugin entry
+    // Upsert all registry plugin entries; visible depends on active status
     for (const [pluginId, entry] of byPluginId) {
       const slug = `menu:plugin:${pluginId}`
-      await upsertPluginRow(db, slug, entry)
+      await upsertPluginRow(db, slug, entry, activeIds.has(pluginId))
     }
 
-    // Deactivate rows whose plugin is no longer active (removed or disabled)
-    await deactivateStalePluginRows(db, new Set(byPluginId.keys()))
+    // Deactivate rows whose plugin is inactive or removed from registry
+    await deactivateStalePluginRows(db, activeIds)
   } catch {
     // DB may not be ready at bootstrap; swallow silently
   }

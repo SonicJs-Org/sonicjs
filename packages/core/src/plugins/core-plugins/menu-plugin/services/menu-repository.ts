@@ -12,7 +12,7 @@ export interface MenuItemData {
   source: 'system' | 'plugin' | 'user'
   pluginId: string | null
   permissions: string[]
-  lockedFields: ('url')[]
+  lockedFields: string[]
 }
 
 export interface MenuItem extends MenuItemData {

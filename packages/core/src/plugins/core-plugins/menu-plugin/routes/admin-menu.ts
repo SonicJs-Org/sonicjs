@@ -159,11 +159,12 @@ async function handleMenuItemUpdate(c: any) {
   const item = items.find((i: any) => i.id === id)
   if (!item) return c.json({ error: 'Not found' }, 404)
 
+  const locked = new Set(item.lockedFields)
   const changes: Record<string, any> = {}
-  if (form.has('label')) changes.label = escapeHtml(String(form.get('label')).trim())
-  if (form.has('icon')) changes.icon = String(form.get('icon')).trim()
-  if (form.has('target')) changes.target = form.get('target') === '_blank' ? '_blank' : '_self'
-  if (form.has('url')) changes.url = String(form.get('url')).trim()
+  if (form.has('label') && !locked.has('label')) changes.label = escapeHtml(String(form.get('label')).trim())
+  if (form.has('icon') && !locked.has('icon')) changes.icon = String(form.get('icon')).trim()
+  if (form.has('target') && !locked.has('target')) changes.target = form.get('target') === '_blank' ? '_blank' : '_self'
+  if (form.has('url') && !locked.has('url')) changes.url = String(form.get('url')).trim()
   if (form.has('parent')) changes.parent = String(form.get('parent')).trim() || null
   // Checkbox: present = true, absent = false
   changes.visible = form.has('visible')

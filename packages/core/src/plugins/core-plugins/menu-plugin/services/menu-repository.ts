@@ -12,7 +12,7 @@ export interface MenuItemData {
   source: 'system' | 'plugin' | 'user'
   pluginId: string | null
   permissions: string[]
-  lockedFields: ('url' | 'parent')[]
+  lockedFields: ('url')[]
 }
 
 export interface MenuItem extends MenuItemData {
@@ -371,7 +371,8 @@ export async function updateItem(
   >,
   lockedFields: string[]
 ): Promise<boolean> {
-  const lockedKeys = new Set(lockedFields)
+  // parent is always editable — admins control layout regardless of source
+  const lockedKeys = new Set(lockedFields.filter(f => f !== 'parent'))
 
   for (const key of Object.keys(changes)) {
     if (lockedKeys.has(key)) {

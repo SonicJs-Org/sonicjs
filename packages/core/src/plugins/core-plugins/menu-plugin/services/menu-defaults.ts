@@ -10,7 +10,7 @@ export interface SystemMenuItem {
   source: 'system'
   pluginId: null
   permissions: []
-  lockedFields: ['url', 'parent']
+  lockedFields: ['url']
   sortOrder: number
 }
 
@@ -27,7 +27,7 @@ export const SYSTEM_MENU_ITEMS: readonly SystemMenuItem[] = [
     source: 'system',
     pluginId: null,
     permissions: [],
-    lockedFields: ['url', 'parent'],
+    lockedFields: ['url'],
     sortOrder: 10,
   },
   {
@@ -42,7 +42,7 @@ export const SYSTEM_MENU_ITEMS: readonly SystemMenuItem[] = [
     source: 'system',
     pluginId: null,
     permissions: [],
-    lockedFields: ['url', 'parent'],
+    lockedFields: ['url'],
     sortOrder: 20,
   },
   {
@@ -57,7 +57,7 @@ export const SYSTEM_MENU_ITEMS: readonly SystemMenuItem[] = [
     source: 'system',
     pluginId: null,
     permissions: [],
-    lockedFields: ['url', 'parent'],
+    lockedFields: ['url'],
     sortOrder: 30,
   },
   {
@@ -72,7 +72,7 @@ export const SYSTEM_MENU_ITEMS: readonly SystemMenuItem[] = [
     source: 'system',
     pluginId: null,
     permissions: [],
-    lockedFields: ['url', 'parent'],
+    lockedFields: ['url'],
     sortOrder: 40,
   },
   {
@@ -87,7 +87,7 @@ export const SYSTEM_MENU_ITEMS: readonly SystemMenuItem[] = [
     source: 'system',
     pluginId: null,
     permissions: [],
-    lockedFields: ['url', 'parent'],
+    lockedFields: ['url'],
     sortOrder: 50,
   },
   {
@@ -102,7 +102,7 @@ export const SYSTEM_MENU_ITEMS: readonly SystemMenuItem[] = [
     source: 'system',
     pluginId: null,
     permissions: [],
-    lockedFields: ['url', 'parent'],
+    lockedFields: ['url'],
     sortOrder: 60,
   },
 ] as const

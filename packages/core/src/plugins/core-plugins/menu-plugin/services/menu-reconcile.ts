@@ -53,7 +53,7 @@ async function upsertPluginRow(
     source: 'plugin',
     pluginId: entry.pluginId,
     permissions: [],
-    lockedFields: ['url', 'parent'],
+    lockedFields: ['url'],
     sortOrder: entry.sortOrder,
   })
 

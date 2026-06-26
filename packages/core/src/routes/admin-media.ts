@@ -107,23 +107,9 @@ adminMediaRoutes.get('/selector', async (c) => {
     const { files } = await mediaSvc.list({ search: search.trim() || undefined, limit: 24 })
     const mediaFiles = files.map(doc => mediaDocToFile(doc))
 
-    // Render media selector grid
-    return c.html(html`
-      <div class="mb-4">
-        <input
-          type="search"
-          id="media-selector-search"
-          placeholder="Search files..."
-          class="w-full rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-          hx-get="/admin/media/selector"
-          hx-trigger="keyup changed delay:300ms"
-          hx-target="#media-selector-grid"
-          hx-include="[name='search']"
-        >
-      </div>
-
-      <div id="media-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-        ${raw(mediaFiles.map(file => `
+    // Build the cards once; the same markup serves both the full panel (the
+    // initial modal load) and the grid-only fragment (HTMX search requests).
+    const cardsHtml = mediaFiles.map(file => `
           <div
             class="relative group cursor-pointer rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800 shadow-sm hover:shadow-md transition-shadow"
             data-media-id="${file.id}"
@@ -173,17 +159,45 @@ adminMediaRoutes.get('/selector', async (c) => {
               </p>
             </div>
           </div>
-        `).join(''))}
-      </div>
+        `).join('')
 
-      ${mediaFiles.length === 0 ? html`
-        <div class="text-center py-12 text-zinc-500 dark:text-zinc-400">
+    const gridInner = mediaFiles.length === 0
+      ? `
+        <div class="col-span-full text-center py-12 text-zinc-500 dark:text-zinc-400">
           <svg class="mx-auto h-12 w-12 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
           </svg>
           <p class="mt-2">No media files found</p>
-        </div>
-      ` : ''}
+        </div>`
+      : cardsHtml
+
+    // On the HTMX search request the input targets #media-selector-grid, so
+    // respond with only the inner cards. Returning the whole panel here (search
+    // box + grid) would nest a fresh panel inside the grid on every keystroke,
+    // and the search input had no `name`, so the typed term was never sent.
+    if (c.req.header('HX-Target') === 'media-selector-grid') {
+      return c.html(raw(gridInner))
+    }
+
+    // Initial modal load: full panel (search box + grid container).
+    return c.html(html`
+      <div class="mb-4">
+        <input
+          type="search"
+          id="media-selector-search"
+          name="search"
+          placeholder="Search files..."
+          class="w-full rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
+          hx-get="/admin/media/selector"
+          hx-trigger="keyup changed delay:300ms, search"
+          hx-target="#media-selector-grid"
+          hx-include="[name='search']"
+        >
+      </div>
+
+      <div id="media-selector-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
+        ${raw(gridInner)}
+      </div>
     `)
   } catch (error) {
     console.error('Error loading media selector:', error)

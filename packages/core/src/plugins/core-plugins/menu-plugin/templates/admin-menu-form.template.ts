@@ -37,7 +37,7 @@ export function renderMenuFormPage(data: MenuFormPageData): string {
   const visibleChecked = item ? (item.visible ? 'checked' : '') : 'checked'
 
   const formAttrs = isEdit
-    ? `hx-put="/admin/menu/${escapeHtml(item!.id)}" hx-target="body" hx-push-url="true"`
+    ? `method="POST" action="/admin/menu/${escapeHtml(item!.id)}/update"`
     : `method="POST" action="/admin/menu"`
 
   const submitLabel = isEdit ? 'Save Changes' : 'Add Item'

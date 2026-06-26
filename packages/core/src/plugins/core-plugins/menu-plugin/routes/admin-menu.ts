@@ -150,13 +150,13 @@ adminMenuRoutes.post('/:id/visibility', async (c) => {
   return c.redirect('/admin/menu?message=Visibility+updated')
 })
 
-adminMenuRoutes.put('/:id', async (c) => {
+async function handleMenuItemUpdate(c: any) {
   const db = c.env.DB
   const id = c.req.param('id')
   const form = await c.req.formData()
 
   const items = await listMenuItems(db)
-  const item = items.find(i => i.id === id)
+  const item = items.find((i: any) => i.id === id)
   if (!item) return c.json({ error: 'Not found' }, 404)
 
   const changes: Record<string, any> = {}
@@ -165,13 +165,19 @@ adminMenuRoutes.put('/:id', async (c) => {
   if (form.has('target')) changes.target = form.get('target') === '_blank' ? '_blank' : '_self'
   if (form.has('url')) changes.url = String(form.get('url')).trim()
   if (form.has('parent')) changes.parent = String(form.get('parent')).trim() || null
-  if (form.has('visible')) changes.visible = form.get('visible') !== 'false'
+  // Checkbox: present = true, absent = false
+  changes.visible = form.has('visible')
 
   const ok = await updateItem(db, id, changes, item.lockedFields)
   if (!ok) return c.json({ error: 'Cannot modify locked fields' }, 403)
 
   return c.redirect('/admin/menu?message=Item+updated')
-})
+}
+
+adminMenuRoutes.put('/:id', handleMenuItemUpdate)
+
+// HTML form fallback (browsers can't PUT)
+adminMenuRoutes.post('/:id/update', handleMenuItemUpdate)
 
 adminMenuRoutes.delete('/:id', async (c) => {
   const db = c.env.DB

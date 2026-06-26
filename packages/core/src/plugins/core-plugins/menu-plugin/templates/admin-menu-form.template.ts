@@ -25,6 +25,7 @@ export function renderMenuFormPage(data: MenuFormPageData): string {
 
   const parentOptions = topLevelItems
     .filter((t) => !isEdit || t.id !== item?.id)
+    .sort((a, b) => a.label.localeCompare(b.label))
     .map((t) => {
       const selected = item?.parent === t.id ? 'selected' : ''
       return `<option value="${escapeHtml(t.id)}" ${selected}>${escapeHtml(t.label)}</option>`

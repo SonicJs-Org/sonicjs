@@ -130,6 +130,7 @@ export interface MediaListOptions {
 
 export interface MediaListResult {
   files: Document[]
+  total: number
   folders: Array<{ folder: string; count: number; totalSize: number }>
   types: Array<{ type: string; count: number }>
 }
@@ -199,11 +200,18 @@ export class MediaDocumentService {
       params.push(term, term, term)
     }
 
-    const listed = await this.db
-      .prepare(`SELECT * FROM documents WHERE ${where.join(' AND ')} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
-      .bind(...params, limit, offset)
-      .all<Record<string, any>>()
+    const [listed, countResult] = await Promise.all([
+      this.db
+        .prepare(`SELECT * FROM documents WHERE ${where.join(' AND ')} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
+        .bind(...params, limit, offset)
+        .all<Record<string, any>>(),
+      this.db
+        .prepare(`SELECT COUNT(*) AS total FROM documents WHERE ${where.join(' AND ')}`)
+        .bind(...params)
+        .first<{ total: number }>(),
+    ])
     const files = (listed.results ?? []).map(rowToMinimalDoc)
+    const total = countResult?.total ?? 0
 
     // Aggregations cover ALL media (not the folder/type-filtered page), matching the legacy sidebar.
     const folderAgg = await this.db
@@ -217,6 +225,7 @@ export class MediaDocumentService {
 
     return {
       files,
+      total,
       folders: (folderAgg.results ?? []).map(f => ({ folder: f.folder, count: f.count, totalSize: f.totalSize ?? 0 })),
       types: (typeAgg.results ?? []).map(t => ({ type: t.type, count: t.count })),
     }

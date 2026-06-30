@@ -344,7 +344,10 @@ adminPluginRoutes.post('/:id/configure', async (c) => {
         ? (def as any).author?.name
         : (def as any).author,
     })
-    await pluginService.updatePluginSettings(pluginId, parsed)
+    // Merge with existing settings so non-configSchema keys (_routes, _adminPath, etc.) are preserved.
+    const existingPlugin = await pluginService.getPlugin(pluginId)
+    const existingSettings = (existingPlugin?.settings as Record<string, unknown>) ?? {}
+    await pluginService.updatePluginSettings(pluginId, { ...existingSettings, ...parsed })
 
     return c.redirect(`/admin/plugins/${encodeURIComponent(pluginId)}/configure`)
   } catch (error) {
@@ -487,7 +490,10 @@ adminPluginRoutes.post('/:id/settings', async (c) => {
     const settings = await c.req.json()
 
     const pluginService = new PluginService(db)
-    await pluginService.updatePluginSettings(pluginId, settings)
+    // Merge with existing settings so system keys (_routes, _adminPath, etc.) are preserved.
+    const existingPlugin = await pluginService.getPlugin(pluginId)
+    const existingSettings = (existingPlugin?.settings as Record<string, unknown>) ?? {}
+    await pluginService.updatePluginSettings(pluginId, { ...existingSettings, ...settings })
 
     // Clear auth validation cache if updating core-auth plugin
     if (pluginId === 'core-auth') {

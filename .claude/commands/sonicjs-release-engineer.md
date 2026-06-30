@@ -2,9 +2,10 @@
 
 ## Critical Rules (NEVER violate without explicit instruction)
 
-- **NEVER add `--tag beta` (or alpha/rc) when publishing** unless the user explicitly requests a pre-release. All publishes go to `latest` by default.
+- **ALL releases use `npm run version:beta` (`3.x.x-beta.N` → `3.x.x-beta.N+1`) until the user explicitly says "we are out of beta" or "release stable".** NEVER use `version:patch`, `version:minor`, or `version:major` for routine releases — those drop the pre-release suffix and publish a stable version.
+- **NEVER add `--tag beta` (or alpha/rc) when publishing** — all publishes go to `latest` dist-tag regardless of the version string containing `-beta.N`.
 - **The `beta` dist-tag MUST always point to the same version as `latest`.** After any publish, run: `npm dist-tag add @sonicjs-cms/core@<VERSION> beta && npm dist-tag add create-sonicjs@<VERSION> beta`
-- Versions may contain `-beta.N` in the version string — that is fine. The dist-tag is what matters.
+- Versions may contain `-beta.N` in the version string — that is fine and expected. The dist-tag (`latest`) is what matters for `npm install` behavior.
 
 ---
 
@@ -118,22 +119,24 @@ npm run build:core
 
 ### Step 2: Determine Version Bump Type
 
-Ask the user for the release type if not specified:
-- **patch** (2.3.12 → 2.3.13): Bug fixes only
-- **minor** (2.3.12 → 2.4.0): New features, backwards compatible
-- **major** (2.3.12 → 3.0.0): Breaking changes
+**DEFAULT: use `version:beta` for ALL routine releases (bug fixes, features, improvements) until the user explicitly declares "out of beta" or "release stable".**
+
+Only use patch/minor/major when the user explicitly requests a stable release:
+- **beta** (3.0.0-beta.17 → 3.0.0-beta.18): DEFAULT — all bug fixes and features during beta period
+- **patch** (3.0.0 → 3.0.1): Stable releases only — bug fixes (user must confirm out-of-beta first)
+- **minor** (3.0.0 → 3.1.0): Stable releases only — new features (user must confirm out-of-beta first)
+- **major** (3.0.0 → 4.0.0): Stable releases only — breaking changes (user must confirm out-of-beta first)
 
 ### Step 3: Bump Version
 
 ```bash
-# For patch release
-npm run version:patch
+# DEFAULT: beta prerelease bump (3.x.x-beta.N → 3.x.x-beta.N+1)
+npm run version:beta
 
-# For minor release
-npm run version:minor
-
-# For major release
-npm run version:major
+# Only for stable releases (user must explicitly request):
+# npm run version:patch
+# npm run version:minor
+# npm run version:major
 ```
 
 This automatically:
@@ -409,11 +412,11 @@ npm publish --workspace=create-sonicjs --tag rc
 ## Usage Examples
 
 ```
+/release-engineer              # DEFAULT: publish next beta (X.X.X-beta.N+1) → latest dist-tag
 /release-engineer update       # Update npm dependencies
-/release-engineer patch        # Publish patch release
-/release-engineer minor        # Publish minor release
-/release-engineer major        # Publish major release
-/release-engineer beta         # Publish beta pre-release
+/release-engineer patch        # Publish stable patch (only after user declares out-of-beta)
+/release-engineer minor        # Publish stable minor (only after user declares out-of-beta)
+/release-engineer major        # Publish stable major (only after user declares out-of-beta)
 /release-engineer status       # Check current version and npm status
 ```
 

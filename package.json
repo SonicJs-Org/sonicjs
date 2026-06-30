@@ -1,6 +1,6 @@
 {
   "name": "sonicjs",
-  "version": "3.0.0-beta.12",
+  "version": "3.0.0-beta.20",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -26,9 +26,11 @@
     "e2e:ui": "playwright test --config=tests/playwright.config.ts --ui",
     "e2e:smoke": "playwright test --config=tests/playwright.smoke.config.ts",
     "e2e:smoke:ui": "playwright test --config=tests/playwright.smoke.config.ts --ui",
+    "killall": "pkill -9 -f 'workerd|wrangler' 2>/dev/null; echo 'Killed wrangler/workerd processes'",
     "prepare": "husky",
     "type-check": "npm run type-check --workspace=@sonicjs-cms/core",
     "lint": "npm run type-check",
+    "version:beta": "npm version prerelease --preid=beta --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",
     "version:patch": "npm version patch --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",
     "version:minor": "npm version minor --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",
     "version:major": "npm version major --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",

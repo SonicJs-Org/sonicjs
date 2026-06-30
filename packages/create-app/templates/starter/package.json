@@ -15,7 +15,8 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "update": "npm install @sonicjs-cms/core@latest --save",
-    "update:beta": "npm install @sonicjs-cms/core@beta --save"
+    "update:beta": "npm install @sonicjs-cms/core@beta --save",
+    "update:plugin": "tsx scripts/update-plugin.ts"
   },
   "dependencies": {},
   "devDependencies": {

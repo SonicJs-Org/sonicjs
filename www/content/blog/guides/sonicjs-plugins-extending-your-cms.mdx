@@ -69,21 +69,20 @@ Every plugin is a plain object created with `definePlugin` from `@sonicjs-cms/co
 
 ```typescript
 import { definePlugin } from '@sonicjs-cms/core'
-import { z } from 'zod'
 
 const myPlugin = definePlugin({
   id: 'my-plugin',
   name: 'My Plugin',
   version: '1.0.0',
-  description?: 'Optional description',
+  description: 'Optional description',
 
-  // Typed config schema (replaces plugins-table JSON)
-  configSchema: z.object({
-    apiKey: z.string(),
-    webhookUrl: z.string().url().optional(),
-  }),
+  // Schema-driven config (auto-generates the admin settings form)
+  configSchema: {
+    apiKey: { type: 'string', label: 'API Key' },
+    webhookUrl: { type: 'string', label: 'Webhook URL', format: 'url' },
+  },
 
-  // Routes registered directly on the Hono app
+  // Routes registered directly on the Hono app (must be synchronous)
   register(app) {
     app.get('/my-route', handler)
   },
@@ -95,7 +94,7 @@ const myPlugin = definePlugin({
 
   // Boot-time: hooks, document-type registration, etc.
   onBoot(ctx) {
-    ctx.hooks.on('content:save', async (data) => {
+    ctx.hooks.on('content:after:update', async (data) => {
       // transform or validate
       return data
     })
@@ -131,8 +130,8 @@ export const helloWorldPlugin = definePlugin({
     { label: 'Hello World', path: '/admin/hello-world', icon: 'HandRaisedIcon', order: 90 },
   ],
 
-  onBoot(ctx) {
-    ctx.logger?.info('hello-world booted')
+  onBoot(_ctx) {
+    console.info('[hello-world] booted')
   },
 })
 ```
@@ -211,26 +210,29 @@ export const newsletterPlugin = definePlugin({
       if (!parsed.success) {
         return c.json({ error: 'Invalid', details: parsed.error.issues }, 400)
       }
-      // Store as a document instead of a custom table
-      const repo = c.get('documentRepository')
-      await repo.create({
-        type: 'newsletter-subscriber',
-        data: { email: parsed.data.email, source: parsed.data.source ?? null },
-      })
+      // Store directly in D1 using the document model
+      const db = c.env.DB
+      const id = crypto.randomUUID()
+      await db.prepare(
+        `INSERT INTO documents (id, root_id, type_id, data, tenant_id, type_version, version_number, is_current_draft, is_published, status)
+         VALUES (?, ?, 'newsletter-subscriber', ?, 'default', 1, 1, 1, 0, 'published')`
+      ).bind(id, id, JSON.stringify({ email: parsed.data.email, source: parsed.data.source ?? null })).run()
       return c.json({ success: true })
     })
 
     // Admin API: only admins can list
     app.get('/api/admin/newsletter/list', requireAuth(), requireRole('admin'), async (c: any) => {
-      const repo = c.get('documentRepository')
-      const { data } = await repo.list({ type: 'newsletter-subscriber' })
-      return c.json({ data })
+      const db = c.env.DB
+      const { results } = await db.prepare(
+        `SELECT id, data FROM documents WHERE type_id = 'newsletter-subscriber' AND tenant_id = 'default' AND is_current_draft = 1`
+      ).all()
+      return c.json({ data: results.map((r: any) => ({ id: r.id, ...JSON.parse(r.data) })) })
     })
   },
 })
 ```
 
-Two routes, two privacy levels, one plugin. The `requireAuth()` and `requireRole()` middleware are the same ones documented in the [SonicJS authentication guide](/authentication) — your plugin gets the platform's auth model for free. Subscriber records live in the document repository; no custom table needed.
+Two routes, two privacy levels, one plugin. The `requireAuth()` and `requireRole()` middleware are the same ones documented in the [SonicJS authentication guide](/authentication) — your plugin gets the platform's auth model for free. Subscriber records live in the `documents` table; no custom table needed.
 
 ## Plugin with Settings (Zod `configSchema`)
 
@@ -240,54 +242,52 @@ This is the pattern used by the OTP login and OAuth providers plugins:
 
 ```typescript
 import { definePlugin } from '@sonicjs-cms/core'
-import { z } from 'zod'
 
 export const newsletterPlugin = definePlugin({
   id: 'newsletter',
   name: 'Newsletter',
   version: '0.1.0',
 
-  // 1. Declare the shape — platform validates + generates the admin form
-  configSchema: z.object({
-    doubleOptIn: z.boolean().default(true),
-    fromAddress: z.string().email().default('hello@example.com'),
-    welcomeSubject: z.string().default('Welcome!'),
-    rateLimitPerHour: z.number().int().positive().default(30),
-  }),
+  // 1. Declare the shape — platform auto-generates the admin settings form
+  configSchema: {
+    doubleOptIn: { type: 'boolean', label: 'Double opt-in', default: true },
+    fromAddress: { type: 'string', label: 'From address', format: 'email', default: 'hello@example.com' },
+    welcomeSubject: { type: 'string', label: 'Welcome subject', default: 'Welcome!' },
+    rateLimitPerHour: { type: 'number', label: 'Rate limit (per hour)', default: 30, min: 1 },
+  },
 
   register(app) {
     app.post('/api/newsletter/subscribe', async (c: any) => {
-      // 2. Config is already validated — access via c.get('pluginConfig')
-      const config = c.get('pluginConfig') as { fromAddress: string; rateLimitPerHour: number }
-      // ...rate-limit by config.rateLimitPerHour, send welcome email from config.fromAddress
+      // 2. Settings are loaded from the DB — read via SettingsService in your handler
+      // const settings = await new SettingsService(c.env.DB).getCategorySettings('newsletter')
+      // ...rate-limit by settings.rateLimitPerHour, send welcome email from settings.fromAddress
     })
   },
 })
 ```
 
-Admins edit settings through the auto-generated form at `/admin/plugins/newsletter`. No `plugins` table to query, no JSON.parse/merge boilerplate — the platform handles validation and persistence.
+Admins edit settings through the auto-generated form at `/admin/settings/plugins/newsletter`. No `plugins` table to query, no JSON.parse/merge boilerplate — the platform handles validation and persistence.
 
-This is exactly how `otp-login-plugin` types its `OTPSettings` and how `oauth-providers` types its `OAuthPluginSettings`. No bespoke schema, no extra migrations.
+`configSchema` fields use a simple record format: `type` (`'string' | 'number' | 'boolean' | 'select'`), `label`, optional `default`, and type-specific extras like `format`, `min`/`max`, or `options`. This is exactly how `hello-world-plugin` and other first-party plugins declare their settings.
 
 ## Hooking Into Auth and Content Events
 
-The hook system is how plugins talk to each other and to the core. SonicJS exposes a stable list of standard hook names — see them all under [hooks](/hooks):
+The hook system is how plugins talk to each other and to the core. SonicJS exposes a typed event catalog — subscribe via `ctx.hooks.on(eventName, handler)` inside `onBoot`. Handlers receive the event payload, can mutate it, and return the (possibly modified) data.
 
-```typescript
-HOOKS.AUTH_LOGIN      // 'auth:login'
-HOOKS.AUTH_LOGOUT     // 'auth:logout'
-HOOKS.AUTH_REGISTER   // 'auth:register'
-HOOKS.CONTENT_CREATE  // 'content:create'
-HOOKS.CONTENT_UPDATE  // 'content:update'
-HOOKS.CONTENT_DELETE  // 'content:delete'
-HOOKS.CONTENT_PUBLISH // 'content:publish'
-HOOKS.MEDIA_UPLOAD    // 'media:upload'
-HOOKS.MEDIA_DELETE    // 'media:delete'
-HOOKS.REQUEST_START   // 'request:start'
-// ...and a dozen more
-```
+**Typed catalog hooks** (preferred — TypeScript-narrowed payload):
 
-Register handlers inside `onBoot(ctx)`. Handlers receive the event payload, can mutate it, and return the (possibly modified) data:
+| Event name | When it fires |
+|---|---|
+| `content:after:create` | After a document is created |
+| `content:after:update` | After a document is updated (also `content:save` — deprecated alias) |
+| `content:after:delete` | After a document is deleted |
+| `content:after:publish` | After a document is published (also `content:publish` — deprecated alias) |
+| `content:read` | When a document is read |
+| `auth:registration:completed` | After a user self-registers |
+| `auth:password-reset:requested` | When a password reset is requested |
+| `auth:password-reset:completed` | After a password reset is confirmed |
+| `auth:magic-link:consumed` | After a magic-link is used |
+| `auth:otp:verified` | After an OTP code is verified |
 
 ```typescript
 import { definePlugin } from '@sonicjs-cms/core'
@@ -299,22 +299,37 @@ export const auditPlugin = definePlugin({
 
   onBoot(ctx) {
     // Auto-tag posts with publish timestamp
-    ctx.hooks.on('content:publish', async (data) => {
+    ctx.hooks.on('content:after:publish', async (data) => {
       data.publishedAt = data.publishedAt ?? Math.floor(Date.now() / 1000)
       return data
     })
 
-    // Mirror new users into a CRM on register
-    ctx.hooks.on('auth:register', async (data) => {
+    // Mirror new users into a CRM after registration
+    ctx.hooks.on('auth:registration:completed', async (data) => {
       await fetch('https://crm.example.com/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: data.email, source: 'sonicjs' }),
+        body: JSON.stringify({ email: data.user.email, source: 'sonicjs' }),
       })
       return data
     })
   },
 })
+```
+
+**Legacy bus hooks** (auth lifecycle, request lifecycle) subscribe via `ctx.raw`:
+
+```typescript
+onBoot(ctx) {
+  // auth:login, auth:logout, request:start are on the legacy hook bus
+  const rawHooks = (ctx.raw as any)?.hooks
+  if (rawHooks?.register) {
+    rawHooks.register('auth:login', async (data: any) => {
+      console.info(`Login: ${data.email}`)
+      return data
+    }, 10) // third arg = priority; lower runs first
+  }
+}
 ```
 
 If you need to push events out of your CMS rather than handle them in-process, that's the [webhooks](/webhooks) system — different wiring, same vocabulary of event names.
@@ -326,8 +341,8 @@ You can also define **custom hooks** to let other plugins extend yours. Pick a n
 Putting the three pieces together, here's a plugin that hooks into auth events, exposes a route, and reads a typed config — all without creating any new tables:
 
 ```typescript
+import type { D1Database } from '@cloudflare/workers-types'
 import { definePlugin, requireAuth } from '@sonicjs-cms/core'
-import { z } from 'zod'
 
 export const loginAuditPlugin = definePlugin({
   id: 'login-audit',
@@ -335,44 +350,53 @@ export const loginAuditPlugin = definePlugin({
   version: '0.1.0',
   description: 'Append-only log of every login attempt',
 
-  configSchema: z.object({
-    logFailedLogins: z.boolean().default(true),
-    logSuccessfulLogins: z.boolean().default(false),
-    retentionDays: z.number().int().positive().default(90),
-  }),
+  // Schema-driven settings — auto-generates the admin form
+  configSchema: {
+    logFailedLogins: { type: 'boolean', label: 'Log failed logins', default: true },
+    logSuccessfulLogins: { type: 'boolean', label: 'Log successful logins', default: false },
+    retentionDays: { type: 'number', label: 'Retention (days)', default: 90, min: 1 },
+  },
 
-  onBoot(ctx) {
-    // Register a document type to store audit entries
-    ctx.documentTypeRegistry.register({
-      id: 'login-audit-entry',
-      name: 'Login Audit Entry',
-      source: 'system',
-      settings: { baseGrants: { public: [] } },
-    })
+  async onBoot(ctx) {
+    // auth:login is on the legacy hook bus — subscribe via ctx.raw
+    const rawHooks = (ctx.raw as any)?.hooks
+    if (!rawHooks?.register) return
 
-    // Hook: capture every login attempt
-    ctx.hooks.on('auth:login', async (data) => {
-      const config = ctx.getConfig() as { logSuccessfulLogins: boolean; logFailedLogins: boolean }
+    rawHooks.register('auth:login', async (data: any) => {
+      const db = ctx.env?.DB as D1Database | undefined
+      if (!db) return data
+
       const success = !!data.userId
+      // Read settings from SettingsService (persisted by the admin UI)
+      const { SettingsService } = await import('@sonicjs-cms/core/services')
+      const svc = new SettingsService(db)
+      const config = await svc.getCategorySettings('login-audit')
+      const logSuccess: boolean = config?.logSuccessfulLogins ?? false
+      const logFailed: boolean = config?.logFailedLogins ?? true
 
-      if (success && !config.logSuccessfulLogins) return data
-      if (!success && !config.logFailedLogins) return data
+      if (success && !logSuccess) return data
+      if (!success && !logFailed) return data
 
-      await ctx.documentService.create({
-        type: 'login-audit-entry',
-        data: { email: data.email, success, ip: data.ip ?? null },
-      })
+      const id = crypto.randomUUID()
+      await db.prepare(
+        `INSERT INTO documents (id, root_id, type_id, data, tenant_id, type_version, version_number, is_current_draft, is_published, status)
+         VALUES (?, ?, 'login-audit-entry', ?, 'default', 1, 1, 1, 0, 'published')`
+      ).bind(id, id, JSON.stringify({ email: data.email, success, ip: data.ip ?? null })).run()
 
       return data
-    })
+    }, 10)
   },
 
   register(app) {
-    // Admin route: read the log from the document repository
+    // Admin route: read the audit log directly from D1
     app.get('/api/admin/login-audit', requireAuth(), async (c: any) => {
-      const repo = c.get('documentRepository')
-      const { data } = await repo.list({ type: 'login-audit-entry' })
-      return c.json({ data })
+      const db: D1Database = c.env.DB
+      const { results } = await db.prepare(
+        `SELECT id, data FROM documents
+         WHERE type_id = 'login-audit-entry' AND tenant_id = 'default' AND is_current_draft = 1
+         ORDER BY rowid DESC LIMIT 200`
+      ).all()
+      return c.json({ data: results.map((r: any) => ({ id: r.id, ...JSON.parse(r.data) })) })
     })
   },
 
@@ -382,7 +406,7 @@ export const loginAuditPlugin = definePlugin({
 })
 ```
 
-That's a fully production-shaped plugin in under 60 lines: typed config schema, an `onBoot` hook with document-type registration, a protected route, and no `CREATE TABLE` or `DROP TABLE` anywhere. Compare it to `packages/core/src/plugins/core-plugins/security-audit-plugin/` and you'll recognize the shape.
+That's a fully production-shaped plugin: schema-driven config, an `onBoot` hook, a protected route, and no `CREATE TABLE` anywhere. Note that `auth:login` lives on the legacy hook bus (accessed via `ctx.raw`) while content lifecycle events are on the typed catalog (`ctx.hooks.on`). Compare to `packages/core/src/plugins/core-plugins/security-audit-plugin/` for the same shape in a core plugin.
 
 ## Publishing Your Plugin to npm
 
@@ -480,7 +504,7 @@ You now have the full picture: `definePlugin`, `registerPlugins`, route registra
 - **No `manifest.json`** — plugins are registered in code via `registerPlugins(app, [...], { hookSystem, env })`.
 - **Typed `configSchema`** (Zod) replaces free-form JSON in a `plugins` table — the platform validates on boot and generates the admin form.
 - **`onBoot(ctx)`** is the single lifecycle hook for side effects: document-type registration, hook subscriptions, in-memory init.
-- **Event hooks** like `content:publish` and `auth:login` let plugins compose without coupling to one another.
+- **Event hooks** like `content:after:publish` (typed catalog) and `auth:login` (legacy bus via `ctx.raw`) let plugins compose without coupling to one another.
 
 Have an idea for a plugin or want feedback on one you're building? Join us on [Discord](https://discord.gg/sonicjs) or open a discussion on [GitHub](https://github.com/lane711/sonicjs).
 

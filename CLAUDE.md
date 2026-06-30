@@ -143,7 +143,7 @@ Base grants only match `public` + `role`, so the `role` principal is mandatory f
 5. **Public exposure**: set `settings.baseGrants.public = ['read']` only if the data is non-PII.
 6. **PII**: set `settings.pii = true` and ensure the erase path covers it.
 7. **Tests**: add at least one `*.sqlite.test.ts` or `*.integration.test.ts` case. Mock tests prove nothing about SQL (R10).
-8. **E2E**: add a Playwright spec (numbered 68+).
+8. **E2E**: add a Playwright spec (numbered 68+). Write it; do NOT run it locally — CI validates it.
 
 ### Status snapshot (avoid re-investigating)
 
@@ -166,15 +166,14 @@ Repo indexed by **codegraph**. Bash auto-proxied by **rtk**. Default reply mode 
 
 Anti-patterns: `grep -r` across repo when codegraph answers; reading 5+ files to learn a flow; spawning a subagent for a known file; verbose narration.
 
-## E2E Testing is Mandatory
+## E2E Testing
 
-Every feature/fix ships with a Playwright spec in `tests/e2e/`. Workflow:
+Every feature/fix ships with a Playwright spec in `tests/e2e/`. Write the spec, but **do NOT run E2E tests locally** — they require a running wrangler dev server, consume excessive memory, and are validated by CI on PR. Running them locally is too expensive.
 
+Workflow:
 1. Implement
 2. Add `tests/e2e/<NN>-<slug>.spec.ts` (NN = next sequential; current floor 68 — R11)
-3. `npx playwright test tests/e2e/<NN>-<slug>.spec.ts` (add `--headed` to debug)
-4. Fix any failures
-5. Commit implementation + tests together
+3. Commit implementation + tests together — CI runs E2E
 
 Spec skeleton:
 
@@ -205,15 +204,10 @@ cd packages/core && npm run type-check
 npm test
 npm test -- <pattern>            # single test by name/path
 
-# E2E (root)
-npm run e2e
-npx playwright test tests/e2e/68-x.spec.ts            # one spec
-npx playwright test tests/e2e/68-x.spec.ts --headed   # debug
-
 # Local D1 — reset + migrate + seed
 cd my-sonicjs-app && npm run setup:db
 
-# Dev server (wrangler :8787)
+# Dev server (wrangler :8787) — use only when explicitly needed, not for testing
 cd my-sonicjs-app && npm run dev
 
 # Migration bundle regen (after any packages/core/migrations/*.sql edit)

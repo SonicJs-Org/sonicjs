@@ -13,6 +13,7 @@ export const sections = [
   { title: 'Document Types', id: 'document-types' },
   { title: 'Admin Interface', id: 'admin-interface' },
   { title: 'Plugin Context', id: 'plugin-context' },
+  { title: 'Example Plugin Reference', id: 'example-plugin-reference' },
   { title: 'Best Practices', id: 'best-practices' },
   { title: 'Testing', id: 'testing' },
   { title: 'Troubleshooting', id: 'troubleshooting' },
@@ -77,6 +78,10 @@ The SonicJS plugin system provides a powerful, modular architecture for extendin
 ### Plugin Location
 
 Custom plugins live in your app's `src/plugins/` directory. When you create a SonicJS app, this folder is set up for you to add your own plugins.
+
+<Callout>
+**Use the bundled example plugin as your starting point.** Every new SonicJS app (`npm create sonicjs@latest`) includes a working example plugin at `src/plugins/example/`. It covers routes, admin pages, collections, settings, and data seeding — read it before writing from scratch.
+</Callout>
 
 ---
 
@@ -674,6 +679,39 @@ definePlugin({
   },
 })
 ```
+
+---
+
+## Example Plugin Reference
+
+The bundled example plugin is the canonical reference for SonicJS plugin development. Every new install includes it at `src/plugins/example/`.
+
+**Files:**
+- `index.ts` — plugin definition with routes, menu, `onBoot` seeding, and settings schema
+- `routes/api.ts` — public Hono routes (`/example`, `/example/:name`, `/example/moods`)
+- `routes/admin.ts` — protected admin page at `/admin/example`
+- `collections/moods.collection.ts` — `CollectionConfig` for mood entries
+
+**Key patterns it demonstrates:**
+
+1. **Why `/example/*` not `/api/*`** — user plugins mount after the core `/api/:collection` catch-all, so custom routes must use a different prefix
+2. **`onBoot` seeding** — creates default moods documents if none exist; idempotent
+3. **Settings schema** — `configSchema` with Zod defines the Settings tab form
+4. **Collection registration** — `moodsCollection` imported and passed to `registerCollections()` in `src/index.ts`
+
+Read `src/plugins/example/index.ts` in your project for the full annotated source.
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/example" variant="text" arrow="right">
+    <>Full Example Plugin reference</>
+  </Button>
+</div>
+
+<div className="not-prose mt-2">
+  <Button href="/blog/building-your-first-sonicjs-plugin" variant="text" arrow="right">
+    <>Blog: Building Your First SonicJS Plugin (step-by-step walkthrough)</>
+  </Button>
+</div>
 
 ---
 

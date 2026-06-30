@@ -1,6 +1,7 @@
 import type { Context, Next } from 'hono'
 import type { Bindings, Variables } from '../app'
 import { PLUGIN_REGISTRY } from '../plugins/manifest-registry'
+import { resolvePluginMenuItems } from '../services/plugin-menu-singleton'
 
 // Build menu plugin data from the auto-generated registry.
 // Any plugin with an adminMenu entry in its manifest.json will
@@ -106,7 +107,20 @@ export function pluginMenuMiddleware() {
       // DB not ready or plugin table doesn't exist yet
     }
 
-    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || '' })))
+    // Append user plugin menu items from the singleton.
+    // The singleton is populated with ONLY config.plugins.register entries (user plugins),
+    // so no DB active-check is needed — user plugins are always mounted when configured.
+    const user = c.get('user') as { role?: string } | undefined
+    const singletonItems = resolvePluginMenuItems(user ? { role: user.role } : undefined)
+    const existingPaths = new Set(activeMenuItems.map(i => i.path))
+    for (const item of singletonItems) {
+      if (!existingPaths.has(item.path)) {
+        activeMenuItems.push({ label: item.label, path: item.path, icon: item.icon, order: item.order })
+      }
+    }
+    activeMenuItems.sort((a, b) => a.order - b.order)
+
+    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || m.icon || '' })))
 
     await next()
 

@@ -73,20 +73,20 @@ Every SonicJS v3 plugin is created with the `definePlugin()` factory exported fr
 
 ```typescript
 import { definePlugin } from '@sonicjs-cms/core'
-import { z } from 'zod'
+import type { D1Database } from '@cloudflare/workers-types'
 
 const plugin = definePlugin({
   id: 'my-plugin',
   name: 'My Plugin',
   version: '1.0.0',
 
-  // Zod schema for typed, validated plugin settings
-  configSchema: z.object({
-    apiKey: z.string().optional(),
-    webhookUrl: z.string().url().optional(),
-  }),
+  // Schema-driven plugin settings (auto-generates the admin form)
+  configSchema: {
+    apiKey: { type: 'string', label: 'API Key' },
+    webhookUrl: { type: 'string', label: 'Webhook URL', format: 'url' },
+  },
 
-  // Mount routes and middleware onto the Hono app
+  // Mount routes and middleware onto the Hono app (must be synchronous)
   register(app) {
     app.get('/my-plugin/status', (c) => c.json({ ok: true }))
   },
@@ -96,16 +96,23 @@ const plugin = definePlugin({
     { label: 'My Plugin', path: '/admin/my-plugin', icon: 'puzzle' },
   ],
 
-  // Runs once at bootstrap — seed data, connect services
+  // Runs once at bootstrap — subscribe hooks, access env bindings
   async onBoot(ctx) {
-    ctx.logger.info('my-plugin booted')
+    console.info('[my-plugin] booted')
+    // Runtime bindings are on ctx.env:
+    const db = ctx.env?.DB as D1Database | undefined
+    // Typed event hooks:
+    ctx.hooks.on('content:after:create', async (data) => {
+      console.info('Document created:', data.id)
+      return data
+    })
   },
 })
 ```
 
 There's no class hierarchy, no decorators, no DI container — just a typed object literal passed to `definePlugin()`. That's intentional: plain objects survive bundling well, are easy to test, and don't require any framework metadata.
 
-The `ctx` object passed to `onBoot` is the gateway to everything: D1 (`ctx.db`), KV (`ctx.kv`), R2 (`ctx.r2`), the auth/content/media services, and a per-plugin logger. Plugins never reach into globals — every dependency is injected.
+The `ctx` object passed to `onBoot` exposes `ctx.hooks` (typed event facade), `ctx.cap` (capability-gated services), `ctx.env` (runtime bindings — `ctx.env.DB`, `ctx.env.KV`, etc.), and `ctx.raw` (escape hatch to the underlying context). There is no `ctx.logger` — use `console.info` / `console.warn` or bring your own logger.
 
 ## Three Tiers of Plugins
 
@@ -150,7 +157,7 @@ In v3, `registerPlugins()` replaces the old `PluginManager` class. The flow look
                   └──────────────────────┘
 ```
 
-`registerPlugins(plugins, app, ctx)` does the heavy lifting:
+`registerPlugins(app, plugins, hostContext)` does the heavy lifting:
 
 1. **Resolve dependencies** — topological sort over each plugin's `dependencies` array.
 2. **Call `register(app)`** — each plugin mounts its routes and middleware onto the Hono app.
@@ -234,20 +241,28 @@ A few details that aren't obvious from the surface:
 - **Recursion is detected.** The system tracks an `executing` set to prevent infinite loops if a hook handler triggers the same hook.
 - **Errors are isolated.** A handler that throws is logged but doesn't abort the chain — unless its message contains `"CRITICAL"`, which short-circuits everything.
 
-The standard hook names live in the exported `HOOKS` constant:
+SonicJS has two hook surfaces: a **typed catalog** (preferred) and a **legacy hook bus** (raw, string-keyed):
 
-| Category | Hooks |
+**Typed catalog** — subscribe via `ctx.hooks.on(eventName, handler)`. TypeScript narrows the payload type per event:
+
+| Event name | When it fires |
 |---|---|
-| **App lifecycle** | `app:init`, `app:ready`, `app:shutdown` |
-| **Request lifecycle** | `request:start`, `request:end`, `request:error` |
-| **Auth** | `auth:login`, `auth:logout`, `auth:register`, `user:login`, `user:logout` |
-| **Content** | `content:create`, `content:update`, `content:delete`, `content:publish`, `content:save` |
-| **Media** | `media:upload`, `media:delete`, `media:transform` |
-| **Plugin** | `plugin:install`, `plugin:uninstall`, `plugin:activate`, `plugin:deactivate` |
-| **Admin** | `admin:menu:render`, `admin:page:render` |
-| **Database** | `db:migrate`, `db:seed` |
+| `content:after:create` | After a document is created |
+| `content:after:update` | After a document is updated |
+| `content:after:delete` | After a document is deleted |
+| `content:after:publish` | After a document is published |
+| `content:read` | When a document is read |
+| `auth:registration:completed` | After user self-registration |
+| `auth:password-reset:requested` | When a password reset is requested |
+| `auth:password-reset:completed` | After a password reset is confirmed |
+| `auth:magic-link:consumed` | After a magic-link is consumed |
+| `auth:otp:verified` | After an OTP code is verified |
 
-That's 25 named events spread across eight categories. Plugins can also define custom hook names — there's no enforced enum at runtime — but sticking to the standard names ensures interoperability.
+Deprecated short aliases (`content:save`, `content:publish`, `content:create` etc.) still work through the typed surface but emit a console warning — prefer the canonical `content:after:*` names.
+
+**Legacy hook bus** — subscribe via `(ctx.raw as any)?.hooks.register(name, handler, priority)`. Used for hooks that predate the typed catalog: `auth:login`, `auth:logout`, `request:start`. These work but have no TypeScript narrowing.
+
+Plugins can also define **custom hook names** — there's no enforced enum at runtime — but using the standard names ensures interoperability with other plugins.
 
 For an outbound integration story (Slack, Zapier, custom HTTP destinations), see [SonicJS webhooks](/webhooks). The [hooks reference](/hooks) lists every event with its data shape.
 
@@ -267,26 +282,26 @@ Each plugin declares its typed settings schema directly in `definePlugin()`. Def
 
 ```typescript
 import { definePlugin } from '@sonicjs-cms/core'
-import { z } from 'zod'
 
 const plugin = definePlugin({
   id: 'otp-login',
   name: 'OTP Login',
   version: '1.0.0',
 
-  configSchema: z.object({
-    codeLength: z.number().default(6),
-    codeExpiryMinutes: z.number().default(10),
-    maxAttempts: z.number().default(3),
-    rateLimitPerHour: z.number().default(5),
-  }),
+  // configSchema is a Record<string, ConfigSchemaField> — NOT a Zod schema
+  configSchema: {
+    codeLength: { type: 'number', label: 'Code length', default: 6, min: 4, max: 12 },
+    codeExpiryMinutes: { type: 'number', label: 'Code expiry (minutes)', default: 10, min: 1 },
+    maxAttempts: { type: 'number', label: 'Max attempts', default: 3, min: 1 },
+    rateLimitPerHour: { type: 'number', label: 'Rate limit (per hour)', default: 5, min: 1 },
+  },
 
   register(app) { /* ... */ },
   async onBoot(ctx) { /* ... */ },
 })
 ```
 
-The admin settings UI reads this schema to auto-generate forms. Values are validated by Zod at write time.
+The admin settings UI reads this schema to auto-generate forms. Field types are `'string' | 'number' | 'boolean' | 'select'` — each with a `label`, optional `default`, and type-specific constraints (`min`/`max` for numbers, `format` for strings, `options` for selects). Values are persisted via `SettingsService` and can be read back in handlers with `new SettingsService(db).getCategorySettings(pluginId)`.
 
 ### 2. The relational `settings` table (via `SettingsService`)
 
@@ -317,7 +332,7 @@ The OAuth providers plugin (`packages/core/src/plugins/core-plugins/oauth-provid
 - Mounts admin routes at `/admin/plugins/oauth` for client-credential management
 - Mounts public auth routes at `/auth/oauth/:provider` and `/auth/oauth/:provider/callback`
 - Stores per-provider client IDs and secrets via its `configSchema` settings (validated by Zod)
-- Fires the `auth:login` hook after a successful OAuth callback so other plugins (like security audit) can react
+- Fires the `auth:login` hook (legacy bus) after a successful OAuth callback so other plugins (like security audit) can react
 
 You can dig into the full setup in the [OAuth plugin docs](/plugins/oauth) and the [code examples plugin](/plugins/code-examples) which uses a similar pattern for content management.
 
@@ -362,7 +377,7 @@ Every plugin contributes at exactly the moment its registration says it should. 
 - SonicJS v3 plugins are created with `definePlugin()` and registered via `registerPlugins()` — no `PluginBuilder`, no `PluginManager` class.
 - Three tiers (core, available, user) share a single registration pipeline and lifecycle.
 - Two lifecycle entry points: `register(app)` (sync, route/middleware mounting) and `onBoot(ctx)` (async, DB-ready setup).
-- Settings are declared as a Zod `configSchema` inside `definePlugin()` — no `plugins.settings` JSON column or `006_plugin_system.sql` migration.
+- Settings are declared as a `configSchema` (`Record<string, ConfigSchemaField>`) inside `definePlugin()` — not Zod. Types are `'string' | 'number' | 'boolean' | 'select'`. No `plugins.settings` JSON column or extra migration.
 - The `HookSystemImpl` is a priority-ordered, scoped, transformative event bus with built-in recursion detection.
 - Route mounting order is part of the contract — plugin routes register before generic `/admin/plugins/:id` to avoid being shadowed.
 - The admin UI reads plugin state from the in-memory registry, not from dedicated plugin database tables.

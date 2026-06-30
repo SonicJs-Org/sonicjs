@@ -515,25 +515,139 @@ Join thousands of developers building the future of web APIs
       </div>
     </div>
 
-    {/* v3.0.0-beta.12 */}
+    {/* v3.0.0-beta.20 */}
     <div className="border-l-4 border-emerald-500 dark:border-emerald-400 pl-4 py-1">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">v3.0.0-beta.12</span>
+        <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">v3.0.0-beta.20</span>
         <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-300 font-bold">LATEST</span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-25</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-30</span>
       </div>
       <div className="text-sm space-y-1">
         <div className="flex items-start gap-2">
           <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat(scripts)**: New `npm run update:plugin` command — fetches the latest bundled plugin files from GitHub main and overwrites local copies, so existing apps can pick up plugin bug fixes without scaffolding a new project (`--dry-run` flag supported)</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.20</span>
+        
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-30</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat(scripts)**: New `npm run update:plugin` command — pull latest bundled plugin files from GitHub without scaffolding a new project</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.19 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.19</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-30</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins)**: Example plugin settings updated in admin now reflect immediately in API responses — no Worker restart required (GitHub #975)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins)**: `greeting` configSchema field now used in `/example` response; example plugin bumped to v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.18 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.18</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-29</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins)**: Stale configSchema settings pruned on save — removed plugin settings fields no longer reappear after reinstall</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.17 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.17</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-27</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins): Example plugin seeds 3 moods on fresh install** — fixed FK race between `wirePlugins` and `bootstrapMiddleware`</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat(admin): plugin tabs reordered** — Settings → Info → Activity; Settings is default active tab for configurable plugins</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.16 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.16</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-26</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**Example plugin ships with new installs** — `npm create sonicjs@latest` now scaffolds an example plugin demonstrating routes, admin UI, collections, hooks, and settings</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**Fix: plugin settings save no longer wipes Routes/Admin Path** — saving configSchema form fields previously replaced the full settings JSON, removing `_routes` and `_adminPath`; now merges with existing settings</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**Plugin rename** — `hello-cruel-world` → `example` plugin with cleaner UX</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.15 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.15</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-26</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">feat(plugins): helloWorldPlugin and createHelloWorldPlugin exported from @sonicjs-cms/core</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">feat(auth): API keys plugin + closed auth test gaps vs Payload CMS baseline</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.12 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.12</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-25</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
           <span className="text-gray-700 dark:text-gray-300">**fix(cors)**: apply CORS middleware globally so `/auth/*` routes work from Astro/Next.js/frontend frameworks</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
           <span className="text-gray-700 dark:text-gray-300">**fix(forms)**: forms plugin no longer returns 500 when `forms` table hasn't been migrated — shows empty state instead</span>
-        </div>
-        <div className="flex items-start gap-2">
-          <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
-          <span className="text-gray-700 dark:text-gray-300">**docs**: added CORS configuration section to authentication.md and getting-started.md troubleshooting guide</span>
         </div>
       </div>
     </div>

@@ -14,6 +14,7 @@ export interface DatabaseTablePageData {
   pageSize: number
   sortColumn?: string
   sortDirection?: 'asc' | 'desc'
+  search?: string
 }
 
 export function renderDatabaseTablePage(data: DatabaseTablePageData): string {
@@ -71,6 +72,43 @@ export function renderDatabaseTablePage(data: DatabaseTablePageData): string {
         </div>
       </div>
 
+      <!-- Search bar -->
+      <div class="flex items-center gap-3">
+        <div class="relative flex-1 max-w-xl">
+          <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <svg class="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+            </svg>
+          </div>
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="Search all columns including JSON data..."
+            value="${escapeHtml(data.search || '')}"
+            class="block w-full rounded-lg border-0 py-2.5 pl-10 pr-10 text-sm text-zinc-900 dark:text-white bg-white dark:bg-zinc-800 ring-1 ring-inset ring-zinc-300 dark:ring-zinc-700 placeholder:text-zinc-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600"
+            onkeydown="if(event.key==='Enter') doSearch()"
+          />
+          ${data.search ? `
+          <button
+            onclick="clearSearch()"
+            class="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+            title="Clear search"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+          ` : ''}
+        </div>
+        <button
+          onclick="doSearch()"
+          class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors shadow-sm"
+        >
+          Search
+        </button>
+        ${data.search ? `<span class="text-sm text-zinc-500 dark:text-zinc-400">Filtered: <strong class="text-zinc-900 dark:text-white">${escapeHtml(data.search)}</strong></span>` : ''}
+      </div>
+
       <!-- Table Card -->
       <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-950/5 dark:ring-white/10 overflow-hidden">
         <!-- Table -->
@@ -106,7 +144,7 @@ export function renderDatabaseTablePage(data: DatabaseTablePageData): string {
                   <tr class="${idx % 2 === 0 ? 'bg-white dark:bg-zinc-900' : 'bg-zinc-50 dark:bg-zinc-900/50'}">
                     ${data.columns.map(col => `
                       <td class="px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300 whitespace-nowrap max-w-xs overflow-hidden text-ellipsis" title="${escapeHtml(String(row[col] ?? ''))}">
-                        ${formatCellValue(row[col])}
+                        ${formatCellValue(row[col], col)}
                       </td>
                     `).join('')}
                   </tr>
@@ -184,79 +222,143 @@ export function renderDatabaseTablePage(data: DatabaseTablePageData): string {
       </div>
     </div>
 
+    <!-- JSON Viewer Modal -->
+    <div id="jsonModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+      <div class="fixed inset-0 bg-black/60 backdrop-blur-sm" onclick="closeJsonModal()"></div>
+      <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+        <div class="pointer-events-auto relative w-full max-w-4xl max-h-[85vh] flex flex-col rounded-xl bg-white dark:bg-zinc-900 shadow-2xl ring-1 ring-zinc-950/10 dark:ring-white/10">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-700">
+            <div>
+              <h3 id="jsonModalTitle" class="text-base font-semibold text-zinc-900 dark:text-white">Field Value</h3>
+              <p id="jsonModalSubtitle" class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5"></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="copyJsonValue()" class="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Copy
+              </button>
+              <button onclick="closeJsonModal()" class="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 overflow-auto p-6">
+            <pre id="jsonModalContent" class="text-sm font-mono text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words leading-relaxed"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
       const currentTableName = '${data.tableName}';
       let currentPage = ${data.currentPage};
       let currentPageSize = ${data.pageSize};
       let currentSort = '${data.sortColumn || ''}';
       let currentSortDir = '${data.sortDirection || 'asc'}';
+      let currentSearch = ${JSON.stringify(data.search || '')};
+
+      function buildParams(overrides = {}) {
+        const params = new URLSearchParams();
+        const p = { page: currentPage, pageSize: currentPageSize, sort: currentSort, dir: currentSortDir, search: currentSearch, ...overrides };
+        if (p.page) params.set('page', p.page);
+        if (p.pageSize) params.set('pageSize', p.pageSize);
+        if (p.sort) { params.set('sort', p.sort); params.set('dir', p.dir || 'asc'); }
+        if (p.search) params.set('search', p.search);
+        return params;
+      }
 
       function goToPage(page) {
         if (page < 1 || page > ${totalPages}) return;
-        const params = new URLSearchParams();
-        params.set('page', page);
-        params.set('pageSize', currentPageSize);
-        if (currentSort) {
-          params.set('sort', currentSort);
-          params.set('dir', currentSortDir);
-        }
-        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${params}\`;
+        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${buildParams({ page })}\`;
       }
 
       function sortTable(column) {
-        let newDir = 'asc';
-        if (currentSort === column && currentSortDir === 'asc') {
-          newDir = 'desc';
-        }
-
-        const params = new URLSearchParams();
-        params.set('page', '1');
-        params.set('pageSize', currentPageSize);
-        params.set('sort', column);
-        params.set('dir', newDir);
-        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${params}\`;
+        const newDir = (currentSort === column && currentSortDir === 'asc') ? 'desc' : 'asc';
+        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${buildParams({ page: 1, sort: column, dir: newDir })}\`;
       }
 
       function changePageSize(newSize) {
-        const params = new URLSearchParams();
-        params.set('page', '1');
-        params.set('pageSize', newSize);
-        if (currentSort) {
-          params.set('sort', currentSort);
-          params.set('dir', currentSortDir);
-        }
-        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${params}\`;
+        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${buildParams({ page: 1, pageSize: newSize })}\`;
       }
 
       function refreshTableData() {
         window.location.reload();
       }
 
-      function formatCellValue(value) {
-        if (value === null || value === undefined) {
-          return '<span class="text-zinc-400 dark:text-zinc-500 italic">null</span>';
-        }
-        if (typeof value === 'boolean') {
-          return \`<span class="px-2 py-0.5 rounded text-xs font-medium \${value ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-400'}">\${value}</span>\`;
-        }
-        if (typeof value === 'object') {
-          return '<span class="text-xs font-mono text-zinc-600 dark:text-zinc-400">' + JSON.stringify(value).substring(0, 50) + (JSON.stringify(value).length > 50 ? '...' : '') + '</span>';
-        }
-        const str = String(value);
-        if (str.length > 100) {
-          return escapeHtml(str.substring(0, 100)) + '...';
-        }
-        return escapeHtml(str);
+      function doSearch() {
+        const val = document.getElementById('searchInput').value.trim();
+        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${buildParams({ page: 1, search: val })}\`;
       }
 
+      function clearSearch() {
+        window.location.href = \`/admin/database-tools/tables/\${currentTableName}?\${buildParams({ page: 1, search: '' })}\`;
+      }
+
+      // JSON viewer modal
+      let _jsonModalValue = '';
+
+      function openJsonModal(rawValue, colName) {
+        // rawValue comes from dataset — browser already decoded HTML entities, so it's the original string
+        _jsonModalValue = rawValue;
+        document.getElementById('jsonModalTitle').textContent = colName;
+        const el = document.getElementById('jsonModalContent');
+        const subtitle = document.getElementById('jsonModalSubtitle');
+        try {
+          const parsed = JSON.parse(rawValue);
+          const pretty = JSON.stringify(parsed, null, 2);
+          subtitle.textContent = 'JSON • ' + rawValue.length + ' chars';
+          el.innerHTML = syntaxHighlight(pretty);
+        } catch {
+          el.textContent = rawValue;
+          subtitle.textContent = rawValue.length + ' chars';
+        }
+        document.getElementById('jsonModal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeJsonModal() {
+        document.getElementById('jsonModal').classList.add('hidden');
+        document.body.style.overflow = '';
+      }
+
+      function copyJsonValue() {
+        navigator.clipboard.writeText(_jsonModalValue).then(() => {
+          const btn = event.currentTarget;
+          const orig = btn.innerHTML;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        });
+      }
+
+      function syntaxHighlight(json) {
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(/("(\\\\u[a-zA-Z0-9]{4}|\\\\[^u]|[^\\\\"])*"(\\s*:)?|\\b(true|false|null)\\b|-?\\d+(?:\\.\\d*)?(?:[eE][+\\-]?\\d+)?)/g, function(match) {
+          let cls = 'text-purple-600 dark:text-purple-400'; // number
+          if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+              cls = 'text-blue-600 dark:text-blue-400 font-medium'; // key
+            } else {
+              cls = 'text-green-700 dark:text-green-400'; // string value
+            }
+          } else if (/true|false/.test(match)) {
+            cls = 'text-orange-600 dark:text-orange-400';
+          } else if (/null/.test(match)) {
+            cls = 'text-zinc-400 italic';
+          }
+          return \`<span class="\${cls}">\${match}</span>\`;
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeJsonModal();
+      });
+
       function escapeHtml(text) {
-        const map = {
-          '&': '&amp;',
-          '<': '&lt;',
-          '>': '&gt;',
-          '"': '&quot;',
-          "'": '&#039;'
-        };
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
         return String(text).replace(/[&<>"']/g, m => map[m]);
       }
     </script>
@@ -335,7 +437,19 @@ function escapeHtml(text: string): string {
   return String(text).replace(/[&<>"']/g, m => map[m] || m)
 }
 
-function formatCellValue(value: any): string {
+function isJsonString(str: string): boolean {
+  const s = str.trim()
+  return (s.startsWith('{') || s.startsWith('[')) && (s.endsWith('}') || s.endsWith(']'))
+}
+
+function jsonButton(raw: string, colName: string): string {
+  const preview = raw.length > 60 ? escapeHtml(raw.substring(0, 60)) + '…' : escapeHtml(raw)
+  // Store raw value in data attribute — browser auto-unescapes on dataset read, no double-escape issue
+  return `<button data-json-val="${escapeHtml(raw)}" data-col-name="${escapeHtml(colName)}" onclick="openJsonModal(this.dataset.jsonVal, this.dataset.colName)" class="text-left text-xs font-mono text-indigo-600 dark:text-indigo-400 hover:underline">${preview}</button>`
+}
+
+function formatCellValue(value: any, colName?: string): string {
+  const col = colName || 'value'
   if (value === null || value === undefined) {
     return '<span class="text-zinc-400 dark:text-zinc-500 italic">null</span>'
   }
@@ -343,11 +457,15 @@ function formatCellValue(value: any): string {
     return `<span class="px-2 py-0.5 rounded text-xs font-medium ${value ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-400'}">${value}</span>`
   }
   if (typeof value === 'object') {
-    return '<span class="text-xs font-mono text-zinc-600 dark:text-zinc-400">' + JSON.stringify(value).substring(0, 50) + (JSON.stringify(value).length > 50 ? '...' : '') + '</span>'
+    return jsonButton(JSON.stringify(value), col)
   }
   const str = String(value)
-  if (str.length > 100) {
-    return escapeHtml(str.substring(0, 100)) + '...'
+  if (isJsonString(str)) {
+    return jsonButton(str, col)
+  }
+  if (str.length > 120) {
+    const preview = escapeHtml(str.substring(0, 120)) + '…'
+    return `<button data-json-val="${escapeHtml(str)}" data-col-name="${escapeHtml(col)}" onclick="openJsonModal(this.dataset.jsonVal, this.dataset.colName)" class="text-left text-sm text-zinc-700 dark:text-zinc-300 hover:underline">${preview}</button>`
   }
   return escapeHtml(str)
 }

@@ -41,6 +41,7 @@ import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
+import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole, requireRbac } from './middleware/auth'
@@ -74,6 +75,7 @@ import { CloudflareEmailProvider } from './plugins/core-plugins/email-plugin/ser
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
 import { setPluginMenu } from './services/plugin-menu-singleton'
+import { PLUGIN_REGISTRY } from './plugins/manifest-registry'
 import { setPluginDefinitions } from './services/plugin-definition-registry'
 
 // ============================================================================
@@ -281,6 +283,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
+    apiKeysPlugin,
     aiSearchPlugin,
     oauthProvidersPlugin,
     userProfilesPlugin,
@@ -480,6 +483,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     await next()
   })
 
+  // API-key auth: if no session resolved a user, accept a programmatic key from
+  // `x-api-key` / `Authorization: Bearer sk_…`. Provided by the api-keys plugin;
+  // gated on that plugin being active. Runs right after the session middleware
+  // so it sits ahead of every route guard, like the security-audit middleware.
+  app.use('*', apiKeyAuthMiddleware())
+
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {
     for (const middleware of config.middleware.afterAuth) {
@@ -662,7 +671,14 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       ...corePluginsAfterCatchAll,
       ...(config.plugins?.register ?? []),
     ]
-    setPluginMenu(allMountedPlugins.flatMap((p) => (p.menu ?? [])))
+    // Only user plugins that are NOT in the manifest registry go into the singleton.
+    // Registry plugins (have manifest.json) use the DB active-status check in
+    // pluginMenuMiddleware. A user plugin that ships a manifest (e.g. redirects)
+    // is treated as a registry plugin and excluded from the singleton.
+    const userPlugins = (config.plugins?.register ?? []).filter(
+      (p: any) => !PLUGIN_REGISTRY[p.id]
+    )
+    setPluginMenu(userPlugins.flatMap((p: any) => (p.menu ?? [])))
     setPluginDefinitions(allMountedPlugins)
   }
 

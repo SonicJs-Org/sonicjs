@@ -1,5 +1,6 @@
 export const sections = [
   { title: 'Overview', id: 'overview' },
+  { title: 'Example Plugin', id: 'example-plugin' },
   { title: 'Authentication Plugin', id: 'authentication-plugin' },
   { title: 'Email Plugin', id: 'email-plugin' },
   { title: 'Magic Link Auth', id: 'magic-link-auth' },
@@ -22,6 +23,11 @@ Core plugins extend SonicJS with critical features like authentication, media ma
 
 <FeatureGrid
   features={[
+    {
+      icon: '😈',
+      title: 'Example Plugin',
+      description: 'Bundled reference plugin — routes, collections, settings, hooks, and data seeding in one working example',
+    },
     {
       icon: '🔐',
       title: 'Authentication',
@@ -65,6 +71,52 @@ Core plugins extend SonicJS with critical features like authentication, media ma
   ]}
   columns={3}
 />
+
+---
+
+## Example Plugin
+
+Every new SonicJS app scaffolded with `npm create sonicjs@latest` ships with a working **Example** plugin. It's a complete, production-pattern reference for every major plugin extension point — routes, collections, settings, hooks, and data seeding.
+
+### What It Does
+
+- Public JSON API at `/example`, `/example/:name`, `/example/moods`
+- Admin page at `/admin/example` with automatic sidebar entry
+- **Moods** collection managed via `/admin/content?model=example`
+- Three default moods seeded at first boot (idempotent COUNT guard)
+- Configurable greeting text, default name, and mood selector via the settings form
+- Lifecycle hook subscriptions for `content:after:create` and `auth:registration:completed`
+
+### Key Patterns to Copy
+
+| Pattern | Where |
+|---|---|
+| `/example/*` routes instead of `/api/*` | Avoids the core `/api/:collection` catch-all |
+| Factory function `createExampleApiRoutes(options)` | Passes live config by reference from `onBoot` |
+| `configSchema` object | Auto-renders settings form — no custom handler needed |
+| Settings merge: `{ ...defaults, ...existingSettings }` | Saved values win; preserves `_routes`/`_adminPath` |
+| COUNT guard before seeding | Idempotent across isolate restarts |
+| `registerCollections([moodsCollection])` | Code-only collection — no DB table |
+
+### Removing It
+
+When you're ready to ship your own plugin:
+
+```typescript
+// src/index.ts — remove these lines:
+import { examplePlugin } from './plugins/example'
+import { moodsCollection } from './plugins/example/collections/moods.collection'
+// remove moodsCollection from registerCollections([...])
+// remove examplePlugin from plugins.register: [...]
+```
+
+Then delete `src/plugins/example/`.
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/example" variant="text" arrow="right">
+    <>Full Example Plugin reference</>
+  </Button>
+</div>
 
 ---
 

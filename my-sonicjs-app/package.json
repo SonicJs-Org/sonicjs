@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "update": "npm install @sonicjs-cms/core@latest --save",
     "update:beta": "npm install @sonicjs-cms/core@beta --save",
+    "update:plugin": "tsx scripts/update-plugin.ts",
     "seed": "tsx scripts/seed-admin.ts",
     "seed:documents": "tsx scripts/seed-documents.ts",
     "setup:db": "bash scripts/setup-worktree-db.sh"

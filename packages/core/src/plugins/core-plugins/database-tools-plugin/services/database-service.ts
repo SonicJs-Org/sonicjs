@@ -203,14 +203,15 @@ export class DatabaseToolsService {
   }
 
   /**
-   * Get table data with optional pagination and sorting
+   * Get table data with optional pagination, sorting, and search
    */
   async getTableData(
     tableName: string,
     limit: number = 100,
     offset: number = 0,
     sortColumn?: string,
-    sortDirection: 'asc' | 'desc' = 'asc'
+    sortDirection: 'asc' | 'desc' = 'asc',
+    search?: string
   ): Promise<TableData> {
     try {
       // Validate table name to prevent SQL injection
@@ -228,19 +229,37 @@ export class DatabaseToolsService {
         sortColumn = undefined
       }
 
-      // Get total row count
-      const countResult = await this.db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).first()
+      // Build WHERE clause for search
+      const searchTerm = search?.trim()
+      let whereClause = ''
+      let bindings: string[] = []
+      if (searchTerm) {
+        const conditions = columns.map(() => `CAST(? AS TEXT) IS NOT NULL AND CAST(? AS TEXT) LIKE ?`).join(' OR ')
+        // Simpler: one condition per column using CAST to handle nulls
+        const colConditions = columns.map(col => `CAST("${col}" AS TEXT) LIKE ?`).join(' OR ')
+        whereClause = ` WHERE (${colConditions})`
+        bindings = columns.map(() => `%${searchTerm}%`)
+      }
+
+      // Get total row count (with search filter)
+      const countQuery = `SELECT COUNT(*) as count FROM "${tableName}"${whereClause}`
+      const countStmt = this.db.prepare(countQuery)
+      const countResult = bindings.length > 0
+        ? await (countStmt.bind(...bindings) as any).first()
+        : await countStmt.first()
       const totalRows = (countResult?.count as number) || 0
 
-      // Build query with optional sorting
-      let query = `SELECT * FROM ${tableName}`
+      // Build data query with optional sorting
+      let query = `SELECT * FROM "${tableName}"${whereClause}`
       if (sortColumn) {
-        query += ` ORDER BY ${sortColumn} ${sortDirection.toUpperCase()}`
+        query += ` ORDER BY "${sortColumn}" ${sortDirection.toUpperCase()}`
       }
       query += ` LIMIT ${limit} OFFSET ${offset}`
 
-      // Get paginated data
-      const dataResult = await this.db.prepare(query).all()
+      const dataStmt = this.db.prepare(query)
+      const dataResult = bindings.length > 0
+        ? await (dataStmt.bind(...bindings) as any).all()
+        : await dataStmt.all()
 
       return {
         tableName,

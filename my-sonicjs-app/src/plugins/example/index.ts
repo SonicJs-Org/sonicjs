@@ -124,8 +124,8 @@ export const examplePlugin = definePlugin({
     //   c) POST to /api/forms or another dedicated catch-all (plugin-provided)
     //
     // The public API is at /hello-cruel-world/* (no /api/ prefix).
-    // Pass pluginOptions by reference — onBoot() mutates it after loading DB settings.
-    app.route('/example', createExampleApiRoutes(pluginOptions) as any)
+    // Settings read from DB per-request — no options needed.
+    app.route('/example', createExampleApiRoutes() as any)
 
     // Admin routes live under /admin/*, which also has a catch-all, but user
     // plugins are mounted BEFORE the /admin catch-all, so this works fine.

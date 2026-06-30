@@ -16,9 +16,25 @@
  */
 
 import { Hono } from 'hono'
-import { DocumentRepository } from '@sonicjs-cms/core'
+import { DocumentRepository, PluginServiceClass as PluginService } from '@sonicjs-cms/core'
 
 const MOODS_TYPE_ID = 'example'
+
+async function getPluginSettings(db: any): Promise<{ greeting: string; defaultName: string }> {
+  const defaults = { greeting: 'Hello, Cruel World!', defaultName: 'Stranger' }
+  if (!db) return defaults
+  try {
+    const svc = new PluginService(db)
+    const plugin = await svc.getPlugin('example')
+    const s = (plugin?.settings ?? {}) as Record<string, unknown>
+    return {
+      greeting: typeof s.greeting === 'string' ? s.greeting : defaults.greeting,
+      defaultName: typeof s.defaultName === 'string' ? s.defaultName : defaults.defaultName,
+    }
+  } catch {
+    return defaults
+  }
+}
 
 /**
  * Pick a random published mood from the DB, or null if none exist yet.
@@ -40,11 +56,10 @@ async function getRandomMood(db: any): Promise<{ name: string; emoji: string; de
 /**
  * createExampleApiRoutes — factory that returns the public API router.
  *
- * Factory pattern (vs. a plain exported Hono instance) lets you pass config from
- * the plugin into the routes without module-level globals.
- * options is passed by reference — onBoot() mutates it so handlers see live values.
+ * Settings are read from the DB on each request so changes made via the admin UI
+ * take effect immediately without waiting for a Worker isolate restart.
  */
-export function createExampleApiRoutes(options: { greeting?: string; defaultName?: string } = {}): Hono {
+export function createExampleApiRoutes(): Hono {
   const router = new Hono()
 
   // ── GET /example ────────────────────────────────────────────────────────────
@@ -52,11 +67,14 @@ export function createExampleApiRoutes(options: { greeting?: string; defaultName
   // c.env holds Cloudflare bindings (DB, KV, etc.) — accessed per-request, not at setup.
   router.get('/', async (c) => {
     const db = (c.env as any)?.DB
-    const mood = db ? await getRandomMood(db) : null
-    const name = options.defaultName ?? 'Stranger'
+    const [mood, settings] = await Promise.all([
+      db ? getRandomMood(db) : Promise.resolve(null),
+      getPluginSettings(db),
+    ])
+    const name = settings.defaultName
 
     return c.json({
-      message: `Hello, ${name}! The world is still quite cruel.`,
+      message: `${settings.greeting} I am ${name}.`,
       mood: mood ? `${mood.emoji} ${mood.name}`.trim() : null,
       moodDescription: mood?.description ?? null,
       timestamp: new Date().toISOString(),
@@ -88,12 +106,14 @@ export function createExampleApiRoutes(options: { greeting?: string; defaultName
   // Registered AFTER /moods so the literal path wins.
   router.get('/:name', async (c) => {
     const db = (c.env as any)?.DB
-    const mood = db ? await getRandomMood(db) : null
-    // c.req.param() reads the :name capture from the URL path.
+    const [mood, settings] = await Promise.all([
+      db ? getRandomMood(db) : Promise.resolve(null),
+      getPluginSettings(db),
+    ])
     const name = c.req.param('name')
 
     return c.json({
-      message: `Hello, ${name}! The world is still quite cruel.`,
+      message: `${settings.greeting} I am ${name}.`,
       mood: mood ? `${mood.emoji} ${mood.name}`.trim() : null,
       moodDescription: mood?.description ?? null,
       timestamp: new Date().toISOString(),

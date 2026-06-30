@@ -471,7 +471,10 @@ adminPluginRoutes.post('/:id/settings', async (c) => {
     const settings = await c.req.json()
 
     const pluginService = new PluginService(db)
-    await pluginService.updatePluginSettings(pluginId, settings)
+    // Merge with existing settings so system keys (_routes, _adminPath, etc.) are preserved.
+    const existingPlugin = await pluginService.getPlugin(pluginId)
+    const existingSettings = (existingPlugin?.settings as Record<string, unknown>) ?? {}
+    await pluginService.updatePluginSettings(pluginId, { ...existingSettings, ...settings })
 
     // Clear auth validation cache if updating core-auth plugin
     if (pluginId === 'core-auth') {

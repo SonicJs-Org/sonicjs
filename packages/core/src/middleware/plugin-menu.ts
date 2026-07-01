@@ -77,9 +77,9 @@ export function pluginMenuMiddleware() {
     }
 
     // Collect menu items from active plugins using the registry
+    const db = c.env.DB
     let activeMenuItems: Array<{ label: string; path: string; icon?: string; order: number }> = []
     try {
-      const db = c.env.DB
       const pluginIds = REGISTRY_MENU_PLUGINS.map(p => p.id)
       if (pluginIds.length > 0) {
         const placeholders = pluginIds.map(() => '?').join(',')
@@ -107,14 +107,34 @@ export function pluginMenuMiddleware() {
       // DB not ready or plugin table doesn't exist yet
     }
 
-    // Append user plugin menu items from the singleton.
-    // The singleton is populated with ONLY config.plugins.register entries (user plugins),
-    // so no DB active-check is needed — user plugins are always mounted when configured.
+    // Append user plugin menu items from the singleton (config.plugins.register entries).
+    // Must DB-check active status — a plugin disabled via the admin UI stays in config
+    // but its document record is set to inactive (issue #971).
     const user = c.get('user') as { role?: string } | undefined
     const singletonItems = resolvePluginMenuItems(user ? { role: user.role } : undefined)
+
+    // Collect unique pluginIds that have entries, query their active status in one shot.
+    const singletonPluginIds = [...new Set(
+      singletonItems.map(i => i.pluginId).filter((id): id is string => !!id)
+    )]
+    let activeSingletonIds = new Set<string>()
+    try {
+      if (singletonPluginIds.length > 0) {
+        const ph = singletonPluginIds.map(() => '?').join(',')
+        const result = await db.prepare(
+          `SELECT slug FROM documents WHERE type_id = 'plugin' AND tenant_id = 'default' AND slug IN (${ph}) AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+        ).bind(...singletonPluginIds).all()
+        activeSingletonIds = new Set((result.results || []).map((r: any) => r.slug))
+      }
+    } catch {
+      // DB not ready — fail open so singleton items without pluginId still render
+    }
+
     const existingPaths = new Set(activeMenuItems.map(i => i.path))
     for (const item of singletonItems) {
-      if (!existingPaths.has(item.path)) {
+      // If item has a pluginId, require it to be active; items without pluginId always show.
+      const isActive = !item.pluginId || activeSingletonIds.has(item.pluginId)
+      if (isActive && !existingPaths.has(item.path)) {
         activeMenuItems.push({ label: item.label, path: item.path, icon: item.icon, order: item.order })
       }
     }

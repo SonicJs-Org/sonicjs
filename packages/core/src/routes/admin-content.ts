@@ -1388,10 +1388,33 @@ adminContentRoutes.put('/:id', async (c) => {
         else if (pub) await svc.unpublish(pub.id)
 
         await getCacheService(CACHE_CONFIGS.content!).invalidate(`content:list:*`)
+
+        const isHTMX = c.req.header('HX-Request') === 'true'
+        const referrerParams = formData.get('referrer_params') as string | null
+        const listUrl = referrerParams
+          ? `/admin/content?${referrerParams}`
+          : `/admin/content?collection=${dcoll.id}`
+
+        if (action === 'save_and_close') {
+          return isHTMX
+            ? c.text('', 200, { 'HX-Redirect': listUrl })
+            : c.redirect(listUrl)
+        }
+
+        // save / save_and_publish: stay on page, return inline success banner
+        if (isHTMX) {
+          const label = status === 'published' ? 'Content published successfully!' : 'Content saved successfully!'
+          return c.html(html`<div id="form-messages">
+            <div class="rounded-lg bg-green-50 dark:bg-green-900/20 p-4 mb-4 flex items-center gap-3 border border-green-200 dark:border-green-800">
+              <svg class="h-5 w-5 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span class="text-sm font-medium text-green-800 dark:text-green-200">${label}</span>
+            </div>
+          </div>`)
+        }
         const redirectUrl = `/admin/content/${id}/edit?success=Content updated successfully!`
-        return c.req.header('HX-Request') === 'true'
-          ? c.text('', 200, { 'HX-Redirect': redirectUrl })
-          : c.redirect(redirectUrl)
+        return c.redirect(redirectUrl)
       }
     }
 

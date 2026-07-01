@@ -166,8 +166,14 @@ export async function wireRegisteredPlugins(
   // so the admin view stays in sync with what's actually running. Errors are
   // non-fatal — DB unavailable during cron-first boot should not break wiring.
   if (context.env?.DB) {
-    reflectWiredPlugins(valid, context.env.DB as D1DatabaseLike).catch((err) => {
+    const db = context.env.DB as D1DatabaseLike
+    reflectWiredPlugins(valid, db).catch((err) => {
       console.warn('[plugins] DB reflection failed (non-fatal):', err)
+    })
+    // Phase D (best-effort): deactivate user plugins that were removed from config.
+    // Any non-core active plugin document not in the current wired list is stale.
+    pruneStaleUserPlugins(valid, db).catch((err) => {
+      console.warn('[plugins] Stale plugin pruning failed (non-fatal):', err)
     })
   }
 
@@ -176,8 +182,61 @@ export async function wireRegisteredPlugins(
 
 /** Minimal D1 interface needed for reflection (avoids a hard @cloudflare/workers-types dep). */
 interface D1DatabaseLike {
-  prepare(sql: string): { bind(...args: unknown[]): { run(): Promise<unknown> } }
+  prepare(sql: string): {
+    bind(...args: unknown[]): {
+      run(): Promise<unknown>
+      all(): Promise<{ results: Array<Record<string, unknown>> }>
+    }
+    all(): Promise<{ results: Array<Record<string, unknown>> }>
+  }
   batch(stmts: unknown[]): Promise<unknown>
+}
+
+/**
+ * Best-effort: deactivate non-core plugin documents whose plugin is no longer
+ * present in config.plugins.register. Runs after reflectWiredPlugins so the
+ * wired set is the authoritative "what's configured" list.
+ *
+ * Only touches documents where json_extract(data, '$.isCore') is falsy — core
+ * plugins bootstrapped by PluginBootstrapService are never pruned.
+ */
+async function pruneStaleUserPlugins(wired: WirablePlugin[], db: D1DatabaseLike): Promise<void> {
+  const wiredIds = new Set(wired.map(p => (p as any).id ?? p.name).filter(Boolean))
+  if (wiredIds.size === 0) return
+
+  const now = Math.floor(Date.now() / 1000)
+
+  // Find active non-core plugin documents whose slug is not in the wired set.
+  const rows = await db
+    .prepare(
+      `SELECT slug FROM documents
+       WHERE type_id = 'plugin' AND tenant_id = 'default'
+         AND is_current_draft = 1 AND deleted_at IS NULL
+         AND q_plugin_status = 'active'
+         AND (json_extract(data, '$.isCore') = 0 OR json_extract(data, '$.isCore') IS NULL)`
+    )
+    .all()
+
+  for (const row of rows.results ?? []) {
+    const slug = row.slug as string
+    if (!slug || wiredIds.has(slug)) continue
+    // Set status to inactive in the data JSON and update the generated column.
+    try {
+      await db
+        .prepare(
+          `UPDATE documents
+           SET data = json_set(data, '$.status', 'inactive'),
+               updated_at = ?
+           WHERE slug = ? AND type_id = 'plugin' AND tenant_id = 'default'
+             AND is_current_draft = 1 AND deleted_at IS NULL`
+        )
+        .bind(now, slug)
+        .run()
+      console.log(`[plugins] Deactivated stale plugin "${slug}" (removed from config)`)
+    } catch {
+      // Non-fatal per-row — continue with others
+    }
+  }
 }
 
 /**

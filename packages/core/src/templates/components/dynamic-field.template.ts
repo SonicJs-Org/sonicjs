@@ -525,9 +525,11 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           min="${opts.min || ''}"
           max="${opts.max || ''}"
           class="${baseClasses} ${errorClasses} !w-auto dark:[color-scheme:dark]"
+          placeholder="YYYY-MM-DD"
           ${required}
           ${disabled ? 'disabled' : ''}
         >
+        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Format: YYYY-MM-DD</p>
       `
       break
 
@@ -544,6 +546,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           ${required}
           ${disabled ? 'disabled' : ''}
         >
+        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Format: YYYY-MM-DD HH:MM</p>
       `
       break
 

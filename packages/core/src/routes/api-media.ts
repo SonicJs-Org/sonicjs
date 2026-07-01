@@ -448,19 +448,27 @@ apiMediaRoutes.post('/create-folder', async (c) => {
       }, 400)
     }
 
-    // Check if folder already exists in the database
-    const checkStmt = c.env.DB.prepare('SELECT COUNT(*) as count FROM media WHERE folder = ? AND deleted_at IS NULL')
-    const existingFolder = await checkStmt.bind(folderName).first() as any
+    // Note: R2 folders are virtual — they appear when files are uploaded to them.
+    // Check against document-model records (media_asset documents), falling back
+    // gracefully so fresh installs without a legacy `media` table don't error.
+    let folderExists = false
+    try {
+      const existing = await c.env.DB
+        .prepare("SELECT COUNT(*) as count FROM documents WHERE type_id = 'media_asset' AND tenant_id = 'default' AND json_extract(data, '$.folder') = ? AND deleted_at IS NULL AND is_current_draft = 1")
+        .bind(folderName)
+        .first<{ count: number }>()
+      folderExists = (existing?.count ?? 0) > 0
+    } catch {
+      // documents table not yet initialised — treat as no existing folder
+    }
 
-    if (existingFolder && existingFolder.count > 0) {
+    if (folderExists) {
       return c.json({
         success: false,
         error: `Folder "${folderName}" already exists`
       }, 400)
     }
 
-    // Note: R2 folders are virtual - they only exist when files are uploaded to them
-    // Return success message explaining this behavior
     return c.json({
       success: true,
       message: `Folder "${folderName}" is ready. Upload files to this folder to make it appear in the media library.`,

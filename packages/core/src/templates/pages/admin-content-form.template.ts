@@ -375,20 +375,31 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
           </a>
 
           <div class="flex items-center gap-x-3">
-            ${data.versioningEnabled ? `
-              <button
-                type="submit"
-                form="content-form"
-                name="action"
-                value="save"
-                class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm"
-              >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                </svg>
-                ${isEdit ? 'Update' : 'Save'}
-              </button>
-            ` : ''}
+            <button
+              type="submit"
+              form="content-form"
+              name="action"
+              value="save"
+              class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm"
+            >
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+              Save
+            </button>
+
+            <button
+              type="submit"
+              form="content-form"
+              name="action"
+              value="save_and_close"
+              class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm"
+            >
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Save & close
+            </button>
 
             ${data.user?.role !== 'viewer' ? `
               <button
@@ -396,12 +407,12 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
                 form="content-form"
                 name="action"
                 value="save_and_publish"
-                class="inline-flex items-center justify-center gap-x-1.5 rounded-lg ${data.versioningEnabled ? 'bg-lime-600 dark:bg-lime-500 hover:bg-lime-700 dark:hover:bg-lime-600' : 'bg-zinc-950 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-100 text-white dark:text-zinc-950'} px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
+                class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-lime-600 dark:bg-lime-500 hover:bg-lime-700 dark:hover:bg-lime-600 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
               >
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                ${data.versioningEnabled ? `${isEdit ? 'Update' : 'Save'} & Publish` : (isEdit ? 'Update' : 'Save')}
+                Publish
               </button>
             ` : ''}
           </div>

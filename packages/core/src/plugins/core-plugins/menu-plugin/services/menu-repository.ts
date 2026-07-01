@@ -354,7 +354,7 @@ export async function toggleVisibility(
         data = json_set(data, '$.visible', ?),
         visible = ?,
         updated_at = ?
-      WHERE id = ? AND tenant_id = 'default'`
+      WHERE id = ? AND tenant_id = 'default' AND type_id = 'menu_item'`
     )
     .bind(visInt, visInt, now, id)
     .run()
@@ -422,7 +422,7 @@ export async function updateItem(
   binds.push(now)
   binds.push(id)
 
-  const sql = `UPDATE documents SET ${setParts.join(', ')} WHERE id = ? AND tenant_id = 'default'`
+  const sql = `UPDATE documents SET ${setParts.join(', ')} WHERE id = ? AND tenant_id = 'default' AND type_id = 'menu_item'`
 
   await db.prepare(sql).bind(...binds).run()
 

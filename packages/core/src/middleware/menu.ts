@@ -129,7 +129,7 @@ async function isMenuPluginActive(db: any): Promise<boolean> {
     if (!row) return false
     return row.status === 'active'
   } catch {
-    return true
+    return false
   }
 }
 

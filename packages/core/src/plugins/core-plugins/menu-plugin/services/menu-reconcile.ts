@@ -32,11 +32,12 @@ async function upsertPluginRow(
     await db
       .prepare(
         `UPDATE documents
-         SET data = json_set(data, '$.url', ?, '$.pluginId', ?),
+         SET data = json_set(data, '$.url', ?, '$.pluginId', ?, '$.visible', ?),
+             visible = ?,
              updated_at = ?
          WHERE id = ? AND tenant_id = 'default'`,
       )
-      .bind(entry.url, entry.pluginId, now, existing.id)
+      .bind(entry.url, entry.pluginId, visible ? 1 : 0, visible ? 1 : 0, now, existing.id)
       .run()
     return
   }

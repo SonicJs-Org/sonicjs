@@ -13,6 +13,14 @@ import {
 } from '../services/menu-repository'
 import { nanoid } from 'nanoid'
 import { D1Database } from '@cloudflare/workers-types'
+
+function sanitizeUrl(url: string): string {
+  const trimmed = url.trim()
+  // Reject javascript: and data: schemes — XSS vectors via href injection
+  if (/^javascript:/i.test(trimmed) || /^data:/i.test(trimmed)) return ''
+  return trimmed
+}
+
 // Template imports (will be created):
 import { renderMenuListPage } from '../templates/admin-menu-list.template'
 import { renderMenuFormPage } from '../templates/admin-menu-form.template'
@@ -79,7 +87,7 @@ adminMenuRoutes.post('/', async (c) => {
   const icon = String(form.get('icon') ?? 'link').trim()
   const target = form.get('target') === '_blank' ? '_blank' : '_self'
   const parent = String(form.get('parent') ?? '').trim() || null
-  const visible = form.get('visible') !== 'false'
+  const visible = form.has('visible')
 
   if (!label) {
     return c.html(renderMenuFormPage({
@@ -96,10 +104,11 @@ adminMenuRoutes.post('/', async (c) => {
   const now = Math.floor(Date.now() / 1000)
   const id = nanoid()
   const slug = `menu:user:${id}`
-  const isExternal = /^https?:\/\//.test(url)
+  const safeUrl = sanitizeUrl(url)
+  const isExternal = /^https?:\/\//.test(safeUrl)
   const data = JSON.stringify({
-    label: escapeHtml(label),
-    url,
+    label,
+    url: safeUrl,
     icon,
     target,
     isExternal,
@@ -161,10 +170,10 @@ async function handleMenuItemUpdate(c: any) {
 
   const locked = new Set(item.lockedFields)
   const changes: Record<string, any> = {}
-  if (form.has('label') && !locked.has('label')) changes.label = escapeHtml(String(form.get('label')).trim())
+  if (form.has('label') && !locked.has('label')) changes.label = String(form.get('label')).trim()
   if (form.has('icon') && !locked.has('icon')) changes.icon = String(form.get('icon')).trim()
   if (form.has('target') && !locked.has('target')) changes.target = form.get('target') === '_blank' ? '_blank' : '_self'
-  if (form.has('url') && !locked.has('url')) changes.url = String(form.get('url')).trim()
+  if (form.has('url') && !locked.has('url')) changes.url = sanitizeUrl(String(form.get('url')))
   if (form.has('parent')) changes.parent = String(form.get('parent')).trim() || null
   // Checkbox: present = true, absent = false
   changes.visible = form.has('visible')
@@ -200,31 +209,37 @@ adminMenuRoutes.post('/:id/delete', async (c) => {
 adminMenuRoutes.post('/:id/move-up', async (c) => {
   const db = c.env.DB
   const id = c.req.param('id')
-  const items = await listMenuItems(db)
-  const idx = items.findIndex((i) => i.id === id)
-  const prev = items[idx - 1]
-  const cur = items[idx]
-  if (idx > 0 && cur && prev) {
+  const allItems = await listMenuItems(db)
+  const cur = allItems.find((i) => i.id === id)
+  if (!cur) return c.redirect('/admin/menu')
+  const siblings = allItems.filter((i) => i.parent === cur.parent)
+  const idx = siblings.findIndex((i) => i.id === id)
+  const prev = siblings[idx - 1]
+  if (idx > 0 && prev) {
     await reorderItems(db, [
       { id: cur.id, sortOrder: prev.sortOrder, parent: cur.parent },
       { id: prev.id, sortOrder: cur.sortOrder, parent: prev.parent },
     ])
+    return c.redirect('/admin/menu?message=Reordered')
   }
-  return c.redirect('/admin/menu?message=Reordered')
+  return c.redirect('/admin/menu')
 })
 
 adminMenuRoutes.post('/:id/move-down', async (c) => {
   const db = c.env.DB
   const id = c.req.param('id')
-  const items = await listMenuItems(db)
-  const idx = items.findIndex((i) => i.id === id)
-  const next = items[idx + 1]
-  const cur = items[idx]
-  if (idx !== -1 && idx < items.length - 1 && cur && next) {
+  const allItems = await listMenuItems(db)
+  const cur = allItems.find((i) => i.id === id)
+  if (!cur) return c.redirect('/admin/menu')
+  const siblings = allItems.filter((i) => i.parent === cur.parent)
+  const idx = siblings.findIndex((i) => i.id === id)
+  const next = siblings[idx + 1]
+  if (idx !== -1 && idx < siblings.length - 1 && next) {
     await reorderItems(db, [
       { id: cur.id, sortOrder: next.sortOrder, parent: cur.parent },
       { id: next.id, sortOrder: cur.sortOrder, parent: next.parent },
     ])
+    return c.redirect('/admin/menu?message=Reordered')
   }
-  return c.redirect('/admin/menu?message=Reordered')
+  return c.redirect('/admin/menu')
 })

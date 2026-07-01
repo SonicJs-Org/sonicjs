@@ -24,7 +24,8 @@
     "seed:documents": "tsx scripts/seed-documents.ts",
     "setup:db": "bash scripts/setup-worktree-db.sh",
     "self-host": "node --experimental-strip-types src/self-host.ts",
-    "self-host:bun": "bun run src/self-host.ts"
+    "self-host:bun": "bun run src/self-host.ts",
+    "reset": "node --experimental-strip-types src/seed-self-host.ts"
   },
   "dependencies": {
     "@sonicjs-cms/core": "file:../packages/core"

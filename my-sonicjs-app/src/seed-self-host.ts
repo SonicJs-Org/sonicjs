@@ -17,8 +17,10 @@
 
 import Database from 'better-sqlite3'
 import { hashPassword } from '@better-auth/utils/password'
-import { mkdirSync, existsSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { createSqliteDriver } from '@sonicjs-cms/core/adapters'
+import { bootstrapDocumentTypes, RbacService } from '@sonicjs-cms/core'
 
 const DB_PATH = resolve(process.env.SONICJS_DB_PATH ?? './data/sonicjs.db')
 const ADMIN_EMAIL = process.env.SONICJS_ADMIN_EMAIL ?? 'admin@sonicjs.com'
@@ -61,14 +63,28 @@ async function seed() {
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(accountId, userId, userId, 'credential', passwordHash, now, now)
 
+    db.close()
+
+    // Bootstrap RBAC so the admin user can access /admin (requireRbac('portal', 'access')).
+    // Uses the D1-compatible SqliteDriver so RbacService writes to the same SQLite file.
+    const driver = await createSqliteDriver({ dbPath: DB_PATH, autoMigrate: false })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await bootstrapDocumentTypes(driver as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rbac = new RbacService(driver as any)
+    await rbac.ensureSystemRbacSeed()
+    await rbac.addUserRoleByName(userId, 'admin')
+    driver.close()
+
     console.log('[seed] Admin user created:')
     console.log(`  Email:    ${ADMIN_EMAIL}`)
     console.log(`  Password: ${ADMIN_PASSWORD}`)
     if (ADMIN_PASSWORD === 'sonicjs!') {
       console.log('  ⚠ Change this password after first login!')
     }
+    return
   } finally {
-    db.close()
+    if (db.open) db.close()
   }
 }
 

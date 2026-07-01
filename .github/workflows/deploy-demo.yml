@@ -41,6 +41,9 @@ jobs:
       - name: Type check demo app
         run: npm run type-check --workspace=demo-app
 
+      - name: Test demo app (reseed integration)
+        run: npm test --workspace=demo-app
+
       - name: Apply D1 migrations
         run: cd demo-app && npx wrangler d1 migrations apply DB --remote
         env:

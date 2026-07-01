@@ -41,12 +41,16 @@ export interface ReseedSummary {
 }
 
 /** document_types the seed writes into. Upserted defensively so the reseed works
- *  even on the cron path or a fresh DB where bootstrap hasn't registered them. */
-const SEED_TYPES: Array<{ id: string; displayName: string; source: 'user' | 'system' }> = [
-  { id: 'blog_post', displayName: 'Blog Posts', source: 'user' },
-  { id: 'page', displayName: 'Pages', source: 'user' },
-  { id: 'testimonial', displayName: 'Testimonials', source: 'user' },
-  { id: 'faq', displayName: 'FAQs', source: 'user' },
+ *  even on the cron path or a fresh DB where bootstrap hasn't registered them.
+ *  `source` must satisfy the document_types CHECK ('code'|'plugin'|'system'); the
+ *  real bootstrap registers both collection types and media_asset as 'system'
+ *  (autoRegisterCollectionDocumentTypes / bootstrapDocumentTypes), so match that —
+ *  'user' is not a legal source and INSERT OR IGNORE would silently drop the row. */
+const SEED_TYPES: Array<{ id: string; displayName: string; source: 'code' | 'plugin' | 'system' }> = [
+  { id: 'blog_post', displayName: 'Blog Posts', source: 'system' },
+  { id: 'page', displayName: 'Pages', source: 'system' },
+  { id: 'testimonial', displayName: 'Testimonials', source: 'system' },
+  { id: 'faq', displayName: 'FAQs', source: 'system' },
   { id: 'media_asset', displayName: 'Media Asset', source: 'system' },
 ]
 

@@ -194,7 +194,7 @@ All 7 phases implemented. Core + demo-app type-check clean.
 - **Phase 2 — collections + demo-login:** 4 collections (`blog_post`, `page`, `testimonial`, `faq`) with `media` fields; `demo-login` plugin (id `demo-login-prefill`, env-gated self-activation via `PluginService`); **core gate fix** in `routes/auth.ts` (doc-model query — see R-5).
 - **Phase 3 — reseed plugin:** `runReseed(env)` (wipe-all → R2 purge → ensure types → seed media to R2 + `media_asset` docs → seed 4 collections → re-activate demo-login). `demo-seed` plugin: token+env-gated `POST /__demo/reseed` + `0 */2 * * *` cron `onCronTick`. Both share `runReseed`.
 - **Phase 4 — local seed:** `scripts/seed-demo.ts` (getPlatformProxy → `runReseed`), `seed:demo` script.
-- **Phase 5 — tests:** `tests/e2e/82-demo-seed.spec.ts` (prefill, seeded API, reseed auth; skipped unless `DEMO_BASE_URL`).
+- **Phase 5 — tests:** `tests/e2e/82-demo-seed.spec.ts` (prefill, seeded API, reseed auth; skipped unless `DEMO_BASE_URL`). **Real-DB integration test** `demo-app/src/plugins/demo-seed/__tests__/reseed.sqlite.test.ts` (R10) — reuses core's better-sqlite3 D1 shim + an in-memory R2 stub; asserts summary counts, published-on-create, `q_media_*` generated cols, full-reset idempotency, and the exact `routes/auth.ts` demo-login gate query. Wired into CI (`npm test --workspace=demo-app` before deploy).
 - **Phase 6 — CI:** `.github/workflows/deploy-demo.yml` (push-to-main → build core → type-check → migrate → deploy → seed-admin → reseed, with health poll).
 - **Phase 7 — docs:** `demo-app/README.md` (operator setup + how-it-works).
 
@@ -208,8 +208,10 @@ All 7 phases implemented. Core + demo-app type-check clean.
 - `packages/core/src/routes/auth.ts` — demo-login gate → document-model query (fixes a latent dead gate; affects all installs but only flips true where a `demo-login-prefill` plugin doc is active).
 - `packages/core/src/index.ts` — re-export `MediaDocumentService` + `MediaUploadMeta`.
 
+### Post-review hardening
+- **Real-DB integration test for `runReseed` shipped** (R10) — and it caught a real bug: `ensureTypes` seeded the 4 collection `document_types` with `source:'user'`, which violates the `document_types` CHECK (`'code'|'plugin'|'system'`); `INSERT OR IGNORE` then silently dropped those rows. Masked in production (bootstrap registers the types as `'system'` first) but broke the fresh-DB fallback (local `npm run seed:demo`). Fixed to `source:'system'`, matching `autoRegisterCollectionDocumentTypes`.
+
 ### Follow-ups / not done
-- **Real-DB integration test for `runReseed`** (R10) — wants the `better-sqlite3` D1 shim + an R2 stub; the E2E (82) covers the live path. Recommended next.
 - **Public demo front-end** — this ships the CMS + seeded data + admin; a themed public site rendering the collections is separate scope.
 - Deleting the dead `core-plugins/demo-login` hook plugin (R-3) — later cleanup.
 - Operator must fill `REPLACE_WITH_*` ids in `wrangler.toml` + set secrets before first deploy.

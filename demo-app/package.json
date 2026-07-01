@@ -14,6 +14,8 @@
     "db:migrate": "wrangler d1 migrations apply DB --remote",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "setup:db": "bash ../my-sonicjs-app/scripts/setup-worktree-db.sh"
   },
@@ -26,6 +28,7 @@
     "hono": "^4.12.26",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3",
+    "vitest": "^4.1.9",
     "wrangler": "^4.65.0",
     "zod": "^3.25.67"
   },

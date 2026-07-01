@@ -60,9 +60,9 @@ export interface PluginSettingsPageData {
 
 export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
   const { plugin, activity = [], user } = data
-  // true only when the plugin has at least one user-configurable setting key
-  // (_-prefixed keys are internal metadata, not settings the user can edit)
-  const hasUserSettings = Object.keys(plugin.settings || {}).some(k => !k.startsWith('_'))
+  // true when plugin has configurable settings or a custom renderer (which handles empty state itself)
+  const hasUserSettings = plugin.id in pluginSettingsComponents ||
+    Object.keys(plugin.settings || {}).some(k => !k.startsWith('_'))
   const defaultTab = hasUserSettings ? 'settings' : 'info'
 
   const pageContent = `
@@ -768,6 +768,7 @@ type PluginSettingsRenderer = (plugin: any, settings: PluginSettings) => string
 const pluginSettingsComponents: Record<string, PluginSettingsRenderer> = {
   'otp-login': renderOTPLoginSettingsContent,
   'email': renderEmailSettingsContent,
+  'oauth-providers': renderOAuthProvidersSettingsContent,
 }
 
 /**
@@ -1518,6 +1519,108 @@ defineUserProfile({
 
       ${fieldsTable}
     </div>
+  `
+}
+
+/**
+ * OAuth Providers plugin settings content
+ */
+function renderOAuthProvidersSettingsContent(_plugin: any, settings: PluginSettings): string {
+  const providers = (settings.providers as any) || {}
+  const github = providers.github || {}
+  const google = providers.google || {}
+
+  const inputClass = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white'
+
+  function renderProviderCard(name: string, label: string, icon: string, data: any): string {
+    const clientId = escapeHtmlAttr(data.clientId || '')
+    const clientSecret = escapeHtmlAttr(data.clientSecret || '')
+    const enabled = data.enabled === true
+
+    return `
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+            <span>${icon}</span> ${label}
+          </h3>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="oauth_${name}_enabled" ${enabled ? 'checked' : ''} class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            <span class="ml-2 text-sm text-gray-300">Enabled</span>
+          </label>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label for="oauth_${name}_clientId" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
+            <input type="text" id="oauth_${name}_clientId" value="${clientId}" placeholder="${label} OAuth Client ID" class="${inputClass}">
+          </div>
+          <div>
+            <label for="oauth_${name}_clientSecret" class="block text-sm font-medium text-gray-300 mb-2">Client Secret</label>
+            <input type="password" id="oauth_${name}_clientSecret" value="${clientSecret}" placeholder="${label} OAuth Client Secret" class="${inputClass}">
+          </div>
+        </div>
+      </div>
+    `
+  }
+
+  return `
+    <div class="space-y-6">
+      <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+        <p class="text-blue-200 text-sm">
+          Configure OAuth provider credentials below. Credentials are stored securely and used server-side only.
+          Make sure to add the callback URL <code class="text-blue-300">/auth/oauth/[provider]/callback</code> to your OAuth app's allowed redirect URIs.
+        </p>
+      </div>
+
+      ${renderProviderCard('github', 'GitHub', '🐙', github)}
+      ${renderProviderCard('google', 'Google', '🔵', google)}
+    </div>
+
+    <script>
+      (function () {
+        const origSave = window.saveSettings;
+        window.saveSettings = async function () {
+          const settings = {
+            providers: {
+              github: {
+                clientId: document.getElementById('oauth_github_clientId').value,
+                clientSecret: document.getElementById('oauth_github_clientSecret').value,
+                enabled: document.getElementById('oauth_github_enabled').checked,
+              },
+              google: {
+                clientId: document.getElementById('oauth_google_clientId').value,
+                clientSecret: document.getElementById('oauth_google_clientSecret').value,
+                enabled: document.getElementById('oauth_google_enabled').checked,
+              },
+            }
+          };
+
+          const saveButton = document.getElementById('save-button');
+          saveButton.disabled = true;
+          saveButton.textContent = 'Saving...';
+
+          try {
+            const response = await fetch('/admin/plugins/oauth-providers/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(settings),
+            });
+            const result = await response.json();
+            if (result.success) {
+              showNotification('Settings saved successfully', 'success');
+              setTimeout(() => location.reload(), 1000);
+            } else {
+              throw new Error(result.error || 'Failed to save settings');
+            }
+          } catch (error) {
+            showNotification(error.message, 'error');
+          } finally {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Settings';
+          }
+        };
+      })();
+    </script>
   `
 }
 

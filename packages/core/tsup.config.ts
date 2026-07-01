@@ -11,6 +11,7 @@ export default defineConfig({
     plugins: 'src/plugins/index.ts',
     utils: 'src/utils/index.ts',
     types: 'src/types/index.ts',
+    adapters: 'src/adapters/index.ts',
   },
 
   // Output formats
@@ -45,6 +46,8 @@ export default defineConfig({
     'better-auth-cloudflare',
     '@better-auth/kysely-adapter',
     'kysely',
+    // Optional self-host dep — present on Node/Bun, absent on Workers
+    'better-sqlite3',
   ],
 
   // Configure esbuild to drop unused imports

@@ -29,12 +29,18 @@ CREATE TABLE IF NOT EXISTS auth_user (
   language TEXT DEFAULT 'en',
   email_notifications INTEGER DEFAULT 1,
   theme TEXT DEFAULT 'dark',
+  -- Password reset flow (routes/auth.ts)
+  password_reset_token TEXT,
+  password_reset_expires INTEGER,
   invitation_token TEXT,
   invited_by TEXT,
   invited_at INTEGER,
   accepted_invitation_at INTEGER,
+  -- Account lockout: reset on success; set on threshold failures
   failed_login_count INTEGER NOT NULL DEFAULT 0,
-  locked_until INTEGER
+  locked_until INTEGER,
+  -- 2FA enrollment flag (twoFactor BA plugin)
+  two_factor_enabled INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_auth_user_email ON auth_user(email);

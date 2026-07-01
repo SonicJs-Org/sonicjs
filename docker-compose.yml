@@ -1,0 +1,30 @@
+services:
+  sonicjs:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - sonicjs-data:/app/data
+    environment:
+      # Required — generate strong secrets before deploying.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      # Optional email provider.
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
+      # Optional Cloudflare Images.
+      IMAGES_ACCOUNT_ID: ${IMAGES_ACCOUNT_ID:-}
+      IMAGES_API_TOKEN: ${IMAGES_API_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  sonicjs-data:

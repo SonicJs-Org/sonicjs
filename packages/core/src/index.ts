@@ -85,6 +85,10 @@ export { bootstrapDocumentTypes } from './services/document-types-seed'
 export { DocumentRepository } from './services/document-repository'
 export { DocumentsService } from './services/documents'
 
+// Media-as-documents adapter — re-exported for apps that seed/manage media assets
+export { MediaDocumentService } from './services/media-documents'
+export type { MediaUploadMeta } from './services/media-documents'
+
 // Cloudflare email provider
 export { CloudflareEmailProvider } from './services/email/providers/cloudflare'
 export type { CloudflareEmailProviderOptions, CFSendEmailBinding } from './services/email/providers/cloudflare'

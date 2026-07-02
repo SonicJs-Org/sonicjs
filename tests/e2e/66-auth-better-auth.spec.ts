@@ -10,7 +10,7 @@ import { ADMIN_CREDENTIALS, loginAsAdmin, logout } from './utils/test-helpers';
  * Numbered 66+ per document-model-poc-plan.md R11.
  */
 
-test.describe('Better Auth — sign in / sign out', () => {
+test.describe('Better Auth — sign in / sign out @smoke @auth', () => {
   test('POST /auth/sign-in/email returns user + token with valid credentials', async ({ request }) => {
     await request.post('/auth/seed-admin');
 

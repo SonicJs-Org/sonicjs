@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, createTestWorkflowContent, createTestContent } from './utils/test-helpers'
 
-test.describe.skip('Notification System', () => {
+test.describe.skip('Notification System @smoke', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

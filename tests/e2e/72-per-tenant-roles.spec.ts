@@ -30,7 +30,7 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Per-tenant roles', () => {
+test.describe.serial('Per-tenant roles @auth', () => {
   test.beforeAll(() => {
     // Tenant vt + the admin enrolled there as a 'viewer' (downgraded from their global admin role).
     d1Exec(

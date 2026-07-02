@@ -5,7 +5,7 @@ import { loginAsAdmin } from './utils/test-helpers';
 // not the dropped auth_user_profiles table. This verifies the admin user-edit
 // page persists profile fields through the document-backed path, and that the
 // auth-owned type does not leak into the content surface.
-test.describe('User profile (document-backed)', () => {
+test.describe('User profile (document-backed) @auth', () => {
   test('persists profile fields written on the user edit page', async ({ page }) => {
     await loginAsAdmin(page);
 

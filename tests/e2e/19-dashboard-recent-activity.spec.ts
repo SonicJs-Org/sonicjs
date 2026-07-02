@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe.skip('Dashboard Recent Activity', () => {
+test.describe.skip('Dashboard Recent Activity @smoke', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

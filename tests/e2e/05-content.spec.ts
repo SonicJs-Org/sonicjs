@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, waitForHTMX } from './utils/test-helpers';
 
-test.describe('Content Management', () => {
+test.describe('Content Management @smoke @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
     // Content is seeded (a published welcome blog post), so navigate straight to the list —

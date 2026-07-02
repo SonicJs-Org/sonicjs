@@ -89,7 +89,7 @@ async function createTestFormWithSchema(
 // Tests: shadow collection creation, content dual-write, filtering
 // ═══════════════════════════════════════════════════════════════
 
-test.describe('Forms as Content', () => {
+test.describe('Forms as Content @content', () => {
   test.describe.configure({ mode: 'serial' });
 
   let testFormId: string;

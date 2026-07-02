@@ -18,7 +18,7 @@ import { emailPluginV3 } from '..'
 import {
   getEmailService,
   resetEmailService,
-} from '../../../../services/email-service-singleton'
+} from '../../../../services/email/email-service-singleton'
 import { getHookSystem, resetHookSystem } from '../../../../services/hook-system-singleton'
 
 function makeMinimalDb(): D1Database {

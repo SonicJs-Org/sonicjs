@@ -9,7 +9,7 @@ import { loginAsAdmin, checkAPIHealth, ADMIN_CREDENTIALS } from './utils/test-he
  *
  * Run with: npm run e2e:smoke
  */
-test.describe('Smoke Tests - Critical Path', () => {
+test.describe('Smoke Tests - Critical Path @smoke', () => {
 
   test('API health check returns running status', async ({ request }) => {
     const response = await request.get('/health');

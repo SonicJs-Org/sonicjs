@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe.skip('Media Thumbnail Loading', () => {
+test.describe.skip('Media Thumbnail Loading @media', () => {
   test('uploaded image should display thumbnail without broken image', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/media');

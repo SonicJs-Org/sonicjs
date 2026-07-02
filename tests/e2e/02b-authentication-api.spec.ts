@@ -12,7 +12,7 @@ function isRegistrationDisabled(status: number, body: any): boolean {
   return msg.includes('disabled') || msg.includes('Registration');
 }
 
-test.describe('Authentication API', () => {
+test.describe('Authentication API @auth @api', () => {
   const testUser = {
     email: 'test.api.user@example.com',
     password: 'TestPassword123!',

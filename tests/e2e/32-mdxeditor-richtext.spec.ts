@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, navigateToAdminSection, waitForHTMX } from './utils/test-helpers';
 
-test.describe.skip('MDXEditor Rich Text Editor', () => {
+test.describe.skip('MDXEditor Rich Text Editor @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

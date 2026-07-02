@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
 
-test.describe('Slug Generation', () => {
+test.describe('Slug Generation @content', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

@@ -13,7 +13,7 @@ import { loginAsAdmin } from './utils/test-helpers'
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787'
 
-test.describe('Plugin system', () => {
+test.describe('Plugin system @plugins', () => {
   test('hello-world plugin route accessible after login', async ({ page }) => {
     await loginAsAdmin(page)
     const res = await page.goto('/admin/hello-world')

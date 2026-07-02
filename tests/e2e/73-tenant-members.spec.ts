@@ -28,7 +28,7 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Tenant member management', () => {
+test.describe.serial('Tenant member management @auth', () => {
   test.beforeAll(() => {
     // A target user to add as a member (no login needed for them in this test).
     d1Exec(

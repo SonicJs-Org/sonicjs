@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { ensureAdminUserExists, loginAsAdmin } from './utils/test-helpers'
 
-test.describe.skip('Collapsible Validation Visibility', () => {
+test.describe.skip('Collapsible Validation Visibility @content', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('API Keys - copy key before redirect', () => {
+test.describe('API Keys - copy key before redirect @api-keys', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

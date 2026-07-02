@@ -28,7 +28,7 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Tenant invitations', () => {
+test.describe.serial('Tenant invitations @auth', () => {
   test.beforeAll(() => {
     // A tenant the admin is NOT a member of (seeded directly, so no auto-enroll).
     d1Exec(

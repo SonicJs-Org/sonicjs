@@ -11,7 +11,7 @@ import { loginAsAdmin, ADMIN_CREDENTIALS } from './utils/test-helpers';
  * 3. Forms list page renders correctly
  */
 
-test.describe('Forms Smoke Test', () => {
+test.describe('Forms Smoke Test @forms', () => {
   test('should access /admin/forms route', async ({ page }) => {
     // Login first
     await loginAsAdmin(page);

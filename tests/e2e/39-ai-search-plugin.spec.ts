@@ -5,7 +5,7 @@ import {
   ensureWorkflowTablesExist
 } from './utils/test-helpers'
 
-test.describe('AI Search Plugin', () => {
+test.describe('AI Search Plugin @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await ensureWorkflowTablesExist(page)

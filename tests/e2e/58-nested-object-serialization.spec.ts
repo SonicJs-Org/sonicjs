@@ -19,7 +19,7 @@ async function resolvePageBlocksCollectionKey(page: import('@playwright/test').P
   return match?.[1] || null
 }
 
-test.describe.skip('Nested Object Serialization', () => {
+test.describe.skip('Nested Object Serialization @content', () => {
   test('should persist sibling flat child objects inside a nested parent object', async ({ page }) => {
     await loginAsAdmin(page)
 

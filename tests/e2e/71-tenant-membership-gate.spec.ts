@@ -32,7 +32,7 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Multi-Tenant membership gate', () => {
+test.describe.serial('Multi-Tenant membership gate @auth', () => {
   test.beforeAll(() => {
     // An active tenant with NO membership rows — the admin is not a member.
     d1Exec(

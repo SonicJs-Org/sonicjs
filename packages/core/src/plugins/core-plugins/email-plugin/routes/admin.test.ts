@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Hono } from 'hono'
 import { adminRoutes } from './admin'
-import { setEmailService, resetEmailService } from '../../../../services/email-service-singleton'
+import { setEmailService, resetEmailService } from '../../../../services/email/email-service-singleton'
 import type { Bindings, Variables } from '../../../../app'
 import type { EmailService, SendEmailResult } from '../../../sdk/types'
 import type { PermissionsManager } from '../../../../services/permissions'

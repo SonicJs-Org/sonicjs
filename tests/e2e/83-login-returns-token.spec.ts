@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('POST /auth/login returns token', () => {
+test.describe('POST /auth/login returns token @smoke @auth', () => {
   test.beforeAll(async ({ request }) => {
     await request.post('/auth/seed-admin')
   })

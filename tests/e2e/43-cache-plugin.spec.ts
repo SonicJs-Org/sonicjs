@@ -8,7 +8,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, waitForHTMX } from './utils/test-helpers';
 
-test.describe('Cache Plugin Dashboard', () => {
+test.describe('Cache Plugin Dashboard @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

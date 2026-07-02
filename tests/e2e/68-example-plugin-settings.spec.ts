@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, TEST_ORIGIN } from './utils/test-helpers'
 
-test.describe('Example plugin — settings reflected in API', () => {
+test.describe('Example plugin — settings reflected in API @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

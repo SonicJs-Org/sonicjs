@@ -10,7 +10,7 @@ import { loginAsAdmin } from './utils/test-helpers'
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787'
 
-test.describe('Example plugin', () => {
+test.describe('Example plugin @plugins', () => {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   // Note: routes are at /example/* (not /api/*) because user plugins

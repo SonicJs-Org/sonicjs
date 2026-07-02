@@ -95,7 +95,7 @@ async function selectMediaForField(
   await expect(modal).toBeHidden({ timeout: 5000 })
 }
 
-test.describe('Array Media Picker Targeting', () => {
+test.describe('Array Media Picker Targeting @content @media', () => {
   let uploadedMediaA: UploadedMedia | null = null
   let uploadedMediaB: UploadedMedia | null = null
 

@@ -12,7 +12,7 @@ import { loginAsAdmin, navigateToAdminSection } from './utils/test-helpers';
  * - Per-form Turnstile configuration
  */
 
-test.describe('Turnstile Plugin Configuration', () => {
+test.describe('Turnstile Plugin Configuration @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

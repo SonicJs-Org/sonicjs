@@ -13,7 +13,7 @@ import { loginAsAdmin } from './utils/test-helpers'
  *
  * Related: GitHub Issue #555, PR #556
  */
-test.describe('Dynamic Field TDZ Bug Fix', () => {
+test.describe('Dynamic Field TDZ Bug Fix @content', () => {
   /**
    * Helper to find and navigate to E2E Test collection
    * Returns true if collection was found and navigated to, false otherwise

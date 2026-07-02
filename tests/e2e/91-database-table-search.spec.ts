@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Database Table Viewer — Search & JSON Browser', () => {
+test.describe('Database Table Viewer — Search & JSON Browser @database', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

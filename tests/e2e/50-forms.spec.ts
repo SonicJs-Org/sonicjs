@@ -12,7 +12,7 @@ import { loginAsAdmin, navigateToAdminSection, TEST_DATA } from './utils/test-he
  * - Component configuration
  */
 
-test.describe('Forms Management', () => {
+test.describe('Forms Management @content', () => {
   test.describe.configure({ mode: 'serial' });
 
   let testFormId: string;

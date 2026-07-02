@@ -7,7 +7,7 @@ import { loginAsAdmin, logout } from './utils/test-helpers';
  * Tests the enforcement of the "registration.enabled" setting in the auth plugin.
  * When disabled, new user registration should be blocked (except for first user bootstrap).
  */
-test.describe('Disable User Registration', () => {
+test.describe('Disable User Registration @auth', () => {
   // Test data for registration attempts
   const testUser = {
     email: `test.disable.reg.${Date.now()}@example.com`,

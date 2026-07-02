@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe.skip('MDXEditor on New Content Form', () => {
+test.describe.skip('MDXEditor on New Content Form @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

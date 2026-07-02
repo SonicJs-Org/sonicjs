@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('default content seed', () => {
+test.describe('default content seed @content', () => {
   test('exposes the code-defined blog_post collection without legacy defaults', async ({ request }) => {
     const response = await request.get('/api/collections')
     expect(response.ok()).toBeTruthy()

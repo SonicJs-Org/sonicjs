@@ -57,7 +57,7 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
   beforeEach(async () => {
     db = createTestD1()
     // Collections are code-only now (id === name) — register in the in-memory registry.
-    getCollectionRegistry().register([{ name: 'blog_post', displayName: 'Blog Posts', description: 'Blog', schema: JSON.parse(BLOG_SCHEMA) }])
+    getCollectionRegistry().register([{ name: 'blog_post', displayName: 'Blog Posts', description: 'Blog', schema: JSON.parse(BLOG_SCHEMA), versioning: true }])
     await bootstrapDocumentTypes(db) // registers the blog_post document type
     app = buildApp(db)
   })

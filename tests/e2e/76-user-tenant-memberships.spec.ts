@@ -24,7 +24,7 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('User-centric tenant memberships', () => {
+test.describe.serial('User-centric tenant memberships @auth', () => {
   test.beforeAll(() => {
     d1Exec(`INSERT INTO auth_user (id, email, first_name, last_name, created_at, updated_at) VALUES ('${UID}', '${UEMAIL}', 'Mem', 'Ber', 1, 1)`)
     for (const t of [T_A, T_B]) {

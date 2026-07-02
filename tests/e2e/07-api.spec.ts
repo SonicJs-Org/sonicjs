@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe('API Endpoints', () => {
+test.describe('API Endpoints @smoke @api', () => {
   test('should return health check', async ({ request }) => {
     const response = await request.get('/health');
 

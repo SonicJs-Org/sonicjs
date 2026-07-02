@@ -44,7 +44,7 @@ async function createBlogPost(request: import('@playwright/test').APIRequestCont
   return (await res.json()).data.rootId as string
 }
 
-test.describe('Versioning (optional, plugin-backed)', () => {
+test.describe('Versioning (optional, plugin-backed) @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

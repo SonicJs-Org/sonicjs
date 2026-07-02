@@ -11,7 +11,7 @@ import { loginAsAdmin, logout } from './utils/test-helpers';
 const ADMIN_EMAIL = 'admin@sonicjs.com';
 const ADMIN_PASSWORD = 'sonicjs!';
 
-test.describe('RBAC — seeded roles and grants', () => {
+test.describe('RBAC — seeded roles and grants @smoke @auth', () => {
   test('RBAC admin UI lists the seeded admin role (the only hardcoded role)', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/rbac');

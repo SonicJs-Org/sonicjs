@@ -25,7 +25,7 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Global document types', () => {
+test.describe.serial('Global document types @content', () => {
   test.beforeAll(() => {
     // A global document type (settings.global=true) with admin base grants.
     const settings = JSON.stringify({ global: true, baseGrants: { admin: ['read', 'create', 'update', 'delete', 'manage'] } }).replace(/'/g, "''")

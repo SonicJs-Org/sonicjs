@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, waitForHTMX, ADMIN_CREDENTIALS } from './utils/test-helpers';
 
-test.describe('User Profile Edit on User Edit Page', () => {
+test.describe('User Profile Edit on User Edit Page @auth', () => {
   let testUserId: string | undefined;
   let authToken: string;
   let setupFailed = false;

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { ensureAdminUserExists, ADMIN_CREDENTIALS, TEST_ORIGIN } from './utils/test-helpers'
 
-test.describe('Login redirect param', () => {
+test.describe('Login redirect param @smoke @auth', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
   })

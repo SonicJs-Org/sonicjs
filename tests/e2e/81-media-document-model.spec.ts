@@ -18,7 +18,7 @@ const minimalJpeg = Buffer.from([
   0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0x80, 0xFF, 0xD9,
 ])
 
-test.describe('Media — document model (slice 3)', () => {
+test.describe('Media — document model (slice 3) @media', () => {
   test('API upload returns document rootId and file is listed from documents', async ({ context }) => {
     const fd = new FormData()
     fd.append('file', new Blob([minimalJpeg], { type: 'image/jpeg' }), 'doc-model-test.jpg')

@@ -50,6 +50,7 @@ crons = ["0 */2 * * *"]
 # ENVIRONMENT must be "demo" — the reseed route/cron are hard-gated to this value
 # so they can never wipe a non-demo install.
 ENVIRONMENT = "demo"
+BETTER_AUTH_URL = "https://demo.sonicjs.com"
 CORS_ORIGINS = "https://demo.sonicjs.com"
 DEFAULT_FROM_EMAIL = "demo@sonicjs.com"
 

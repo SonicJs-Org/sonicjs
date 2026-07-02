@@ -1,6 +1,6 @@
 {
   "name": "@sonicjs-cms/core",
-  "version": "3.0.0-beta.20",
+  "version": "3.0.0-beta.23",
   "description": "Core framework for SonicJS headless CMS - Edge-first, TypeScript-native CMS built for Cloudflare Workers",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -49,6 +49,11 @@
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js",
       "require": "./dist/types.cjs"
+    },
+    "./adapters": {
+      "types": "./dist/adapters.d.ts",
+      "import": "./dist/adapters.js",
+      "require": "./dist/adapters.cjs"
     },
     "./package.json": "./package.json"
   },
@@ -104,7 +109,7 @@
   },
   "dependencies": {
     "@cf-wasm/resvg": "^0.3.3",
-    "better-auth": "^1.6.13",
+    "better-auth": "^1.6.23",
     "better-auth-cloudflare": "^0.3.0",
     "csv-parse": "^6.2.1",
     "drizzle-zod": "^0.8.3",
@@ -115,6 +120,9 @@
     "semver": "^7.7.3",
     "tiny-lru": "^13.0.0"
   },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.10.0"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251014.0",
     "@types/better-sqlite3": "^7.6.13",
@@ -123,7 +131,6 @@
     "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.50.0",
     "@vitest/coverage-v8": "^4.1.9",
-    "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",
     "eslint": "^9.39.2",
     "glob": "^10.5.0",

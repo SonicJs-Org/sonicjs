@@ -74,6 +74,51 @@ describe('media-as-document (Phase 6)', () => {
     expect(file.public_url).toBe('/files/uploads/hero.jpg') // no host configured → relative
   })
 
+  it('mediaDocToFile converts seconds-based createdAt to a valid non-1970 uploadedAt (issue #889)', () => {
+    // Regression: createdAt is stored in SECONDS (not ms). mediaDocToFile must multiply by 1000
+    // before passing to Date, otherwise new Date(seconds) resolves to ~1970.
+    const nowSeconds = Math.floor(Date.now() / 1000) // e.g. 1750000000
+    const doc = { rootId: 'r1', data: { ...META }, ownerId: 'u1', createdAt: nowSeconds, updatedAt: nowSeconds }
+    const file = mediaDocToFile(doc)
+
+    const uploadedDate = new Date(file.uploadedAt)
+    expect(uploadedDate.getFullYear()).toBeGreaterThanOrEqual(2024)
+    // Sanity: uploaded_at from the ISO string must NOT be epoch (1970)
+    expect(uploadedDate.getFullYear()).not.toBe(1970)
+  })
+
+  it('createFromUpload produces a doc whose uploadedAt is a valid current-year date (issue #889)', async () => {
+    const svc = new MediaDocumentService(db)
+    const doc = await svc.createFromUpload(META, 'u1')
+    const file = mediaDocToFile(doc)
+
+    const uploadedDate = new Date(file.uploadedAt)
+    expect(uploadedDate.getFullYear()).toBeGreaterThanOrEqual(2024)
+    expect(uploadedDate.getFullYear()).not.toBe(1970)
+    // uploaded_at string must be a valid ISO 8601 date
+    expect(file.uploadedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('list() returns newest uploads first (updated_at DESC, issue #889 sort regression)', async () => {
+    const svc = new MediaDocumentService(db)
+    // Upload three files with a small delay to ensure distinct updated_at values
+    const a = await svc.createFromUpload({ ...META, filename: 'old.jpg', r2Key: 'uploads/old.jpg' }, 'u1')
+    // Force older updated_at on first file to guarantee ordering
+    db.raw.prepare('UPDATE documents SET updated_at = updated_at - 10 WHERE id = ?').run(a.id)
+    const b = await svc.createFromUpload({ ...META, filename: 'new.jpg', r2Key: 'uploads/new.jpg' }, 'u1')
+
+    const { files } = await svc.list()
+    expect(files).toHaveLength(2)
+    // Newest file (b) must appear first
+    expect((files[0].data as any).filename).toBe('new.jpg')
+    expect((files[1].data as any).filename).toBe('old.jpg')
+    // Both dates must be valid non-1970
+    for (const f of files) {
+      const year = new Date(mediaDocToFile(f).uploadedAt).getFullYear()
+      expect(year).toBeGreaterThanOrEqual(2024)
+    }
+  })
+
   it('thumbnail only for images with an Images account', () => {
     expect(deriveMediaThumbnailUrl('a/b.pdf', 'application/pdf', { imagesAccountId: 'x' })).toBeNull()
     expect(deriveMediaThumbnailUrl('a/b.jpg', 'image/jpeg', {})).toBeNull()

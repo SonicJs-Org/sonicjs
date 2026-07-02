@@ -708,6 +708,7 @@ function renderCatalystSidebar(
       <!-- Sidebar Body -->
       <div class="flex flex-1 flex-col overflow-y-auto p-4">
         <div class="flex flex-col gap-0.5">
+          <!-- ADMIN_SIDEBAR_NAV_ITEMS -->
           ${allMenuItems
             .map((item) => {
               const isActive =
@@ -776,6 +777,7 @@ function renderCatalystSidebar(
               ${pluginsSubItems}
             </div>
           </div>
+          <!-- /ADMIN_SIDEBAR_NAV_ITEMS -->
         </div>
       </div>
 

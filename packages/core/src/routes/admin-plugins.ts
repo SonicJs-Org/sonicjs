@@ -12,6 +12,7 @@ import {
   parseFormDataToSettings,
   applySchemaDefaults,
 } from '../plugins/sdk/config-schema'
+import { reconcileMenuFromPlugins } from '../plugins/core-plugins/menu-plugin/services/menu-reconcile'
 import type { Bindings, Variables } from '../app'
 
 const adminPluginRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -62,14 +63,18 @@ adminPluginRoutes.get('/', async (c) => {
       // Continue with empty data
     }
 
+    // Filter out DB records whose IDs no longer exist in the registry (e.g. renamed plugins)
+    const registryIds = new Set(AVAILABLE_PLUGINS.map(p => p.id))
+    const validInstalledPlugins = installedPlugins.filter(p => registryIds.has(p.id))
+
     // Get list of installed plugin IDs
-    const installedPluginIds = new Set(installedPlugins.map(p => p.id))
+    const installedPluginIds = new Set(validInstalledPlugins.map(p => p.id))
 
     // Find uninstalled plugins
     const uninstalledPlugins = AVAILABLE_PLUGINS.filter(p => !installedPluginIds.has(p.id))
 
     // Map installed plugins to template format
-    const templatePlugins: Plugin[] = installedPlugins.map(p => ({
+    const templatePlugins: Plugin[] = validInstalledPlugins.map(p => ({
       id: p.id,
       name: p.name,
       displayName: p.display_name,
@@ -111,7 +116,7 @@ adminPluginRoutes.get('/', async (c) => {
 
     // Update stats with uninstalled count
     stats.uninstalled = uninstalledPlugins.length
-    stats.total = installedPlugins.length + uninstalledPlugins.length
+    stats.total = validInstalledPlugins.length + uninstalledPlugins.length
 
     const pageData: PluginsListPageData = {
       plugins: allPlugins,
@@ -240,6 +245,17 @@ adminPluginRoutes.get('/:id', async (c) => {
       user: item.userId || null
     }))
 
+    // Load plugin-specific settings tab data if the plugin definition declares loadData
+    const pluginDef = getPluginDefinition(pluginId)
+    let settingsTabData: any = undefined
+    if (pluginDef?.settingsTabContent?.loadData) {
+      try {
+        settingsTabData = await pluginDef.settingsTabContent.loadData(db)
+      } catch (e) {
+        console.error(`settingsTabContent.loadData failed for plugin "${pluginId}":`, e)
+      }
+    }
+
     const pageData: PluginSettingsPageData = {
       plugin: templatePlugin,
       activity: templateActivity,
@@ -247,7 +263,8 @@ adminPluginRoutes.get('/:id', async (c) => {
         name: user?.email || 'User',
         email: user?.email || '',
         role: user?.role || 'user'
-      }
+      },
+      settingsTabData,
     }
 
     return c.html(renderPluginSettingsPage(pageData))
@@ -353,6 +370,7 @@ adminPluginRoutes.post('/:id/activate', async (c) => {
 
     const pluginService = new PluginService(db)
     await pluginService.activatePlugin(pluginId)
+    await reconcileMenuFromPlugins(db)
 
     return c.json({ success: true })
   } catch (error) {
@@ -376,6 +394,7 @@ adminPluginRoutes.post('/:id/deactivate', async (c) => {
 
     const pluginService = new PluginService(db)
     await pluginService.deactivatePlugin(pluginId)
+    await reconcileMenuFromPlugins(db)
 
     return c.json({ success: true })
   } catch (error) {

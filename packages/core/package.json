@@ -1,6 +1,6 @@
 {
   "name": "@sonicjs-cms/core",
-  "version": "3.0.0-beta.22",
+  "version": "3.0.0-beta.23",
   "description": "Core framework for SonicJS headless CMS - Edge-first, TypeScript-native CMS built for Cloudflare Workers",
   "type": "module",
   "main": "./dist/index.cjs",

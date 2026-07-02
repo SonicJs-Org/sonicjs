@@ -2,7 +2,7 @@
   "id": "core-cache",
   "name": "Cache System",
   "version": "1.0.0-beta.1",
-  "defaultActive": true,
+  "defaultActive": false,
   "description": "Three-tiered caching system with in-memory and KV storage. Provides automatic caching for content, users, media, and API responses with configurable TTL and invalidation patterns.",
   "author": "SonicJS",
   "homepage": "https://sonicjs.com/plugins/cache",

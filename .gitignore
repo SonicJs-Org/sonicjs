@@ -44,6 +44,9 @@ pids
 coverage/
 *.lcov
 
+# Claude Code — local settings are per-developer, not shared
+.claude/settings.local.json
+
 # IDE
 .vscode/settings.json
 .idea/

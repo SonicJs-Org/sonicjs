@@ -14,7 +14,7 @@
 To create a new SonicJS project, use:
 
 ```bash
-npx create-sonicjs my-app
+npx create-sonicjs@latest my-app
 ```
 
 This is the recommended way to get started with SonicJS. It sets up everything you need with a single command.
@@ -28,9 +28,9 @@ This is the recommended way to get started with SonicJS. It sets up everything y
 - 🔒 **Type-Safe**: Full TypeScript support with comprehensive type definitions
 - 🔌 **Plugin System**: Extensible architecture with hooks and middleware
 - ⚡ **Three-Tier Caching**: Memory, KV, and database layers for optimal performance
-- 🎨 **Admin Interface**: Beautiful glass morphism design system
-- 🔐 **Authentication**: JWT-based auth with role-based permissions
-- 📝 **Content Management**: Dynamic collections with versioning and workflows
+- 🎨 **Admin Interface**: Glass-morphism design system
+- 🔐 **Authentication**: Better Auth with session management and role-based permissions
+- 📝 **Content Management**: Document-model collections with versioning
 - 🖼️ **Media Management**: R2 storage with automatic optimization
 - 🌐 **REST API**: Auto-generated endpoints for all collections
 
@@ -54,22 +54,24 @@ npm install wrangler drizzle-kit  # For development
 
 ## 🚀 Quick Start
 
-### 1. Create Your Application
+### 1. Register Collections and Create Your Application
 
 ```typescript
 // src/index.ts
-import { createSonicJSApp } from '@sonicjs-cms/core'
+import {
+  createSonicJSApp,
+  registerCollections,
+} from '@sonicjs-cms/core'
 import type { SonicJSConfig } from '@sonicjs-cms/core'
+import blogPostsCollection from './collections/blog-posts.collection'
+
+// Register code-defined collections before creating the app
+registerCollections([blogPostsCollection])
 
 const config: SonicJSConfig = {
-  collections: {
-    directory: './src/collections',
-    autoSync: true
-  },
   plugins: {
-    directory: './src/plugins',
-    autoLoad: false
-  }
+    register: [/* your plugins here */],
+  },
 }
 
 export default createSonicJSApp(config)
@@ -77,13 +79,16 @@ export default createSonicJSApp(config)
 
 ### 2. Define Collections
 
+Collections are TypeScript config objects — no database table required.
+
 ```typescript
 // src/collections/blog-posts.collection.ts
 import type { CollectionConfig } from '@sonicjs-cms/core'
 
 export default {
-  name: 'blog-posts',
-  displayName: 'Blog Posts',
+  name: 'blog_post',
+  displayName: 'Blog Post',
+  slug: 'blog-posts',
   description: 'Manage your blog posts',
 
   schema: {
@@ -93,26 +98,23 @@ export default {
         type: 'string',
         title: 'Title',
         required: true,
-        maxLength: 200
+        maxLength: 200,
       },
       content: {
-        type: 'markdown',
+        type: 'lexical',
         title: 'Content',
-        required: true
+        required: true,
       },
       publishedAt: {
         type: 'datetime',
-        title: 'Published Date'
+        title: 'Published Date',
       },
-      status: {
-        type: 'select',
-        title: 'Status',
-        enum: ['draft', 'published', 'archived'],
-        default: 'draft'
-      }
     },
-    required: ['title', 'content']
-  }
+    required: ['title', 'content'],
+  },
+
+  managed: true,
+  isActive: true,
 } satisfies CollectionConfig
 ```
 
@@ -131,7 +133,7 @@ database_id = "your-database-id"
 migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media"
 ```
 
@@ -152,7 +154,7 @@ Visit `http://localhost:8787/admin` to access the admin interface.
 ### Main Application
 
 ```typescript
-import { createSonicJSApp } from '@sonicjs-cms/core'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
 import type { SonicJSConfig, SonicJSApp, Bindings, Variables } from '@sonicjs-cms/core'
 ```
 
@@ -161,7 +163,6 @@ import type { SonicJSConfig, SonicJSApp, Bindings, Variables } from '@sonicjs-cm
 ```typescript
 import {
   loadCollectionConfigs,
-  syncCollections,
   MigrationService,
   Logger,
   PluginService
@@ -223,8 +224,8 @@ import {
 import {
   createDb,
   users,
-  collections,
   content,
+  contentVersions,
   media
 } from '@sonicjs-cms/core'
 ```
@@ -272,31 +273,29 @@ customRoutes.get('/api/custom', requireAuth(), async (c) => {
 
 // In your app config
 export default createSonicJSApp({
-  routes: [{ path: '/custom', handler: customRoutes }]
+  plugins: {
+    register: [{ name: 'custom', version: '1.0.0', register: (app) => app.route('/custom', customRoutes) }],
+  },
 })
 ```
 
 ### Custom Plugin
 
 ```typescript
-import type { Plugin } from '@sonicjs-cms/core'
+import type { Plugin, PluginContext } from '@sonicjs-cms/core'
 
 export default {
   name: 'my-plugin',
   version: '1.0.0',
   description: 'My custom plugin',
 
-  async onActivate() {
+  async activate(context: PluginContext) {
     console.log('Plugin activated!')
   },
 
-  hooks: {
-    'content.beforeSave': async (content) => {
-      // Transform content before saving
-      content.metadata = { modified: new Date() }
-      return content
-    }
-  }
+  async install(context: PluginContext) {
+    // Run once on install — migrations, seed data, etc.
+  },
 } satisfies Plugin
 ```
 
@@ -409,16 +408,16 @@ The `generate-migrations.ts` script:
 
 SonicJS follows semantic versioning:
 
-- **v2.x.x** - Current npm package (core extracted)
-- **v1.x.x** - Legacy monolith (deprecated)
+- **v3.x.x** - Current (document model, Better Auth, edge-first)
+- **v2.x.x** - Legacy monolith (deprecated)
 
-**Current Version**: `2.0.0-alpha.1`
+**Current Version**: `3.0.0-beta.9`
 
 ### Upgrade Path
 
 ```bash
-# Install the new package
-npm install @sonicjs-cms/core@2.0.0-alpha.1
+# Install the latest package
+npm install @sonicjs-cms/core@latest
 
 # Run any new migrations
 wrangler d1 migrations apply DB
@@ -467,12 +466,12 @@ MIT © SonicJS Team - See [LICENSE](./LICENSE) for details.
 
 ## 🛡️ Security
 
-- JWT authentication
-- Role-based access control (RBAC)
+- Better Auth (sessions + RBAC)
+- Role-based access control
 - Permission system
 - Secure headers
 - Input sanitization
 
 ---
 
-**Built with ❤️ for the edge** | v2.0.0-alpha.1
+**Built with ❤️ for the edge** | v3.0.0-beta.9

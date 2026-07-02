@@ -5,15 +5,15 @@ async function resolvePageBlocksCollectionKey(page: Page): Promise<string> {
   await page.goto('/admin/content/new')
   await page.waitForLoadState('networkidle', { timeout: 15000 })
 
-  const pageBlocksLink = page
+  const e2eTestLink = page
     .locator('a[href^="/admin/content/new?collection="]')
-    .filter({ hasText: 'Page Blocks' })
+    .filter({ hasText: 'E2E Test' })
     .first()
 
-  await expect(pageBlocksLink).toBeVisible({ timeout: 10000 })
-  const href = await pageBlocksLink.getAttribute('href')
+  await expect(e2eTestLink).toBeVisible({ timeout: 10000 })
+  const href = await e2eTestLink.getAttribute('href')
   const match = href?.match(/[?&]collection=([^&]+)/)
-  return match?.[1] || 'page_blocks'
+  return match?.[1] || 'e2e_test'
 }
 
 async function gotoWithRetry(page: Page, url: string): Promise<void> {

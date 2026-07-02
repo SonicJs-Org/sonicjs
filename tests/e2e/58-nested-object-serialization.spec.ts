@@ -5,16 +5,16 @@ async function resolvePageBlocksCollectionKey(page: import('@playwright/test').P
   await page.goto('/admin/content/new')
   await page.waitForLoadState('networkidle', { timeout: 15000 })
 
-  const pageBlocksLink = page
+  const e2eTestLink = page
     .locator('a[href^="/admin/content/new?collection="]')
-    .filter({ hasText: 'Page Blocks' })
+    .filter({ hasText: 'E2E Test' })
     .first()
 
-  if (!(await pageBlocksLink.isVisible({ timeout: 5000 }).catch(() => false))) {
+  if (!(await e2eTestLink.isVisible({ timeout: 5000 }).catch(() => false))) {
     return null
   }
 
-  const href = await pageBlocksLink.getAttribute('href')
+  const href = await e2eTestLink.getAttribute('href')
   const match = href?.match(/[?&]collection=([^&]+)/)
   return match?.[1] || null
 }
@@ -24,7 +24,7 @@ test.describe.skip('Nested Object Serialization', () => {
     await loginAsAdmin(page)
 
     const collectionKey = await resolvePageBlocksCollectionKey(page)
-    test.skip(!collectionKey, 'Page Blocks collection not available')
+    test.skip(!collectionKey, 'E2E Test collection not available')
 
     await page.goto('/admin/content/new?collection=' + encodeURIComponent(collectionKey!))
     await page.waitForLoadState('networkidle')

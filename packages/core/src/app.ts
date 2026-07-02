@@ -5,6 +5,7 @@
  */
 
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import type { Context } from 'hono'
 import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-types'
 import {
@@ -40,12 +41,15 @@ import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
+import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole, requireRbac } from './middleware/auth'
 import { createAuth } from './auth/config'
 import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
+import { menuMiddleware } from './middleware/menu'
+import { menuPlugin } from './plugins/core-plugins/menu-plugin'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
@@ -71,6 +75,7 @@ import { CloudflareEmailProvider } from './plugins/core-plugins/email-plugin/ser
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
 import { setPluginMenu } from './services/plugin-menu-singleton'
+import { PLUGIN_REGISTRY } from './plugins/manifest-registry'
 import { setPluginDefinitions } from './services/plugin-definition-registry'
 
 // ============================================================================
@@ -278,6 +283,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
+    apiKeysPlugin,
     aiSearchPlugin,
     oauthProvidersPlugin,
     userProfilesPlugin,
@@ -292,6 +298,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     multiTenantPlugin,
     lexicalEditorPlugin,
     versioningPlugin,
+    menuPlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
@@ -417,6 +424,20 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     await next()
   })
 
+  // Global CORS middleware — covers /auth/*, /v1/*, and all other routes.
+  // Set CORS_ORIGINS in wrangler.toml (comma-separated) to allow cross-origin requests.
+  app.use('*', cors({
+    origin: (origin, c) => {
+      const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
+      if (!allowed) return null
+      const list = allowed.split(',').map((s: string) => s.trim())
+      return list.includes(origin) ? origin : null
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+    credentials: true,
+  }))
+
   // Security middleware
   app.use('*', securityHeadersMiddleware())
 
@@ -462,6 +483,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     await next()
   })
 
+  // API-key auth: if no session resolved a user, accept a programmatic key from
+  // `x-api-key` / `Authorization: Bearer sk_…`. Provided by the api-keys plugin;
+  // gated on that plugin being active. Runs right after the session middleware
+  // so it sits ahead of every route guard, like the security-audit middleware.
+  app.use('*', apiKeyAuthMiddleware())
+
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {
     for (const middleware of config.middleware.afterAuth) {
@@ -481,6 +508,8 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())
+  // Menu plugin sidebar replacement (DB-driven nav items)
+  app.use('/admin/*', menuMiddleware())
 
   // RBAC-aware admin shell. Computes the signed-in user's effective permission
   // set once, then (1) redirects the dashboard landing to the first section the
@@ -642,7 +671,14 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       ...corePluginsAfterCatchAll,
       ...(config.plugins?.register ?? []),
     ]
-    setPluginMenu(allMountedPlugins.flatMap((p) => (p.menu ?? [])))
+    // Only user plugins that are NOT in the manifest registry go into the singleton.
+    // Registry plugins (have manifest.json) use the DB active-status check in
+    // pluginMenuMiddleware. A user plugin that ships a manifest (e.g. redirects)
+    // is treated as a registry plugin and excluded from the singleton.
+    const userPlugins = (config.plugins?.register ?? []).filter(
+      (p: any) => !PLUGIN_REGISTRY[p.id]
+    )
+    setPluginMenu(userPlugins.flatMap((p: any) => (p.menu ?? [])))
     setPluginDefinitions(allMountedPlugins)
   }
 

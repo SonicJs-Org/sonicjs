@@ -1,0 +1,49 @@
+name: Deploy Stats
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/stats/**'
+      - 'packages/core/src/**'
+      - '.github/workflows/deploy-stats.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build:core
+
+      - name: Type check stats
+        run: cd packages/stats && npx tsc --noEmit
+
+      - name: Apply D1 migrations
+        # stats.sonicjs.com is bound to the default sonicjs-stats worker (no --env flag)
+        run: cd packages/stats && npx wrangler d1 migrations apply DB --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy stats to Cloudflare Workers
+        # Deploy to default worker (sonicjs-stats) — that is what stats.sonicjs.com is bound to
+        run: cd packages/stats && npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

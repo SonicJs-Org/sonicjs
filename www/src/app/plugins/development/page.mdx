@@ -3,13 +3,17 @@ export const sections = [
   { title: 'Getting Started', id: 'getting-started' },
   { title: 'Plugin Structure', id: 'plugin-structure' },
   { title: 'Creating a Plugin', id: 'creating-a-plugin' },
+  { title: 'Two-Phase Boot', id: 'two-phase-boot' },
   { title: 'Routes', id: 'routes' },
   { title: 'Lifecycle Hooks', id: 'lifecycle-hooks' },
   { title: 'Hook System', id: 'hook-system' },
   { title: 'Capabilities', id: 'capabilities' },
+  { title: 'Cron Support', id: 'cron-support' },
+  { title: 'Schema-Driven Settings', id: 'schema-driven-settings' },
   { title: 'Document Types', id: 'document-types' },
   { title: 'Admin Interface', id: 'admin-interface' },
   { title: 'Plugin Context', id: 'plugin-context' },
+  { title: 'Example Plugin Reference', id: 'example-plugin-reference' },
   { title: 'Best Practices', id: 'best-practices' },
   { title: 'Testing', id: 'testing' },
   { title: 'Troubleshooting', id: 'troubleshooting' },
@@ -74,6 +78,10 @@ The SonicJS plugin system provides a powerful, modular architecture for extendin
 ### Plugin Location
 
 Custom plugins live in your app's `src/plugins/` directory. When you create a SonicJS app, this folder is set up for you to add your own plugins.
+
+<Callout>
+**Use the bundled example plugin as your starting point.** Every new SonicJS app (`npm create sonicjs@latest`) includes a working example plugin at `src/plugins/example/`. It covers routes, admin pages, collections, settings, and data seeding — read it before writing from scratch.
+</Callout>
 
 ---
 
@@ -157,6 +165,53 @@ Plugins are **explicitly registered** — SonicJS does not auto-discover plugins
 
 ---
 
+## Two-Phase Boot
+
+Every plugin goes through two distinct phases. Understanding this split prevents the most common plugin bugs.
+
+| Phase | Function | When it runs | What it can do |
+|---|---|---|---|
+| **Mount** | `register(app)` | At app construction, before any request | Add routes only |
+| **Wire** | `onBoot(ctx)` | On the first request, after all plugins have mounted | Subscribe hooks, access `env`, seed DB |
+
+### Why the split?
+
+Hono locks its router after the first request — any `app.route()` or `app.get()` call made after that point silently has no effect. Routes must therefore be declared synchronously during construction, before any request arrives.
+
+`onBoot` runs lazily on the first request because that is the first moment the Cloudflare `env` (D1, KV, R2 bindings) is available. All async setup — hook subscriptions, DB seeding, registering document types — belongs in `onBoot`.
+
+```typescript
+export const myPlugin = definePlugin({
+  id: 'my-plugin',
+  version: '1.0.0',
+
+  // PHASE 1 — sync, routes only. No await, no env access.
+  register(app) {
+    app.get('/api/my-plugin/items', async (c) => {
+      // env IS available inside a request handler (c.env)
+      const db = c.env.DB
+      const rows = await db.prepare('SELECT id FROM documents WHERE type_id = ?')
+        .bind('my-plugin-item').all()
+      return c.json({ data: rows.results })
+    })
+  },
+
+  // PHASE 2 — async, runs once on first request.
+  async onBoot(ctx) {
+    ctx.hooks.on('content:after:create', (payload) => {
+      console.info('Created:', payload.id)
+    })
+    // seed document type, etc.
+  },
+})
+```
+
+<Callout type="warning">
+**`register` must be synchronous.** If `register` returns a `Promise`, SonicJS throws `PluginRegisterMustBeSyncError` at startup. Move all `async`/`await` work to `onBoot`.
+</Callout>
+
+---
+
 ## Routes
 
 Routes define API endpoints using [Hono.js](https://hono.dev/). Add them inside the `register(app)` function.
@@ -184,45 +239,59 @@ export const myPlugin = definePlugin({
 })
 ```
 
-Routes are mounted directly on the Hono `app` instance — no separate route options object is needed.
+Routes are mounted directly on the Hono `app` instance — no separate route options object is needed. `register` must be synchronous (see [Two-Phase Boot](#two-phase-boot)).
 
 ---
 
 ## Lifecycle Hooks
 
-Plugins have four lifecycle stages, all defined as top-level keys in `definePlugin`.
+Plugins have five lifecycle callbacks, all defined as top-level keys in `definePlugin`.
 
-### 1. Install
+### 1. onBoot
 
-Called once when the plugin is first installed.
-
-```typescript
-definePlugin({
-  // ...
-  async install(ctx) {
-    // register document types, seed default data, etc.
-    console.info('My plugin installed!')
-  },
-})
-```
-
-### 2. Activate
-
-Called when the plugin is activated.
+Called once on the first request, after every plugin has mounted. This is the primary place for hook subscriptions and env-dependent setup. Receives a fully typed context.
 
 ```typescript
 definePlugin({
   // ...
-  async activate(ctx) {
-    ctx.hooks.register('content:save', async (data) => {
-      console.info('Content saved:', data.id)
-      return data
+  capabilities: ['hooks.content:subscribe'],
+
+  async onBoot(ctx) {
+    // typed hook subscription — payload is ContentEventPayload
+    ctx.hooks.on('content:after:create', (payload) => {
+      console.info('Created:', payload.collection, payload.id)
     })
   },
 })
 ```
 
-### 3. Deactivate
+### 2. Install
+
+Called once when the plugin is first installed (admin action).
+
+```typescript
+definePlugin({
+  // ...
+  async install(ctx) {
+    console.info('My plugin installed!')
+  },
+})
+```
+
+### 3. Activate
+
+Called when the plugin is activated via the admin UI.
+
+```typescript
+definePlugin({
+  // ...
+  async activate(ctx) {
+    console.info('My plugin activated!')
+  },
+})
+```
+
+### 4. Deactivate
 
 Called when the plugin is deactivated.
 
@@ -235,7 +304,7 @@ definePlugin({
 })
 ```
 
-### 4. Uninstall
+### 5. Uninstall
 
 Called when the plugin is removed.
 
@@ -252,62 +321,89 @@ definePlugin({
 
 ## Hook System
 
-The hook system provides event-driven extensibility.
+The hook system provides event-driven extensibility. Hooks use a **typed facade** — each event's payload is statically typed so TypeScript catches wrong field names at the call site.
 
-### Standard Hooks
+### Declaring Hook Subscriptions
 
-SonicJS provides these built-in hooks:
-
-**Application Lifecycle**
-- `app:init` - App initialization
-- `app:ready` - App ready to receive requests
-- `app:shutdown` - App shutting down
-
-**Request Lifecycle**
-- `request:start` - Request begins
-- `request:end` - Request completes
-- `request:error` - Request error occurs
-
-**Authentication**
-- `auth:login` - User logs in
-- `auth:logout` - User logs out
-- `auth:register` - User registers
-
-**Content Lifecycle**
-- `content:create` - Content created
-- `content:update` - Content updated
-- `content:delete` - Content deleted
-- `content:publish` - Content published
-
-**Media Lifecycle**
-- `media:upload` - File uploaded
-- `media:delete` - File deleted
-
-### Registering Hooks
-
-Use `ctx.hooks` inside `onBoot` or lifecycle methods:
+Declare the required capability before subscribing. Subscriptions go in `onBoot`.
 
 ```typescript
 definePlugin({
-  // ...
+  id: 'my-plugin',
+  version: '1.0.0',
+  capabilities: ['hooks.content:subscribe'],
+
   async onBoot(ctx) {
-    ctx.hooks.register('content:save', async (data) => {
-      console.info('Content saved:', data.id)
-      data.processedAt = Date.now()
-      return data
+    // typed — payload is ContentEventPayload
+    ctx.hooks.on('content:after:create', (payload) => {
+      console.info('Created in', payload.collection, 'id:', payload.id)
+    })
+
+    // before-hook: mutate payload to transform the write
+    ctx.hooks.on('content:before:update', (payload) => {
+      payload.data.updatedAt = Date.now()
+      return payload   // return updated payload to pass it down the chain
     })
   },
 })
 ```
 
-### Custom Hooks
+### Catalog Events
+
+**Content lifecycle** (requires `hooks.content:subscribe`)
+
+| Event | When |
+|---|---|
+| `content:read` | Before a content item is returned |
+| `content:before:create` | Before insert — handlers may mutate `payload.data` or throw to cancel |
+| `content:before:update` | Before update — same as above |
+| `content:before:delete` | Before delete |
+| `content:after:create` | After insert committed |
+| `content:after:update` | After update committed |
+| `content:after:delete` | After delete committed |
+| `content:after:publish` | After a document is published |
+
+**Auth events** (requires `hooks.auth:subscribe`)
+
+| Event | When |
+|---|---|
+| `auth:registration:completed` | User completed self-registration |
+| `auth:password-reset:requested` | Password reset requested (carries `resetToken` — never expose this) |
+| `auth:password-reset:completed` | Password reset confirmed |
+| `auth:magic-link:consumed` | Magic link sign-in completed |
+| `auth:otp:verified` | OTP code verified |
+
+### Declarative Hooks (alternative to onBoot)
+
+For simple static subscriptions, use the `hooks` object directly on `definePlugin`:
+
+```typescript
+definePlugin({
+  id: 'my-plugin',
+  version: '1.0.0',
+  capabilities: ['hooks.auth:subscribe'],
+
+  hooks: {
+    'auth:registration:completed': (payload) => {
+      console.info('New user:', payload.user.email)
+    },
+  },
+})
+```
+
+Declarative hooks are subscribed during the wire phase, before `onBoot` runs. Use `onBoot` for dynamic or conditional subscriptions.
+
+### Custom Events
+
+Plugins can emit and subscribe to their own events using the raw hook system:
 
 ```typescript
 definePlugin({
   // ...
   async onBoot(ctx) {
-    ctx.hooks.register('my-plugin:data-processed', async (data) => {
-      console.info('Data processed:', data)
+    // subscribe to your own custom event
+    ctx.raw.hooks.register('my-plugin:processed', async (data) => {
+      console.info('Processed:', data)
       return data
     })
   },
@@ -318,49 +414,111 @@ definePlugin({
 
 ## Capabilities
 
-Capabilities expose named services to other plugins via `ctx.cap`.
+Capabilities declare what platform services a plugin is allowed to use. Undeclared services throw `SonicCapabilityError` at access time rather than silently failing later.
 
-### Declaring Capabilities
+### Available Capabilities
+
+| Capability string | What it grants | Access via |
+|---|---|---|
+| `'email:send'` | Send transactional email | `ctx.cap.email` → `EmailService` |
+| `'cache:read'` | Read from cache | `ctx.cap.cache` |
+| `'cache:write'` | Write to cache | `ctx.cap.cache` |
+| `'media:read'` | Read media records | — |
+| `'media:write'` | Upload/delete media | — |
+| `'http:fetch'` | Outbound HTTP requests | `ctx.cap.http` → `fetch` |
+| `'cron:register'` | Register cron jobs | — |
+| `'admin:menu'` | Add admin sidebar entries | — |
+| `'hooks.content:subscribe'` | Subscribe to content events | `ctx.hooks.on('content:*', ...)` |
+| `'hooks.auth:subscribe'` | Subscribe to auth events | `ctx.hooks.on('auth:*', ...)` |
+| `'db:<tableName>'` | Scoped DB access for a specific table | — |
+
+### Declaring and Using Capabilities
 
 ```typescript
 import { definePlugin } from '@sonicjs-cms/core'
 
-export class EmailService {
-  private apiKey: string
-
-  constructor(apiKey: string) {
-    this.apiKey = apiKey
-  }
-
-  async sendEmail(to: string, subject: string, body: string) {
-    // email sending logic
-    return true
-  }
-}
-
 export const myPlugin = definePlugin({
   id: 'my-plugin',
-  name: 'My Plugin',
   version: '1.0.0',
+  // declare every capability the plugin uses
+  capabilities: ['email:send', 'hooks.content:subscribe'],
 
-  capabilities: [
-    {
-      id: 'emailService',
-      description: 'Email sending service',
-      factory: (ctx) => new EmailService(ctx.env.EMAIL_API_KEY),
-    },
-  ],
+  async onBoot(ctx) {
+    // ctx.cap.email is typed as EmailService (because 'email:send' is declared)
+    await ctx.cap.email.send({
+      to: 'user@example.com',
+      subject: 'Hello',
+      html: '<p>World</p>',
+    })
+
+    // ctx.cap.http is typed as fetch (would throw if 'http:fetch' not declared)
+    // ctx.cap.cache is available if 'cache:read' or 'cache:write' is declared
+  },
 })
 ```
 
-### Consuming Capabilities
+---
+
+## Cron Support
+
+Plugins can register scheduled tasks via `crons` and `onCronTick`. The schedule runs on Cloudflare's [cron triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
 
 ```typescript
-definePlugin({
-  // ...
+export const myPlugin = definePlugin({
+  id: 'my-plugin',
+  version: '1.0.0',
+  capabilities: ['cron:register', 'email:send'],
+
+  // declare one or more cron schedules
+  crons: [
+    { schedule: '0 9 * * 1', hookFamily: 'weekly-digest' },
+    { schedule: '*/15 * * * *', hookFamily: 'sync-check' },
+  ],
+
+  async onCronTick(event, ctx) {
+    if (event.hookFamily === 'weekly-digest') {
+      // send weekly email report
+      await ctx.cap.email.send({ to: 'team@example.com', subject: 'Weekly Digest', html: '...' })
+    }
+    if (event.hookFamily === 'sync-check') {
+      // run periodic sync
+    }
+  },
+})
+```
+
+You also need to declare the cron schedule in `wrangler.toml`:
+
+```toml
+[triggers]
+crons = ["0 9 * * 1", "*/15 * * * *"]
+```
+
+---
+
+## Schema-Driven Settings
+
+Declare a `configSchema` and SonicJS auto-generates an admin settings form at `/admin/settings/plugins/<id>`, parses form submissions, and persists values — no custom settings route needed.
+
+```typescript
+import { definePlugin } from '@sonicjs-cms/core'
+import type { ConfigSchema } from '@sonicjs-cms/core'
+
+const schema: ConfigSchema = [
+  { key: 'apiKey', type: 'string', label: 'API Key', required: true, secret: true },
+  { key: 'webhookUrl', type: 'string', label: 'Webhook URL' },
+  { key: 'maxRetries', type: 'number', label: 'Max Retries', default: 3 },
+  { key: 'enabled', type: 'boolean', label: 'Enable notifications', default: true },
+]
+
+export const myPlugin = definePlugin({
+  id: 'my-plugin',
+  version: '1.0.0',
+  configSchema: schema,
+
   async onBoot(ctx) {
-    const emailService = ctx.cap.get('emailService')
-    await emailService.sendEmail('user@example.com', 'Hello', 'World')
+    // settings are loaded from ctx.env or the plugins table
+    const apiKey = (ctx.env?.MY_PLUGIN_API_KEY as string) ?? ''
   },
 })
 ```
@@ -467,26 +625,42 @@ The `icon` field accepts either an emoji, an SVG string, or a named Heroicon (e.
 
 ## Plugin Context
 
-Lifecycle methods (`onBoot`, `install`, `activate`, `deactivate`, `uninstall`) receive a context object.
+`onBoot` and `onCronTick` receive a fully typed, capability-gated context. `install`, `activate`, `deactivate`, and `uninstall` receive an opaque context (avoid touching `env` there — it may not be available).
 
-### Context Interface
+### Context Interface (`onBoot` / `onCronTick`)
 
 ```typescript
-interface PluginContext {
-  hooks: HookSystem       // register / emit hooks
-  cap: CapabilityRegistry // get capabilities from other plugins
-  env: Env                // Cloudflare bindings (env.DB, env.CACHE_KV, etc.)
-  raw: unknown            // raw request context (when available)
+interface DefinedPluginContext {
+  /** Typed hook facade — ctx.hooks.on('content:after:create', handler) */
+  hooks: TypedHooks
+
+  /**
+   * Capability-gated services.
+   * ctx.cap.email   → EmailService    (requires 'email:send' declared)
+   * ctx.cap.cache   → cache service   (requires 'cache:read' or 'cache:write')
+   * ctx.cap.http    → fetch           (requires 'http:fetch')
+   * Accessing an undeclared capability throws SonicCapabilityError.
+   */
+  cap: CapabilityContext
+
+  /** Cloudflare runtime bindings (DB, CACHE_KV, R2, etc.) */
+  env?: Record<string, unknown>
+
+  /** The raw boot/cron context (escape hatch for low-level access) */
+  raw: PluginBootContext | CronContext
 }
 ```
 
 ### Using the Database
 
+Access `env.DB` inside `onBoot` or inside route handlers (via `c.env`). Do not use `env` inside `install`/`activate` — it may not be present.
+
 ```typescript
 definePlugin({
   // ...
-  async activate(ctx) {
-    const result = await ctx.env.DB.prepare(
+  async onBoot(ctx) {
+    const db = ctx.env?.DB as D1Database
+    const result = await db.prepare(
       "SELECT * FROM documents WHERE type_id = ? AND tenant_id = 'default'"
     ).bind('my-plugin-item').all()
   },
@@ -498,12 +672,46 @@ definePlugin({
 ```typescript
 definePlugin({
   // ...
-  async activate(ctx) {
-    await ctx.env.CACHE_KV.put('my-plugin:config', JSON.stringify({ enabled: true }))
-    const stored = await ctx.env.CACHE_KV.get('my-plugin:config', 'json')
+  async onBoot(ctx) {
+    const kv = ctx.env?.CACHE_KV as KVNamespace
+    await kv.put('my-plugin:config', JSON.stringify({ enabled: true }))
+    const stored = await kv.get('my-plugin:config', 'json')
   },
 })
 ```
+
+---
+
+## Example Plugin Reference
+
+The bundled example plugin is the canonical reference for SonicJS plugin development. Every new install includes it at `src/plugins/example/`.
+
+**Files:**
+- `index.ts` — plugin definition with routes, menu, `onBoot` seeding, and settings schema
+- `routes/api.ts` — public Hono routes (`/example`, `/example/:name`, `/example/moods`)
+- `routes/admin.ts` — protected admin page at `/admin/example`
+- `collections/moods.collection.ts` — `CollectionConfig` for mood entries
+
+**Key patterns it demonstrates:**
+
+1. **Why `/example/*` not `/api/*`** — user plugins mount after the core `/api/:collection` catch-all, so custom routes must use a different prefix
+2. **`onBoot` seeding** — creates default moods documents if none exist; idempotent
+3. **Settings schema** — `configSchema` with Zod defines the Settings tab form
+4. **Collection registration** — `moodsCollection` imported and passed to `registerCollections()` in `src/index.ts`
+
+Read `src/plugins/example/index.ts` in your project for the full annotated source.
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/example" variant="text" arrow="right">
+    <>Full Example Plugin reference</>
+  </Button>
+</div>
+
+<div className="not-prose mt-2">
+  <Button href="/blog/building-your-first-sonicjs-plugin" variant="text" arrow="right">
+    <>Blog: Building Your First SonicJS Plugin (step-by-step walkthrough)</>
+  </Button>
+</div>
 
 ---
 

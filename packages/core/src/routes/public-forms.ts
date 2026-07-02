@@ -53,6 +53,9 @@ type Variables = {
   appVersion?: string
 }
 
+const isTableMissing = (err: any) =>
+  String(err?.message ?? err?.cause?.message ?? '').includes('no such table: form')
+
 export const publicFormsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Get Turnstile configuration for a form (for headless frontends)
@@ -94,6 +97,7 @@ publicFormsRoutes.get('/:identifier/turnstile-config', async (c) => {
       appearance: formSettings.appearance || globalSettings.appearance || 'always'
     })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ enabled: false })
     console.error('Error fetching Turnstile config:', error)
     return c.json({ error: 'Failed to fetch config' }, 500)
   }
@@ -128,6 +132,7 @@ publicFormsRoutes.get('/:identifier/schema', async (c) => {
       submitUrl: `/api/forms/${form.id}/submit`
     })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ error: 'Form not found' }, 404)
     console.error('Error fetching form schema:', error)
     return c.json({ error: 'Failed to fetch form schema' }, 500)
   }
@@ -502,6 +507,7 @@ publicFormsRoutes.get('/:name', async (c) => {
 
     return c.html(html)
   } catch (error: any) {
+    if (isTableMissing(error)) return c.html('<h1>Form not found</h1><p>This form does not exist or is not publicly available.</p>', 404)
     console.error('Error rendering form:', error)
     return c.html('<p>Error loading form</p>', 500)
   }
@@ -609,6 +615,7 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
       message: 'Form submitted successfully'
     })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ error: 'Form not found' }, 404)
     console.error('Error submitting form:', error)
     return c.json({ error: 'Failed to submit form' }, 500)
   }

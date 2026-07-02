@@ -16,9 +16,9 @@ test.describe('Hero CTA Style Persistence', () => {
       await loginAsAdmin(page)
 
       await page.goto('/admin/content/new')
-      const pageBlocksLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'Page Blocks' })
-      await expect(pageBlocksLink).toBeVisible()
-      await pageBlocksLink.click()
+      const e2eTestLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'E2E Test' })
+      await expect(e2eTestLink).toBeVisible()
+      await e2eTestLink.click()
 
       await page.waitForLoadState('networkidle')
       await expect(page.locator('form#content-form')).toBeVisible()
@@ -64,7 +64,7 @@ test.describe('Hero CTA Style Persistence', () => {
       await page.click('button[name="action"][value="save_and_publish"]')
       await page.waitForTimeout(2000)
 
-      await page.goto('/admin/content?collection=page_blocks')
+      await page.goto('/admin/content?collection=e2e_test')
       const contentLink = page.locator(`a:has-text("${title}")`).first()
       await expect(contentLink).toBeVisible()
       const href = await contentLink.getAttribute('href')
@@ -105,7 +105,7 @@ test.describe('Hero CTA Style Persistence', () => {
       if (contentId) {
         await page.goto(`/admin/content/${contentId}/edit`)
       } else {
-        await page.goto('/admin/content?collection=page_blocks')
+        await page.goto('/admin/content?collection=e2e_test')
         await page.locator(`a:has-text("${updatedTitle}")`).first().click()
       }
 
@@ -141,7 +141,7 @@ test.describe('Hero CTA Style Persistence', () => {
         }
 
         if (!contentId) {
-          await page.goto('/admin/content?collection=page_blocks')
+          await page.goto('/admin/content?collection=e2e_test')
           const updatedLink = page.locator(`a:has-text("${updatedTitle}")`).first()
           if (await updatedLink.count()) {
             contentId = tryExtractContentIdFromHref(await updatedLink.getAttribute('href'))

@@ -1,12 +1,12 @@
 export const sections = [
   { title: 'Overview', id: 'overview' },
+  { title: 'Example Plugin', id: 'example-plugin' },
   { title: 'Authentication Plugin', id: 'authentication-plugin' },
   { title: 'Email Plugin', id: 'email-plugin' },
   { title: 'Magic Link Auth', id: 'magic-link-auth' },
   { title: 'Media Plugin', id: 'media-plugin' },
   { title: 'Cache Plugin', id: 'cache-plugin' },
   { title: 'Database Tools', id: 'database-tools' },
-  { title: 'Seed Data Plugin', id: 'seed-data-plugin' },
   { title: 'QR Code Generator', id: 'qr-code-generator' },
   { title: 'Redirect Management', id: 'redirect-management' },
 ]
@@ -24,14 +24,19 @@ Core plugins extend SonicJS with critical features like authentication, media ma
 <FeatureGrid
   features={[
     {
+      icon: '😈',
+      title: 'Example Plugin',
+      description: 'Bundled reference plugin — routes, collections, settings, hooks, and data seeding in one working example',
+    },
+    {
       icon: '🔐',
       title: 'Authentication',
-      description: 'JWT-based authentication with session management and token refresh',
+      description: 'Better Auth session management with RBAC, JWT API tokens, and magic links',
     },
     {
       icon: '📧',
       title: 'Email',
-      description: 'Transactional email sending via Resend with pre-built templates',
+      description: 'Transactional email sending via Resend or Cloudflare Email with pre-built templates',
     },
     {
       icon: '🔗',
@@ -54,11 +59,6 @@ Core plugins extend SonicJS with critical features like authentication, media ma
       description: 'Database administration, migrations, and query tools',
     },
     {
-      icon: '🌱',
-      title: 'Seed Data',
-      description: 'Sample data generation for development and testing',
-    },
-    {
       icon: '📱',
       title: 'QR Code Generator',
       description: 'Generate styled QR codes with logo embedding and scan tracking',
@@ -74,17 +74,77 @@ Core plugins extend SonicJS with critical features like authentication, media ma
 
 ---
 
+## Example Plugin
+
+Every new SonicJS app scaffolded with `npm create sonicjs@latest` ships with a working **Example** plugin. It's a complete, production-pattern reference for every major plugin extension point — routes, collections, settings, hooks, and data seeding.
+
+### What It Does
+
+- Public JSON API at `/example`, `/example/:name`, `/example/moods`
+- Admin page at `/admin/example` with automatic sidebar entry
+- **Moods** collection managed via `/admin/content?model=example`
+- Three default moods seeded at first boot (idempotent COUNT guard)
+- Configurable greeting text, default name, and mood selector via the settings form
+- Lifecycle hook subscriptions for `content:after:create` and `auth:registration:completed`
+
+### Key Patterns to Copy
+
+| Pattern | Where |
+|---|---|
+| `/example/*` routes instead of `/api/*` | Avoids the core `/api/:collection` catch-all |
+| Factory function `createExampleApiRoutes(options)` | Passes live config by reference from `onBoot` |
+| `configSchema` object | Auto-renders settings form — no custom handler needed |
+| Settings merge: `{ ...defaults, ...existingSettings }` | Saved values win; preserves `_routes`/`_adminPath` |
+| COUNT guard before seeding | Idempotent across isolate restarts |
+| `registerCollections([moodsCollection])` | Code-only collection — no DB table |
+
+### Removing It
+
+When you're ready to ship your own plugin:
+
+```typescript
+// src/index.ts — remove these lines:
+import { examplePlugin } from './plugins/example'
+import { moodsCollection } from './plugins/example/collections/moods.collection'
+// remove moodsCollection from registerCollections([...])
+// remove examplePlugin from plugins.register: [...]
+```
+
+Then delete `src/plugins/example/`.
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/example" variant="text" arrow="right">
+    <>Full Example Plugin reference</>
+  </Button>
+</div>
+
+---
+
 ## Authentication Plugin
 
-The authentication plugin provides comprehensive user authentication and session management functionality.
+The authentication plugin provides comprehensive user authentication and session management functionality, built on [Better Auth](https://www.better-auth.com) — a TypeScript-first authentication framework designed for modern full-stack applications.
+
+### Why Better Auth?
+
+SonicJS evaluated several auth libraries and chose Better Auth for a few reasons that matter specifically in the Cloudflare Workers context:
+
+**Edge-compatible by design.** Most auth libraries assume a Node.js runtime. Better Auth is built from the ground up to run on edge runtimes — no `fs`, no `crypto` polyfills, no Node-specific dependencies. It runs natively on Cloudflare Workers without shims.
+
+**TypeScript-first.** Better Auth exposes fully typed APIs for sessions, users, and plugins. This aligns with SonicJS's TypeScript-first philosophy and lets the compiler catch auth bugs at build time.
+
+**Works with D1 / SQLite.** Better Auth ships a database adapter that works with any SQL database. SonicJS wires it directly to Cloudflare D1 — sessions and user records live in the same D1 instance as your content, no separate auth service required.
+
+**Pluggable auth strategies.** Email/password, OAuth providers, and magic links are all first-class citizens in Better Auth's plugin model. SonicJS's Magic Link Auth plugin is a thin wrapper on top — the session lifecycle is handled by Better Auth, not by custom JWT logic.
+
+**Active maintenance and security posture.** Better Auth follows a responsible-disclosure process and releases patches quickly. Rolling your own session management in a CMS is a high-risk trade-off; delegating it to a focused library reduces the attack surface.
 
 ### Features
 
-- **JWT Token Authentication** - Secure token-based authentication
-- **Session Management** - Track and manage active user sessions
-- **Token Refresh** - Automatic token renewal without re-authentication
+- **Session Authentication** - Cookie-based sessions via Better Auth (`better-auth.session_token`)
+- **RBAC** - Role-based access control seeded into `rbac_role` / `rbac_verb` / `rbac_user_roles`
+- **JWT API Tokens** - Signed tokens for programmatic API access (separate from the session cookie)
 - **Rate Limiting** - Protect authentication endpoints from abuse
-- **User Context** - Inject authenticated user data into request context
+- **User Context** - Inject authenticated user data into request context via `c.get('user')`
 
 ### Configuration
 
@@ -145,28 +205,27 @@ Get current authenticated user information
 **POST /api/auth/refresh**
 Refresh an expired access token
 
-### Services
+### Auth Context
 
-<CodeGroup title="Auth Service">
+SonicJS injects the authenticated user into every request via `c.get('user')`:
+
+<CodeGroup title="Auth Context">
 
 ```typescript
-// Available auth service methods
-const authService = {
-  // Validate JWT token
-  validateToken(token: string): { valid: boolean; userId: number }
+// In any route handler:
+const user = c.get('user')
+// user: { userId: string, email: string, role: string } | null
 
-  // Generate new JWT token
-  generateToken(userId: number): string
+// Better Auth also exposes its full API via the auth instance:
+import { auth } from '@sonicjs-cms/core'
 
-  // Hash password for storage
-  hashPassword(password: string): string
-
-  // Verify password against hash
-  verifyPassword(password: string, hash: string): boolean
-}
+// Verify a session from within a Worker:
+const session = await auth.api.getSession({ headers: request.headers })
 ```
 
 </CodeGroup>
+
+Session management (sign-in, sign-out, session tokens) is handled by Better Auth. See the [Better Auth docs](https://www.better-auth.com/docs) for the full API surface.
 
 ### Hooks
 
@@ -176,39 +235,72 @@ const authService = {
 
 ### Admin Pages
 
-- **/admin/auth/sessions** - View and manage active sessions
-- **/admin/auth/tokens** - Manage API tokens and access keys
+- **/admin/auth/sessions** - View and manage active Better Auth sessions
 
 ---
 
 ## Email Plugin
 
-The email plugin provides transactional email functionality using Resend, with pre-built templates for common authentication and notification scenarios.
+The email plugin provides transactional email functionality using either **Resend** or **Cloudflare Email**, with pre-built templates for common authentication and notification scenarios.
 
 ### Features
 
-- **Resend Integration** - Send emails via the Resend API
+- **Resend Integration** - Send emails via the Resend API (API key required)
+- **Cloudflare Email** - Send via the Cloudflare `send_email` Workers binding (no API key needed)
 - **Email Templates** - Pre-built templates for registration, verification, password reset, and one-time codes
 - **Template Customization** - Code-based templates that can be customized
 - **Logo Support** - Add your company logo to email templates
 - **Settings Management** - Admin UI for configuring email settings
 - **Test Email** - Send test emails to verify configuration
+- **Console Fallback** - Zero-config dev mode logs emails to the console instead of delivering them
+
+### Providers
+
+| Provider | How to enable |
+|---|---|
+| **Resend** | Set `RESEND_API_KEY` env var, or configure in Admin → Email settings |
+| **Cloudflare Email** | Add an `EMAIL` Workers binding (`send_email`) in `wrangler.toml` |
+| **Console** | Automatic fallback when no provider is configured (dev only) |
+
+Provider resolution order at boot:
+1. `RESEND_API_KEY` env var → Resend (wins regardless of DB setting)
+2. DB `provider=resend` + saved API key → Resend
+3. `EMAIL` Workers binding present, provider not forced to resend → Cloudflare Email
+4. Auto-detect from env, then Console fallback
 
 ### Configuration
 
-<CodeGroup title="Plugin Configuration">
+<CodeGroup title="Resend — env var (recommended)">
+
+```bash
+# wrangler.toml or .dev.vars
+RESEND_API_KEY=re_...
+```
+
+</CodeGroup>
+
+<CodeGroup title="Cloudflare Email — wrangler.toml binding">
+
+```toml
+[[send_email]]
+name = "EMAIL"
+```
+
+</CodeGroup>
+
+<CodeGroup title="Admin UI settings shape">
 
 ```typescript
+// POST /admin/email/settings
 {
-  name: 'email',
-  version: '1.0.0-beta.1',
-  settings: {
-    apiKey: 're_...',              // Resend API key
-    fromEmail: 'noreply@yourdomain.com',  // From email address
-    fromName: 'Your App Name',     // From name
-    replyTo: 'support@yourdomain.com',    // Reply-to address (optional)
-    logoUrl: 'https://yourdomain.com/logo.png'  // Logo URL (optional)
-  }
+  provider: 'resend' | 'cloudflare',
+  resendApiKey: 're_...',              // Resend API key (if not in env)
+  fromEmail: 'noreply@yourdomain.com',
+  fromName: 'Your App Name',
+  replyTo: 'support@yourdomain.com',   // optional
+  logoUrl: 'https://yourdomain.com/logo.png', // optional
+  cfAccountId: '...',                  // optional — for delivery reconciliation
+  cfEmailApiToken: '...',              // optional — for delivery reconciliation
 }
 ```
 
@@ -216,10 +308,17 @@ The email plugin provides transactional email functionality using Resend, with p
 
 ### Setup
 
-1. Sign up for [Resend](https://resend.com) and get your API key
-2. Navigate to `/admin/plugins/email/settings` in your SonicJS admin
-3. Configure your Resend API key and email settings
-4. Send a test email to verify configuration
+**Option A — Resend**
+1. Sign up at [resend.com](https://resend.com) and get your API key
+2. Set `RESEND_API_KEY` in your env, or navigate to `/admin/email/settings` and enter it there
+3. Verify your sending domain in Resend
+4. Send a test email from `/admin/email/settings`
+
+**Option B — Cloudflare Email**
+1. Add a `send_email` binding named `EMAIL` in `wrangler.toml`
+2. Configure Cloudflare Email Routing in your Cloudflare dashboard
+3. No API key required — the Workers binding handles auth
+4. Send a test email from `/admin/email/settings`
 
 ### Included Email Templates
 
@@ -232,39 +331,29 @@ Sent to verify user email addresses
 **Password Reset**
 Sent when users request to reset their password
 
-**One-Time Code (2FA)**
-Sent for two-factor authentication codes
+**One-Time Code (OTP/2FA)**
+Sent for one-time passwords and two-factor authentication codes
 
 ### API Usage
 
 <CodeGroup title="Sending Emails">
 
 ```typescript
-// Get email plugin instance
-const emailPlugin = context.plugins.get('email')
+import { getEmailService } from '@sonicjs-cms/core'
 
 // Send a custom email
-await emailPlugin.sendEmail({
+await getEmailService().send({
   to: 'user@example.com',
   subject: 'Welcome to SonicJS',
-  html: '<h1>Welcome!</h1><p>Thanks for signing up.</p>'
+  html: '<h1>Welcome!</h1><p>Thanks for signing up.</p>',
+  flow: 'welcome', // recorded in email_log for observability
 })
 
-// Send using built-in templates
-await emailPlugin.sendVerificationEmail({
-  to: 'user@example.com',
-  verificationUrl: 'https://yoursite.com/verify?token=...'
-})
-
-await emailPlugin.sendPasswordResetEmail({
-  to: 'user@example.com',
-  resetUrl: 'https://yoursite.com/reset?token=...'
-})
-
-await emailPlugin.sendOneTimeCodeEmail({
-  to: 'user@example.com',
-  code: '123456',
-  expiryMinutes: 10
+// Send to multiple recipients
+await getEmailService().send({
+  to: ['alice@example.com', 'bob@example.com'],
+  subject: 'Team notification',
+  html: '<p>Hello team!</p>',
 })
 ```
 
@@ -272,135 +361,95 @@ await emailPlugin.sendOneTimeCodeEmail({
 
 ### Admin Pages
 
-- **/admin/plugins/email/settings** - Configure Resend API and email settings
-
-<Note>
-The email plugin requires a Resend API key. You must verify your domain in Resend before sending emails from it.
-</Note>
+- **/admin/email/settings** - Configure provider, API keys, and sender identity
 
 ---
 
 ## Magic Link Auth
 
-The magic link auth plugin provides passwordless authentication via secure, one-time email links. Users can sign in without remembering passwords.
+Magic link authentication is powered by **Better Auth's native `magicLink` plugin** — it is always active when the Email plugin is configured. No separate plugin activation is required.
 
-### Features
+Users receive a one-time sign-in link via email. Clicking it creates a full Better Auth session (cookie: `better-auth.session_token`).
 
-- **Passwordless Authentication** - No passwords required
-- **Secure One-Time Links** - Links expire after 15 minutes and can only be used once
-- **Rate Limiting** - Prevent abuse with configurable rate limits
-- **Email Integration** - Works with the Email plugin for sending magic links
-- **Auto User Creation** - Optionally create new users when they request a magic link
-- **Security Tracking** - Logs IP addresses and user agents for security auditing
+### Prerequisites
+
+1. **Better Auth secret** — set `BETTER_AUTH_SECRET` via `wrangler secret put BETTER_AUTH_SECRET` (or in `.dev.vars` for local dev). This is required for all Better Auth features.
+2. **Email plugin configured** — go to **Admin → Plugins → Email Plugin** and enter a valid Resend API key and verified sender address. Without a working email service, magic links are logged to the console only.
+
+No plugin activation step is needed. Once the two prerequisites above are met, magic link is live.
 
 ### How It Works
 
-1. User enters their email address
-2. System generates a secure, random token
-3. Email is sent with a magic link containing the token
-4. User clicks the link to authenticate
-5. Token is validated and marked as used
-6. User is signed in with a JWT session
-
-### Configuration
-
-<CodeGroup title="Plugin Configuration">
-
-```typescript
-{
-  name: 'magic-link-auth',
-  version: '1.0.0',
-  dependencies: ['email'],
-  settings: {
-    linkExpiryMinutes: 15,         // Magic link expiry time
-    rateLimitPerHour: 5,           // Max requests per hour per email
-    allowNewUsers: false,          // Auto-create users who don't exist
-    requireEmailVerification: true // Require verified emails
-  }
-}
-```
-
-</CodeGroup>
+1. User submits their email to `POST /auth/sign-in/magic-link`
+2. Better Auth generates a secure one-time token and stores it in `auth_verification`
+3. Email is delivered via the Email plugin (Resend)
+4. User clicks the link — `GET /auth/magic-link/verify?token=...`
+5. Better Auth validates the token, marks it used, and creates a session
+6. User is redirected with `better-auth.session_token` cookie set
 
 ### API Endpoints
 
-**POST /auth/magic-link/request**
-Request a magic link to be sent via email
+**POST /auth/sign-in/magic-link**
+
+Send a magic link to an email address.
 
 <CodeGroup title="Request Magic Link">
 
 ```bash {{ title: 'cURL' }}
-curl -X POST http://localhost:8787/auth/magic-link/request \
+curl -X POST http://localhost:8787/auth/sign-in/magic-link \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com"
-  }'
+  -d '{ "email": "user@example.com" }'
 ```
 
-```javascript
-const response = await fetch('http://localhost:8787/auth/magic-link/request', {
+```javascript {{ title: 'fetch' }}
+const response = await fetch('/auth/sign-in/magic-link', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    email: 'user@example.com'
-  })
+  body: JSON.stringify({ email: 'user@example.com' })
 })
 
 const result = await response.json()
-// result: { message: 'If an account exists...' }
+// result: { status: true }
 ```
 
 ```json {{ title: 'Response' }}
-{
-  "message": "If an account exists for this email, you will receive a magic link shortly."
-}
+{ "status": true }
 ```
 
 </CodeGroup>
 
-**GET /auth/magic-link/verify?token=...**
-Verify magic link token and sign in the user
+Better Auth does not reveal whether the email belongs to an existing user — the response is always `{ status: true }` for any valid email format.
 
-### Database Schema
+**GET /auth/magic-link/verify?token=...&callbackURL=/admin/dashboard**
 
-<CodeGroup title="Magic Links Table">
+Better Auth handles this automatically. On success it creates a session and redirects to `callbackURL` (defaults to `/`). On failure it redirects with an `?error=` param.
 
-```sql
-CREATE TABLE magic_links (
-  id TEXT PRIMARY KEY,
-  user_email TEXT NOT NULL,
-  token TEXT NOT NULL UNIQUE,
-  expires_at INTEGER NOT NULL,
-  used INTEGER DEFAULT 0,
-  used_at INTEGER,
-  created_at INTEGER NOT NULL,
-  ip_address TEXT,
-  user_agent TEXT
-)
+### Better Auth Client (recommended for frontend)
+
+<CodeGroup title="Better Auth Client">
+
+```typescript {{ title: 'Setup' }}
+import { createAuthClient } from 'better-auth/client'
+import { magicLinkClient } from 'better-auth/client/plugins'
+
+const client = createAuthClient({
+  baseURL: 'https://your-app.workers.dev',
+  plugins: [magicLinkClient()]
+})
+```
+
+```typescript {{ title: 'Send magic link' }}
+await client.signIn.magicLink({
+  email: 'user@example.com',
+  callbackURL: '/admin/dashboard'  // optional
+})
 ```
 
 </CodeGroup>
 
-### Security Features
+### Plain HTML Example
 
-**Token Generation**
-Tokens are generated using crypto.randomUUID() twice and concatenated for maximum entropy
-
-**Rate Limiting**
-Limits users to 5 magic link requests per hour to prevent abuse
-
-**Expiration**
-Links automatically expire after 15 minutes
-
-**One-Time Use**
-Each link can only be used once - it's marked as used immediately after verification
-
-**IP Tracking**
-IP addresses and user agents are logged for security auditing
-
-### Usage Example
-
-<CodeGroup title="Adding Magic Link to Login Page">
+<CodeGroup title="Magic Link Form">
 
 ```html
 <form id="magicLinkForm">
@@ -414,7 +463,7 @@ document.getElementById('magicLinkForm').addEventListener('submit', async (e) =>
   e.preventDefault()
   const email = new FormData(e.target).get('email')
 
-  const response = await fetch('/auth/magic-link/request', {
+  const response = await fetch('/auth/sign-in/magic-link', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email })
@@ -429,16 +478,35 @@ document.getElementById('magicLinkForm').addEventListener('submit', async (e) =>
 
 </CodeGroup>
 
-### Email Template
+### Security
 
-The magic link email includes:
-- A prominent "Sign In" button with the magic link
-- Expiration time warning
-- Security notice if the user didn't request it
-- Modern, responsive design
+- **One-time use** — token is invalidated immediately after first click
+- **15-minute expiry** — configurable via `expiresIn` in `auth/config.ts`
+- **No user enumeration** — always returns `{ status: true }` for valid email format
+- **Better Auth session** — creates a proper session entry, not a stateless JWT
+- **No custom DB table** — token state lives in `auth_verification` managed by Better Auth
+
+### Extending the Configuration
+
+Magic link options live in `packages/core/src/auth/config.ts` inside the `plugins` array. To change expiry or add custom email templates, extend via `config.auth.extendBetterAuth` in `createSonicJSApp()`:
+
+```typescript
+createSonicJSApp({
+  auth: {
+    extendBetterAuth: (opts) => ({
+      ...opts,
+      plugins: opts.plugins?.map((p: any) =>
+        p.id === 'magic-link'
+          ? { ...p, options: { ...p.options, expiresIn: 30 * 60 } } // 30 min
+          : p
+      )
+    })
+  }
+})
+```
 
 <Note>
-The Magic Link Auth plugin requires the Email plugin to be installed and configured. Make sure to set up Resend before enabling magic link authentication.
+Magic link requires the Email plugin (Admin → Plugins → Email Plugin) to be configured with a valid Resend API key. In local dev without email configured, the link is printed to the Workers console instead of being sent.
 </Note>
 
 ---
@@ -865,102 +933,6 @@ const databaseService = {
 
 <Note>
 The database tools plugin is restricted to admin users only for security. Never expose database query capabilities to untrusted users.
-</Note>
-
----
-
-## Seed Data Plugin
-
-The seed data plugin generates sample data for development and testing purposes.
-
-### Features
-
-- **Sample Content** - Generate blog posts, pages, and articles
-- **Test Users** - Create user accounts with various roles
-- **Media Files** - Generate placeholder images and files
-- **Collections** - Populate custom collections with data
-- **Relationships** - Create related data (users, posts, comments)
-- **Customizable** - Configure data generation parameters
-
-### Configuration
-
-<CodeGroup title="Plugin Configuration">
-
-```typescript
-{
-  name: 'seed-data-plugin',
-  version: '1.0.0',
-  settings: {
-    enabled: false,               // Disable in production
-    autoSeed: false,             // Auto-seed on first run
-    contentCount: 50,            // Number of content items
-    userCount: 10,               // Number of test users
-    mediaCount: 20               // Number of media files
-  }
-}
-```
-
-</CodeGroup>
-
-### API Endpoints
-
-**POST /admin/seed-data/generate**
-Generate seed data
-
-<CodeGroup title="Generate Seed Data">
-
-```bash {{ title: 'cURL' }}
-curl -X POST http://localhost:8787/admin/seed-data/generate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${token}" \
-  -d '{
-    "contentCount": 50,
-    "userCount": 10,
-    "mediaCount": 20,
-    "clearExisting": false
-  }'
-```
-
-</CodeGroup>
-
-**POST /admin/seed-data/clear**
-Clear all seed data
-
-**GET /admin/seed-data/status**
-Check seed data status
-
-### Usage
-
-<CodeGroup title="Seed Data Generation">
-
-```typescript
-import { generateSeedData } from '@sonicjs-cms/core'
-
-// Generate seed data programmatically
-await generateSeedData({
-  content: {
-    count: 50,
-    collections: ['blog_posts', 'pages']
-  },
-  users: {
-    count: 10,
-    roles: ['admin', 'editor', 'author']
-  },
-  media: {
-    count: 20,
-    types: ['image', 'video', 'document']
-  }
-})
-```
-
-</CodeGroup>
-
-### Admin Pages
-
-- **/admin/seed-data** - Seed data generator interface
-
-<Note>
-The seed data plugin should be disabled in production environments. It's designed for development and testing only.
 </Note>
 
 ---

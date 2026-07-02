@@ -119,8 +119,29 @@ export function resetAdminExistsCache(): void {
  * Auth Validation Service
  * Provides dynamic validation schemas for registration based on database settings
  */
+/**
+ * Email schema. Zod's `.email()` already rejects the common malformed shapes
+ * (spaces, double-quoted local parts, consecutive dots, leading dots, commas),
+ * but it *accepts* domain labels that begin or end with a hyphen (e.g.
+ * `user@example-.com`), which are invalid per RFC 1035. The refine closes that
+ * gap so registration validation matches stricter CMS auth suites.
+ */
+export const emailSchema = z
+  .string()
+  .email('Valid email is required')
+  .refine(
+    (value) => {
+      const at = value.lastIndexOf('@')
+      if (at < 0) return false
+      const domain = value.slice(at + 1)
+      // No domain label may start or end with a hyphen.
+      return domain.split('.').every((label) => label.length > 0 && !label.startsWith('-') && !label.endsWith('-'))
+    },
+    { message: 'Valid email is required' }
+  )
+
 const baseRegistrationSchema = z.object({
-  email: z.string().email('Valid email is required'),
+  email: emailSchema,
   password: z.string().min(8, 'Password must be at least 8 characters'),
   firstName: z.string().min(1, 'First name is required').optional(),
   lastName: z.string().min(1, 'Last name is required').optional()

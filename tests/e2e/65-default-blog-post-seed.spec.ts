@@ -10,7 +10,7 @@ test.describe('default content seed', () => {
     const names = collections.map((collection: any) => collection.name)
     // Core collections expected on a fresh install
     expect(names).toContain('blog_post')
-    expect(names).toContain('page_blocks')
+    expect(names).toContain('e2e_test')
     // Legacy collections from old DB schema must not appear
     expect(names).not.toContain('pages')
     expect(names).not.toContain('news')

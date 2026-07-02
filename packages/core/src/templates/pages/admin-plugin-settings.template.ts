@@ -1,6 +1,7 @@
 import { renderAdminLayout, AdminLayoutData } from '../layouts/admin-layout-v2.template'
 import { renderAuthSettingsForm } from '../components/auth-settings-form.template'
 import type { AuthSettings } from '../../services/auth-validation'
+import { getPluginDefinition } from '../../services/plugin-definition-registry'
 
 /**
  * Escape HTML attribute values to prevent XSS
@@ -56,11 +57,20 @@ export interface PluginSettingsPageData {
     email: string
     role: string
   }
+  /** Data returned by the plugin's settingsTabContent.loadData(), if defined. */
+  settingsTabData?: any
 }
 
 export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
-  const { plugin, activity = [], user } = data
-  
+  const { plugin, activity = [], user, settingsTabData } = data
+  // true only when the plugin has at least one user-configurable setting key
+  // (_-prefixed keys are internal metadata, not settings the user can edit)
+  const pluginDef = getPluginDefinition(plugin.id || plugin.name)
+  const hasUserSettings = pluginDef?.settingsTabContent != null ||
+    Object.keys(plugin.settings || {}).some(k => !k.startsWith('_'))
+  const defaultTab = hasUserSettings ? 'settings' : 'info'
+
+
   const pageContent = `
     <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
       <!-- Header with Back Button -->
@@ -71,13 +81,24 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
             ${plugin.description}
           </p>
         </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+        <div class="mt-4 sm:mt-0 sm:ml-16 flex items-center gap-3">
           <a href="/admin/plugins" class="inline-flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
             Back to Plugins
           </a>
+          ${plugin.settings?._adminPath ? `
+          <a
+            href="${plugin.settings._adminPath}"
+            class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200"
+          >
+            <svg class="-ml-0.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+            View Page
+          </a>
+          ` : ''}
         </div>
       </div>
 
@@ -110,23 +131,25 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
       <!-- Tabs -->
       <div class="mb-6">
         <nav class="flex space-x-8" aria-label="Tabs">
-          <button onclick="showTab('settings')" id="settings-tab" class="tab-button active border-b-2 border-blue-400 py-2 px-1 text-sm font-medium text-blue-400">
+          ${hasUserSettings ? `
+          <a href="#settings" onclick="showTab('settings')" id="settings-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
             Settings
-          </button>
-          <button onclick="showTab('activity')" id="activity-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
-            Activity Log
-          </button>
-          <button onclick="showTab('info')" id="info-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
+          </a>
+          ` : ''}
+          <a href="#info" onclick="showTab('info')" id="info-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
             Information
-          </button>
+          </a>
+          <a href="#activity" onclick="showTab('activity')" id="activity-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
+            Activity Log
+          </a>
         </nav>
       </div>
 
       <!-- Tab Content -->
       <div id="tab-content">
         <!-- Settings Tab -->
-        <div id="settings-content" class="tab-content">
-          ${renderSettingsTab(plugin)}
+        <div id="settings-content" class="tab-content hidden">
+          ${hasUserSettings ? renderSettingsTab(plugin, settingsTabData) : ''}
         </div>
 
         <!-- Activity Tab -->
@@ -142,26 +165,41 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
     </div>
 
     <script>
+      const VALID_TABS = [${hasUserSettings ? "'settings', " : ""}'activity', 'info'];
+
       function showTab(tabName) {
-        // Hide all tab contents
+        if (!VALID_TABS.includes(tabName)) tabName = '${defaultTab}';
+
         document.querySelectorAll('.tab-content').forEach(content => {
           content.classList.add('hidden');
         });
-        
-        // Remove active class from all tabs
+
         document.querySelectorAll('.tab-button').forEach(tab => {
           tab.classList.remove('active', 'border-blue-400', 'text-blue-400');
           tab.classList.add('border-transparent', 'text-gray-400');
         });
-        
-        // Show selected tab content
-        document.getElementById(tabName + '-content').classList.remove('hidden');
-        
-        // Add active class to selected tab
+
+        const contentEl = document.getElementById(tabName + '-content');
+        if (contentEl) contentEl.classList.remove('hidden');
+
         const activeTab = document.getElementById(tabName + '-tab');
-        activeTab.classList.add('active', 'border-blue-400', 'text-blue-400');
-        activeTab.classList.remove('border-transparent', 'text-gray-400');
+        if (activeTab) {
+          activeTab.classList.add('active', 'border-blue-400', 'text-blue-400');
+          activeTab.classList.remove('border-transparent', 'text-gray-400');
+        }
+
+        if (window.location.hash !== '#' + tabName) {
+          history.replaceState(null, '', '#' + tabName);
+        }
       }
+
+      function initTabFromHash() {
+        const hash = window.location.hash.replace('#', '');
+        showTab(VALID_TABS.includes(hash) ? hash : '${defaultTab}');
+      }
+
+      window.addEventListener('hashchange', initTabFromHash);
+      initTabFromHash();
 
       async function togglePlugin(pluginId, action) {
         const button = event.target;
@@ -342,11 +380,18 @@ function renderToggleButton(plugin: any): string {
     : `<button onclick="togglePlugin('${plugin.id}', 'activate')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Activate</button>`
 }
 
-function renderSettingsTab(plugin: any): string {
+function renderSettingsTab(plugin: any, settingsTabData?: any): string {
   const settings = plugin.settings || {}
   const pluginId = plugin.id || plugin.name
+  const hasUserKeys = Object.keys(settings).some(k => !k.startsWith('_'))
 
-  // Check for custom settings component first
+  // Check plugin definition registry first (plugins self-register via definePlugin settingsTabContent)
+  const pluginDef = getPluginDefinition(pluginId)
+  if (pluginDef?.settingsTabContent) {
+    return pluginDef.settingsTabContent.render({ plugin, settings, data: settingsTabData })
+  }
+
+  // Legacy: hardcoded per-plugin renderers
   const customRenderer = pluginSettingsComponents[pluginId]
   if (customRenderer) {
     return `
@@ -384,16 +429,16 @@ function renderSettingsTab(plugin: any): string {
       `}
 
       <form id="settings-form" class="space-y-6">
-        ${isAuthPlugin && Object.keys(settings).length > 0
+        ${isAuthPlugin && hasUserKeys
           ? renderAuthSettingsForm(settings as AuthSettings)
-          : isTurnstilePlugin && Object.keys(settings).length > 0
+          : isTurnstilePlugin && hasUserKeys
             ? renderTurnstileSettingsForm(settings)
-            : Object.keys(settings).length > 0
+            : hasUserKeys
               ? renderSettingsFields(settings)
               : renderNoSettings(plugin)
         }
 
-        ${Object.keys(settings).length > 0 ? `
+        ${hasUserKeys ? `
         <div class="flex items-center justify-end pt-6 border-t border-white/10">
           <button
             type="button"
@@ -411,7 +456,7 @@ function renderSettingsTab(plugin: any): string {
 }
 
 function renderSettingsFields(settings: PluginSettings): string {
-  return Object.entries(settings).map(([key, value]) => {
+  return Object.entries(settings).filter(([key]) => !key.startsWith('_')).map(([key, value]) => {
     const fieldId = `setting_${key}`
     const displayName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
     
@@ -610,6 +655,48 @@ function renderActivityTab(activity: PluginActivity[]): string {
 
 function renderInformationTab(plugin: any): string {
   return `
+    ${plugin.description ? `
+    <!-- About -->
+    <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-3">About</h2>
+      <p class="text-gray-300 leading-relaxed">${plugin.description}</p>
+    </div>
+    ` : ''}
+
+    ${(plugin.settings?._routes?.length ?? 0) > 0 ? `
+    <!-- Routes -->
+    <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-4">Routes</h2>
+      <div class="space-y-2">
+        ${(plugin.settings._routes as Array<{ method: string; path: string; description?: string; requiresAuth?: boolean }>).map(r => {
+          const badge = r.method === 'GET'
+            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+            : r.method === 'POST'
+            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+            : r.method === 'DELETE'
+            ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+            : 'bg-white/10 text-gray-300 border border-white/20'
+          const pathHtml = r.method === 'GET'
+            ? `<a href="${r.path}" class="font-mono text-sm text-blue-400 hover:text-blue-300 hover:underline">${r.path}</a>`
+            : `<span class="font-mono text-sm text-gray-200">${r.path}</span>`
+          const authBadge = r.requiresAuth
+            ? `<span class="ml-2 text-xs text-amber-400/80">🔒 auth</span>`
+            : ''
+          return `
+          <div class="flex items-start gap-3 py-2 border-b border-white/5 last:border-0">
+            <span class="shrink-0 inline-block px-2 py-0.5 rounded text-xs font-bold ${badge}">${r.method}</span>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1 flex-wrap">
+                ${pathHtml}${authBadge}
+              </div>
+              ${r.description ? `<p class="text-xs text-gray-400 mt-0.5">${r.description}</p>` : ''}
+            </div>
+          </div>`
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Plugin Details -->
       <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6">

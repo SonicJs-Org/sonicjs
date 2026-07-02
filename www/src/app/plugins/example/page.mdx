@@ -1,0 +1,535 @@
+export const sections = [
+  { title: 'Overview', id: 'overview' },
+  { title: 'File Structure', id: 'file-structure' },
+  { title: 'Plugin Definition', id: 'plugin-definition' },
+  { title: 'Two-Phase Boot', id: 'two-phase-boot' },
+  { title: 'Public Routes', id: 'public-routes' },
+  { title: 'Admin Page', id: 'admin-page' },
+  { title: 'Moods Collection', id: 'moods-collection' },
+  { title: 'Settings', id: 'settings' },
+  { title: 'Hooks', id: 'hooks' },
+  { title: 'Data Seeding', id: 'data-seeding' },
+  { title: 'Customizing', id: 'customizing' },
+  { title: 'Updating', id: 'updating' },
+  { title: 'Removing', id: 'removing' },
+]
+
+# Example Plugin
+
+A fully-featured reference plugin that ships with every new SonicJS app. Read it to learn the plugin system, then delete it and build your own. {{ className: 'lead' }}
+
+---
+
+## Overview
+
+The example plugin demonstrates every major extension point in the SonicJS v3 plugin system. It is not a toy — it uses real routes, real collections, real settings, and real data seeding patterns that you can copy directly into your own plugins.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '🌐',
+      title: 'Public API Routes',
+      description: 'GET /example, GET /example/:name, GET /example/moods — served at a top-level path to avoid the /api/:collection catch-all',
+    },
+    {
+      icon: '🖥️',
+      title: 'Admin Page',
+      description: 'Custom admin page at /admin/example with automatic sidebar menu entry',
+    },
+    {
+      icon: '📋',
+      title: 'Moods Collection',
+      description: 'Code-defined collection registered via registerCollections() — no DB table required',
+    },
+    {
+      icon: '⚙️',
+      title: 'Schema-Driven Settings',
+      description: 'configSchema auto-renders a settings form in /admin/plugins/example — no custom form needed',
+    },
+    {
+      icon: '🔔',
+      title: 'Lifecycle Hooks',
+      description: 'Declarative subscriptions to content:after:create and auth:registration:completed events',
+    },
+    {
+      icon: '🌱',
+      title: 'Idempotent Data Seeding',
+      description: 'onBoot seeds three default moods with a COUNT guard — safe across isolate restarts',
+    },
+  ]}
+  columns={3}
+/>
+
+<Callout>
+**Remove the example plugin** from `src/index.ts` and delete `src/plugins/example/` when you're ready to ship your own. It has no production use — it's a learning aid.
+</Callout>
+
+---
+
+## File Structure
+
+```
+src/plugins/example/
+├── index.ts                      ← definePlugin() entry point (start here)
+├── routes/
+│   ├── api.ts                    ← public Hono routes
+│   └── admin.ts                  ← admin page route
+└── collections/
+    └── moods.collection.ts       ← CollectionConfig for the Moods collection
+```
+
+Wired into `src/index.ts`:
+
+```typescript
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
+import { examplePlugin } from './plugins/example'
+import { moodsCollection } from './plugins/example/collections/moods.collection'
+
+registerCollections([moodsCollection])
+
+export default createSonicJSApp({
+  plugins: { register: [examplePlugin] },
+})
+```
+
+---
+
+## Plugin Definition
+
+Every SonicJS plugin is a `PluginConfig` object created by `definePlugin()`. The identity fields are set once and never changed:
+
+```typescript
+export const examplePlugin = definePlugin({
+  id: 'example',        // stable machine key — used as DB key, URL segment, dependency ref
+  name: 'Example',      // displayed in /admin/plugins list
+  version: '1.0.0',
+  description: 'A demo plugin that explains the SonicJS v3 plugin system.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'You', email: 'you@example.com', url: 'https://example.com' },
+  // ...
+})
+```
+
+The `id` becomes:
+- The key under which settings are stored in the `documents` table
+- The URL segment in `/admin/plugins/example`
+- The identifier used by other plugins that declare `dependencies: ['example']`
+
+---
+
+## Two-Phase Boot
+
+SonicJS plugins initialize in two strict phases that match the Cloudflare Workers execution model:
+
+```typescript
+// Phase 1 — SYNCHRONOUS — must complete before any request arrives
+register(app) {
+  app.route('/example', createExampleApiRoutes(pluginOptions) as any)
+  app.route('/admin/example', createExampleAdminRoutes(pluginOptions) as any)
+},
+
+// Phase 2 — ASYNC — runs once per Worker isolate on the first request
+async onBoot(ctx) {
+  // safe to: await DB queries, read env bindings, register conditional hooks
+},
+```
+
+**Why two phases?** Hono locks its router after the first request. Routes added after that are silently ignored. `register()` must be synchronous and mount all routes while the app is still initializing. `onBoot()` handles everything requiring I/O: loading settings from D1, seeding default data, registering conditional hooks.
+
+The `pluginOptions` object is passed by reference from `register` into `onBoot`. When `onBoot` mutates `pluginOptions.greeting`, the route handlers created in `register` see the new value immediately — no restart required.
+
+---
+
+## Public Routes
+
+Routes live at `/example/*` — **not** `/api/example/*`. User plugins mount after the core `/api/:collection` catch-all. In Hono, routes match in registration order, so any path starting with `/api/` gets swallowed before your handler runs. Use a top-level prefix.
+
+<CodeGroup title="routes/api.ts">
+
+```typescript
+export function createExampleApiRoutes(
+  options: { greeting?: string; defaultName?: string } = {}
+): Hono {
+  const router = new Hono()
+
+  // GET /example — greeting with random mood
+  router.get('/', async (c) => {
+    const db = (c.env as any)?.DB
+    const mood = db ? await getRandomMood(db) : null
+    return c.json({
+      message: `Hello, ${options.defaultName ?? 'Stranger'}! The world is still quite cruel.`,
+      mood: mood ? `${mood.emoji} ${mood.name}`.trim() : null,
+      moodDescription: mood?.description ?? null,
+      timestamp: new Date().toISOString(),
+      plugin: 'example',
+    })
+  })
+
+  // GET /example/moods — must be BEFORE /:name
+  router.get('/moods', async (c) => {
+    const repo = new DocumentRepository((c.env as any).DB, 'default')
+    const docs = await repo.list({ typeId: 'example', status: 'published', limit: 100 })
+    return c.json({ moods: docs.map(d => d.data), total: docs.length })
+  })
+
+  // GET /example/:name — personalised greeting (registered AFTER /moods)
+  router.get('/:name', async (c) => {
+    const name = c.req.param('name')
+    // ... same pattern as GET /
+  })
+
+  return router
+}
+```
+
+</CodeGroup>
+
+Route order matters: `/moods` must be registered before `/:name`. Hono matches in registration order, so if `/:name` came first, `GET /example/moods` would be caught as a name param.
+
+`DocumentRepository` is the read chokepoint for all document data. Pass it the D1 binding and tenant ID; it handles SQL, tenant scoping, and status filtering (R4 from the architecture rules).
+
+### API Response Examples
+
+<CodeGroup title="GET /example">
+
+```bash {{ title: 'cURL' }}
+curl http://localhost:8787/example
+```
+
+```json {{ title: 'Response' }}
+{
+  "message": "Hello, Stranger! The world is still quite cruel.",
+  "mood": "😈 Cruel",
+  "moodDescription": "Default adversarial energy.",
+  "timestamp": "2026-06-26T12:00:00.000Z",
+  "plugin": "example"
+}
+```
+
+</CodeGroup>
+
+<CodeGroup title="GET /example/:name">
+
+```bash {{ title: 'cURL' }}
+curl http://localhost:8787/example/Alice
+```
+
+```json {{ title: 'Response' }}
+{
+  "message": "Hello, Alice! The world is still quite cruel.",
+  "mood": "😇 Kind",
+  "moodDescription": "Surprising warmth from an unexpected source.",
+  "timestamp": "2026-06-26T12:00:01.000Z",
+  "plugin": "example"
+}
+```
+
+</CodeGroup>
+
+<CodeGroup title="GET /example/moods">
+
+```bash {{ title: 'cURL' }}
+curl http://localhost:8787/example/moods
+```
+
+```json {{ title: 'Response' }}
+{
+  "moods": [
+    { "name": "Cruel", "emoji": "😈", "description": "Default adversarial energy." },
+    { "name": "Kind",  "emoji": "😇", "description": "Surprising warmth from an unexpected source." },
+    { "name": "Chaotic", "emoji": "🌀", "description": "Unpredictable in the best possible way." }
+  ],
+  "total": 3
+}
+```
+
+</CodeGroup>
+
+---
+
+## Admin Page
+
+The admin route is mounted at `/admin/example` and registered in `register()` alongside the API routes:
+
+```typescript
+register(app) {
+  app.route('/example', createExampleApiRoutes(pluginOptions) as any)
+  app.route('/admin/example', createExampleAdminRoutes(pluginOptions) as any)
+},
+```
+
+The sidebar entry is declared in the plugin's `menu` array:
+
+```typescript
+menu: [
+  {
+    label: 'Example',
+    path: '/admin/example',
+    icon: 'globe-alt',
+    order: 90,
+    permissions: ['admin'],
+  },
+],
+```
+
+The catalyst admin layout reads `menu` from the plugin registry and renders the sidebar entry automatically. No middleware or template modifications required.
+
+---
+
+## Moods Collection
+
+Collections in SonicJS v3 are **code-only** — no DB table. You define a `CollectionConfig`, pass it to `registerCollections()`, and the bootstrap sequence auto-registers a `document_type` row. The admin content UI at `/admin/content?model=example` appears automatically.
+
+<CodeGroup title="collections/moods.collection.ts">
+
+```typescript
+export const moodsCollection = {
+  name: 'example',           // must match typeId used in DocumentRepository queries
+  displayName: 'Example',
+  slug: 'example',
+  description: 'Moods served by the Example plugin API',
+  icon: '😈',
+
+  schema: {
+    type: 'object',
+    properties: {
+      name:        { type: 'string', title: 'Mood Name', required: true, maxLength: 100 },
+      emoji:       { type: 'string', title: 'Emoji', maxLength: 10 },
+      description: { type: 'string', title: 'Description', maxLength: 300 },
+    },
+    required: ['name'],
+  },
+
+  listFields:      ['name', 'emoji', 'description'],
+  searchFields:    ['name', 'description'],
+  defaultSort:     'createdAt',
+  defaultSortOrder: 'asc' as const,
+  managed:  true,
+  isActive: true,
+
+  access: {
+    public: ['read'],   // readable by GET /example/moods without auth
+  },
+} satisfies CollectionConfig
+```
+
+</CodeGroup>
+
+The `name: 'example'` ties the collection to the `typeId` used everywhere else: `DocumentRepository.list({ typeId: 'example' })`, `DocumentsService.create({ typeId: 'example', ... })`, and the seeding COUNT guard. Keep them consistent.
+
+---
+
+## Settings
+
+Declaring `configSchema` in the plugin definition auto-renders a settings form at `/admin/plugins/example` — no custom Hono handler needed.
+
+```typescript
+configSchema: {
+  greeting: {
+    type: 'string',
+    label: 'Custom Greeting',
+    default: 'Hello, Cruel World!',
+  },
+  defaultName: {
+    type: 'string',
+    label: 'Default Name',
+    default: 'Stranger',
+  },
+  showTimestamp: {
+    type: 'boolean',
+    label: 'Show Timestamp in API Response',
+    default: true,
+  },
+  mood: {
+    type: 'select',
+    label: 'Mood',
+    options: [
+      { value: 'cruel',       label: '😈 Cruel (default)' },
+      { value: 'kind',        label: '😇 Kind' },
+      { value: 'indifferent', label: '😐 Indifferent' },
+    ],
+    default: 'cruel',
+  },
+},
+```
+
+The core validates and persists submitted form data to the `documents` table. On the next `onBoot`, your plugin reads the saved values and applies them:
+
+```typescript
+async onBoot(ctx) {
+  const existing = await svc.getPlugin('example')
+  const existingSettings = (existing?.settings as Record<string, unknown>) ?? {}
+  const mergedSettings = {
+    greeting:    'Hello, Cruel World!',   // default
+    defaultName: 'Stranger',              // default
+    ...existingSettings,                  // saved values win
+  }
+  if (typeof mergedSettings.greeting === 'string') {
+    pluginOptions.greeting = mergedSettings.greeting
+  }
+  // Always write back with _adminPath and _routes preserved:
+  await svc.updatePluginSettings('example', {
+    ...mergedSettings,
+    _adminPath: '/admin/example',
+    _routes: [ /* route list */ ],
+  })
+}
+```
+
+Always spread `existingSettings` after defaults so saved values win. Always include `_adminPath` and `_routes` in the write-back — the admin plugin info tab reads them.
+
+---
+
+## Hooks
+
+Hooks are the declarative way to subscribe to typed lifecycle events. The `hooks` map in the plugin definition is always active:
+
+```typescript
+hooks: {
+  'content:after:create': (payload) => {
+    console.log(`[example] New content in "${payload.collection}"`)
+  },
+  'auth:registration:completed': (payload) => {
+    console.log(`[example] Welcome, ${payload.user.email}!`)
+  },
+},
+```
+
+For **conditional subscriptions** (e.g., only subscribe when a config flag is on), use `ctx.hooks.on()` inside `onBoot` instead:
+
+```typescript
+async onBoot(ctx) {
+  if (pluginOptions.verboseLogging) {
+    ctx.hooks.on('content:after:update', (payload) => {
+      console.log('[example] Content updated:', payload.id)
+    })
+  }
+}
+```
+
+---
+
+## Data Seeding
+
+`onBoot` seeds three default moods on first run. A COUNT guard prevents duplicates across isolate restarts:
+
+```typescript
+async onBoot(ctx) {
+  const db = ctx.env?.DB
+
+  const countRow = await db
+    .prepare(`SELECT COUNT(*) as n FROM documents WHERE type_id = ? AND tenant_id = ?`)
+    .bind('example', 'default')
+    .first()
+
+  if ((countRow?.n ?? 0) === 0) {
+    for (const mood of DEFAULT_MOODS) {
+      await svc.create(
+        { typeId: 'example', data: mood, publishOnCreate: true },
+        'system'
+      )
+    }
+  }
+}
+```
+
+`DocumentsService.create()` handles the raw SQL batch (R1), tenant scoping (R3), and version numbering (R6). The `publishOnCreate: true` flag makes the moods immediately available via `GET /example/moods` without a separate publish step.
+
+The three default moods:
+
+| Name | Emoji | Description |
+|---|---|---|
+| Cruel | 😈 | Default adversarial energy. |
+| Kind | 😇 | Surprising warmth from an unexpected source. |
+| Chaotic | 🌀 | Unpredictable in the best possible way. |
+
+---
+
+## Customizing
+
+Change the defaults by editing `src/plugins/example/index.ts`:
+
+```typescript
+// Change the seed data
+const DEFAULT_MOODS = [
+  { name: 'Caffeinated', emoji: '☕', description: 'Monday morning energy.' },
+  { name: 'Focused',     emoji: '🎯', description: 'Deep work mode.' },
+]
+
+// Change the plugin identity (do this first)
+export const examplePlugin = definePlugin({
+  id: 'my-plugin',   // ← pick a stable id before shipping
+  name: 'My Plugin',
+  // ...
+})
+```
+
+Or configure via the admin UI without touching code: **Admin → Plugins → Example → Settings**.
+
+---
+
+## Updating
+
+Plugin files are copied into your project when you run `npm create sonicjs@latest`. Unlike `@sonicjs-cms/core`, they are **your code** — `npm install` won't update them. To pull the latest version of the example plugin from the SonicJS main branch:
+
+```bash
+npm run update:plugin
+# or specify the plugin name explicitly:
+npm run update:plugin -- example
+```
+
+Preview what would change without writing files:
+
+```bash
+npm run update:plugin -- example --dry-run
+```
+
+The script downloads each file listed in its manifest from `github.com/SonicJs-Org/sonicjs` and overwrites your local copies.
+
+<Callout type="warning">
+**Commit or stash local changes first.** `update:plugin` overwrites files — any custom modifications to the example plugin will be lost.
+</Callout>
+
+After running:
+
+```bash
+# Review the diff
+git diff src/plugins/example
+
+# Verify types still compile
+npm run type-check
+
+# Commit if happy
+git add src/plugins/example && git commit -m "chore(plugins): update example plugin"
+```
+
+To add new plugins to the manifest (for when additional bundled plugins are released), edit `scripts/update-plugin.ts` and add an entry to `PLUGIN_MANIFEST`.
+
+---
+
+## Removing
+
+When you're ready to build your own plugin, remove the example from `src/index.ts`:
+
+```typescript
+// Remove these imports
+import { examplePlugin } from './plugins/example'
+import { moodsCollection } from './plugins/example/collections/moods.collection'
+
+// Remove from registerCollections([...])
+// Remove examplePlugin from plugins.register: [...]
+```
+
+Then delete `src/plugins/example/`. The moods documents in D1 remain until you clean them up manually — they don't affect other collections.
+
+<div className="not-prose mt-8">
+  <Button href="/plugins/development" variant="text" arrow="right">
+    <>Build your own plugin — Plugin Development Guide</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/blog/building-your-first-sonicjs-plugin" variant="text" arrow="right">
+    <>Blog: Building Your First SonicJS Plugin (walkthrough)</>
+  </Button>
+</div>

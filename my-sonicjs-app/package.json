@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "npm run dev:build && npm run dev:watch",
     "dev:build": "cd ../packages/core && npm run build",
-    "dev:watch": "npm run dev:core & npx wait-on ../packages/core/dist/index.js && PORT=$(($(echo -n \"$(basename $(cd .. && pwd))\" | cksum | cut -d' ' -f1) % 1000 + 9000)) && echo \"Dev server: http://localhost:$PORT\" && wrangler dev --port $PORT --local 2>&1 | grep -v '\\[wrangler:inf\\]'",
+    "dev:watch": "npm run dev:core & npx wait-on ../packages/core/dist/index.js && PORT=$(($(echo -n \"$(basename $(cd .. && pwd))\" | cksum | cut -d' ' -f1) % 1000 + 9000)) && GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '') && echo \"Dev server: http://localhost:$PORT\" && wrangler dev --port $PORT --local --var GIT_BRANCH:$GIT_BRANCH 2>&1 | grep -v '\\[wrangler:inf\\]'",
     "dev:core": "cd ../packages/core && npm run dev",
     "build": "echo 'Worker build is handled by wrangler during deployment'",
     "deploy": "wrangler deploy",
@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "update": "npm install @sonicjs-cms/core@latest --save",
     "update:beta": "npm install @sonicjs-cms/core@beta --save",
+    "update:plugin": "tsx scripts/update-plugin.ts",
     "seed": "tsx scripts/seed-admin.ts",
     "seed:documents": "tsx scripts/seed-documents.ts",
     "setup:db": "bash scripts/setup-worktree-db.sh"
@@ -31,9 +32,9 @@
     "@types/node": "^20.19.1",
     "drizzle-kit": "^0.30.0",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.18",
+    "hono": "^4.12.26",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.8",
+    "vitest": "^4.1.9",
     "wrangler": "^4.65.0",
     "zod": "^3.25.67"
   },

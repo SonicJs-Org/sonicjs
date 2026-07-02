@@ -284,8 +284,7 @@ This updates `wrangler.toml` `[triggers]` automatically.
 **Unit tests** (`__tests__/**/*.test.ts`) — fast, mock-free:
 
 ```ts
-import { helloWorldPlugin } from '../src/plugins/core-plugins/hello-world-plugin'
-import { definePlugin, isDefinedPlugin } from '@sonicjs-cms/core'
+import { helloWorldPlugin, isDefinedPlugin } from '@sonicjs-cms/core'
 
 test('isDefinedPlugin returns true', () => {
   expect(isDefinedPlugin(helloWorldPlugin)).toBe(true)
@@ -378,6 +377,40 @@ There is no `PluginBuilder`, `PluginHelpers`, or `.build()` in v4. Every plugin 
 
 ---
 
+## Using built-in plugins
+
+Several plugins ship with `@sonicjs-cms/core` and are importable directly:
+
+```ts
+import {
+  helloWorldPlugin,
+  redirectPlugin,
+  emailReconciliationPlugin,
+} from '@sonicjs-cms/core'
+```
+
+Register them in your Worker entry (`my-sonicjs-app/src/index.ts`):
+
+```ts
+import { createSonicJSApp, helloWorldPlugin } from '@sonicjs-cms/core'
+import type { SonicJSConfig } from '@sonicjs-cms/core'
+
+const config: SonicJSConfig = {
+  plugins: {
+    register: [helloWorldPlugin],
+  },
+}
+
+const app = createSonicJSApp(config)
+export default { fetch: app.fetch }
+```
+
+Then visit `/admin/hello-world` to confirm it loaded, or `/admin/plugins/hello-world/configure` to adjust its settings.
+
+> **Do not** use a relative path like `'./plugins/hello-world-plugin'` — the plugin lives inside the core package and is not on the filesystem of your Worker app.
+
+---
+
 ## See also
 
 - `packages/core/src/plugins/sdk/define-plugin.ts` — full TypeScript source + JSDoc
@@ -385,6 +418,7 @@ There is no `PluginBuilder`, `PluginHelpers`, or `.build()` in v4. Every plugin 
 - `packages/core/src/services/plugin-menu-singleton.ts` — menu filtering + icon map
 - `packages/core/src/plugins/core-plugins/hello-world-plugin/index.ts` — reference implementation
 - `packages/core/src/plugins/core-plugins/email-plugin/index.ts` — configSchema with 4 typed fields
+- `docs/plugins/hello-world-from-scratch.md` — step-by-step tutorial: build your own Hello World plugin with configurable name
 
 ---
 

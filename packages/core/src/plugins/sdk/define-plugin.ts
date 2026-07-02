@@ -207,6 +207,17 @@ export interface DefinePluginInput<Caps extends readonly Capability[] = readonly
    * routes/templates.
    */
   configSchema?: ConfigSchema
+  /**
+   * Custom settings-tab renderer for the plugin detail page (`/admin/plugins/:id`).
+   * `loadData` is called server-side with the D1 database before the page renders;
+   * its result is forwarded to `render` as `data`. Plugins that need DB access
+   * (e.g. fetching their own document records) declare `loadData`; static content
+   * can omit it and read only from `plugin` / `settings`.
+   */
+  settingsTabContent?: {
+    loadData?: (db: any) => Promise<any>
+    render: (props: { plugin: any; settings: any; data?: any }) => string
+  }
 }
 
 /**
@@ -241,6 +252,11 @@ export interface DefinedPlugin {
   menu?: PluginMenuEntry[]
   /** Schema-driven settings. Renders the admin settings form for this plugin. */
   configSchema?: ConfigSchema
+  /** Custom settings-tab renderer. loadData runs server-side; render produces the tab HTML. */
+  settingsTabContent?: {
+    loadData?: (db: any) => Promise<any>
+    render: (props: { plugin: any; settings: any; data?: any }) => string
+  }
   /** Marker so tooling/tests can detect a v3-defined plugin. */
   // eslint-disable-next-line @typescript-eslint/naming-convention -- intentional internal marker
   readonly __sonicV3: true
@@ -362,6 +378,7 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
     deactivate: input.deactivate,
     menu: input.menu,
     configSchema: input.configSchema,
+    settingsTabContent: input.settingsTabContent,
     // eslint-disable-next-line @typescript-eslint/naming-convention -- intentional internal marker
     __sonicV3: true,
   }

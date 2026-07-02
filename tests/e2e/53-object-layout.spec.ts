@@ -6,11 +6,11 @@ test.describe('Object Layout', () => {
     await loginAsAdmin(page)
 
     await page.goto('/admin/content/new')
-    const pageBlocksLink = page
+    const e2eTestLink = page
       .locator('a[href^="/admin/content/new?collection="]')
-      .filter({ hasText: 'Page Blocks' })
-    await expect(pageBlocksLink).toBeVisible()
-    await pageBlocksLink.click()
+      .filter({ hasText: 'E2E Test' })
+    await expect(e2eTestLink).toBeVisible()
+    await e2eTestLink.click()
     await page.waitForLoadState('networkidle')
     await expect(page.locator('form#content-form')).toBeVisible()
 

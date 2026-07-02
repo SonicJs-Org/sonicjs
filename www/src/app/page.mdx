@@ -480,7 +480,7 @@ Join thousands of developers building the future of web APIs
     <div className="border-l-4 border-purple-500 dark:border-purple-400 pl-4 py-1">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xs font-bold px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">v3.0.0-beta</span>
-        <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-300 font-bold">LATEST</span>
+        
         <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-15</span>
       </div>
       <div className="text-sm space-y-1">
@@ -515,23 +515,289 @@ Join thousands of developers building the future of web APIs
       </div>
     </div>
 
-    {/* v2.19.0 */}
+    {/* v3.0.0-beta.22 */}
     <div className="border-l-4 border-emerald-500 dark:border-emerald-400 pl-4 py-1">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">v2.19.0</span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">2026-05-28</span>
+        <span className="text-xs font-bold px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">v3.0.0-beta.22</span>
+        <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 border border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-300 font-bold">LATEST</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-07-01</span>
       </div>
       <div className="text-sm space-y-1">
         <div className="flex items-start gap-2">
           <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(oauth-providers)**: Settings tab now visible and renders provider-specific fields (client ID, secret, etc.)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(api-keys)**: New API key stays visible until user copies it — no premature redirect</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.20 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.20</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-30</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat(scripts)**: New `npm run update:plugin` command — pull latest bundled plugin files from GitHub without scaffolding a new project</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.19 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.19</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-30</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins)**: Example plugin settings updated in admin now reflect immediately in API responses — no Worker restart required (GitHub #975)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins)**: `greeting` configSchema field now used in `/example` response; example plugin bumped to v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.18 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.18</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-29</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins)**: Stale configSchema settings pruned on save — removed plugin settings fields no longer reappear after reinstall</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.17 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.17</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-27</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(plugins): Example plugin seeds 3 moods on fresh install** — fixed FK race between `wirePlugins` and `bootstrapMiddleware`</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat(admin): plugin tabs reordered** — Settings → Info → Activity; Settings is default active tab for configurable plugins</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.16 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.16</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-26</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**Example plugin ships with new installs** — `npm create sonicjs@latest` now scaffolds an example plugin demonstrating routes, admin UI, collections, hooks, and settings</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**Fix: plugin settings save no longer wipes Routes/Admin Path** — saving configSchema form fields previously replaced the full settings JSON, removing `_routes` and `_adminPath`; now merges with existing settings</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**Plugin rename** — `hello-cruel-world` → `example` plugin with cleaner UX</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.15 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.15</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-26</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">feat(plugins): helloWorldPlugin and createHelloWorldPlugin exported from @sonicjs-cms/core</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">feat(auth): API keys plugin + closed auth test gaps vs Payload CMS baseline</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.12 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.12</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-25</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(cors)**: apply CORS middleware globally so `/auth/*` routes work from Astro/Next.js/frontend frameworks</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix(forms)**: forms plugin no longer returns 500 when `forms` table hasn't been migrated — shows empty state instead</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.10 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.10</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-23</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: `stats.sonicjs.com` telemetry endpoint — `POST /v1/events` now accepts CLI payloads (was 404)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat**: Admin sidebar branch label on localhost — auto-detects git branch via `npm run dev`</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.9 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.9</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-23</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: `create-sonicjs` CLI now reliably sends telemetry — install events no longer dropped on process exit</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat**: Stats dashboard version distribution and doc-volume charts; "What People Build" section always visible</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.8 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.8</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-23</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat**: `stats.sonicjs.com` analytics dashboard — installation growth, retention/churn, OS/template/Node breakdowns, error analysis</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat**: `project_snapshot` telemetry — collections, doc counts, active plugins, field types reported on bootstrap</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.7 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.7</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-18</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: Cache plugin now inactive by default on new installs — enable from Admin → Plugins when ready to use caching</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.6 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.6</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-18</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: `create-sonicjs` falls back to `npx wrangler` when wrangler isn't on PATH — resolves "Failed to create Cloudflare resources" for npx users</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.5 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.5</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-18</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**feat**: Versioning plugin registered in manifest registry</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**chore**: `.claude/settings.local.json` now gitignored — per-developer Claude Code settings stay local</span>
+        </div>
+      </div>
+    </div>
+
+    {/* v3.0.0-beta.4 */}
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v3.0.0-beta.4</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-06-18</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: Admin seeding now works — rewrote generated seed to use raw SQL (Drizzle was injecting schema columns missing from the migration, causing `auth_user has no column named password_reset_token`)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: Admin login now works — seed now creates `auth_account` record that Better Auth needs for credential verification</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: Auto-generate `.dev.vars` with `BETTER_AUTH_SECRET` on project creation (was causing 500 on every auth request)</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+          <span className="text-gray-700 dark:text-gray-300">**fix**: Password hashed with PBKDF2 matching the auth system's expected format</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">v2.19.0</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">2026-05-28</span>
+      </div>
+      <div className="text-sm space-y-1">
+        <div className="flex items-start gap-2">
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
           <span className="text-gray-700 dark:text-gray-300"><strong>Admin code export modal for collections</strong> — Generate ready-to-use TypeScript collection config code directly from the admin UI</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
           <span className="text-gray-700 dark:text-gray-300"><strong>Array fields with media items no longer crash the form</strong> — Collections configured as <code>{`type: 'array'`}</code> with <code>{`items: { type: 'media' }`}</code> now load cleanly in the new-content form</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+          <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
           <span className="text-gray-700 dark:text-gray-300"><strong>AuthManager.verifyToken usable from custom Hono routes</strong>, SVG uploads no longer fail on D1, and the <code>create-sonicjs</code> starter uses the <code>MEDIA_BUCKET</code> binding name</span>
         </div>
       </div>

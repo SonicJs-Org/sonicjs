@@ -56,14 +56,14 @@ test.describe('Block Media Persistence', () => {
     const title = `Block Media ${Date.now()}`;
     const slug = `block-media-${Date.now()}`;
     await page.goto('/admin/content/new');
-    const pageBlocksLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'Page Blocks' });
-    const hasPageBlocks = await pageBlocksLink.isVisible().catch(() => false);
-    if (!hasPageBlocks) {
-      test.skip(true, 'Page Blocks collection not available');
+    const e2eTestLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'E2E Test' });
+    const hasE2eTest = await e2eTestLink.isVisible().catch(() => false);
+    if (!hasE2eTest) {
+      test.skip(true, 'E2E Test collection not available');
       return;
     }
 
-    await pageBlocksLink.click();
+    await e2eTestLink.click();
     await page.waitForLoadState('networkidle');
     await expect(page.locator('form#content-form')).toBeVisible();
 
@@ -108,7 +108,7 @@ test.describe('Block Media Persistence', () => {
       if (editUrlMatch?.[1]) {
         createdContentId = editUrlMatch[1];
       } else {
-        await page.goto('/admin/content?collection=page_blocks');
+        await page.goto('/admin/content?collection=e2e_test');
         const contentLink = page.locator(`a:has-text("${title}")`).first();
         await expect(contentLink).toBeVisible({ timeout: 10000 });
         const href = await contentLink.getAttribute('href');
@@ -123,7 +123,7 @@ test.describe('Block Media Persistence', () => {
     } finally {
       if (!createdContentId) {
         try {
-          await page.goto('/admin/content?collection=page_blocks');
+          await page.goto('/admin/content?collection=e2e_test');
           const fallbackLink = page.locator(`a:has-text("${title}")`).first();
           if (await fallbackLink.isVisible({ timeout: 3000 }).catch(() => false)) {
             const href = await fallbackLink.getAttribute('href');

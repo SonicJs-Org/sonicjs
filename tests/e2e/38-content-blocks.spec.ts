@@ -1,16 +1,16 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-// Skip in CI - depends on Page Blocks collection which may not be configured in CI environment
+// Skip in CI - depends on E2E Test collection which may not be configured in CI environment
 test.describe.skip('Content Blocks (Code-Based Collections)', () => {
   test('should allow adding block content in code-based collections', async ({ page }) => {
     await loginAsAdmin(page)
 
     await page.goto('/admin/content/new')
 
-    const pageBlocksLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'Page Blocks' })
-    await expect(pageBlocksLink).toBeVisible()
-    await pageBlocksLink.click()
+    const e2eTestLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'E2E Test' })
+    await expect(e2eTestLink).toBeVisible()
+    await e2eTestLink.click()
 
     await page.waitForLoadState('networkidle')
     await expect(page.locator('form#content-form')).toBeVisible()

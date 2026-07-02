@@ -1,6 +1,7 @@
 import type { Context, Next } from 'hono'
 import type { Bindings, Variables } from '../app'
 import { PLUGIN_REGISTRY } from '../plugins/manifest-registry'
+import { resolvePluginMenuItems } from '../services/plugin-menu-singleton'
 
 // Build menu plugin data from the auto-generated registry.
 // Any plugin with an adminMenu entry in its manifest.json will
@@ -106,18 +107,35 @@ export function pluginMenuMiddleware() {
       // DB not ready or plugin table doesn't exist yet
     }
 
-    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || '' })))
+    // Append user plugin menu items from the singleton.
+    // The singleton is populated with ONLY config.plugins.register entries (user plugins),
+    // so no DB active-check is needed — user plugins are always mounted when configured.
+    const user = c.get('user') as { role?: string } | undefined
+    const singletonItems = resolvePluginMenuItems(user ? { role: user.role } : undefined)
+    const existingPaths = new Set(activeMenuItems.map(i => i.path))
+    for (const item of singletonItems) {
+      if (!existingPaths.has(item.path)) {
+        activeMenuItems.push({ label: item.label, path: item.path, icon: item.icon, order: item.order })
+      }
+    }
+    activeMenuItems.sort((a, b) => a.order - b.order)
+
+    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || m.icon || '' })))
 
     await next()
 
-    // Inject menu items into HTML response by replacing the marker
-    if (activeMenuItems.length > 0 && c.res.headers.get('content-type')?.includes('text/html')) {
+    // Inject menu items into HTML response by replacing the marker.
+    // Read from context var (not activeMenuItems) so plugins that self-inject
+    // via app.use('/admin/*', ...) pre-next are included even when they're not
+    // in the compiled manifest registry (e.g. external/stats plugin).
+    const finalItems = (c.get('pluginMenuItems') as Array<{ label: string; path: string; icon: string }>) ?? []
+    if (finalItems.length > 0 && c.res.headers.get('content-type')?.includes('text/html')) {
       const status = c.res.status
       const headers = new Headers(c.res.headers)
       const html = await c.res.text()
 
       if (html.includes(MARKER)) {
-        const renderedItems = activeMenuItems.map(item => renderMenuItem(item, path)).join('')
+        const renderedItems = finalItems.map(item => renderMenuItem(item, path)).join('')
         const newHtml = html.split(MARKER).join(renderedItems)
         c.res = new Response(newHtml, { status, headers })
       } else {

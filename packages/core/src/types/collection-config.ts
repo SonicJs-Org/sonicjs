@@ -194,6 +194,32 @@ export interface CollectionConfig {
     enabled?: boolean
     ttl?: number
   }
+
+  /**
+   * Per-collection access control. Maps principal keys to allowed permissions.
+   *
+   * Without this property the collection defaults to **deny** for public access
+   * (only `admin` and `editor` get grants). To make content publicly readable,
+   * explicitly opt in:
+   *
+   * ```ts
+   * access: {
+   *   public: ['read'],
+   * }
+   * ```
+   *
+   * Keys are principal identifiers matched during ACL resolution:
+   * - `'public'` — unauthenticated visitors
+   * - `'admin'`, `'editor'`, `'viewer'`, or any custom RBAC role name
+   *
+   * Values are arrays of permissions: `'read'`, `'create'`, `'update'`,
+   * `'delete'`, `'publish'`, `'manage'`.
+   *
+   * When provided, these entries are **merged on top of** the built-in defaults
+   * (`admin` and `editor` grants). To revoke a default grant, set the key to
+   * an empty array (e.g. `editor: []`).
+   */
+  access?: Record<string, ('read' | 'create' | 'update' | 'delete' | 'publish' | 'manage')[]>
 }
 
 export interface CollectionConfigModule {

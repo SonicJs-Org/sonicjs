@@ -15,28 +15,28 @@ import { loginAsAdmin } from './utils/test-helpers'
  */
 test.describe('Dynamic Field TDZ Bug Fix', () => {
   /**
-   * Helper to find and navigate to Page Blocks collection
+   * Helper to find and navigate to E2E Test collection
    * Returns true if collection was found and navigated to, false otherwise
    */
-  async function navigateToPageBlocksCollection(page: any): Promise<boolean> {
+  async function navigateToE2eTestCollection(page: any): Promise<boolean> {
     // Navigate to the new content page to see available collections
     await page.goto('/admin/content/new')
     await page.waitForLoadState('networkidle')
 
-    // Look for Page Blocks collection which has object and array fields
-    // The collection might be named "page_blocks" or listed as "Page Blocks"
-    const pageBlocksLink = page.locator('a[href*="collection=page_blocks"]')
-    const hasPageBlocks = await pageBlocksLink.count() > 0
+    // Look for E2E Test collection which has object and array fields
+    // The collection might be named "e2e_test" or listed as "E2E Test"
+    const e2eTestLink = page.locator('a[href*="collection=e2e_test"]')
+    const hasE2eTest = await e2eTestLink.count() > 0
 
-    if (!hasPageBlocks) {
+    if (!hasE2eTest) {
       // Collection not found in content new page
       // Try triggering collection sync by visiting collections page
       await page.goto('/admin/collections')
       await page.waitForLoadState('networkidle')
 
-      // Check if page_blocks appears in the collections list
-      const hasPageBlocksInList = await page.locator('text=page_blocks').count() > 0
-      if (!hasPageBlocksInList) {
+      // Check if e2e_test appears in the collections list
+      const hasE2eTestInList = await page.locator('text=E2E Test').count() > 0
+      if (!hasE2eTestInList) {
         return false
       }
 
@@ -45,14 +45,14 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
       await page.waitForLoadState('networkidle')
 
       // Try again
-      const pageBlocksLinkRetry = page.locator('a[href*="collection=page_blocks"]')
-      if (await pageBlocksLinkRetry.count() === 0) {
+      const e2eTestLinkRetry = page.locator('a[href*="collection=e2e_test"]')
+      if (await e2eTestLinkRetry.count() === 0) {
         return false
       }
 
-      await pageBlocksLinkRetry.click()
+      await e2eTestLinkRetry.click()
     } else {
-      await pageBlocksLink.click()
+      await e2eTestLink.click()
     }
 
     await page.waitForLoadState('networkidle')
@@ -62,12 +62,12 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
   test('should render content form with object fields without TDZ crash', async ({ page }) => {
     await loginAsAdmin(page)
 
-    // Navigate to Page Blocks collection
-    const found = await navigateToPageBlocksCollection(page)
+    // Navigate to E2E Test collection
+    const found = await navigateToE2eTestCollection(page)
 
     if (!found) {
-      // If Page Blocks collection doesn't exist, skip the test
-      test.skip(true, 'Page Blocks collection not available - code-based collection required')
+      // If E2E Test collection doesn't exist, skip the test
+      test.skip(true, 'E2E Test collection not available - code-based collection required')
       return
     }
 
@@ -77,7 +77,7 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
     // Check if collection was found or if there's an error
     const collectionNotFound = page.locator('text=Collection not found')
     if (await collectionNotFound.isVisible({ timeout: 2000 }).catch(() => false)) {
-      test.skip(true, 'Page Blocks collection not synced to database')
+      test.skip(true, 'E2E Test collection not synced to database')
       return
     }
 
@@ -118,18 +118,18 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
   test('should allow adding blocks to array field without errors', async ({ page }) => {
     await loginAsAdmin(page)
 
-    // Navigate to Page Blocks collection
-    const found = await navigateToPageBlocksCollection(page)
+    // Navigate to E2E Test collection
+    const found = await navigateToE2eTestCollection(page)
 
     if (!found) {
-      test.skip(true, 'Page Blocks collection not available')
+      test.skip(true, 'E2E Test collection not available')
       return
     }
 
     // Check for collection not found error
     const collectionNotFound = page.locator('text=Collection not found')
     if (await collectionNotFound.isVisible({ timeout: 2000 }).catch(() => false)) {
-      test.skip(true, 'Page Blocks collection not synced to database')
+      test.skip(true, 'E2E Test collection not synced to database')
       return
     }
 
@@ -147,7 +147,7 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
       }
 
       // If form not visible but no TDZ error, collection might not exist
-      test.skip(true, 'Page Blocks collection form not available')
+      test.skip(true, 'E2E Test collection form not available')
       return
     }
 

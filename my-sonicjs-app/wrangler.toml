@@ -13,8 +13,8 @@ workers_dev = true
 # Note: database_name and database_id are automatically updated by GitHub Actions
 [[d1_databases]]
 binding = "DB"
-database_name = "sonicjs-worktree-lane711-cache-plugin-document-model"
-database_id = "d2d7477e-6278-419b-bd12-962e2d0a050c"
+database_name = "sonicjs-worktree-lane711-menu-plugin-plan"
+database_id = "2bffa108-2c31-4710-9a04-8b4f97b16b72"
 migrations_dir = "./migrations"
 
 # R2 Bucket for media storage (using CI bucket)
@@ -35,7 +35,7 @@ name = "EMAIL"
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
-CORS_ORIGINS = "http://localhost:8787"
+CORS_ORIGINS = "http://localhost:8787,http://localhost:4321"
 DEFAULT_FROM_EMAIL = "lane@sonicjs.com"
 
 # Observability

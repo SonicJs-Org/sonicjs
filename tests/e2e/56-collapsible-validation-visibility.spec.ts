@@ -13,12 +13,12 @@ test.describe.skip('Collapsible Validation Visibility', () => {
     await page.goto('/admin/content/new')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
 
-    const pageBlocksLink = page
+    const e2eTestLink = page
       .locator('a[href^="/admin/content/new?collection="]')
-      .filter({ hasText: 'Page Blocks' })
+      .filter({ hasText: 'E2E Test' })
       .first()
-    await expect(pageBlocksLink).toBeVisible({ timeout: 10000 })
-    await pageBlocksLink.click()
+    await expect(e2eTestLink).toBeVisible({ timeout: 10000 })
+    await e2eTestLink.click()
     await page.waitForLoadState('networkidle', { timeout: 15000 })
 
     await page.fill('input[name="title"]', `Test Validation Visibility ${Date.now()}`)

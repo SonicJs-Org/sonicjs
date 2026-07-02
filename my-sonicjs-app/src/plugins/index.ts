@@ -7,4 +7,6 @@
 
 export { default as contactFormPlugin } from './contact-form/index'
 export { default as qrGeneratorPlugin } from './qr-generator/index'
+// Demo plugin — explains every plugin system extension point with comments.
+export { helloCruelWorldPlugin } from './hello-cruel-world/index'
 

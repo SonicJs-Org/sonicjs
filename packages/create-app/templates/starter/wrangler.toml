@@ -1,6 +1,6 @@
 name = "my-sonicjs-app"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 # Cloudflare Workers settings
@@ -21,7 +21,7 @@ bucket_name = "my-sonicjs-media"
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
-CORS_ORIGINS = "http://localhost:8787"
+CORS_ORIGINS = "http://localhost:8787,http://localhost:4321"
 
 # Production environment
 [env.production]

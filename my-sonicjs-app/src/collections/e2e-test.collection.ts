@@ -1,11 +1,11 @@
 import type { CollectionConfig } from "@sonicjs-cms/core";
 
 export default {
-  name: "page_blocks",
-  displayName: "Page Blocks",
-  slug: "page-blocks",
-  description: "Page layouts built from block components",
-  icon: "🧱",
+  name: "e2e_test",
+  displayName: "E2E Test",
+  slug: "e2e-test",
+  description: "Comprehensive field-type coverage for E2E testing — not for production use",
+  icon: "🧪",
 
   schema: {
     type: "object",
@@ -21,6 +21,58 @@ export default {
         title: "URL Slug",
         required: true,
         maxLength: 200,
+      },
+      description: {
+        type: "textarea",
+        title: "Description",
+        maxLength: 500,
+      },
+      count: {
+        type: "number",
+        title: "Count",
+      },
+      isActive: {
+        type: "boolean",
+        title: "Is Active",
+      },
+      publishDate: {
+        type: "date",
+        title: "Publish Date",
+      },
+      publishDatetime: {
+        type: "datetime",
+        title: "Publish Datetime",
+      },
+      author: {
+        type: "user",
+        title: "Author",
+      },
+      featuredImage: {
+        type: "media",
+        title: "Featured Image",
+      },
+      category: {
+        type: "select",
+        title: "Category",
+        enum: ["news", "tutorial", "showcase"],
+        enumLabels: ["News", "Tutorial", "Showcase"],
+        default: "news",
+      },
+      displayMode: {
+        type: "radio",
+        title: "Display Mode",
+        enum: ["list", "grid", "card"],
+        enumLabels: ["List", "Grid", "Card"],
+        default: "list",
+      },
+      metadata: {
+        type: "json",
+        title: "Metadata",
+        helpText: "JSON object for arbitrary structured data",
+      },
+      richContent: {
+        type: "lexical",
+        title: "Rich Content",
       },
       seo: {
         type: "object",
@@ -103,6 +155,16 @@ export default {
                 body: { type: "textarea", title: "Body" },
               },
             },
+            callToAction: {
+              label: "Call to Action",
+              description: "CTA section with button",
+              properties: {
+                title: { type: "string", title: "Title" },
+                body: { type: "textarea", title: "Body" },
+                buttonLabel: { type: "string", title: "Button Label" },
+                buttonUrl: { type: "string", title: "Button URL" },
+              },
+            },
           },
         },
       },
@@ -117,4 +179,8 @@ export default {
 
   managed: true,
   isActive: true,
+
+  access: {
+    public: ['read'],
+  },
 } satisfies CollectionConfig;

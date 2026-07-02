@@ -33,7 +33,7 @@ SonicJS plugins provide modular functionality that can be enabled or disabled wi
     {
       icon: '🔌',
       title: 'Hot-Swappable',
-      description: 'Enable or disable plugins without restarting the server',
+      description: 'Activate or deactivate plugins from the admin UI without redeploying — status changes persist across restarts',
     },
     {
       icon: '⚙️',
@@ -106,23 +106,6 @@ Send transactional emails via Resend, SendGrid, or other email services.
 
 ---
 
-### Seed Data Plugin
-
-**Status:** Active by default
-**Version:** 1.0.0
-
-Generate sample data for testing and development.
-
-**Features:**
-- Create demo users
-- Generate sample content
-- Populate media library
-- Configurable data size
-
-**Access:** **Admin** → **Tools** → **Seed Data**
-
----
-
 ### Demo Login Plugin
 
 **Status:** Active in development only
@@ -137,6 +120,53 @@ Auto-fills admin credentials on login screen for faster development.
 <Callout type="warning">
 This plugin is **automatically disabled in production** for security.
 </Callout>
+
+---
+
+### Example Plugin
+
+**Status:** Bundled with new installs
+**Version:** 1.0.1
+
+A fully-featured reference plugin that ships with every new SonicJS app created via `npm create sonicjs@latest`. Demonstrates the complete plugin API: public routes, admin page, collections, configurable settings, and data seeding.
+
+**Public API Routes:**
+- `GET /example` — greeting with random mood
+- `GET /example/:name` — personalized greeting
+- `GET /example/moods` — list all published moods
+
+**Admin Page:** `/admin/example`
+
+**Features:**
+- Configurable greeting, name, and mood via plugin Settings tab
+- Moods collection (create/manage mood entries with emoji)
+- Admin page showing API links and collection management
+- Data seeding in `onBoot` (default moods seeded if none exist)
+
+**Access:** Navigate to **Admin** → **Example** (or **Admin** → **Plugins** → **Example**)
+
+<Callout>
+Remove this plugin (and its `moodsCollection` import) from `src/index.ts` when you're ready to build your own — it's there to learn from, not to keep.
+</Callout>
+
+**Updating the example plugin** — plugin files are part of your project, not a package dependency. Pull the latest version from GitHub main without rebuilding from scratch:
+
+```bash
+npm run update:plugin
+# or: npm run update:plugin -- example --dry-run
+```
+
+<div className="not-prose mt-4">
+  <Button href="/plugins/example" variant="text" arrow="right">
+    <>Full Example Plugin reference</>
+  </Button>
+</div>
+
+<div className="not-prose mt-2">
+  <Button href="/blog/building-your-first-sonicjs-plugin" variant="text" arrow="right">
+    <>Blog: Building Your First SonicJS Plugin</>
+  </Button>
+</div>
 
 ---
 
@@ -368,7 +398,7 @@ Additional functionality and workflow automation.
 
 ### Workflow Plugin
 
-**Status:** Core plugin
+**Status:** Inactive (coming soon)
 **Version:** 1.0.0
 
 Automate content workflows and approvals.
@@ -378,8 +408,6 @@ Automate content workflows and approvals.
 - Multi-step processes
 - Automated actions
 - Notification triggers
-
-**Access:** **Admin** → **Workflows**
 
 **Usage:** See [Workflow Plugin Docs](/plugins/workflow)
 
@@ -519,6 +547,31 @@ Accept payments and manage subscriptions with Stripe.
 2. Find active plugin
 3. Click **Deactivate**
 4. Plugin features are disabled (data is preserved)
+
+### Updating Bundled Plugins
+
+Bundled plugins (like the example plugin) are scaffolded into your project as source files — `npm install` updates `@sonicjs-cms/core` but leaves plugin files untouched. Use the update script to pull the latest version:
+
+```bash
+# Update the example plugin from SonicJS main branch
+npm run update:plugin
+
+# Preview changes without writing files
+npm run update:plugin -- example --dry-run
+```
+
+After updating, review the diff and run type-check:
+
+```bash
+git diff src/plugins/example
+npm run type-check
+```
+
+<Callout type="warning">
+Commit or stash local plugin changes before running `update:plugin` — it overwrites files.
+</Callout>
+
+---
 
 ### Plugin Settings
 

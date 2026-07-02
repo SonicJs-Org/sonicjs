@@ -62,19 +62,21 @@ describe('RbacService — document-backed', () => {
   beforeEach(async () => { db = makeDb(); await new RbacService(db).ensureSystemRbacSeed() })
   afterEach(() => db.close())
 
-  it('seeds admin (locked system role) + editor (deletable example role) + 6 verbs, idempotently', async () => {
+  it('seeds admin (locked system role) + editor/authenticated/public (deletable example roles) + 6 verbs, idempotently', async () => {
     const rbac = new RbacService(db)
     const roles = await rbac.getRoles()
-    expect(roles.map((r) => r.name).sort()).toEqual(['admin', 'editor'])
-    // `admin` is the only hardcoded SYSTEM role; `editor` is a deletable example.
+    expect(roles.map((r) => r.name).sort()).toEqual(['admin', 'authenticated', 'editor', 'public'])
+    // `admin` is the only hardcoded SYSTEM role; others are deletable examples.
     expect(roles.find((r) => r.name === 'admin')?.is_system).toBe(1)
     expect(roles.find((r) => r.name === 'editor')?.is_system).toBe(0)
+    expect(roles.find((r) => r.name === 'authenticated')?.is_system).toBe(0)
+    expect(roles.find((r) => r.name === 'public')?.is_system).toBe(0)
     expect((await rbac.getVerbs()).map((v) => v.name)).toEqual(['access', 'read', 'create', 'update', 'delete', 'manage'])
-    // Re-seed: still exactly 2 roles (no duplicate documents).
+    // Re-seed: still exactly 4 roles (no duplicate documents).
     await rbac.ensureSystemRbacSeed()
-    expect((await rbac.getRoles()).length).toBe(2)
+    expect((await rbac.getRoles()).length).toBe(4)
     const n = db.raw.prepare("SELECT COUNT(*) c FROM documents WHERE type_id='rbac_role' AND is_current_draft=1").get().c
-    expect(n).toBe(2)
+    expect(n).toBe(4)
   })
 
   it('seeded editor role is deletable (only admin is locked)', async () => {

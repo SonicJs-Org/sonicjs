@@ -52,9 +52,9 @@ adminMediaRoutes.get('/', async (c) => {
     const offset = (page - 1) * limit
 
     const mediaSvc = new MediaDocumentService(c.env.DB, getRequestTenant(c))
-    const { files, folders: folderAgg, types: typeAgg } = await mediaSvc.list({ folder, type, limit, offset })
+    const { files, total, folders: folderAgg, types: typeAgg } = await mediaSvc.list({ folder, type, limit, offset })
     const mediaFiles: MediaFile[] = files.map(doc => mediaDocToFile(doc))
-    
+
     const pageData: MediaLibraryPageData = {
       files: mediaFiles,
       folders: folderAgg.map(f => ({ folder: f.folder, count: f.count, totalSize: f.totalSize })) as FolderStats[],
@@ -63,8 +63,8 @@ adminMediaRoutes.get('/', async (c) => {
       currentType: type,
       currentView: view as 'grid' | 'list',
       currentPage: page,
-      totalFiles: mediaFiles.length,
-      hasNextPage: mediaFiles.length === limit,
+      totalFiles: total,
+      hasNextPage: offset + mediaFiles.length < total,
       user: {
         name: user!.email,
         email: user!.email,
@@ -113,12 +113,14 @@ adminMediaRoutes.get('/selector', async (c) => {
         <input
           type="search"
           id="media-selector-search"
+          name="search"
           placeholder="Search files..."
           class="w-full rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
           hx-get="/admin/media/selector"
           hx-trigger="keyup changed delay:300ms"
           hx-target="#media-selector-grid"
-          hx-include="[name='search']"
+          hx-swap="outerHTML"
+          hx-select="#media-selector-grid"
         >
       </div>
 

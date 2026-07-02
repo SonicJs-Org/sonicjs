@@ -81,6 +81,10 @@ export type { PluginMenuEntry, ResolvedPluginMenuEntry } from './services/plugin
 export { RbacService } from './services/rbac'
 export { bootstrapDocumentTypes } from './services/document-types-seed'
 
+// Document repository + service — re-exported for user plugins that read/write documents
+export { DocumentRepository } from './services/document-repository'
+export { DocumentsService } from './services/documents'
+
 // Cloudflare email provider
 export { CloudflareEmailProvider } from './services/email/providers/cloudflare'
 export type { CloudflareEmailProviderOptions, CFSendEmailBinding } from './services/email/providers/cloudflare'
@@ -89,6 +93,7 @@ export type { EmailLogRow } from './services/email/types'
 // Core plugins exported for use in Worker entries and custom scheduled handlers
 export { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 export { redirectPlugin, createRedirectPlugin } from './plugins/redirect-management'
+export { helloWorldPlugin, createHelloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
 
 // ============================================================================
 // Placeholders - To be populated in Phase 2
@@ -202,6 +207,8 @@ export {
   getConfirmationDialogScript,
   // Filter bar templates
   renderFilterBar,
+  // Admin layout (catalyst)
+  renderAdminLayoutCatalyst,
 } from './templates'
 
 export type {
@@ -215,6 +222,7 @@ export type {
   FilterBarData,
   Filter,
   FilterOption,
+  AdminLayoutCatalystData,
 } from './templates'
 
 // Types - Week 1 (COMPLETED)

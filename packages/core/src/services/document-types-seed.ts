@@ -2,6 +2,7 @@ import { D1Database } from '@cloudflare/workers-types'
 import { z } from 'zod'
 import { DocumentTypeRegistry } from './document-type-registry'
 import { getCollectionRegistry } from './collection-registry'
+import type { Permission } from '../schemas/document'
 
 // Passthrough schema: accepts any JSON object for POC types.
 // Individual fields are validated at the queryable-field level; the full
@@ -182,6 +183,30 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     ],
   })
 
+  // API key (document-backed programmatic access tokens; auth-owned, one document per key).
+  // Stores only the SHA-256 hash of the secret (q_apikey_hash) — never the plaintext. PII/credential:
+  // revoke hard-erases. See services/api-keys.ts (ApiKeyService) for the write/resolve paths.
+  await registry.register({
+    id: 'api_key',
+    name: 'api_key',
+    displayName: 'API Key',
+    description: 'Programmatic API access key (auth-owned; only the secret hash is stored)',
+    source: 'system',
+    isAuth: true,
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      pii: true,
+      baseGrants: { admin: ['read', 'create', 'update', 'delete', 'manage'] },
+    },
+    queryableFields: [
+      { name: 'keyHash', kind: 'scalar', type: 'text',    column: 'q_apikey_hash' },
+      { name: 'userId',  kind: 'scalar', type: 'text',    column: 'q_apikey_user_id' },
+      { name: 'revoked', kind: 'scalar', type: 'integer', column: 'q_apikey_revoked' },
+    ],
+  })
+
   // Analytics event (document-backed; replaces legacy analytics_events table)
   await registry.register({
     id: 'analytics_event',
@@ -274,6 +299,15 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
     if (collection.name === 'blog_post') continue
 
     try {
+      const defaultGrants: Record<string, Permission[]> = {
+        admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'],
+        editor: ['read', 'create', 'update', 'publish'],
+        viewer: ['read'],
+      }
+      const baseGrants: Record<string, Permission[]> = collection.access
+        ? { ...defaultGrants, ...collection.access }
+        : defaultGrants
+
       await registry.register({
         id: collection.name,
         name: collection.name,
@@ -282,12 +316,7 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
         source: 'system',
         schema: anyObject,
         settings: {
-          baseGrants: {
-            public: ['read'],
-            admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'],
-            editor: ['read', 'create', 'update', 'publish'],
-            viewer: ['read'],
-          },
+          baseGrants,
           maxVersionsPerRoot: 50,
           ...(collection.versioning ? { versioning: true } : {}),
         },

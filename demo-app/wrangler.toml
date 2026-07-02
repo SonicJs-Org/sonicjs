@@ -20,7 +20,7 @@ routes = [
 [[d1_databases]]
 binding = "DB"
 database_name = "sonicjs-demo"
-database_id = "REPLACE_WITH_SONICJS_DEMO_D1_ID"
+database_id = "dc87c94a-14e2-4bc1-a77c-ab382191e7a9"
 migrations_dir = "./migrations"
 
 # R2 Bucket for demo media. Provision once:
@@ -34,7 +34,7 @@ bucket_name = "sonicjs-demo-media"
 # then paste the returned id below.
 [[kv_namespaces]]
 binding = "CACHE_KV"
-id = "REPLACE_WITH_SONICJS_DEMO_KV_ID"
+id = "91de57b1e6af4cef8bb6a2786179bc14"
 
 # Cloudflare Email Service binding (send_email)
 [[send_email]]

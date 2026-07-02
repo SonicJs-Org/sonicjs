@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation'
 
 import { Breadcrumbs } from '@/components/Breadcrumbs'
 import { Footer } from '@/components/Footer'
+import { MarketingFooter } from '@/components/MarketingFooter'
 import { Header } from '@/components/Header'
 import { Logo } from '@/components/Logo'
+import { MarketingNav } from '@/components/MarketingNav'
 import { Navigation } from '@/components/Navigation'
 import { SectionProvider, type Section } from '@/components/SectionProvider'
 import { VERSION } from '@/lib/version'
@@ -21,6 +23,16 @@ export function Layout({
 }) {
   let pathname = usePathname()
 
+  if (pathname === '/') {
+    return (
+      <div className="flex min-h-full flex-col">
+        <MarketingNav />
+        <main className="flex-auto">{children}</main>
+        <MarketingFooter />
+      </div>
+    )
+  }
+
   return (
     <SectionProvider sections={allSections[pathname] ?? []}>
       <div className="h-full lg:ml-72 xl:ml-80">
@@ -33,7 +45,7 @@ export function Layout({
               <Link href="/" aria-label="Home">
                 <Logo className="h-6" />
               </Link>
-              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/20">
+              <span className="inline-flex items-center rounded-md bg-pink-50 px-2 py-1 text-xs font-medium text-pink-700 ring-1 ring-inset ring-pink-700/10 dark:bg-pink-500/10 dark:text-pink-300 dark:ring-pink-400/20">
                 v{VERSION}
               </span>
             </div>

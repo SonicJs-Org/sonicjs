@@ -2,7 +2,7 @@ import { ComparisonMatrix } from '@/components/ComparisonMatrix'
 
 # Headless CMS Comparison: SonicJS vs Payload, Strapi, Directus, Sanity & Contentful
 
-These six are among the most popular headless CMSs — but they make very different trade-offs. **SonicJS** runs on **Cloudflare Workers** with a **D1 (SQLite)** database. **Payload, Strapi, and Directus** are mature, self-hostable **Node.js** platforms. **Sanity and Contentful** are hosted **SaaS** content platforms with deep enterprise features but no self-hosting and significant plan-gating. The table below is a full inventory of 125+ capabilities across 13 categories — meant as an honest reference, including the many places where the others are still ahead of SonicJS.
+These six are among the most popular headless CMSs — but they make very different trade-offs. **SonicJS** is edge-first — built for **Cloudflare Workers** with a **D1 (SQLite)** database — and also self-hosts on **Docker or any Node/Bun server** with SQLite on disk. **Payload, Strapi, and Directus** are mature, self-hostable **Node.js** platforms. **Sanity and Contentful** are hosted **SaaS** content platforms with deep enterprise features but no self-hosting and significant plan-gating. The table below is a full inventory of 125+ capabilities across 13 categories — meant as an honest reference, including the many places where the others are still ahead of SonicJS.
 
 <ComparisonMatrix />
 
@@ -20,7 +20,7 @@ This is the honest part. Compared to SonicJS, the older platforms ship a number 
 
 ### Where SonicJS is differentiated
 
-Its edge-native runtime (sub-50ms global reads, near-zero cold starts), built-in three-tier caching, and the fact that everything ships in the open-source core with no paywalls. Note the trade-offs that come with the edge model: a single database engine (D1/SQLite) and Cloudflare-only hosting rather than run-anywhere Docker.
+Its edge-native runtime (sub-50ms global reads, near-zero cold starts), built-in three-tier caching, and the fact that everything ships in the open-source core with no paywalls. It also self-hosts — Docker, VPS, or any Node/Bun server, using SQLite on disk in place of D1. The trade-off that remains is a single database dialect (SQLite everywhere); managed Postgres is on the roadmap.
 
 ### Pricing & feature gating
 
@@ -43,7 +43,7 @@ The self-hostable four are free to run (Directus requires a commercial license a
     <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-5">
       <li>You need GraphQL or real-time today</li>
       <li>You depend on Postgres, MySQL, or MongoDB specifically</li>
-      <li>You want a large ecosystem and the control of self-hosting</li>
+      <li>You want a large, mature ecosystem of plugins and integrations</li>
       <li>Your traffic is regional and edge latency isn't a priority</li>
     </ul>
   </div>

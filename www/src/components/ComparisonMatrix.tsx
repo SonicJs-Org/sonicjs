@@ -25,7 +25,7 @@ import { Fragment, useRef } from 'react'
  * Data last verified June 2026. Update LAST_VERIFIED when refreshed.
  */
 
-const LAST_VERIFIED = 'June 2026'
+const LAST_VERIFIED = 'July 2026'
 
 type Mark = {
   kind: 'yes' | 'no' | 'partial' | 'plugin' | 'paid' | 'soon'
@@ -72,7 +72,7 @@ const SECTIONS: Section[] = [
       {
         label: 'Runtime',
         cells: [
-          'Cloudflare Workers',
+          'Workers · Node/Bun',
           'Node.js',
           'Node.js',
           'Node.js',
@@ -98,7 +98,7 @@ const SECTIONS: Section[] = [
       {
         label: 'Database',
         cells: [
-          'D1 (SQLite)',
+          'D1 / SQLite',
           'Postgres · Mongo',
           'Postgres · MySQL',
           'Postgres · +5',
@@ -146,9 +146,9 @@ const SECTIONS: Section[] = [
       },
       {
         label: 'Self-hostable anywhere',
-        cells: [partial('CF only'), yes, yes, yes, no, no],
+        cells: [yes, yes, yes, yes, no, no],
       },
-      { label: 'Docker support', cells: [no, yes, yes, yes, no, no] },
+      { label: 'Docker support', cells: [yes, yes, yes, yes, no, no] },
       {
         label: 'Official managed cloud',
         cells: [no, paid('Paused'), paid(), paid(), yes, yes],

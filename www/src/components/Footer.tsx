@@ -42,7 +42,7 @@ function PageNavigation() {
   let allPages = navigation.flatMap((group) => group.links)
   let currentPageIndex = allPages.findIndex((page) => page.href === pathname)
 
-  if (currentPageIndex === -1) {
+  if (currentPageIndex === -1 || pathname === '/') {
     return null
   }
 

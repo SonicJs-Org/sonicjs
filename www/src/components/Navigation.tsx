@@ -286,6 +286,7 @@ export const navigation: Array<NavGroup> = [
     title: 'Deployment',
     links: [
       { title: 'Production Deployment', href: '/deployment' },
+      { title: 'Self-Hosting', href: '/self-hosting' },
       { title: 'Testing', href: '/testing' },
     ],
   },

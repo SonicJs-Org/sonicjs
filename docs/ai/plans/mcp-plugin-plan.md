@@ -1,311 +1,346 @@
-# MCP Plugin Plan — Issue #784
+# MCP Plugin Plan — Issue #784 (revised)
 
-**Status**: Draft  
-**Branch**: `lane711/analyze-issue-784`  
+**Status**: Ready to build
 **Issue**: https://github.com/SonicJs-Org/sonicjs/issues/784
+
+> **Revision note**: This plan was rewritten after a codebase audit. The original
+> draft duplicated infrastructure that already exists. See §0 for what changed and
+> why. Net effect: ~40% less code, zero new dependencies, zero new tables, zero
+> new document types.
+
+---
+
+## 0. What changed from the original draft (and why)
+
+| Original draft | Reality found in codebase | Decision |
+|---|---|---|
+| New `mcp_api_key` document type + hashing + mint-once flow (§7.1, §3.2) | `api-keys-plugin` already ships `api_key` doc type, `sk_<hex>` secret, SHA-256 hash, mint-once UI at `/admin/plugins/api-keys`, and `ApiKeyService.resolve()`. | **Reuse it.** Drop the entire `mcp_api_key` type, `auth/` dir, and key-CRUD UI. |
+| Per-request Bearer→key middleware inside the plugin | `apiKeyAuthMiddleware()` is wired **globally** (`app.ts:487`, `app.use('*', …)`). It resolves `Authorization: Bearer sk_…` → `c.get('user') = {userId,email,role,isSuperAdmin}` before any route runs. | **Inherit it.** `/api/mcp` gets an authed principal for free. Plugin only checks `c.get('user')` presence. |
+| `principalSet` uses invented `role: 'mcp'` (§7.3) | Base grants match `public` + real `role`. A fake `mcp` role matches no grants. | Use the **real user role**: `[{type:'user',id:userId},{type:'role',id:role}]`. Higher ACL fidelity. |
+| `zod-to-json-schema` dependency (§10) | Collections are `FieldConfig[]` arrays (`types/collection-config.ts`), **not** Zod schemas. | Hand-write a small `fieldConfigToJsonSchema()` mapper. **No new dep** (Workers bundle stays lean). |
+| MCP SDK + Streamable HTTP + SSE stream (§2, §4) | The official SDK assumes Node transports. SSE is only needed for **server-initiated** notifications (out of scope v1). | v1 = plain **POST → JSON** JSON-RPC 2.0, hand-rolled (~60 LOC). `GET /api/mcp` SSE deferred to v2. |
+| Reads via `DocumentRepository.list({principalSet})` | `list()` takes **no** `principalSet`; ACL is a separate `isAllowed(principalSet, rootId, permission, typeSettings)` call. | Reads = `list()` then per-doc `isAllowed()` filter. Writes = `DocumentsService` + `isAllowed` gate (mirrors `admin-content.ts`). |
+| E2E specs numbered 68–70 | Highest existing spec is `91-*`. R11 floor is stale. | Number new specs **92–94**. |
+| Per-key `scopes: ['read','write']` | `api_key` has no scope field. | v1: **no per-key scopes.** ACL + document-level permissions are the real gate. Read/write split is enforced by tool config (`types[t].write`) + `isAllowed(...,'update'|'create')`. Per-key scopes = v2 (would need an `api_key` field add). |
+
+**Unchanged from the draft**: opt-in plugin, auto-generated per-type tools, static
+`list_collections` + `search_content`, resources for collection schemas, admin
+dashboard + integration guide, R12 compliance (no legacy-table drops).
 
 ---
 
 ## 1. Goal
 
-MCP plugin exposes SonicJS content as callable tools. AI agents read/manage content via standard MCP clients (Claude Code, Cursor, VS Code, etc.).
+MCP plugin exposes SonicJS content as callable tools over the Model Context
+Protocol. AI agents (Claude Code, Cursor, VS Code, …) read/manage content via
+standard MCP clients.
 
-Plugin is **opt-in** — users install via `plugins.register`. Not bundled in default bootstrap.
+**Opt-in** — registered like any core plugin (manifest `is_core: true`, **not**
+seeded active). Activated by the operator; mounts zero surface area when inactive.
+
+Authentication is delegated entirely to the existing **API Keys** plugin. To use
+MCP, an operator mints a key at `/admin/plugins/api-keys` and presents it as
+`Authorization: Bearer sk_…`.
 
 ---
 
-## 2. MCP Protocol Primer
+## 2. MCP protocol (v1 subset)
 
-MCP = JSON-RPC 2.0 over HTTP + SSE. Spec defines three primitives:
+MCP = JSON-RPC 2.0. v1 implements the request/response half over a single
+`POST /api/mcp` endpoint returning `application/json`. No SSE stream in v1
+(server-initiated notifications are out of scope).
 
-- **Tools** — callable functions (CRUD ops on content)
-- **Resources** — readable URIs (collection schemas, document lists)
-- **Prompts** — structured message templates (out of scope v1)
+Methods supported:
 
-Transport: **Streamable HTTP** (POST to `/api/mcp`, SSE stream). Modern MCP transport — compatible with Cloudflare Workers via `ReadableStream`.
+| Method | Description |
+|---|---|
+| `initialize` | Handshake — returns `serverInfo` + `capabilities: { tools:{}, resources:{} }` |
+| `tools/list` | Tools visible to the caller (per plugin config) |
+| `tools/call` | Execute one tool; returns `content: [{type:'text', text:…}]` |
+| `resources/list` | Available resource URIs |
+| `resources/read` | Read one resource (collection schema / document list) |
+
+JSON-RPC error envelope on failure: `{ jsonrpc:'2.0', id, error:{ code, message } }`.
+Codes: `-32700` parse, `-32600` invalid request, `-32601` method not found,
+`-32602` invalid params, `-32603` internal, `-32001` unauthorized (custom).
 
 ---
 
 ## 3. Architecture
 
-### 3.1 Plugin Location
+### 3.1 Plugin location + files
 
 ```
 packages/core/src/plugins/core-plugins/mcp-plugin/
-  index.ts                    — definePlugin entry point
+  index.ts                       definePlugin — register(app), configSchema, menu
+  manifest.json                  auto-registry entry (is_core, opt-in)
+  config.ts                      Zod config schema + defaults + resolve helper
+  jsonrpc.ts                     JSON-RPC 2.0 parse + dispatch + error envelopes
   routes/
-    mcp.ts                    — main Hono router (mounted at /api/mcp)
-    transport.ts              — Streamable HTTP + SSE handler
+    mcp.ts                       POST /api/mcp — the 5 methods
   tools/
-    index.ts                  — builds tool registry from CollectionRegistry
-    documents.ts              — find/get/create/update/delete tool factories
-    collections.ts            — list_collections tool
+    registry.ts                  build tool list from CollectionRegistry ∩ config
+    documents.ts                 list/get/create/update/publish/delete executors
+    static.ts                    list_collections, search_content executors
   resources/
-    index.ts                  — resource registry
-    schemas.ts                — collection schema resources
-  auth/
-    middleware.ts             — Bearer token → API key validation
-    api-keys.ts               — CRUD for mcp_api_key document type
-  services/
-    tool-registry.ts          — builds + caches MCP tool list at boot
-    schema-generator.ts       — Zod → JSON Schema for tool input/output
+    schemas.ts                   sonicjs:// resource resolvers
+  schema/
+    field-to-jsonschema.ts       FieldConfig[] → JSON Schema (no dep)
   admin/
-    routes.ts                 — /admin/mcp/* (key management UI)
-    templates.ts              — HTMX templates for key list + create form
-  configSchema.ts             — Zod schema for plugin config
+    routes.ts                    GET /admin/mcp dashboard + integration guide
+    templates.ts                 catalyst/HTMX templates
+  __tests__/
+    tool-registry.test.ts        unit — tool generation from config
+    jsonrpc.test.ts              unit — dispatch + error envelopes
+    field-to-jsonschema.test.ts  unit — field mapper
+    mcp.integration.test.ts      real-SQLite — call round-trips
 ```
 
-### 3.2 Document Types Introduced
+### 3.2 Document types introduced
+
+**None.** Auth reuses `api_key`. Content lives in existing collection-backed
+`documents`. No new type registration, no new `q_*` columns.
+
+### 3.3 Mount points
+
+Both mounted synchronously in the plugin's `register(app)`:
 
 ```
-mcp_api_key  — stores API keys (hashed) in documents table
-  fields:
-    name: string          — human label
-    key_hash: string      — SHA-256 of raw key (raw never stored)
-    key_prefix: string    — first 8 chars for UI display
-    scopes: string[]      — ['read', 'write'] or per-type overrides
-    allowed_types: string[] | null  — null = all types
-    owner_user_id: string
-    expires_at: number | null
-    last_used_at: number | null
+POST /mcp            JSON-RPC endpoint (under global apiKeyAuthMiddleware)
+GET  /admin/mcp      dashboard + integration guide (under admin auth)
 ```
 
-No new DB tables. Keys in `documents` with `type_id = 'mcp_api_key'`, `tenant_id = 'default'`. R12 compliant.
+Note: `/mcp` not `/api/mcp` — user plugins are registered after `app.route('/api', apiRoutes)`
+in `app.ts`, so `/api/mcp` would be caught by the `/:collection` POST catch-all.
 
 ---
 
-## 4. MCP Endpoint
+## 4. Auth (delegated)
 
-**Mount**: `register(app) => app.route('/api/mcp', mcpRouter)`
+No auth code in this plugin beyond a presence check.
 
-```
-POST /api/mcp          — JSON-RPC request (tools/call, tools/list, resources/list, resources/read)
-GET  /api/mcp          — SSE stream (server-sent notifications, keep-alive)
-```
+1. Operator mints an `sk_…` key at `/admin/plugins/api-keys`.
+2. Client sends `Authorization: Bearer sk_…` to `POST /api/mcp`.
+3. Global `apiKeyAuthMiddleware` (`app.ts:487`) resolves it → `c.get('user')`.
+4. In `routes/mcp.ts`:
+   ```ts
+   const user = c.get('user')
+   if (!user) return jsonRpcError(id, -32001, 'Unauthorized: valid API key required')
+   const principalSet = [
+     { type: 'user', id: user.userId },
+     { type: 'role', id: user.role },
+   ]
+   ```
+5. Every read/write passes `principalSet` through `DocumentRepository.isAllowed()`.
+   The MCP layer never bypasses document ACL.
 
-All requests require `Authorization: Bearer <api-key>`.
-
-### 4.1 JSON-RPC Methods Supported (v1)
-
-| Method | Description |
-|---|---|
-| `initialize` | Handshake — server info + capabilities |
-| `tools/list` | All tools visible to API key |
-| `tools/call` | Execute tool |
-| `resources/list` | Available resources |
-| `resources/read` | Read resource (e.g. collection schema) |
+Read vs write split (v1, no per-key scopes):
+- Read tools (`list_*`, `get_*`, `list_collections`, `search_content`) require
+  `isAllowed(principalSet, rootId, 'read', …)` per document.
+- Write tools (`create_*`, `update_*`, `publish_*`, `delete_*`) are only generated
+  for types with `config.types[t].write === true`, **and** gated at call time by
+  `isAllowed(…, 'create'|'update'|'delete', …)`.
 
 ---
 
 ## 5. Tools
 
-### 5.1 Auto-Generated Per Document Type
+### 5.1 Auto-generated per exposed type
 
-Per active document type in plugin config, generate:
+For each active collection in `CollectionRegistry.listActive()` that passes the
+`config.expose` filter:
 
-| Tool Name | Maps To |
-|---|---|
-| `list_{typeId}` | `DocumentRepository.list({ typeId, status })` |
-| `get_{typeId}` | Raw SQL lookup by id/slug |
-| `create_{typeId}` | `DocumentsService.create()` + optional auto-publish |
-| `update_{typeId}` | `DocumentsService.saveDraft()` |
-| `publish_{typeId}` | `DocumentsService.publish()` |
-| `delete_{typeId}` | `DocumentsService` soft-delete (sets `deleted_at`) |
+| Tool | Maps to | Scope |
+|---|---|---|
+| `list_{typeId}` | `DocumentRepository.list({ typeId, status, limit })` → `isAllowed` filter | read |
+| `get_{typeId}` | `DocumentRepository.getById` / by slug (`q_slug`) → `isAllowed` | read |
+| `create_{typeId}` | `DocumentsService.create()` (optional `publishOnCreate`) | write |
+| `update_{typeId}` | `DocumentsService.saveDraft()` | write |
+| `publish_{typeId}` | `DocumentsService.publish()` | write |
+| `delete_{typeId}` | `DocumentsService` soft-delete (`deleted_at`) | write |
 
-### 5.2 Static Tools (Always Present)
+Write tools emitted only when `config.types[typeId].write === true` (default true
+for exposed types unless overridden).
+
+### 5.2 Static tools (always present when plugin active)
 
 | Tool | Description |
 |---|---|
-| `list_collections` | All exposed type IDs + display names |
-| `search_content` | Cross-type full-text search via `q_title` / `q_slug` |
+| `list_collections` | Exposed type IDs + display names + record counts |
+| `search_content` | Cross-type search over `q_title` / `q_slug` (LIKE), ACL-filtered |
 
-### 5.3 Tool Input Schema Generation
+### 5.3 Tool input schema generation
 
-Each tool `inputSchema` = JSON Schema from collection Zod schema via `zod-to-json-schema`. Virtual/system fields (`id`, `created_at`, `updated_at`, `version_number`) stripped from write schemas.
+`inputSchema` (JSON Schema) built from the collection's `FieldConfig[]` via
+`fieldConfigToJsonSchema()`. Mapping:
+
+| FieldType | JSON Schema |
+|---|---|
+| `text`, `slug`, `richtext`, `textarea`, `email`, `url` | `{type:'string'}` |
+| `number` | `{type:'number'}` |
+| `boolean`, `checkbox` | `{type:'boolean'}` |
+| `date`, `datetime` | `{type:'string', format:'date-time'}` |
+| `select` | `{type:'string', enum:[…]}` |
+| `array` | `{type:'array', items:…}` |
+| `object` | `{type:'object'}` |
+| `relation`, `media` | `{type:'string'}` (id reference) |
+
+System/virtual fields stripped from **write** schemas: `id`, `created_at`,
+`updated_at`, `version_number`, `root_id`. `required` derived from
+`field.required === true`.
 
 ---
 
 ## 6. Resources
 
-| URI Pattern | Content |
+| URI | Content |
 |---|---|
-| `sonicjs://collections` | JSON list of all exposed types + their schemas |
+| `sonicjs://collections` | JSON list of exposed types + display names |
 | `sonicjs://collections/{typeId}/schema` | JSON Schema for one type |
-| `sonicjs://collections/{typeId}/documents` | Paginated list (published, first 50) |
+| `sonicjs://collections/{typeId}/documents` | First `listLimit` published docs (ACL-filtered) |
+
+`resources/list` enumerates the first two per exposed type; `resources/read`
+resolves by URI.
 
 ---
 
-## 7. Auth
-
-### 7.1 API Key Flow
-
-1. Admin creates key in `/admin/mcp/keys` — selects name, scopes, allowed types, expiry
-2. System generates `crypto.randomUUID()` raw key, shows it **once**
-3. Store `SHA-256(rawKey)` as `key_hash` in documents table
-4. On each request: hash bearer token, lookup matching `mcp_api_key` doc, check scopes + expiry
-5. On match: update `last_used_at` (async, non-blocking)
-
-### 7.2 Scope Enforcement
-
-Scopes on key: `['read']`, `['write']`, or `['read', 'write']`
-
-Write tools (`create_*`, `update_*`, `publish_*`, `delete_*`) require `write` scope.  
-Read tools (`list_*`, `get_*`, `search_*`) require `read` scope.
-
-Per-type: if `allowed_types` set, only those type IDs accessible.
-
-### 7.3 ACL Passthrough
-
-After API key auth, reads/writes still go through `DocumentRepository.isAllowed()` + `DocumentsService` — inheriting existing ACL. API key auth does **not** bypass document-level permissions.
-
-Principal set for MCP requests:
-```ts
-const principalSet = [
-  { type: 'user', id: apiKey.owner_user_id },
-  { type: 'role', id: 'mcp' },  // new role, base grants apply
-]
-```
-
----
-
-## 8. Plugin Configuration
+## 7. Plugin configuration
 
 ```ts
-import { mcpPlugin } from '@sonicjs/core/plugins/mcp'
+import { mcpPlugin } from '@sonicjs-cms/core'
 
-export default createSonicJSApp({
-  plugins: {
-    register: [
-      mcpPlugin({
-        // Expose only these types (default: all active types)
-        expose: ['posts', 'pages', 'products'],
-
-        // Per-type write control (default: read+write for all exposed)
-        types: {
-          posts:    { read: true, write: true },
-          pages:    { read: true, write: false },  // read-only
-          products: { read: true, write: true },
-        },
-
-        // Strip these fields from all tool responses
-        redactFields: ['internal_notes', 'cost_price'],
-
-        // Max documents returned by list_* tools (default: 50)
-        listLimit: 50,
-
-        // Allow unauthenticated read access (default: false — insecure, dev only)
-        allowPublicRead: false,
-      })
-    ]
-  }
-})
+registerPlugins([
+  mcpPlugin({
+    expose: ['posts', 'pages', 'products'],   // default: all active collections
+    types: {
+      posts:    { read: true, write: true },
+      pages:    { read: true, write: false }, // read-only
+      products: { read: true, write: true },
+    },
+    redactFields: ['internal_notes', 'cost_price'],  // stripped from all responses
+    listLimit: 50,                                    // cap for list_*/resources
+  }),
+])
 ```
 
-Config in plugin `configSchema` (Zod), persisted in plugin document `settings` field (existing plugin storage pattern).
+`config.ts` exposes a Zod schema (all fields optional, defaulted) and a
+`resolveMcpConfig(raw, registry)` that expands `expose` defaults from the live
+registry. Persisted via the standard plugin `settings` field (`configSchema`).
+
+Defaults: `expose` = every active collection; `types[t]` = `{read:true,write:true}`;
+`redactFields` = `[]`; `listLimit` = 50.
 
 ---
 
-## 9. Admin UI
+## 8. Admin UI (`/admin/mcp`)
 
-Routes mounted at `/admin/mcp` via `register(app)`.
+No key management here — that lives at `/admin/plugins/api-keys`. This page is
+read-only guidance + status.
 
-### Pages
-
-| Route | Description |
+| Section | Content |
 |---|---|
-| `GET /admin/mcp` | Dashboard — active keys, request count, enabled types |
-| `GET /admin/mcp/keys` | Key list with prefix + scopes |
-| `POST /admin/mcp/keys` | Create new key — shows raw key once |
-| `DELETE /admin/mcp/keys/:id` | Revoke key |
-| `GET /admin/mcp/docs` | Integration guide (how to connect Claude Code, Cursor) |
+| Status | Plugin active? Endpoint URL. Count of exposed collections + tools. |
+| Exposed collections | Table: type, read/write flags, tool names. |
+| Integration guide | Copy-paste client config (Claude Code / Cursor `mcp.json`) with the live endpoint URL pre-filled + a "mint a key" link to `/admin/plugins/api-keys`. |
 
-Design: glass-morphism/catalyst, HTMX, consistent with existing admin pages.
+Design: catalyst/glass-morphism + HTMX, consistent with existing admin pages.
+Escape all rendered values with `escapeHtml` (R8).
 
 ---
 
-## 10. Cloudflare Workers Compatibility
+## 9. Cloudflare Workers compatibility
 
 | Concern | Solution |
 |---|---|
-| SSE | `ReadableStream` + `TransformStream` — native Workers API |
-| Crypto (key hashing) | `crypto.subtle.digest('SHA-256', ...)` — native Workers API |
-| Long-running connections | Keep-alive ping every 30s via SSE comment (`:\n\n`) |
-| `zod-to-json-schema` | Tree-shakeable, no Node.js deps — Workers compatible |
-| No `process.env` | Use `ctx.env` from `onBoot` context |
+| JSON-RPC parse | `await c.req.json()` — native |
+| Crypto | none needed in-plugin (delegated to ApiKeyService) |
+| JSON Schema gen | hand-rolled mapper, no deps |
+| No SSE in v1 | plain JSON response; no long-lived connection |
+| `process.env` | use `c.env` — never `process` |
 
 ---
 
-## 11. Implementation Plan
+## 10. Implementation plan
 
-### Phase 1 — Core Protocol + Read Tools
-- [ ] `configSchema.ts` — plugin config Zod schema
-- [ ] `mcp_api_key` document type registration in `onBoot`
-- [ ] Bearer token auth middleware
-- [ ] Transport handler (POST JSON-RPC + GET SSE)
-- [ ] `initialize` + `tools/list` methods
-- [ ] `list_collections`, `list_{typeId}`, `get_{typeId}` tools
-- [ ] `resources/list` + `resources/read` (schemas only)
-- [ ] Unit tests for tool generation + auth middleware
+### Phase 1 — Protocol + read tools ✅ (shipped)
+- [x] `config.ts` — Zod config schema, defaults, `resolveMcpConfig`
+- [x] `schema/field-to-jsonschema.ts` — FieldConfig[] → JSON Schema
+- [x] `jsonrpc.ts` — parse, dispatch, error envelopes
+- [x] `tools/registry.ts` — build tool set from registry ∩ config (write/search phase-gated off)
+- [x] `tools/documents.ts` — `list_*`, `get_*` executors (read + `isAllowed` filter)
+- [x] `tools/static.ts` — `list_collections`
+- [x] `resources/schemas.ts` — `resources/list` + `resources/read` (schemas)
+- [x] `routes/mcp.ts` — POST handler: `initialize`, `tools/list`, `tools/call`, `resources/*`
+- [x] `index.ts` + `manifest.json` — definePlugin, register (`/api/mcp` only; menu/admin → P3)
+- [x] export from `core-plugins/index.ts` + public `src/index.ts`; regenerated `manifest-registry.ts`
+- [x] unit tests: `tool-registry`, `jsonrpc`, `field-to-jsonschema`, `config` (37 tests, all pass)
+- [ ] **P2 carryover**: real-SQLite integration test of the read path (R10 — unit/mock tests don't prove SQL). Bundled with the Phase 2 harness.
 
-### Phase 2 — Write Tools
-- [ ] `create_{typeId}`, `update_{typeId}`, `publish_{typeId}`, `delete_{typeId}` tools
-- [ ] Scope enforcement on write ops
-- [ ] Input schema generation (Zod → JSON Schema)
-- [ ] Integration tests (real SQLite harness)
+### Phase 2 — Write tools ✅ (shipped)
+- [x] `tools/mutations.ts` — `create_*`, `update_*`, `publish_*`, `delete_*` (keyed by root id)
+- [x] write-scope gating: config `types[t].write` (tool emission) + `isAllowed` per op (create=base-grant, update/publish/delete=concrete root)
+- [x] PII branch: `settings.pii` → hard `erase`; else soft-delete live rows (published + current draft)
+- [x] `PHASE_FLAGS.includeWrite` flipped on in `routes/mcp.ts` + write dispatch wired
+- [x] `mcp.integration.test.ts` — real-SQLite route-level: create→list(draft/published)→publish→get→update→delete round-trip, ACL denial (viewer), auth gate, unknown-tool, resources/read (9 tests)
+- Note: `data` on update merges (`{...prev, ...input.data}`) — partial payloads are safe. Input beyond title/slug/data is not accepted (system fields already stripped from the write schema).
 
-### Phase 3 — Admin UI + API Keys
-- [ ] Admin routes + HTMX templates
-- [ ] Key create/list/revoke UI
-- [ ] Plugin dashboard with request metrics (stored in `documents` as `mcp_request_log` type)
-- [ ] Integration guide page (Claude Code `~/.claude/settings.json` snippet auto-generated)
+### Phase 3 — Admin UI ✅ (shipped)
+- [x] `admin/templates.ts` — `renderMcpDashboardPage`: status card (endpoint URL + counts), exposed collections table (typeId/displayName/read/write/tools), integration guide (Claude Code + Cursor mcp.json with auto-filled URL)
+- [x] `admin/routes.ts` — `createMcpAdminRoutes(options)`: requireAuth + admin role guard, derives endpoint URL from request, resolves live config + builds tool list for counts
+- [x] `index.ts` updated — mounts `/admin/mcp`, adds sidebar menu entry (order 87, terminal icon)
+- [x] E2E spec `tests/e2e/93-mcp-admin.spec.ts` (7 cases: heading, endpoint URL, copy button, collections table, Claude Code snippet, Cursor snippet, api-keys link, unauthed redirect)
 
 ### Phase 4 — Polish
 - [ ] `search_content` cross-type tool
-- [ ] `redactFields` config option
-- [ ] E2E Playwright specs (numbered 68+, per R11)
-- [ ] README + integration examples
+- [ ] `redactFields` enforcement in all responses
+- [ ] E2E specs `94-mcp-read.spec.ts`, `95-mcp-write.spec.ts` (write only — CI runs; admin spec shipped in P3 as `93-mcp-admin.spec.ts`)
+- [ ] README + client integration examples
 
 ---
 
-## 12. Open Questions
-
-1. **`mcp-remote` vs direct HTTP** — Some MCP clients need `mcp-remote` npm bridge for SSE. Add setup instructions or ship small proxy endpoint?
-2. **Request logging** — Store per-request logs as documents (`mcp_request_log`)? Adds storage, enables usage analytics. Make opt-in via config.
-3. **Webhooks / push notifications** — Out of scope v1. MCP 2025-11 spec supports server-initiated notifications. Note for v2.
-4. **Rate limiting** — Cloudflare Rate Limiting on `/api/mcp`? Deployment concern, not plugin responsibility.
-5. **Multi-tenant** — POC uses `tenant_id = 'default'`. Multi-tenant follows same pattern as rest of system.
-
----
-
-## 13. Files Changed / Created
+## 11. Files changed / created
 
 ### New
 ```
-packages/core/src/plugins/core-plugins/mcp-plugin/   (entire directory)
-tests/e2e/68-mcp-plugin-read.spec.ts
-tests/e2e/69-mcp-plugin-write.spec.ts
-tests/e2e/70-mcp-api-key-management.spec.ts
+packages/core/src/plugins/core-plugins/mcp-plugin/**   (entire directory)
+tests/e2e/93-mcp-admin.spec.ts
+tests/e2e/94-mcp-read.spec.ts      (P4)
+tests/e2e/95-mcp-write.spec.ts     (P4)
 ```
 
 ### Modified
 ```
-packages/core/src/plugins/core-plugins/index.ts      — export mcpPlugin
-packages/core/src/index.ts                           — export mcpPlugin from public API
-packages/core/src/services/document-types-seed.ts   — add mcp_api_key type seed (optional)
+packages/core/src/plugins/core-plugins/index.ts   — export mcpPlugin
+packages/core/src/index.ts                         — re-export mcpPlugin from public API
 ```
 
-No migration files. No new DB tables.
+**No migrations. No new DB tables. No new document types. No new dependencies.**
 
 ---
 
-## 14. Acceptance Criteria
+## 12. Acceptance criteria
 
-- [ ] `POST /api/mcp` with valid bearer key returns valid MCP `initialize` response
-- [ ] `tools/list` returns one tool per exposed collection × operation
-- [ ] `tools/call list_posts` returns published posts via `DocumentRepository`
-- [ ] `tools/call create_posts` creates document, respects ACL
-- [ ] Invalid/expired key returns `401` with MCP error envelope
-- [ ] Admin can create, view prefix, and revoke API keys
-- [ ] Plugin disabled = no routes mounted (zero surface area)
+- [ ] `POST /api/mcp` (`initialize`) with a valid `Bearer sk_…` returns MCP handshake
+- [ ] Missing/invalid key → `-32001` unauthorized envelope
+- [ ] `tools/list` returns one tool per exposed collection × operation + static tools
+- [ ] `tools/call list_{type}` returns published docs, ACL-filtered via `isAllowed`
+- [ ] `tools/call create_{type}` creates a document and respects ACL (denied → error)
+- [ ] Read-only type (`write:false`) emits no write tools; forced call → method-not-found
+- [ ] `resources/read sonicjs://collections/{type}/schema` returns valid JSON Schema
+- [ ] `/admin/mcp` renders status + integration guide; links to api-keys for tokens
+- [ ] Plugin inactive → no routes mounted (zero surface area)
 - [ ] All existing tests pass (no regressions)
-- [ ] E2E specs 68–70 pass in CI
+- [ ] E2E specs 92–94 present (validated by CI)
+
+---
+
+## 13. Open questions / deferred to v2
+
+1. **SSE / server push** — `GET /api/mcp` streaming for notifications. Out of scope v1.
+2. **Per-key scopes** — narrow a key to read-only or to specific types. Needs an
+   `api_key` field addition; v1 relies on ACL + user role.
+3. **`mcp-remote` bridge** — some clients need the npm SSE bridge. Document in the
+   integration guide; revisit if direct HTTP proves insufficient.
+4. **Request logging / usage metrics** — opt-in `documents`-backed log. v2.
+5. **Rate limiting** — Cloudflare Rate Limiting on `/api/mcp` is a deployment
+   concern, not plugin responsibility.

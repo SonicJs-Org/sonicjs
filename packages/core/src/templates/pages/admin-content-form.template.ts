@@ -65,6 +65,8 @@ export interface ContentFormData {
   }
   versioningEnabled?: boolean // Flag to indicate if versioning is enabled for this document type
   referrerParams?: string // URL parameters to preserve filters when returning to list
+  /** Resolved email of the document creator (from documents.created_by → auth_user.email). Shown when the content schema lacks an explicit author field. */
+  createdBy?: string
   user?: {
     name: string
     email: string
@@ -296,7 +298,7 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
                 </div>
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Author</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.data?.author || 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.data?.author || data.createdBy || 'Unknown'}</dd>
                 </div>
                 ${data.published_at ? `
                   <div>

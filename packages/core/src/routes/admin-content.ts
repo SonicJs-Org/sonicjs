@@ -511,6 +511,15 @@ adminContentRoutes.get('/', async (c) => {
       docParams.push(limit, offset)
       const { results: docRows } = await db.prepare(docSql).bind(...docParams).all()
 
+      // Resolve created_by UUIDs to human-readable emails in one query.
+      const docUserIds = [...new Set((docRows ?? []).map((r: any) => r.created_by).filter(Boolean))]
+      const docAuthorMap: Record<string, string> = {}
+      if (docUserIds.length > 0) {
+        const ph = docUserIds.map(() => '?').join(',')
+        const { results: uRows } = await db.prepare(`SELECT id, email FROM auth_user WHERE id IN (${ph})`).bind(...docUserIds).all()
+        for (const u of uRows ?? []) docAuthorMap[(u as any).id] = (u as any).email
+      }
+
       const statusBadgeCss = {
         published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',
         draft: 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20',
@@ -527,7 +536,7 @@ adminContentRoutes.get('/', async (c) => {
           slug: row.slug || '',
           modelName: docType?.displayName ?? typeId,
           statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${css}">${label}</span>`,
-          authorName: row.created_by || 'System',
+          authorName: (row.created_by ? (docAuthorMap[row.created_by] ?? row.created_by) : null) || 'System',
           // Document timestamps are stored in SECONDS (documents.ts), unlike legacy content rows which
           // store MILLISECONDS — hence the *1000 here (D23).
           formattedDate: new Date((row.updated_at ?? 0) * 1000).toLocaleDateString(),
@@ -572,8 +581,8 @@ adminContentRoutes.get('/', async (c) => {
         SELECT d.root_id AS id, d.title AS title, d.slug AS slug,
                CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
                d.updated_at * 1000 AS updated_at,
-               dt.display_name AS cdisplay, COALESCE(d.created_by, 'System') AS author_label
-        FROM documents d JOIN document_types dt ON dt.id = d.type_id
+               dt.display_name AS cdisplay, COALESCE(u.email, d.created_by, 'System') AS author_label
+        FROM documents d JOIN document_types dt ON dt.id = d.type_id LEFT JOIN auth_user u ON u.id = d.created_by
         WHERE ${docConds.join(' AND ')}
         ORDER BY updated_at DESC LIMIT ? OFFSET ?`
       const { results: unionRows } = await db.prepare(unionSql).bind(...docParams, limit, offset).all()
@@ -985,6 +994,11 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       if (docType && dcoll) {
         const fields = await getCollectionFields(db, dcoll.id)
         const flags = await loadContentEditorFlags(db)
+        let createdBy: string | undefined
+        if (docRow.created_by) {
+          const uRow = await db.prepare('SELECT email FROM auth_user WHERE id = ?').bind(docRow.created_by).first<{ email: string }>()
+          createdBy = uRow?.email
+        }
         const formData: ContentFormData = {
           id: docRow.root_id,
           title: docRow.title,
@@ -1001,6 +1015,7 @@ adminContentRoutes.get('/:id/edit', async (c) => {
           versioningEnabled: docType?.settings?.versioning === true,
           user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
           version: c.get('appVersion'),
+          createdBy,
           ...flags,
         } as ContentFormData
         return c.html(renderContentFormPage(formData))
@@ -2233,7 +2248,7 @@ adminContentRoutes.get('/documents/:typeId/:rootId/versions', async (c) => {
   const docType = await registry.findById(typeId)
   if (!docType) return c.html('<div>Unknown type.</div>', 404)
   const result = await db.prepare(
-    'SELECT id, version_number, is_current_draft, is_published, status, updated_at, created_by FROM documents WHERE root_id = ? AND tenant_id = ? ORDER BY version_number DESC LIMIT 50'
+    'SELECT d.id, d.version_number, d.is_current_draft, d.is_published, d.status, d.updated_at, COALESCE(u.email, d.created_by) AS created_by FROM documents d LEFT JOIN auth_user u ON u.id = d.created_by WHERE d.root_id = ? AND d.tenant_id = ? ORDER BY d.version_number DESC LIMIT 50'
   ).bind(rootId, reqTenant(c)).all()
   const versions = (result.results ?? []).map((r: any) => ({
     id: r.id, versionNumber: r.version_number, isCurrentDraft: r.is_current_draft === 1,

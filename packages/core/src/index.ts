@@ -373,6 +373,10 @@ export { OAuthService, BUILT_IN_PROVIDERS } from './plugins/core-plugins/oauth-p
 export { userProfilesPlugin, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig } from './plugins/core-plugins/user-profiles'
 export type { ProfileFieldDefinition, UserProfileConfig } from './plugins/core-plugins/user-profiles'
 
+// MCP Server Plugin (opt-in)
+export { mcpPlugin, createMcpPlugin } from './plugins/core-plugins/mcp-plugin'
+export type { McpConfigInput, McpConfig } from './plugins/core-plugins/mcp-plugin'
+
 // ============================================================================
 // Version
 // ============================================================================

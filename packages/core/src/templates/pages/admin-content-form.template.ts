@@ -66,14 +66,13 @@ export interface ContentFormData {
   }
   versioningEnabled?: boolean // Flag to indicate if versioning is enabled for this document type
   referrerParams?: string // URL parameters to preserve filters when returning to list
-  /** Resolved email of the document creator (from documents.created_by → auth_user.email). Shown when the content schema lacks an explicit author field. */
-  createdBy?: string
   user?: {
     name: string
     email: string
     role: string
   }
   version?: string
+  author_name?: string
 }
 
 export function renderContentFormPage(data: ContentFormData, opts?: { partialOnly?: boolean }): string {
@@ -291,20 +290,20 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
               <dl class="space-y-3 text-sm">
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Created</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.created_at ? new Date(data.created_at).toLocaleDateString() : 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.created_at ? new Date(data.created_at * 1000).toLocaleDateString() : 'Unknown'}</dd>
                 </div>
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Last Modified</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.updated_at ? new Date(data.updated_at).toLocaleDateString() : 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.updated_at ? new Date(data.updated_at * 1000).toLocaleDateString() : 'Unknown'}</dd>
                 </div>
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Author</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${escapeHtml(String(data.data?.author || data.createdBy || 'Unknown'))}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${escapeHtml(String(data.data?.author || data.author_name || 'Unknown'))}</dd>
                 </div>
                 ${data.published_at ? `
                   <div>
                     <dt class="text-zinc-500 dark:text-zinc-400">Published</dt>
-                    <dd class="mt-1 text-zinc-950 dark:text-white">${new Date(data.published_at).toLocaleDateString()}</dd>
+                    <dd class="mt-1 text-zinc-950 dark:text-white">${new Date(data.published_at * 1000).toLocaleDateString()}</dd>
                   </div>
                 ` : ''}
               </dl>

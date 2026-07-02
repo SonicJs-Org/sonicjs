@@ -3,8 +3,8 @@
 > High-level feasibility + effort analysis for decoupling SonicJS from
 > Cloudflare-specific services, and the deployment targets it would unlock.
 >
-> **Status:** analysis only — no implementation committed.
-> **Date:** 2026-06-17
+> **Status:** Tier 1 implemented — all 5 adapter steps shipped.
+> **Date:** 2026-06-17 (updated 2026-06-30)
 
 ## TL;DR
 
@@ -48,15 +48,21 @@ Dialect-coupled SQL counted in `packages/core`:
 | **Node/Bun + SQLite-on-disk + filesystem storage** | small–medium, **~1–3 weeks** | No Durable Objects. DB shim exists. R2 = 4 calls. 1 queue. Hono already portable. |
 | **+ Postgres + S3 (scale tier)** | large, **months** | 28 `json_extract` + virtual columns + partial indexes = dialect rewrite + re-test matrix |
 
-Tier 1 blockers are all small and mechanical:
+Tier 1 blockers — **all shipped**:
 
-1. Promote `d1-sqlite.ts` test shim → runtime DB driver (SQLite-on-disk).
-2. Storage driver abstraction: R2 → S3 / filesystem (4 methods).
-3. KV shim: `CACHE_KV` → Redis / in-memory / SQLite table.
-4. Queue fallback: `EMAIL_QUEUE.send` → synchronous send.
-5. Replace Cloudflare `env` binding injection with config-driven DI at bootstrap.
+1. ✅ `packages/core/src/adapters/db/sqlite-driver.ts` — D1-compat runtime driver, file-path + auto-migrate.
+2. ✅ `packages/core/src/adapters/storage/filesystem-driver.ts` — R2-compat driver (put/get/delete/head + .meta.json sidecars).
+3. ✅ `packages/core/src/adapters/kv/memory-kv-driver.ts` — KVNamespace-compat in-memory driver with TTL + optional JSON persistence.
+4. ✅ `packages/core/src/adapters/queue/sync-queue-driver.ts` — Queue-compat synchronous driver (handler called in-process).
+5. ✅ `packages/core/src/adapters/node-server.ts` — `createNodeSonicApp()` injects all local drivers via Hono middleware.
+
+Entry points:
+- `my-sonicjs-app/src/self-host.ts` — Bun / Node.js server entry point.
+- `Dockerfile` + `docker-compose.yml` — container deployment.
 
 No architectural surgery required for Tier 1.
+
+**Known caveat:** `better-auth-cloudflare` uses `withCloudflare()` which wraps D1/KV. Our shims implement the same interfaces, so it should work at runtime, but has not been tested end-to-end. If auth fails, replace `drizzle(env.DB)` + `withCloudflare` with `better-auth`'s native SQLite adapter in `auth/config.ts`.
 
 ## Deployment targets unlocked
 

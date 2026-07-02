@@ -61,3 +61,4 @@ export default {
     boot: app.boot,
   }),
 };
+

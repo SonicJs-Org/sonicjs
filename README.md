@@ -29,6 +29,25 @@ npx create-sonicjs@latest my-app
 
 > **⚠️ Note:** This repository is for **developing the SonicJS core package**. To build an application with SonicJS, use the command above to create a new project.
 
+## 🐳 Self-Hosting with Docker
+
+No Cloudflare account? Run SonicJS on any server with Docker and SQLite:
+
+```bash
+docker build -t sonicjs .
+docker run -d --name sonicjs -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e JWT_SECRET=$(openssl rand -base64 32) \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  sonicjs
+
+# Create the first admin user
+docker exec sonicjs npm run reset
+# → admin@sonicjs.com / sonicjs! (change after first login)
+```
+
+See the [Self-Hosting guide](https://sonicjs.com/self-hosting) for Docker Compose, Node.js, backup strategy, and production hardening.
+
 ## 🚀 Features
 
 ### Core Platform

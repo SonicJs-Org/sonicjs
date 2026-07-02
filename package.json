@@ -1,6 +1,6 @@
 {
   "name": "sonicjs",
-  "version": "3.0.0-beta.20",
+  "version": "3.0.0-beta.23",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -68,6 +68,9 @@
     "motion": "^12.23.22",
     "semver": "^7.7.3",
     "zod": "^4.1.12"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "12.11.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251014.0",

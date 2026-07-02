@@ -45,6 +45,7 @@ export { multiTenantPlugin, createMultiTenantPlugin, TenantService } from './mul
 export { versioningPlugin, createVersioningPlugin } from './versioning-plugin'
 export { mcpPlugin, createMcpPlugin } from './mcp-plugin'
 export type { McpConfigInput, McpConfig } from './mcp-plugin'
+export { menuPlugin, createMenuPlugin } from './menu-plugin'
 
 // Core plugins list - now imported from auto-generated registry
 export const CORE_PLUGIN_IDS = [
@@ -67,7 +68,8 @@ export const CORE_PLUGIN_IDS = [
   'user-profiles',
   'stripe',
   'multi-tenant',
-  'versioning'
+  'versioning',
+  'menu',
 ] as const
 
 export type CorePluginNames = (typeof CORE_PLUGIN_IDS)[number]

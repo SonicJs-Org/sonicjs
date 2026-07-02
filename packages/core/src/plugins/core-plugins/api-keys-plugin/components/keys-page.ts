@@ -72,14 +72,18 @@ export function renderApiKeysPage(data: ApiKeysPageData): string {
 
       <!-- Newly-created secret banner (populated by JS, shown once) -->
       <div id="new-key-banner" class="hidden mb-6 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-4 ring-1 ring-emerald-200 dark:ring-emerald-800">
-        <p class="text-sm font-medium text-emerald-800 dark:text-emerald-300 mb-2">
-          Copy your new key now — it will not be shown again.
-        </p>
+        <div class="flex items-start justify-between mb-2">
+          <p class="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+            Copy your new key now — it will not be shown again.
+          </p>
+          <button type="button" onclick="document.getElementById('new-key-banner').classList.add('hidden')"
+            class="ml-4 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 text-lg leading-none">&times;</button>
+        </div>
         <div class="flex items-center gap-2">
           <code id="new-key-value" class="flex-1 rounded-lg bg-white dark:bg-zinc-900 px-3 py-2 text-sm font-mono text-zinc-950 dark:text-white ring-1 ring-zinc-950/10 dark:ring-white/10 break-all"></code>
           <button type="button" onclick="copyNewKey()"
             class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 transition-colors">
-            Copy
+            Copy &amp; dismiss
           </button>
         </div>
       </div>
@@ -151,11 +155,50 @@ export function renderApiKeysPage(data: ApiKeysPageData): string {
         document.getElementById('create-key-modal').classList.add('hidden')
         document.getElementById('new-key-value').textContent = apiKey.key
         document.getElementById('new-key-banner').classList.remove('hidden')
-        setTimeout(() => location.reload(), 1500)
+        // Add new key row to table immediately so user can see it without reloading
+        const tbody = document.getElementById('keys-tbody')
+        const emptyRow = tbody.querySelector('td[colspan]')
+        if (emptyRow) emptyRow.closest('tr').remove()
+        const tr = document.createElement('tr')
+        tr.className = 'border-t border-zinc-950/5 dark:border-white/10'
+        tr.setAttribute('data-key-id', apiKey.id)
+        const prefix = apiKey.prefix
+        const today = new Date().toISOString().slice(0, 10)
+        const expires = apiKey.expiresAt ? new Date(apiKey.expiresAt).toISOString().slice(0, 10) : 'Never'
+        // Build row using DOM methods to avoid nested template-literal escaping issues
+        const nameTd = document.createElement('td')
+        nameTd.className = 'py-3 pr-4 text-sm font-medium text-zinc-950 dark:text-white'
+        nameTd.textContent = apiKey.name
+        const prefixTd = document.createElement('td')
+        prefixTd.className = 'py-3 pr-4 text-sm font-mono text-zinc-500 dark:text-zinc-400'
+        prefixTd.textContent = prefix + '…'
+        const createdTd = document.createElement('td')
+        createdTd.className = 'py-3 pr-4 text-sm text-zinc-500 dark:text-zinc-400'
+        createdTd.textContent = today
+        const lastUsedTd = document.createElement('td')
+        lastUsedTd.className = 'py-3 pr-4 text-sm text-zinc-500 dark:text-zinc-400'
+        lastUsedTd.textContent = 'Never'
+        const expiresTd = document.createElement('td')
+        expiresTd.className = 'py-3 pr-4 text-sm text-zinc-500 dark:text-zinc-400'
+        expiresTd.textContent = expires
+        const actionsTd = document.createElement('td')
+        actionsTd.className = 'py-3 text-right'
+        const revokeBtn = document.createElement('button')
+        revokeBtn.type = 'button'
+        revokeBtn.className = 'rounded-lg bg-red-50 dark:bg-red-900/20 px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 ring-1 ring-red-200 dark:ring-red-800 transition-colors'
+        revokeBtn.textContent = 'Revoke'
+        revokeBtn.addEventListener('click', () => revokeApiKey(apiKey.id, apiKey.name))
+        actionsTd.appendChild(revokeBtn)
+        tr.appendChild(nameTd); tr.appendChild(prefixTd); tr.appendChild(createdTd)
+        tr.appendChild(lastUsedTd); tr.appendChild(expiresTd); tr.appendChild(actionsTd)
+        tbody.appendChild(tr)
       }
       function copyNewKey() {
         const v = document.getElementById('new-key-value').textContent
-        navigator.clipboard.writeText(v).then(() => window.showNotification && window.showNotification('Copied', 'success'))
+        navigator.clipboard.writeText(v).then(() => {
+          window.showNotification && window.showNotification('Copied to clipboard', 'success')
+          document.getElementById('new-key-banner').classList.add('hidden')
+        })
       }
       async function revokeApiKey(id, name) {
         if (!confirm('Revoke "' + name + '"? This cannot be undone and will break any client using it.')) return

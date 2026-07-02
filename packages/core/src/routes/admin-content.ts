@@ -985,6 +985,17 @@ adminContentRoutes.get('/:id/edit', async (c) => {
       if (docType && dcoll) {
         const fields = await getCollectionFields(db, dcoll.id)
         const flags = await loadContentEditorFlags(db)
+        let authorName: string | undefined
+        if (docRow.created_by) {
+          const authorRow = await db
+            .prepare("SELECT name, first_name, last_name, email FROM auth_user WHERE id = ?")
+            .bind(docRow.created_by).first() as any
+          if (authorRow) {
+            authorName = authorRow.name ||
+              [authorRow.first_name, authorRow.last_name].filter(Boolean).join(' ') ||
+              authorRow.email
+          }
+        }
         const formData: ContentFormData = {
           id: docRow.root_id,
           title: docRow.title,
@@ -999,6 +1010,7 @@ adminContentRoutes.get('/:id/edit', async (c) => {
           isEdit: true,
           referrerParams,
           versioningEnabled: docType?.settings?.versioning === true,
+          author_name: authorName,
           user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
           version: c.get('appVersion'),
           ...flags,
@@ -1186,6 +1198,7 @@ adminContentRoutes.post('/', async (c) => {
 
     // Check for validation errors
     if (Object.keys(errors).length > 0) {
+      const flags = await loadContentEditorFlags(db)
       const formDataWithErrors: ContentFormData = {
         collection,
         fields,
@@ -1196,7 +1209,8 @@ adminContentRoutes.post('/', async (c) => {
           name: user.email,
           email: user.email,
           role: user.role
-        } : undefined
+        } : undefined,
+        ...flags,
       }
       if (c.req.header('HX-Request') === 'true') {
         c.header('HX-Retarget', '#content-form-page')
@@ -1428,6 +1442,7 @@ adminContentRoutes.put('/:id', async (c) => {
     const { data, errors } = extractFieldData(fields, formData)
 
     if (Object.keys(errors).length > 0) {
+      const flags = await loadContentEditorFlags(db)
       const formDataWithErrors: ContentFormData = {
         id,
         collection: collection!,
@@ -1440,7 +1455,8 @@ adminContentRoutes.put('/:id', async (c) => {
           name: user!.email,
           email: user!.email,
           role: user!.role
-        } : undefined
+        } : undefined,
+        ...flags,
       }
       if (c.req.header('HX-Request') === 'true') {
         c.header('HX-Retarget', '#content-form-page')

@@ -511,12 +511,13 @@ adminContentRoutes.get('/', async (c) => {
       docParams.push(limit, offset)
       const { results: docRows } = await db.prepare(docSql).bind(...docParams).all()
 
-      // Resolve created_by UUIDs to human-readable emails in one query.
+      // Resolve created_by UUIDs to human-readable emails. Chunk to stay under D1's 100-param limit.
       const docUserIds = [...new Set((docRows ?? []).map((r: any) => r.created_by).filter(Boolean))]
       const docAuthorMap: Record<string, string> = {}
-      if (docUserIds.length > 0) {
-        const ph = docUserIds.map(() => '?').join(',')
-        const { results: uRows } = await db.prepare(`SELECT id, email FROM auth_user WHERE id IN (${ph})`).bind(...docUserIds).all()
+      for (let i = 0; i < docUserIds.length; i += 99) {
+        const chunk = docUserIds.slice(i, i + 99)
+        const ph = chunk.map(() => '?').join(',')
+        const { results: uRows } = await db.prepare(`SELECT id, email FROM auth_user WHERE id IN (${ph})`).bind(...chunk).all()
         for (const u of uRows ?? []) docAuthorMap[(u as any).id] = (u as any).email
       }
 

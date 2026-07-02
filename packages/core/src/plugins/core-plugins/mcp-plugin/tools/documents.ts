@@ -98,10 +98,7 @@ export async function execGet(
       ?? (await repo.getPublished(args.id))
       ?? (await repo.getCurrentDraft(args.id))
   } else if (args.slug) {
-    // No slug index on the repo; scan the published page (bounded by listLimit).
-    const now = Math.floor(Date.now() / 1000)
-    const page = await repo.list({ typeId, status: 'published', timeWindow: true, now, limit: ctx.listLimit })
-    doc = page.find((d) => d.slug === args.slug) ?? null
+    doc = await repo.getBySlug(typeId, args.slug)
   } else {
     throw new McpToolError('get requires an "id" or "slug" argument')
   }

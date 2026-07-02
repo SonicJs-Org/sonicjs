@@ -158,11 +158,17 @@ export async function execDelete(ctx: McpWriteCtx, typeId: string, args: { id?: 
   }
 
   // Non-PII: soft-delete the live rows of the root (published + current draft, which may coincide).
+  // Reuse the already-fetched `current` row and only query for the other axis to avoid a TOCTOU
+  // window where a concurrent saveDraft/publish could create a row between the ACL check and here.
   const ids = new Set<string>()
-  const draft = await scope.repo.getCurrentDraft(args.id)
-  if (draft) ids.add(draft.id)
-  const published = await scope.repo.getPublished(args.id)
-  if (published) ids.add(published.id)
+  ids.add(current.id)
+  if (current.isCurrentDraft) {
+    const published = await scope.repo.getPublished(args.id)
+    if (published) ids.add(published.id)
+  } else {
+    const draft = await scope.repo.getCurrentDraft(args.id)
+    if (draft) ids.add(draft.id)
+  }
   for (const id of ids) await scope.svc.softDelete(id)
 
   return { rootId: args.id, deleted: true, erased: false }

@@ -104,6 +104,14 @@ export class DocumentRepository {
     return row ? rowToDocument(row) : null
   }
 
+  async getBySlug(typeId: string, slug: string): Promise<Document | null> {
+    const row = await this.db
+      .prepare('SELECT * FROM documents WHERE tenant_id = ? AND type_id = ? AND slug = ? AND is_published = 1 AND deleted_at IS NULL LIMIT 1')
+      .bind(this.tenantId, typeId, slug)
+      .first<DocumentRow>()
+    return row ? rowToDocument(row) : null
+  }
+
   // Unified, tenant-scoped list with optional generated-column / facet filters and sort. This is the
   // single place document list SQL is built — route handlers must call this, never inline SQL (R4).
   async list(opts: ListDocumentsOptions = {}): Promise<Document[]> {

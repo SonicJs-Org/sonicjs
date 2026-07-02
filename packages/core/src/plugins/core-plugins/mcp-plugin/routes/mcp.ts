@@ -110,7 +110,7 @@ export function createMcpRoutes(options: McpConfigInput = {}) {
             let result: unknown
             switch (tool.op) {
               case 'list_collections':
-                result = await execListCollections(readCtx, cfg.types)
+                result = execListCollections(cfg.types)
                 break
               case 'list':
                 result = await execList(readCtx, tool.typeId!, args as { status?: string; limit?: number })

@@ -8,8 +8,6 @@
  */
 
 import type { ResolvedMcpType } from '../config'
-import type { McpReadCtx } from './documents'
-import { DocumentTypeRegistry } from '../../../../services/document-type-registry'
 
 export interface CollectionSummary {
   typeId: string
@@ -18,17 +16,11 @@ export interface CollectionSummary {
   write: boolean
 }
 
-export async function execListCollections(
-  ctx: McpReadCtx,
-  types: ResolvedMcpType[],
-): Promise<CollectionSummary[]> {
-  const registry = new DocumentTypeRegistry(ctx.db)
-  const out: CollectionSummary[] = []
-  for (const t of types) {
-    // Skip a configured type whose document type isn't registered/active yet.
-    const docType = await registry.findById(t.typeId)
-    if (!docType || !docType.isActive) continue
-    out.push({ typeId: t.typeId, displayName: t.displayName, read: t.read, write: t.write })
-  }
-  return out
+/**
+ * `types` comes from `resolveMcpConfig` which already filters against
+ * `CollectionRegistry.listActive()` — every entry is guaranteed active.
+ * No per-type DB round-trip needed.
+ */
+export function execListCollections(types: ResolvedMcpType[]): CollectionSummary[] {
+  return types.map((t) => ({ typeId: t.typeId, displayName: t.displayName, read: t.read, write: t.write }))
 }

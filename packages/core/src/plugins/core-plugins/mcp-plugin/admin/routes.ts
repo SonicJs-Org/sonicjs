@@ -2,12 +2,9 @@ import { Hono } from 'hono'
 import { requireAuth } from '../../../../middleware'
 import { getCollectionRegistry } from '../../../../services/collection-registry'
 import { resolveMcpConfig, type McpConfigInput } from '../config'
-import { buildToolRegistry } from '../tools/registry'
+import { buildToolRegistry, PHASE_FLAGS } from '../tools/registry'
 import { renderMcpDashboardPage } from './templates'
 import type { Bindings, Variables } from '../../../../app'
-
-// Phase flags mirrored from routes/mcp.ts — must stay in sync.
-const PHASE_FLAGS = { includeWrite: true, includeSearch: false }
 
 export function createMcpAdminRoutes(options: McpConfigInput = {}) {
   const routes = new Hono<{ Bindings: Bindings; Variables: Variables }>()

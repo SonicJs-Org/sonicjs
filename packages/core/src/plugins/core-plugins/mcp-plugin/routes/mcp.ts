@@ -1,11 +1,12 @@
 /**
- * MCP JSON-RPC endpoint — POST /api/mcp.
+ * MCP JSON-RPC endpoint — POST /mcp.
  *
- * Auth is delegated: the app-wide apiKeyAuthMiddleware (app.ts) resolves
- * `Authorization: Bearer sk_…` to `c.get('user')` before this runs. We only check
- * that a user was resolved, then derive the ACL principal set via the shared
- * getDocumentRequestContext coupling point — so MCP callers get exactly the
- * permissions of the key's owning user, gated per document by isAllowed.
+ * Mounted at top-level /mcp (not /api/mcp) so it clears the /api/:collection
+ * catch-all in app.ts. Auth is delegated: the app-wide apiKeyAuthMiddleware
+ * (app.ts) resolves `Authorization: Bearer sk_…` to `c.get('user')` before this
+ * runs. We only check that a user was resolved, then derive the ACL principal set
+ * via the shared getDocumentRequestContext coupling point — so MCP callers get
+ * exactly the permissions of the key's owning user, gated per document by isAllowed.
  *
  * v1 supports: initialize, tools/list, tools/call, resources/list, resources/read.
  * Write tools + search_content are gated off here until Phases 2 / 4.
@@ -16,7 +17,7 @@ import type { Bindings, Variables } from '../../../../app'
 import { getDocumentRequestContext } from '../../../../services/document-request-context'
 import { getCollectionRegistry } from '../../../../services/collection-registry'
 import { resolveMcpConfig, type McpConfigInput } from '../config'
-import { buildToolRegistry } from '../tools/registry'
+import { buildToolRegistry, PHASE_FLAGS } from '../tools/registry'
 import { execList, execGet, type McpReadCtx } from '../tools/documents'
 import { execCreate, execUpdate, execPublish, execDelete, type McpWriteCtx } from '../tools/mutations'
 import { execListCollections } from '../tools/static'
@@ -26,9 +27,6 @@ import { parseJsonRpc, rpcResult, rpcError, JSON_RPC, McpToolError } from '../js
 const SERVER_INFO = { name: 'sonicjs-mcp', version: '1.0.0' } as const
 // MCP protocol revision this server speaks (request/response subset).
 const PROTOCOL_VERSION = '2024-11-05'
-
-// Phase gates — flipped on as later phases land. search_content → Phase 4.
-const PHASE_FLAGS = { includeWrite: true, includeSearch: false }
 
 export function createMcpRoutes(options: McpConfigInput = {}) {
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()

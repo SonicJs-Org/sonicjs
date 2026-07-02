@@ -21,7 +21,7 @@ import { createDocumentSchema, updateDocumentSchema } from '../../../../schemas/
 import type { DocumentType, Permission, PrincipalRef } from '../../../../schemas/document'
 import { getCollectionRegistry } from '../../../../services/collection-registry'
 import { McpToolError } from '../jsonrpc'
-import { shapeDocument } from './documents'
+import { shapeDocument, redact } from './documents'
 
 export interface McpWriteCtx {
   db: D1Database
@@ -89,7 +89,9 @@ export async function execCreate(
   // Base-grant check (no root yet): can this principal create this type?
   await assertAllowed(scope, ctx, '', 'create')
 
-  const data = applyUserFieldDefaults(args.data ?? {}, typeId, ctx.userId)
+  // Redacted fields are invisible on read; strip them on write too so a client can't
+  // populate a field it can never see back (write-but-not-read asymmetry).
+  const data = redact(applyUserFieldDefaults(args.data ?? {}, typeId, ctx.userId), ctx.redactFields)
 
   const input = createDocumentSchema.parse({
     typeId,
@@ -122,7 +124,7 @@ export async function execUpdate(
   const patch = updateDocumentSchema.parse({
     ...(args.title !== undefined ? { title: args.title } : {}),
     ...(args.slug !== undefined ? { slug: args.slug } : {}),
-    ...(args.data !== undefined ? { data: args.data } : {}),
+    ...(args.data !== undefined ? { data: redact(args.data, ctx.redactFields) } : {}),
   })
   const doc = await scope.svc.saveDraft(args.id, patch, ctx.userId)
   return shapeDocument(doc, ctx.redactFields)

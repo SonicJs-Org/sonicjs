@@ -40,6 +40,13 @@ export interface BuildToolsOptions {
   includeSearch?: boolean
 }
 
+/**
+ * Which tool phases are live. Single source of truth — both the JSON-RPC endpoint
+ * and the admin dashboard read this so the advertised tool list can't drift from
+ * what the endpoint actually serves. search_content → Phase 4.
+ */
+export const PHASE_FLAGS: BuildToolsOptions = { includeWrite: true, includeSearch: false }
+
 const EMPTY_OBJECT_SCHEMA: JsonSchemaNode = { type: 'object', properties: {} }
 
 export function buildToolRegistry(

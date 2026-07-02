@@ -23,8 +23,9 @@ export interface McpReadCtx {
   redactFields: string[]
 }
 
-/** Strip redacted fields from a document's data payload. */
-function redact(data: Record<string, unknown>, fields: string[]): Record<string, unknown> {
+/** Strip redacted fields from a document's data payload. Used on both read output
+ *  (shapeDocument) and write input (mutations) so a redacted field can't be written. */
+export function redact(data: Record<string, unknown>, fields: string[]): Record<string, unknown> {
   if (!fields.length) return data
   const out = { ...data }
   for (const f of fields) delete out[f]
@@ -76,7 +77,9 @@ export async function execList(
     limit,
   })
 
-  // Per-document ACL — a published-but-restricted doc is hidden (D5).
+  // Per-document ACL — a published-but-restricted doc is hidden (D5). ACL filtering
+  // happens post-fetch, so the returned count can be < limit even when more readable
+  // docs exist beyond it; restricted rows consume slots. Same tradeoff as /api/documents.
   const allowed = await Promise.all(
     docs.map((d) => repo.isAllowed(ctx.principalSet, d.rootId, 'read', docType.settings)),
   )

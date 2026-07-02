@@ -181,4 +181,33 @@ describe('mcp plugin — endpoint over real SQLite', () => {
     expect(schema.type).toBe('object')
     expect(schema.properties).toHaveProperty('title')
   })
+
+  it('get by slug resolves a never-published draft', async () => {
+    // Create a draft only (no publish) with a slug, then fetch it by slug.
+    const created = parseContent(await call(app, 'create_mcp_post', { title: 'Draft', slug: 'draft-only', data: { body: 'x' } }))
+    expect(created.isPublished).toBe(false)
+    const got = parseContent(await call(app, 'get_mcp_post', { slug: 'draft-only' }))
+    expect(got.rootId).toBe(created.rootId)
+    expect(got.data.body).toBe('x')
+  })
+
+  it('redactFields are stripped on write, not just on read', async () => {
+    // A fresh app whose config redacts `body`.
+    const redactApp = new Hono()
+    redactApp.use('*', async (c: any, next: any) => {
+      c.env = { DB: db }
+      const role = c.req.header('x-test-role')
+      if (role) c.set('user', { userId: 'u1', email: 'a@b.c', role })
+      await next()
+    })
+    redactApp.route('/mcp', createMcpRoutes({ redactFields: ['body'] }))
+
+    // Client sends `body` even though it is redacted from the advertised schema.
+    const created = parseContent(await call(redactApp, 'create_mcp_post', { title: 'R', slug: 'r', data: { body: 'secret' } }))
+    // Response is redacted…
+    expect(created.data).not.toHaveProperty('body')
+    // …and, critically, it was never written. A non-redacting read confirms absence.
+    const got = parseContent(await call(app, 'get_mcp_post', { id: created.rootId }))
+    expect(got.data).not.toHaveProperty('body')
+  })
 })

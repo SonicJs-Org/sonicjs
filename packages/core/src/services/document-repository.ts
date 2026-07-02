@@ -104,9 +104,17 @@ export class DocumentRepository {
     return row ? rowToDocument(row) : null
   }
 
+  // Slug lookup for a single doc. Prefer the published row; fall back to the current
+  // draft so a never-published doc is still reachable by slug (matches getById, which
+  // resolves drafts too). ORDER BY makes the preference deterministic when both exist.
   async getBySlug(typeId: string, slug: string): Promise<Document | null> {
     const row = await this.db
-      .prepare('SELECT * FROM documents WHERE tenant_id = ? AND type_id = ? AND slug = ? AND is_published = 1 AND deleted_at IS NULL LIMIT 1')
+      .prepare(
+        `SELECT * FROM documents
+         WHERE tenant_id = ? AND type_id = ? AND slug = ? AND deleted_at IS NULL
+           AND (is_published = 1 OR is_current_draft = 1)
+         ORDER BY is_published DESC LIMIT 1`,
+      )
       .bind(this.tenantId, typeId, slug)
       .first<DocumentRow>()
     return row ? rowToDocument(row) : null

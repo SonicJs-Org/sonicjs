@@ -8,8 +8,8 @@
  * user before the MCP endpoint runs. Every read/write then flows through the normal
  * document ACL for that user; MCP adds no privilege.
  *
- * Endpoint (Phase 1): POST /api/mcp — JSON-RPC 2.0 (initialize, tools/list,
- * tools/call, resources/list, resources/read). Admin UI + menu land in Phase 3.
+ * Endpoint: POST /mcp — JSON-RPC 2.0 (initialize, tools/list, tools/call,
+ * resources/list, resources/read). Admin UI + menu at /admin/mcp.
  */
 
 import { definePlugin } from '../../sdk/define-plugin'

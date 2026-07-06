@@ -127,7 +127,8 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
       internal: true,
       maxVersionsPerRoot: 5,
       baseGrants: {
-        admin: ['read', 'create', 'update', 'delete', 'manage'],
+        public: ['read'],
+        admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'],
         editor: ['read', 'create', 'update'],
         author: ['read', 'create'],
         viewer: ['read'],
@@ -226,27 +227,6 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
       { name: 'userId',    kind: 'scalar', type: 'text',    column: 'q_evt_user_id' },
       { name: 'sessionId', kind: 'scalar', type: 'text',    column: 'q_evt_session_id' },
       { name: 'path',      kind: 'scalar', type: 'text',    column: 'q_evt_path' },
-    ],
-  })
-
-  // Media asset: every file upload creates a media_asset document (document-authoritative).
-  // File bytes stay in R2; this document holds intrinsic metadata (dimensions, mime, r2Key…).
-  await registry.register({
-    id: 'media_asset',
-    name: 'media_asset',
-    displayName: 'Media Asset',
-    description: 'Media file metadata (R2 object key + intrinsic properties; URL derived at read time)',
-    source: 'system',
-    schema: anyObject,
-    settings: {
-      baseGrants: { public: ['read'], admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'], editor: ['read', 'create', 'update'] },
-      maxVersionsPerRoot: 5,
-    },
-    queryableFields: [
-      { name: 'mimeType', kind: 'scalar', type: 'text',    column: 'q_media_mime' },
-      { name: 'folder',   kind: 'scalar', type: 'text',    column: 'q_media_folder' },
-      { name: 'size',     kind: 'scalar', type: 'integer', column: 'q_media_size' },
-      { name: 'tags',     kind: 'facet',  type: 'text' },
     ],
   })
 

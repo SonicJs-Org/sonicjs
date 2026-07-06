@@ -71,7 +71,8 @@ jobs:
             echo "Uploading blog/$slug/hero.png ..."
             npx wrangler r2 object put sonicjs-demo-media/blog/$slug/hero.png \
               --file="$src" \
-              --content-type=image/png
+              --content-type=image/png \
+              --remote
           done
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

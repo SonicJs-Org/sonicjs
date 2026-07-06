@@ -58,6 +58,11 @@ DEFAULT_FROM_EMAIL = "demo@sonicjs.com"
 #   BETTER_AUTH_SECRET   — required, >= 16 chars (openssl rand -hex 32)
 #   DEMO_SEED_TOKEN      — bearer token the deploy workflow uses to call POST /__demo/reseed
 
+# Smart Placement — paid plan feature that co-locates the Worker with D1 to
+# minimize latency on the bootstrap D1 round-trips that drive first-load time.
+[placement]
+mode = "smart"
+
 # Observability
 [observability]
 enabled = true

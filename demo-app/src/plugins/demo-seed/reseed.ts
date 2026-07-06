@@ -19,7 +19,7 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
 import { DocumentsService, MediaDocumentService } from '@sonicjs-cms/core'
 
-import { DEMO_IMAGES, MEDIA_FOLDER } from '../../seed/assets/images'
+import { BLOG_HERO_IMAGES, DEMO_IMAGES, MEDIA_FOLDER } from '../../seed/assets/images'
 import { SEED_COLLECTIONS } from '../../seed/content'
 import { ensureDemoLoginActive } from '../demo-login'
 
@@ -52,6 +52,7 @@ const SEED_TYPES: Array<{ id: string; displayName: string; source: 'code' | 'plu
   { id: 'testimonial', displayName: 'Testimonials', source: 'system' },
   { id: 'faq', displayName: 'FAQs', source: 'system' },
   { id: 'media_asset', displayName: 'Media Asset', source: 'system' },
+  { id: 'rbac_user_roles', displayName: 'RBAC User Roles', source: 'system' },
 ]
 
 const TYPE_SETTINGS = JSON.stringify({
@@ -141,7 +142,33 @@ export async function runReseed(env: DemoEnv): Promise<ReseedSummary> {
     media++
   }
 
-  // 5. Seed collection content (published-on-create).
+  // 5. Register static blog hero PNGs as media_asset documents.
+  //    The R2 objects live under `blog/` (not purged above). We just re-register
+  //    the D1 documents on every reseed so the media library stays populated.
+  for (const image of BLOG_HERO_IMAGES) {
+    try {
+      await mediaSvc.createFromUpload(
+        {
+          filename: image.filename,
+          originalName: image.filename,
+          mimeType: 'image/png',
+          size: image.size,
+          width: image.width,
+          height: image.height,
+          folder: 'blog',
+          r2Key: image.r2Key,
+          alt: image.alt,
+        },
+        'system',
+      )
+      media++
+    } catch (e) {
+      // Skip if R2 object not yet uploaded — wrangler upload script handles first-time setup.
+      console.warn(`[demo-seed] Skipped blog image ${image.r2Key} (not in R2 yet):`, e)
+    }
+  }
+
+  // 6. Seed collection content (published-on-create).
   const docs = new DocumentsService(db, { tenantId: TENANT })
   let created = 0
   for (const collection of SEED_COLLECTIONS) {
@@ -166,7 +193,29 @@ export async function runReseed(env: DemoEnv): Promise<ReseedSummary> {
     }
   }
 
-  // 6. Re-assert the demo-login prefill (its plugin document was wiped in step 1).
+  // 7. Re-seed RBAC user role assignments so admin and editor can access the portal.
+  //    These are documents (wiped in step 1), not auth_user rows (which survive).
+  //    Without them requireRbac() returns false for every admin route.
+  await db.batch([
+    db.prepare(
+      `INSERT OR REPLACE INTO documents
+         (id, root_id, type_id, tenant_id, slug, title, locale,
+          parent_root_id, version_number, is_current_draft, is_published,
+          data, metadata, sort_order, visible, created_at, updated_at)
+       VALUES ('ur-admin-001','ur-admin-001','rbac_user_roles','default','admin-user-id','admin-user-id','default',
+               '',1,1,1,'{"roleIds":["role-admin"]}','{}',0,1,strftime('%s','now'),strftime('%s','now'))`,
+    ),
+    db.prepare(
+      `INSERT OR REPLACE INTO documents
+         (id, root_id, type_id, tenant_id, slug, title, locale,
+          parent_root_id, version_number, is_current_draft, is_published,
+          data, metadata, sort_order, visible, created_at, updated_at)
+       VALUES ('ur-editor-001','ur-editor-001','rbac_user_roles','default','editor-user-eddie','editor-user-eddie','default',
+               '',1,1,1,'{"roleIds":["role-editor"]}','{}',0,1,strftime('%s','now'),strftime('%s','now'))`,
+    ),
+  ])
+
+  // 8. Re-assert the demo-login prefill (its plugin document was wiped in step 1).
   if (env.ENVIRONMENT === 'demo') {
     try {
       await ensureDemoLoginActive(db)

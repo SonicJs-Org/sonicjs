@@ -98,6 +98,7 @@ export type { EmailLogRow } from './services/email/types'
 export { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 export { redirectPlugin, createRedirectPlugin } from './plugins/redirect-management'
 export { helloWorldPlugin, createHelloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
+export { mediaPlugin, createMediaPlugin } from './plugins/core-plugins/media'
 
 // ============================================================================
 // Placeholders - To be populated in Phase 2
@@ -213,6 +214,8 @@ export {
   renderFilterBar,
   // Admin layout (catalyst)
   renderAdminLayoutCatalyst,
+  // Auth pages
+  renderLoginPage,
 } from './templates'
 
 export type {
@@ -227,6 +230,7 @@ export type {
   Filter,
   FilterOption,
   AdminLayoutCatalystData,
+  LoginPageData,
 } from './templates'
 
 // Types - Week 1 (COMPLETED)

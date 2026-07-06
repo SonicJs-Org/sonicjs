@@ -60,3 +60,59 @@ export const DEMO_IMAGES: DemoImage[] = [
   img('avatar-marcus.svg', avatar('MC', '#0ea5e9'), 240, 240, 'Avatar for Marcus Chen'),
   img('avatar-amara.svg', avatar('AO', '#10b981'), 240, 240, 'Avatar for Amara Okafor'),
 ]
+
+/**
+ * Static blog hero images from the www marketing site.
+ * Uploaded once to R2 under the `blog/` prefix (NOT purged on reseed).
+ * Registered as media_asset documents on every reseed (since D1 docs are wiped).
+ */
+export interface BlogHeroImage {
+  slug: string
+  r2Key: string
+  filename: string
+  size: number
+  width: number
+  height: number
+  alt: string
+}
+
+const blogHero = (slug: string, size: number, alt: string): BlogHeroImage => ({
+  slug,
+  r2Key: `blog/${slug}/hero.png`,
+  filename: `${slug}-hero.png`,
+  size,
+  width: slug === 'using-emdash-with-sonicjs' ? 1536 : 1792,
+  height: 1024,
+  alt,
+})
+
+export const BLOG_HERO_IMAGES: BlogHeroImage[] = [
+  blogHero('best-open-source-project-for-ai-coding-practice', 4021954, 'Best open source project for AI coding practice'),
+  blogHero('building-a-blog-with-sonicjs', 2604450, 'Building a blog with SonicJS'),
+  blogHero('building-rest-api-with-sonicjs', 2576722, 'Building a REST API with SonicJS'),
+  blogHero('creating-custom-collections-in-sonicjs', 3088447, 'Creating custom collections in SonicJS'),
+  blogHero('custom-public-routes-in-sonicjs', 2577213, 'Custom public routes in SonicJS'),
+  blogHero('deploy-sonicjs-to-cloudflare-workers', 2144636, 'Deploy SonicJS to Cloudflare Workers'),
+  blogHero('directus-vs-payload-vs-sonicjs', 2872910, 'Directus vs Payload vs SonicJS'),
+  blogHero('directus-vs-sanity-vs-sonicjs', 3474484, 'Directus vs Sanity vs SonicJS'),
+  blogHero('getting-started-with-sonicjs', 2330529, 'Getting started with SonicJS'),
+  blogHero('nestjs-vs-sonicjs-vs-hono', 3591775, 'NestJS vs SonicJS vs Hono'),
+  blogHero('sanity-vs-contentful-vs-sonicjs', 3119998, 'Sanity vs Contentful vs SonicJS'),
+  blogHero('sonicjs-authentication-complete-guide', 2907544, 'SonicJS authentication complete guide'),
+  blogHero('sonicjs-caching-strategy', 2428640, 'SonicJS caching strategy'),
+  blogHero('sonicjs-d1-database-deep-dive', 2997264, 'SonicJS D1 database deep dive'),
+  blogHero('sonicjs-file-uploads-with-r2', 2354505, 'SonicJS file uploads with R2'),
+  blogHero('sonicjs-plugin-architecture-deep-dive', 2358528, 'SonicJS plugin architecture deep dive'),
+  blogHero('sonicjs-plugins-extending-your-cms', 3250996, 'SonicJS plugins — extending your CMS'),
+  blogHero('sonicjs-vs-ghost', 2396152, 'SonicJS vs Ghost'),
+  blogHero('sonicjs-vs-strapi', 2224674, 'SonicJS vs Strapi'),
+  blogHero('sonicjs-vs-wordpress', 3121720, 'SonicJS vs WordPress'),
+  blogHero('strapi-vs-contentful-vs-sonicjs', 2924986, 'Strapi vs Contentful vs SonicJS'),
+  blogHero('strapi-vs-directus-vs-sonicjs', 2467750, 'Strapi vs Directus vs SonicJS'),
+  blogHero('strapi-vs-payload-vs-sonicjs', 2805602, 'Strapi vs Payload vs SonicJS'),
+  blogHero('strapi-vs-sanity-vs-sonicjs', 2340446, 'Strapi vs Sanity vs SonicJS'),
+  blogHero('using-emdash-with-sonicjs', 1916519, 'Using em dash with SonicJS'),
+  blogHero('using-sonicjs-with-astro', 2093913, 'Using SonicJS with Astro'),
+  blogHero('using-sonicjs-with-nextjs', 2456378, 'Using SonicJS with Next.js'),
+  blogHero('why-edge-first-cms-is-the-future', 3183607, 'Why edge-first CMS is the future'),
+]

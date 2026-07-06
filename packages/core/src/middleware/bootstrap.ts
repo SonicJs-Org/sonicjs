@@ -21,6 +21,10 @@ type Bindings = {
 // Track if bootstrap has been run in this worker instance
 let bootstrapComplete = false;
 
+// KV key used to persist the bootstrap-complete flag across cold starts.
+// Version-scoped so a new deploy (new SONICJS_VERSION) always re-runs bootstrap.
+const bootstrapKvKey = () => `_bootstrap:v${SONICJS_VERSION}`
+
 /**
  * Verify security-critical environment configuration at startup.
  * Logs warnings in development, throws in production to prevent
@@ -120,6 +124,25 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
     const gitBranch = (c.env as any).GIT_BRANCH as string | undefined;
     setBranchLabel(isLocalhost && gitBranch ? gitBranch : undefined);
 
+    // KV fast-path: if a previous cold start already ran full bootstrap and
+    // stored the flag, skip all D1 work. Version-scoped — a new deploy clears it.
+    const kvStore = (c.env as any).CACHE_KV as KVNamespace | undefined;
+    if (kvStore) {
+      try {
+        const kvFlag = await kvStore.get(bootstrapKvKey());
+        if (kvFlag === '1') {
+          // Still populate in-memory registry (pure JS, no D1).
+          try {
+            const configs = await loadCollectionConfigs();
+            getCollectionRegistry().register(configs);
+          } catch { /* non-fatal */ }
+          bootstrapComplete = true;
+          console.log("[Bootstrap] Skipped via KV cache — already initialized");
+          return next();
+        }
+      } catch { /* KV unavailable — fall through to full bootstrap */ }
+    }
+
     try {
       console.log("[Bootstrap] Starting system initialization...");
 
@@ -202,8 +225,14 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
         console.log("[Bootstrap] Plugin bootstrap skipped (disableAll is true)");
       }
 
-      // Mark bootstrap as complete for this worker instance
+      // Mark bootstrap as complete for this worker instance + persist to KV so
+      // future cold starts can skip the D1 work (1 KV read vs 8+ D1 queries).
       bootstrapComplete = true;
+      if (kvStore) {
+        try {
+          await kvStore.put(bootstrapKvKey(), '1', { expirationTtl: 3600 });
+        } catch { /* non-fatal */ }
+      }
       console.log("[Bootstrap] System initialization completed");
 
       // Fire project snapshot telemetry (fire-and-forget, never blocks boot)

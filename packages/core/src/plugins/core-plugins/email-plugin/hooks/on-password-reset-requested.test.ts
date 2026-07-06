@@ -3,7 +3,7 @@ import { onPasswordResetRequested } from './on-password-reset-requested'
 import {
   setEmailService,
   resetEmailService,
-} from '../../../../services/email-service-singleton'
+} from '../../../../services/email/email-service-singleton'
 import type { EmailService, SendEmailResult, SonicHookContext } from '../../../sdk/types'
 
 function makeCtx(opts: {

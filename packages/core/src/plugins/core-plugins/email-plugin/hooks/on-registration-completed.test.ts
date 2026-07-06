@@ -3,7 +3,7 @@ import { onRegistrationCompleted } from './on-registration-completed'
 import {
   setEmailService,
   resetEmailService,
-} from '../../../../services/email-service-singleton'
+} from '../../../../services/email/email-service-singleton'
 import type { EmailService, SendEmailResult } from '../../../sdk/types'
 import type { SonicHookContext } from '../../../sdk/types'
 

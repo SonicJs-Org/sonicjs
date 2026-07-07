@@ -374,7 +374,8 @@ authRoutes.post('/logout', async (c) => {
     await auth.handler(baReq)
   } catch { /* non-fatal — clear cookie regardless */ }
 
-  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0 })
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
   clearCsrfCookie(c)
   return c.json({ message: 'Logged out successfully' })
 })
@@ -392,7 +393,8 @@ authRoutes.get('/logout', async (c) => {
     await auth.handler(baReq)
   } catch { /* non-fatal */ }
 
-  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0 })
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
   clearCsrfCookie(c)
   return c.redirect('/auth/login?message=You have been logged out successfully')
 })
@@ -710,6 +712,14 @@ authRoutes.post('/login/form',
 
     const rawRedirect = c.req.query('redirect')
     const redirectUrl = rawRedirect && rawRedirect.startsWith('/') ? rawRedirect : '/admin/content'
+
+    // For HTMX requests: HX-Redirect triggers an immediate client-side navigation.
+    // For native form submissions (HTMX not loaded): the <script> setTimeout handles it.
+    const isHtmx = c.req.header('HX-Request') === 'true'
+    if (isHtmx) {
+      c.header('HX-Redirect', redirectUrl)
+      return c.html(html`<div id="form-response"><p class="text-sm text-green-600">Login successful! Redirecting...</p></div>`)
+    }
 
     return c.html(html`
       <div id="form-response">

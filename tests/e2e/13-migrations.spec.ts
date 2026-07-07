@@ -267,7 +267,7 @@ test.describe.skip('Admin Migrations Page', () => {
   });
 });
 
-test.describe('Migrations API Endpoints', () => {
+test.describe('Migrations API Endpoints @content @media @api', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

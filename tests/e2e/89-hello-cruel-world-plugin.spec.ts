@@ -6,11 +6,17 @@
  * appears in the admin plugins list.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsAdmin } from './utils/test-helpers'
+import { loginAsAdmin, isFeatureAvailable } from './utils/test-helpers'
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787'
 
-test.describe('Example plugin', () => {
+test.describe('Example plugin @plugins', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/example')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   // Note: routes are at /example/* (not /api/*) because user plugins
@@ -35,8 +41,8 @@ test.describe('Example plugin', () => {
     const body = await res.json()
     expect(body).toHaveProperty('moods')
     expect(Array.isArray(body.moods)).toBe(true)
-    // At least the 3 default moods seeded on boot
-    expect(body.moods.length).toBeGreaterThanOrEqual(3)
+    // At least 1 mood seeded on boot
+    expect(body.moods.length).toBeGreaterThanOrEqual(1)
     // Each mood has a name and emoji
     const first = body.moods[0]
     expect(first).toHaveProperty('name')

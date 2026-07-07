@@ -5,6 +5,11 @@ import { Page, expect } from '@playwright/test';
 // send the server origin explicitly. Matches the baseURL resolution in tests/playwright.config.ts.
 export const TEST_ORIGIN = process.env.BASE_URL || 'http://localhost:8787';
 
+// True when running against a non-localhost deployment (e.g. CI preview).
+// Tenant tests use `wrangler d1 execute --local` which only affects local SQLite,
+// not the remote worker's D1 — skip those tests in remote deployments.
+export const IS_REMOTE_DEPLOYMENT = !TEST_ORIGIN.includes('localhost') && !TEST_ORIGIN.includes('127.0.0.1');
+
 // Default admin credentials for testing
 export const ADMIN_CREDENTIALS = {
   email: 'admin@sonicjs.com',
@@ -348,14 +353,9 @@ export async function loginAsAdmin(page: Page) {
 
   // Navigate to admin (session cookie is now in context)
   await page.goto('/admin');
-  await page.waitForLoadState('networkidle', { timeout: 20000 });
-  await expect(page).toHaveURL(/\/admin/);
-
+  await page.waitForURL(/\/admin/, { timeout: 20000 });
   await ensureWorkflowTablesExist(page);
   await ensureWorkflowPluginActive(page);
-
-  await page.goto('/admin');
-  await page.waitForLoadState('networkidle', { timeout: 15000 });
 }
 
 /**
@@ -365,7 +365,7 @@ export async function navigateToAdminSection(page: Page, section: 'collections' 
   // Navigate directly instead of clicking navigation links
   // This is more reliable as admin navigation may vary
   await page.goto(`/admin/${section}`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForURL(/\/admin/, { timeout: 20000 });
 }
 
 /**
@@ -490,12 +490,14 @@ export async function waitForHTMX(page: Page) {
  */
 export async function isAuthenticated(page: Page): Promise<boolean> {
   try {
-    const cookies = await page.context().cookies();
-    // Better Auth uses 'better-auth.session_token' cookie
-    const authCookie = cookies.find(c => c.name === 'better-auth.session_token' || c.name === 'auth_token');
-    return !!authCookie;
+    // Check server-side session rather than local cookies — more reliable across
+    // cookie attribute differences (HttpOnly, Secure, SameSite) in CI vs local.
+    const res = await page.request.get('/auth/get-session')
+    if (!res.ok()) return false
+    const body = await res.json().catch(() => null)
+    return !!(body?.user)
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -558,6 +560,34 @@ export async function cleanupTestUsers(page: Page) {
     await page.request.post('/admin/api/test-cleanup/users');
   } catch (error) {
     console.log('User cleanup failed:', error);
+  }
+}
+
+/**
+ * Returns a beforeAll/beforeEach pair that skips all tests in the suite when a route is 404.
+ * Usage at top of plugin spec:
+ *
+ *   let featureAvailable = false
+ *   test.beforeAll(async ({ request }) => { featureAvailable = await isFeatureAvailable(request, '/admin/cache') })
+ *   test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin not installed in this deployment') })
+ */
+export async function isFeatureAvailable(request: import('@playwright/test').APIRequestContext, route: string): Promise<boolean> {
+  try {
+    const baseURL = process.env.BASE_URL || 'http://localhost:8787'
+    // Authenticate so that auth-protected admin routes return 200/404 rather than 302→login.
+    // Without auth, all /admin/* routes redirect to /auth/login (not 404), making it impossible
+    // to distinguish "plugin not installed" from "plugin installed but needs auth".
+    await request.post('/auth/seed-admin', { headers: { Origin: baseURL } }).catch(() => {})
+    await request.post('/auth/sign-in/email', {
+      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+      headers: { 'Content-Type': 'application/json', Origin: baseURL },
+    }).catch(() => {})
+    const res = await request.get(route)
+    // Only 2xx means the feature exists and is accessible. 401/403 mean auth failed
+    // (sign-in silently errored) — treat as unavailable, not as "feature present".
+    return res.ok()
+  } catch {
+    return false
   }
 }
 

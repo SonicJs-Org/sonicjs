@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
-import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
+import { loginAsAdmin, ensureAdminUserExists, isFeatureAvailable, IS_REMOTE_DEPLOYMENT } from './utils/test-helpers'
 
 // G5 — shared/global document types end-to-end through the canonical admin-documents route. A type
 // with settings.global=true is created from one tenant and is visible from another (shared pool),
@@ -25,8 +25,15 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Global document types', () => {
+test.describe.serial('Global document types @content', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = !IS_REMOTE_DEPLOYMENT && await isFeatureAvailable(request, '/admin/tenants')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeAll(() => {
+    if (!featureAvailable) return
     // A global document type (settings.global=true) with admin base grants.
     const settings = JSON.stringify({ global: true, baseGrants: { admin: ['read', 'create', 'update', 'delete', 'manage'] } }).replace(/'/g, "''")
     d1Exec(`INSERT INTO document_types (id, name, display_name, settings, source, is_active) VALUES ('${GLOBAL_TYPE}', '${GLOBAL_TYPE}', 'Global Note', '${settings}', 'system', 1)`)
@@ -38,6 +45,7 @@ test.describe.serial('Global document types', () => {
   })
 
   test.afterAll(() => {
+    if (!featureAvailable) return
     d1Exec(`DELETE FROM auth_tenant_member WHERE tenant_id IN ('${T_A}','${T_B}')`)
     d1Exec(`DELETE FROM auth_tenant WHERE slug IN ('${T_A}','${T_B}')`)
     // Documents reference the type — delete them before the type row (FK).

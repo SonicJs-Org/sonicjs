@@ -24,7 +24,7 @@ async function ensureTestRole(page: Page, name: string, displayName: string): Pr
   return roleId
 }
 
-test.describe('RBAC Roles & Verbs tab', () => {
+test.describe('RBAC Roles & Verbs tab @auth', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

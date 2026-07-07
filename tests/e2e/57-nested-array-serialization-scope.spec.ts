@@ -65,7 +65,7 @@ async function addRootMemberAndWaitForCount(
   await expect(topLevelMembers).toHaveCount(expectedCount)
 }
 
-test.describe.skip('Nested Array Serialization Scope', () => {
+test.describe.skip('Nested Array Serialization Scope @content', () => {
   const getEditUrlFromPage = async (page: Page): Promise<string | null> => {
     const editMatch = page.url().match(/\/admin\/content\/([^/]+)\/edit/)
     if (editMatch?.[1]) {

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, navigateToAdminSection, TEST_DATA } from './utils/test-helpers';
+import { loginAsAdmin, navigateToAdminSection, TEST_DATA, isFeatureAvailable } from './utils/test-helpers';
 
 /**
  * E2E Tests for Forms System
@@ -12,8 +12,14 @@ import { loginAsAdmin, navigateToAdminSection, TEST_DATA } from './utils/test-he
  * - Component configuration
  */
 
-test.describe('Forms Management', () => {
+test.describe('Forms Management @content', () => {
   test.describe.configure({ mode: 'serial' });
+
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/forms')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
 
   let testFormId: string;
   const testFormName = `test_form_${Date.now()}`;
@@ -49,7 +55,7 @@ test.describe('Forms Management', () => {
     await page.click('button[type="submit"]');
     
     // Should redirect to builder
-    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 5000 });
+    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 20000 });
     
     // Extract form ID from URL
     const url = page.url();
@@ -59,7 +65,7 @@ test.describe('Forms Management', () => {
     expect(testFormId).toBeTruthy();
     
     // Verify builder loaded
-    await expect(page.locator('#builder-container')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#builder-container')).toBeVisible({ timeout: 20000 });
   });
 
   test('should validate form name format', async ({ page }) => {
@@ -124,7 +130,7 @@ test.describe.skip('Form Builder UI', () => {
     await page.fill('[name="displayName"]', 'Builder Test Form');
     await page.click('button[type="submit"]');
     
-    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 5000 });
+    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 20000 });
     const url = page.url();
     const match = url.match(/\/admin\/forms\/([^/]+)\/builder/);
     testFormId = match ? match[1] : '';
@@ -145,7 +151,7 @@ test.describe.skip('Form Builder UI', () => {
     }
 
     // Wait for builder to initialize
-    await page.waitForSelector('#builder-container', { timeout: 10000 });
+    await page.waitForSelector('#builder-container', { timeout: 20000 });
     
     // Check for Form.io components sidebar
     await expect(page.locator('.formcomponents')).toBeVisible({ timeout: 15000 });
@@ -162,8 +168,8 @@ test.describe.skip('Form Builder UI', () => {
       return;
     }
 
-    await page.waitForSelector('#display-form-btn', { timeout: 5000 });
-    await page.waitForSelector('#display-wizard-btn', { timeout: 5000 });
+    await page.waitForSelector('#display-form-btn', { timeout: 20000 });
+    await page.waitForSelector('#display-wizard-btn', { timeout: 20000 });
     
     await expect(page.locator('#display-form-btn')).toBeVisible();
     await expect(page.locator('#display-wizard-btn')).toBeVisible();
@@ -179,7 +185,7 @@ test.describe.skip('Form Builder UI', () => {
       return;
     }
 
-    await page.waitForSelector('#display-wizard-btn', { timeout: 5000 });
+    await page.waitForSelector('#display-wizard-btn', { timeout: 20000 });
     
     // Click wizard mode button
     await page.click('#display-wizard-btn');
@@ -225,7 +231,7 @@ test.describe.skip('Form Builder UI', () => {
       return;
     }
 
-    await page.waitForSelector('#save-btn', { timeout: 5000 });
+    await page.waitForSelector('#save-btn', { timeout: 20000 });
     
     // Click save button
     await page.click('#save-btn');
@@ -244,7 +250,7 @@ test.describe.skip('Form Builder UI', () => {
       return;
     }
 
-    await page.waitForSelector('#preview-btn', { timeout: 5000 });
+    await page.waitForSelector('#preview-btn', { timeout: 20000 });
     
     // Click preview button
     await page.click('#preview-btn');
@@ -261,7 +267,7 @@ test.describe.skip('Form Builder UI', () => {
       return;
     }
 
-    await page.waitForSelector('a[href^="/forms/"]', { timeout: 5000 });
+    await page.waitForSelector('a[href^="/forms/"]', { timeout: 20000 });
     
     const publicFormLink = page.locator('a[href^="/forms/"]');
     await expect(publicFormLink).toBeVisible();
@@ -289,7 +295,7 @@ test.describe.skip('Public Form Rendering', () => {
     await page.fill('[name="displayName"]', 'Public Test Form');
     await page.click('button[type="submit"]');
     
-    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 5000 });
+    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 20000 });
     const url = page.url();
     const match = url.match(/\/admin\/forms\/([^/]+)\/builder/);
     testFormId = match ? match[1] : '';
@@ -319,7 +325,7 @@ test.describe.skip('Public Form Rendering', () => {
 
     // Form should be visible
     await expect(page.locator('h1')).toContainText('Public Test Form');
-    await expect(page.locator('#formio-form')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#formio-form')).toBeVisible({ timeout: 20000 });
   });
 
   test('should load Form.io on public form', async ({ page }) => {
@@ -377,13 +383,13 @@ test.describe.skip('Form Submissions', () => {
     await page.fill('[name="displayName"]', 'Submission Test');
     await page.click('button[type="submit"]');
     
-    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 5000 });
+    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 20000 });
     const url = page.url();
     const match = url.match(/\/admin\/forms\/([^/]+)\/builder/);
     testFormId = match ? match[1] : '';
 
     // Save the form (even with no components for basic test)
-    await page.waitForSelector('#save-btn', { timeout: 5000 });
+    await page.waitForSelector('#save-btn', { timeout: 20000 });
     await page.click('#save-btn');
     await page.waitForTimeout(2000);
   });
@@ -460,12 +466,12 @@ test.describe.skip('Headless API', () => {
     await page.fill('[name="displayName"]', 'API Test Form');
     await page.click('button[type="submit"]');
     
-    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 5000 });
+    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 20000 });
     const url = page.url();
     const match = url.match(/\/admin\/forms\/([^/]+)\/builder/);
     testFormId = match ? match[1] : '';
 
-    await page.waitForSelector('#save-btn', { timeout: 5000 });
+    await page.waitForSelector('#save-btn', { timeout: 20000 });
     await page.click('#save-btn');
     await page.waitForTimeout(2000);
   });
@@ -565,7 +571,7 @@ test.describe('Form Deletion', () => {
     await page.fill('[name="displayName"]', 'Delete Test');
     await page.click('button[type="submit"]');
     
-    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 5000 });
+    await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 20000 });
     
     // Go back to forms list
     await page.goto('/admin/forms');

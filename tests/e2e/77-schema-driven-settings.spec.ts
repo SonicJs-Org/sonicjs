@@ -7,7 +7,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 // the plugin's `configSchema` field (declared via definePlugin).
 // The hello-world plugin has: { greeting: { type: 'string', default: 'Hello World!' } }
 // The email plugin has: { apiKey (sensitive), fromEmail, fromName, replyTo }
-test.describe('Schema-driven plugin settings', () => {
+test.describe('Schema-driven plugin settings @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

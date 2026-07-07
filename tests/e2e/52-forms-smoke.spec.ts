@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, ADMIN_CREDENTIALS } from './utils/test-helpers';
+import { loginAsAdmin, ADMIN_CREDENTIALS, isFeatureAvailable } from './utils/test-helpers';
 
 /**
  * Forms Smoke Test
@@ -11,7 +11,13 @@ import { loginAsAdmin, ADMIN_CREDENTIALS } from './utils/test-helpers';
  * 3. Forms list page renders correctly
  */
 
-test.describe('Forms Smoke Test', () => {
+test.describe('Forms Smoke Test @forms', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/forms')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test('should access /admin/forms route', async ({ page }) => {
     // Login first
     await loginAsAdmin(page);

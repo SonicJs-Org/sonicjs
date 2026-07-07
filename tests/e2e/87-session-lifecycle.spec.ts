@@ -32,7 +32,7 @@ function me(ctx: any) {
   return ctx.get('/auth/me', { headers: { Accept: 'application/json' } })
 }
 
-test.describe('Session lifecycle', () => {
+test.describe('Session lifecycle @smoke @auth', () => {
   test.beforeAll(async ({ request }) => {
     await request.post('/auth/seed-admin').catch(() => {})
   })

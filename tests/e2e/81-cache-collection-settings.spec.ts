@@ -8,7 +8,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Cache — Collection Settings tab', () => {
+test.describe('Cache — Collection Settings tab @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
     await page.goto('/admin/cache')

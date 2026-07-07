@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN_CREDENTIALS } from './utils/test-helpers';
 
-test.describe.skip('User Management - Hard Delete', () => {
+test.describe.skip('User Management - Hard Delete @auth', () => {
   let authToken: string;
 
   test.beforeAll(async ({ request }) => {

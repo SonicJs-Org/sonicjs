@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
-import { loginAsAdmin, ensureAdminUserExists, ADMIN_CREDENTIALS } from './utils/test-helpers'
+import { loginAsAdmin, ensureAdminUserExists, ADMIN_CREDENTIALS, isFeatureAvailable, IS_REMOTE_DEPLOYMENT } from './utils/test-helpers'
 
 // Membership gate: an authed admin may only switch into / resolve tenants they belong to. Creating a
 // tenant auto-enrolls the creator (owner), so the happy path works; a tenant the admin is NOT a
@@ -32,8 +32,15 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Multi-Tenant membership gate', () => {
+test.describe.serial('Multi-Tenant membership gate @auth', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = !IS_REMOTE_DEPLOYMENT && await isFeatureAvailable(request, '/admin/tenants')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeAll(() => {
+    if (!featureAvailable) return
     // An active tenant with NO membership rows — the admin is not a member.
     d1Exec(
       `INSERT INTO auth_tenant (id, name, slug, status, notes, metadata, created_at, updated_at)
@@ -42,6 +49,7 @@ test.describe.serial('Multi-Tenant membership gate', () => {
   })
 
   test.afterAll(() => {
+    if (!featureAvailable) return
     d1Exec(`DELETE FROM auth_tenant WHERE slug = '${ORPHAN_SLUG}'`)
     // Safety net: never leave the shared admin flagged super-admin for later specs.
     d1Exec(`UPDATE auth_user SET is_super_admin = 0 WHERE email = 'admin@sonicjs.com'`)

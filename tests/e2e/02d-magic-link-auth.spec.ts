@@ -11,7 +11,7 @@ function uniqueEmail(prefix: string): string {
   return `${prefix}.${Date.now()}.${Math.random().toString(36).substring(7)}@test.sonicjs.com`;
 }
 
-test.describe('Magic Link Authentication (Better Auth)', () => {
+test.describe('Magic Link Authentication (Better Auth) @auth', () => {
 
   test.describe('POST /auth/sign-in/magic-link - Request Magic Link', () => {
     test('should accept valid email and return status true', async ({ request }) => {

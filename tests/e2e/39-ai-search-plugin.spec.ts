@@ -1,11 +1,18 @@
 import { test, expect } from '@playwright/test'
-import { 
-  loginAsAdmin, 
+import {
+  loginAsAdmin,
   ensureAdminUserExists,
-  ensureWorkflowTablesExist
+  ensureWorkflowTablesExist,
+  isFeatureAvailable
 } from './utils/test-helpers'
 
-test.describe('AI Search Plugin', () => {
+test.describe('AI Search Plugin @plugins', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/plugins/ai-search')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await ensureWorkflowTablesExist(page)

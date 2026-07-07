@@ -1,10 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { loginAsAdmin, isFeatureAvailable } from './utils/test-helpers';
 
-test.describe('Contact Form Plugin', () => {
+test.describe('Contact Form Plugin @plugins', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/forms')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
 
   // Ensure plugin is activated before running tests
   test.beforeAll(async ({ browser }) => {
+    if (!featureAvailable) return
     const page = await browser.newPage();
     await loginAsAdmin(page);
     

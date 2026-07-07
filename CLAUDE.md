@@ -170,10 +170,40 @@ Anti-patterns: `grep -r` across repo when codegraph answers; reading 5+ files to
 
 Every feature/fix ships with a Playwright spec in `tests/e2e/`. Write the spec, but **do NOT run E2E tests locally** — they require a running wrangler dev server, consume excessive memory, and are validated by CI on PR. Running them locally is too expensive.
 
+### CI test selection strategy (dynamic)
+
+CI runs **smoke tests + tests tagged to changed areas only** — not the full suite. This keeps PR feedback fast.
+
+**Tag every test** with `@smoke` (critical path, always runs) or a feature tag (`@media`, `@content`, `@auth`, `@api-keys`, `@database`, `@collections`, etc.):
+
+```typescript
+test('does the thing @media', async ({ page }) => { … })
+// or on the describe block:
+test.describe('Media Upload @media', () => { … })
+```
+
+**Tag mapping** (CI uses `git diff --name-only` → selects tags to run):
+
+| Changed path pattern | Tags to run |
+|---|---|
+| `src/routes/admin-content*` or `src/services/documents*` | `@smoke @content` |
+| `src/routes/admin-media*` or `src/services/media*` | `@smoke @media` |
+| `src/routes/api*` | `@smoke @api` |
+| `src/middleware/auth*` or `src/routes/admin-settings*` | `@smoke @auth` |
+| `src/services/api-keys*` or related | `@smoke @api-keys` |
+| `src/routes/admin-database*` | `@smoke @database` |
+| `packages/core/migrations/*` | `@smoke @content @media @api` |
+| Anything else / multiple areas | `@smoke` only |
+
+CI invocation: `npx playwright test --grep "@smoke|@<detected-tag>"`.
+
+**When writing a new spec**: choose the tightest matching feature tag. If it spans multiple features, use the primary one + `@smoke` if it tests login/nav/core flow.
+
 Workflow:
 1. Implement
 2. Add `tests/e2e/<NN>-<slug>.spec.ts` (NN = next sequential; current floor 68 — R11)
-3. Commit implementation + tests together — CI runs E2E
+3. Tag tests with `@smoke` and/or appropriate feature tag
+4. Commit implementation + tests together — CI selects and runs relevant tests
 
 Spec skeleton:
 
@@ -181,7 +211,7 @@ Spec skeleton:
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Feature Name', () => {
+test.describe('Feature Name @feature-tag', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })
@@ -215,6 +245,12 @@ cd packages/core && npm run generate:migrations
 ```
 
 After **any** `packages/core/migrations/*.sql` change: regenerate the bundle, re-sync `my-sonicjs-app/migrations/`, commit the regenerated `migrations-bundle.ts` (R9).
+
+**Lock file trap (macOS → Linux CI):** Any `npm install` on macOS regenerates `package-lock.json` without Linux optional packages (`@emnapi/runtime`, `@emnapi/core`, `wrangler/node_modules/esbuild`), breaking `npm ci` in CI. After any `npm install` that touches `package-lock.json`, immediately run a full delete-and-reinstall to restore cross-platform entries:
+```bash
+rm -rf node_modules package-lock.json && npm install
+```
+Then commit the regenerated `package-lock.json`. Never commit a lock file produced by `npm install --workspace=...` directly.
 
 D1's **100 bound params/statement** and **100 columns/table** limits do not reproduce on local SQLite — cover with logic unit tests (chunk counts, column budget).
 

@@ -314,7 +314,7 @@ export default function HomePage() {
       <div className="mx-auto mt-24 max-w-7xl px-6 sm:mt-40 lg:px-8">
         <SectionHeader
           eyebrow="The escape hatch"
-          title="Why Developers Switch to SonicJS"
+          title="Why developers switch to SonicJS"
           lede={
             <>
               Migration hell. $99/mo paywalls. Single-region latency. Cold-start lag. You&apos;ve

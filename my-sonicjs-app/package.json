@@ -27,7 +27,9 @@
     "reset": "node --experimental-strip-types src/seed-self-host.ts"
   },
   "dependencies": {
-    "@sonicjs-cms/core": "file:../packages/core"
+    "@sonicjs-cms/core": "file:../packages/core",
+    "defu": "^6.1.7",
+    "mime": "^4.1.0"
   },
   "optionalDependencies": {
     "@hono/node-server": "^1.13.7"

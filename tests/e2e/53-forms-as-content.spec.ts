@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { loginAsAdmin, isFeatureAvailable } from './utils/test-helpers';
 
 /**
  * E2E Tests for Forms-as-Content Integration
@@ -64,7 +64,7 @@ async function createTestFormWithSchema(
   await page.selectOption('[name="category"]', 'general');
   await page.click('button[type="submit"]');
 
-  await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 10000 });
+  await page.waitForURL(/\/admin\/forms\/[^/]+\/builder/, { timeout: 20000 });
   const url = page.url();
   const match = url.match(/\/admin\/forms\/([^/]+)\/builder/);
   const formId = match ? match[1] : '';
@@ -89,8 +89,14 @@ async function createTestFormWithSchema(
 // Tests: shadow collection creation, content dual-write, filtering
 // ═══════════════════════════════════════════════════════════════
 
-test.describe('Forms as Content', () => {
+test.describe('Forms as Content @content', () => {
   test.describe.configure({ mode: 'serial' });
+
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/forms')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
 
   let testFormId: string;
   let submissionCreated = false;

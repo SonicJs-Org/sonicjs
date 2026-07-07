@@ -14,7 +14,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8787'
  * document type registry remains populated and a code-defined collection's
  * documents are readable end-to-end.
  */
-test.describe('collection registry (PR 1)', () => {
+test.describe('collection registry (PR 1) @collections', () => {
   test('boot succeeds — blog_post document type is reachable', async ({ request }) => {
     const response = await request.get(`${BASE}/api/documents?type=blog_post&limit=1`)
     expect(response.ok()).toBeTruthy()

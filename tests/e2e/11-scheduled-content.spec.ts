@@ -10,7 +10,7 @@ async function skipIfWorkflowInactive(page: any) {
   return false;
 }
 
-test.describe.skip('Scheduled Content Management', () => {
+test.describe.skip('Scheduled Content Management @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

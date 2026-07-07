@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe.skip('User XSS Prevention', () => {
+test.describe.skip('User XSS Prevention @auth', () => {
   test('should prevent XSS in user creation via API', async ({ page }) => {
     // Set up a flag to detect if any alert() is triggered
     let alertTriggered = false;

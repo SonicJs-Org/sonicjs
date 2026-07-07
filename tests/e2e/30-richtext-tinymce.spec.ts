@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, navigateToAdminSection } from './utils/test-helpers';
 
-test.describe.skip('Rich Text Editor (TinyMCE)', () => {
+test.describe.skip('Rich Text Editor (TinyMCE) @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

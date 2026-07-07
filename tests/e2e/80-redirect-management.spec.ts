@@ -5,7 +5,7 @@ import { loginAsAdmin } from './utils/test-helpers'
 const BASE_TS = Date.now()
 const src = (n: number) => `/e2e-redir-${BASE_TS}-${n}`
 
-test.describe('Redirect Management', () => {
+test.describe('Redirect Management @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

@@ -8,7 +8,7 @@ import { loginAsAdmin } from './utils/test-helpers'
  * required, and searchable properties, all values persist after saving and reopening the modal.
  */
 
-test.describe.skip('Field Properties Persistence', () => {
+test.describe.skip('Field Properties Persistence @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

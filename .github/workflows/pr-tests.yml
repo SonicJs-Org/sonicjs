@@ -188,13 +188,59 @@ jobs:
           echo "Preview failed to become ready"
           exit 1
 
+      - name: Detect changed areas for E2E test selection
+        if: github.actor != 'dependabot[bot]'
+        id: test-tags
+        run: |
+          # Get changed files vs base branch (PR diff) or last commit (push)
+          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} 2>/dev/null || git diff --name-only HEAD~1)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          # Always include smoke
+          TAGS="@smoke"
+
+          # Map changed paths to feature tags
+          if echo "$CHANGED" | grep -qE 'admin-media|services/media|media-documents'; then
+            TAGS="$TAGS|@media"
+          fi
+          if echo "$CHANGED" | grep -qE 'admin-content|services/documents|document-repository|document-projection'; then
+            TAGS="$TAGS|@content"
+          fi
+          if echo "$CHANGED" | grep -qE 'routes/api|api-content|api-documents|api-media'; then
+            TAGS="$TAGS|@api"
+          fi
+          if echo "$CHANGED" | grep -qE 'middleware/auth|admin-settings|api-keys|services/api-key'; then
+            TAGS="$TAGS|@auth|@api-keys"
+          fi
+          if echo "$CHANGED" | grep -qE 'admin-database|database-tools'; then
+            TAGS="$TAGS|@database"
+          fi
+          if echo "$CHANGED" | grep -qE 'collection-registry|admin-collections'; then
+            TAGS="$TAGS|@collections"
+          fi
+          if echo "$CHANGED" | grep -qE 'migrations/'; then
+            TAGS="$TAGS|@content|@media|@api"
+          fi
+
+          # Deduplicate tags
+          TAGS=$(echo "$TAGS" | tr '|' '\n' | sort -u | tr '\n' '|' | sed 's/|$//')
+
+          echo "Running E2E with tag filter: $TAGS"
+          echo "grep_pattern=$TAGS" >> $GITHUB_OUTPUT
+
       - name: Install Playwright browsers
         if: github.actor != 'dependabot[bot]'
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests against preview
         if: github.actor != 'dependabot[bot]'
-        run: npm run e2e
+        run: npx playwright test --grep "${{ steps.test-tags.outputs.grep_pattern }}"
         env:
           CI: true
           BASE_URL: ${{ steps.deploy.outputs.preview_url }}

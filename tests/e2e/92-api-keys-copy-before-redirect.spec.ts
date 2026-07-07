@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('API Keys - copy key before redirect', () => {
+test.describe('API Keys - copy key before redirect @api-keys', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })
@@ -15,7 +15,7 @@ test.describe('API Keys - copy key before redirect', () => {
 
     // Fill form
     await page.locator('#new-key-name').fill('e2e-test-key')
-    await page.getByRole('button', { name: 'Create' }).click()
+    await page.locator('#create-key-modal').getByRole('button', { name: 'Create' }).click()
 
     // Banner should appear with key value
     const banner = page.locator('#new-key-banner')
@@ -40,7 +40,7 @@ test.describe('API Keys - copy key before redirect', () => {
 
     await page.getByRole('button', { name: 'Create API key' }).click()
     await page.locator('#new-key-name').fill('e2e-table-row-test')
-    await page.getByRole('button', { name: 'Create' }).click()
+    await page.locator('#create-key-modal').getByRole('button', { name: 'Create' }).click()
 
     // Banner visible
     await expect(page.locator('#new-key-banner')).not.toHaveClass(/hidden/)
@@ -55,7 +55,7 @@ test.describe('API Keys - copy key before redirect', () => {
 
     await page.getByRole('button', { name: 'Create API key' }).click()
     await page.locator('#new-key-name').fill('e2e-copy-dismiss-test')
-    await page.getByRole('button', { name: 'Create' }).click()
+    await page.locator('#create-key-modal').getByRole('button', { name: 'Create' }).click()
 
     await expect(page.locator('#new-key-banner')).not.toHaveClass(/hidden/)
 
@@ -70,7 +70,7 @@ test.describe('API Keys - copy key before redirect', () => {
 
     await page.getByRole('button', { name: 'Create API key' }).click()
     await page.locator('#new-key-name').fill('e2e-dismiss-x-test')
-    await page.getByRole('button', { name: 'Create' }).click()
+    await page.locator('#create-key-modal').getByRole('button', { name: 'Create' }).click()
 
     await expect(page.locator('#new-key-banner')).not.toHaveClass(/hidden/)
 

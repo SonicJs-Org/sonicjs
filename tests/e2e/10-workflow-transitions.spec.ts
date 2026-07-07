@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, createTestWorkflowContent } from './utils/test-helpers'
 
-test.describe.skip('Workflow Transitions', () => {
+test.describe.skip('Workflow Transitions @content', () => {
   let contentId: string
 
   test.beforeEach(async ({ page }) => {

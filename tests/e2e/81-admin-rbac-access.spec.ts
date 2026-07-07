@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Admin RBAC access', () => {
+test.describe('Admin RBAC access @smoke @auth', () => {
   test('admin user can access admin area without permission error', async ({ page }) => {
     await loginAsAdmin(page)
     await page.goto('/admin/content')

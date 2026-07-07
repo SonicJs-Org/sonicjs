@@ -313,7 +313,7 @@ describe('Admin Users - Profile on Edit Page', () => {
     it('should skip the profile write when no profile fields are submitted', async () => {
       const { writeProfileData } = await import('../../plugins/core-plugins/user-profiles')
       mockDb = createOrderedMockDb([
-        { all: { results: [] } },       // call 0: RbacService.getRoles() for role validation
+        { all: { results: [] } },       // call 0: RbacService.getRoles() — no custom roles
         { first: null },                // call 1: uniqueness check, no conflict
         { run: { success: true } }      // call 2: UPDATE users SET ...
       ])
@@ -341,7 +341,7 @@ describe('Admin Users - Profile on Edit Page', () => {
 
       // No profile fields + no custom config → profile write skipped entirely.
       expect(writeProfileData).not.toHaveBeenCalled()
-      // 3 prepare calls: getRoles (role validation) + uniqueness check + user update.
+      // Only 3 prepare calls: getRoles (role validation) + uniqueness check + user update.
       expect(mockDb.prepare.mock.calls.length).toBe(3)
     })
 

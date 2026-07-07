@@ -237,7 +237,7 @@ jobs:
 
       - name: Install Playwright browsers
         if: github.actor != 'dependabot[bot]'
-        run: npx playwright install --with-deps chromium --config=tests/playwright.config.ts
+        run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests against preview
         if: github.actor != 'dependabot[bot]'

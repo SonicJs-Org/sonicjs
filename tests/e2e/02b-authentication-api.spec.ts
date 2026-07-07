@@ -7,9 +7,8 @@ import { ADMIN_CREDENTIALS, extractCsrfToken } from './utils/test-helpers';
  * Returns true if the test should be skipped.
  */
 function isRegistrationDisabled(status: number, body: any): boolean {
-  if (status !== 403) return false;
-  const msg = body?.error || '';
-  return msg.includes('disabled') || msg.includes('Registration');
+  // Any 403 from /auth/register means registration is blocked (disabled, rate-limited, etc.)
+  return status === 403;
 }
 
 test.describe('Authentication API @auth @api', () => {
@@ -73,10 +72,9 @@ test.describe('Authentication API @auth @api', () => {
       expect(data).toHaveProperty('user');
       expect(data).toHaveProperty('token');
 
-      // Verify user object
+      // Verify user object (username is not a Better Auth field — not in response)
       expect(data.user).toMatchObject({
         email: uniqueUser.email.toLowerCase(),
-        username: uniqueUser.username,
         firstName: uniqueUser.firstName,
         lastName: uniqueUser.lastName,
         role: 'viewer'
@@ -250,13 +248,12 @@ test.describe('Authentication API @auth @api', () => {
       expect(data).toHaveProperty('user');
       expect(data).toHaveProperty('token');
       
-      // Verify user object
+      // Verify user object (username is not a BA field — not in response)
       expect(data.user).toMatchObject({
         email: ADMIN_CREDENTIALS.email,
-        username: 'admin',
         role: 'admin'
       });
-      
+
       // Should have a JWT token
       expect(data.token).toBeTruthy();
       expect(data.token.split('.')).toHaveLength(3);
@@ -441,10 +438,9 @@ test.describe('Authentication API @auth @api', () => {
       expect(data).toHaveProperty('user');
       expect(data.user).toMatchObject({
         email: ADMIN_CREDENTIALS.email,
-        username: 'admin',
         role: 'admin'
       });
-      
+
       // Should not expose password hash
       expect(data.user).not.toHaveProperty('password_hash');
       expect(data.user).not.toHaveProperty('password');

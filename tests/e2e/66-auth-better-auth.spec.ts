@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN_CREDENTIALS, loginAsAdmin, logout } from './utils/test-helpers';
+import { ADMIN_CREDENTIALS, loginAsAdmin, logout, TEST_ORIGIN } from './utils/test-helpers';
 
 /**
  * Better Auth integration E2E tests.
@@ -71,7 +71,7 @@ test.describe('Better Auth — sign in / sign out @smoke @auth', () => {
     await page.request.post('/auth/seed-admin');
     const signIn = await page.request.post('/auth/sign-in/email', {
       data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Origin': TEST_ORIGIN },
     });
     const signInBody = await signIn.json();
     // BA returns token in body; use it as Bearer for sign-out (cookie transport may be blocked by SameSite)
@@ -81,7 +81,7 @@ test.describe('Better Auth — sign in / sign out @smoke @auth', () => {
       data: {},
       headers: {
         'Content-Type': 'application/json',
-        'Origin': 'http://localhost:8787',
+        'Origin': TEST_ORIGIN,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });

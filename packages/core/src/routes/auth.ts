@@ -291,7 +291,7 @@ authRoutes.post('/login',
       const normalizedEmail = email.toLowerCase()
 
       const { createAuth } = await import('../auth/config')
-      const auth = createAuth(c.env)
+      const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
 
       const baReq = new Request(new URL('/auth/sign-in/email', c.req.url).href, {
         method: 'POST',
@@ -365,7 +365,7 @@ authRoutes.post('/logout', async (c) => {
   // Delegate to BA to invalidate the session server-side, then clear cookies.
   try {
     const { createAuth } = await import('../auth/config')
-    const auth = createAuth(c.env)
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
     const baReq = new Request(new URL('/auth/sign-out', c.req.url).href, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin, 'Cookie': c.req.header('Cookie') || '' },
@@ -384,7 +384,7 @@ authRoutes.get('/logout', async (c) => {
   // Delegate to BA to invalidate the session server-side, then clear cookies.
   try {
     const { createAuth } = await import('../auth/config')
-    const auth = createAuth(c.env)
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
     const baReq = new Request(new URL('/auth/sign-out', c.req.url).href, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin, 'Cookie': c.req.header('Cookie') || '' },
@@ -670,7 +670,7 @@ authRoutes.post('/login/form',
 
     // Delegate to Better Auth — call sign-in/email, get session token, set BA cookie.
     const { createAuth } = await import('../auth/config')
-    const auth = createAuth(c.env)
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
 
     const baReq = new Request(new URL('/auth/sign-in/email', c.req.url).href, {
       method: 'POST',

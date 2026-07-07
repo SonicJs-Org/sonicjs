@@ -44,7 +44,7 @@ import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRout
 import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
-import { requireAuth, requireRole, requireRbac } from './middleware/auth'
+import { requireAuth, requireRole, requireRbac, AuthManager } from './middleware/auth'
 import { createAuth } from './auth/config'
 import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
@@ -488,6 +488,34 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // gated on that plugin being active. Runs right after the session middleware
   // so it sits ahead of every route guard, like the security-audit middleware.
   app.use('*', apiKeyAuthMiddleware())
+
+  // Custom JWT Bearer auth: if BA session + API-key both failed to resolve a user,
+  // fall back to the custom JWT minted by /auth/login (not a BA session token).
+  // Accepts `Authorization: Bearer <jwt>` where the token is NOT an `sk_` API key.
+  app.use('*', async (c, next) => {
+    if (!c.get('user')) {
+      const authHeader = c.req.header('Authorization')
+      if (authHeader?.startsWith('Bearer ') && !authHeader.startsWith('Bearer sk_')) {
+        const token = authHeader.slice(7)
+        try {
+          const secret = (c.env as any)?.JWT_SECRET
+          const payload = await AuthManager.verifyToken(token, secret)
+          if (payload) {
+            c.set('user', {
+              userId: payload.userId,
+              email: payload.email,
+              role: payload.role,
+              exp: payload.exp,
+              iat: payload.iat,
+            })
+          }
+        } catch {
+          // Invalid token — leave user unset.
+        }
+      }
+    }
+    await next()
+  })
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {

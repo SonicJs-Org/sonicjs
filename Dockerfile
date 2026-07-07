@@ -67,5 +67,15 @@ ENV SONICJS_STORAGE_PATH=/app/data/media
 ENV SONICJS_KV_PATH=/app/data/kv.json
 ENV PORT=3000
 
-# Run via Node with native ESM + TypeScript stripping (Node 22+).
-CMD ["node", "--experimental-strip-types", "my-sonicjs-app/src/self-host.ts"]
+# Copy entrypoint script.
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+
+# Run as non-root for security.
+RUN chown -R node:node /app && chmod +x /app/docker-entrypoint.sh
+USER node
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+# Entrypoint: seeds DB on first boot then starts server (sequential, no concurrent SQLite access).
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

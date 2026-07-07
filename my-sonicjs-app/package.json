@@ -13,7 +13,6 @@
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply DB",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "db:studio": "drizzle-kit studio",
     "type-check": "tsc --noEmit",
     "test": "vitest --run",
     "test:watch": "vitest",
@@ -36,8 +35,6 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250620.0",
     "@types/node": "^20.19.1",
-    "drizzle-kit": "^0.30.0",
-    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.26",
     "typescript": "^5.8.3",
     "vitest": "^4.1.9",

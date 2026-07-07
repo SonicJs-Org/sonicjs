@@ -606,6 +606,13 @@ function renderCatalystSidebar(
   // Active plugin nav items injected by pluginMenuMiddleware via dynamicMenuItems.
   // When not provided, the marker below is replaced by the middleware post-render.
   const resolvedMenuItems = dynamicMenuItems ?? [];
+  const userRole: string = user?.role ?? 'viewer';
+  const isAdmin = userRole === 'admin';
+  const isEditor = userRole === 'editor';
+  const canManageUsers = isAdmin;
+  const canAccessSettings = isAdmin || isEditor;
+  const canAccessPlugins = isAdmin;
+
   let baseMenuItems = [
     {
       label: "Content",
@@ -621,13 +628,13 @@ function renderCatalystSidebar(
         <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"/>
       </svg>`,
     },
-    {
+    ...(canManageUsers ? [{
       label: "Users",
       path: "/admin/users",
       icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
         <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
       </svg>`,
-    },
+    }] : []),
   ];
 
   const pluginsIcon = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -745,7 +752,7 @@ function renderCatalystSidebar(
             `;
             })
             .join("")}
-          <!-- Plugins accordion -->
+          ${canAccessPlugins ? `<!-- Plugins accordion -->
           <div data-plugins-accordion class="relative">
             ${isPluginsActive ? '<span class="absolute inset-y-2 -left-4 w-0.5 rounded-full bg-cyan-500 dark:bg-cyan-400"></span>' : ""}
             <div class="flex w-full items-center">
@@ -776,7 +783,7 @@ function renderCatalystSidebar(
             <div data-plugins-submenu class="pl-6 mt-0.5 flex flex-col gap-0.5">
               ${pluginsSubItems}
             </div>
-          </div>
+          </div>` : ""}
           <!-- /ADMIN_SIDEBAR_NAV_ITEMS -->
         </div>
       </div>
@@ -822,7 +829,7 @@ function renderCatalystSidebar(
         </div>
       </div>
 
-      <!-- Settings Menu Item (Bottom) -->
+      ${canAccessSettings ? `<!-- Settings Menu Item (Bottom) -->
       <div class="border-t border-zinc-950/5 p-4 dark:border-white/5">
         ${(() => {
           const isActive =
@@ -858,7 +865,7 @@ function renderCatalystSidebar(
             </span>
           `;
         })()}
-      </div>
+      </div>` : ""}
 
       <!-- Sidebar Footer (User) -->
       ${

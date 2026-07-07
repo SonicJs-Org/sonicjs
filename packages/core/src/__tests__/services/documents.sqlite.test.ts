@@ -301,6 +301,28 @@ describe('Document ACL — isAllowed against real document_permissions (D5/D11)'
     const repoB = new DocumentRepository(db, 'tenantB')
     expect(await repoB.isAllowed([{ type: 'public', id: '*' }], 'root1', 'read', PUBLIC_READ)).toBe(true)
   })
+
+  // Security: an authenticated user whose auth_user.role == 'public' must NOT inherit the
+  // anonymous baseGrants['public'] bucket. If it did, a logged-in "public-role" user would
+  // bypass ACL and see everything an anonymous visitor sees — defeating per-role isolation.
+  it('authenticated user with role=public does NOT inherit baseGrants["public"] (collision guard)', async () => {
+    const repo = new DocumentRepository(db, 'default')
+    // Principal set for an authed user whose role name is 'public':
+    //   { type: 'user', id: 'u-pub' }, { type: 'role', id: 'public' }
+    const authedPublicRolePrincipal = [
+      { type: 'user', id: 'u-pub' },
+      { type: 'role', id: 'public' },
+    ]
+    // PUBLIC_READ has baseGrants.public = ['read']. An anonymous visitor { type:'public', id:'*' }
+    // can read. An authed user with role='public' must NOT — their role principal must not match
+    // the 'public' key in baseGrants.
+    expect(await repo.isAllowed(authedPublicRolePrincipal, 'root1', 'read', PUBLIC_READ)).toBe(false)
+  })
+
+  it('anonymous { type:public } still inherits baseGrants["public"] normally', async () => {
+    const repo = new DocumentRepository(db, 'default')
+    expect(await repo.isAllowed([{ type: 'public', id: '*' }], 'root1', 'read', PUBLIC_READ)).toBe(true)
+  })
 })
 
 describe('versioning off', () => {

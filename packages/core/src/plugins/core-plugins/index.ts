@@ -43,6 +43,8 @@ export { stripePlugin, createStripePlugin, SubscriptionService, StripeAPI, requi
 export { dashboardPlugin, createDashboardPlugin } from './dashboard-plugin'
 export { multiTenantPlugin, createMultiTenantPlugin, TenantService } from './multi-tenant-plugin'
 export { versioningPlugin, createVersioningPlugin } from './versioning-plugin'
+export { mcpPlugin, createMcpPlugin } from './mcp-plugin'
+export type { McpConfigInput, McpConfig } from './mcp-plugin'
 export { menuPlugin, createMenuPlugin } from './menu-plugin'
 
 // Core plugins list - now imported from auto-generated registry

@@ -383,7 +383,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', metricsMiddleware())
 
   // Bootstrap middleware - runs migrations, syncs collections, and initializes plugins
-  app.use('*', bootstrapMiddleware(config))
+  app.use('*', bootstrapMiddleware(config, [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])]))
 
   // bootIsolate — extracted from the wiring middleware so it can be called from
   // both HTTP requests AND cron-first cold isolates (scheduled() handlers) that
@@ -678,7 +678,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     const userPlugins = (config.plugins?.register ?? []).filter(
       (p: any) => !PLUGIN_REGISTRY[p.id]
     )
-    setPluginMenu(userPlugins.flatMap((p: any) => (p.menu ?? [])))
+    setPluginMenu(userPlugins.flatMap((p: any) => (p.menu ?? []).map((m: any) => ({ ...m, pluginId: p.id }))))
     setPluginDefinitions(allMountedPlugins)
   }
 

@@ -50,6 +50,11 @@ export class DocumentPermissionsService {
         const publicGrants = baseGrants['public'] ?? []
         if (publicGrants.includes(permission)) return true
       } else if (principal.type === 'role') {
+        // 'public' in baseGrants is reserved for anonymous { type: 'public', id: '*' } access only.
+        // An authenticated user whose role name happens to be 'public' must not inherit anonymous
+        // grants — doing so would allow a logged-in "public" role user to bypass ACL the same way
+        // an unauthenticated visitor does, defeating per-role grant isolation.
+        if (principal.id === 'public') continue
         const roleGrants = baseGrants[principal.id] ?? []
         if (roleGrants.includes(permission)) return true
       }

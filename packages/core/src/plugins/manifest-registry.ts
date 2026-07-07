@@ -459,6 +459,26 @@ export const PLUGIN_REGISTRY: Record<string, PluginRegistryEntry> = {
     "adminMenu": null
   },
 
+  'mcp': {
+    "id": "mcp",
+    "codeName": "mcp",
+    "displayName": "MCP Server",
+    "description": "Exposes SonicJS content as Model Context Protocol tools for AI agents (Claude Code, Cursor, VS Code)",
+    "version": "1.0.0",
+    "author": "SonicJS Team",
+    "category": "integration",
+    "iconEmoji": "🔌",
+    "is_core": true,
+    "permissions": [],
+    "dependencies": [
+      "api-keys"
+    ],
+    "defaultSettings": {
+      "listLimit": 50
+    },
+    "adminMenu": null
+  },
+
   'menu': {
     "id": "menu",
     "codeName": "menu",

@@ -112,25 +112,27 @@ describe('RBAC enforcement - requireRole middleware', () => {
   })
 
   describe('role validation on user creation', () => {
-    it('accepts valid roles', () => {
-      const validRoles = ['admin', 'editor', 'author', 'viewer']
-      for (const role of validRoles) {
-        expect(validRoles.includes(role)).toBe(true)
-      }
+    // admin-users.ts validates against dynamic DB roles (RbacService.getRoles()), not a
+    // static list. Roles are slugs like 'role-admin', not the old 'admin'/'viewer' strings.
+    it('accepts a role that exists in the dynamic valid set', () => {
+      const validRoles = ['role-admin', 'role-editor', 'role-public']
+      const roleInput = 'role-admin'
+      const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'role-admin')
+      expect(role).toBe('role-admin')
     })
 
-    it('rejects invalid role and defaults to viewer', () => {
-      const validRoles = ['admin', 'editor', 'author', 'viewer']
+    it('rejects unknown role and falls back to first valid role', () => {
+      const validRoles = ['role-admin', 'role-editor']
       const roleInput = 'superadmin'
-      const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
-      expect(role).toBe('viewer')
+      const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'role-admin')
+      expect(role).toBe('role-admin')
     })
 
-    it('rejects empty string role and defaults to viewer', () => {
-      const validRoles = ['admin', 'editor', 'author', 'viewer']
+    it('rejects empty string role and falls back to first valid role', () => {
+      const validRoles = ['role-admin', 'role-editor']
       const roleInput = ''
-      const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
-      expect(role).toBe('viewer')
+      const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'role-admin')
+      expect(role).toBe('role-admin')
     })
   })
 

@@ -10,6 +10,7 @@ import { renderUsersListPage, type UsersListPageData, type User } from '../templ
 import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData, readProfileData, writeProfileData } from '../plugins/core-plugins/user-profiles'
 import { TenantService, VALID_MEMBER_ROLES } from '../plugins/core-plugins/multi-tenant-plugin/services/tenant-service'
+import { RbacService } from '../services/rbac'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -58,13 +59,10 @@ const LANGUAGES = [
   { value: 'zh', label: 'Chinese' }
 ]
 
-// Role options for user form
-const ROLES = [
-  { value: 'admin', label: 'Administrator' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'author', label: 'Author' },
-  { value: 'viewer', label: 'Viewer' }
-]
+async function fetchRoleOptions(db: any): Promise<Array<{ value: string; label: string }>> {
+  const roles = await new RbacService(db).getRoles()
+  return roles.map((r) => ({ value: r.id, label: r.display_name }))
+}
 
 /**
  * GET /admin/profile - Show user profile page
@@ -630,8 +628,10 @@ userRoutes.get('/users/new', async (c) => {
       ? renderCustomProfileSection({ fields: regFields }, {})
       : undefined
 
+    const roles = await fetchRoleOptions(db)
+
     const pageData: UserNewPageData = {
-      roles: ROLES,
+      roles,
       registrationFieldsHtml,
       user: {
         name: user!.email.split('@')[0] || user!.email,
@@ -668,9 +668,9 @@ userRoutes.post('/users/new', async (c) => {
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     const bio = sanitizeInput(formData.get('bio')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || 'viewer'
-    const validRoles = ['admin', 'editor', 'author', 'viewer']
-    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
+    const roleInput = formData.get('role')?.toString() || ''
+    const validRoles = (await new RbacService(db).getRoles()).map((r) => r.id)
+    const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'admin')
     const password = formData.get('password')?.toString() || ''
     const confirmPassword = formData.get('confirm_password')?.toString() || ''
     const isActive = formData.get('is_active') === '1'
@@ -942,9 +942,11 @@ userRoutes.get('/users/:id/edit', async (c) => {
     const queryMessage = c.req.query('message')
     const queryType = c.req.query('type') === 'error' ? 'error' : 'success'
 
+    const roles = await fetchRoleOptions(db)
+
     const pageData: UserEditPageData = {
       userToEdit: editData,
-      roles: ROLES,
+      roles,
       hasProfilePlugin: profileConfig !== null && upRow !== null,
       customProfileFieldsHtml,
       tenantMemberships,
@@ -985,9 +987,9 @@ userRoutes.put('/users/:id', async (c) => {
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || 'viewer'
-    const validRoles = ['admin', 'editor', 'author', 'viewer']
-    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
+    const roleInput = formData.get('role')?.toString() || ''
+    const validRoles = (await new RbacService(db).getRoles()).map((r) => r.id)
+    const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'admin')
     const isActive = formData.get('is_active') === '1'
     const emailVerified = formData.get('email_verified') === '1'
 

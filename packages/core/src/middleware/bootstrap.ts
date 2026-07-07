@@ -86,7 +86,7 @@ export function verifySecurityConfig(env: Bindings): void {
  * Bootstrap middleware that ensures system initialization
  * Runs once per worker instance
  */
-export function bootstrapMiddleware(config: SonicJSConfig = {}) {
+export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Array<{ name?: string; id?: string }>) {
   return async (c: Context<{ Bindings: Bindings; Variables: { hookSystem?: unknown } }>, next: Next) => {
     // Attach the hook system to the request BEFORE any heavy bootstrap work
     // runs, so anything that emits a hook during bootstrap (cron cold starts,
@@ -262,8 +262,9 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}) {
           }
         }
 
-        // Plugin names from config
-        const activePlugins = (config.plugins?.register ?? []).map((p: any) => p.name ?? 'unknown');
+        // Plugin names — use allPlugins (all registered, including core) when available
+        const pluginSource = allPlugins ?? (config.plugins?.register ?? []) as Array<{ name?: string; id?: string }>;
+        const activePlugins = pluginSource.map((p) => p.name ?? String(p.id ?? 'unknown'));
 
         // Stable installation ID via KV (generated once, persisted)
         let installationId = 'unknown';

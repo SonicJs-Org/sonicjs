@@ -133,6 +133,34 @@ apiContentCrudRoutes.get('/:id', optionalAuth(), async (c) => {
       'fire-and-forget'
     )
 
+    // ?fields= projection: e.g. ?fields=id,title,data.excerpt
+    const fieldsParam = c.req.query('fields')
+    if (fieldsParam) {
+      const projFields = fieldsParam.split(',').map(s => s.trim()).filter(Boolean)
+      if (projFields.length > 0) {
+        const result: any = {}
+        const dataSubFields: string[] = []
+        for (const f of projFields) {
+          if (f === 'data') {
+            result.data = transformedContent.data
+          } else if (f.startsWith('data.')) {
+            dataSubFields.push(f.slice(5))
+          } else if (Object.prototype.hasOwnProperty.call(transformedContent, f)) {
+            result[f] = transformedContent[f]
+          }
+        }
+        if (dataSubFields.length > 0 && !result.data) {
+          result.data = {}
+          for (const sub of dataSubFields) {
+            if (transformedContent.data && Object.prototype.hasOwnProperty.call(transformedContent.data, sub)) {
+              result.data[sub] = transformedContent.data[sub]
+            }
+          }
+        }
+        return c.json({ data: result })
+      }
+    }
+
     return c.json({ data: transformedContent })
   } catch (error) {
     console.error('Error fetching content:', error)
@@ -215,8 +243,8 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
         user?.userId,
       )
       const cache = getCacheService(CACHE_CONFIGS.api!)
-      await cache.invalidate('content-filtered:*')
-      await cache.invalidate('collection-content-filtered:*')
+      await cache.invalidate('api:content-filtered:*')
+      await cache.invalidate(`api:collection-content-filtered:${backing.coll.name}:*`)
 
       // Fire content:after:create for side-effect plugins (fire-and-forget).
       dispatchHookEvent(
@@ -297,8 +325,8 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
         await svc.unpublish(pub.id)
       }
       const cache = getCacheService(CACHE_CONFIGS.api!)
-      await cache.invalidate('content-filtered:*')
-      await cache.invalidate('collection-content-filtered:*')
+      await cache.invalidate('api:content-filtered:*')
+      await cache.invalidate(`api:collection-content-filtered:${docRow.type_id}:*`)
       const coll = getCollectionRegistry().getByName(docRow.type_id)
       const saved = await db.prepare('SELECT * FROM documents WHERE id = ?').bind(newDraft.id).first() as any
       const savedData = saved?.data ? JSON.parse(saved.data) : {}
@@ -353,8 +381,8 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor
       const now = Math.floor(Date.now() / 1000)
       await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, id, tenantId).run()
       const cache = getCacheService(CACHE_CONFIGS.api!)
-      await cache.invalidate('content-filtered:*')
-      await cache.invalidate('collection-content-filtered:*')
+      await cache.invalidate('api:content-filtered:*')
+      await cache.invalidate(`api:collection-content-filtered:${docRow.type_id}:*`)
 
       // Fire content:after:delete (fire-and-forget).
       dispatchHookEvent(c, 'content:after:delete', { collection: docRow.type_id, id, data: {}, user: actor }, 'fire-and-forget')

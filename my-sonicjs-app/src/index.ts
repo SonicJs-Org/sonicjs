@@ -13,6 +13,7 @@ import {
   createSonicJSApp,
   emailReconciliationPlugin,
   getHookSystem,
+  mcpPlugin,
   redirectPlugin,
   registerCollections,
 } from '@sonicjs-cms/core';
@@ -34,7 +35,7 @@ const config: SonicJSConfig = {
   plugins: {
     // Add plugins to this array to activate them. Each plugin's register()
     // runs synchronously at startup; onBoot() runs async on first request.
-    register: [redirectPlugin, examplePlugin],
+    register: [redirectPlugin, examplePlugin, mcpPlugin()],
     disableAll: false,
   },
 };

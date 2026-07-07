@@ -26,6 +26,12 @@ export function getBlocksFieldConfig(fieldOptions: any): BlocksFieldConfig | nul
   }
 }
 
+function generateBlockId(): string {
+  const bytes = new Uint8Array(6)
+  crypto.getRandomValues(bytes)
+  return 'blk_' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 export function parseBlocksValue(value: unknown, config: BlocksFieldConfig) {
   const errors: string[] = []
   let rawValue = value
@@ -52,15 +58,22 @@ export function parseBlocksValue(value: unknown, config: BlocksFieldConfig) {
       return null
     }
 
+    let block: any
     if ((item as any).blockType && (item as any).data && typeof (item as any).data === 'object') {
-      return { [config.discriminator]: (item as any).blockType, ...(item as any).data }
+      block = { [config.discriminator]: (item as any).blockType, ...(item as any).data }
+    } else {
+      if (!(config.discriminator in (item as any))) {
+        errors.push(`Block #${index + 1} is missing "${config.discriminator}"`)
+      }
+      block = item as any
     }
 
-    if (!(config.discriminator in (item as any))) {
-      errors.push(`Block #${index + 1} is missing "${config.discriminator}"`)
+    // Preserve existing blockId or generate a stable one for new blocks
+    if (!block.blockId) {
+      block = { blockId: generateBlockId(), ...block }
     }
 
-    return item as any
+    return block
   }).filter((item) => item !== null)
 
   return { value: normalized, errors }

@@ -508,6 +508,13 @@ function renderSidebar(
     icon: string;
   }>
 ): string {
+  const userRole: string = user?.role ?? 'viewer';
+  const isAdmin = userRole === 'admin';
+  const isEditor = userRole === 'editor';
+  const canManageUsers = isAdmin;
+  const canAccessSettings = isAdmin || isEditor;
+  const canAccessPlugins = isAdmin;
+
   const baseMenuItems = [
     {
       label: "Content",
@@ -589,8 +596,19 @@ function renderSidebar(
     },
   ];
 
+  // Filter based on role: viewers see content/collections/media only
+  const filteredBaseItems = baseMenuItems.filter(item => {
+    if (item.path === '/admin/users') return canManageUsers;
+    if (item.path === '/admin/plugins') return canAccessPlugins;
+    if (item.path === '/admin/settings') return canAccessSettings;
+    if (item.path === '/admin/cache') return canAccessSettings;
+    if (item.path === '/admin/logs') return canAccessSettings;
+    if (item.path === '/admin/field-types') return canAccessSettings;
+    return true;
+  });
+
   // Combine base menu items with dynamic menu items from active plugins
-  const allMenuItems = [...baseMenuItems];
+  const allMenuItems = [...filteredBaseItems];
 
   // Insert dynamic menu items after "Users"
   if (dynamicMenuItems && dynamicMenuItems.length > 0) {

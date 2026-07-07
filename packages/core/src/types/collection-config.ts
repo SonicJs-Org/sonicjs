@@ -227,6 +227,58 @@ export interface CollectionConfigModule {
 }
 
 /**
+ * Maps FieldType strings to their TypeScript equivalents.
+ * Use with InferCollectionData to get typed data shapes from a CollectionConfig.
+ */
+export type FieldTypeMap = {
+  string: string
+  number: number
+  boolean: boolean
+  date: string
+  datetime: string
+  email: string
+  url: string
+  richtext: string
+  lexical: string
+  markdown: string
+  mdxeditor: string
+  easymde: string
+  quill: string
+  tinymce: string
+  json: Record<string, unknown>
+  array: unknown[]
+  object: Record<string, unknown>
+  reference: string
+  media: string
+  select: string
+  multiselect: string[]
+  checkbox: boolean
+  radio: string
+  textarea: string
+  slug: string
+  color: string
+  file: string
+  user: string
+}
+
+/** Infer the TypeScript type for a single FieldConfig. */
+export type InferFieldType<F extends FieldConfig> = F['type'] extends keyof FieldTypeMap
+  ? FieldTypeMap[F['type']]
+  : unknown
+
+/**
+ * Infer the TypeScript data shape of a CollectionConfig's schema.
+ *
+ * @example
+ * const postsCollection = { ... } satisfies CollectionConfig
+ * type PostData = InferCollectionData<typeof postsCollection>
+ * // { title: string; slug: string; content: string; status: string; ... }
+ */
+export type InferCollectionData<C extends CollectionConfig> = {
+  [K in keyof C['schema']['properties']]: InferFieldType<C['schema']['properties'][K]>
+}
+
+/**
  * Result of syncing a collection
  */
 export interface CollectionSyncResult {

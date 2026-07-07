@@ -20,6 +20,8 @@ export interface PluginMenuEntry {
   order?: number
   /** Required permission slugs; if any matches the user's permissions, the entry is shown. */
   permissions?: readonly string[]
+  /** Plugin ID — set automatically by registerPlugins. Used to DB-check active status. */
+  pluginId?: string
 }
 
 /**
@@ -33,6 +35,7 @@ export interface ResolvedPluginMenuEntry {
   path: string
   icon: string
   order: number
+  pluginId?: string
 }
 
 // ── Icon name → SVG map ──────────────────────────────────────────────────────
@@ -104,5 +107,6 @@ export function resolvePluginMenuItems(
       path: m.path,
       icon: resolveIcon(m.icon),
       order: m.order ?? 100,
+      pluginId: m.pluginId,
     }))
 }

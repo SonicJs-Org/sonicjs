@@ -10,7 +10,41 @@ import { DocumentTypeRegistry } from '../services/document-type-registry'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import type { HookActor } from '../plugins/hooks/catalog'
 import { createDocumentSchema } from '../schemas/document'
+import type { PrincipalRef } from '../schemas/document'
 import { getCoreVersion } from '../utils/version'
+import { getDocumentRequestContext } from '../services/document-request-context'
+import { DocumentRepository } from '../services/document-repository'
+import { DocumentPermissionsService } from '../services/document-permissions'
+import { RbacService } from '../services/rbac'
+
+// Anonymous principal = unauthenticated request. Authenticated users (even with role 'public')
+// must pass isAllowed so the document ACL is enforced — not just is_published.
+function isAnonPrincipal(principalSet: PrincipalRef[]): boolean {
+  return principalSet.length === 1 && principalSet[0]?.type === 'public'
+}
+
+// Checks document ACL baseGrants first, then falls back to RBAC dynamic role grants.
+// Both systems must be consulted: baseGrants is set at registration time (in code), while
+// RBAC grants are set at runtime via the RBAC matrix UI and stored in the document store.
+async function typeReadAllowed(
+  db: any,
+  principalSet: PrincipalRef[],
+  docType: { settings?: any } | null | undefined,
+  typeName: string,
+): Promise<boolean> {
+  const perms = new DocumentPermissionsService(db)
+  if (perms.isAllowedSync(principalSet, [], 'read', docType?.settings ?? {})) return true
+  const rbac = new RbacService(db)
+  let anyRbacRoleFound = false
+  for (const p of principalSet) {
+    if (p.type !== 'role') continue
+    if (!(await rbac.hasRbacRole(p.id))) continue  // role not in RBAC → skip (legacy roles default to allow)
+    anyRbacRoleFound = true
+    if (await rbac.isGrantedForRole(p.id, `document_type:${typeName}`, 'read')) return true
+  }
+  // No RBAC role found in principal set → legacy/unknown role → default allow
+  return !anyRbacRoleFound
+}
 
 // Document columns the public list is allowed to ORDER BY. The legacy `content` table exposed
 // collection_id; on documents that maps to type_id. Anything else (incl. nonexistent columns like a
@@ -118,6 +152,42 @@ function mapDocRowToContent(row: any, collectionId: string | null) {
     created_at: documentSecondsToMs(row.created_at),
     updated_at: documentSecondsToMs(row.updated_at),
   }
+}
+
+/**
+ * Project a content item to only the requested fields.
+ * Supports top-level fields (e.g. "title", "slug") and data sub-fields
+ * via dot notation (e.g. "data.excerpt", "data.body").
+ * Requesting "data" (no dot) returns the entire data object.
+ * Returns the original item unchanged when fields is empty.
+ */
+function projectFields(item: any, fields: string[]): any {
+  if (fields.length === 0) return item
+  const result: any = {}
+  const dataSubFields: string[] = []
+  for (const f of fields) {
+    if (f === 'data') {
+      result.data = item.data
+    } else if (f.startsWith('data.')) {
+      dataSubFields.push(f.slice(5))
+    } else if (Object.prototype.hasOwnProperty.call(item, f)) {
+      result[f] = item[f]
+    }
+  }
+  if (dataSubFields.length > 0 && !result.data) {
+    result.data = {}
+    for (const sub of dataSubFields) {
+      if (item.data && Object.prototype.hasOwnProperty.call(item.data, sub)) {
+        result.data[sub] = item.data[sub]
+      }
+    }
+  }
+  return result
+}
+
+function parseFieldsParam(raw: string | undefined): string[] {
+  if (!raw) return []
+  return raw.split(',').map(s => s.trim()).filter(Boolean)
 }
 import apiContentCrudRoutes, { resolveDocBacking, slugify } from './api-content-crud'
 import type { Bindings, Variables as AppVariables } from '../app'
@@ -651,7 +721,15 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
     const db = c.env.DB
     const queryParams = c.req.query()
 
+    // ?fields= projection — strip before filter parsing to avoid SQL errors
+    const projFields = parseFieldsParam(queryParams.fields)
+    if (queryParams.fields) delete queryParams.fields
+
     const role = c.get('user')?.role
+    const { tenantId: cTenantId, principalSet: cPrincipalSet } = getDocumentRequestContext(c)
+    const cAnon = isAnonPrincipal(cPrincipalSet)
+    // Admin/editor have unconditional access — ACL gates non-privileged authenticated callers only.
+    const cNeedsAcl = !cAnon && !canReadNonPublicContent(role)
 
     // Resolve collection scoping to document type ids (== collection name). Build a name→collectionId
     // map so the response keeps a stable collectionId field.
@@ -706,8 +784,8 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
       }, 400)
     }
 
-    // Only use cache if cache plugin is active
-    const cacheEnabled = c.get('cacheEnabled')
+    // Non-anonymous / non-privileged users get per-request ACL filtering — skip cache.
+    const cacheEnabled = c.get('cacheEnabled') && cAnon
     const cache = getCacheService(CACHE_CONFIGS.api!)
     const cacheKey = cache.generateKey('content-filtered', JSON.stringify({ filter: normalizedFilter, query: queryResult.sql }))
 
@@ -750,13 +828,44 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
 
     const { results } = await boundStmt.all()
 
+    // Non-privileged authenticated users must pass the document ACL per row.
+    // Two systems: baseGrants (code-time) + RBAC grants (runtime). Per-doc deny overrides
+    // only apply when baseGrants granted access; RBAC-only grants pass all rows.
+    let aclResults = results
+    if (cNeedsAcl) {
+      const typeReg = new DocumentTypeRegistry(db)
+      const repo = new DocumentRepository(db, cTenantId)
+      const uniqueTypeIds = [...new Set((results as any[]).map((r: any) => r.type_id as string))]
+      const typeSettingsMap = new Map<string, any>()
+      const typeRbacOnlyMap = new Map<string, boolean>()
+      const typeDeniedMap = new Map<string, boolean>()
+      await Promise.all(uniqueTypeIds.map(async (tid) => {
+        const dt = await typeReg.findById(tid)
+        const settings = dt?.settings ?? {}
+        typeSettingsMap.set(tid, settings)
+        const allowed = await typeReadAllowed(db, cPrincipalSet, dt, tid)
+        if (!allowed) { typeDeniedMap.set(tid, true); return }
+        const perms = new DocumentPermissionsService(db)
+        typeRbacOnlyMap.set(tid, !perms.isAllowedSync(cPrincipalSet, [], 'read', settings))
+      }))
+      const allowed = await Promise.all(
+        (results as any[]).map((row: any) => {
+          const tid = row.type_id as string
+          if (typeDeniedMap.get(tid)) return Promise.resolve(false)
+          if (typeRbacOnlyMap.get(tid)) return Promise.resolve(true)
+          return repo.isAllowed(cPrincipalSet, row.root_id, 'read', typeSettingsMap.get(tid) ?? {})
+        })
+      )
+      aclResults = (results as any[]).filter((_: any, i: number) => allowed[i])
+    }
+
     // Transform document rows to the public content shape (id == document root id).
-    const transformedResults = results.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
+    const transformedResults = aclResults.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
 
     const responseData = {
-      data: transformedResults,
+      data: projFields.length ? transformedResults.map(item => projectFields(item, projFields)) : transformedResults,
       meta: addTimingMeta(c, {
-        count: results.length,
+        count: aclResults.length,
         timestamp: new Date().toISOString(),
         // D44: echo the caller's filter with the access policy applied (status=published forced for
         // anonymous callers — the visible enforcement proof), NOT the internal doc-augmented where-tree.
@@ -768,8 +877,8 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
       }, executionStart)
     }
 
-    // Cache the response only if cache is enabled
-    if (cacheEnabled) {
+    // Cache the response only if cache is enabled (skip when field projection active)
+    if (cacheEnabled && projFields.length === 0) {
       await cache.set(cacheKey, responseData)
     }
 
@@ -804,6 +913,19 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     // Parse the user filter, re-target to documents scoped to this collection's type + visibility.
     // type_id == the collection name; one row per root via is_published / is_current_draft.
     const role = c.get('user')?.role
+    const { tenantId: ccTenantId, principalSet: ccPrincipalSet } = getDocumentRequestContext(c)
+    const ccAnon = isAnonPrincipal(ccPrincipalSet)
+    const ccNeedsAcl = !ccAnon && !canReadNonPublicContent(role)
+
+    // Non-privileged authenticated users with no type-level read grant get 403 immediately.
+    let ccDocType: Awaited<ReturnType<DocumentTypeRegistry['findById']>> | undefined
+    if (ccNeedsAcl) {
+      ccDocType = await new DocumentTypeRegistry(db).findById(record.name)
+      if (!(await typeReadAllowed(db, ccPrincipalSet, ccDocType, record.name))) {
+        return c.json({ error: 'Forbidden' }, 403)
+      }
+    }
+
     const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
     const normalizedFilter = augmentFilterForDocuments(filter, { typeId: collection, role })
 
@@ -825,7 +947,8 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     }
 
     // Generate cache key
-    const cacheEnabled = c.get('cacheEnabled')
+    // Non-privileged authenticated users get per-request ACL filtering — skip cache.
+    const cacheEnabled = c.get('cacheEnabled') && ccAnon
     const cache = getCacheService(CACHE_CONFIGS.api!)
     const includeCollection = queryParams.include?.split(',').map(s => s.trim()).includes('collection')
     const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
@@ -870,14 +993,30 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
 
     const { results } = await boundStmt.all()
 
+    // Non-privileged authenticated users must pass the document ACL.
+    let ccAclResults = results
+    if (ccNeedsAcl) {
+      // ccDocType was fetched above for the 403 guard — reuse it here.
+      const ccPerms = new DocumentPermissionsService(db)
+      const ccBaseGrantsPass = ccPerms.isAllowedSync(ccPrincipalSet, [], 'read', ccDocType?.settings ?? {})
+      if (ccBaseGrantsPass) {
+        const repo = new DocumentRepository(db, ccTenantId)
+        const allowed = await Promise.all(
+          (results as any[]).map((row: any) => repo.isAllowed(ccPrincipalSet, row.root_id, 'read', ccDocType?.settings ?? {}))
+        )
+        ccAclResults = (results as any[]).filter((_: any, i: number) => allowed[i])
+      }
+      // else: RBAC granted type-level read — all rows pass
+    }
+
     // Transform document rows to the public content shape (id == document root id).
-    const transformedResults = results.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
+    const transformedResults = ccAclResults.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
 
     const responseData = {
       data: transformedResults,
       meta: addTimingMeta(c, {
         ...(includeCollection ? { collection: collectionRecordToRow(record) } : {}),
-        count: results.length,
+        count: ccAclResults.length,
         timestamp: new Date().toISOString(),
         // D44: echo the caller's filter with the access policy applied (status=published forced for
         // anonymous callers — the visible enforcement proof), NOT the internal doc-augmented where-tree.
@@ -919,6 +1058,10 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     const db = c.env.DB
     const queryParams = c.req.query()
 
+    // ?fields= projection — strip before filter parsing
+    const projFields = parseFieldsParam(queryParams.fields)
+    if (queryParams.fields) delete queryParams.fields
+
     const record = getCollectionRegistry().getBySlugOrName(collection!)
     if (!record || record.isActive === false) {
       return c.json({ error: 'Collection not found' }, 404)
@@ -928,6 +1071,19 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     collIdByName.set(record.name, record.id)
 
     const role = c.get('user')?.role
+    const { tenantId, principalSet } = getDocumentRequestContext(c)
+    const anon = isAnonPrincipal(principalSet)
+    const needsAcl = !anon && !canReadNonPublicContent(role)
+
+    // Non-privileged authenticated users with no type-level read grant get 403 immediately.
+    let docTypeForCheck: Awaited<ReturnType<DocumentTypeRegistry['findById']>> | undefined
+    if (needsAcl) {
+      docTypeForCheck = await new DocumentTypeRegistry(db).findById(record.name)
+      if (!(await typeReadAllowed(db, principalSet, docTypeForCheck, record.name))) {
+        return c.json({ error: 'Forbidden' }, 403)
+      }
+    }
+
     const filter: QueryFilter = QueryFilterBuilder.parseFromQuery(queryParams)
     const normalizedFilter = augmentFilterForDocuments(filter, { typeId: record.name, role })
     if (!normalizedFilter.limit) normalizedFilter.limit = 50
@@ -943,7 +1099,9 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     // Per-collection cache override — collection config can disable caching or set a custom TTL.
     const collectionCache = (record as any).cache as { enabled?: boolean; ttl?: number } | undefined
     const collectionCacheDisabled = collectionCache?.enabled === false
-    const cacheEnabled = c.get('cacheEnabled') && !collectionCacheDisabled
+    // Authenticated non-anonymous users get per-request ACL filtering — skip cache to avoid
+    // serving a cached anonymous response that hasn't been filtered for their principal set.
+    const cacheEnabled = c.get('cacheEnabled') && !collectionCacheDisabled && projFields.length === 0 && anon
     const cache = getCacheService(CACHE_CONFIGS.api!)
     const includeCollection = queryParams.include?.split(',').map(s => s.trim()).includes('collection')
     const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
@@ -965,12 +1123,33 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     const boundStmt = queryResult.params.length > 0 ? stmt.bind(...queryResult.params) : stmt
     const { results } = await boundStmt.all()
 
-    const transformedResults = results.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
+    // Non-privileged authenticated users must pass the document ACL.
+    // Anonymous and privileged (admin/editor) requests are unchanged.
+    let aclResults = results
+    if (needsAcl) {
+      // docTypeForCheck was fetched above for the 403 guard — reuse it here.
+      // If RBAC grants type-level read, all rows pass (baseGrants alone can't see the RBAC grant).
+      // Otherwise fall through to per-row isAllowed which checks baseGrants + per-doc overrides.
+      const perms = new DocumentPermissionsService(db)
+      const baseGrantsPass = perms.isAllowedSync(principalSet, [], 'read', docTypeForCheck?.settings ?? {})
+      if (!baseGrantsPass) {
+        // RBAC granted it at type level (we passed the 403 guard) — all rows pass.
+        // Per-doc deny overrides are intentionally not applied here; use /api/documents for that.
+      } else {
+        const repo = new DocumentRepository(db, tenantId)
+        const allowed = await Promise.all(
+          (results as any[]).map((row: any) => repo.isAllowed(principalSet, row.root_id, 'read', docTypeForCheck?.settings ?? {}))
+        )
+        aclResults = (results as any[]).filter((_: any, i: number) => allowed[i])
+      }
+    }
+
+    const transformedResults = aclResults.map((row: any) => mapDocRowToContent(row, collIdByName.get(row.type_id) ?? null))
     const responseData = {
-      data: transformedResults,
+      data: projFields.length ? transformedResults.map(item => projectFields(item, projFields)) : transformedResults,
       meta: addTimingMeta(c, {
         ...(includeCollection ? { collection: collectionRecordToRow(record) } : {}),
-        count: results.length,
+        count: aclResults.length,
         timestamp: new Date().toISOString(),
         filter: normalizePublicContentFilter(filter, role),
         cache: { hit: false, source: 'database' },
@@ -1013,6 +1192,28 @@ apiRoutes.get('/:collection/:id', optionalAuth(), async (c) => {
 
     if (!docRow) return c.json({ error: 'Content not found' }, 404)
 
+    // Authenticated non-anonymous users must pass the document ACL.
+    const colRole = c.get('user')?.role
+    const { tenantId: colTenantId, principalSet: colPrincipalSet } = getDocumentRequestContext(c)
+    const colNeedsAcl = !isAnonPrincipal(colPrincipalSet) && !canReadNonPublicContent(colRole)
+    if (colNeedsAcl) {
+      const docType = await new DocumentTypeRegistry(db).findById(record.name)
+      // Check both baseGrants and RBAC grants (same two-system approach as the list routes).
+      if (!(await typeReadAllowed(db, colPrincipalSet, docType, record.name))) {
+        return c.json({ error: 'Content not found' }, 404)
+      }
+      // If baseGrants granted it, also honour per-doc deny overrides.
+      const perms = new DocumentPermissionsService(db)
+      if (perms.isAllowedSync(colPrincipalSet, [], 'read', docType?.settings ?? {})) {
+        const repo = new DocumentRepository(db, colTenantId)
+        if (!(await repo.isAllowed(colPrincipalSet, docRow.root_id, 'read', docType?.settings ?? {}))) {
+          return c.json({ error: 'Content not found' }, 404)
+        }
+      }
+      // else: RBAC granted type-level read — item passes (per-doc deny not applied on RBAC path)
+    }
+
+    const projFields = parseFieldsParam(c.req.query('fields'))
     const coll = getCollectionRegistry().getByName(docRow.type_id)
     const transformedContent = {
       id: docRow.root_id,
@@ -1026,7 +1227,7 @@ apiRoutes.get('/:collection/:id', optionalAuth(), async (c) => {
     }
 
     dispatchHookEvent(c, 'content:read', { collection: docRow.type_id, id: docRow.root_id, data: transformedContent.data }, 'fire-and-forget')
-    return c.json({ data: transformedContent })
+    return c.json({ data: projFields.length ? projectFields(transformedContent, projFields) : transformedContent })
   } catch (error) {
     console.error('Error fetching content:', error)
     return c.json({ error: 'Failed to fetch content', details: error instanceof Error ? error.message : String(error) }, 500)
@@ -1068,8 +1269,8 @@ apiRoutes.post('/:collection', requireAuth(), requireRole(['admin', 'editor', 'a
     const doc = await svc.create(createDocumentSchema.parse({ typeId: backing.coll.name, tenantId: 'default', locale: 'default', title, slug: finalSlug, data: hookData, publishOnCreate: (status || 'draft') === 'published' }), user?.userId)
 
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    await cache.invalidate('content-filtered:*')
-    await cache.invalidate('collection-content-filtered:*')
+    await cache.invalidate('api:content-filtered:*')
+    await cache.invalidate(`api:collection-content-filtered:${backing.coll.name}:*`)
     dispatchHookEvent(c, 'content:after:create', { collection: backing.coll.name, id: doc.rootId, data: doc.data ?? {}, user: actor }, 'fire-and-forget')
 
     return c.json({ data: { id: doc.rootId, title: doc.title, slug: doc.slug, status: doc.status, collectionId: backing.coll.id, data: doc.data, created_at: documentSecondsToMs(doc.createdAt), updated_at: documentSecondsToMs(doc.updatedAt) } }, 201)
@@ -1122,8 +1323,8 @@ apiRoutes.put('/:collection/:id', requireAuth(), requireRole(['admin', 'editor',
     }
 
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    await cache.invalidate('content-filtered:*')
-    await cache.invalidate('collection-content-filtered:*')
+    await cache.invalidate('api:content-filtered:*')
+    await cache.invalidate(`api:collection-content-filtered:${docRow.type_id}:*`)
     const coll = getCollectionRegistry().getByName(docRow.type_id)
     const saved = await db.prepare('SELECT * FROM documents WHERE id = ?').bind(newDraft.id).first() as any
     const savedData = saved?.data ? JSON.parse(saved.data) : {}
@@ -1162,8 +1363,8 @@ apiRoutes.delete('/:collection/:id', requireAuth(), requireRole(['admin', 'edito
     const now = Math.floor(Date.now() / 1000)
     await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = 'default'").bind(now, now, id).run()
     const cache = getCacheService(CACHE_CONFIGS.api!)
-    await cache.invalidate('content-filtered:*')
-    await cache.invalidate('collection-content-filtered:*')
+    await cache.invalidate('api:content-filtered:*')
+    await cache.invalidate(`api:collection-content-filtered:${docRow.type_id}:*`)
     dispatchHookEvent(c, 'content:after:delete', { collection: docRow.type_id, id, data: {}, user: actor }, 'fire-and-forget')
 
     return c.json({ success: true })

@@ -25,7 +25,7 @@ describe('blocks utils', () => {
     })
   })
 
-  it('parses blocks JSON with discriminator key', () => {
+  it('parses blocks JSON with discriminator key and assigns stable blockId', () => {
     const config = {
       blocks: {
         text: { properties: { heading: { type: 'string' } } }
@@ -39,10 +39,31 @@ describe('blocks utils', () => {
     const parsed = parseBlocksValue(input, config)
 
     expect(parsed.errors).toEqual([])
-    expect(parsed.value).toEqual([{ blockType: 'text', heading: 'Hello' }])
+    expect(parsed.value).toHaveLength(1)
+    expect(parsed.value[0].blockType).toBe('text')
+    expect(parsed.value[0].heading).toBe('Hello')
+    expect(parsed.value[0].blockId).toMatch(/^blk_[0-9a-f]{12}$/)
   })
 
-  it('converts legacy blockType/data shape', () => {
+  it('preserves existing blockId on re-parse (reorder/edit)', () => {
+    const config = {
+      blocks: {
+        text: { properties: { heading: { type: 'string' } } }
+      },
+      discriminator: 'blockType'
+    }
+    const existingId = 'blk_aabbccddeeff'
+    const input = JSON.stringify([
+      { blockId: existingId, blockType: 'text', heading: 'Hello' }
+    ])
+
+    const parsed = parseBlocksValue(input, config)
+
+    expect(parsed.errors).toEqual([])
+    expect(parsed.value[0].blockId).toBe(existingId)
+  })
+
+  it('converts legacy blockType/data shape and assigns blockId', () => {
     const config = {
       blocks: {
         text: { properties: { heading: { type: 'string' } } }
@@ -56,7 +77,9 @@ describe('blocks utils', () => {
     const parsed = parseBlocksValue(input, config)
 
     expect(parsed.errors).toEqual([])
-    expect(parsed.value).toEqual([{ blockType: 'text', heading: 'Hello' }])
+    expect(parsed.value[0].blockType).toBe('text')
+    expect(parsed.value[0].heading).toBe('Hello')
+    expect(parsed.value[0].blockId).toMatch(/^blk_[0-9a-f]{12}$/)
   })
 
   it('reports errors for invalid JSON and missing discriminator', () => {
@@ -71,6 +94,6 @@ describe('blocks utils', () => {
     expect(invalidJson.errors).toEqual(['Blocks value must be valid JSON'])
 
     const missingDiscriminator = parseBlocksValue([{ heading: 'Hello' }], config)
-    expect(missingDiscriminator.errors).toEqual(['Block #1 is missing \"blockType\"'])
+    expect(missingDiscriminator.errors).toEqual(['Block #1 is missing "blockType"'])
   })
 })

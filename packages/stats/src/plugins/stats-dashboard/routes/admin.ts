@@ -129,13 +129,14 @@ adminRoutes.get('/', async (c) => {
        FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='installation_started'
        GROUP BY t ORDER BY count DESC`
     ).all(),
-    // 9. Install failures by errorType
+    // 9. Install failures by errorType + step + version
     db.prepare(
       `SELECT COALESCE(json_extract(data,'$.properties.errorType'), json_extract(data,'$.error_code'),'unknown') AS err,
-              COALESCE(json_extract(data,'$.step'),'-') AS step,
+              COALESCE(json_extract(data,'$.properties.step'),'-') AS step,
+              COALESCE(json_extract(data,'$.properties.version'),'-') AS version,
               COUNT(*) AS count
        FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='installation_failed'
-       GROUP BY err, step ORDER BY count DESC LIMIT 25`
+       GROUP BY err, step, version ORDER BY count DESC LIMIT 25`
     ).all(),
     // 10. Runtime errors (error_occurred) by errorType + version
     db.prepare(
@@ -145,18 +146,34 @@ adminRoutes.get('/', async (c) => {
        FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='error_occurred'
        GROUP BY err, version ORDER BY count DESC LIMIT 25`
     ).all(),
-    // 11. Top collections from project_snapshot (aggregate doc counts across installations)
+    // 11. Top collections from project_snapshot — latest snapshot per installation to avoid boot-count inflation
     db.prepare(
-      `SELECT key AS collection, SUM(CAST(value AS INTEGER)) AS total_docs, COUNT(DISTINCT json_extract(data,'$.properties.installation_id')) AS installations
-       FROM documents, json_each(json(json_extract(data,'$.properties.collection_counts')))
-       WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+      `WITH latest AS (
+         SELECT json_extract(data,'$.properties.installation_id') AS installation_id,
+                json_extract(data,'$.properties.collection_counts') AS counts_json
+         FROM documents
+         WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+         GROUP BY json_extract(data,'$.properties.installation_id')
+         HAVING created_at = MAX(created_at)
+       )
+       SELECT key AS collection,
+              SUM(CAST(value AS INTEGER)) AS total_docs,
+              COUNT(DISTINCT installation_id) AS installations
+       FROM latest, json_each(json(counts_json))
        GROUP BY key ORDER BY total_docs DESC LIMIT 20`
     ).all(),
-    // 12. Top plugins from project_snapshot (count appearances across installations)
+    // 12. Top plugins from project_snapshot — latest snapshot per installation
     db.prepare(
-      `SELECT value AS plugin, COUNT(DISTINCT json_extract(data,'$.properties.installation_id')) AS installations
-       FROM documents, json_each(json(json_extract(data,'$.properties.active_plugins')))
-       WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+      `WITH latest AS (
+         SELECT json_extract(data,'$.properties.installation_id') AS installation_id,
+                json_extract(data,'$.properties.active_plugins') AS plugins_json
+         FROM documents
+         WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+         GROUP BY json_extract(data,'$.properties.installation_id')
+         HAVING created_at = MAX(created_at)
+       )
+       SELECT value AS plugin, COUNT(DISTINCT installation_id) AS installations
+       FROM latest, json_each(json(plugins_json))
        GROUP BY value ORDER BY installations DESC LIMIT 20`
     ).all(),
     // 13. Field type histogram aggregated across all snapshots
@@ -228,7 +245,7 @@ adminRoutes.get('/', async (c) => {
     const s = t.get('installation_started') ?? 0
     const comp = t.get('installation_completed') ?? 0
     const f = t.get('installation_failed') ?? 0
-    return { week: w, started: s, completed: comp, failed: f, rate: s > 0 ? Math.round((comp / s) * 100) : 0 }
+    return { week: w, started: s, completed: comp, failed: f, rate: s > 0 ? Math.round((comp / s) * 100) : 0, avgPerDay: (comp / 7).toFixed(1) }
   })
 
   // ── Totals / KPIs ──────────────────────────────────────────────────────
@@ -265,7 +282,7 @@ adminRoutes.get('/', async (c) => {
     count: Number(r.count),
   }))
   const templateRows = rowsOf(templateR) as { t: string; count: number }[]
-  const installFailRows = rowsOf(installFailR) as { err: string; step: string; count: number }[]
+  const installFailRows = rowsOf(installFailR) as { err: string; step: string; version: string; count: number }[]
   const runtimeErrRows = rowsOf(runtimeErrR) as { err: string; version: string; count: number }[]
 
   // ── Project snapshot breakdowns ─────────────────────────────────────────
@@ -378,6 +395,7 @@ adminRoutes.get('/', async (c) => {
           <th class="py-2 text-left font-medium">Week</th>
           <th class="py-2 text-right font-medium">Started</th>
           <th class="py-2 text-right font-medium">Completed</th>
+          <th class="py-2 text-right font-medium">Avg/day</th>
           <th class="py-2 text-right font-medium">Failed</th>
           <th class="py-2 text-right font-medium">Completion %</th>
         </tr>
@@ -387,6 +405,7 @@ adminRoutes.get('/', async (c) => {
         <td class="py-2 font-mono text-zinc-700 dark:text-zinc-300">${fmtWeekDate(r.week)}</td>
         <td class="py-2 text-right text-zinc-700 dark:text-zinc-300">${r.started.toLocaleString()}</td>
         <td class="py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">${r.completed.toLocaleString()}</td>
+        <td class="py-2 text-right text-zinc-500 dark:text-zinc-400">${r.avgPerDay}</td>
         <td class="py-2 text-right ${r.failed > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'}">${r.failed.toLocaleString()}</td>
         <td class="py-2 text-right"><span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${r.rate >= 70 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : r.rate >= 40 ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'}">${r.rate}%</span></td>
       </tr>`).join('')}
@@ -394,7 +413,20 @@ adminRoutes.get('/', async (c) => {
 
   <!-- Errors -->
   <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-    ${card('Install Failures', 'installation_failed grouped by error + step', errTable(installFailRows.map((r) => ({ err: r.err, sub: r.step, count: Number(r.count) })), 'Step', 'No failures recorded.'))}
+    ${card('Install Failures', 'installation_failed grouped by error + step + version', installFailRows.length === 0
+      ? '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No failures recorded.</div>'
+      : `<div class="overflow-x-auto"><table class="w-full text-sm">
+          <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <tr><th class="py-2 text-left font-medium">Error</th><th class="py-2 text-left font-medium">Step</th><th class="py-2 text-left font-medium">Version</th><th class="py-2 text-right font-medium">Count</th></tr>
+          </thead>
+          <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+          ${installFailRows.map((r) => `<tr>
+            <td class="py-2 pr-4 text-zinc-700 dark:text-zinc-300 max-w-xs break-words">${esc(r.err)}</td>
+            <td class="py-2 pr-4 font-mono text-xs text-zinc-500 dark:text-zinc-400">${esc(r.step)}</td>
+            <td class="py-2 pr-4 font-mono text-xs text-zinc-500 dark:text-zinc-400">${esc(r.version)}</td>
+            <td class="py-2 text-right font-semibold text-red-600 dark:text-red-400">${Number(r.count).toLocaleString()}</td>
+          </tr>`).join('')}
+          </tbody></table></div>`)}
     ${card('Runtime Errors', 'error_occurred grouped by error + version', errTable(runtimeErrRows.map((r) => ({ err: r.err, sub: r.version, count: Number(r.count) })), 'Version', 'No runtime errors recorded.'))}
   </div>
 

@@ -3,22 +3,22 @@
  *
  * Creates an initial admin user when the database has no users yet.
  * Safe to run multiple times — exits silently if an admin already exists.
+ * Safe to run BEFORE the server starts — applies migrations automatically.
  *
  * Usage:
  *   node --experimental-strip-types src/seed-self-host.ts
- *   # or via npm script:
+ *   # or via npm script (from my-sonicjs-app/):
  *   npm run reset
  *
  * Configure via environment variables:
- *   SONICJS_DB_PATH       Path to SQLite file (default: ./data/sonicjs.db)
- *   SONICJS_ADMIN_EMAIL   Admin email         (default: admin@sonicjs.com)
- *   SONICJS_ADMIN_PASSWORD Admin password     (default: sonicjs!)
+ *   SONICJS_DB_PATH        Path to SQLite file (default: ./data/sonicjs.db)
+ *   SONICJS_ADMIN_EMAIL    Admin email         (default: admin@sonicjs.com)
+ *   SONICJS_ADMIN_PASSWORD Admin password      (default: sonicjs!)
  */
 
-import Database from 'better-sqlite3'
 import { hashPassword } from '@better-auth/utils/password'
-import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
+import { mkdirSync } from 'node:fs'
 import { createSqliteDriver } from '@sonicjs-cms/core/adapters'
 import { bootstrapDocumentTypes, RbacService } from '@sonicjs-cms/core'
 
@@ -27,18 +27,17 @@ const ADMIN_EMAIL = process.env.SONICJS_ADMIN_EMAIL ?? 'admin@sonicjs.com'
 const ADMIN_PASSWORD = process.env.SONICJS_ADMIN_PASSWORD ?? 'sonicjs!'
 
 async function seed() {
-  if (!existsSync(DB_PATH)) {
-    console.error(`[seed] Database not found at ${DB_PATH}`)
-    console.error('[seed] Start the server first so it auto-migrates, then run this script.')
-    process.exit(1)
-  }
+  // Ensure data directory exists before opening DB.
+  mkdirSync(dirname(DB_PATH), { recursive: true })
 
-  const db = new Database(DB_PATH)
+  // createSqliteDriver: opens DB, enables WAL, auto-migrates schema if absent.
+  // Safe to run before the server — no concurrent connection needed.
+  const driver = await createSqliteDriver({ dbPath: DB_PATH, autoMigrate: true })
 
   try {
     // Idempotency check — skip if any user already exists.
-    const existing = db.prepare('SELECT COUNT(*) as n FROM auth_user').get() as { n: number }
-    if (existing.n > 0) {
+    const existing = await driver.prepare('SELECT COUNT(*) as n FROM auth_user').first<{ n: number }>()
+    if (existing && existing.n > 0) {
       console.log('[seed] Admin already exists — skipping.')
       return
     }
@@ -49,32 +48,27 @@ async function seed() {
 
     const passwordHash = await hashPassword(ADMIN_PASSWORD)
 
-    db.prepare(`
+    await driver.prepare(`
       INSERT INTO auth_user (
         id, email, name, first_name, last_name,
         role, is_super_admin, is_active,
         email_verified, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, ADMIN_EMAIL, 'Admin', 'Admin', 'User', 'admin', 1, 1, 0, now, now)
+    `).bind(userId, ADMIN_EMAIL, 'Admin', 'Admin', 'User', 'admin', 1, 1, 0, now, now).run()
 
-    db.prepare(`
+    await driver.prepare(`
       INSERT INTO auth_account (
         id, user_id, account_id, provider_id, password, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(accountId, userId, userId, 'credential', passwordHash, now, now)
-
-    db.close()
+    `).bind(accountId, userId, userId, 'credential', passwordHash, now, now).run()
 
     // Bootstrap RBAC so the admin user can access /admin (requireRbac('portal', 'access')).
-    // Uses the D1-compatible SqliteDriver so RbacService writes to the same SQLite file.
-    const driver = await createSqliteDriver({ dbPath: DB_PATH, autoMigrate: false })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await bootstrapDocumentTypes(driver as any)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rbac = new RbacService(driver as any)
     await rbac.ensureSystemRbacSeed()
     await rbac.addUserRoleByName(userId, 'admin')
-    driver.close()
 
     console.log('[seed] Admin user created:')
     console.log(`  Email:    ${ADMIN_EMAIL}`)
@@ -82,9 +76,8 @@ async function seed() {
     if (ADMIN_PASSWORD === 'sonicjs!') {
       console.log('  ⚠ Change this password after first login!')
     }
-    return
   } finally {
-    if (db.open) db.close()
+    driver.close()
   }
 }
 

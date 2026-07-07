@@ -160,4 +160,53 @@ describe('RbacService — document-backed', () => {
     await rbac.deleteRole('role-admin')
     expect((await rbac.getRoles()).some((r) => r.id === 'role-admin')).toBe(true)
   })
+
+  // ─── isGrantedForRole ─────────────────────────────────────────────────────────
+  // Covers the two-system ACL fix: RBAC dynamic grants must be checked alongside
+  // code-time baseGrants so admin UI changes take effect immediately.
+
+  it('isGrantedForRole returns false for unknown role', async () => {
+    const rbac = new RbacService(db)
+    expect(await rbac.isGrantedForRole('role-nonexistent', 'document_type:example', 'read')).toBe(false)
+  })
+
+  it('isGrantedForRole returns false for role with no matching grant', async () => {
+    const rbac = new RbacService(db)
+    // Public role is seeded with zero grants by default.
+    expect(await rbac.isGrantedForRole('role-public', 'document_type:example', 'read')).toBe(false)
+    expect(await rbac.isGrantedForRole('public', 'document_type:example', 'read')).toBe(false)
+  })
+
+  it('isGrantedForRole matches by slug (role-public) after setRoleGrants', async () => {
+    const rbac = new RbacService(db)
+    await rbac.setRoleGrants('role-public', [{ resource: 'document_type:example', verb: 'read' }])
+    expect(await rbac.isGrantedForRole('role-public', 'document_type:example', 'read')).toBe(true)
+  })
+
+  it('isGrantedForRole matches by name (public) after setRoleGrants', async () => {
+    const rbac = new RbacService(db)
+    await rbac.setRoleGrants('role-public', [{ resource: 'document_type:example', verb: 'read' }])
+    expect(await rbac.isGrantedForRole('public', 'document_type:example', 'read')).toBe(true)
+  })
+
+  it('isGrantedForRole respects wildcard resource (document_type:*)', async () => {
+    const rbac = new RbacService(db)
+    await rbac.setRoleGrants('role-public', [{ resource: 'document_type:*', verb: 'read' }])
+    expect(await rbac.isGrantedForRole('role-public', 'document_type:example', 'read')).toBe(true)
+    expect(await rbac.isGrantedForRole('role-public', 'document_type:blog_post', 'read')).toBe(true)
+  })
+
+  it('isGrantedForRole is false after grants are cleared', async () => {
+    const rbac = new RbacService(db)
+    await rbac.setRoleGrants('role-public', [{ resource: 'document_type:example', verb: 'read' }])
+    expect(await rbac.isGrantedForRole('role-public', 'document_type:example', 'read')).toBe(true)
+    await rbac.setRoleGrants('role-public', [])
+    expect(await rbac.isGrantedForRole('role-public', 'document_type:example', 'read')).toBe(false)
+  })
+
+  it('isGrantedForRole verb mismatch returns false', async () => {
+    const rbac = new RbacService(db)
+    await rbac.setRoleGrants('role-public', [{ resource: 'document_type:example', verb: 'read' }])
+    expect(await rbac.isGrantedForRole('role-public', 'document_type:example', 'create')).toBe(false)
+  })
 })

@@ -18,6 +18,22 @@ import { RbacService } from '../services/rbac'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
 
+const DEMO_EMAIL = 'admin@sonicjs.com'
+const STATS_EVENTS_ENDPOINT = 'https://stats.sonicjs.com/v1/events'
+
+async function trackDemoLogin(kv: KVNamespace | undefined): Promise<void> {
+  try {
+    const installationId = (await kv?.get('_sonicjs_installation_id')) ?? 'demo-unknown'
+    await fetch(STATS_EVENTS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: { installation_id: installationId, event_type: 'demo_login', properties: {}, timestamp: new Date().toISOString() }
+      }),
+    })
+  } catch { /* silent — telemetry never blocks auth */ }
+}
+
 /** Minimal, dependency-free HTML body for the password-reset email. */
 function renderPasswordResetEmail(resetLink: string, firstName?: string): string {
   const greeting = firstName ? `Hi ${firstName},` : 'Hello,'
@@ -328,6 +344,10 @@ authRoutes.post('/login',
         sameSite: 'Strict',
         maxAge: tokenTtl,
       })
+
+      if (normalizedEmail === DEMO_EMAIL) {
+        c.executionCtx?.waitUntil(trackDemoLogin(c.env.CACHE_KV))
+      }
 
       return c.json({
         user: {
@@ -685,6 +705,10 @@ authRoutes.post('/login/form',
     }
 
     await setCsrfCookie(c)
+
+    if (email === DEMO_EMAIL) {
+      c.executionCtx?.waitUntil(trackDemoLogin(c.env.CACHE_KV))
+    }
 
     const rawRedirect = c.req.query('redirect')
     const redirectUrl = rawRedirect && rawRedirect.startsWith('/') ? rawRedirect : '/admin/content'

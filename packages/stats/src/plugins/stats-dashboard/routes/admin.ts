@@ -67,6 +67,8 @@ adminRoutes.get('/', async (c) => {
     snapshotDocVolumeR,
     snapshotCountR,
     countryR,
+    demoLoginDailyR,
+    demoLoginTotalR,
   ] = await Promise.all([
     // 1. Weekly funnel: started/completed/failed counts per week (keyed to Monday date)
     db.prepare(
@@ -218,6 +220,19 @@ adminRoutes.get('/', async (c) => {
        FROM documents WHERE ${EVENTS_WHERE}
        GROUP BY country ORDER BY installs DESC LIMIT 30`
     ).all(),
+    // 18. Daily demo login counts (last 30 days)
+    db.prepare(
+      `SELECT date(datetime(created_at, 'unixepoch')) AS day, COUNT(*) AS count
+       FROM documents WHERE ${EVENTS_WHERE}
+         AND json_extract(data,'$.event_type') = 'demo_login'
+         AND created_at >= unixepoch('now', '-30 days')
+       GROUP BY day ORDER BY day ASC`
+    ).all(),
+    // 19. Total demo logins all time
+    db.prepare(
+      `SELECT COUNT(*) AS total FROM documents WHERE ${EVENTS_WHERE}
+         AND json_extract(data,'$.event_type') = 'demo_login'`
+    ).first(),
   ])
 
   // ── Funnel aggregation ──────────────────────────────────────────────────
@@ -297,6 +312,11 @@ adminRoutes.get('/', async (c) => {
   // ── Country breakdown ────────────────────────────────────────────────────
   const countryRows = (rowsOf(countryR) as { country: string; installs: number }[]).filter((r) => r.country !== 'unknown')
 
+  // ── Demo logins ──────────────────────────────────────────────────────────
+  const demoLoginDailyRows = rowsOf(demoLoginDailyR) as { day: string; count: number }[]
+  const demoLoginTotal = Number((demoLoginTotalR as Row | null)?.total ?? 0)
+  const demoLogin30d = demoLoginDailyRows.reduce((s, r) => s + Number(r.count), 0)
+
   // ── Chart datasets (serialized) ─────────────────────────────────────────
   const charts = {
     trend: { labels: trendLabels.map(fmtWeekDate), weekly: trendCounts, cumulative: trendCumulative },
@@ -312,6 +332,7 @@ adminRoutes.get('/', async (c) => {
     versions: { labels: snapshotVersionRows.map((r) => r.version), data: snapshotVersionRows.map((r) => Number(r.installations)) },
     docVolume: { labels: snapshotDocVolumeRows.map((r) => r.bucket), data: snapshotDocVolumeRows.map((r) => Number(r.count)) },
     country: { labels: countryRows.map((r) => r.country), data: countryRows.map((r) => Number(r.installs)) },
+    demoLogin: { labels: demoLoginDailyRows.map((r) => r.day), data: demoLoginDailyRows.map((r) => Number(r.count)) },
   }
 
   // ── KPI card markup ─────────────────────────────────────────────────────
@@ -385,6 +406,19 @@ adminRoutes.get('/', async (c) => {
   <!-- Geography -->
   <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
     ${card('Country', 'Unique installs by country (CF-IPCountry, no PII)', countryRows.length > 0 ? '<canvas id="chartCountry" height="280"></canvas>' : '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No country data yet — will populate for new events.</div>')}
+  </div>
+
+  <!-- Demo Site Logins -->
+  <div>
+    <h2 class="text-xl font-semibold text-zinc-950 dark:text-white">Demo Site Logins</h2>
+    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Logins with demo credentials (admin@sonicjs.com) on the live demo site</p>
+  </div>
+  <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+    ${kpi('Total Logins', demoLoginTotal.toLocaleString(), 'all time', 'text-indigo-600 dark:text-indigo-400')}
+    ${kpi('Last 30 Days', demoLogin30d.toLocaleString(), 'daily breakdown below', 'text-emerald-600 dark:text-emerald-400')}
+  </div>
+  <div class="grid grid-cols-1 gap-6">
+    ${card('Daily Demo Logins', 'Last 30 days', demoLoginDailyRows.length > 0 ? '<canvas id="chartDemoLogin" height="200"></canvas>' : '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No demo login events yet.</div>')}
   </div>
 
   <!-- Weekly table -->
@@ -564,6 +598,13 @@ adminRoutes.get('/', async (c) => {
   if (D.docVolume && D.docVolume.labels.length) {
     bar('chartDocVolume', D.docVolume.labels, [
       { label: 'Installations', data: D.docVolume.data, backgroundColor: P[2] }
+    ], { legend: false });
+  }
+
+  // Demo logins
+  if (D.demoLogin && D.demoLogin.labels.length) {
+    bar('chartDemoLogin', D.demoLogin.labels, [
+      { label: 'Logins', data: D.demoLogin.data, backgroundColor: P[0] }
     ], { legend: false });
   }
 })();

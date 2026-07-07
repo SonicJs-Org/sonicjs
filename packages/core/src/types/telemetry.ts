@@ -18,6 +18,7 @@ export type TelemetryEvent =
   | 'dev_server_started'
   | 'dev_server_stopped'
   | 'admin_login'
+  | 'demo_login'
   | 'plugin_activated'
   | 'plugin_deactivated'
   | 'collection_created'

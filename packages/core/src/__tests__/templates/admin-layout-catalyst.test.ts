@@ -153,11 +153,6 @@ describe('renderAdminLayoutCatalyst', () => {
     content: '<div>Test Content</div>',
   };
 
-  const adminData: AdminLayoutCatalystData = {
-    ...baseData,
-    user: { name: 'Admin', email: 'admin@test.com', role: 'admin' },
-  };
-
   it('should render HTML document structure', () => {
     const html = renderAdminLayoutCatalyst(baseData);
 
@@ -280,8 +275,11 @@ describe('renderAdminLayoutCatalyst', () => {
     });
 
     it('should render default menu items', () => {
-      // Users/Plugins/Settings are admin-only; use adminData to render all items.
-      const html = renderAdminLayoutCatalyst(adminData);
+      // Users and Plugins require admin role — pass an admin user
+      const html = renderAdminLayoutCatalyst({
+        ...baseData,
+        user: { name: 'Admin', email: 'admin@test.com', role: 'admin' },
+      });
 
       expect(html).toContain('Content');
       expect(html).toContain('Collections');
@@ -323,9 +321,10 @@ describe('renderAdminLayoutCatalyst', () => {
 
   describe('Dynamic Menu Items', () => {
     it('should render dynamic menu items', () => {
-      // Dynamic items render in the admin-only plugins section; use adminData.
+      // Dynamic items appear inside the Plugins submenu, which requires admin role
       const html = renderAdminLayoutCatalyst({
-        ...adminData,
+        ...baseData,
+        user: { name: 'Admin', email: 'admin@test.com', role: 'admin' },
         dynamicMenuItems: [
           {
             label: 'Custom Page',

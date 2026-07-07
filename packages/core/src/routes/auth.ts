@@ -93,12 +93,21 @@ authRoutes.get('/login', async (c) => {
     redirect: redirect && redirect.startsWith('/') ? redirect : undefined,
   }
   
-  // Check if demo login plugin is active
+  // Check if the demo-login plugin is active. Plugins are stored as documents
+  // (type_id='plugin') in the document repository — PluginService.activatePlugin
+  // sets data.status='active'. The legacy `plugins` table does not exist on
+  // greenfield installs, so query the document model directly.
   const db = c.env.DB
   let demoLoginActive = false
   try {
-    const plugin = await db.prepare('SELECT * FROM plugins WHERE id = ? AND status = ?')
-      .bind('demo-login-prefill', 'active')
+    const plugin = await db.prepare(
+      `SELECT 1 FROM documents
+       WHERE type_id = 'plugin' AND slug = ? AND tenant_id = 'default'
+         AND is_current_draft = 1 AND deleted_at IS NULL
+         AND json_extract(data, '$.status') = 'active'
+       LIMIT 1`
+    )
+      .bind('demo-login-prefill')
       .first()
     demoLoginActive = !!plugin
   } catch (error) {

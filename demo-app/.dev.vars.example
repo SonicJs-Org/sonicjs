@@ -1,0 +1,16 @@
+# Copy to .dev.vars and fill in real values. .dev.vars is gitignored.
+# Wrangler loads this file for `wrangler dev` (local dev only).
+#
+# Required: BETTER_AUTH_SECRET must be >= 16 chars. Auth init refuses to
+# start without it and login returns 500.
+#
+# Generate a strong random secret:
+#   openssl rand -hex 32
+BETTER_AUTH_SECRET="replace-me-with-32-bytes-of-hex"
+
+# Bearer token guarding POST /__demo/reseed. The deploy workflow sends it as
+# `Authorization: Bearer <token>`. Any non-empty value works for local dev.
+DEMO_SEED_TOKEN="replace-me-with-a-random-token"
+
+# Optional: set if Better Auth can't detect the base URL.
+# BETTER_AUTH_URL="http://localhost:8787"

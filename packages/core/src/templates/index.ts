@@ -40,6 +40,8 @@ export { renderLogo } from './components/logo.template'
 // Page templates - Admin
 export { renderCheckboxPage } from './pages/admin-checkboxes.template'
 export type { CheckboxPageData } from './pages/admin-checkboxes.template'
+export { renderLoginPage } from './pages/auth-login.template'
+export type { LoginPageData } from './pages/auth-login.template'
 export { renderFormsDocsPage } from './pages/admin-forms-docs.template'
 export type { FormsDocsPageData } from './pages/admin-forms-docs.template'
 export { renderFormsExamplesPage } from './pages/admin-forms-examples.template'

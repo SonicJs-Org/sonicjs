@@ -1,0 +1,68 @@
+name = "sonicjs-demo"
+main = "src/index.ts"
+compatibility_date = "2025-05-05"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare account (same account as the core worker + sonicjs.com zone)
+account_id = "f9d6328dc3115e621758a741dda3d5c4"
+
+workers_dev = true
+
+# Custom domain — demo.sonicjs.com. Zone DNS must point at this worker.
+# (Same CF account as account_id above, so custom_domain binding is valid.)
+routes = [
+  { pattern = "demo.sonicjs.com", custom_domain = true }
+]
+
+# D1 Database — dedicated to the demo. Provision once:
+#   wrangler d1 create sonicjs-demo
+# then paste the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "sonicjs-demo"
+database_id = "dc87c94a-14e2-4bc1-a77c-ab382191e7a9"
+migrations_dir = "./migrations"
+
+# R2 Bucket for demo media. Provision once:
+#   wrangler r2 bucket create sonicjs-demo-media
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "sonicjs-demo-media"
+
+# KV Cache — dedicated namespace. Provision once:
+#   wrangler kv namespace create sonicjs-demo-cache
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "91de57b1e6af4cef8bb6a2786179bc14"
+
+# Cloudflare Email Service binding (send_email)
+[[send_email]]
+name = "EMAIL"
+
+# Reseed cron — every 2 hours. Wipes + reseeds demo data so visitor edits
+# never persist longer than ~2h. Handler: demoSeedPlugin.onCronTick → runReseed.
+[triggers]
+crons = ["0 */2 * * *"]
+
+# Environment variables
+[vars]
+# ENVIRONMENT must be "demo" — the reseed route/cron are hard-gated to this value
+# so they can never wipe a non-demo install.
+ENVIRONMENT = "demo"
+BETTER_AUTH_URL = "https://demo.sonicjs.com"
+CORS_ORIGINS = "https://demo.sonicjs.com"
+DEFAULT_FROM_EMAIL = "demo@sonicjs.com"
+
+# Secrets (set via `wrangler secret put`, NOT here):
+#   BETTER_AUTH_SECRET   — required, >= 16 chars (openssl rand -hex 32)
+#   DEMO_SEED_TOKEN      — bearer token the deploy workflow uses to call POST /__demo/reseed
+
+# Smart Placement — paid plan feature that co-locates the Worker with D1 to
+# minimize latency on the bootstrap D1 round-trips that drive first-load time.
+[placement]
+mode = "smart"
+
+# Observability
+[observability]
+enabled = true

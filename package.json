@@ -6,18 +6,21 @@
   "workspaces": [
     "packages/*",
     "www",
-    "my-sonicjs-app"
+    "my-sonicjs-app",
+    "demo-app"
   ],
   "scripts": {
     "predev": "test -d node_modules/@sonicjs-cms || npm install",
     "dev": "npm run dev --workspace=my-sonicjs-app",
     "dev:www": "npm run dev --workspace=www",
+    "dev:demo": "npm run dev --workspace=demo-app",
     "build": "npm run build:core && npm run build --workspace=my-sonicjs-app",
     "build:www": "npm run build --workspace=www",
     "plugins:generate": "node packages/scripts/generate-plugin-registry.mjs",
     "build:core": "npm run plugins:generate && npm run build --workspace=@sonicjs-cms/core",
     "deploy": "npm run deploy --workspace=my-sonicjs-app",
     "deploy:www": "npm run deploy --workspace=www",
+    "deploy:demo": "npm run build:core && npm run deploy --workspace=demo-app",
     "deploy:stats": "npm run deploy:production --workspace=sonicjs-stats",
     "test": "npm run test --workspace=@sonicjs-cms/core",
     "test:cov": "npm run test:cov --workspace=@sonicjs-cms/core",

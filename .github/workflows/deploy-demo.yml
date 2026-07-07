@@ -1,0 +1,112 @@
+name: Deploy Demo
+
+# demo.sonicjs.com always runs the latest main. Every push to main redeploys the
+# demo worker and resets its data (full wipe + reseed) so the public demo always
+# reflects the newest build with a known dataset.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'demo-app/**'
+      - 'packages/core/src/**'
+      - 'packages/core/migrations/**'
+      - 'www/public/images/blog/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      DEMO_BASE_URL: https://demo.sonicjs.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build:core
+
+      - name: Type check demo app
+        run: npm run type-check --workspace=demo-app
+
+      - name: Test demo app (reseed integration)
+        run: npm test --workspace=demo-app
+
+      - name: Apply D1 migrations
+        run: cd demo-app && npx wrangler d1 migrations apply DB --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy demo to Cloudflare Workers
+        run: cd demo-app && npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Upload blog hero images to R2
+        # Uploads all www/public/images/blog/<slug>/hero.png files to R2 under
+        # blog/<slug>/hero.png. Idempotent — re-uploads on every deploy so the
+        # bucket stays in sync if images are added or replaced. Runs before reseed
+        # so mediaSvc.createFromUpload finds the objects already in R2.
+        run: |
+          cd demo-app
+          for slug_dir in ../www/public/images/blog/*/; do
+            slug=$(basename "$slug_dir")
+            src="../www/public/images/blog/$slug/hero.png"
+            [ -f "$src" ] || continue
+            echo "Uploading blog/$slug/hero.png ..."
+            npx wrangler r2 object put sonicjs-demo-media/blog/$slug/hero.png \
+              --file="$src" \
+              --content-type=image/png \
+              --remote
+          done
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Wait for deployment to be live
+        run: |
+          echo "Polling $DEMO_BASE_URL/auth/login ..."
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$DEMO_BASE_URL/auth/login" || true)
+            if [ "$code" = "200" ]; then
+              echo "Demo is live (HTTP $code)."
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $code — retrying in 5s"
+            sleep 5
+          done
+          echo "Demo did not become healthy in time."
+          exit 1
+
+      - name: Seed admin user (idempotent)
+        run: |
+          curl -fsS -X POST "$DEMO_BASE_URL/auth/seed-admin" -o /dev/null \
+            && echo "Admin seeded." \
+            || echo "Admin seed returned non-zero (may already exist) — continuing."
+
+      - name: Reseed demo data (full wipe + rebuild)
+        run: |
+          status=$(curl -s -o /tmp/reseed.json -w "%{http_code}" \
+            -X POST "$DEMO_BASE_URL/__demo/reseed" \
+            -H "Authorization: Bearer ${DEMO_SEED_TOKEN}")
+          echo "Reseed HTTP $status"
+          cat /tmp/reseed.json || true
+          echo
+          test "$status" = "200"
+        env:
+          DEMO_SEED_TOKEN: ${{ secrets.DEMO_SEED_TOKEN }}

@@ -194,7 +194,7 @@ jobs:
         run: |
           # Get changed files vs base branch (PR diff) or last commit (push)
           if [ "${{ github.event_name }}" = "pull_request_target" ]; then
-            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} 2>/dev/null || git diff --name-only HEAD~1)
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "")
           else
             CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
           fi

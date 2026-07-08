@@ -60,5 +60,6 @@
   },
   "iconEmoji": "📸",
   "is_core": true,
+  "defaultActive": true,
   "defaultSettings": {}
 }

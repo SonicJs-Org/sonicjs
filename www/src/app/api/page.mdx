@@ -416,6 +416,7 @@ Retrieve all content items for a collection with pagination and filtering.
 - `offset` - Number of items to skip for pagination
 - `sort` - Sort field (prefix with `-` for descending)
 - `filter` - Advanced filtering (see [Filtering & Querying](#filtering))
+- `fields` - Comma-separated list of fields to include in the response (field projection). Example: `?fields=id,title,slug` returns only those fields, reducing payload size.
 
 <CodeGroup title="List Content">
 

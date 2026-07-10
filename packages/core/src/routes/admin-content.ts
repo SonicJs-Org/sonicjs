@@ -17,6 +17,7 @@ import { renderDocumentFormPage } from '../templates/pages/admin-documents-form.
 import { createDocumentSchema } from '../schemas/document'
 import type { QueryableField } from '../schemas/document'
 import { loadCollectionConfigs, getVisibleCollections } from '../services/collection-loader'
+import { invalidateByTag } from '../plugins/cache/services/tag-index'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -1416,8 +1417,13 @@ adminContentRoutes.put('/:id', async (c) => {
 
         await getCacheService(CACHE_CONFIGS.content!).invalidate(`content:list:*`)
         const apiCacheEdit = getCacheService(CACHE_CONFIGS.api!)
-        await apiCacheEdit.invalidate('api:content-filtered:*')
-        await apiCacheEdit.invalidate(`api:collection-content-filtered:${docRowU.type_id}:*`)
+        // Tag-based: delete only the specific cache entries that contain this document.
+        // Falls back to collection-scoped prefix if tag index is empty (e.g. cold start).
+        const tagCount = await invalidateByTag(id, (key) => apiCacheEdit.delete(key))
+        if (tagCount === 0) {
+          await apiCacheEdit.invalidate('api:content-filtered:*')
+          await apiCacheEdit.invalidate(`api:collection-content-filtered:${docRowU.type_id}:*`)
+        }
 
         const isHTMX = c.req.header('HX-Request') === 'true'
         const referrerParams = formData.get('referrer_params') as string | null
@@ -1933,8 +1939,16 @@ adminContentRoutes.post('/bulk-action', async (c) => {
     }
     await cache.invalidate('content:list:*')
     const apiCache = getCacheService(CACHE_CONFIGS.api!)
-    await apiCache.invalidate('api:content-filtered:*')
-    await apiCache.invalidate('api:collection-content-filtered:*')
+    // Tag-based: for each deleted/bulk-actioned id, bust only the specific cache entries that contain it.
+    // Fall back to full prefix invalidation only when tag index is empty (cold start / no entries found).
+    let totalTagged = 0
+    for (const contentId of ids) {
+      totalTagged += await invalidateByTag(contentId, (key) => apiCache.delete(key))
+    }
+    if (totalTagged === 0) {
+      await apiCache.invalidate('api:content-filtered:*')
+      await apiCache.invalidate('api:collection-content-filtered:*')
+    }
 
     return c.json({ success: true, count: ids.length })
   } catch (error) {

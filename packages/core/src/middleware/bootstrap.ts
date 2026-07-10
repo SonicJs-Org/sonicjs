@@ -120,6 +120,8 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
             const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
             setGlobalCatalogKv(kv)
             c.executionCtx.waitUntil(loadKvCatalog())
+            const { setGlobalTagKv } = await import("../plugins/cache/services/tag-index")
+            setGlobalTagKv(kv)
           } catch { /* KV wiring optional */ }
           try {
             const configs = await loadCollectionConfigs()
@@ -176,6 +178,8 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
           );
           setGlobalCatalogKv(kv);
           c.executionCtx.waitUntil(loadKvCatalog());
+          const { setGlobalTagKv } = await import("../plugins/cache/services/tag-index");
+          setGlobalTagKv(kv);
         }
       } catch (error) {
         console.error("[Bootstrap] Error wiring CACHE_KV namespace:", error);

@@ -17,6 +17,7 @@ import { DocumentRepository } from '../services/document-repository'
 import { DocumentPermissionsService } from '../services/document-permissions'
 import { RbacService } from '../services/rbac'
 import { recordCatalogRequest, scheduleKvWrite } from '../plugins/cache/services/catalog'
+import { writeTagEntries, invalidateByTag } from '../plugins/cache/services/tag-index'
 import { markStale, getAndConsumeStale } from '../plugins/cache/services/swr'
 
 // Anonymous principal = unauthenticated request. Authenticated users (even with role 'public')
@@ -898,6 +899,8 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
     // Cache the response only if cache is enabled (skip when field projection active)
     if (cacheEnabled && projFields.length === 0) {
       await cache.set(cacheKey, responseData)
+      const rootIds = (responseData.data as any[]).map((item: any) => item.id).filter(Boolean)
+      try { writeTagEntries(cacheKey, rootIds, c.executionCtx) } catch { /* no ExecutionContext in test env */ }
     }
 
     return c.json(responseData)
@@ -1064,6 +1067,8 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     // Cache the response only if cache plugin is enabled
     if (cacheEnabled) {
       await cache.set(cacheKey, responseData)
+      const rootIds = (responseData.data as any[]).map((item: any) => item.id).filter(Boolean)
+      try { writeTagEntries(cacheKey, rootIds, c.executionCtx) } catch { /* no ExecutionContext in test env */ }
     }
 
     return c.json(responseData)
@@ -1209,6 +1214,8 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
       const customTtl = typeof collectionCache?.ttl === 'number' ? collectionCache.ttl : undefined
       await cache.set(cacheKey, responseData, customTtl)
       if (customTtl) c.header('X-Cache-TTL', customTtl.toString())
+      const rootIds = (responseData.data as any[]).map((item: any) => item.id).filter(Boolean)
+      try { writeTagEntries(cacheKey, rootIds, c.executionCtx) } catch { /* no ExecutionContext in test env */ }
     }
     return c.json(responseData)
   } catch (error) {

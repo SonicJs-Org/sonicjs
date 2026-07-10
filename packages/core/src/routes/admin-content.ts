@@ -18,6 +18,7 @@ import { createDocumentSchema } from '../schemas/document'
 import type { QueryableField } from '../schemas/document'
 import { loadCollectionConfigs, getVisibleCollections } from '../services/collection-loader'
 import { invalidateByTag } from '../plugins/cache/services/tag-index'
+import { markStale } from '../plugins/cache/services/swr'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -1417,12 +1418,23 @@ adminContentRoutes.put('/:id', async (c) => {
 
         await getCacheService(CACHE_CONFIGS.content!).invalidate(`content:list:*`)
         const apiCacheEdit = getCacheService(CACHE_CONFIGS.api!)
+        const editTypeId = docRowU.type_id
         // Tag-based: delete only the specific cache entries that contain this document.
+        // Mark each stale before deleting so the immediate next request is served without a DB hit (SWR).
         // Falls back to collection-scoped prefix if tag index is empty (e.g. cold start).
-        const tagCount = await invalidateByTag(id, (key) => apiCacheEdit.delete(key))
+        const tagCount = await invalidateByTag(id, async (key) => {
+          const val = await apiCacheEdit.get<any>(key)
+          if (val) markStale(key, val, editTypeId)
+          await apiCacheEdit.delete(key)
+        })
         if (tagCount === 0) {
+          const affectedKeys = (await apiCacheEdit.listKeys())
+            .map(k => k.key)
+            .filter(k => k.startsWith('api:content-filtered:') || k.startsWith(`api:collection-content-filtered:${editTypeId}:`))
+          const staleValues = await apiCacheEdit.getMany<any>(affectedKeys)
+          for (const [key, val] of staleValues) markStale(key, val, editTypeId)
           await apiCacheEdit.invalidate('api:content-filtered:*')
-          await apiCacheEdit.invalidate(`api:collection-content-filtered:${docRowU.type_id}:*`)
+          await apiCacheEdit.invalidate(`api:collection-content-filtered:${editTypeId}:*`)
         }
 
         const isHTMX = c.req.header('HX-Request') === 'true'
@@ -1943,9 +1955,18 @@ adminContentRoutes.post('/bulk-action', async (c) => {
     // Fall back to full prefix invalidation only when tag index is empty (cold start / no entries found).
     let totalTagged = 0
     for (const contentId of ids) {
-      totalTagged += await invalidateByTag(contentId, (key) => apiCache.delete(key))
+      totalTagged += await invalidateByTag(contentId, async (key) => {
+        const val = await apiCache.get<any>(key)
+        if (val) markStale(key, val, null)
+        await apiCache.delete(key)
+      })
     }
     if (totalTagged === 0) {
+      const affectedKeys = (await apiCache.listKeys())
+        .map(k => k.key)
+        .filter(k => k.startsWith('api:'))
+      const staleValues = await apiCache.getMany<any>(affectedKeys)
+      for (const [key, val] of staleValues) markStale(key, val, null)
       await apiCache.invalidate('api:content-filtered:*')
       await apiCache.invalidate('api:collection-content-filtered:*')
     }

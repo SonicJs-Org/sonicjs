@@ -470,8 +470,8 @@ export class QueryFilterBuilder {
       }
     }
 
-    // Parse bracket-syntax filters: filter[field][operator]=value or filter[field]=value
-    const bracketFilterRegex = /^filter\[([^\]]+)\](?:\[([^\]]+)\])?$/
+    // Parse bracket-syntax filters: filter[field][operator]=value or where[field][operator]=value
+    const bracketFilterRegex = /^(?:filter|where)\[([^\]]+)\](?:\[([^\]]+)\])?$/
     for (const [key, rawValue] of Object.entries(query)) {
       const match = key.match(bracketFilterRegex)
       if (!match) continue

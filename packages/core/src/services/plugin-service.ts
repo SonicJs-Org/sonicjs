@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { invalidateTenantCache } from '../middleware/tenant'
+import { invalidatePluginStatusCache } from '../middleware/plugin-middleware'
 
 export interface PluginData {
   id: string
@@ -178,6 +179,7 @@ export class PluginService {
     // to single-tenant while inactive). The UI toggle does not run plugin lifecycle callbacks, so bust
     // the cache here. Cheap no-op for every other plugin.
     invalidateTenantCache()
+    invalidatePluginStatusCache(pluginId)
     await this.logActivity(pluginId, 'activated', null)
   }
 
@@ -195,6 +197,7 @@ export class PluginService {
     // Sync status into the plugins table so isPluginActive() sees the change immediately.
     await this.db.prepare(`UPDATE plugins SET status = 'inactive' WHERE id = ?`).bind(pluginId).run().catch(() => {})
     invalidateTenantCache()
+    invalidatePluginStatusCache(pluginId)
     await this.logActivity(pluginId, 'deactivated', null)
   }
 

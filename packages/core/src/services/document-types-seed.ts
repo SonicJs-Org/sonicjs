@@ -14,6 +14,9 @@ const anyObject = z.record(z.string(), z.unknown())
 // Each call is a no-op if the type already exists and the schema hasn't changed.
 export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
   const registry = new DocumentTypeRegistry(db)
+  // Pre-warm cache: 1 SELECT for all types instead of N individual SELECTs.
+  // register() will hit cache and early-return when schema is unchanged.
+  await registry.preloadAll()
 
   // Site settings: internal singleton config — never surfaced in content admin.
   await registry.register({
@@ -269,6 +272,8 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
  */
 export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promise<string[]> {
   const registry = new DocumentTypeRegistry(db)
+  // Pre-warm cache so register() calls hit cache instead of doing N individual SELECTs.
+  await registry.preloadAll()
   const collections = getCollectionRegistry().listActive()
   const registered: string[] = []
 
@@ -301,7 +306,7 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
           maxVersionsPerRoot: 50,
           ...(collection.versioning ? { versioning: true } : {}),
         },
-        queryableFields: [],
+        queryableFields: collection.queryableFields ?? [],
       })
       registered.push(collection.name)
     } catch (error) {

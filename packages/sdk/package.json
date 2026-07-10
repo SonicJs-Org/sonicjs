@@ -1,0 +1,52 @@
+{
+  "name": "@sonicjs-cms/sdk",
+  "version": "3.0.0-beta.24",
+  "description": "Isomorphic TypeScript client + codegen CLI for the SonicJS headless CMS API.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "sonicjs-sdk": "./dist/cli.cjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["cms", "headless-cms", "sonicjs", "sdk", "typescript", "cloudflare"],
+  "author": "SonicJS Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sonicjs/sonicjs.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://sonicjs.com",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "@sonicjs-cms/core": "*",
+    "@types/node": "^24.9.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}

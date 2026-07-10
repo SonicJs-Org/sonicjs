@@ -47,6 +47,9 @@ coverage/
 # Claude Code — local settings are per-developer, not shared
 .claude/settings.local.json
 
+# Production wrangler config (contains secrets)
+wrangler-demo.toml
+
 # IDE
 .vscode/settings.json
 .idea/

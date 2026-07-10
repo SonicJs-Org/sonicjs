@@ -11,6 +11,7 @@
   "scripts": {
     "predev": "test -d node_modules/@sonicjs-cms || npm install",
     "dev": "npm run dev --workspace=my-sonicjs-app",
+    "dev:demo": "bash scripts/dev-demo.sh",
     "dev:www": "npm run dev --workspace=www",
     "build": "npm run build:core && npm run build --workspace=my-sonicjs-app",
     "build:www": "npm run build --workspace=www",
@@ -19,6 +20,8 @@
     "deploy": "npm run deploy --workspace=my-sonicjs-app",
     "deploy:www": "npm run deploy --workspace=www",
     "deploy:stats": "npm run deploy:production --workspace=sonicjs-stats",
+    "dev:react-demo": "cd demos/employee-directory && npm run dev",
+    "deploy:demo": "cd demos/employee-directory && npm run build && npx wrangler pages deploy dist --project-name sonicjs-sdk-demo --branch main",
     "test": "npm run test --workspace=@sonicjs-cms/core",
     "test:cov": "npm run test:cov --workspace=@sonicjs-cms/core",
     "test:watch": "npm run test:watch --workspace=@sonicjs-cms/core",

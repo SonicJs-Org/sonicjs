@@ -508,6 +508,19 @@ export class RbacService {
       { id: 'verb-manage', name: 'manage', description: 'Full control (implies all verbs)', isSystem: true, sortOrder: 50 },
     ]
 
+    // Fast path: one COUNT query — if all expected roles+verbs already exist, skip.
+    const expectedCount = roles.length + verbs.length
+    const countRes = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS cnt FROM documents
+         WHERE type_id IN ('${T_ROLE}','${T_VERB}') AND tenant_id = ?
+         AND is_current_draft = 1 AND deleted_at IS NULL`,
+      )
+      .bind(TENANT)
+      .first<{ cnt: number }>()
+    if ((countRes?.cnt ?? 0) >= expectedCount) return
+
+    // Full seeding path (first boot or partial state).
     for (const r of roles) {
       if (await this.getDoc(T_ROLE, r.id)) continue
       const { id, ...data } = r

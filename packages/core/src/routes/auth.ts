@@ -15,6 +15,7 @@ import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import { RbacService } from '../services/rbac'
+import { isDemoModeActive } from '../services/demo-mode'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
 
@@ -93,17 +94,8 @@ authRoutes.get('/login', async (c) => {
     redirect: redirect && redirect.startsWith('/') ? redirect : undefined,
   }
   
-  // Check if demo login plugin is active
-  const db = c.env.DB
-  let demoLoginActive = false
-  try {
-    const plugin = await db.prepare('SELECT * FROM plugins WHERE id = ? AND status = ?')
-      .bind('demo-login-prefill', 'active')
-      .first()
-    demoLoginActive = !!plugin
-  } catch (error) {
-    // Ignore database errors - plugin system might not be initialized
-  }
+  // Check if demo login plugin is active (set by demoLoginPlugin.onBoot at bootstrap)
+  const demoLoginActive = isDemoModeActive()
   
   return c.html(renderLoginPage(pageData, demoLoginActive))
 })

@@ -10,6 +10,8 @@ import { getAllCacheStats, clearAllCaches, getCacheService } from './services/ca
 import { CACHE_CONFIGS, parseCacheKey } from './services/cache-config.js'
 import { getRecentInvalidations, getCacheInvalidationStats } from './services/cache-invalidation.js'
 import { warmCommonCaches, warmNamespace } from './services/cache-warming.js'
+import { getCatalog, getCatalogStats, clearCatalog, loadKvCatalog, clearKvCatalog } from './services/catalog.js'
+import { swrStats } from './services/swr.js'
 import { renderCacheDashboard, CacheDashboardData, CollectionCacheConfig } from '../../templates/pages/admin-cache.template'
 import { getCollectionRegistry } from '../../services/collection-registry.js'
 
@@ -57,6 +59,10 @@ app.get('/', async (c: Context) => {
       } satisfies CollectionCacheConfig
     })
 
+  await loadKvCatalog()
+  const catalogEntries = getCatalog({ limit: 100 })
+  const catalogSummary = getCatalogStats()
+
   const dashboardData: CacheDashboardData = {
     stats,
     totals: {
@@ -69,6 +75,11 @@ app.get('/', async (c: Context) => {
     },
     namespaces: Object.keys(stats),
     collections,
+    catalog: {
+      entries: catalogEntries,
+      stats: catalogSummary,
+      swrPending: swrStats().count,
+    },
     user: user ? {
       name: user.email,
       email: user.email,
@@ -554,6 +565,36 @@ app.post('/warm/:namespace', async (c: Context) => {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, 500)
   }
+})
+
+/**
+ * GET /admin/cache/catalog
+ * URL catalog — tracked cache-eligible API requests ranked by traffic
+ */
+app.get('/catalog', async (c: Context) => {
+  const collection = c.req.query('collection') || undefined
+  const sortBy = (c.req.query('sort') as 'hits' | 'requests' | 'misses') || 'requests'
+  const limit = parseInt(c.req.query('limit') || '100')
+
+  await loadKvCatalog()
+  const entries = getCatalog({ collection, sortBy, limit })
+  const stats = getCatalogStats()
+
+  return c.json({
+    success: true,
+    data: { entries, stats, swrPending: swrStats().count },
+    timestamp: new Date().toISOString()
+  })
+})
+
+/**
+ * POST /admin/cache/catalog/clear
+ * Clear the URL catalog
+ */
+app.post('/catalog/clear', async (_c: Context) => {
+  clearCatalog()
+  await clearKvCatalog()
+  return _c.json({ success: true, message: 'URL catalog cleared', timestamp: new Date().toISOString() })
 })
 
 export default app

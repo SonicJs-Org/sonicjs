@@ -16,6 +16,8 @@ import { getDocumentRequestContext } from '../services/document-request-context'
 import { DocumentRepository } from '../services/document-repository'
 import { DocumentPermissionsService } from '../services/document-permissions'
 import { RbacService } from '../services/rbac'
+import { recordCatalogRequest, scheduleKvWrite } from '../plugins/cache/services/catalog'
+import { markStale, getAndConsumeStale } from '../plugins/cache/services/swr'
 
 // Anonymous principal = unauthenticated request. Authenticated users (even with role 'public')
 // must pass isAllowed so the document ACL is enforced — not just is_published.
@@ -209,9 +211,10 @@ apiRoutes.use('*', async (c, next) => {
   c.header('X-Response-Time', `${totalTime}ms`)
 })
 
-// Check if cache plugin is active
+// Check if cache plugin is active; honour Cache-Control: no-cache bypass
 apiRoutes.use('*', async (c, next) => {
-  const cacheEnabled = await isPluginActive(c.env.DB, 'core-cache')
+  const bypass = c.req.header('Cache-Control') === 'no-cache'
+  const cacheEnabled = !bypass && await isPluginActive(c.env.DB, 'core-cache')
   c.set('cacheEnabled', cacheEnabled)
   await next()
 })
@@ -785,7 +788,7 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
     }
 
     // Non-anonymous / non-privileged users get per-request ACL filtering — skip cache.
-    const cacheEnabled = c.get('cacheEnabled') && cAnon
+    const cacheEnabled = c.get('cacheEnabled') && !cNeedsAcl
     const cache = getCacheService(CACHE_CONFIGS.api!)
     const cacheKey = cache.generateKey('content-filtered', JSON.stringify({ filter: normalizedFilter, query: queryResult.sql }))
 
@@ -812,8 +815,23 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
           }, executionStart)
         }
 
+        recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
+        scheduleKvWrite(cacheKey, c.executionCtx)
         return c.json(dataWithMeta)
       }
+
+      // SWR: serve stale value during revalidation window
+      const swrData = getAndConsumeStale(cacheKey)
+      if (swrData) {
+        c.header('X-Cache-Status', 'STALE')
+        c.header('X-Cache-Source', 'swr')
+        recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
+        scheduleKvWrite(cacheKey, c.executionCtx)
+        return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
+      }
+
+      recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
+      scheduleKvWrite(cacheKey, c.executionCtx)
     }
 
     // Cache miss - fetch from database
@@ -948,7 +966,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
 
     // Generate cache key
     // Non-privileged authenticated users get per-request ACL filtering — skip cache.
-    const cacheEnabled = c.get('cacheEnabled') && ccAnon
+    const cacheEnabled = c.get('cacheEnabled') && !ccNeedsAcl
     const cache = getCacheService(CACHE_CONFIGS.api!)
     const includeCollection = queryParams.include?.split(',').map(s => s.trim()).includes('collection')
     const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
@@ -977,8 +995,23 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
           }, executionStart)
         }
 
+        recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
+        scheduleKvWrite(cacheKey, c.executionCtx)
         return c.json(dataWithMeta)
       }
+
+      // SWR: serve stale value during revalidation window
+      const swrData = getAndConsumeStale(cacheKey)
+      if (swrData) {
+        c.header('X-Cache-Status', 'STALE')
+        c.header('X-Cache-Source', 'swr')
+        recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
+        scheduleKvWrite(cacheKey, c.executionCtx)
+        return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
+      }
+
+      recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
+      scheduleKvWrite(cacheKey, c.executionCtx)
     }
 
     // Cache miss - fetch from database
@@ -1099,9 +1132,10 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     // Per-collection cache override — collection config can disable caching or set a custom TTL.
     const collectionCache = (record as any).cache as { enabled?: boolean; ttl?: number } | undefined
     const collectionCacheDisabled = collectionCache?.enabled === false
-    // Authenticated non-anonymous users get per-request ACL filtering — skip cache to avoid
-    // serving a cached anonymous response that hasn't been filtered for their principal set.
-    const cacheEnabled = c.get('cacheEnabled') && !collectionCacheDisabled && projFields.length === 0 && anon
+    // Cache for anonymous AND privileged authenticated users (admin/editor) — both see the same
+    // published data on the public API. Only skip cache for non-privileged authed users who need
+    // per-principal ACL filtering (needsAcl=true), since their result set may differ.
+    const cacheEnabled = c.get('cacheEnabled') && !collectionCacheDisabled && projFields.length === 0 && !needsAcl
     const cache = getCacheService(CACHE_CONFIGS.api!)
     const includeCollection = queryParams.include?.split(',').map(s => s.trim()).includes('collection')
     const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
@@ -1112,8 +1146,23 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
         c.header('X-Cache-Status', 'HIT')
         c.header('X-Cache-Source', cacheResult.source)
         if (cacheResult.ttl) c.header('X-Cache-TTL', Math.floor(cacheResult.ttl).toString())
+        recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
+        scheduleKvWrite(cacheKey, c.executionCtx)
         return c.json({ ...cacheResult.data, meta: addTimingMeta(c, { ...cacheResult.data.meta, cache: { hit: true, source: cacheResult.source, ttl: cacheResult.ttl ? Math.floor(cacheResult.ttl) : undefined } }, executionStart) })
       }
+
+      // SWR: serve stale value during revalidation window
+      const swrData = getAndConsumeStale(cacheKey)
+      if (swrData) {
+        c.header('X-Cache-Status', 'STALE')
+        c.header('X-Cache-Source', 'swr')
+        recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
+        scheduleKvWrite(cacheKey, c.executionCtx)
+        return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
+      }
+
+      recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
+      scheduleKvWrite(cacheKey, c.executionCtx)
     }
 
     c.header('X-Cache-Status', 'MISS')
@@ -1269,6 +1318,12 @@ apiRoutes.post('/:collection', requireAuth(), requireRole(['admin', 'editor', 'a
     const doc = await svc.create(createDocumentSchema.parse({ typeId: backing.coll.name, tenantId: 'default', locale: 'default', title, slug: finalSlug, data: hookData, publishOnCreate: (status || 'draft') === 'published' }), user?.userId)
 
     const cache = getCacheService(CACHE_CONFIGS.api!)
+    // Stash memory-cached values for SWR before invalidating
+    const createAffectedKeys = (await cache.listKeys())
+      .map(k => k.key)
+      .filter(k => k.startsWith('api:content-filtered:') || k.startsWith(`api:collection-content-filtered:${backing.coll.name}:`))
+    const createStaleValues = await cache.getMany<any>(createAffectedKeys)
+    for (const [key, val] of createStaleValues) markStale(key, val, backing.coll.name)
     await cache.invalidate('api:content-filtered:*')
     await cache.invalidate(`api:collection-content-filtered:${backing.coll.name}:*`)
     dispatchHookEvent(c, 'content:after:create', { collection: backing.coll.name, id: doc.rootId, data: doc.data ?? {}, user: actor }, 'fire-and-forget')
@@ -1323,6 +1378,12 @@ apiRoutes.put('/:collection/:id', requireAuth(), requireRole(['admin', 'editor',
     }
 
     const cache = getCacheService(CACHE_CONFIGS.api!)
+    // Stash memory-cached values for SWR before invalidating
+    const updateAffectedKeys = (await cache.listKeys())
+      .map(k => k.key)
+      .filter(k => k.startsWith('api:content-filtered:') || k.startsWith(`api:collection-content-filtered:${docRow.type_id}:`))
+    const updateStaleValues = await cache.getMany<any>(updateAffectedKeys)
+    for (const [key, val] of updateStaleValues) markStale(key, val, docRow.type_id)
     await cache.invalidate('api:content-filtered:*')
     await cache.invalidate(`api:collection-content-filtered:${docRow.type_id}:*`)
     const coll = getCollectionRegistry().getByName(docRow.type_id)
@@ -1363,6 +1424,12 @@ apiRoutes.delete('/:collection/:id', requireAuth(), requireRole(['admin', 'edito
     const now = Math.floor(Date.now() / 1000)
     await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = 'default'").bind(now, now, id).run()
     const cache = getCacheService(CACHE_CONFIGS.api!)
+    // Stash memory-cached values for SWR before invalidating
+    const deleteAffectedKeys = (await cache.listKeys())
+      .map(k => k.key)
+      .filter(k => k.startsWith('api:content-filtered:') || k.startsWith(`api:collection-content-filtered:${docRow.type_id}:`))
+    const deleteStaleValues = await cache.getMany<any>(deleteAffectedKeys)
+    for (const [key, val] of deleteStaleValues) markStale(key, val, docRow.type_id)
     await cache.invalidate('api:content-filtered:*')
     await cache.invalidate(`api:collection-content-filtered:${docRow.type_id}:*`)
     dispatchHookEvent(c, 'content:after:delete', { collection: docRow.type_id, id, data: {}, user: actor }, 'fire-and-forget')

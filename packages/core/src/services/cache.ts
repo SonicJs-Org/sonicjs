@@ -118,6 +118,14 @@ export class CacheService {
     await this.set(key, value, ttl)
     return value
   }
+
+  async listKeys(): Promise<Array<{ key: string; size: number; expiresAt: number; age: number }>> {
+    return this.inner.listKeys()
+  }
+
+  async getMany<T>(keys: string[]): Promise<Map<string, T>> {
+    return this.inner.getMany<T>(keys)
+  }
 }
 
 /**

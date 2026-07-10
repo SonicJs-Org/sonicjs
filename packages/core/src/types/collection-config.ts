@@ -5,6 +5,15 @@
  * Collections can be defined in TypeScript/JSON files and synced to the database.
  */
 
+/** Subset of QueryableField from schemas/document.ts — duplicated here to keep this file dependency-free. */
+export interface CollectionQueryableField {
+  name: string
+  path?: string
+  kind: 'scalar' | 'facet' | 'reference'
+  type?: 'text' | 'number' | 'integer' | 'boolean' | 'date'
+  column?: string
+}
+
 export type FieldType =
   | 'string'
   | 'number'
@@ -220,6 +229,13 @@ export interface CollectionConfig {
    * an empty array (e.g. `editor: []`).
    */
   access?: Record<string, ('read' | 'create' | 'update' | 'delete' | 'publish' | 'manage')[]>
+
+  /**
+   * Fields to expose as queryable (filterable) virtual columns on the documents table.
+   * Each entry creates a `q_*` generated column via the self-heal migration at bootstrap.
+   * Use for fields you need to filter/sort on via the `where[field]` API DSL.
+   */
+  queryableFields?: CollectionQueryableField[]
 }
 
 export interface CollectionConfigModule {

@@ -293,6 +293,13 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
           }
         } catch { /* KV not available */ }
 
+        // Extract deploy origin (scheme + host only — no path, no query, no PII)
+        let deployUrl: string | undefined;
+        try {
+          const u = new URL(c.req.url);
+          deployUrl = u.origin; // e.g. "https://example.com"
+        } catch { /* malformed URL — skip */ }
+
         const telemetry = getTelemetryService();
         await telemetry.trackProjectSnapshot({
           installation_id: installationId,
@@ -302,6 +309,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
           field_type_histogram: fieldTypeHistogram,
           doc_total: docTotal,
           sonicjs_version: SONICJS_VERSION,
+          deploy_url: deployUrl,
         });
       } catch { /* silent — telemetry must never break boot */ }
     } catch (error) {

@@ -69,6 +69,7 @@ adminRoutes.get('/', async (c) => {
     countryR,
     demoLoginDailyR,
     demoLoginTotalR,
+    deployUrlsR,
   ] = await Promise.all([
     // 1. Weekly funnel: started/completed/failed counts per week (keyed to Monday date)
     db.prepare(
@@ -230,6 +231,14 @@ adminRoutes.get('/', async (c) => {
       `SELECT COUNT(*) AS total FROM documents WHERE ${EVENTS_WHERE}
          AND json_extract(data,'$.event_type') = 'demo_login'`
     ).first(),
+    // 20. Deploy URLs seen in project_snapshot events
+    db.prepare(
+      `SELECT json_extract(data,'$.properties.deploy_url') AS url, COUNT(*) AS snapshots
+       FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+         AND json_extract(data,'$.properties.deploy_url') IS NOT NULL
+         AND json_extract(data,'$.properties.deploy_url') != 'null'
+       GROUP BY url ORDER BY snapshots DESC`
+    ).all(),
   ])
 
   // ── Funnel aggregation ──────────────────────────────────────────────────
@@ -308,6 +317,9 @@ adminRoutes.get('/', async (c) => {
 
   // ── Country breakdown ────────────────────────────────────────────────────
   const countryRows = (rowsOf(countryR) as { country: string; installs: number }[]).filter((r) => r.country !== 'unknown')
+
+  // ── Deploy URLs ──────────────────────────────────────────────────────────
+  const deployUrlRows = rowsOf(deployUrlsR) as { url: string; snapshots: number }[]
 
   // ── Demo logins ──────────────────────────────────────────────────────────
   const demoLoginDailyRows = rowsOf(demoLoginDailyR) as { day: string; count: number }[]
@@ -417,6 +429,26 @@ adminRoutes.get('/', async (c) => {
   <div class="grid grid-cols-1 gap-6">
     ${card('Daily Demo Logins', 'Last 30 days', demoLoginDailyRows.length > 0 ? '<canvas id="chartDemoLogin" height="200"></canvas>' : '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No demo login events yet.</div>')}
   </div>
+
+  <!-- Deploy URLs -->
+  ${deployUrlRows.length > 0 ? card('Deployed Sites', `${deployUrlRows.length} unique domain${deployUrlRows.length !== 1 ? 's' : ''} reporting snapshots`, `
+    <div class="overflow-x-auto max-h-64 overflow-y-auto"><table class="w-full text-sm">
+      <thead class="sticky top-0 bg-white dark:bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        <tr>
+          <th class="py-2 text-left font-medium">Domain</th>
+          <th class="py-2 text-right font-medium">Snapshots</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+      ${deployUrlRows.map((r) => `<tr>
+        <td class="py-1.5 font-mono text-sm text-zinc-700 dark:text-zinc-300">
+          <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(r.url)}</a>
+        </td>
+        <td class="py-1.5 text-right text-zinc-500 dark:text-zinc-400">${Number(r.snapshots).toLocaleString()}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table></div>
+  `) : ''}
 
   <!-- Weekly table -->
   ${card('Weekly Breakdown', 'Detailed funnel by week', tableWeeks.length === 0 ? '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No data yet.</div>' : `

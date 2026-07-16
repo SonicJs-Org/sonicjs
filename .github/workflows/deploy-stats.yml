@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'packages/stats/**'
-      - 'packages/core/src/**'
-      - '.github/workflows/deploy-stats.yml'
   workflow_dispatch:
 
 jobs:

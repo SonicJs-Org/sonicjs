@@ -162,7 +162,7 @@ adminRoutes.get('/', async (c) => {
               SUM(CAST(value AS INTEGER)) AS total_docs,
               COUNT(DISTINCT installation_id) AS installations
        FROM latest, json_each(json(counts_json))
-       GROUP BY key ORDER BY total_docs DESC LIMIT 20`
+       GROUP BY key ORDER BY installations DESC, total_docs DESC`
     ).all(),
     // 12. Top plugins from project_snapshot — latest snapshot per installation
     db.prepare(
@@ -326,7 +326,7 @@ adminRoutes.get('/', async (c) => {
     os: { labels: osRows.map((r) => r.os), data: osRows.map((r) => Number(r.count)) },
     node: { labels: nodeRows.map((r) => r.v), data: nodeRows.map((r) => r.count) },
     template: { labels: templateRows.map((r) => r.t), data: templateRows.map((r) => Number(r.count)) },
-    collections: { labels: snapshotCollectionRows.map((r) => r.collection), docs: snapshotCollectionRows.map((r) => Number(r.total_docs)), installs: snapshotCollectionRows.map((r) => Number(r.installations)) },
+    collections: { labels: snapshotCollectionRows.slice(0, 20).map((r) => r.collection), docs: snapshotCollectionRows.slice(0, 20).map((r) => Number(r.total_docs)), installs: snapshotCollectionRows.slice(0, 20).map((r) => Number(r.installations)) },
     plugins: { labels: snapshotPluginRows.map((r) => r.plugin), data: snapshotPluginRows.map((r) => Number(r.installations)) },
     fieldTypes: { labels: snapshotFieldTypeRows.map((r) => r.field_type), data: snapshotFieldTypeRows.map((r) => Number(r.total_fields)) },
     versions: { labels: snapshotVersionRows.map((r) => r.version), data: snapshotVersionRows.map((r) => Number(r.installations)) },
@@ -492,20 +492,48 @@ adminRoutes.get('/', async (c) => {
     ${card('Content Volume', 'Distribution of total doc counts per installation', hasSnapshotData ? '<canvas id="chartDocVolume" height="240"></canvas>' : '<div class="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500">No data yet</div>')}
   </div>
 
-  ${hasSnapshotData ? card('Collections Detail', 'Collections appearing across projects — doc count + number of installs using it', `
-    <div class="overflow-x-auto"><table class="w-full text-sm">
-      <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        <tr><th class="py-2 text-left font-medium">Collection</th><th class="py-2 text-right font-medium">Total Docs</th><th class="py-2 text-right font-medium">Installations</th></tr>
-      </thead>
-      <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
-      ${snapshotCollectionRows.slice(0, 15).map((r) => `<tr>
-        <td class="py-2 font-mono text-zinc-700 dark:text-zinc-300">${esc(r.collection)}</td>
-        <td class="py-2 text-right font-semibold text-zinc-900 dark:text-white">${Number(r.total_docs).toLocaleString()}</td>
-        <td class="py-2 text-right text-zinc-500 dark:text-zinc-400">${Number(r.installations).toLocaleString()}</td>
-      </tr>`).join('')}
-      </tbody>
-    </table></div>
-  `) : ''}
+  ${hasSnapshotData ? (() => {
+    const customCollections = snapshotCollectionRows.filter((r) => Number(r.installations) === 1)
+    const sharedCollections = snapshotCollectionRows.filter((r) => Number(r.installations) > 1)
+    return `
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    ${card('All Collections', `${snapshotCollectionRows.length} unique collections across ${snapshotInstallations} reporting installations`, `
+      <div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white dark:bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <tr>
+            <th class="py-2 text-left font-medium">Collection</th>
+            <th class="py-2 text-right font-medium">Installs</th>
+            <th class="py-2 text-right font-medium">Total Docs</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+        ${sharedCollections.map((r) => `<tr>
+          <td class="py-1.5 font-mono text-sm text-zinc-700 dark:text-zinc-300">${esc(r.collection)}</td>
+          <td class="py-1.5 text-right font-semibold text-indigo-600 dark:text-indigo-400">${Number(r.installations).toLocaleString()}</td>
+          <td class="py-1.5 text-right text-zinc-500 dark:text-zinc-400">${Number(r.total_docs).toLocaleString()}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    `)}
+    ${card(`Custom Collections <span class="ml-2 text-xs font-normal text-zinc-400">${customCollections.length} unique</span>`, 'Collections seen in exactly one installation — user-defined', customCollections.length === 0
+      ? '<div class="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500">None yet</div>'
+      : `<div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white dark:bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <tr>
+            <th class="py-2 text-left font-medium">Collection</th>
+            <th class="py-2 text-right font-medium">Docs</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+        ${customCollections.sort((a, b) => Number(b.total_docs) - Number(a.total_docs)).map((r) => `<tr>
+          <td class="py-1.5 font-mono text-sm text-emerald-700 dark:text-emerald-400">${esc(r.collection)}</td>
+          <td class="py-1.5 text-right text-zinc-500 dark:text-zinc-400">${Number(r.total_docs).toLocaleString()}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>`
+    )}
+  </div>`
+  })() : ''}
 </div>
 
 <script>

@@ -12,7 +12,8 @@ import { setBranchLabel } from "../templates/layouts/admin-layout-catalyst.templ
 
 type Bindings = {
   DB: D1Database;
-  KV: KVNamespace;
+  KV?: KVNamespace;
+  CACHE_KV?: KVNamespace;
   JWT_SECRET?: string;
   CORS_ORIGINS?: string;
   ENVIRONMENT?: string;
@@ -282,7 +283,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
         // Stable installation ID via KV (generated once, persisted)
         let installationId = 'unknown';
         try {
-          const kv = c.env.KV as KVNamespace | undefined;
+          const kv = (c.env.CACHE_KV ?? c.env.KV) as KVNamespace | undefined;
           if (kv) {
             installationId = (await kv.get('_sonicjs_installation_id')) ?? '';
             if (!installationId) {

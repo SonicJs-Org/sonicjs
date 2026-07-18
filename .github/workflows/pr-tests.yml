@@ -26,6 +26,28 @@ jobs:
           echo "PR Head Repo: ${{ github.event.pull_request.head.repo.full_name || 'N/A' }}"
           echo "Is Fork: ${{ github.event.pull_request.head.repo.full_name != github.repository }}"
 
+  node18-wrangler-compat:
+    needs: authorize
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Verify Wrangler runs on Node 18
+        run: npm exec --workspace=my-sonicjs-app -- wrangler --version
+
   test:
     needs: authorize
     runs-on: ubuntu-latest

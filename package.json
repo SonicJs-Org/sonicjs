@@ -3,6 +3,9 @@
   "version": "3.0.0-beta.24",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.3.0"
+  },
   "workspaces": [
     "packages/*",
     "www",
@@ -87,7 +90,7 @@
     "tsx": "^4.20.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9",
-    "wrangler": "^4.65.0"
+    "wrangler": "4.86.0"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

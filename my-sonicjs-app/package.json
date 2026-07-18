@@ -45,7 +45,7 @@
     "hono": "^4.12.26",
     "typescript": "^5.8.3",
     "vitest": "^4.1.9",
-    "wrangler": "^4.65.0",
+    "wrangler": "4.105.0",
     "zod": "^3.25.67"
   },
   "engines": {

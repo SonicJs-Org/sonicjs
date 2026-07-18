@@ -40,12 +40,12 @@
     "@hono/node-server": "^1.13.7"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250620.0",
+    "@cloudflare/workers-types": "^4.20251109.0",
     "@types/node": "^20.19.1",
     "hono": "^4.12.26",
     "typescript": "^5.8.3",
     "vitest": "^4.1.9",
-    "wrangler": "4.105.0",
+    "wrangler": "4.47.0",
     "zod": "^3.25.67"
   },
   "engines": {

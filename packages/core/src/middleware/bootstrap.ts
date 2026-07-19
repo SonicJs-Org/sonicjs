@@ -112,7 +112,10 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       if (cacheKv) {
         const kvDone = await cacheKv.get(BOOTSTRAP_KV_KEY())
         if (kvDone === '1') {
-          // Hydrate in-memory state without touching D1.
+          // Hydrate in-memory state, then reconcile code-defined collection document
+          // types. The KV marker can outlive a newly added collection while the
+          // SonicJS version stays the same, so skipping D1 entirely would leave that
+          // collection unable to use document-backed APIs such as slug checking.
           try {
             const kv = (c.env as any).CACHE_KV as KVNamespace
             const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
@@ -124,6 +127,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
           try {
             const configs = await loadCollectionConfigs()
             getCollectionRegistry().register(configs)
+            await autoRegisterCollectionDocumentTypes(c.env.DB)
           } catch { /* registry optional in fast-path */ }
           bootstrapComplete = true
           return next()

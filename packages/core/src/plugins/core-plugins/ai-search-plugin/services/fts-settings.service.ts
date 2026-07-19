@@ -22,7 +22,14 @@ export const DEFAULT_FTS_SETTINGS: FtsSettings = {
   slugBoost: 2,
   bodyBoost: 1,
   resultsLimit: 20,
-  cacheTtlSeconds: 60,
+  // Result caching is OFF by default. The KV result cache is keyed by query+tenant and is currently
+  // only invalidated on settings change — NOT on document writes. With it on, an unpublished or deleted
+  // doc keeps appearing in public search for the whole TTL window (a correctness/security leak; caught
+  // by E2E 82). Re-enabling safely requires write-path invalidation (a per-tenant search-index version
+  // bumped inside the DocumentsService projection and folded into resultCacheKey) — not settings-only
+  // invalidation, which (like content hooks) misses admin/media writes. Operators may opt in (>0) once
+  // they accept the staleness window.
+  cacheTtlSeconds: 0,
   searchableTypes: [],
 }
 

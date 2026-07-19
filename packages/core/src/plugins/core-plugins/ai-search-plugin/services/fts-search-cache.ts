@@ -4,6 +4,12 @@
  * Keyed by a SHA-256 of the normalized query + tenant + paging + filters, so identical queries hit the
  * cache. Caching is fire-and-forget: a KV error never breaks a search. Invalidated wholesale when
  * settings change (relevance/ranking changes invalidate every cached result).
+ *
+ * ⚠️ KNOWN GAP: this is NOT invalidated on document writes, so a cached result can serve an
+ * unpublished/deleted doc until its TTL expires (E2E 82 regression). For that reason result caching is
+ * OFF by default (DEFAULT_FTS_SETTINGS.cacheTtlSeconds = 0). To re-enable safely, fold a per-tenant
+ * search-index version (bumped in the DocumentsService projection on every write) into resultCacheKey
+ * so a write invalidates all prior keys for free — settings-only invalidation is insufficient.
  */
 import type { KVNamespace } from '@cloudflare/workers-types'
 import type { SearchQuery, SearchResponse } from '../types'

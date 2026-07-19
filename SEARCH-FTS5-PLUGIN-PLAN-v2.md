@@ -388,3 +388,33 @@ KV), `routes/api.ts` (tenant + CACHE_KV), `routes/admin.ts` (GET/POST `/fts-sett
 `api-content-crud-documents.integration.test.ts`. They are assertion failures unrelated to FTS (zero
 `documents_fts` references). This work introduced 2 regressions (migration-count assertion + the rbac
 test's inline harness), both fixed.
+
+### E2E run (2026-06-22) — found + fixed a real cache-staleness defect; spec now green
+Running `tests/e2e/82-fts5-search.spec.ts` against a live dev server surfaced a defect the 37 unit
+tests could not (they exercise the projection/DB directly and never touch the KV serving cache):
+
+- **Defect:** the FTS result cache (`fts-search-cache.ts`, on by default at `cacheTtlSeconds=60`) is keyed
+  by query+tenant and **only invalidated on settings change — never on a document write.** So after
+  `unpublish`/`delete`/edit, a repeat of the same query served the pre-mutation snapshot for up to the TTL
+  → **unpublished/deleted content stayed in public search** (a correctness/security leak). The 2 failing
+  E2E cases were exactly the two that search the same marker before *and* after the mutation; the 2 passing
+  cases search once. DB-level deindex was verified correct (the row was `is_published=0` in both
+  `documents` and `documents_fts`) — the cache was serving stale.
+- **Why unit tests missed it:** `fts-settings-cache.sqlite.test.ts` actually *encoded the stale-serve as
+  expected* (`r2.total===1` after a softDelete without cache-bust). False confidence.
+- **Fix (minimal, layering-safe):** default `DEFAULT_FTS_SETTINGS.cacheTtlSeconds = 0` (cache **off** by
+  default). Correctness over an optimization that was net-negative as designed. Re-enabling safely needs
+  **write-path invalidation** — a per-tenant search-index version bumped in the `DocumentsService`
+  projection and folded into `resultCacheKey` (settings-only/​hook-based invalidation misses admin+media
+  writes, the same lesson that put indexing in the projection). Documented in both files + the cache test
+  (now opt-in). **This requires threading `CACHE_KV` into core `DocumentsService` — deferred (real work).**
+- **Result:** `82-fts5-search.spec.ts` **4/4 passed**; FTS unit suites **37/37**; type-check clean.
+
+### E2E harness note (environment)
+This worktree's dev script computes a **per-worktree port** (`wrangler dev --port <hash>`), here **9158** —
+but `tests/playwright.config.ts` hard-codes `baseURL`/`webServer.url` to **8787**, so a bare `npm run e2e`
+hangs until timeout waiting on a port that never binds (zero output — the list reporter is silent during
+the webServer wait). Run against the live server instead: start `npm run dev` (note the `Dev server:
+http://localhost:<port>` line), then `BASE_URL=http://localhost:<port> CI=1 npx playwright test --config=tests/playwright.config.ts 82-fts5-search --reporter=list`. Setting `BASE_URL` makes the config skip
+its own `webServer`. Fixing the config to read the computed port (or pinning `--port 8787`) is a worthwhile
+follow-up so the documented `npm run e2e` works.

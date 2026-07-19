@@ -63,9 +63,13 @@ describe('FTS settings + result cache (T1.3)', () => {
     expect(res.results[0].id).toBe(b.id)
   })
 
-  it('result cache serves repeats and invalidation forces a fresh read', async () => {
+  it('result cache (opt-in) serves repeats and invalidation forces a fresh read', async () => {
+    // Caching is OFF by default (cacheTtlSeconds=0): there is no write-path invalidation yet, so an
+    // unpublished/deleted doc would otherwise linger in public search for the TTL (E2E 82 regression).
+    // Opt the cache IN here to verify the mechanism itself (repeat-serving + settings invalidation).
+    await saveFtsSettings(kv, { cacheTtlSeconds: 60 })
     const a = await pub({ title: 'cacheable', slug: 'c', data: { body: '' } })
-    const svc = new AISearchService(db, undefined, undefined, 'default', kv) // default cacheTtl=60 → caching on
+    const svc = new AISearchService(db, undefined, undefined, 'default', kv)
     const r1 = await svc.search({ query: 'cacheable', mode: 'keyword', filters: {} })
     expect(r1.total).toBe(1)
 

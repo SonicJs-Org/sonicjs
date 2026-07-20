@@ -6,36 +6,38 @@ import type { QueryableField } from '../schemas/document'
 // this is defense-in-depth, mirroring document-repository.ts.
 const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 
-// Per-isolate caches: eliminate repeated PRAGMA + CREATE INDEX round-trips across
-// multiple ensureScalarSchema() calls during bootstrap. Reset is intentionally
-// absent — isolate lifetime matches cache validity.
-let _columnCache: Set<string> | null = null
-let _indexCache: Set<string> | null = null
-// Single shared promise so parallel callers don't each fire their own PRAGMA batch.
-let _cacheInitPromise: Promise<{ columns: Set<string>; indexes: Set<string> }> | null = null
+// Per-DB caches: eliminate repeated PRAGMA + CREATE INDEX round-trips across multiple
+// ensureScalarSchema() calls during a bootstrap. Keyed by the binding object (WeakMap),
+// NOT module-level: one bootstrap reuses one env.DB, so the intended dedup is fully
+// preserved — while a DIFFERENT database gets a fresh snapshot instead of another DB's
+// column set. (The module-level version broke every real-SQLite suite after the first
+// test in a file: the next in-memory DB "already had" its q_* columns according to the
+// cache, the ALTERs were skipped, and reads failed with "no such column".)
+// The cached value is a single shared promise per DB so parallel callers during one
+// bootstrap don't each fire their own PRAGMA batch.
+const _docCaches = new WeakMap<D1Database, Promise<{ columns: Set<string>; indexes: Set<string> }>>()
 
-/** Fetch (and cache) column names + existing index names on `documents` in one batch. */
+/** Fetch (and cache per DB binding) column + index names on `documents` in one batch. */
 function ensureDocumentsCaches(db: D1Database): Promise<{ columns: Set<string>; indexes: Set<string> }> {
-  if (_columnCache !== null && _indexCache !== null) {
-    return Promise.resolve({ columns: _columnCache, indexes: _indexCache })
-  }
-  if (!_cacheInitPromise) {
-    _cacheInitPromise = (async () => {
+  let cached = _docCaches.get(db)
+  if (!cached) {
+    cached = (async () => {
       try {
         const [colInfo, idxInfo] = await db.batch([
           db.prepare("SELECT name FROM pragma_table_xinfo('documents')"),
           db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='documents'"),
         ])
-        _columnCache = new Set((colInfo?.results ?? []).map((r: any) => r.name as string))
-        _indexCache = new Set((idxInfo?.results ?? []).map((r: any) => r.name as string))
+        return {
+          columns: new Set((colInfo?.results ?? []).map((r: any) => r.name as string)),
+          indexes: new Set((idxInfo?.results ?? []).map((r: any) => r.name as string)),
+        }
       } catch {
-        _columnCache = new Set()
-        _indexCache = new Set()
+        return { columns: new Set<string>(), indexes: new Set<string>() }
       }
-      return { columns: _columnCache!, indexes: _indexCache! }
     })()
+    _docCaches.set(db, cached)
   }
-  return _cacheInitPromise
+  return cached
 }
 
 /** Map a queryable field's logical type to a SQLite column affinity. */

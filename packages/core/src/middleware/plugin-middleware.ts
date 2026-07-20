@@ -6,16 +6,20 @@
 
 import type { D1Database } from '@cloudflare/workers-types'
 
-// Per-isolate cache: avoids a D1 round-trip on every API request.
-// Invalidated by calling invalidatePluginStatusCache() after activate/deactivate.
-const _pluginStatusCache = new Map<string, boolean>()
+// Per-DB cache: avoids a D1 round-trip on every API request. Keyed by the binding
+// object (WeakMap), not module-level: one isolate reuses one env.DB, so the request-path
+// dedup is fully preserved — while a DIFFERENT database (each unit test's fresh mock/
+// in-memory DB) gets its own map instead of another DB's cached statuses.
+// Invalidation is a generation stamp (a WeakMap can't be enumerated): bumping it lazily
+// discards every DB's map on next read. Activate/deactivate is rare; the refill is one
+// D1 read per plugin.
+let _pluginStatusGen = 0
+const _pluginStatusCaches = new WeakMap<D1Database, { gen: number; map: Map<string, boolean> }>()
 
-export function invalidatePluginStatusCache(pluginId?: string): void {
-  if (pluginId) {
-    _pluginStatusCache.delete(pluginId)
-  } else {
-    _pluginStatusCache.clear()
-  }
+export function invalidatePluginStatusCache(_pluginId?: string): void {
+  // Per-plugin granularity can't reach into per-DB maps through a WeakMap; a full
+  // generation bump is always correct and costs at most one re-read per plugin.
+  _pluginStatusGen++
 }
 
 /**
@@ -24,8 +28,13 @@ export function invalidatePluginStatusCache(pluginId?: string): void {
  * activate/deactivate operations.
  */
 export async function isPluginActive(db: D1Database, pluginId: string): Promise<boolean> {
-  if (_pluginStatusCache.has(pluginId)) {
-    return _pluginStatusCache.get(pluginId)!
+  let entry = _pluginStatusCaches.get(db)
+  if (!entry || entry.gen !== _pluginStatusGen) {
+    entry = { gen: _pluginStatusGen, map: new Map() }
+    _pluginStatusCaches.set(db, entry)
+  }
+  if (entry.map.has(pluginId)) {
+    return entry.map.get(pluginId)!
   }
   try {
     // documents table is the authoritative source — PluginService writes here on install/activate.
@@ -39,7 +48,7 @@ export async function isPluginActive(db: D1Database, pluginId: string): Promise<
       .bind(pluginId)
       .first()
     const active = (docResult as any)?.status === 'active'
-    _pluginStatusCache.set(pluginId, active)
+    entry.map.set(pluginId, active)
     return active
   } catch (error) {
     console.error(`[isPluginActive] Error checking plugin status for ${pluginId}:`, error)

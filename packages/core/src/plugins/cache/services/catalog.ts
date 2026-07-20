@@ -86,8 +86,10 @@ async function kvSafeKey(cacheKey: string): Promise<string> {
 }
 
 /** Schedule a throttled KV write for the given cache key. Call after recordCatalogRequest(). */
-export function scheduleKvWrite(cacheKey: string, ctx: CtxLike): void {
-  if (!globalKv) return
+export function scheduleKvWrite(cacheKey: string, ctx: CtxLike | undefined): void {
+  // No ExecutionContext (unit tests / non-Workers runtimes) → skip the background warm;
+  // it is a best-effort optimization, never load-bearing.
+  if (!ctx || !globalKv) return
   const entry = catalog.get(cacheKey)
   if (!entry) return
   const now = Date.now()

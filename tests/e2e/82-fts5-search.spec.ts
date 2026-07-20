@@ -44,7 +44,7 @@ async function search(request: import('@playwright/test').APIRequestContext, que
   }
 }
 
-test.describe('FTS5 lexical search', () => {
+test.describe('FTS5 lexical search @api', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })
@@ -61,6 +61,36 @@ test.describe('FTS5 lexical search', () => {
     expect(hit, 'published doc should appear in keyword search').toBeTruthy()
     expect(hit!.title).toContain('<mark>') // FTS highlight wraps the matched term
     expect(typeof hit!.relevance_score).toBe('number')
+  })
+
+  test('post body text is searchable with a highlighted snippet (fulltext content field)', async ({ page }) => {
+    // Marker appears ONLY in data.content — title/slug stay generic so a hit proves body indexing.
+    // (FTS MATCH spans all columns, so a marker in the slug would false-positive this test.)
+    const marker = `capybara${Date.now()}`
+    const res = await page.request.post('/admin/documents', {
+      headers: JSON_HEADERS,
+      data: {
+        typeId: 'blog_post',
+        title: 'Plain Title Only',
+        slug: `plain-${Date.now()}`,
+        data: {
+          title: 'Plain Title Only',
+          content: `<h2>Field Notes</h2><p>A deep dive about ${marker} habitats along the river.</p>`,
+          author: 'admin',
+          difficulty: 'beginner',
+        },
+      },
+    })
+    expect(res.ok(), `create failed: ${res.status()} ${await res.text()}`).toBeTruthy()
+    const created = await res.json()
+    const id = (created.data.id ?? created.data.rootId) as string
+    await publish(page.request, id)
+
+    const data = await search(page.request, marker)
+    const hit = data.results.find((r) => r.id === id)
+    expect(hit, 'doc should be found by body-only text').toBeTruthy()
+    expect(hit!.snippet ?? '').toContain('<mark>') // snippet() highlights the body match
+    expect(hit!.snippet ?? '').not.toContain('<h2>') // HTML stripped before indexing
   })
 
   test('a draft (unpublished) is NOT returned by public search', async ({ page }) => {

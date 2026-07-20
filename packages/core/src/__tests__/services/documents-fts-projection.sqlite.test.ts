@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTestD1 } from '../utils/d1-sqlite'
 import { DocumentsService } from '../../services/documents'
 import { DocumentProjection } from '../../services/document-projection'
+import { bootstrapDocumentTypes } from '../../services/document-types-seed'
 
 const FTS_FIELDS = [{ name: 'body', kind: 'fulltext' }]
 
@@ -120,5 +121,25 @@ describe('FTS projection seam (T0.2) — real SQLite', () => {
     expect(search(db, 'pangolin')).toContain(doc.id)
     await new DocumentProjection(db).reindexType('article', 'default', FTS_FIELDS) // re-run
     expect(search(db, 'pangolin')).toEqual([doc.id]) // still exactly one (idempotent)
+  })
+
+  it('seeded blog_post type indexes HTML content into body (lexical stores HTML)', async () => {
+    await bootstrapDocumentTypes(db)
+    const row = db.raw.prepare(`SELECT queryable_fields FROM document_types WHERE id = 'blog_post'`).get()
+    const fields = JSON.parse(row.queryable_fields)
+    expect(fields).toContainEqual(expect.objectContaining({ name: 'content', kind: 'fulltext' }))
+
+    const s = new DocumentsService(db, { queryableFields: fields, tenantId: 'default', typeSchemaVersion: 1, versioning: true })
+    const doc = await s.create(
+      {
+        typeId: 'blog_post',
+        tenantId: 'default',
+        title: 'Ridge Guide',
+        data: { content: '<h2>Trail notes</h2><p>the zebra crossing at dawn</p>', difficulty: 'hard', author: 'trail-team' },
+      },
+      'u1',
+    )
+    expect(search(db, 'zebra')).toContain(doc.id) // body prose searchable
+    expect(search(db, 'h2')).toHaveLength(0) // HTML tags stripped, not indexed
   })
 })

@@ -20,6 +20,13 @@ type Bindings = {
 
 // Track if bootstrap has been run in this worker instance
 let bootstrapComplete = false;
+// Single-flight latch: the in-progress bootstrap promise for THIS isolate, or null.
+// `bootstrapComplete` only flips at the END of a successful run, so without this a
+// second request arriving on a cold isolate mid-bootstrap passes the completion/KV
+// checks and starts a SECOND concurrent seed — re-opening the document_types-vs-
+// documents FK window across the two runs and duplicating writes. Concurrent callers
+// await this instead.
+let bootstrapInFlight: Promise<void> | null = null;
 
 // KV key for cross-isolate bootstrap state. Version-keyed so a code deployment
 // (SONICJS_VERSION bump) automatically invalidates the cached flag and forces
@@ -152,6 +159,17 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
     const gitBranch = (c.env as any).GIT_BRANCH as string | undefined;
     setBranchLabel(isLocalhost && gitBranch ? gitBranch : undefined);
 
+    // Single-flight: if another request on this cold isolate is already running the
+    // full bootstrap, await THAT run and proceed — never start a second concurrent
+    // seed. The check-and-set below is synchronous (no await between), so exactly one
+    // request wins the latch. Cleared in the `finally` at the end of the run.
+    if (bootstrapInFlight) {
+      await bootstrapInFlight;
+      return next();
+    }
+    let releaseInFlight: () => void = () => {};
+    bootstrapInFlight = new Promise<void>((resolve) => { releaseInFlight = resolve; });
+
     try {
       console.log("[Bootstrap] Starting system initialization...");
 
@@ -193,60 +211,76 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
         console.error("[Bootstrap] Error populating collection registry:", error);
       }
 
-      // 3–4. Independent D1 operations — run in parallel to minimise cold-start latency.
-      // Each step has its own error handling so one failure doesn't block the others.
+      // 3–4. System-data seeding. Ordered in two phases because of a foreign-key
+      // dependency that a flat parallel batch violates on a fresh DB:
+      //   - PRODUCERS create `document_types` rows.
+      //   - CONSUMERS `INSERT INTO documents`, whose `type_id` FK-references those rows.
+      // Running all five in one Promise.all let a consumer insert win the race against
+      // its producer on a cold DB → `FOREIGN KEY constraint failed`, caught+swallowed
+      // per step, leaving RBAC roles / core plugins unseeded (see the header note).
       console.log("[Bootstrap] Registering document types and seeding system data...");
       const { RbacService } = await import("../services/rbac");
       const rbacService = new RbacService(c.env.DB, (c.env as any).CACHE_KV);
 
-      await Promise.all([
-        // 3. Register document types (idempotent)
-        bootstrapDocumentTypes(c.env.DB).catch((e) =>
-          console.error("[Bootstrap] Error registering document types:", e)
-        ),
-
-        // 3b. Make every content collection document-backed.
-        autoRegisterCollectionDocumentTypes(c.env.DB)
-          .then((auto) => {
-            if (auto.length) console.log(`[Bootstrap] Document-backed collections registered: ${auto.join(", ")}`)
-          })
-          .catch((e) => console.error("[Bootstrap] Error auto-registering collection document types:", e)),
-
-        // 2c. Repair legacy credential accounts.
-        repairMissingCredentialAccounts(c.env.DB).catch((e) =>
-          console.error("[Bootstrap] Error repairing credential accounts:", e)
-        ),
-
-        // 3a. Seed system RBAC roles/verbs/grants.
-        rbacService.ensureSystemRbacSeed().catch((e) =>
-          console.error("[Bootstrap] Error seeding RBAC documents:", e)
-        ),
-
-        // 4. Bootstrap core plugins.
-        config.plugins?.disableAll
-          ? Promise.resolve()
-          : (async () => {
-              const bootstrapService = new PluginBootstrapService(c.env.DB)
-              const needsBootstrap = await bootstrapService.isBootstrapNeeded()
-              if (needsBootstrap) {
-                console.log("[Bootstrap] Bootstrapping core plugins...")
-                await bootstrapService.bootstrapCorePlugins()
-              }
-            })().catch((e) => console.error("[Bootstrap] Error bootstrapping plugins:", e)),
-      ])
-
-      // Mark bootstrap as complete for this worker instance and persist to KV
-      // so subsequent cold-start isolates can skip the D1 work entirely.
-      bootstrapComplete = true;
-      console.log("[Bootstrap] System initialization completed");
-      try {
-        const cacheKv = (c.env as any).CACHE_KV as KVNamespace | undefined
-        if (cacheKv) {
-          // 24h TTL — long enough that hot instances never re-bootstrap, short
-          // enough that a DB reset auto-heals within a day.
-          await cacheKv.put(BOOTSTRAP_KV_KEY(), '1', { expirationTtl: 86400 })
+      // Track step failures so we never cache a PARTIAL bootstrap as "done" (below).
+      let bootstrapOk = true;
+      const runStep = async (label: string, fn: () => Promise<unknown>) => {
+        try {
+          await fn();
+        } catch (e) {
+          bootstrapOk = false;
+          console.error(`[Bootstrap] Error ${label}:`, e);
         }
-      } catch { /* KV write failure is non-fatal */ }
+      };
+
+      // Phase A — PRODUCERS: register every document type FIRST and await them, so the
+      // `document_types` rows are committed before any `documents` insert references them.
+      await runStep("registering document types", () => bootstrapDocumentTypes(c.env.DB));
+      await runStep("auto-registering collection document types", async () => {
+        const auto = await autoRegisterCollectionDocumentTypes(c.env.DB);
+        if (auto.length) console.log(`[Bootstrap] Document-backed collections registered: ${auto.join(", ")}`);
+      });
+
+      // Phase B — CONSUMERS (+ the independent credential-account repair): the types now
+      // exist, so these can safely run in parallel to keep cold-start latency low.
+      await Promise.all([
+        // Independent of document types (operates on auth `account` rows).
+        runStep("repairing credential accounts", () => repairMissingCredentialAccounts(c.env.DB)),
+
+        // Seeds system RBAC roles/verbs/grants as `documents` (FK → document_types).
+        runStep("seeding RBAC documents", () => rbacService.ensureSystemRbacSeed()),
+
+        // Bootstraps core plugins; installPlugin writes plugin `documents` (FK → document_types).
+        runStep("bootstrapping plugins", async () => {
+          if (config.plugins?.disableAll) return;
+          const bootstrapService = new PluginBootstrapService(c.env.DB);
+          if (await bootstrapService.isBootstrapNeeded()) {
+            console.log("[Bootstrap] Bootstrapping core plugins...");
+            await bootstrapService.bootstrapCorePlugins();
+          }
+        }),
+      ]);
+
+      // Mark bootstrap complete ONLY when every step succeeded. A partial bootstrap must
+      // not latch the in-memory flag or persist the KV skip marker: doing so would cache
+      // the broken state for the isolate's lifetime AND for the KV TTL (24h), so every
+      // later request/isolate skips the D1 work while roles/plugins stay missing. Leaving
+      // both unset lets the next request retry the (idempotent) bootstrap and converge
+      // once the transient condition clears.
+      if (bootstrapOk) {
+        bootstrapComplete = true;
+        console.log("[Bootstrap] System initialization completed");
+        try {
+          const cacheKv = (c.env as any).CACHE_KV as KVNamespace | undefined
+          if (cacheKv) {
+            // 24h TTL — long enough that hot instances never re-bootstrap, short
+            // enough that a DB reset auto-heals within a day.
+            await cacheKv.put(BOOTSTRAP_KV_KEY(), '1', { expirationTtl: 86400 })
+          }
+        } catch { /* KV write failure is non-fatal */ }
+      } else {
+        console.warn("[Bootstrap] System initialization completed WITH ERRORS — not caching the skip marker; the next request will retry.");
+      }
 
       // Fire project snapshot telemetry (fire-and-forget, never blocks boot)
       try {
@@ -306,6 +340,11 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
     } catch (error) {
       console.error("[Bootstrap] Error during system initialization:", error);
       // Don't prevent the app from starting, but log the error
+    } finally {
+      // Release the single-flight latch so a later request can retry if this run
+      // did not mark bootstrap complete (transient failure self-heal).
+      bootstrapInFlight = null;
+      releaseInFlight();
     }
 
     // 4. Verify security configuration (outside try/catch so critical
@@ -321,6 +360,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
  */
 export function resetBootstrap() {
   bootstrapComplete = false;
+  bootstrapInFlight = null;
 }
 
 /**

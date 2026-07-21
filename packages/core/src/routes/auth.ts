@@ -747,6 +747,10 @@ authRoutes.post('/seed-admin',
   try {
     const db = c.env.DB
     const rbac = new RbacService(db)
+    // Ensure RBAC system roles exist even when bootstrap was skipped via the KV
+    // fast-path (shared KV namespace across PR deployments can cause new deployments
+    // with a fresh D1 to skip bootstrap, leaving no rbac_role docs).
+    await rbac.ensureSystemRbacSeed()
     const results: Array<{ email: string; status: string }> = []
 
     const upsertSeedUser = async (opts: {

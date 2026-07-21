@@ -129,3 +129,11 @@ export async function ensureScalarSchema(
   }
   return added
 }
+
+/** Reset module-level caches. Test-only: call after closing each in-memory DB so the
+ *  next createTestD1() gets a fresh schema probe rather than stale column names. */
+export function resetDocumentScalarSchemaCache(): void {
+  _columnCache = null
+  _indexCache = null
+  _cacheInitPromise = null
+}

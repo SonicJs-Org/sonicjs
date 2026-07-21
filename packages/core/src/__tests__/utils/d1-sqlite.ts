@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { QueryableField } from '../../schemas/document'
-import { ensureScalarSchema } from '../../services/document-scalar-schema'
+import { ensureScalarSchema, resetDocumentScalarSchemaCache } from '../../services/document-scalar-schema'
 
 // Real-SQLite test harness. Wraps better-sqlite3 in the subset of the D1Database
 // interface the document services use (prepare/bind/run/all/first + batch) and applies
@@ -106,6 +106,10 @@ export function createTestD1(): TestD1 {
     raw: sqlite,
     close() {
       sqlite.close()
+      // Each in-memory DB is a fresh SQLite instance; reset the module-level column/index
+      // caches so the next createTestD1() probes its own schema rather than seeing stale
+      // columns from a previous test's DB.
+      resetDocumentScalarSchemaCache()
     },
   }
 }

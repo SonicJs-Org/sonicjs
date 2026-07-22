@@ -13,7 +13,9 @@
  */
 
 import { Hono } from 'hono'
+import type { Bindings, Variables } from '../../../app'
 import { definePlugin } from '../../sdk/define-plugin'
+import { requireAuth, requireRole } from '../../../middleware'
 import { wrapAdminPage } from '../_shared/admin-template'
 import {
   resolveVariablesInObject,
@@ -51,7 +53,21 @@ CREATE INDEX IF NOT EXISTS idx_global_variables_active ON global_variables(is_ac
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatVariable(row: any) {
+type AppEnv = { Bindings: Bindings; Variables: Variables }
+
+/** A row of the `global_variables` table. */
+interface GlobalVariableRow {
+  id: number
+  key: string
+  value: string
+  description: string | null
+  category: string
+  is_active: number
+  created_at: number
+  updated_at: number
+}
+
+function formatVariable(row: GlobalVariableRow | null) {
   if (!row) return null
   return {
     id: row.id,
@@ -59,7 +75,7 @@ function formatVariable(row: any) {
     value: row.value,
     description: row.description,
     category: row.category,
-    isActive: row.is_active === 1 || row.is_active === true,
+    isActive: row.is_active === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -69,16 +85,16 @@ function esc(s: string): string {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-async function getVariablesMap(db: any): Promise<Map<string, string>> {
+async function getVariablesMap(db: D1Database): Promise<Map<string, string>> {
   let variables = getVariablesCached()
   if (variables) return variables
   try {
     const { results } = await db.prepare(
       'SELECT key, value FROM global_variables WHERE is_active = 1'
-    ).all()
+    ).all<Pick<GlobalVariableRow, 'key' | 'value'>>()
     variables = new Map<string, string>()
     for (const row of results || []) {
-      variables.set((row as any).key, (row as any).value)
+      variables.set(row.key, row.value)
     }
     setVariablesCache(variables)
     return variables
@@ -89,40 +105,45 @@ async function getVariablesMap(db: any): Promise<Map<string, string>> {
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 
-const apiRoutes = new Hono()
+const apiRoutes = new Hono<AppEnv>()
 
 // Gate: all routes return 404 if this plugin is inactive
-apiRoutes.use('*', async (c: any, next: any) => {
+apiRoutes.use('*', async (c, next) => {
   try {
-    const db = c.env?.DB
+    const db = c.env.DB
     if (db) {
       const row = await db.prepare("SELECT status FROM plugins WHERE id = 'global-variables' AND status = 'active'").first()
       if (!row) return c.json({ error: 'Plugin not active' }, 404)
     }
   } catch { /* allow if table doesn't exist yet */ }
-  await next()
+  return await next()
 })
 
-apiRoutes.get('/', async (c: any) => {
+// Auth: every API route requires a signed-in user (these values are only
+// consumed by the authenticated admin UI). Writes additionally require an
+// admin — global variables are site-wide config, so mutations are admin-only.
+apiRoutes.use('*', requireAuth())
+
+apiRoutes.get('/', async (c) => {
   try {
     const db = c.env.DB
     const category = c.req.query('category')
     const active = c.req.query('active')
 
     let query = 'SELECT * FROM global_variables WHERE 1=1'
-    const params: any[] = []
+    const params: (string | number)[] = []
     if (category) { query += ' AND category = ?'; params.push(category) }
     if (active !== undefined) { query += ' AND is_active = ?'; params.push(active === 'true' ? 1 : 0) }
     query += ' ORDER BY category ASC, key ASC'
 
-    const { results } = await db.prepare(query).bind(...params).all()
+    const { results } = await db.prepare(query).bind(...params).all<GlobalVariableRow>()
     return c.json({ success: true, data: (results || []).map(formatVariable) })
   } catch {
     return c.json({ success: false, error: 'Failed to fetch global variables' }, 500)
   }
 })
 
-apiRoutes.get('/resolve', async (c: any) => {
+apiRoutes.get('/resolve', async (c) => {
   try {
     const map = await getVariablesMap(c.env.DB)
     return c.json({ success: true, data: Object.fromEntries(map) })
@@ -131,9 +152,9 @@ apiRoutes.get('/resolve', async (c: any) => {
   }
 })
 
-apiRoutes.get('/:id', async (c: any) => {
+apiRoutes.get('/:id', async (c) => {
   try {
-    const result = await c.env.DB.prepare('SELECT * FROM global_variables WHERE id = ?').bind(c.req.param('id')).first()
+    const result = await c.env.DB.prepare('SELECT * FROM global_variables WHERE id = ?').bind(c.req.param('id')).first<GlobalVariableRow>()
     if (!result) return c.json({ error: 'Variable not found' }, 404)
     return c.json({ success: true, data: formatVariable(result) })
   } catch {
@@ -141,10 +162,12 @@ apiRoutes.get('/:id', async (c: any) => {
   }
 })
 
-apiRoutes.post('/', async (c: any) => {
+apiRoutes.post('/', requireRole(['admin']), async (c) => {
   try {
     const db = c.env.DB
-    const { key, value, description, category, isActive } = await c.req.json()
+    const { key, value, description, category, isActive } = await c.req.json<{
+      key?: string; value?: string; description?: string; category?: string; isActive?: boolean
+    }>()
     if (!key || !/^[a-z0-9_]+$/.test(key)) {
       return c.json({ error: 'Key must be lowercase alphanumeric with underscores' }, 400)
     }
@@ -156,23 +179,26 @@ apiRoutes.post('/', async (c: any) => {
     ).bind(key, value || '', description || '', category || 'general', isActive !== false ? 1 : 0).run()
     invalidateVariablesCache()
 
-    const created = await db.prepare('SELECT * FROM global_variables WHERE key = ?').bind(key).first()
+    const created = await db.prepare('SELECT * FROM global_variables WHERE key = ?').bind(key).first<GlobalVariableRow>()
     return c.json({ success: true, data: formatVariable(created) }, 201)
   } catch {
     return c.json({ success: false, error: 'Failed to create variable' }, 500)
   }
 })
 
-apiRoutes.put('/:id', async (c: any) => {
+apiRoutes.put('/:id', requireRole(['admin']), async (c) => {
   try {
     const db = c.env.DB
     const id = c.req.param('id')
-    const existing = await db.prepare('SELECT * FROM global_variables WHERE id = ?').bind(id).first() as any
+    if (!id) return c.json({ error: 'Variable not found' }, 404)
+    const existing = await db.prepare('SELECT * FROM global_variables WHERE id = ?').bind(id).first<GlobalVariableRow>()
     if (!existing) return c.json({ error: 'Variable not found' }, 404)
 
-    const body = await c.req.json()
+    const body = await c.req.json<{
+      value?: string; description?: string; category?: string; isActive?: boolean; key?: string
+    }>()
     const updates: string[] = []
-    const params: any[] = []
+    const params: (string | number)[] = []
 
     if (body.value !== undefined) { updates.push('value = ?'); params.push(body.value) }
     if (body.description !== undefined) { updates.push('description = ?'); params.push(body.description) }
@@ -193,18 +219,18 @@ apiRoutes.put('/:id', async (c: any) => {
     await db.prepare(`UPDATE global_variables SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run()
     invalidateVariablesCache()
 
-    const updated = await db.prepare('SELECT * FROM global_variables WHERE id = ?').bind(id).first()
+    const updated = await db.prepare('SELECT * FROM global_variables WHERE id = ?').bind(id).first<GlobalVariableRow>()
     return c.json({ success: true, data: formatVariable(updated) })
   } catch {
     return c.json({ success: false, error: 'Failed to update variable' }, 500)
   }
 })
 
-apiRoutes.delete('/:id', async (c: any) => {
+apiRoutes.delete('/:id', requireRole(['admin']), async (c) => {
   try {
     const db = c.env.DB
     const id = c.req.param('id')
-    const existing = await db.prepare('SELECT id FROM global_variables WHERE id = ?').bind(id).first()
+    const existing = await db.prepare('SELECT id FROM global_variables WHERE id = ?').bind(id).first<Pick<GlobalVariableRow, 'id'>>()
     if (!existing) return c.json({ error: 'Variable not found' }, 404)
     await db.prepare('DELETE FROM global_variables WHERE id = ?').bind(id).run()
     invalidateVariablesCache()

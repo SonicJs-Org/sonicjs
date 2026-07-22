@@ -32,9 +32,9 @@ export function resolveVariables(
  * Handles nested objects, arrays, and the `data` field of content items.
  */
 export function resolveVariablesInObject(
-  obj: any,
+  obj: unknown,
   variables: Map<string, string>
-): any {
+): unknown {
   if (!obj || variables.size === 0) return obj
 
   if (typeof obj === 'string') {
@@ -46,7 +46,7 @@ export function resolveVariablesInObject(
   }
 
   if (typeof obj === 'object') {
-    const result: Record<string, any> = {}
+    const result: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(obj)) {
       result[key] = resolveVariablesInObject(value, variables)
     }
@@ -88,9 +88,9 @@ export function invalidateVariablesCache(): void {
  * Safe to call even if the global_variables table doesn't exist yet.
  */
 export async function resolveContentVariables(
-  contentData: any,
-  db: any
-): Promise<any> {
+  contentData: unknown,
+  db: D1Database
+): Promise<unknown> {
   if (!db || !contentData) return contentData
 
   try {
@@ -100,11 +100,11 @@ export async function resolveContentVariables(
     if (!variables) {
       const { results } = await db.prepare(
         'SELECT key, value FROM global_variables WHERE is_active = 1'
-      ).all()
+      ).all<{ key: string; value: string }>()
 
       variables = new Map<string, string>()
       for (const row of results || []) {
-        variables.set((row as any).key, (row as any).value)
+        variables.set(row.key, row.value)
       }
       setVariablesCache(variables)
     }

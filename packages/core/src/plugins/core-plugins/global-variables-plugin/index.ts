@@ -81,6 +81,18 @@ function formatVariable(row: GlobalVariableRow | null) {
   }
 }
 
+/** The client-facing variable shape produced by formatVariable() (nulls filtered out). */
+type FormattedVariable = NonNullable<ReturnType<typeof formatVariable>>
+
+/** A `plugins` row projection carrying only the JSON settings blob. */
+interface PluginSettingsRow { settings: string | null }
+
+/** The global-variables plugin's own settings (stored as JSON in `plugins.settings`). */
+interface GvSettings { enableEditorIntegration?: boolean }
+
+/** Minimal shape the install/uninstall lifecycle context is read for (the SDK types it `unknown`). */
+interface LifecycleContext { env?: { DB?: D1Database } }
+
 function esc(s: string): string {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -242,25 +254,25 @@ apiRoutes.delete('/:id', requireRole(['admin']), async (c) => {
 
 // ─── Admin Page ──────────────────────────────────────────────────────────────
 
-const adminRoutes = new Hono()
+const adminRoutes = new Hono<AppEnv>()
 
-adminRoutes.use('*', async (c: any, next: any) => {
+adminRoutes.use('*', async (c, next) => {
   try {
-    const db = c.env?.DB
+    const db = c.env.DB
     if (db) {
       const row = await db.prepare("SELECT status FROM plugins WHERE id = 'global-variables' AND status = 'active'").first()
       if (!row) return c.html('<html><body><h1>Plugin not active</h1><p>Enable the Global Variables plugin from <a href="/admin/plugins">Plugins</a>.</p></body></html>', 404)
     }
   } catch { /* allow */ }
-  await next()
+  return await next()
 })
 
-adminRoutes.get('/', async (c: any) => {
+adminRoutes.get('/', async (c) => {
   const db = c.env.DB
-  let variables: any[] = []
+  let variables: FormattedVariable[] = []
   try {
-    const { results } = await db.prepare('SELECT * FROM global_variables ORDER BY category ASC, key ASC').all()
-    variables = (results || []).map(formatVariable)
+    const { results } = await db.prepare('SELECT * FROM global_variables ORDER BY category ASC, key ASC').all<GlobalVariableRow>()
+    variables = (results || []).map(formatVariable).filter((v): v is FormattedVariable => v !== null)
   } catch { /* table may not exist yet */ }
 
   // Fetch editor integration status
@@ -272,9 +284,9 @@ adminRoutes.get('/', async (c: any) => {
     const tmRow = await db.prepare("SELECT status FROM plugins WHERE (id = 'tinymce-plugin' OR name = 'tinymce-plugin') AND status = 'active'").first()
     if (qeRow) { editorActive = true; activeEditorName = 'Quill Editor' }
     else if (tmRow) { editorActive = true; activeEditorName = 'TinyMCE' }
-    const gvRow = await db.prepare("SELECT settings FROM plugins WHERE id = 'global-variables'").first() as any
+    const gvRow = await db.prepare("SELECT settings FROM plugins WHERE id = 'global-variables'").first<PluginSettingsRow>()
     if (gvRow?.settings) {
-      const settings = typeof gvRow.settings === 'string' ? JSON.parse(gvRow.settings) : gvRow.settings
+      const settings = JSON.parse(gvRow.settings) as GvSettings
       enableEditorIntegration = settings.enableEditorIntegration !== false
     }
   } catch { /* ignore */ }
@@ -283,11 +295,11 @@ adminRoutes.get('/', async (c: any) => {
 })
 
 // HTMX: inline update value
-adminRoutes.put('/:id', async (c: any) => {
+adminRoutes.put('/:id', async (c) => {
   const db = c.env.DB
   const id = c.req.param('id')
-  let body: any
-  try { body = await c.req.json() } catch { body = await c.req.parseBody() }
+  let body: Record<string, unknown>
+  try { body = await c.req.json<Record<string, unknown>>() } catch { body = await c.req.parseBody() }
   const value = body.value
   if (value !== undefined) {
     await db.prepare('UPDATE global_variables SET value = ?, updated_at = strftime(\'%s\', \'now\') WHERE id = ?').bind(value, id).run()
@@ -297,7 +309,7 @@ adminRoutes.put('/:id', async (c: any) => {
 })
 
 // HTMX: toggle active
-adminRoutes.post('/:id/toggle', async (c: any) => {
+adminRoutes.post('/:id/toggle', async (c) => {
   const db = c.env.DB
   const id = c.req.param('id')
   await db.prepare('UPDATE global_variables SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END, updated_at = strftime(\'%s\', \'now\') WHERE id = ?').bind(id).run()
@@ -307,7 +319,7 @@ adminRoutes.post('/:id/toggle', async (c: any) => {
 })
 
 // HTMX: create variable
-adminRoutes.post('/', async (c: any) => {
+adminRoutes.post('/', async (c) => {
   const db = c.env.DB
   const form = await c.req.parseBody()
   const key = (form.key as string || '').trim()
@@ -334,11 +346,11 @@ adminRoutes.post('/', async (c: any) => {
 })
 
 // Toggle editor integration setting
-adminRoutes.post('/settings/editor-integration', async (c: any) => {
+adminRoutes.post('/settings/editor-integration', async (c) => {
   const db = c.env.DB
   try {
-    const row = await db.prepare("SELECT settings FROM plugins WHERE id = 'global-variables'").first() as any
-    const settings = row?.settings ? (typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings) : {}
+    const row = await db.prepare("SELECT settings FROM plugins WHERE id = 'global-variables'").first<PluginSettingsRow>()
+    const settings: GvSettings = row?.settings ? JSON.parse(row.settings) as GvSettings : {}
     settings.enableEditorIntegration = !settings.enableEditorIntegration
     await db.prepare("UPDATE plugins SET settings = ? WHERE id = 'global-variables'").bind(JSON.stringify(settings)).run()
     return c.json({ success: true, enableEditorIntegration: settings.enableEditorIntegration })
@@ -348,7 +360,7 @@ adminRoutes.post('/settings/editor-integration', async (c: any) => {
 })
 
 // HTMX: delete variable
-adminRoutes.delete('/:id', async (c: any) => {
+adminRoutes.delete('/:id', async (c) => {
   const db = c.env.DB
   await db.prepare('DELETE FROM global_variables WHERE id = ?').bind(c.req.param('id')).run()
   invalidateVariablesCache()
@@ -357,9 +369,9 @@ adminRoutes.delete('/:id', async (c: any) => {
 
 // ─── Admin Page Template ─────────────────────────────────────────────────────
 
-function renderAdminPage(variables: any[], editorStatus: { editorActive: boolean; activeEditorName: string; enableEditorIntegration: boolean } = { editorActive: false, activeEditorName: '', enableEditorIntegration: true }): string {
+function renderAdminPage(variables: FormattedVariable[], editorStatus: { editorActive: boolean; activeEditorName: string; enableEditorIntegration: boolean } = { editorActive: false, activeEditorName: '', enableEditorIntegration: true }): string {
   // Group by category
-  const groups = new Map<string, any[]>()
+  const groups = new Map<string, FormattedVariable[]>()
   for (const v of variables) {
     const cat = v.category || 'general'
     if (!groups.has(cat)) groups.set(cat, [])
@@ -706,6 +718,10 @@ export const globalVariablesPlugin = definePlugin({
   ],
 
   hooks: {
+    // NOTE (typing follow-up): `data`/`context` stay `any` here. The typed `content:read`
+    // payload is ContentEventPayload (content lives at `.data`), but this handler treats `data`
+    // as the content itself and reads `context.context.env.DB` — reconciling that (plus this
+    // event's reserved/unwired dispatch) is a behavior change, out of scope for a types-only PR.
     // eslint-disable-next-line @typescript-eslint/naming-convention -- hook event names use colons
     'content:read': async (data: any, context: any) => {
       try {
@@ -720,8 +736,8 @@ export const globalVariablesPlugin = definePlugin({
     },
   },
 
-  install: async (ctx: any) => {
-    const db = ctx?.env?.DB
+  install: async (context: unknown) => {
+    const db = (context as LifecycleContext | undefined)?.env?.DB
     if (db) {
       const statements = MIGRATION_SQL.split(';').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
       for (const stmt of statements) { await db.prepare(stmt).run() }
@@ -733,8 +749,8 @@ export const globalVariablesPlugin = definePlugin({
     invalidateVariablesCache()
     console.info('[GlobalVariables] Plugin deactivated, cache cleared')
   },
-  uninstall: async (ctx: any) => {
-    const db = ctx?.env?.DB
+  uninstall: async (context: unknown) => {
+    const db = (context as LifecycleContext | undefined)?.env?.DB
     if (db) {
       await db.prepare('DROP TABLE IF EXISTS global_variables').run()
       console.info('[GlobalVariables] Tables dropped')

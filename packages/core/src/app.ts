@@ -41,6 +41,7 @@ import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
+import { apiDocsPlugin } from './plugins/core-plugins/api-docs-plugin'
 import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
@@ -283,6 +284,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
+    apiDocsPlugin,
     apiKeysPlugin,
     aiSearchPlugin,
     oauthProvidersPlugin,

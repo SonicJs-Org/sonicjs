@@ -70,6 +70,30 @@ export const PLUGIN_REGISTRY: Record<string, PluginRegistryEntry> = {
     }
   },
 
+  'api-docs': {
+    "id": "api-docs",
+    "codeName": "api-docs",
+    "displayName": "API Documentation",
+    "description": "Interactive API reference — an auto-discovered endpoint catalog, a Scalar API explorer, and a live OpenAPI 3.0 spec generated from the running route table.",
+    "version": "1.0.0-beta.1",
+    "author": "SonicJS Team",
+    "category": "developer-tools",
+    "iconEmoji": "📖",
+    "is_core": true,
+    "defaultActive": true,
+    "permissions": [
+      "api-docs:view"
+    ],
+    "dependencies": [],
+    "defaultSettings": {},
+    "adminMenu": {
+      "label": "API Reference",
+      "icon": "book-open",
+      "path": "/admin/plugins/api-docs",
+      "order": 90
+    }
+  },
+
   'api-keys': {
     "id": "api-keys",
     "codeName": "api-keys",

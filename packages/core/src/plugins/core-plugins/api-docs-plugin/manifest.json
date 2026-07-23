@@ -1,0 +1,29 @@
+{
+  "id": "api-docs",
+  "name": "API Documentation",
+  "version": "1.0.0-beta.1",
+  "description": "Interactive API reference — an auto-discovered endpoint catalog, a Scalar API explorer, and a live OpenAPI 3.0 spec generated from the running route table.",
+  "author": "SonicJS Team",
+  "category": "developer-tools",
+  "tags": [
+    "api",
+    "docs",
+    "openapi",
+    "scalar",
+    "reference",
+    "developer-experience"
+  ],
+  "dependencies": [],
+  "permissions": {
+    "api-docs:view": "View the API reference and interactive explorer"
+  },
+  "adminMenu": {
+    "label": "API Reference",
+    "icon": "book-open",
+    "path": "/admin/plugins/api-docs",
+    "order": 90
+  },
+  "iconEmoji": "📖",
+  "is_core": true,
+  "defaultActive": true
+}

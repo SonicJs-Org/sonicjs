@@ -37,7 +37,9 @@ function canAccessProfile(
 ): targetUserId is string {
   if (!targetUserId) return false
   const user = c.get('user')
-  if (!user) return false
+  // requireAuth() runs before every caller of this function; a missing user
+  // here means the middleware chain was bypassed — fail loudly.
+  if (!user) throw new Error('canAccessProfile called without authenticated user')
   return user.userId === targetUserId || user.role === 'admin'
 }
 

@@ -86,8 +86,8 @@ async function kvSafeKey(cacheKey: string): Promise<string> {
 }
 
 /** Schedule a throttled KV write for the given cache key. Call after recordCatalogRequest(). */
-export function scheduleKvWrite(cacheKey: string, ctx: CtxLike): void {
-  if (!globalKv) return
+export function scheduleKvWrite(cacheKey: string, ctx: CtxLike | null | undefined): void {
+  if (!globalKv || !ctx) return
   const entry = catalog.get(cacheKey)
   if (!entry) return
   const now = Date.now()

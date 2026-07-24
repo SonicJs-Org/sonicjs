@@ -407,3 +407,60 @@ describe('renderDynamicField - media field defensive handling', () => {
     expect(html).not.toContain('<img src="[object');
   });
 });
+
+describe('renderDynamicField - stored XSS escaping (Issue #1026)', () => {
+  const xssPayload = '"><script>alert(1)</script>';
+  const baseField = (type: string): FieldDefinition => ({
+    id: `test-${type}`,
+    field_name: 'qty',
+    field_type: type,
+    field_label: 'Qty',
+    field_options: {},
+    field_order: 1,
+    is_required: false,
+    is_searchable: false,
+  });
+
+  it('number: escapes stored XSS payload in value attr', () => {
+    const html = renderDynamicField(baseField('number'), { value: xssPayload });
+    expect(html).not.toContain(xssPayload);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('date: escapes stored XSS payload in value attr', () => {
+    const html = renderDynamicField(baseField('date'), { value: xssPayload });
+    expect(html).not.toContain(xssPayload);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('datetime: escapes stored XSS payload in value attr', () => {
+    const html = renderDynamicField(baseField('datetime'), { value: xssPayload });
+    expect(html).not.toContain(xssPayload);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('number: valid numeric value preserved', () => {
+    const html = renderDynamicField(baseField('number'), { value: 42 });
+    expect(html).toContain('value="42"');
+  });
+
+  it('date: valid date string preserved', () => {
+    const html = renderDynamicField(baseField('date'), { value: '2024-01-15' });
+    expect(html).toContain('value="2024-01-15"');
+  });
+
+  it('datetime: valid datetime string preserved', () => {
+    const html = renderDynamicField(baseField('datetime'), { value: '2024-01-15T10:30' });
+    expect(html).toContain('value="2024-01-15T10:30"');
+  });
+
+  it('number: null/undefined value renders empty string', () => {
+    const htmlNull = renderDynamicField(baseField('number'), { value: null });
+    const htmlUndef = renderDynamicField(baseField('number'), { value: undefined });
+    expect(htmlNull).toContain('value=""');
+    expect(htmlUndef).toContain('value=""');
+  });
+});

@@ -107,6 +107,12 @@ async function getVariablesMap(db: D1Database): Promise<Map<string, string>> {
 
 const apiRoutes = new Hono<AppEnv>()
 
+// Auth: every API route requires a signed-in user (these values are only
+// consumed by the authenticated admin UI). Writes additionally require an
+// admin — global variables are site-wide config, so mutations are admin-only.
+// Auth runs first so unauthenticated probes get 401 before any plugin-state info.
+apiRoutes.use('*', requireAuth())
+
 // Gate: all routes return 404 if this plugin is inactive
 apiRoutes.use('*', async (c, next) => {
   try {
@@ -118,11 +124,6 @@ apiRoutes.use('*', async (c, next) => {
   } catch { /* allow if table doesn't exist yet */ }
   return await next()
 })
-
-// Auth: every API route requires a signed-in user (these values are only
-// consumed by the authenticated admin UI). Writes additionally require an
-// admin — global variables are site-wide config, so mutations are admin-only.
-apiRoutes.use('*', requireAuth())
 
 apiRoutes.get('/', async (c) => {
   try {
@@ -143,7 +144,7 @@ apiRoutes.get('/', async (c) => {
   }
 })
 
-apiRoutes.get('/resolve', async (c) => {
+apiRoutes.get('/resolve', requireRole(['admin']), async (c) => {
   try {
     const map = await getVariablesMap(c.env.DB)
     return c.json({ success: true, data: Object.fromEntries(map) })

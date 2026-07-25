@@ -17,10 +17,10 @@ const channels = [
     cta: 'Join the Discord',
   },
   {
-    title: 'GitHub Discussions',
-    body: 'Ask questions, request features, and browse past answers.',
-    href: 'https://github.com/lane711/sonicjs/discussions',
-    cta: 'Open Discussions',
+    title: 'GitHub Issues',
+    body: 'Report bugs, request features, and browse past reports.',
+    href: 'https://github.com/SonicJs-Org/sonicjs/issues',
+    cta: 'Open an issue',
   },
   {
     title: 'Commercial Support',

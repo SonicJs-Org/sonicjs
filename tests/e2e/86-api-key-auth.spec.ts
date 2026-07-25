@@ -38,7 +38,7 @@ async function createKey(request: any, token: string, name: string) {
   return body.apiKey as { id: string; key: string; prefix: string; name: string }
 }
 
-test.describe('Programmatic API keys', () => {
+test.describe('Programmatic API keys @smoke @api-keys', () => {
   test.beforeAll(async ({ request }) => {
     await request.post('/auth/seed-admin').catch(() => {})
   })

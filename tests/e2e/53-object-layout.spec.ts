@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Object Layout', () => {
+test.describe('Object Layout @content', () => {
   test('should render flat objects expanded and nested objects collapsed by default', async ({ page }) => {
     await loginAsAdmin(page)
 

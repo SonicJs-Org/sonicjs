@@ -7,6 +7,9 @@
 
 import { renderAdminLayoutCatalyst, AdminLayoutCatalystData } from '../layouts/admin-layout-catalyst.template'
 import { renderConfirmationDialog, getConfirmationDialogScript } from '../components/confirmation-dialog.template'
+import type { CatalogEntry } from '../../plugins/cache/services/catalog'
+
+export type { CatalogEntry }
 
 export interface CacheStats {
   memoryHits: number
@@ -41,6 +44,17 @@ export interface CacheDashboardData {
   }
   namespaces: string[]
   collections: CollectionCacheConfig[]
+  catalog: {
+    entries: CatalogEntry[]
+    stats: {
+      totalEntries: number
+      totalHits: number
+      totalMisses: number
+      totalStale: number
+      collections: string[]
+    }
+    swrPending: number
+  }
   user?: {
     name: string
     email: string
@@ -98,6 +112,14 @@ export function renderCacheDashboard(data: CacheDashboardData): string {
             class="cache-tab border-b-2 border-transparent py-3 px-1 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600 whitespace-nowrap"
           >
             Collection Settings
+          </button>
+          <button
+            onclick="switchTab('url-catalog')"
+            id="tab-url-catalog"
+            class="cache-tab border-b-2 border-transparent py-3 px-1 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600 whitespace-nowrap"
+          >
+            URL Catalog
+            ${data.catalog.stats.totalEntries > 0 ? `<span class="ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300">${data.catalog.stats.totalEntries}</span>` : ''}
           </button>
         </nav>
       </div>
@@ -179,10 +201,18 @@ export function renderCacheDashboard(data: CacheDashboardData): string {
       <div id="tab-panel-collection-settings" class="hidden space-y-6">
         ${renderCollectionSettingsTab(data.collections)}
       </div>
+
+      <!-- Tab: URL Catalog -->
+      <div id="tab-panel-url-catalog" class="hidden space-y-6">
+        ${renderUrlCatalogTab(data.catalog)}
+      </div>
     </div>
 
     <script>
-      function switchTab(tab) {
+      const VALID_TABS = ['overview', 'collection-settings', 'url-catalog']
+
+      function switchTab(tab, pushHash) {
+        if (!VALID_TABS.includes(tab)) tab = 'overview'
         // Update tab button styles
         document.querySelectorAll('.cache-tab').forEach(btn => {
           btn.classList.remove('border-zinc-950', 'dark:border-white', 'text-zinc-950', 'dark:text-white')
@@ -200,7 +230,20 @@ export function renderCacheDashboard(data: CacheDashboardData): string {
         })
         const activePanel = document.getElementById('tab-panel-' + tab)
         if (activePanel) activePanel.classList.remove('hidden')
+
+        // Sync URL hash (pushHash=false when called from hashchange to avoid loop)
+        if (pushHash !== false) location.hash = tab
       }
+
+      document.addEventListener('DOMContentLoaded', function () {
+        const hash = location.hash.slice(1)
+        switchTab(VALID_TABS.includes(hash) ? hash : 'overview', false)
+      })
+
+      window.addEventListener('hashchange', function () {
+        const hash = location.hash.slice(1)
+        switchTab(VALID_TABS.includes(hash) ? hash : 'overview', false)
+      })
 
       async function refreshStats() {
         window.location.reload()
@@ -222,6 +265,21 @@ export function renderCacheDashboard(data: CacheDashboardData): string {
           }
         } catch (error) {
           alert('Error clearing caches: ' + error.message)
+        }
+      }
+
+      async function clearUrlCatalog() {
+        try {
+          const response = await fetch('/admin/cache/catalog/clear', { method: 'POST' })
+          const result = await response.json()
+          if (result.success) {
+            alert('URL catalog cleared')
+            window.location.reload()
+          } else {
+            alert('Error: ' + result.error)
+          }
+        } catch (error) {
+          alert('Error: ' + error.message)
         }
       }
 
@@ -287,6 +345,142 @@ export function renderCacheDashboard(data: CacheDashboardData): string {
   }
 
   return renderAdminLayoutCatalyst(layoutData)
+}
+
+function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
+  const { entries, stats, swrPending } = catalog
+
+  const statCards = `
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      ${renderMiniStatCard('Tracked URLs', stats.totalEntries.toLocaleString(), 'sky')}
+      ${renderMiniStatCard('Cache Hits', stats.totalHits.toLocaleString(), 'lime')}
+      ${renderMiniStatCard('Cache Misses', stats.totalMisses.toLocaleString(), 'amber')}
+      ${renderMiniStatCard('Stale Serves', stats.totalStale.toLocaleString(), 'purple')}
+    </div>
+  `
+
+  const swrBadge = swrPending > 0
+    ? `<span class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">${swrPending} stale pending</span>`
+    : ''
+
+  if (entries.length === 0) {
+    return `
+      ${statCards}
+      <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+        <div class="p-12 text-center">
+          <svg class="mx-auto h-8 w-8 text-zinc-400 dark:text-zinc-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">No entries yet</p>
+          <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Cache-eligible API requests will appear here after the first page load.</p>
+        </div>
+      </div>
+    `
+  }
+
+  const rows = entries.map(entry => {
+    const totalReqs = entry.hits + entry.misses + entry.staleServes
+    const hitRate = totalReqs > 0 ? Math.round((entry.hits / totalReqs) * 100) : 0
+    const hitRateColor = hitRate > 70 ? 'text-lime-600 dark:text-lime-400' : hitRate > 40 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
+    const pathDisplay = entry.queryString ? `${entry.path}?${entry.queryString}` : entry.path
+    const truncatedPath = pathDisplay.length > 80 ? pathDisplay.slice(0, 77) + '…' : pathDisplay
+    const collBadge = entry.collection
+      ? `<span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 ring-1 ring-inset ring-sky-600/20">${entry.collection}</span>`
+      : `<span class="text-xs text-zinc-400 dark:text-zinc-600">—</span>`
+    const timeAgo = formatTimeAgo(entry.lastSeen)
+    return `
+      <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+        <td class="px-4 py-3 max-w-xs">
+          <code class="text-xs text-zinc-700 dark:text-zinc-300 break-all" title="${pathDisplay}">${truncatedPath}</code>
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap">${collBadge}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-zinc-900 dark:text-zinc-100 text-right">${totalReqs.toLocaleString()}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-right">
+          <span class="text-sm font-medium ${hitRateColor}">${hitRate}%</span>
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-400 text-right">${entry.hits.toLocaleString()}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-400 text-right">${entry.misses.toLocaleString()}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-sm text-zinc-500 dark:text-zinc-500 text-right">${entry.staleServes > 0 ? entry.staleServes.toLocaleString() : '—'}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-xs text-zinc-400 dark:text-zinc-500 text-right">${timeAgo}</td>
+      </tr>
+    `
+  }).join('')
+
+  return `
+    ${statCards}
+
+    <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+      <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">
+            Cache-Eligible API URLs${swrBadge}
+          </h2>
+          <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Ranked by total requests. Resets on isolate eviction. Scoped to public/privileged (non-ACL) requests only.
+          </p>
+        </div>
+        <button
+          onclick="clearUrlCatalog()"
+          class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+        >
+          Clear
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">
+          <thead class="bg-zinc-50 dark:bg-zinc-800/50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">URL</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Collection</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Requests</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Hit Rate</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Hits</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Misses</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Stale</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Last Seen</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-zinc-950/5 dark:divide-white/10">
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">
+      <div class="px-6 py-5">
+        <h3 class="text-sm font-semibold text-zinc-950 dark:text-white mb-2">About this catalog</h3>
+        <ul class="text-sm text-zinc-600 dark:text-zinc-400 space-y-1 list-disc list-inside">
+          <li><strong>Phase 1 (done):</strong> Collection-scoped cache invalidation — content changes only purge the affected collection's keys.</li>
+          <li><strong>Phase 2 (this view):</strong> URL catalog tracks every cache-eligible API request. Use to identify hot URLs for targeted pre-warming.</li>
+          <li><strong>Phase 3 (SWR):</strong> Stale-While-Revalidate — on invalidation, the previous response is kept for 30 s so the first post-edit request is served from cache instantly. Stale serves are counted above.</li>
+          <li>Catalog is per-isolate and resets on cold start. For persistent tracking, sink data to Analytics Engine.</li>
+        </ul>
+      </div>
+    </div>
+  `
+}
+
+function renderMiniStatCard(label: string, value: string, color: string): string {
+  const colorClasses: Record<string, string> = {
+    sky: 'bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400',
+    lime: 'bg-lime-50 dark:bg-lime-500/10 text-lime-600 dark:text-lime-400',
+    amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    purple: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
+  }
+  return `
+    <div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10 p-4">
+      <p class="text-xs text-zinc-500 dark:text-zinc-400">${label}</p>
+      <p class="mt-1 text-xl font-semibold ${colorClasses[color] ?? colorClasses.sky}">${value}</p>
+    </div>
+  `
+}
+
+function formatTimeAgo(ts: number): string {
+  const secs = Math.floor((Date.now() - ts) / 1000)
+  if (secs < 60) return `${secs}s ago`
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  return `${Math.floor(secs / 3600)}h ago`
 }
 
 function renderCollectionSettingsTab(collections: CollectionCacheConfig[]): string {

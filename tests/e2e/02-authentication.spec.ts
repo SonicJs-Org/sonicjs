@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, logout, isAuthenticated, ADMIN_CREDENTIALS } from './utils/test-helpers';
 
-test.describe('Authentication', () => {
+test.describe('Authentication @smoke @auth', () => {
   test.beforeEach(async ({ page }) => {
     // Ensure we start logged out
     await logout(page);

@@ -1,7 +1,13 @@
 import { test, expect } from '@playwright/test'
-import { loginAsAdmin, TEST_ORIGIN } from './utils/test-helpers'
+import { loginAsAdmin, TEST_ORIGIN, isFeatureAvailable } from './utils/test-helpers'
 
-test.describe('Example plugin — settings reflected in API', () => {
+test.describe('Example plugin — settings reflected in API @plugins', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/example')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

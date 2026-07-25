@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
-import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
+import { loginAsAdmin, ensureAdminUserExists, isFeatureAvailable, IS_REMOTE_DEPLOYMENT } from './utils/test-helpers'
 
 // User-centric tenant membership management: from a user's edit page, open their memberships,
 // add the user to a tenant with a role, change the role, and remove them. Roles are per-tenant.
@@ -24,8 +24,15 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('User-centric tenant memberships', () => {
+test.describe.serial('User-centric tenant memberships @auth', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = !IS_REMOTE_DEPLOYMENT && await isFeatureAvailable(request, '/admin/tenants')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeAll(() => {
+    if (!featureAvailable) return
     d1Exec(`INSERT INTO auth_user (id, email, first_name, last_name, created_at, updated_at) VALUES ('${UID}', '${UEMAIL}', 'Mem', 'Ber', 1, 1)`)
     for (const t of [T_A, T_B]) {
       d1Exec(`INSERT INTO auth_tenant (id, name, slug, status, notes, metadata, created_at, updated_at) VALUES ('${t}', '${t}', '${t}', 'active', '', '{}', 1, 1)`)
@@ -33,6 +40,7 @@ test.describe.serial('User-centric tenant memberships', () => {
   })
 
   test.afterAll(() => {
+    if (!featureAvailable) return
     d1Exec(`DELETE FROM auth_tenant_member WHERE user_id = '${UID}'`)
     d1Exec(`DELETE FROM auth_tenant WHERE slug IN ('${T_A}','${T_B}')`)
     d1Exec(`DELETE FROM auth_user WHERE id = '${UID}'`)

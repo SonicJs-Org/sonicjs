@@ -7,7 +7,7 @@ const EXTERNAL_ORIGIN = 'http://localhost:4321'
 // to test CORS properly since Playwright's APIRequestContext drops the Origin header
 // (it's a "forbidden header" in the Fetch spec for browser contexts).
 
-test.describe('CORS - cross-origin auth and API access', () => {
+test.describe('CORS - cross-origin auth and API access @auth @api', () => {
   test('GET /health returns ACAO header for allowed origin', async ({ page, baseURL }) => {
     // Navigate to the app so we have a page context to evaluate from
     await page.goto('/')

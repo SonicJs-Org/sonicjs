@@ -44,7 +44,7 @@ import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRout
 import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
-import { requireAuth, requireRole, requireRbac } from './middleware/auth'
+import { requireAuth, requireRole, requireRbac, AuthManager } from './middleware/auth'
 import { createAuth } from './auth/config'
 import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
@@ -426,15 +426,25 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // Global CORS middleware — covers /auth/*, /v1/*, and all other routes.
   // Set CORS_ORIGINS in wrangler.toml (comma-separated) to allow cross-origin requests.
+  // Supports wildcard prefix: "*.example.com" matches any subdomain of example.com.
   app.use('*', cors({
     origin: (origin, c) => {
       const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
       if (!allowed) return null
       const list = allowed.split(',').map((s: string) => s.trim())
-      return list.includes(origin) ? origin : null
+      const match = list.some((pattern: string) => {
+        if (pattern === origin) return true
+        if (pattern.startsWith('*.')) {
+          const suffix = pattern.slice(1) // e.g. ".pages.dev" from "*.pages.dev"
+          return origin.endsWith(suffix)
+        }
+        return false
+      })
+      return match ? origin : null
     },
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'Cache-Control'],
+    exposeHeaders: ['X-Cache-Status', 'X-Cache-Source', 'X-Cache-TTL', 'X-Response-Time'],
     credentials: true,
   }))
 
@@ -488,6 +498,34 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // gated on that plugin being active. Runs right after the session middleware
   // so it sits ahead of every route guard, like the security-audit middleware.
   app.use('*', apiKeyAuthMiddleware())
+
+  // Custom JWT Bearer auth: if BA session + API-key both failed to resolve a user,
+  // fall back to the custom JWT minted by /auth/login (not a BA session token).
+  // Accepts `Authorization: Bearer <jwt>` where the token is NOT an `sk_` API key.
+  app.use('*', async (c, next) => {
+    if (!c.get('user')) {
+      const authHeader = c.req.header('Authorization')
+      if (authHeader?.startsWith('Bearer ') && !authHeader.startsWith('Bearer sk_')) {
+        const token = authHeader.slice(7)
+        try {
+          const secret = (c.env as any)?.JWT_SECRET
+          const payload = await AuthManager.verifyToken(token, secret)
+          if (payload) {
+            c.set('user', {
+              userId: payload.userId,
+              email: payload.email,
+              role: payload.role,
+              exp: payload.exp,
+              iat: payload.iat,
+            })
+          }
+        } catch {
+          // Invalid token — leave user unset.
+        }
+      }
+    }
+    await next()
+  })
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {

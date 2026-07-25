@@ -1,0 +1,46 @@
+name: Deploy SDK Demo
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'demos/employee-directory/**'
+      - 'packages/sdk/src/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies (for SDK workspace)
+        run: npm ci
+
+      - name: Build SDK
+        run: cd packages/sdk && npm run build
+
+      - name: Install demo dependencies
+        run: cd demos/employee-directory && npm ci
+
+      - name: Build demo
+        run: cd demos/employee-directory && npm run build
+        env:
+          VITE_CMS_URL: ${{ secrets.DEMO_CMS_URL }}
+
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy demos/employee-directory/dist --project-name sonicjs-sdk-demo --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

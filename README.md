@@ -386,6 +386,7 @@ SonicJS is 100% open source and free forever. If you find it useful, consider sp
 ### Thank You to Our Sponsors
 
 <a href="https://github.com/mmcintosh"><img src="https://github.com/mmcintosh.png" width="60" alt="@mmcintosh" /></a>
+<a href="https://github.com/nickgraynews"><img src="https://github.com/nickgraynews.png" width="60" alt="@nickgraynews" /></a>
 
 ## 📞 Support
 

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Public Content API Status Visibility', () => {
+test.describe('Public Content API Status Visibility @api @content', () => {
   let authCookie = ''
   let collectionId = ''
   let collectionName = ''

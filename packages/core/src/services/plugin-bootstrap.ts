@@ -110,10 +110,14 @@ export class PluginBootstrapService {
           await this.updatePlugin(plugin);
         }
 
-        // ALWAYS ensure core-auth is active (critical for system functionality)
-        if (plugin.id === 'core-auth' && existingPlugin.status !== 'active') {
+        // Ensure bootstrapped plugins are active (defaultActive or core-auth).
+        // If a plugin enters the bootstrap list it should be on unless the user
+        // explicitly deactivated it — but we can't distinguish that from
+        // "never activated", so we activate all bootstrapped plugins that are
+        // currently inactive. This is safe: user can deactivate via admin UI.
+        if (existingPlugin.status !== 'active') {
           console.log(
-            `[PluginBootstrap] Core-auth plugin is inactive, activating it now...`
+            `[PluginBootstrap] Activating bootstrapped plugin: ${plugin.display_name}`
           );
           await this.pluginService.activatePlugin(plugin.id);
         }
@@ -161,23 +165,29 @@ export class PluginBootstrapService {
    */
   async isBootstrapNeeded(): Promise<boolean> {
     try {
-      // Check if any core plugins are missing
-      for (const corePlugin of this.CORE_PLUGINS.filter((p) =>
-        p.name.startsWith("core-")
-      )) {
-        const exists = await this.pluginService.getPlugin(corePlugin.id);
-        if (!exists) {
-          return true;
-        }
-      }
-      return false;
+      const corePlugins = this.CORE_PLUGINS.filter((p) => p.name.startsWith("core-"))
+      if (!corePlugins.length) return false
+
+      // Single query: count installed AND count active. Bootstrap needed if any
+      // are missing OR if any bootstrapped plugin is installed but inactive.
+      const slugs = corePlugins.map((p) => `'${p.id.replace(/'/g, "''")}'`).join(',')
+      const res = await this.db
+        .prepare(
+          `SELECT
+             COUNT(DISTINCT slug) AS installed,
+             COUNT(DISTINCT CASE WHEN json_extract(data, '$.status') = 'active' THEN slug END) AS active
+           FROM documents
+           WHERE slug IN (${slugs}) AND type_id = 'plugin'
+           AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL`,
+        )
+        .first<{ installed: number; active: number }>()
+      const installed = res?.installed ?? 0
+      const active = res?.active ?? 0
+      // Needs bootstrap if any plugin missing OR any installed plugin is inactive
+      return installed < corePlugins.length || active < installed
     } catch (error) {
-      // If there's an error (like table doesn't exist), we need bootstrap
-      console.error(
-        "[PluginBootstrap] Error checking bootstrap status:",
-        error
-      );
-      return true;
+      console.error("[PluginBootstrap] Error checking bootstrap status:", error)
+      return true
     }
   }
 

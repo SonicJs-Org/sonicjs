@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Lexical Rich Text Editor Plugin', () => {
+test.describe('Lexical Rich Text Editor Plugin @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

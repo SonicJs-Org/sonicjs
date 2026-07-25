@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Author user-search field', () => {
+test.describe('Author user-search field @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
 
-test.describe('Hero CTA Style Persistence', () => {
+test.describe('Hero CTA Style Persistence @content', () => {
   test('should keep CTA styles after unrelated second save', async ({ page }) => {
     test.setTimeout(60000)
     let contentId: string | null = null

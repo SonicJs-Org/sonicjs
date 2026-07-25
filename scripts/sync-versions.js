@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename)
 const rootDir = path.join(__dirname, '..')
 const rootPackageJsonPath = path.join(rootDir, 'package.json')
 const corePackageJsonPath = path.join(rootDir, 'packages/core/package.json')
+const sdkPackageJsonPath = path.join(rootDir, 'packages/sdk/package.json')
 const createAppCliPath = path.join(rootDir, 'packages/create-app/src/cli.js')
 const createAppPackageJsonPath = path.join(rootDir, 'packages/create-app/package.json')
 const wwwVersionPath = path.join(rootDir, 'www/src/lib/version.ts')
@@ -44,6 +45,15 @@ async function syncVersions() {
       console.log(`✓ Updated create-app CLI to use @sonicjs-cms/core@^${coreVersion}`)
     } else {
       console.warn('⚠ Could not find version string in CLI file to update')
+    }
+
+    // Sync SDK version to match core version
+    if (fs.existsSync(sdkPackageJsonPath)) {
+      const sdkPackageJson = JSON.parse(fs.readFileSync(sdkPackageJsonPath, 'utf8'))
+      const oldSdkVersion = sdkPackageJson.version
+      sdkPackageJson.version = coreVersion
+      fs.writeFileSync(sdkPackageJsonPath, JSON.stringify(sdkPackageJson, null, 2) + '\n', 'utf8')
+      console.log(`✓ Synced @sonicjs-cms/sdk from ${oldSdkVersion} to ${coreVersion}`)
     }
 
     // Sync create-sonicjs version to match core version

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
-import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
+import { loginAsAdmin, ensureAdminUserExists, isFeatureAvailable, IS_REMOTE_DEPLOYMENT } from './utils/test-helpers'
 
 // Invitation flow (G3): invite an email to a tenant with a per-tenant role, accept via the link
 // (gated on the signed-in user's email matching the invite), and revoke pending invites. The admin
@@ -28,8 +28,15 @@ async function setPluginState(page: Page, action: 'activate' | 'deactivate') {
   await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/${action}`).catch(() => {})
 }
 
-test.describe.serial('Tenant invitations', () => {
+test.describe.serial('Tenant invitations @auth', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = !IS_REMOTE_DEPLOYMENT && await isFeatureAvailable(request, '/admin/tenants')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeAll(() => {
+    if (!featureAvailable) return
     // A tenant the admin is NOT a member of (seeded directly, so no auto-enroll).
     d1Exec(
       `INSERT INTO auth_tenant (id, name, slug, status, notes, metadata, created_at, updated_at)
@@ -38,6 +45,7 @@ test.describe.serial('Tenant invitations', () => {
   })
 
   test.afterAll(() => {
+    if (!featureAvailable) return
     d1Exec(`DELETE FROM auth_tenant_member WHERE tenant_id = '${TENANT}'`)
     d1Exec(`DELETE FROM auth_tenant_invitation WHERE tenant_id = '${TENANT}'`)
     d1Exec(`DELETE FROM auth_tenant WHERE slug = '${TENANT}'`)

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers';
 
-test.describe('Block Media Persistence', () => {
+test.describe('Block Media Persistence @content @media', () => {
   let uploadedFileId: string | undefined;
 
   test.beforeEach(async ({ page, context }) => {

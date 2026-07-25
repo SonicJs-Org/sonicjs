@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe('Home Link and Admin Redirect', () => {
+test.describe('Home Link and Admin Redirect @smoke', () => {
   test('/admin redirects to /admin/dashboard', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin');

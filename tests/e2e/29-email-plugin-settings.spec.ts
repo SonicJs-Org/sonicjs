@@ -3,7 +3,7 @@ import { loginAsAdmin } from './utils/test-helpers'
 
 // TODO: These tests pass locally but fail in CI due to D1 migration timing issues
 // Skipping until the CI D1 propagation issue is resolved
-test.describe.skip('Email Plugin Settings', () => {
+test.describe.skip('Email Plugin Settings @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

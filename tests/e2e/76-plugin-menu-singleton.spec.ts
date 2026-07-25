@@ -6,7 +6,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 // Verifies that declarative menu entries (definePlugin `menu: [...]`) collected by
 // setPluginMenu() appear inside the plugins submenu in the catalyst admin sidebar.
 // Also verifies the /configure link is accessible for plugins that have configSchema.
-test.describe('Plugin menu singleton', () => {
+test.describe('Plugin menu singleton @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

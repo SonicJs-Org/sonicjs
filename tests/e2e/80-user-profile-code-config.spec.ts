@@ -10,7 +10,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 //
 // The default app entry (my-sonicjs-app/src/index.ts) does NOT call
 // defineUserProfile(), so these tests assert the "unconfigured" state.
-test.describe('User Profiles — code-defined config', () => {
+test.describe('User Profiles — code-defined config @auth', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

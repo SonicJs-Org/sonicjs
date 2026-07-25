@@ -19,8 +19,9 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 
 async function newSession(playwright: any) {
   const ctx = await playwright.request.newContext({ baseURL: BASE_URL })
-  const res = await ctx.post('/auth/login', {
+  const res = await ctx.post('/auth/sign-in/email', {
     data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+    headers: { 'Content-Type': 'application/json', 'Origin': BASE_URL },
   })
   expect(res.ok()).toBe(true)
   return ctx
@@ -32,7 +33,7 @@ function me(ctx: any) {
   return ctx.get('/auth/me', { headers: { Accept: 'application/json' } })
 }
 
-test.describe('Session lifecycle', () => {
+test.describe('Session lifecycle @smoke @auth', () => {
   test.beforeAll(async ({ request }) => {
     await request.post('/auth/seed-admin').catch(() => {})
   })

@@ -11,7 +11,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 // We inject a stale key 'oldField' via the JSON settings endpoint, then verify
 // it does NOT appear in the legacy settings UI and is pruned when saving via /configure.
 
-test.describe('Plugin stale settings pruning (issue #972)', () => {
+test.describe('Plugin stale settings pruning (issue #972) @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

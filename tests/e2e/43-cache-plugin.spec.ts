@@ -6,9 +6,15 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, waitForHTMX } from './utils/test-helpers';
+import { loginAsAdmin, waitForHTMX, isFeatureAvailable } from './utils/test-helpers';
 
-test.describe('Cache Plugin Dashboard', () => {
+test.describe('Cache Plugin Dashboard @plugins', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/cache')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

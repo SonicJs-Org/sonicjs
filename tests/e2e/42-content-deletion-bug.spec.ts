@@ -10,7 +10,7 @@ import { loginAsAdmin, waitForHTMX } from './utils/test-helpers';
  * This error occurs because HTMX re-executes script tags when swapping content,
  * and the `let currentBulkAction` variable gets redeclared in the same scope.
  */
-test.describe('Content Deletion UI Bug (Issue #522)', () => {
+test.describe('Content Deletion UI Bug (Issue #522) @content', () => {
   // Track JavaScript errors during tests
   let jsErrors: string[] = [];
 

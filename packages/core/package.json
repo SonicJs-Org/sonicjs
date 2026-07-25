@@ -127,7 +127,7 @@
     "@vitest/coverage-v8": "^4.1.9",
     "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",
-    "eslint": "^9.39.2",
+    "eslint": "^10.8.0",
     "glob": "^10.5.0",
     "hono": "^4.12.26",
     "tsup": "^8.5.0",

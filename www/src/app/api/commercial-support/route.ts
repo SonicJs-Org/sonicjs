@@ -6,11 +6,11 @@ interface EmailBinding {
   send(message: {
     to: string
     from: { email: string; name?: string }
-    replyTo?: { email: string; name?: string }
+    replyTo?: string
     subject: string
     text: string
     html?: string
-  }): Promise<unknown>
+  }): Promise<{ messageId?: string }>
 }
 
 interface Env {
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     await env.EMAIL.send({
       to,
       from: { email: from, name: 'SonicJS Support Form' },
-      replyTo: { email, name },
+      replyTo: email, // reply goes straight to the submitter
       subject: `Commercial support request — ${company} (${tier || 'unspecified'})`,
       text,
     })

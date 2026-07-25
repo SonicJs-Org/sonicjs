@@ -12,8 +12,9 @@
     "binding": "ASSETS"
   },
   // Cloudflare Email Service — sends the commercial-support intake form to an
-  // internal inbox. Onboard the domain first: `wrangler email sending enable sonicjs.com`.
-  "send_email": [{ "name": "EMAIL" }],
+  // internal inbox. Domain sonicjs.com is already onboarded (Email Sending → Enabled).
+  // `remote: true` proxies local dev/preview sends to the real service so you can test.
+  "send_email": [{ "name": "EMAIL", "remote": true }],
   "vars": {
     // Recipient + sender live here (not in the page) so the address is never published.
     // Override per-environment; SUPPORT_FROM must be on the onboarded domain.

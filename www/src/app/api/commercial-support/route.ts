@@ -56,6 +56,15 @@ function isEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 }
 
+function escapeHtml(v: string): string {
+  return v
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export async function POST(request: Request) {
   let payload: Record<string, unknown>
   try {
@@ -132,6 +141,32 @@ export async function POST(request: Request) {
       { error: 'We could not submit your request. Please try again shortly.' },
       { status: 502 },
     )
+  }
+
+  // Confirmation to the submitter — best-effort; never fails the request.
+  try {
+    await env.EMAIL.send({
+      to: email,
+      from: { email: from, name: 'SonicJS Support' },
+      replyTo: to,
+      subject: 'We received your commercial support request',
+      text: [
+        `Hi ${name},`,
+        '',
+        `Thanks for reaching out about commercial support for ${company}.`,
+        `We've received your request${tier ? ` (${tier})` : ''} and a member of the team will reply within 1 business day.`,
+        '',
+        '— The SonicJS Team',
+      ].join('\n'),
+      html: [
+        `<p>Hi ${escapeHtml(name)},</p>`,
+        `<p>Thanks for reaching out about commercial support for <strong>${escapeHtml(company)}</strong>.</p>`,
+        `<p>We've received your request${tier ? ` (<strong>${escapeHtml(tier)}</strong>)` : ''} and a member of the team will reply within <strong>1 business day</strong>.</p>`,
+        `<p>— The SonicJS Team</p>`,
+      ].join(''),
+    })
+  } catch (err) {
+    console.error('Failed to send confirmation email', err)
   }
 
   return NextResponse.json({ ok: true })

@@ -33,6 +33,15 @@ function isEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 }
 
+function escapeHtml(v: string): string {
+  return v
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 async function verifyTurnstile(
   token: string,
   secret: string,
@@ -126,6 +135,30 @@ export async function POST(request: Request) {
       { error: 'We could not send your message. Please try again shortly.' },
       { status: 502 },
     )
+  }
+
+  // Confirmation to the sender — best-effort; never fails the request.
+  try {
+    await env.EMAIL.send({
+      to: email,
+      from: { email: from, name: 'SonicJS' },
+      replyTo: to,
+      subject: 'We received your message',
+      text: [
+        `Hi ${name},`,
+        '',
+        `Thanks for getting in touch with SonicJS. We've received your message and will reply within 1 business day.`,
+        '',
+        '— The SonicJS Team',
+      ].join('\n'),
+      html: [
+        `<p>Hi ${escapeHtml(name)},</p>`,
+        `<p>Thanks for getting in touch with SonicJS. We've received your message and will reply within <strong>1 business day</strong>.</p>`,
+        `<p>— The SonicJS Team</p>`,
+      ].join(''),
+    })
+  } catch (err) {
+    console.error('Failed to send confirmation email', err)
   }
 
   return NextResponse.json({ ok: true })

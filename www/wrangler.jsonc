@@ -10,5 +10,14 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+  // Cloudflare Email Service — sends the commercial-support intake form to an
+  // internal inbox. Onboard the domain first: `wrangler email sending enable sonicjs.com`.
+  "send_email": [{ "name": "EMAIL" }],
+  "vars": {
+    // Recipient + sender live here (not in the page) so the address is never published.
+    // Override per-environment; SUPPORT_FROM must be on the onboarded domain.
+    "SUPPORT_INBOX": "sales@sonicjs.com",
+    "SUPPORT_FROM": "noreply@sonicjs.com"
   }
 }

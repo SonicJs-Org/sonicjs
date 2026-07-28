@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { QueryableField } from '../../schemas/document'
-import { ensureScalarSchema, resetDocumentScalarSchemaCache } from '../../services/document-scalar-schema'
+import { ensureScalarSchema, resetScalarSchemaCache } from '../../services/document-scalar-schema'
 
 // Real-SQLite test harness. Wraps better-sqlite3 in the subset of the D1Database
 // interface the document services use (prepare/bind/run/all/first + batch) and applies
@@ -79,6 +79,10 @@ export interface TestD1 {
 }
 
 export function createTestD1(): TestD1 {
+  // Each call gets a fresh in-memory DB, so the module-level column/index caches
+  // from document-scalar-schema.ts must be reset — otherwise the second test's
+  // applyScalarSchema() sees a stale "already exists" hit and skips the ALTER TABLE.
+  resetScalarSchemaCache()
   const sqlite = new Database(':memory:')
   // better-sqlite3 enables foreign_keys by default; D1 does NOT reliably enforce them, and the
   // services intentionally delete derived rows explicitly instead of relying on cascade. Turn them
@@ -109,7 +113,7 @@ export function createTestD1(): TestD1 {
       // Each in-memory DB is a fresh SQLite instance; reset the module-level column/index
       // caches so the next createTestD1() probes its own schema rather than seeing stale
       // columns from a previous test's DB.
-      resetDocumentScalarSchemaCache()
+      resetScalarSchemaCache()
     },
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@sonicjs-cms/sdk",
-  "version": "3.0.0-beta.24",
+  "version": "3.0.0-beta.26",
   "description": "Isomorphic TypeScript client + codegen CLI for the SonicJS headless CMS API.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -17,7 +17,9 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -29,7 +31,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["cms", "headless-cms", "sonicjs", "sdk", "typescript", "cloudflare"],
+  "keywords": [
+    "cms",
+    "headless-cms",
+    "sonicjs",
+    "sdk",
+    "typescript",
+    "cloudflare"
+  ],
   "author": "SonicJS Team",
   "license": "MIT",
   "repository": {

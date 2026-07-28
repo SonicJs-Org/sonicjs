@@ -23,7 +23,10 @@ export function Layout({
 }) {
   let pathname = usePathname()
 
-  if (pathname === '/') {
+  // Marketing-shell routes (full-width nav + footer, no docs sidebar).
+  const marketingRoutes = ['/', '/support', '/contact']
+
+  if (marketingRoutes.includes(pathname)) {
     return (
       <div className="flex min-h-full flex-col">
         <MarketingNav />

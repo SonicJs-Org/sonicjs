@@ -8,7 +8,8 @@ import {
   invalidatePluginStatusCache,
   requireActivePlugin,
   requireActivePlugins,
-  getActivePlugins
+  getActivePlugins,
+  invalidatePluginStatusCache
 } from './plugin-middleware'
 
 // Mock D1Database

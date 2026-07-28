@@ -747,14 +747,11 @@ authRoutes.post('/seed-admin',
   async (c) => {
   try {
     const db = c.env.DB
-    // Ensure document types (rbac_role, rbac_verb, rbac_user_roles, …) exist as FK
-    // targets in document_types before seeding RBAC documents. D1 enforces the FK
-    // constraint on documents.type_id, and both tables are empty on a fresh CI D1
-    // when the KV bootstrap fast-path skips the normal bootstrap sequence.
+    // Ensure document_types FK targets exist before RBAC seed — D1 enforces the FK
+    // and bootstrap's Promise.all can race. Also covers KV fast-path deployments that
+    // skip ensureSystemRbacSeed entirely.
     await bootstrapDocumentTypes(db)
     const rbac = new RbacService(db)
-    // Ensure RBAC system roles exist even when bootstrap was skipped via the KV
-    // fast-path (shared KV namespace across PR deployments).
     await rbac.ensureSystemRbacSeed()
     const results: Array<{ email: string; status: string }> = []
 

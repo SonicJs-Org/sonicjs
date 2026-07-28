@@ -7,7 +7,8 @@ import {
   isPluginActive,
   requireActivePlugin,
   requireActivePlugins,
-  getActivePlugins
+  getActivePlugins,
+  invalidatePluginStatusCache,
 } from './plugin-middleware'
 
 // Mock D1Database
@@ -40,6 +41,7 @@ describe('isPluginActive', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
   })
@@ -109,6 +111,7 @@ describe('requireActivePlugin', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
   })
@@ -150,6 +153,7 @@ describe('requireActivePlugins', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
   })
@@ -212,6 +216,7 @@ describe('getActivePlugins', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
   })

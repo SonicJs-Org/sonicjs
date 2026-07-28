@@ -816,7 +816,7 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
         }
 
         recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
-        scheduleKvWrite(cacheKey, c.executionCtx)
+        scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
         return c.json(dataWithMeta)
       }
 
@@ -826,12 +826,12 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
         c.header('X-Cache-Status', 'STALE')
         c.header('X-Cache-Source', 'swr')
         recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
-        scheduleKvWrite(cacheKey, c.executionCtx)
+        scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
         return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
       }
 
       recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
-      scheduleKvWrite(cacheKey, c.executionCtx)
+      scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
     }
 
     // Cache miss - fetch from database
@@ -996,7 +996,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
         }
 
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
-        scheduleKvWrite(cacheKey, c.executionCtx)
+        scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
         return c.json(dataWithMeta)
       }
 
@@ -1006,12 +1006,12 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
         c.header('X-Cache-Status', 'STALE')
         c.header('X-Cache-Source', 'swr')
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
-        scheduleKvWrite(cacheKey, c.executionCtx)
+        scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
         return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
       }
 
       recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
-      scheduleKvWrite(cacheKey, c.executionCtx)
+      scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
     }
 
     // Cache miss - fetch from database
@@ -1147,7 +1147,7 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
         c.header('X-Cache-Source', cacheResult.source)
         if (cacheResult.ttl) c.header('X-Cache-TTL', Math.floor(cacheResult.ttl).toString())
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
-        scheduleKvWrite(cacheKey, c.executionCtx)
+        scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
         return c.json({ ...cacheResult.data, meta: addTimingMeta(c, { ...cacheResult.data.meta, cache: { hit: true, source: cacheResult.source, ttl: cacheResult.ttl ? Math.floor(cacheResult.ttl) : undefined } }, executionStart) })
       }
 
@@ -1157,12 +1157,12 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
         c.header('X-Cache-Status', 'STALE')
         c.header('X-Cache-Source', 'swr')
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
-        scheduleKvWrite(cacheKey, c.executionCtx)
+        scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
         return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
       }
 
       recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
-      scheduleKvWrite(cacheKey, c.executionCtx)
+      scheduleKvWrite(cacheKey, (() => { try { return c.executionCtx } catch { return null } })())
     }
 
     c.header('X-Cache-Status', 'MISS')

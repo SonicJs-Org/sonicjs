@@ -18,6 +18,12 @@ export interface UserEditData {
   isActive: boolean
   emailVerified: boolean
   twoFactorEnabled: boolean
+  /**
+   * The user owes an enrolment — set by an admin reset. Independent of `twoFactorEnabled`:
+   * `required && !enabled` is what forces the redirect to /admin/two-factor, and
+   * `required && enabled` means enrolled and not allowed to turn it off.
+   */
+  twoFactorRequired: boolean
   createdAt: number
   lastLoginAt?: number
   profile?: UserProfileData
@@ -42,6 +48,91 @@ export interface UserEditPageData {
     email: string
     role: string
   }
+}
+
+/**
+ * Break-glass panel for a user whose authenticator is gone.
+ *
+ * The action is only offered when there is something to clear (`enabled`) or something to
+ * release (`required`). Rendering a destructive control on every user row would be noise, and
+ * on an unenrolled account it does nothing worth a button.
+ *
+ * Presented as a distinct amber panel rather than inside the Danger Zone: this is a recovery
+ * action taken to GIVE someone access, and burying it beside "Delete User" is how an admin
+ * ends up not finding it at 2am — which is the entire scenario it exists for.
+ */
+function renderTwoFactorRecoverySection(u: UserEditData): string {
+  const uid = escapeHtml(u.id)
+  const email = escapeHtml(u.email)
+
+  const state = u.twoFactorEnabled
+    ? u.twoFactorRequired
+      ? { label: 'Enrolled — required', tone: 'blue', detail: 'This user has a second factor and may not turn it off.' }
+      : { label: 'Enrolled', tone: 'blue', detail: 'This user has a working second factor.' }
+    : u.twoFactorRequired
+      ? { label: 'Re-enrolment pending', tone: 'amber', detail: 'This user must set up a second factor before they can use the admin portal.' }
+      : { label: 'Not enrolled', tone: 'zinc', detail: 'This user signs in with a password only.' }
+
+  const badgeTone: Record<string, string> = {
+    blue: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 ring-blue-700/10 dark:ring-blue-500/20',
+    amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-amber-700/10 dark:ring-amber-500/20',
+    zinc: 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 ring-zinc-700/10 dark:ring-zinc-500/20',
+  }
+
+  const action = u.twoFactorEnabled || u.twoFactorRequired ? `
+      <div class="mt-5 border-t border-amber-600/20 dark:border-amber-500/20 pt-5">
+        <p class="text-sm text-amber-800 dark:text-amber-300 mb-3">
+          Resetting removes this user's second factor and any active lockout, letting them sign in
+          with their password alone. It does not change their password. Every reset is recorded in
+          the security audit log.
+        </p>
+
+        <label for="tf-confirm-email" class="block text-sm font-medium text-amber-900 dark:text-amber-200">
+          Type <span class="font-mono font-semibold">${email}</span> to confirm
+        </label>
+        <input
+          type="text"
+          id="tf-confirm-email"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="${email}"
+          class="mt-1.5 block w-full rounded-lg border-0 py-2 px-3 text-sm text-zinc-950 dark:text-white bg-white dark:bg-zinc-900 ring-1 ring-inset ring-amber-600/30 dark:ring-amber-500/30 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:ring-2 focus:ring-inset focus:ring-amber-600"
+        />
+
+        <div class="mt-3 flex gap-2 items-start">
+          <input type="checkbox" id="tf-require-reenrol" checked
+            class="mt-1 h-4 w-4 rounded border-amber-300 dark:border-amber-700 text-amber-600 focus:ring-amber-600" />
+          <label for="tf-require-reenrol" class="text-sm text-amber-800 dark:text-amber-300">
+            Require them to set up two-factor again before using the portal
+            <span class="block text-xs text-amber-700/80 dark:text-amber-400/80">Leave this on unless you intend the account to stay password-only.</span>
+          </label>
+        </div>
+
+        <p id="tf-reset-message" class="mt-3 text-sm hidden"></p>
+
+        <button
+          type="button"
+          onclick="resetTwoFactor('${uid}')"
+          id="tf-reset-button"
+          class="mt-4 w-full inline-flex items-center justify-center rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60 transition-colors"
+        >
+          <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+          </svg>
+          Reset two-factor authentication
+        </button>
+      </div>` : ''
+
+  return `
+          <div class="rounded-xl bg-amber-50 dark:bg-amber-500/10 shadow-sm ring-1 ring-amber-600/20 dark:ring-amber-500/20 p-6">
+            <h3 class="text-base font-semibold text-amber-900 dark:text-amber-300 mb-2">Two-Factor Recovery</h3>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ring-1 ring-inset ${badgeTone[state.tone]}">${state.label}</span>
+            </div>
+            <p class="text-sm text-amber-700 dark:text-amber-400">${state.detail}</p>
+            ${action}
+          </div>
+`
 }
 
 function renderTenantMembershipsSection(
@@ -391,6 +482,8 @@ export function renderUserEditPage(data: UserEditPageData): string {
             </dl>
           </div>
 
+          ${renderTwoFactorRecoverySection(data.userToEdit)}
+
           <!-- Danger Zone -->
           <div class="rounded-xl bg-red-50 dark:bg-red-500/10 shadow-sm ring-1 ring-red-600/20 dark:ring-red-500/20 p-6">
             <h3 class="text-base font-semibold text-red-900 dark:text-red-300 mb-2">Danger Zone</h3>
@@ -433,6 +526,58 @@ export function renderUserEditPage(data: UserEditPageData): string {
     ${renderTenantMembershipsSection(data.userToEdit.id, data.tenantMemberships)}
 
     <script>
+      // Two-factor break-glass. Inline rather than a confirmation dialog because the confirmation
+      // IS the typed email — a second "are you sure?" on top of that trains people to click
+      // through both. The server re-checks the email regardless; this is not the gate.
+      function resetTwoFactor(userId) {
+        const emailInput = document.getElementById('tf-confirm-email');
+        const requireInput = document.getElementById('tf-require-reenrol');
+        const button = document.getElementById('tf-reset-button');
+        const message = document.getElementById('tf-reset-message');
+
+        function show(text, ok) {
+          message.textContent = text;
+          message.className = 'mt-3 text-sm ' + (ok
+            ? 'text-lime-700 dark:text-lime-400'
+            : 'text-red-700 dark:text-red-400');
+        }
+
+        if (!emailInput.value.trim()) {
+          show('Type the user\\'s email address to confirm.', false);
+          return;
+        }
+
+        button.disabled = true;
+        fetch('/admin/two-factor-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            confirmEmail: emailInput.value,
+            requireReenrolment: requireInput.checked
+          })
+        })
+        .then(function (response) { return response.json().then(function (body) { return { response: response, body: body }; }); })
+        .then(function (result) {
+          if (!result.response.ok) {
+            show(result.body.error || 'Reset failed.', false);
+            button.disabled = false;
+            return;
+          }
+          show(result.body.requireReenrolment
+            ? 'Two-factor reset. They must set it up again before using the portal.'
+            : 'Two-factor reset. This account is now password-only.', true);
+          // Reload so the state badge and the rest of the page reflect the change rather than
+          // showing a stale "Enrolled".
+          setTimeout(function () { window.location.href = '/admin/users/' + userId + '/edit?_t=' + Date.now(); }, 900);
+        })
+        .catch(function (error) {
+          console.error('Error:', error);
+          show('Reset failed — see the console for details.', false);
+          button.disabled = false;
+        });
+      }
+
       let userIdToDelete = null;
 
       function deleteUser(userId) {

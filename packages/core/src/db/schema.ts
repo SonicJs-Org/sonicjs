@@ -26,8 +26,16 @@ export const authUser = sqliteTable('auth_user', {
   // Account lockout: reset on success; set on threshold failures
   failedLoginCount: integer('failed_login_count').notNull().default(0),
   lockedUntil: integer('locked_until'),
-  // 2FA enrollment flag (twoFactor BA plugin)
-  twoFactorEnabled: integer('two_factor_enabled').notNull().default(0),
+  // 2FA enrollment flag, contributed to the USER model by BA's twoFactor plugin.
+  // `mode: 'boolean'` is required, not stylistic: the drizzle adapter leaves BA's
+  // `supportsBooleans` at its `true` default, so BA writes a JS `true`/`false` here and
+  // drizzle must be the thing that converts it to 1/0. Matches emailVerified/isSuperAdmin.
+  twoFactorEnabled: integer('two_factor_enabled', { mode: 'boolean' }).notNull().default(false),
+  // Set by an admin reset (migration 0004). Independent of twoFactorEnabled: `required && !enabled`
+  // is the state a reset leaves behind, and it forces the user to /admin/two-factor until they
+  // enrol again. Plain integer rather than `mode: 'boolean'` — Better Auth never writes this
+  // column, so nothing needs the boolean round-trip and the SQL reads/writes 0/1 directly.
+  twoFactorRequired: integer('two_factor_required').notNull().default(0),
   // timestamp_ms so Better Auth's Date values round-trip; matches SonicJS's
   // existing Date.now() (ms) convention for these columns.
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
@@ -79,6 +87,52 @@ export const authVerification = sqliteTable('auth_verification', {
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
+ * Better Auth `twoFactor` plugin storage — TOTP secret, single-use backup codes, and the
+ * per-account second-factor lockout counters.
+ *
+ * Property keys are deliberately the BA field names (`userId`, `backupCodes`,
+ * `failedVerificationCount`, `lockedUntil`). The drizzle adapter maps a BA field to a
+ * drizzle **property key**, not to a column name, so matching them here means the plugin
+ * needs no `schema.twoFactor.fields` map at all — and adding one would double-map.
+ *
+ * Registered in the BA d1 schema map under the key `auth_two_factor`, which must equal the
+ * `twoFactorTable` modelName (see auth/config.ts).
+ */
+export const authTwoFactor = sqliteTable('auth_two_factor', {
+  id: text('id').primaryKey(),
+  // Encrypted with the Better Auth secret; BA never returns it from an endpoint.
+  secret: text('secret').notNull(),
+  backupCodes: text('backup_codes').notNull(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUser.id, { onDelete: 'cascade' }),
+  // BA defaults this true. It is false only between POST /two-factor/enable and the first
+  // successful /two-factor/verify-totp — the window where enrolment has started but has not
+  // been proven against a live code.
+  verified: integer('verified', { mode: 'boolean' }).notNull().default(true),
+  // See migration 0003: NOT NULL DEFAULT 0 keeps BA's `count = count + 1` bump from
+  // evaluating to NULL, which would make the lockout silently unreachable.
+  failedVerificationCount: integer('failed_verification_count').notNull().default(0),
+  // timestamp_ms, matching auth_session.expires_at. BA hands the drizzle adapter a real
+  // `Date` (supportsDates defaults to true), so the mode is what round-trips it.
+  lockedUntil: integer('locked_until', { mode: 'timestamp_ms' }),
+  // `$defaultFn` is load-bearing, not tidiness. Better Auth adds createdAt/updatedAt to its four
+  // CORE models only — `getAuthTables()` spreads PLUGIN tables verbatim
+  // (@better-auth/core/dist/db/get-tables.mjs) — and the twoFactor schema declares neither. So
+  // `POST /two-factor/enable` creates a row with no timestamps, drizzle emits explicit NULLs for
+  // absent notNull columns, and the INSERT dies on `NOT NULL constraint failed:
+  // auth_two_factor.created_at`. Enrolment would 500 for every user, and the page would report
+  // it as a wrong password. Defaulting here (rather than in SQL) also repairs already-migrated
+  // databases, because an ALTER cannot retro-add a default.
+  // Covered by __tests__/services/two-factor-adapter-create.test.ts.
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
 });
 
 // BA internal resolution aliases

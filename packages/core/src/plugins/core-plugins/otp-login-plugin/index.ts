@@ -15,6 +15,7 @@ import { renderOTPEmail } from './email-templates'
 import { AuthManager } from '../../../middleware'
 import { getEmailService, hasEmailService } from '../../../services/email/email-service-singleton'
 import { getJwtExpirySecondsFromDb } from '../../../middleware/auth'
+import { hasVerifiedSecondFactor } from '../../../auth/second-factor-guard'
 import { SettingsService } from '../../../services/settings'
 import { getCustomData } from '../user-profiles'
 import { dispatchHookEvent } from '../../hooks/dispatch-event'
@@ -282,6 +283,20 @@ function buildOtpApi(): Hono {
       if (!user.is_active) {
         return c.json({
           error: 'Account is deactivated'
+        }, 403)
+      }
+
+      // Second-factor gate. This route mints a session WITHOUT Better Auth, so BA's second-factor
+      // challenge never runs here — which would leave an emailed code as a complete bypass of a
+      // second factor the user deliberately enrolled in, while /admin/profile still read
+      // "Enabled". It also sits ahead of the /auth/* catch-all in app.ts, so
+      // guardPasswordlessSecondFactor never sees it; the check has to be here.
+      //
+      // Deliberately placed AFTER the code has been consumed, so a refused attempt also spends
+      // the code — otherwise this becomes an oracle for probing which accounts have 2FA.
+      if (await hasVerifiedSecondFactor(db, user.id)) {
+        return c.json({
+          error: 'This account uses two-factor authentication. Sign in with your password, then enter your authenticator code.'
         }, 403)
       }
 

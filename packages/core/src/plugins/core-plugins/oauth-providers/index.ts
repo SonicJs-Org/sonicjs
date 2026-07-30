@@ -23,6 +23,7 @@ import {
 } from './oauth-service'
 import { AuthManager } from '../../../middleware'
 import { getJwtExpirySecondsFromDb } from '../../../middleware/auth'
+import { hasVerifiedSecondFactor } from '../../../auth/second-factor-guard'
 
 const STATE_COOKIE_NAME = 'oauth_state'
 const STATE_COOKIE_MAX_AGE = 600 // 10 minutes
@@ -218,6 +219,23 @@ function buildOauthApi(): Hono {
       if (existingUser) {
         if (!existingUser.is_active) {
           return c.redirect('/auth/login?error=Account is deactivated')
+        }
+
+        // Second-factor gate. This branch auto-links a provider identity to a pre-existing LOCAL
+        // account matched only by email address, then mints a session without Better Auth — so
+        // BA's second-factor challenge never runs, and an attacker who controls any provider
+        // account bearing the victim's email address would bypass a second factor the victim
+        // deliberately enrolled in. Unlike a provider the user linked themselves (handled above,
+        // where the provider is trusted to have done its own MFA), nothing here was ever
+        // confirmed by the account owner.
+        //
+        // This route is mounted ahead of the /auth/* catch-all in app.ts, so
+        // guardPasswordlessSecondFactor never sees it; the check has to be here.
+        if (await hasVerifiedSecondFactor((c.env as any).DB, existingUser.id)) {
+          return c.redirect(
+            '/auth/login?error=' +
+            encodeURIComponent('This account uses two-factor authentication. Sign in with your password, then enter your authenticator code.')
+          )
         }
 
         // Link OAuth to existing account

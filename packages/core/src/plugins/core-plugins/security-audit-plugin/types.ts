@@ -8,6 +8,11 @@ export type SecurityEventType =
   | 'suspicious_activity'
   | 'logout'
   | 'permission_denied'
+  // An admin cleared another account's second factor (two-factor-auth plugin's break-glass path).
+  // Its own type rather than 'suspicious_activity' because it is a legitimate, expected action
+  // that nonetheless removes a security control from an account other than the actor's own —
+  // exactly the shape that needs to be findable after the fact.
+  | 'two_factor_reset'
 
 export type SecuritySeverity = 'info' | 'warning' | 'critical'
 

@@ -52,9 +52,11 @@ import { APIError } from 'better-auth/api'
 import { magicLink } from 'better-auth/plugins/magic-link'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import { organization } from 'better-auth/plugins/organization'
+import { twoFactor } from 'better-auth/plugins/two-factor'
 import { drizzle } from 'drizzle-orm/d1'
-import { authUser, authSession, authAccount, authVerification, authTenant, authTenantMember, authTenantInvitation, authTenantTeam } from '../db/schema'
+import { authUser, authSession, authAccount, authVerification, authTwoFactor, authTenant, authTenantMember, authTenantInvitation, authTenantTeam } from '../db/schema'
 import { isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
+import { getTwoFactorPolicy } from './two-factor-settings'
 import type { Bindings } from '../app'
 
 /**
@@ -99,7 +101,7 @@ export function getDefaultAuthOptions(env: Bindings, requestBaseURL?: string) {
           db,
           options: {
             // Keys MUST match modelName values — BA resolves by modelName, not by JS variable name.
-            schema: { auth_user: authUser, auth_session: authSession, auth_account: authAccount, auth_verification: authVerification, auth_tenant: authTenant, auth_tenant_member: authTenantMember, auth_tenant_invitation: authTenantInvitation, auth_tenant_team: authTenantTeam },
+            schema: { auth_user: authUser, auth_session: authSession, auth_account: authAccount, auth_verification: authVerification, auth_two_factor: authTwoFactor, auth_tenant: authTenant, auth_tenant_member: authTenantMember, auth_tenant_invitation: authTenantInvitation, auth_tenant_team: authTenantTeam },
           },
         },
         kv: env.CACHE_KV, // session secondary storage → getSession skips D1
@@ -238,6 +240,72 @@ export function getDefaultAuthOptions(env: Bindings, requestBaseURL?: string) {
         },
         otpLength: 6,
         expiresIn: 10 * 60,
+      }),
+
+      // Second factor — TOTP + single-use backup codes + per-ACCOUNT lockout.
+      //
+      // Composed UNCONDITIONALLY, and that is the security decision, not laziness. If this
+      // were gated on the plugin row being active, deactivating the plugin would silently
+      // downgrade every enrolled account to password-only: sign-in would stop asking for a
+      // code, nothing would error, and /admin/profile would still read "Enabled". Plugin
+      // status therefore gates the enrolment SURFACE only (routes 404, sidebar hides) — never
+      // verification. A gate that needs an `EXISTS` probe would also put a D1 round-trip on
+      // `createAuth`, which is synchronous and runs on every authenticated request.
+      //
+      // NOTE no `schema.*.fields` maps. The drizzle adapter resolves a BA field to a drizzle
+      // PROPERTY KEY, and `authTwoFactor`/`authUser` already declare `userId`, `backupCodes`,
+      // `failedVerificationCount`, `lockedUntil`, `twoFactorEnabled` — the snake_case column
+      // names live on the drizzle columns. Adding maps here would double-map and break both
+      // reads and writes. (The sibling Infowall port needs them because it is on the kysely
+      // adapter, which takes raw column names.)
+      twoFactor({
+        // Read synchronously — BA snapshots these onto its plugin options at construction
+        // time and `verify-two-factor.mjs` pulls the lockout config back off that object, so
+        // a lazily-resolved value would never be seen. Loaded once per isolate from the
+        // plugin's onBoot; defaults (the strict end of every knob) apply until then.
+        ...(() => {
+          const policy = getTwoFactorPolicy()
+          return {
+            issuer: policy.issuer,
+            // Per-ACCOUNT, so rotating IPs does not help. This is the control that matters
+            // once an attacker already holds a valid password: a TOTP code is only a million
+            // possibilities, and per-IP rate limiting does not bound a distributed guesser.
+            accountLockout: {
+              enabled: true,
+              maxFailedAttempts: policy.maxFailedAttempts,
+              durationSeconds: policy.lockoutDurationSeconds,
+            },
+            backupCodeOptions: { amount: policy.backupCodeCount },
+          }
+        })(),
+        twoFactorTable: 'auth_two_factor',
+        // Trusted-device remember-me is switched OFF, and it takes an explicit `0` to do it.
+        //
+        // Leaving the option unset does NOT disable the feature: BA reads
+        // `options?.trustDeviceMaxAge ?? 2592e3` (two-factor/index.mjs, and again in
+        // verify-two-factor.mjs), i.e. it defaults to THIRTY DAYS, and `verifyTOTPBodySchema`
+        // accepts `trustDevice` from the request body. So any client — not just the page shipped
+        // here, which never sends it — could post
+        // `{code:'<one valid code>', trustDevice:true}` once and then sign in with the password
+        // alone for a month, refreshed on every sign-in. One phished code or one stolen backup
+        // code would convert into a month-long password-only bypass, invisible in normal use.
+        //
+        // `0` is not nullish, so it wins the `??`: the cookie is written with `Max-Age=0` and the
+        // trust record's `expiresAt` is `Date.now() + 0`, which can never satisfy the sign-in
+        // hook's `expiresAt > new Date()` check. A trusted-device cookie is a second bypass
+        // surface to reason about and this release does not take it on.
+        //
+        // Break-it proof: __tests__/services/two-factor-roundtrip.test.ts goes red without this
+        // line — the second password sign-in returns a session instead of a challenge.
+        trustDeviceMaxAge: 0,
+        // BA's own /two-factor/* rate limit (3 per 10s) is left alone: a `rateLimit.customRules`
+        // entry REPLACES a plugin's rule rather than stacking with it. Note that rule is NOT
+        // currently active — `rateLimit.enabled` defaults to BA's `isProduction`, which reads
+        // `process.env.NODE_ENV`, and nothing in this repo sets it (wrangler.toml sets only
+        // ENVIRONMENT). What actually bounds TOTP guessing today is the per-account lockout
+        // configured above (D1-backed, atomic via `incrementOne`) plus BA's in-code
+        // `beginAttempt(5)` per challenge. Turning BA rate limiting on globally is a separate,
+        // repo-wide decision — it would apply to every /auth/* endpoint.
       }),
 
       organization({

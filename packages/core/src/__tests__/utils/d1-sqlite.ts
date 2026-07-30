@@ -15,7 +15,12 @@ import { ensureScalarSchema, resetScalarSchemaCache } from '../../services/docum
 // services delete derived rows explicitly rather than relying on cascade.
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../../migrations')
-const DOC_MIGRATIONS = ['0001_core.sql', '0002_documents.sql']
+const DOC_MIGRATIONS = [
+  '0001_core.sql',
+  '0002_documents.sql',
+  '0006_two_factor_lockout.sql',
+  '0007_two_factor_required.sql',
+]
 
 // better-sqlite3 only accepts numbers/strings/bigints/buffers/null. Coerce the values the
 // services bind (undefined, booleans) the same way D1's binder tolerates them.
@@ -55,6 +60,31 @@ class TestStatement {
       | undefined
     if (row == null) return null
     return (colName ? (row[colName] as T) : (row as unknown as T))
+  }
+
+  /**
+   * D1's `Statement.raw()` — rows as positional arrays rather than objects.
+   *
+   * Required to drive Better Auth in these tests, not a completeness nicety. `getDefaultAuthOptions`
+   * builds `drizzle(env.DB)` from `drizzle-orm/d1`, and that driver reaches for `.raw()` on any
+   * statement with a RETURNING clause (`d1/session.cjs` → `this.stmt.bind(...).raw()`), which is
+   * every write BA performs through the adapter. Without it, driving BA against this harness fails
+   * with `this.stmt.bind(...).raw is not a function` — the reason an earlier version of this suite
+   * could only assert on GENERATED SQL and never on what BA actually wrote.
+   */
+  async raw<T = unknown[]>(options?: { columnNames?: boolean }): Promise<T[]> {
+    // better-sqlite3's .raw() flips the statement into array mode and returns the statement.
+    const stmt = this.sqlite.prepare(this.sql).raw()
+    const rows = stmt.all(...(this.binds as never[])) as unknown[][]
+    if (options?.columnNames) {
+      // `.columns()` throws on statements that return no data; D1 would give [] there too.
+      try {
+        return [stmt.columns().map((c) => c.name), ...rows] as T[]
+      } catch {
+        return rows as T[]
+      }
+    }
+    return rows as T[]
   }
 
   // Used by batch() to execute a write statement inside the shared transaction.

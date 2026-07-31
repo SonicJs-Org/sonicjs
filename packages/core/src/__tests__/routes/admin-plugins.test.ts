@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import { adminPluginRoutes } from '../../routes/admin-plugins'
+import { setPluginDefinitions, resetPluginDefinitions } from '../../services/plugin-definition-registry'
 
 // Helper to create mock user with specific role
 const createMockUser = (role: string = 'admin') => ({
@@ -62,6 +63,19 @@ const createDefaultPlugins = () => [
     rating: 5.0
   }
 ]
+
+// A definePlugin()-style plugin definition, as populated into the
+// plugin-definition-registry by setPluginDefinitions() at app construction.
+const createDefinedPlugin = (overrides: Record<string, any> = {}) => ({
+  id: 'example-plugin',
+  name: 'example-plugin',
+  version: '1.0.0',
+  description: 'A user plugin registered via definePlugin',
+  author: { name: 'Acme', email: 'acme@example.com' },
+  capabilities: [],
+  dependencies: [],
+  ...overrides,
+})
 
 // Mock the requireAuth middleware to bypass authentication in tests
 vi.mock('../../middleware', () => ({
@@ -172,6 +186,7 @@ describe('Admin Plugins Routes', () => {
     vi.clearAllMocks()
     mockEnv = createMockEnv()
     mockUserRole = 'admin'
+    resetPluginDefinitions()
 
     // Reset all mock functions
     mockGetAllPlugins = vi.fn().mockResolvedValue(createDefaultPlugins())
@@ -648,4 +663,82 @@ describe('Admin Plugins Routes', () => {
   // Note: formatLastUpdated is tested implicitly through the plugin list page tests.
   // Direct unit tests for formatLastUpdated would require exporting the function,
   // which is currently a private helper in admin-plugins.ts
+
+  describe('definePlugin-registered plugins (no manifest.json)', () => {
+    it('includes an installed definePlugin plugin that has a DB record', async () => {
+      setPluginDefinitions([createDefinedPlugin()])
+
+      mockGetAllPlugins = vi.fn().mockResolvedValue([
+        ...createDefaultPlugins(),
+        {
+          id: 'example-plugin',
+          name: 'example-plugin',
+          display_name: 'Example Plugin',
+          description: 'A user plugin registered via definePlugin',
+          version: '1.0.0',
+          author: 'Acme',
+          category: 'utilities',
+          icon: '🚀',
+          status: 'active',
+          is_core: false,
+          permissions: [],
+          dependencies: [],
+          installed_at: Date.now(),
+          last_updated: Math.floor(Date.now() / 1000),
+          download_count: 0,
+          rating: 0
+        }
+      ])
+
+      const res = await app.request('/admin/plugins', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toContain('Example Plugin')
+      expect(html).toContain('data-status="active"')
+    })
+
+    it('shows an uninstalled definePlugin plugin as an available plugin', async () => {
+      setPluginDefinitions([createDefinedPlugin()])
+
+      // mockGetAllPlugins still returns only the default (email/auth) plugins
+      const res = await app.request('/admin/plugins', { method: 'GET' })
+
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toContain('example-plugin')
+      expect(html).toContain('data-status="uninstalled"')
+    })
+
+    it('installs a definePlugin plugin that is not in the manifest registry', async () => {
+      setPluginDefinitions([createDefinedPlugin()])
+
+      const res = await app.request('/admin/plugins/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'example-plugin' })
+      })
+
+      expect(res.status).toBe(200)
+      const json = await res.json()
+      expect(json.success).toBe(true)
+      expect(mockInstallPlugin).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'example-plugin',
+        display_name: 'example-plugin',
+        is_core: false
+      }))
+    })
+
+    it('returns 404 for an unknown plugin even when definitions exist', async () => {
+      setPluginDefinitions([createDefinedPlugin()])
+
+      const res = await app.request('/admin/plugins/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'unknown-plugin' })
+      })
+
+      expect(res.status).toBe(404)
+    })
+  })
 })

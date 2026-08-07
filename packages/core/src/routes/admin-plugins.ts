@@ -22,11 +22,27 @@ const adminPluginRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>
 // Apply authentication middleware
 adminPluginRoutes.use('*', requireAuth())
 
+// Fields that exist on RegisterablePlugin at runtime but aren't in the
+// structural type (they come from definePlugin's options bag, not MountablePlugin).
+type DefinedPluginExtras = {
+  description?: string
+  author?: string | { name?: string }
+  category?: string
+  iconEmoji?: string
+  permissions?: string[]
+}
+
+function resolveAuthor(d: DefinedPluginExtras): string {
+  return typeof d.author === 'object' ? d.author?.name ?? '' : (d.author ?? '')
+}
+
+function getDefinedPlugins(): ReadonlyArray<RegisterablePlugin> {
+  return getAllPluginDefinitions().filter(p => !PLUGIN_REGISTRY[p.id])
+}
+
 // Build the available plugins list from the manifest registry (core plugins)
-// PLUS code-registered definePlugin plugins. The latter is computed per-request
-// because setPluginDefinitions() runs at app construction, after module import.
-// Without it, active user plugins with DB records (via ensurePlugin) were
-// silently filtered out of the admin list because they never enter PLUGIN_REGISTRY.
+// PLUS code-registered definePlugin plugins. Computed per-request because
+// setPluginDefinitions() runs at app construction, after module import.
 function getAvailablePlugins() {
   const registryPlugins = Object.values(PLUGIN_REGISTRY).map(p => ({
     id: p.id,
@@ -42,18 +58,16 @@ function getAvailablePlugins() {
     is_core: p.is_core
   }))
 
-  // definePlugin-registered plugins with no manifest entry (registry wins on overlap).
-  const definedPlugins = getAllPluginDefinitions()
-    .filter(p => !PLUGIN_REGISTRY[p.id])
+  const definedPlugins = getDefinedPlugins()
     .map(p => {
-      const d = p as { description?: string; author?: string | { name?: string }; category?: string; iconEmoji?: string; permissions?: string[] }
+      const d = p as DefinedPluginExtras
       return {
         id: p.id,
         name: p.name ?? p.id,
-        display_name: p.name ?? p.id,
+        display_name: p.displayName ?? p.name ?? p.id,
         description: d.description ?? '',
         version: p.version,
-        author: typeof d.author === 'object' ? d.author?.name ?? '' : (d.author ?? ''),
+        author: resolveAuthor(d),
         category: d.category ?? 'general',
         icon: d.iconEmoji ?? '🔌',
         permissions: d.permissions ?? [],
@@ -69,14 +83,14 @@ function getAvailablePlugins() {
 // used by the install route, so the install handler keeps a single contract.
 function toRegistryEntry(p: RegisterablePlugin | undefined): PluginRegistryEntry | undefined {
   if (!p) return undefined
-  const d = p as { description?: string; author?: string | { name?: string }; category?: string; iconEmoji?: string; permissions?: string[] }
+  const d = p as DefinedPluginExtras
   return {
     id: p.id,
     codeName: p.name ?? p.id,
-    displayName: p.name ?? p.id,
+    displayName: p.displayName ?? p.name ?? p.id,
     description: d.description ?? '',
     version: p.version,
-    author: typeof d.author === 'object' ? d.author?.name ?? '' : (d.author ?? ''),
+    author: resolveAuthor(d),
     category: d.category ?? 'general',
     iconEmoji: d.iconEmoji ?? '🔌',
     is_core: false,
@@ -477,8 +491,7 @@ adminPluginRoutes.post('/install', async (c) => {
       || PLUGIN_REGISTRY[body.name]
       || PLUGIN_REGISTRY[body.id]
       || toRegistryEntry(
-          getAllPluginDefinitions()
-            .filter(p => !PLUGIN_REGISTRY[p.id])
+          getDefinedPlugins()
             .find(p => p.id === body.name || p.id === body.id)
         )
 

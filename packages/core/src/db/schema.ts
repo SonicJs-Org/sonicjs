@@ -51,6 +51,7 @@ export const authSession = sqliteTable('auth_session', {
   userAgent: text('user_agent'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  activeOrganizationId: text('active_organization_id'),
 });
 
 export const authAccount = sqliteTable('auth_account', {

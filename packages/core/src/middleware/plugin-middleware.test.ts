@@ -8,7 +8,7 @@ import {
   requireActivePlugin,
   requireActivePlugins,
   getActivePlugins,
-  invalidatePluginStatusCache,
+  invalidatePluginStatusCache
 } from './plugin-middleware'
 
 // Mock D1Database
@@ -44,6 +44,7 @@ describe('isPluginActive', () => {
     invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should return true when plugin status is active', async () => {
@@ -114,6 +115,7 @@ describe('requireActivePlugin', () => {
     invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should not throw when plugin is active', async () => {
@@ -156,6 +158,7 @@ describe('requireActivePlugins', () => {
     invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should not throw when all plugins are active', async () => {

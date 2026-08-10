@@ -386,12 +386,34 @@ SonicJS is 100% open source and free forever. If you find it useful, consider sp
 ### Thank You to Our Sponsors
 
 <a href="https://github.com/mmcintosh"><img src="https://github.com/mmcintosh.png" width="60" alt="@mmcintosh" /></a>
+<a href="https://github.com/nickgraynews"><img src="https://github.com/nickgraynews.png" width="60" alt="@nickgraynews" /></a>
 
 ## 📞 Support
+
+### Community (free)
 
 - [GitHub Issues](https://github.com/lane711/sonicjs/issues)
 - [Community Discussions](https://github.com/lane711/sonicjs/discussions)
 - [Discord](https://discord.gg/8bMy6bv3sZ)
+
+### Commercial Support (for teams that need an SLA)
+
+Every feature stays 100% MIT and free — **commercial support buys a guaranteed response time and a named contact, not features.** If your company requires a support contract before adopting an open-source dependency, this is for you.
+
+| | Community | Priority Support | Enterprise |
+|---|---|---|---|
+| All features (MIT, forever) | ✅ | ✅ | ✅ |
+| GitHub Issues / Discord | ✅ | ✅ | ✅ |
+| Guaranteed response time | — | Next business day | Same business day |
+| Private support channel | — | Email | Email + Slack |
+| Named support contact | — | — | ✅ |
+| Security-issue priority triage | — | ✅ | ✅ |
+| Upgrade & architecture guidance | — | ✅ | ✅ |
+| License indemnification | — | — | ✅ |
+| Price | Free | $499/mo | From $2,500/mo |
+
+📄 Full terms, SLA, and procurement details: **[docs/commercial-support.md](docs/commercial-support.md)**
+📝 Request support: **[sonicjs.com/commercial-support](https://sonicjs.com/commercial-support)**
 
 ---
 

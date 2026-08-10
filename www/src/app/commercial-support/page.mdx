@@ -1,0 +1,87 @@
+import { SupportContactForm } from '@/components/SupportContactForm'
+
+export const sections = [
+  { title: 'What you get', id: 'what-you-get' },
+  { title: 'Tiers', id: 'tiers' },
+  { title: 'SLA', id: 'sla' },
+  { title: 'For procurement & security', id: 'procurement' },
+  { title: 'Get started', id: 'get-started' },
+]
+
+# Commercial Support
+
+Every SonicJS feature is, and always will be, **100% MIT open source** — no Growth tier, no Enterprise feature gate. Commercial support does not change that. It gives your team a **paid support contract with a guaranteed response time and a named contact**, so adopting SonicJS clears procurement, security, and vendor-risk review. {{ className: 'lead' }}
+
+If you want to advocate for SonicJS but your company requires "vendor support" before approving a dependency — this is the page you forward to your manager or procurement team.
+
+---
+
+## What you get {{ id: 'what-you-get' }}
+
+**You are buying:**
+
+- A **response-time SLA** you can put in front of procurement.
+- A **private channel** (email / Slack) instead of public issues.
+- A **named human** who knows your deployment.
+- **Priority security triage** and upgrade/architecture guidance.
+- (Enterprise) **license indemnification** for legal/compliance sign-off.
+
+**You are not buying features.** Every capability ships in the open-source core under MIT and always will. Support is additive, never a gate.
+
+---
+
+## Tiers {{ id: 'tiers' }}
+
+| | Community | Priority Support | Enterprise |
+|---|---|---|---|
+| All features (MIT, forever) | ✅ | ✅ | ✅ |
+| GitHub Issues / Discord | ✅ | ✅ | ✅ |
+| Guaranteed response time | — | Next business day | Same business day |
+| Private support channel | — | Email | Email + Slack |
+| Named support contact | — | — | ✅ |
+| Security-issue priority triage | — | ✅ | ✅ |
+| Upgrade & architecture guidance | — | ✅ | ✅ |
+| License indemnification | — | — | ✅ |
+| Price | Free | `$499/mo` | From `$2,500/mo` |
+
+### Community — Free
+All features, GitHub Issues, Community Discussions, Discord. Best-effort community response.
+
+### Priority Support — `$499/mo` (billed annually)
+Everything in Community, plus guaranteed next-business-day response, private email channel, priority security triage, and upgrade/architecture guidance. Best for startups and teams running SonicJS in production that need a support paper trail.
+
+### Enterprise — from `$2,500/mo`
+Everything in Priority, plus same-business-day response (1-business-hour Sev-1 target), email + Slack channel, a named support contact familiar with your deployment, and **license indemnification / IP warranty**. Optional onboarding, migration help, and security-questionnaire support (SOC2 / vendor forms).
+
+---
+
+## Service Level Agreement {{ id: 'sla' }}
+
+| Severity | Definition | Priority target | Enterprise target |
+|---|---|---|---|
+| **Sev-1** | Production down / data loss | 4 business hours | 1 business hour |
+| **Sev-2** | Major feature broken, no workaround | 1 business day | 4 business hours |
+| **Sev-3** | Minor bug, workaround exists | 2 business days | 1 business day |
+| **Sev-4** | Question / guidance | Best effort | 2 business days |
+
+- **Support hours:** 9:00 AM – 6:00 PM ET (UTC−5), Mon–Fri, excluding US public holidays.
+- **Response** = a human engaging with your ticket, not resolution time.
+- SLA applies to the latest minor release and one prior minor.
+
+---
+
+## For procurement & security teams {{ id: 'procurement' }}
+
+- **License:** MIT. No copyleft obligations.
+- **Source availability:** Full source public on GitHub — no vendor lock-in. A support lapse never removes access to the software.
+- **Indemnification:** Available on the Enterprise tier.
+- **Data residency:** SonicJS runs on **your** Cloudflare account — you own the data and infrastructure. The vendor holds no customer data.
+- **Business continuity:** Because the software is MIT and self-hosted on your infrastructure, a lapse in support or vendor availability does not interrupt your running deployment.
+
+---
+
+## Get started {{ id: 'get-started' }}
+
+Tell us about your team and we&rsquo;ll reply within **1 business day**. No account or email address to copy — just fill out the form.
+
+<SupportContactForm />

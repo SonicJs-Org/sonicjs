@@ -34,7 +34,12 @@ function seed(sqlite: any, typeId: string, queryableFields: any[], data: string)
 }
 
 describe('MigrationService D45 — documents generated columns self-heal (data-driven)', () => {
-  beforeEach(() => resetScalarSchemaCache())
+  beforeEach(() => {
+    // Each test creates a fresh in-memory DB, so the module-level scalar-schema cache
+    // must be reset — otherwise the second test sees stale "column exists" hits and
+    // skips the ALTER TABLE on the new DB (same bug as createTestD1 / api-key-service).
+    resetScalarSchemaCache()
+  })
 
   it('adds the q_* generated columns + indexes declared by an active document type', async () => {
     const sqlite = new Database(':memory:')

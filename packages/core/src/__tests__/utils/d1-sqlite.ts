@@ -79,6 +79,9 @@ export interface TestD1 {
 }
 
 export function createTestD1(): TestD1 {
+  // Each call gets a fresh in-memory DB, so the module-level column/index caches
+  // from document-scalar-schema.ts must be reset — otherwise the second test's
+  // applyScalarSchema() sees a stale "already exists" hit and skips the ALTER TABLE.
   resetScalarSchemaCache()
   const sqlite = new Database(':memory:')
   // better-sqlite3 enables foreign_keys by default; D1 does NOT reliably enforce them, and the

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Plugin Filter URL Persistence', () => {
+test.describe('Plugin Filter URL Persistence @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

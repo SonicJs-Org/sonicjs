@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN_CREDENTIALS, loginAsAdmin, logout } from './utils/test-helpers';
+import { ADMIN_CREDENTIALS, loginAsAdmin, logout, TEST_ORIGIN } from './utils/test-helpers';
 
 /**
  * Better Auth integration E2E tests.
@@ -10,7 +10,7 @@ import { ADMIN_CREDENTIALS, loginAsAdmin, logout } from './utils/test-helpers';
  * Numbered 66+ per document-model-poc-plan.md R11.
  */
 
-test.describe('Better Auth — sign in / sign out', () => {
+test.describe('Better Auth — sign in / sign out @smoke @auth', () => {
   test('POST /auth/sign-in/email returns user + token with valid credentials', async ({ request }) => {
     await request.post('/auth/seed-admin');
 
@@ -69,21 +69,17 @@ test.describe('Better Auth — sign in / sign out', () => {
 
   test('POST /auth/sign-out invalidates session', async ({ page }) => {
     await page.request.post('/auth/seed-admin');
+    // Sign in so page.request cookie jar holds the BA session cookie.
     const signIn = await page.request.post('/auth/sign-in/email', {
       data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Origin': TEST_ORIGIN },
     });
-    const signInBody = await signIn.json();
-    // BA returns token in body; use it as Bearer for sign-out (cookie transport may be blocked by SameSite)
-    const token = signInBody.token ?? signInBody.session?.token ?? '';
+    expect(signIn.ok()).toBeTruthy();
 
+    // Sign out using session cookies (page.request shares the same cookie jar).
     const signOutRes = await page.request.post('/auth/sign-out', {
       data: {},
-      headers: {
-        'Content-Type': 'application/json',
-        'Origin': 'http://localhost:8787',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json', 'Origin': TEST_ORIGIN },
     });
     // Sign-out should succeed (2xx)
     expect(signOutRes.status()).toBeLessThan(400);

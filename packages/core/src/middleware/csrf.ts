@@ -117,7 +117,9 @@ export async function validateCsrfToken(token: string, secret: string): Promise<
 
 const DEFAULT_EXEMPT_PATHS = [
   '/auth/login',
+  '/auth/logout',
   '/auth/register',
+  '/auth/refresh',
   '/auth/seed-admin',
   '/test-seed-defaults',
   '/test-cleanup',

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe.skip('Media Upload - Immediate Availability', () => {
+test.describe.skip('Media Upload - Immediate Availability @media', () => {
   test('uploaded photo should appear immediately in media list', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/media');

@@ -21,6 +21,11 @@ type Bindings = {
 // Track if bootstrap has been run in this worker instance
 let bootstrapComplete = false;
 
+// KV key for cross-isolate bootstrap state. Version-keyed so a code deployment
+// (SONICJS_VERSION bump) automatically invalidates the cached flag and forces
+// a fresh full bootstrap on the next cold start.
+const BOOTSTRAP_KV_KEY = () => `_sonicjs_bootstrap_v${SONICJS_VERSION}`
+
 /**
  * Verify security-critical environment configuration at startup.
  * Logs warnings in development, throws in production to prevent
@@ -99,6 +104,33 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       return next();
     }
 
+    // Fast KV check: if a previous isolate already ran the full bootstrap for this
+    // app version, skip the expensive D1 operations entirely. KV reads are ~10ms
+    // vs 5-10s for cold D1. Version-keyed so deployments auto-invalidate the flag.
+    try {
+      const cacheKv = (c.env as any).CACHE_KV as KVNamespace | undefined
+      if (cacheKv) {
+        const kvDone = await cacheKv.get(BOOTSTRAP_KV_KEY())
+        if (kvDone === '1') {
+          // Hydrate in-memory state without touching D1.
+          try {
+            const kv = (c.env as any).CACHE_KV as KVNamespace
+            const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
+            setGlobalKVNamespace(kv)
+            const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
+            setGlobalCatalogKv(kv)
+            c.executionCtx.waitUntil(loadKvCatalog())
+          } catch { /* KV wiring optional */ }
+          try {
+            const configs = await loadCollectionConfigs()
+            getCollectionRegistry().register(configs)
+          } catch { /* registry optional in fast-path */ }
+          bootstrapComplete = true
+          return next()
+        }
+      }
+    } catch { /* KV unavailable — fall through to full bootstrap */ }
+
     // Skip bootstrap for static assets and health checks
     const path = c.req.path;
     if (
@@ -139,6 +171,11 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
             "../plugins/cache/services/cache"
           );
           setGlobalKVNamespace(kv);
+          const { setGlobalCatalogKv, loadKvCatalog } = await import(
+            "../plugins/cache/services/catalog"
+          );
+          setGlobalCatalogKv(kv);
+          c.executionCtx.waitUntil(loadKvCatalog());
         }
       } catch (error) {
         console.error("[Bootstrap] Error wiring CACHE_KV namespace:", error);
@@ -156,55 +193,60 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
         console.error("[Bootstrap] Error populating collection registry:", error);
       }
 
-      // 3. Register document types (idempotent)
-      console.log("[Bootstrap] Registering document types...");
-      try {
-        await bootstrapDocumentTypes(c.env.DB);
-      } catch (error) {
-        console.error("[Bootstrap] Error registering document types:", error);
-      }
+      // 3–4. Independent D1 operations — run in parallel to minimise cold-start latency.
+      // Each step has its own error handling so one failure doesn't block the others.
+      console.log("[Bootstrap] Registering document types and seeding system data...");
+      const { RbacService } = await import("../services/rbac");
+      const rbacService = new RbacService(c.env.DB, (c.env as any).CACHE_KV);
 
-      // 2c. Repair legacy users that have password_hash in auth_user but no
-      // auth_account credential row (registered before Better Auth migration).
-      try {
-        await repairMissingCredentialAccounts(c.env.DB)
-      } catch (error) {
-        console.error('[Bootstrap] Error repairing credential accounts:', error)
-      }
+      await Promise.all([
+        // 3. Register document types (idempotent)
+        bootstrapDocumentTypes(c.env.DB).catch((e) =>
+          console.error("[Bootstrap] Error registering document types:", e)
+        ),
 
-      // 3a. Seed system RBAC roles/verbs/grants as documents (idempotent).
-      try {
-        const { RbacService } = await import("../services/rbac");
-        await new RbacService(c.env.DB, (c.env as any).CACHE_KV).ensureSystemRbacSeed();
-      } catch (error) {
-        console.error("[Bootstrap] Error seeding RBAC documents:", error);
-      }
+        // 3b. Make every content collection document-backed.
+        autoRegisterCollectionDocumentTypes(c.env.DB)
+          .then((auto) => {
+            if (auto.length) console.log(`[Bootstrap] Document-backed collections registered: ${auto.join(", ")}`)
+          })
+          .catch((e) => console.error("[Bootstrap] Error auto-registering collection document types:", e)),
 
-      // 3b. Make every content collection document-backed (so all new content goes to `documents`).
-      try {
-        const auto = await autoRegisterCollectionDocumentTypes(c.env.DB);
-        if (auto.length) console.log(`[Bootstrap] Document-backed collections registered: ${auto.join(", ")}`);
-      } catch (error) {
-        console.error("[Bootstrap] Error auto-registering collection document types:", error);
-      }
+        // 2c. Repair legacy credential accounts.
+        repairMissingCredentialAccounts(c.env.DB).catch((e) =>
+          console.error("[Bootstrap] Error repairing credential accounts:", e)
+        ),
 
-      // 4. Bootstrap core plugins (unless disableAll is set)
-      if (!config.plugins?.disableAll) {
-        console.log("[Bootstrap] Bootstrapping core plugins...");
-        const bootstrapService = new PluginBootstrapService(c.env.DB);
+        // 3a. Seed system RBAC roles/verbs/grants.
+        rbacService.ensureSystemRbacSeed().catch((e) =>
+          console.error("[Bootstrap] Error seeding RBAC documents:", e)
+        ),
 
-        // Check if bootstrap is needed
-        const needsBootstrap = await bootstrapService.isBootstrapNeeded();
-        if (needsBootstrap) {
-          await bootstrapService.bootstrapCorePlugins();
-        }
-      } else {
-        console.log("[Bootstrap] Plugin bootstrap skipped (disableAll is true)");
-      }
+        // 4. Bootstrap core plugins.
+        config.plugins?.disableAll
+          ? Promise.resolve()
+          : (async () => {
+              const bootstrapService = new PluginBootstrapService(c.env.DB)
+              const needsBootstrap = await bootstrapService.isBootstrapNeeded()
+              if (needsBootstrap) {
+                console.log("[Bootstrap] Bootstrapping core plugins...")
+                await bootstrapService.bootstrapCorePlugins()
+              }
+            })().catch((e) => console.error("[Bootstrap] Error bootstrapping plugins:", e)),
+      ])
 
-      // Mark bootstrap as complete for this worker instance
+      // Mark bootstrap as complete for this worker instance and persist to KV
+      // so subsequent cold-start isolates can skip the D1 work entirely.
       bootstrapComplete = true;
       console.log("[Bootstrap] System initialization completed");
+      try {
+        const cacheKv = (c.env as any).CACHE_KV as KVNamespace | undefined
+        if (cacheKv) {
+          // 24h TTL — long enough that hot instances never re-bootstrap, short
+          // enough that a DB reset auto-heals within a day.
+          await cacheKv.put(BOOTSTRAP_KV_KEY(), '1', { expirationTtl: 86400 })
+        }
+      } catch { /* KV write failure is non-fatal */ }
 
       // Fire project snapshot telemetry (fire-and-forget, never blocks boot)
       try {

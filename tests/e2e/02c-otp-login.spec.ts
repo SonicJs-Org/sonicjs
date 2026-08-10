@@ -17,7 +17,7 @@ const BA_HEADERS = {
   'Origin': 'http://localhost:9704',
 };
 
-test.describe('Email OTP Authentication (Better Auth)', () => {
+test.describe('Email OTP Authentication (Better Auth) @auth', () => {
 
   test.describe('POST /auth/email-otp/send-verification-otp - Request OTP Code', () => {
     test('should accept valid email and return success', async ({ request }) => {

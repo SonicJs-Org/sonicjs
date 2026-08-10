@@ -7,6 +7,7 @@
  */
 
 import { definePlugin } from '../../sdk/define-plugin'
+import { setDemoModeActive } from '../../../services/demo-mode'
 
 const demoLoginJs = `
   // Demo Login Prefill Script
@@ -64,6 +65,7 @@ export const demoLoginPlugin = definePlugin({
   author: { name: 'SonicJS' },
 
   async onBoot(ctx) {
+    setDemoModeActive()
     // Legacy non-typed hooks — subscribe via the raw bus.
     const hooks = (ctx.raw as any)?.hooks
     if (hooks?.register) {

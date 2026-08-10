@@ -8,7 +8,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 // exposed for code-defined collections — fields are declared in TypeScript.
 // These tests tested a removed feature; skip until a runtime field-editor
 // is re-introduced.
-test.describe.skip('Reference Fields', () => {
+test.describe.skip('Reference Fields @content', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

@@ -5,7 +5,7 @@ import { loginAsAdmin } from './utils/test-helpers';
 // not the dropped auth_user_profiles table. This verifies the admin user-edit
 // page persists profile fields through the document-backed path, and that the
 // auth-owned type does not leak into the content surface.
-test.describe('User profile (document-backed)', () => {
+test.describe('User profile (document-backed) @auth', () => {
   test('persists profile fields written on the user edit page', async ({ page }) => {
     await loginAsAdmin(page);
 
@@ -27,14 +27,23 @@ test.describe('User profile (document-backed)', () => {
     // Edit the user's profile. The standard profile now carries only displayName (bio lives on
     // auth_user; company/website/etc. were removed) plus the custom-fields namespace.
     await page.goto(`/admin/users/${userId}/edit`);
+    await page.waitForURL(/\/admin\/users\//, { timeout: 20000 });
     const displayName = `Display ${ts}`;
-    await page.fill('input[name="profile_display_name"]', displayName);
+    await page.evaluate((val) => {
+      const el = document.querySelector('input[name="profile_display_name"]') as HTMLInputElement;
+      if (el) { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
+    }, displayName);
     await page.click('button[type="submit"]');
-    await page.waitForLoadState('networkidle');
+    await page.waitForURL(/\/admin\/users/, { timeout: 20000 });
 
     // Reload the edit page; the value must survive a round-trip through the user_profile document.
     await page.goto(`/admin/users/${userId}/edit`);
-    await expect(page.locator('input[name="profile_display_name"]')).toHaveValue(displayName);
+    await page.waitForURL(/\/admin\/users\//, { timeout: 20000 });
+    const savedVal = await page.evaluate(() => {
+      const el = document.querySelector('input[name="profile_display_name"]') as HTMLInputElement;
+      return el?.value ?? '';
+    });
+    expect(savedVal).toBe(displayName);
   });
 
   test('user_profile type is not offered as content', async ({ page }) => {

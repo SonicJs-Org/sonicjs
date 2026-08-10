@@ -32,6 +32,14 @@ export class DocumentTypeRegistry {
 
   constructor(private db: D1Database) {}
 
+  // Populate cache from a single SELECT ALL — call before register() loops to eliminate N SELECT round-trips.
+  async preloadAll(): Promise<void> {
+    const all = await this.findAll(false)
+    for (const dt of all) {
+      this.cache.set(dt.id, dt)
+    }
+  }
+
   // Register or update a document type. Idempotent: bumps schema_version only when schema changes.
   async register(def: PluginDocumentType & { pluginId?: string; source?: 'code' | 'plugin' | 'system' }): Promise<DocumentType> {
     const now = Math.floor(Date.now() / 1000)
@@ -46,7 +54,10 @@ export class DocumentTypeRegistry {
 
     if (existing) {
       const schemaChanged = schemaJson !== JSON.stringify(existing.schema)
-      const newVersion = schemaChanged ? existing.schemaVersion + 1 : existing.schemaVersion
+      // Fast path: nothing changed — skip UPDATE + DDL + refetch (saves ~4 D1 round-trips per type)
+      if (!schemaChanged) return existing
+
+      const newVersion = existing.schemaVersion + 1
 
       await this.db
         .prepare(

@@ -62,7 +62,7 @@ async function saveAndCaptureEditUrl(page: Page): Promise<string> {
   return page.url()
 }
 
-test.describe.skip('Collapsible State Persistence', () => {
+test.describe.skip('Collapsible State Persistence @content', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)

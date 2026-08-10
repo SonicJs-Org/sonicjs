@@ -10,7 +10,7 @@ import { loginAsAdmin } from './utils/test-helpers'
  * the admin grid now reads created_at from the documents table and multiplies
  * by 1000 inside mediaDocToFile().
  */
-test.describe('Media upload date display (#889)', () => {
+test.describe('Media upload date display (#889) @media', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

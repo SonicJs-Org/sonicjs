@@ -10,7 +10,7 @@ let testContentId: string;
 // auth_token/JWT cookie no longer exists — auth is session-based now).
 let cookieHeader = '';
 
-test.describe('Content API CRUD Operations', () => {
+test.describe('Content API CRUD Operations @smoke @content @api', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();

@@ -66,8 +66,10 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
   // true only when the plugin has at least one user-configurable setting key
   // (_-prefixed keys are internal metadata, not settings the user can edit)
   const pluginDef = getPluginDefinition(plugin.id || plugin.name)
+  const pluginId = plugin.id || plugin.name
   const hasUserSettings = pluginDef?.settingsTabContent != null ||
-    Object.keys(plugin.settings || {}).some(k => !k.startsWith('_'))
+    Object.keys(plugin.settings || {}).some(k => !k.startsWith('_')) ||
+    hasCustomSettingsComponent(pluginId)
   const defaultTab = hasUserSettings ? 'settings' : 'info'
 
 
@@ -234,9 +236,28 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
         const form = document.getElementById('settings-form');
         const formData = new FormData(form);
         const isAuthPlugin = '${plugin.id}' === 'core-auth';
+        const isOAuthPlugin = '${plugin.id}' === 'oauth-providers';
         let settings = {};
 
-        if (isAuthPlugin) {
+        if (isOAuthPlugin) {
+          // Build nested provider settings structure
+          const getVal = id => (document.getElementById(id) || {}).value || '';
+          const getChecked = id => !!(document.getElementById(id) || {}).checked;
+          settings = {
+            providers: {
+              github: {
+                clientId: getVal('oauth_github_clientId'),
+                clientSecret: getVal('oauth_github_clientSecret'),
+                enabled: getChecked('oauth_github_enabled'),
+              },
+              google: {
+                clientId: getVal('oauth_google_clientId'),
+                clientSecret: getVal('oauth_google_clientSecret'),
+                enabled: getChecked('oauth_google_enabled'),
+              },
+            }
+          };
+        } else if (isAuthPlugin) {
           // Handle nested auth settings structure
           settings = {
             requiredFields: {},
@@ -780,6 +801,7 @@ type PluginSettingsRenderer = (plugin: any, settings: PluginSettings) => string
 const pluginSettingsComponents: Record<string, PluginSettingsRenderer> = {
   'otp-login': renderOTPLoginSettingsContent,
   'email': renderEmailSettingsContent,
+  'oauth-providers': renderOAuthProvidersSettingsContent,
 }
 
 /**
@@ -1529,6 +1551,66 @@ defineUserProfile({
       </div>
 
       ${fieldsTable}
+    </div>
+  `
+}
+
+/**
+ * OAuth Providers plugin settings — renders GitHub and Google credential fields.
+ * Settings are stored as { providers: { github: {...}, google: {...} } }.
+ * The saveSettings() JS function handles the nested structure for oauth-providers.
+ */
+function renderOAuthProvidersSettingsContent(plugin: any, settings: PluginSettings): string {
+  const providers = (settings.providers as Record<string, any>) || {}
+  const gh = providers.github || {}
+  const gg = providers.google || {}
+  const inputClass = 'backdrop-blur-sm bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:border-blue-400 focus:outline-none transition-colors w-full'
+
+  return `
+    <div class="space-y-6">
+      <form id="settings-form">
+        <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6 space-y-6">
+          <h3 class="text-lg font-semibold text-white">GitHub OAuth</h3>
+          <div>
+            <label for="oauth_github_clientId" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
+            <input type="text" id="oauth_github_clientId" name="oauth_github_clientId"
+              value="${escapeHtmlAttr(gh.clientId || '')}"
+              placeholder="GitHub OAuth App Client ID" class="${inputClass}" />
+          </div>
+          <div>
+            <label for="oauth_github_clientSecret" class="block text-sm font-medium text-gray-300 mb-2">Client Secret</label>
+            <input type="password" id="oauth_github_clientSecret" name="oauth_github_clientSecret"
+              value="${escapeHtmlAttr(gh.clientSecret || '')}"
+              placeholder="GitHub OAuth App Client Secret" class="${inputClass}" />
+          </div>
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="oauth_github_enabled" name="oauth_github_enabled"
+              ${gh.enabled ? 'checked' : ''} class="w-4 h-4 rounded border-white/10" />
+            <label for="oauth_github_enabled" class="text-sm text-gray-300">Enable GitHub login</label>
+          </div>
+        </div>
+
+        <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6 space-y-6 mt-6">
+          <h3 class="text-lg font-semibold text-white">Google OAuth</h3>
+          <div>
+            <label for="oauth_google_clientId" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
+            <input type="text" id="oauth_google_clientId" name="oauth_google_clientId"
+              value="${escapeHtmlAttr(gg.clientId || '')}"
+              placeholder="Google OAuth Client ID" class="${inputClass}" />
+          </div>
+          <div>
+            <label for="oauth_google_clientSecret" class="block text-sm font-medium text-gray-300 mb-2">Client Secret</label>
+            <input type="password" id="oauth_google_clientSecret" name="oauth_google_clientSecret"
+              value="${escapeHtmlAttr(gg.clientSecret || '')}"
+              placeholder="Google OAuth Client Secret" class="${inputClass}" />
+          </div>
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="oauth_google_enabled" name="oauth_google_enabled"
+              ${gg.enabled ? 'checked' : ''} class="w-4 h-4 rounded border-white/10" />
+            <label for="oauth_google_enabled" class="text-sm text-gray-300">Enable Google login</label>
+          </div>
+        </div>
+      </form>
     </div>
   `
 }

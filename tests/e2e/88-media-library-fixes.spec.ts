@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Media library fixes (#888, #890)', () => {
+test.describe('Media library fixes (#888, #890) @media', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

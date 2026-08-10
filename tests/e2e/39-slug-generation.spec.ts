@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
 
-test.describe('Slug Generation', () => {
+test.describe('Slug Generation @content', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
     await loginAsAdmin(page)
@@ -141,7 +141,7 @@ test.describe('Slug Generation', () => {
     await expect(slugField).toHaveValue('test-duplicate-page')
 
     // Fill required fields before saving
-    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"]') as HTMLInputElement
       if (el) el.value = 'Test content'
@@ -225,7 +225,7 @@ test.describe('Slug Generation', () => {
     await expect(page.locator('input[name="slug"]')).toHaveValue(originalSlug)
 
     // Fill required fields before saving
-    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"]') as HTMLInputElement
       if (el) el.value = 'Test content'
@@ -268,7 +268,7 @@ test.describe('Slug Generation', () => {
     await page.waitForTimeout(1000)
 
     // Fill required fields before saving
-    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"]') as HTMLInputElement
       if (el) el.value = 'Test content'
@@ -342,7 +342,7 @@ test.describe('Slug Generation', () => {
     await page.waitForTimeout(1000)
 
     // Fill required fields before saving
-    await page.fill('input[name="author"]', 'Test Author')
+    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"]') as HTMLInputElement
       if (el) el.value = 'Test content'

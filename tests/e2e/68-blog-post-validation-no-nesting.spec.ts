@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Blog post validation error - no nested form', () => {
+test.describe('Blog post validation error - no nested form @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

@@ -4,7 +4,7 @@ import { loginAsAdmin, TEST_ORIGIN } from './utils/test-helpers'
 const COLLECTION = 'e2e_test'
 const SAMPLE_JSON = { version: 1, tags: ['a', 'b'], nested: { active: true } }
 
-test.describe('JSON field viewer', () => {
+test.describe('JSON field viewer @database', () => {
   let contentId: string
 
   test.beforeAll(async ({ browser }) => {

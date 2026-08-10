@@ -15,6 +15,8 @@ import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import { RbacService } from '../services/rbac'
+import { bootstrapDocumentTypes } from '../services/document-types-seed'
+import { isDemoModeActive } from '../services/demo-mode'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
 
@@ -93,17 +95,8 @@ authRoutes.get('/login', async (c) => {
     redirect: redirect && redirect.startsWith('/') ? redirect : undefined,
   }
   
-  // Check if demo login plugin is active
-  const db = c.env.DB
-  let demoLoginActive = false
-  try {
-    const plugin = await db.prepare('SELECT * FROM plugins WHERE id = ? AND status = ?')
-      .bind('demo-login-prefill', 'active')
-      .first()
-    demoLoginActive = !!plugin
-  } catch (error) {
-    // Ignore database errors - plugin system might not be initialized
-  }
+  // Check if demo login plugin is active (set by demoLoginPlugin.onBoot at bootstrap)
+  const demoLoginActive = isDemoModeActive()
   
   return c.html(renderLoginPage(pageData, demoLoginActive))
 })
@@ -291,7 +284,7 @@ authRoutes.post('/login',
       const normalizedEmail = email.toLowerCase()
 
       const { createAuth } = await import('../auth/config')
-      const auth = createAuth(c.env)
+      const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
 
       const baReq = new Request(new URL('/auth/sign-in/email', c.req.url).href, {
         method: 'POST',
@@ -305,12 +298,16 @@ authRoutes.post('/login',
       }
 
       // Forward BA session cookie(s) to client.
-      const rawSetCookie = baRes.headers.get('set-cookie')
-      if (rawSetCookie) {
-        c.res.headers.append('Set-Cookie', rawSetCookie)
-      } else if ((baRes.headers as any).getSetCookie) {
+      // Use c.header() so headers survive into the c.json() response (c.res.headers mutations are discarded).
+      // Prefer getSetCookie() — headers.get('set-cookie') joins multiple cookies with ',' which corrupts them.
+      if ((baRes.headers as any).getSetCookie) {
         for (const sc of (baRes.headers as any).getSetCookie()) {
-          c.res.headers.append('Set-Cookie', sc)
+          c.header('Set-Cookie', sc, { append: true })
+        }
+      } else {
+        const rawSetCookie = baRes.headers.get('set-cookie')
+        if (rawSetCookie) {
+          c.header('Set-Cookie', rawSetCookie, { append: true })
         }
       }
 
@@ -361,7 +358,7 @@ authRoutes.post('/logout', async (c) => {
   // Delegate to BA to invalidate the session server-side, then clear cookies.
   try {
     const { createAuth } = await import('../auth/config')
-    const auth = createAuth(c.env)
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
     const baReq = new Request(new URL('/auth/sign-out', c.req.url).href, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin, 'Cookie': c.req.header('Cookie') || '' },
@@ -370,7 +367,8 @@ authRoutes.post('/logout', async (c) => {
     await auth.handler(baReq)
   } catch { /* non-fatal — clear cookie regardless */ }
 
-  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0 })
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
   clearCsrfCookie(c)
   return c.json({ message: 'Logged out successfully' })
 })
@@ -379,7 +377,7 @@ authRoutes.get('/logout', async (c) => {
   // Delegate to BA to invalidate the session server-side, then clear cookies.
   try {
     const { createAuth } = await import('../auth/config')
-    const auth = createAuth(c.env)
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
     const baReq = new Request(new URL('/auth/sign-out', c.req.url).href, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin, 'Cookie': c.req.header('Cookie') || '' },
@@ -388,7 +386,8 @@ authRoutes.get('/logout', async (c) => {
     await auth.handler(baReq)
   } catch { /* non-fatal */ }
 
-  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0 })
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
   clearCsrfCookie(c)
   return c.redirect('/auth/login?message=You have been logged out successfully')
 })
@@ -664,7 +663,7 @@ authRoutes.post('/login/form',
 
     // Delegate to Better Auth — call sign-in/email, get session token, set BA cookie.
     const { createAuth } = await import('../auth/config')
-    const auth = createAuth(c.env)
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
 
     const baReq = new Request(new URL('/auth/sign-in/email', c.req.url).href, {
       method: 'POST',
@@ -684,14 +683,17 @@ authRoutes.post('/login/form',
     // Forward BA's Set-Cookie header(s) to the browser.
     // BA sets better-auth.session_token as token.signature (signed). Using the
     // raw JSON .token field would break session lookup — must use the full cookie value.
-    const rawSetCookie = baRes.headers.get('set-cookie')
-    if (rawSetCookie) {
-      // Workers may join multiple Set-Cookie values; for BA there is normally one.
-      // Append each cookie directive as-is.
-      c.res.headers.append('Set-Cookie', rawSetCookie)
-    } else if ((baRes.headers as any).getSetCookie) {
+    // Use c.header() (not c.res.headers.append) — Hono's c.html() creates a new Response
+    // from c's internal header store; mutations to c.res.headers are discarded.
+    // Prefer getSetCookie() — headers.get('set-cookie') joins multiple cookies with ',' which corrupts them.
+    if ((baRes.headers as any).getSetCookie) {
       for (const sc of (baRes.headers as any).getSetCookie()) {
-        c.res.headers.append('Set-Cookie', sc)
+        c.header('Set-Cookie', sc, { append: true })
+      }
+    } else {
+      const rawSetCookie = baRes.headers.get('set-cookie')
+      if (rawSetCookie) {
+        c.header('Set-Cookie', rawSetCookie, { append: true })
       }
     }
 
@@ -703,6 +705,14 @@ authRoutes.post('/login/form',
 
     const rawRedirect = c.req.query('redirect')
     const redirectUrl = rawRedirect && rawRedirect.startsWith('/') ? rawRedirect : '/admin/content'
+
+    // For HTMX requests: HX-Redirect triggers an immediate client-side navigation.
+    // For native form submissions (HTMX not loaded): the <script> setTimeout handles it.
+    const isHtmx = c.req.header('HX-Request') === 'true'
+    if (isHtmx) {
+      c.header('HX-Redirect', redirectUrl)
+      return c.html(html`<div id="form-response"><p class="text-sm text-green-600">Login successful! Redirecting...</p></div>`)
+    }
 
     return c.html(html`
       <div id="form-response">
@@ -737,7 +747,12 @@ authRoutes.post('/seed-admin',
   async (c) => {
   try {
     const db = c.env.DB
+    // Ensure document_types FK targets exist before RBAC seed — D1 enforces the FK
+    // and bootstrap's Promise.all can race. Also covers KV fast-path deployments that
+    // skip ensureSystemRbacSeed entirely.
+    await bootstrapDocumentTypes(db)
     const rbac = new RbacService(db)
+    await rbac.ensureSystemRbacSeed()
     const results: Array<{ email: string; status: string }> = []
 
     const upsertSeedUser = async (opts: {

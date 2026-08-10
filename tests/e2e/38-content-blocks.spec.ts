@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
 // Skip in CI - depends on E2E Test collection which may not be configured in CI environment
-test.describe.skip('Content Blocks (Code-Based Collections)', () => {
+test.describe.skip('Content Blocks (Code-Based Collections) @content', () => {
   test('should allow adding block content in code-based collections', async ({ page }) => {
     await loginAsAdmin(page)
 

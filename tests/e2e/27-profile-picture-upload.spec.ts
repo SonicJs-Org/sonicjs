@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe.skip('Profile Picture Upload', () => {
+test.describe.skip('Profile Picture Upload @media @auth', () => {
   test('should update profile picture and display it immediately', async ({ page }) => {
     // Login as admin
     await loginAsAdmin(page);

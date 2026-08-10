@@ -35,6 +35,9 @@ jobs:
       - name: Build core
         run: npm run build:core
 
+      - name: Build SDK
+        run: npm run build --workspace=@sonicjs-cms/sdk
+
       - name: Type check
         run: npm run type-check
 
@@ -46,6 +49,16 @@ jobs:
             npm publish --workspace=@sonicjs-cms/core --provenance --access public --dry-run
           else
             npm publish --workspace=@sonicjs-cms/core --provenance --access public
+          fi
+
+      - name: Publish @sonicjs-cms/sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish --workspace=@sonicjs-cms/sdk --provenance --access public --dry-run
+          else
+            npm publish --workspace=@sonicjs-cms/sdk --provenance --access public
           fi
 
       - name: Publish create-sonicjs

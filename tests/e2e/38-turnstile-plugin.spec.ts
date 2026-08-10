@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Turnstile Plugin', () => {
+test.describe('Turnstile Plugin @plugins', () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin using the test helper
     await loginAsAdmin(page)

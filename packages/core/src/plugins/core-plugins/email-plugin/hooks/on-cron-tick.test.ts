@@ -36,12 +36,12 @@ describe('onCronTick — hookFamily filter', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const ctx = makeCtx({}) // no credentials, no DB
 
-    await onCronTick(ctx, {
+    await onCronTick({
       type: 'cron:tick',
       schedule: '*/5 * * * *',
       hookFamily: 'some-other-plugin-cron',
       triggeredAt: 1700000000000,
-    })
+    }, ctx)
 
     expect(warn).not.toHaveBeenCalled()
   })
@@ -52,12 +52,12 @@ describe('onCronTick — credential check', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const ctx = makeCtx({ DB: {}, EMAIL_API_TOKEN: 'tok' })
 
-    await onCronTick(ctx, {
+    await onCronTick({
       type: 'cron:tick',
       schedule: '*/5 * * * *',
       hookFamily: 'email-reconciliation',
       triggeredAt: 0,
-    })
+    }, ctx)
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('CF GraphQL credentials missing'),
@@ -69,12 +69,12 @@ describe('onCronTick — credential check', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const ctx = makeCtx({ DB: {}, CF_ZONE_ID: 'zone' })
 
-    await onCronTick(ctx, {
+    await onCronTick({
       type: 'cron:tick',
       schedule: '*/5 * * * *',
       hookFamily: 'email-reconciliation',
       triggeredAt: 0,
-    })
+    }, ctx)
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('CF GraphQL credentials missing'),
@@ -87,12 +87,12 @@ describe('onCronTick — credential check', () => {
     const ctx = makeCtx({ DB: {} })
 
     await expect(
-      onCronTick(ctx, {
+      onCronTick({
         type: 'cron:tick',
         schedule: '*/5 * * * *',
         hookFamily: 'email-reconciliation',
         triggeredAt: 0,
-      }),
+      }, ctx),
     ).resolves.toBeUndefined()
   })
 })
@@ -120,7 +120,7 @@ describe('onCronTick — happy path (credentials present)', () => {
     ) as never
 
     const ctx = makeCtx({ DB: {} as unknown, CF_ZONE_ID: 'zone', EMAIL_API_TOKEN: 'tok' })
-    await onCronTick(ctx, { type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 1700000000000 })
+    await onCronTick({ type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 1700000000000 }, ctx)
 
     // Pre-#701: this outcome was silently swallowed — making "cron working but
     // CF returned 0 rows" indistinguishable from "cron never fired" in worker logs.
@@ -147,7 +147,7 @@ describe('onCronTick — happy path (credentials present)', () => {
     ) as never
 
     const ctx = makeCtx({ DB: makeDb(), CF_ZONE_ID: 'zone', EMAIL_API_TOKEN: 'tok' })
-    await onCronTick(ctx, { type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 1700000000000 })
+    await onCronTick({ type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 1700000000000 }, ctx)
 
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining('reconciliation cron: ok'),
@@ -163,7 +163,7 @@ describe('onCronTick — happy path (credentials present)', () => {
     globalThis.fetch = vi.fn(async () => new Response('Internal Server Error', { status: 500 })) as never
 
     const ctx = makeCtx({ DB: makeDb(), CF_ZONE_ID: 'zone', EMAIL_API_TOKEN: 'tok' })
-    await onCronTick(ctx, { type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 0 })
+    await onCronTick({ type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 0 }, ctx)
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('GraphQL error'),
@@ -190,7 +190,7 @@ describe('onCronTick — D1 settings fallback', () => {
       })),
     } as unknown as D1Database
     const ctx = makeCtx({ DB: db, CF_ZONE_ID: 'zone' }) // EMAIL_API_TOKEN absent
-    await onCronTick(ctx, { type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 0 })
+    await onCronTick({ type: 'cron:tick', schedule: '*/5 * * * *', hookFamily: 'email-reconciliation', triggeredAt: 0 }, ctx)
     expect(debug).toHaveBeenCalledWith(expect.stringContaining('EMAIL_API_TOKEN read from D1'))
   })
 })

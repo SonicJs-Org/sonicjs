@@ -14,8 +14,8 @@ export default defineConfig({
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
-  retries: process.env.CI ? 1 : 0,
+  /* Retry on CI only — 2 retries handles consecutive transient CF Worker cold-starts */
+  retries: process.env.CI ? 2 : 0,
   /* Per-test timeout: remote CF Workers under parallel load need headroom */
   timeout: 60 * 1000,
   /* 1 worker locally (in-memory D1 conflicts); 4 in CI (remote D1, I/O bound) */

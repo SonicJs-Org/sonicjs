@@ -61,7 +61,7 @@ test.describe('Hero CTA Style Persistence @content', () => {
       await ctaSecondary.locator('input[name$="__label"]').fill('Secondary CTA')
       await ctaSecondary.locator('select[name$="__style"]').selectOption('secondary')
 
-      await page.click('button[name="action"][value="save_and_publish"]')
+      await page.click('button[name="action"][value="save"]')
       await page.waitForTimeout(2000)
 
       await page.goto('/admin/content?collection=e2e_test')
@@ -99,7 +99,7 @@ test.describe('Hero CTA Style Persistence @content', () => {
       await expect(reloadedSecondaryStyle).toHaveValue('secondary')
 
       await page.fill('input[name="title"]', updatedTitle)
-      await page.click('button[name="action"][value="save_and_publish"]')
+      await page.click('button[name="action"][value="save"]')
       await page.waitForTimeout(2000)
 
       if (contentId) {

@@ -16,9 +16,9 @@ test.describe('Blog post validation error - no nested form @content', () => {
       await titleInput.fill('Test Blog Post')
     }
 
-    // Submit form
-    const form = page.locator('#content-form')
-    await form.evaluate((el: HTMLFormElement) => el.requestSubmit())
+    // Submit form via save button (not requestSubmit — needs button value for HTMX action)
+    const saveBtn = page.locator('button[name="action"][value="save"]').first()
+    await saveBtn.click()
     await page.waitForLoadState('networkidle')
 
     // There must be exactly ONE #content-form-page — no nesting

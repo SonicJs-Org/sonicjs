@@ -86,7 +86,7 @@ test.describe('Block Media Persistence @content @media', () => {
     }
     await ctaPrimaryLabelInput.fill('Primary CTA');
 
-    const imageField = firstBlock.locator('[data-block-field="image"]');
+    const imageField = firstBlock.locator('[data-block-field="backgroundImage"]');
     const selectMediaButton = imageField.locator('button:has-text("Select Media")');
     await expect(selectMediaButton).toBeVisible();
     await selectMediaButton.click();
@@ -99,7 +99,7 @@ test.describe('Block Media Persistence @content @media', () => {
     const hiddenInput = imageField.locator('input[type="hidden"]');
     await expect(hiddenInput).not.toHaveValue('');
 
-    await page.click('button[name="action"][value="save_and_publish"]');
+    await page.click('button[name="action"][value="save"]');
     await page.waitForURL(/\/admin\/content\/[^/]+\/edit|\/admin\/content\?/, { timeout: 15000 });
 
     try {
@@ -118,7 +118,7 @@ test.describe('Block Media Persistence @content @media', () => {
       }
 
       const reloadedBlock = page.locator('[data-field-name="body"] .blocks-item').first();
-      const reloadedHiddenInput = reloadedBlock.locator('[data-block-field="image"] input[type="hidden"]');
+      const reloadedHiddenInput = reloadedBlock.locator('[data-block-field="backgroundImage"] input[type="hidden"]');
       await expect(reloadedHiddenInput).not.toHaveValue('');
     } finally {
       if (!createdContentId) {

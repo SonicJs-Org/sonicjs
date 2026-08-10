@@ -1,8 +1,10 @@
 import { D1Database } from '@cloudflare/workers-types'
 import { z } from 'zod'
 import { DocumentTypeRegistry } from './document-type-registry'
+import { DocumentsService } from './documents'
 import { getCollectionRegistry } from './collection-registry'
 import type { Permission } from '../schemas/document'
+import { createDocumentSchema } from '../schemas/document'
 
 // Passthrough schema: accepts any JSON object for POC types.
 // Individual fields are validated at the queryable-field level; the full
@@ -314,4 +316,44 @@ export async function autoRegisterCollectionDocumentTypes(db: D1Database): Promi
   }
 
   return registered
+}
+
+/**
+ * Create starter content for fresh installs. Idempotent — skips if already present.
+ * Must be called AFTER bootstrapDocumentTypes so the blog_post type exists.
+ */
+export async function bootstrapDefaultContent(db: D1Database): Promise<void> {
+  const existing = await db
+    .prepare(
+      `SELECT id FROM documents WHERE type_id = 'blog_post' AND tenant_id = 'default' AND slug = 'welcome-to-sonicjs' AND is_current_draft = 1 LIMIT 1`
+    )
+    .first()
+  if (existing) return
+
+  const svc = new DocumentsService(db, {
+    queryableFields: [],
+    typeSchemaVersion: 1,
+    maxVersionsPerRoot: 50,
+    tenantId: 'default',
+    versioning: false,
+  })
+  await svc.create(
+    createDocumentSchema.parse({
+      typeId: 'blog_post',
+      tenantId: 'default',
+      locale: 'default',
+      title: 'Welcome to SonicJS',
+      slug: 'welcome-to-sonicjs',
+      data: {
+        title: 'Welcome to SonicJS',
+        slug: 'welcome-to-sonicjs',
+        content: '<p>Welcome to SonicJS. This first post confirms your default blog content is ready.</p>',
+        author: 'SonicJS Team',
+        difficulty: 'beginner',
+        excerpt: 'Welcome to SonicJS.',
+      },
+      publishOnCreate: true,
+    }),
+    'system'
+  )
 }

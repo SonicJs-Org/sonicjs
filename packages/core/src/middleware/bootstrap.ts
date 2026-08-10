@@ -3,7 +3,7 @@ import { loadCollectionConfigs } from "../services/collection-loader";
 import { getCollectionRegistry } from "../services/collection-registry";
 import { MigrationService } from "../services/migrations";
 import { PluginBootstrapService } from "../services/plugin-bootstrap";
-import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes } from "../services/document-types-seed";
+import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes, bootstrapDefaultContent } from "../services/document-types-seed";
 import { getHookSystem, hasHookSystem } from "../plugins/hooks/hook-system-singleton";
 import { getTelemetryService } from "../services/telemetry-service"
 import { SONICJS_VERSION } from "../utils/version";
@@ -125,6 +125,18 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
             const configs = await loadCollectionConfigs()
             getCollectionRegistry().register(configs)
           } catch { /* registry optional in fast-path */ }
+          // Sync document types to D1 even on KV fast-path — both operations are
+          // idempotent (no-ops when nothing changed) and ensure newly added
+          // collections and settings updates reach D1 without requiring a version bump.
+          await bootstrapDocumentTypes(c.env.DB).catch((e) =>
+            console.error("[Bootstrap] KV fast-path: error syncing document types:", e)
+          )
+          await autoRegisterCollectionDocumentTypes(c.env.DB).catch((e) =>
+            console.error("[Bootstrap] KV fast-path: error auto-registering collection types:", e)
+          )
+          await bootstrapDefaultContent(c.env.DB).catch((e) =>
+            console.error("[Bootstrap] KV fast-path: error seeding default content:", e)
+          )
           bootstrapComplete = true
           return next()
         }
@@ -234,6 +246,11 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
               }
             })().catch((e) => console.error("[Bootstrap] Error bootstrapping plugins:", e)),
       ])
+
+      // Seed starter content after types are registered (idempotent no-op when present).
+      await bootstrapDefaultContent(c.env.DB).catch((e) =>
+        console.error("[Bootstrap] Error seeding default content:", e)
+      )
 
       // Mark bootstrap as complete for this worker instance and persist to KV
       // so subsequent cold-start isolates can skip the D1 work entirely.

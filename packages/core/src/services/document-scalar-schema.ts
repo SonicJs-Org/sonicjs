@@ -15,8 +15,8 @@ let _indexCache: Set<string> | null = null
 // Single shared promise so parallel callers don't each fire their own PRAGMA batch.
 let _cacheInitPromise: Promise<{ columns: Set<string>; indexes: Set<string> }> | null = null
 
-/** Reset module-level caches. Call this when switching to a new DB instance (tests only). */
-export function resetScalarSchemaCaches(): void {
+/** Reset the module-level column/index caches. Tests that swap the underlying DB between runs must call this. */
+export function resetScalarSchemaCache(): void {
   _columnCache = null
   _indexCache = null
   _cacheInitPromise = null

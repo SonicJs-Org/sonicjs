@@ -8,7 +8,7 @@ import {
   requireActivePlugin,
   requireActivePlugins,
   getActivePlugins,
-  invalidatePluginStatusCache,
+  invalidatePluginStatusCache
 } from './plugin-middleware'
 
 // Mock D1Database
@@ -218,7 +218,6 @@ describe('getActivePlugins', () => {
   beforeEach(() => {
     mockDb = createMockDb()
     vi.clearAllMocks()
-    invalidatePluginStatusCache()
   })
 
   it('should return array of active plugins', async () => {

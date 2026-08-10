@@ -20,7 +20,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251202.0",
+    "@cloudflare/workers-types": "^5.20260724.1",
     "@types/node": "^24.10.1",
     "drizzle-kit": "^0.31.7",
     "drizzle-orm": "^0.44.7",

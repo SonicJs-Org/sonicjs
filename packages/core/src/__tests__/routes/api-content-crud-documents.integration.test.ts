@@ -63,12 +63,13 @@ describe('api-content-crud → documents (decommission step)', () => {
     expect(res.status).toBe(409)
   })
 
-  it('PUT saves a new draft and republishes it', async () => {
+  it('PUT updates document in-place and keeps it published', async () => {
     const created = (await (await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'V1', slug: 'v', status: 'published', data: {} }))).json()).data
     const res = await app.request(`/api/content/${created.id}`, json('PUT', { data: { body: 'v2' }, status: 'published' }))
     expect(res.status).toBe(200)
-    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(created.id).n).toBe(2)
-    expect(db.raw.prepare('SELECT version_number v FROM documents WHERE root_id=? AND is_published=1').get(created.id).v).toBe(2)
+    // blog_post has versioning=false → in-place update, single row
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(created.id).n).toBe(1)
+    expect(db.raw.prepare('SELECT is_published v FROM documents WHERE root_id=?').get(created.id).v).toBe(1)
   })
 
   it('DELETE soft-deletes every version row of the root', async () => {

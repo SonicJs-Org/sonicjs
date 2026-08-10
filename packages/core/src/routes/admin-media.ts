@@ -89,20 +89,6 @@ adminMediaRoutes.get('/selector', async (c) => {
     const search = searchParams.get('search') || ''
     const db = c.env.DB
 
-    const pluginService = new PluginService(db)
-    const mediaPlugin = await pluginService.getPlugin('core-media')
-    if (!mediaPlugin || mediaPlugin.status !== 'active') {
-      return c.html(html`
-        <div class="text-center py-12">
-          <svg class="mx-auto h-12 w-12 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
-          </svg>
-          <p class="mt-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">Media plugin is not enabled</p>
-          <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Enable the Media plugin in <a href="/admin/plugins" class="underline hover:text-zinc-700 dark:hover:text-zinc-200">Plugins</a> to use media selection.</p>
-        </div>
-      `)
-    }
-
     const mediaSvc = new MediaDocumentService(db, getRequestTenant(c))
     const { files } = await mediaSvc.list({ search: search.trim() || undefined, limit: 24 })
     const mediaFiles = files.map(doc => mediaDocToFile(doc))

@@ -44,7 +44,6 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     source: 'system',
     schema: anyObject,
     settings: {
-      versioning: true,
       baseGrants: { public: ['read'], admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'], editor: ['read', 'create', 'update', 'publish'], viewer: ['read'] },
       maxVersionsPerRoot: 50,
     },

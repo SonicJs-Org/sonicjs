@@ -112,7 +112,7 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
     expect(await res.text()).toContain('Post editme')
   })
 
-  it('update creates a new version and republishes it (v2 becomes the live revision)', async () => {
+  it('update modifies the document in-place and keeps it published (versioning=false)', async () => {
     await createPost('updateme') // v1 published
     const rootId = db.raw.prepare("SELECT root_id r FROM documents WHERE slug='updateme'").get().r
     const res = await app.request(`/admin/content/${rootId}`, {
@@ -120,10 +120,9 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
       body: form({ _method: 'PUT', collection_id: COLL, title: 'Post updateme v2', slug: 'updateme', content: '<p>v2</p>', author: 'Ada', difficulty: 'beginner', status: 'published' }),
     })
     expect([200, 302]).toContain(res.status)
-    // A new version exists and exactly one published row, now at v2.
-    expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=?").get(rootId).n).toBe(2)
+    // blog_post has versioning=false → in-place update, single row stays published.
+    expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=?").get(rootId).n).toBe(1)
     expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=? AND is_published=1").get(rootId).n).toBe(1)
-    expect(db.raw.prepare("SELECT version_number v FROM documents WHERE root_id=? AND is_published=1").get(rootId).v).toBe(2)
   })
 
   it('update with status=draft unpublishes the live revision (consistent status semantics)', async () => {

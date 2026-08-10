@@ -31,10 +31,11 @@ import e2eTestCollection from './collections/e2e-test.collection';
 import { departmentsCollection } from './collections/departments.collection';
 import { regionsCollection } from './collections/regions.collection';
 import { employeesCollection } from './collections/employees.collection';
+import { faqCollection } from './collections/faq.collection';
 
 // Register collections so they appear in admin UI
 // departments + regions must be registered before employees (reference targets)
-registerCollections([siteSettingsCollection, blogPostsCollection, e2eTestCollection, moodsCollection, departmentsCollection, regionsCollection, employeesCollection]);
+registerCollections([siteSettingsCollection, blogPostsCollection, e2eTestCollection, moodsCollection, departmentsCollection, regionsCollection, employeesCollection, faqCollection]);
 
 const config: SonicJSConfig = {
   plugins: {

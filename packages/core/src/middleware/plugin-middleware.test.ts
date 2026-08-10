@@ -8,7 +8,7 @@ import {
   requireActivePlugin,
   requireActivePlugins,
   getActivePlugins,
-  invalidatePluginStatusCache,
+  invalidatePluginStatusCache
 } from './plugin-middleware'
 
 // Mock D1Database
@@ -43,7 +43,6 @@ describe('isPluginActive', () => {
   beforeEach(() => {
     mockDb = createMockDb()
     vi.clearAllMocks()
-    // Module-level cache persists across tests; clear so each test hits the mock DB fresh.
     invalidatePluginStatusCache()
   })
 

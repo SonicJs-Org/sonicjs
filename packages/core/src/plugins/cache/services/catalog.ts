@@ -85,16 +85,18 @@ async function kvSafeKey(cacheKey: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
 }
 
-/** Schedule a throttled KV write for the given cache key. Call after recordCatalogRequest(). */
-export function scheduleKvWrite(cacheKey: string, ctx: CtxLike | null | undefined): void {
-  if (!globalKv || !ctx) return
+/** Schedule a throttled KV write for the given cache key. Call after recordCatalogRequest().
+ * Accepts a lazy getter so c.executionCtx is only evaluated when KV is actually configured —
+ * callers that pass () => c.executionCtx won't throw in test environments where KV is absent. */
+export function scheduleKvWrite(cacheKey: string, getCtx: () => CtxLike): void {
+  if (!globalKv) return
   const entry = catalog.get(cacheKey)
   if (!entry) return
   const now = Date.now()
   if ((kvThrottle.get(cacheKey) ?? 0) > now - KV_THROTTLE_MS) return
   kvThrottle.set(cacheKey, now)
   const kv = globalKv
-  ctx.waitUntil(
+  getCtx().waitUntil(
     kvSafeKey(cacheKey).then(h => kv.put(`_catalog:${h}`, JSON.stringify(entry), { expirationTtl: KV_TTL }))
   )
 }

@@ -15,6 +15,7 @@ import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import { RbacService } from '../services/rbac'
+import { bootstrapDocumentTypes } from '../services/document-types-seed'
 import { isDemoModeActive } from '../services/demo-mode'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
@@ -746,7 +747,12 @@ authRoutes.post('/seed-admin',
   async (c) => {
   try {
     const db = c.env.DB
+    // Ensure document_types FK targets exist before RBAC seed — D1 enforces the FK
+    // and bootstrap's Promise.all can race. Also covers KV fast-path deployments that
+    // skip ensureSystemRbacSeed entirely.
+    await bootstrapDocumentTypes(db)
     const rbac = new RbacService(db)
+    await rbac.ensureSystemRbacSeed()
     const results: Array<{ email: string; status: string }> = []
 
     const upsertSeedUser = async (opts: {

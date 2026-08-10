@@ -19,13 +19,6 @@ import { RbacService } from '../services/rbac'
 import { recordCatalogRequest, scheduleKvWrite } from '../plugins/cache/services/catalog'
 import { markStale, getAndConsumeStale } from '../plugins/cache/services/swr'
 
-// Hono's c.executionCtx getter throws "This context has no ExecutionContext" in test environments
-// (app.request() / app.fetch() without a real Cloudflare execution context). scheduleKvWrite
-// accepts null and exits early, so this guard makes KV scheduling a no-op in tests.
-function safeExecCtx(c: { executionCtx: { waitUntil(p: Promise<unknown>): void } }): { waitUntil(p: Promise<unknown>): void } | null {
-  try { return c.executionCtx } catch { return null }
-}
-
 // Anonymous principal = unauthenticated request. Authenticated users (even with role 'public')
 // must pass isAllowed so the document ACL is enforced — not just is_published.
 function isAnonPrincipal(principalSet: PrincipalRef[]): boolean {
@@ -823,7 +816,7 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
         }
 
         recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
-        scheduleKvWrite(cacheKey, safeExecCtx(c))
+        scheduleKvWrite(cacheKey, () => c.executionCtx)
         return c.json(dataWithMeta)
       }
 
@@ -833,12 +826,12 @@ apiRoutes.get('/content', optionalAuth(), async (c) => {
         c.header('X-Cache-Status', 'STALE')
         c.header('X-Cache-Source', 'swr')
         recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
-        scheduleKvWrite(cacheKey, safeExecCtx(c))
+        scheduleKvWrite(cacheKey, () => c.executionCtx)
         return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
       }
 
       recordCatalogRequest({ cacheKey, collection: typeId ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
-      scheduleKvWrite(cacheKey, safeExecCtx(c))
+      scheduleKvWrite(cacheKey, () => c.executionCtx)
     }
 
     // Cache miss - fetch from database
@@ -1003,7 +996,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
         }
 
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
-        scheduleKvWrite(cacheKey, safeExecCtx(c))
+        scheduleKvWrite(cacheKey, () => c.executionCtx)
         return c.json(dataWithMeta)
       }
 
@@ -1013,12 +1006,12 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
         c.header('X-Cache-Status', 'STALE')
         c.header('X-Cache-Source', 'swr')
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
-        scheduleKvWrite(cacheKey, safeExecCtx(c))
+        scheduleKvWrite(cacheKey, () => c.executionCtx)
         return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
       }
 
       recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
-      scheduleKvWrite(cacheKey, safeExecCtx(c))
+      scheduleKvWrite(cacheKey, () => c.executionCtx)
     }
 
     // Cache miss - fetch from database
@@ -1154,7 +1147,7 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
         c.header('X-Cache-Source', cacheResult.source)
         if (cacheResult.ttl) c.header('X-Cache-TTL', Math.floor(cacheResult.ttl).toString())
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
-        scheduleKvWrite(cacheKey, safeExecCtx(c))
+        scheduleKvWrite(cacheKey, () => c.executionCtx)
         return c.json({ ...cacheResult.data, meta: addTimingMeta(c, { ...cacheResult.data.meta, cache: { hit: true, source: cacheResult.source, ttl: cacheResult.ttl ? Math.floor(cacheResult.ttl) : undefined } }, executionStart) })
       }
 
@@ -1164,12 +1157,12 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
         c.header('X-Cache-Status', 'STALE')
         c.header('X-Cache-Source', 'swr')
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'swr' })
-        scheduleKvWrite(cacheKey, safeExecCtx(c))
+        scheduleKvWrite(cacheKey, () => c.executionCtx)
         return c.json({ ...(swrData as any), meta: addTimingMeta(c, { ...(swrData as any).meta, cache: { hit: true, source: 'swr', stale: true } }, executionStart) })
       }
 
       recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: 'miss' })
-      scheduleKvWrite(cacheKey, safeExecCtx(c))
+      scheduleKvWrite(cacheKey, () => c.executionCtx)
     }
 
     c.header('X-Cache-Status', 'MISS')

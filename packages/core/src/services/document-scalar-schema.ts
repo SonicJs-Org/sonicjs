@@ -8,17 +8,14 @@ const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 
 // Per-isolate caches: eliminate repeated PRAGMA + CREATE INDEX round-trips across
 // multiple ensureScalarSchema() calls during bootstrap. Reset is intentionally
-// absent in production — isolate lifetime matches cache validity.
+// absent — isolate lifetime matches cache validity.
 let _columnCache: Set<string> | null = null
 let _indexCache: Set<string> | null = null
 // Single shared promise so parallel callers don't each fire their own PRAGMA batch.
 let _cacheInitPromise: Promise<{ columns: Set<string>; indexes: Set<string> }> | null = null
 
-/**
- * Reset module-level schema caches. Only for test environments where multiple
- * in-memory DBs are created within one module lifetime (each createTestD1() call).
- */
-export function resetScalarSchemaCaches(): void {
+/** Reset the module-level column/index caches. Tests that swap the underlying DB between runs must call this. */
+export function resetScalarSchemaCache(): void {
   _columnCache = null
   _indexCache = null
   _cacheInitPromise = null

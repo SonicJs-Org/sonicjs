@@ -8,8 +8,8 @@ const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 
 // Per-isolate caches: eliminate repeated PRAGMA + CREATE INDEX round-trips across
 // multiple ensureScalarSchema() calls during bootstrap. Reset is intentionally
-// absent in production — isolate lifetime matches cache validity.
-// In tests, call resetScalarSchemaCaches() between DB instances.
+// absent in production — isolate lifetime matches cache validity. Tests must call
+// resetScalarSchemaCache() when creating a new DB instance.
 let _columnCache: Set<string> | null = null
 let _indexCache: Set<string> | null = null
 // Single shared promise so parallel callers don't each fire their own PRAGMA batch.

@@ -165,6 +165,24 @@ export default {
                 buttonUrl: { type: "string", title: "Button URL" },
               },
             },
+            gallery: {
+              label: "Gallery",
+              description: "Image gallery",
+              properties: {
+                heading: { type: "string", title: "Heading" },
+                images: {
+                  type: "array",
+                  title: "Images",
+                  items: {
+                    type: "object",
+                    properties: {
+                      image: { type: "media", title: "Image" },
+                      caption: { type: "string", title: "Caption" },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },

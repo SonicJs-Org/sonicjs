@@ -17,6 +17,7 @@ import {
   mcpPlugin,
   redirectPlugin,
   registerCollections,
+  versioningPlugin,
 } from '@sonicjs-cms/core';
 import { examplePlugin } from './plugins/example';
 import { moodsCollection } from './plugins/example/collections/moods.collection';
@@ -41,7 +42,7 @@ const config: SonicJSConfig = {
   plugins: {
     // Add plugins to this array to activate them. Each plugin's register()
     // runs synchronously at startup; onBoot() runs async on first request.
-    register: [redirectPlugin, examplePlugin, mcpPlugin(), demoLoginPlugin],
+    register: [redirectPlugin, examplePlugin, mcpPlugin(), demoLoginPlugin, versioningPlugin],
     disableAll: false,
   },
 };

@@ -113,33 +113,45 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       if (cacheKv) {
         const kvDone = await cacheKv.get(BOOTSTRAP_KV_KEY())
         if (kvDone === '1') {
-          // Hydrate in-memory state without touching D1.
-          try {
-            const kv = (c.env as any).CACHE_KV as KVNamespace
-            const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
-            setGlobalKVNamespace(kv)
-            const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
-            setGlobalCatalogKv(kv)
-            c.executionCtx.waitUntil(loadKvCatalog())
-          } catch { /* KV wiring optional */ }
-          try {
-            const configs = await loadCollectionConfigs()
-            getCollectionRegistry().register(configs)
-          } catch { /* registry optional in fast-path */ }
-          // Sync document types to D1 even on KV fast-path — both operations are
-          // idempotent (no-ops when nothing changed) and ensure newly added
-          // collections and settings updates reach D1 without requiring a version bump.
-          await bootstrapDocumentTypes(c.env.DB).catch((e) =>
-            console.error("[Bootstrap] KV fast-path: error syncing document types:", e)
-          )
-          await autoRegisterCollectionDocumentTypes(c.env.DB).catch((e) =>
-            console.error("[Bootstrap] KV fast-path: error auto-registering collection types:", e)
-          )
-          await bootstrapDefaultContent(c.env.DB).catch((e) =>
-            console.error("[Bootstrap] KV fast-path: error seeding default content:", e)
-          )
-          bootstrapComplete = true
-          return next()
+          // Guard against stale KV key + fresh D1 (e.g. CI re-creates D1 each run but
+          // reuses KV). If document_types is empty the KV flag is lying — fall through
+          // to full bootstrap so autoRegisterCollectionDocumentTypes runs.
+          const d1Fresh = await (c.env.DB as D1Database)
+            .prepare('SELECT COUNT(*) n FROM document_types LIMIT 1')
+            .first<{ n: number }>()
+            .then(r => !r || r.n === 0)
+            .catch(() => true)
+          if (!d1Fresh) {
+            // D1 has data — fast-path is valid.
+            try {
+              const kv = (c.env as any).CACHE_KV as KVNamespace
+              const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
+              setGlobalKVNamespace(kv)
+              const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
+              setGlobalCatalogKv(kv)
+              c.executionCtx.waitUntil(loadKvCatalog())
+            } catch { /* KV wiring optional */ }
+            try {
+              const configs = await loadCollectionConfigs()
+              getCollectionRegistry().register(configs)
+            } catch { /* registry optional in fast-path */ }
+            // Sync document types to D1 even on KV fast-path — idempotent no-ops when
+            // nothing changed, but ensures newly added code collections reach D1 without
+            // requiring a version bump or full cold-start bootstrap.
+            await bootstrapDocumentTypes(c.env.DB).catch((e) =>
+              console.error("[Bootstrap] KV fast-path: error syncing document types:", e)
+            )
+            await autoRegisterCollectionDocumentTypes(c.env.DB).catch((e) =>
+              console.error("[Bootstrap] KV fast-path: error auto-registering collection types:", e)
+            )
+            await bootstrapDefaultContent(c.env.DB).catch((e) =>
+              console.error("[Bootstrap] KV fast-path: error seeding default content:", e)
+            )
+            bootstrapComplete = true
+            return next()
+          }
+          // D1 is fresh — delete the stale KV key so the next cold start also re-bootstraps.
+          cacheKv.delete(BOOTSTRAP_KV_KEY()).catch(() => {})
         }
       }
     } catch { /* KV unavailable — fall through to full bootstrap */ }

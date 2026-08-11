@@ -5,10 +5,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   isPluginActive,
+  invalidatePluginStatusCache,
   requireActivePlugin,
   requireActivePlugins,
   getActivePlugins,
-  invalidatePluginStatusCache
 } from './plugin-middleware'
 
 // Mock D1Database
@@ -222,6 +222,7 @@ describe('getActivePlugins', () => {
     invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should return array of active plugins', async () => {

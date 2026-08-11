@@ -148,7 +148,7 @@ test.describe('Slug Generation @content', () => {
     })
 
     // Save the content
-    await page.click('button[name="action"][value="save"]')
+    await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
 
     // Now try to create another with same slug
@@ -188,7 +188,7 @@ test.describe('Slug Generation @content', () => {
     const slugValue = 'test-cross-collection'
     await expect(page.locator('input[name="slug"]')).toHaveValue(slugValue)
     
-    await page.click('button[name="action"][value="save"]')
+    await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
     
     // Try to use same slug in blog_post collection
@@ -231,7 +231,7 @@ test.describe('Slug Generation @content', () => {
       if (el) el.value = 'Test content'
     })
 
-    await page.click('button[name="action"][value="save"]')
+    await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
 
     // Navigate to content list and find the item
@@ -274,7 +274,7 @@ test.describe('Slug Generation @content', () => {
       if (el) el.value = 'Test content'
     })
 
-    await page.click('button[name="action"][value="save"]')
+    await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
     
     // Navigate to edit
@@ -348,7 +348,7 @@ test.describe('Slug Generation @content', () => {
       if (el) el.value = 'Test content'
     })
 
-    await page.click('button[name="action"][value="save"]')
+    await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
     
     // Try to create duplicate
@@ -367,7 +367,7 @@ test.describe('Slug Generation @content', () => {
     await expect(page.locator('#field-slug-status')).toContainText('already in use')
     
     // Try to submit
-    await page.click('button[name="action"][value="save"]')
+    await page.click('button[name="action"][value="save_and_publish"]')
     
     // Should still be on form (not navigate away)
     await page.waitForTimeout(1000)

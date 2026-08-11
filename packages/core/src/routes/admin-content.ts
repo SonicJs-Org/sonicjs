@@ -1210,8 +1210,26 @@ adminContentRoutes.post('/', async (c) => {
     // Extract and validate field data
     const { data, errors } = extractFieldData(fields, formData)
 
+    // Defensive: title is always required regardless of schema
+    const titleVal = (formData.get('title') as string || '').trim()
+    if (!titleVal && !errors['title']) {
+      errors['title'] = ['Title is required']
+    }
+
     // Check for validation errors
     if (Object.keys(errors).length > 0) {
+      if (c.req.header('HX-Request') === 'true') {
+        // Return bare error alert — HTMX swaps innerHTML into #form-messages (hx-target on the form).
+        // Avoids HX-Retarget/outerHTML nesting issues with HTMX 2.x.
+        return c.html(html`<div class="p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 text-sm" role="alert">
+          <strong>Please fix the validation errors below.</strong>
+          <ul class="mt-1 list-disc list-inside text-xs">
+            ${Object.entries(errors).map(([field, msgs]) =>
+              `<li>${field}: ${(msgs as string[]).join(', ')}</li>`
+            ).join('')}
+          </ul>
+        </div>`)
+      }
       const flags = await loadContentEditorFlags(db)
       const formDataWithErrors: ContentFormData = {
         collection,
@@ -1225,11 +1243,6 @@ adminContentRoutes.post('/', async (c) => {
           role: user.role
         } : undefined,
         ...flags,
-      }
-      if (c.req.header('HX-Request') === 'true') {
-        c.header('HX-Retarget', '#content-form-page')
-        c.header('HX-Reswap', 'outerHTML')
-        return c.html(renderContentFormPage(formDataWithErrors, { partialOnly: true }))
       }
       return c.html(renderContentFormPage(formDataWithErrors))
     }

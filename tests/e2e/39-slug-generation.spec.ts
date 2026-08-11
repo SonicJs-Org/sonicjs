@@ -143,7 +143,7 @@ test.describe('Slug Generation @content', () => {
     // Fill required fields before saving
     await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
-      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'
     })
 
@@ -227,7 +227,7 @@ test.describe('Slug Generation @content', () => {
     // Fill required fields before saving
     await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
-      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'
     })
 
@@ -270,13 +270,13 @@ test.describe('Slug Generation @content', () => {
     // Fill required fields before saving
     await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
-      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'
     })
 
     await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
-    
+
     // Navigate to edit
     await page.goto('/admin/content?collection=blog_post')
     await page.waitForTimeout(1000)
@@ -344,13 +344,13 @@ test.describe('Slug Generation @content', () => {
     // Fill required fields before saving
     await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
     await page.evaluate(() => {
-      const el = document.querySelector('input[name="content"]') as HTMLInputElement
+      const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'
     })
 
     await page.click('button[name="action"][value="save_and_publish"]')
     await page.waitForTimeout(2000)
-    
+
     // Try to create duplicate
     await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle', { timeout: 15000 })

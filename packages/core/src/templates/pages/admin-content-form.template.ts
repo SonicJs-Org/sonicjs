@@ -190,6 +190,7 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
             hx-encoding="multipart/form-data"
             data-has-validation-errors="${hasValidationErrors ? 'true' : 'false'}"
             class="space-y-6"
+            novalidate
           >
             <input type="hidden" name="collection_id" value="${data.collection.id}">
             ${isEdit ? `<input type="hidden" name="id" value="${data.id}">` : ''}

@@ -149,7 +149,7 @@ test.describe('Slug Generation @content', () => {
 
     // Save the content
     await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForTimeout(2000)
+    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
 
     // Now try to create another with same slug
     await page.goto('/admin/content/new?collection=blog_post')
@@ -232,7 +232,7 @@ test.describe('Slug Generation @content', () => {
     })
 
     await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForTimeout(2000)
+    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
 
     // Navigate to content list and find the item
     await page.goto('/admin/content?collection=blog_post')
@@ -275,7 +275,7 @@ test.describe('Slug Generation @content', () => {
     })
 
     await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForTimeout(2000)
+    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
 
     // Navigate to edit
     await page.goto('/admin/content?collection=blog_post')
@@ -349,7 +349,7 @@ test.describe('Slug Generation @content', () => {
     })
 
     await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForTimeout(2000)
+    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
 
     // Try to create duplicate
     await page.goto('/admin/content/new?collection=blog_post')

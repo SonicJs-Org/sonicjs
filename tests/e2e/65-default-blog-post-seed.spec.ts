@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('default content seed @content', () => {
+  test.beforeEach(async ({ request }) => {
+    // Ensure welcome post exists and is published before each test (may have been deleted by test 42 bulk-delete).
+    await request.post('/test-seed-defaults')
+  })
+
   test('exposes the code-defined blog_post collection without legacy defaults', async ({ request }) => {
     const response = await request.get('/api/collections')
     expect(response.ok()).toBeTruthy()

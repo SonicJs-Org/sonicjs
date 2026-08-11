@@ -891,6 +891,9 @@ adminContentRoutes.get('/new', async (c) => {
     // Use the RESOLVED collection id (the ?collection= param may have been a name).
     const fields = await getCollectionFields(db, collection.id)
 
+    // Resolve document-backing type to expose versioning flag to the template.
+    const newDocType = await getDocBackingType(db, collection.name ?? collection.id)
+
     // Check if workflow plugin is active
     const workflowEnabled = await isPluginActive(db, 'workflow')
 
@@ -941,6 +944,7 @@ adminContentRoutes.get('/new', async (c) => {
       collection,
       fields,
       isEdit: false,
+      versioningEnabled: newDocType?.settings?.versioning === true,
       workflowEnabled,
       tinymceEnabled,
       tinymceSettings,

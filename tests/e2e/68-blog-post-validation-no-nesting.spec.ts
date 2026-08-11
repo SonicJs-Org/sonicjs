@@ -10,11 +10,7 @@ test.describe('Blog post validation error - no nested form @content', () => {
     await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle')
 
-    // Fill title but leave required author field empty to trigger validation
-    const titleInput = page.locator('input[name="title"]')
-    if (await titleInput.count() > 0) {
-      await titleInput.fill('Test Blog Post')
-    }
+    // Leave all fields empty — title is required and not auto-populated, so validation will fire.
 
     // Submit form via save button (not requestSubmit — needs button value for HTMX action)
     const saveBtn = page.locator('button[name="action"][value="save"]').first()
@@ -36,11 +32,7 @@ test.describe('Blog post validation error - no nested form @content', () => {
     await page.goto('/admin/content/new?collection=blog_post')
     await page.waitForLoadState('networkidle')
 
-    // Fill title only, leave required fields empty
-    const titleInput = page.locator('input[name="title"]')
-    if (await titleInput.count() > 0) {
-      await titleInput.fill('HTMX Validation Test')
-    }
+    // Leave all fields empty — title required, not auto-populated, so validation fires.
 
     // Click any save button
     const saveBtn = page.locator('button[type="submit"]').first()

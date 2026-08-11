@@ -212,17 +212,25 @@ app.post('/test-seed-defaults', async (c: Context) => {
 
     const existing = await db
       .prepare(
-        `SELECT id, deleted_at FROM documents
+        `SELECT id, deleted_at, is_published FROM documents
          WHERE type_id = ? AND tenant_id = 'default' AND slug = ? AND is_current_draft = 1`,
       )
       .bind(BLOG_POST_TYPE, WELCOME_SLUG)
       .first() as any
 
-    if (existing && !existing.deleted_at) {
-      return c.json({ success: true, action: 'skipped', message: 'Welcome post already exists' })
-    }
-
     const nowSec = Math.floor(Date.now() / 1000)
+
+    if (existing && !existing.deleted_at) {
+      if (existing.is_published) {
+        return c.json({ success: true, action: 'skipped', message: 'Welcome post already exists and is published' })
+      }
+      // Exists but unpublished (e.g. bulk-drafted by another test) — re-publish.
+      await db
+        .prepare(`UPDATE documents SET is_published = 1, updated_at = ? WHERE id = ?`)
+        .bind(nowSec, existing.id)
+        .run()
+      return c.json({ success: true, action: 'republished', message: 'Welcome post re-published' })
+    }
 
     if (existing && existing.deleted_at) {
       // Restore soft-deleted post

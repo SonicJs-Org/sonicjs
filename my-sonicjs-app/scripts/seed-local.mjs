@@ -6,8 +6,9 @@
  * Usage: node scripts/seed-local.mjs [path-to-sqlite]
  */
 
+import { bootstrapDocumentTypes, RbacService } from '@sonicjs-cms/core'
 import { createRequire } from 'module'
-import { createHash, randomBytes, pbkdf2Sync } from 'node:crypto'
+import { randomBytes, pbkdf2Sync } from 'node:crypto'
 import { readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -56,11 +57,14 @@ const PASSWORD = 'sonicjs!'
 
 const existing = db.prepare('SELECT id FROM auth_user WHERE email = ?').get(EMAIL)
 
+let userId
+
 if (existing) {
+  userId = existing.id
   console.log('✓ Admin user already exists')
 } else {
   const now = Math.floor(Date.now() / 1000)
-  const userId = `admin-${Date.now()}-${randomBytes(4).toString('hex')}`
+  userId = `admin-${Date.now()}-${randomBytes(4).toString('hex')}`
   const passwordHash = hashPassword(PASSWORD)
 
   db.prepare(`
@@ -79,5 +83,90 @@ if (existing) {
   console.log('  Role: admin')
 }
 
-db.close()
-console.log('✓ Seed complete')
+// ── D1-compatible adapter over better-sqlite3 ────────────────────────────────
+// Minimal shim so @sonicjs-cms/core services (bootstrapDocumentTypes, RbacService)
+// can run against the local miniflare SQLite file. Mirrors the D1PreparedStatement /
+// D1Database shapes those services rely on.
+
+function coerceBind(v) {
+  if (v === undefined || v === null) return null
+  if (typeof v === 'boolean') return v ? 1 : 0
+  return v
+}
+
+function makeD1Adapter(sqlite) {
+  function prepare(sql) {
+    const stmt = sqlite.prepare(sql)
+    let binds = []
+    return {
+      bind(...args) {
+        binds = args.map(coerceBind)
+        return this
+      },
+      async run() {
+        const info = stmt.run(...binds)
+        binds = []
+        return { success: true, meta: { changes: info.changes, last_row_id: Number(info.lastInsertRowid) } }
+      },
+      async all() {
+        const results = stmt.all(...binds)
+        binds = []
+        return { results, success: true, meta: {} }
+      },
+      async first(colName) {
+        const row = stmt.get(...binds)
+        binds = []
+        if (row == null) return null
+        return colName ? row[colName] ?? null : row
+      },
+      async raw() {
+        const rows = sqlite.prepare(sql).raw().all(...binds)
+        binds = []
+        return rows
+      },
+      execInBatch() {
+        stmt.run(...binds)
+        binds = []
+      },
+    }
+  }
+  return {
+    prepare,
+    async batch(statements) {
+      const tx = sqlite.transaction((stmts) => {
+        for (const s of stmts) s.execInBatch()
+      })
+      tx(statements)
+      return statements.map(() => ({ success: true, meta: {} }))
+    },
+    async exec(query) {
+      sqlite.exec(query)
+      return { success: true, meta: {} }
+    },
+    async dump() {
+      const buf = sqlite.serialize()
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+    },
+  }
+}
+
+// ── RBAC (document-backed) ──────────────────────────────────────────────────
+// Register document types, seed system roles/verbs, then assign the admin role
+// so the seeded admin passes requireRbac('portal', 'access') on /admin/*.
+// Idempotent: existing roles/assignments are left untouched.
+
+;(async () => {
+  try {
+    const d1 = makeD1Adapter(db)
+    await bootstrapDocumentTypes(d1)
+    const rbac = new RbacService(d1)
+    await rbac.ensureSystemRbacSeed()
+    await rbac.addUserRoleByName(userId, 'admin')
+    console.log('✓ RBAC seeded — admin role assigned')
+    db.close()
+    console.log('✓ Seed complete')
+  } catch (err) {
+    console.error('❌ RBAC seed failed:', err)
+    process.exit(1)
+  }
+})()

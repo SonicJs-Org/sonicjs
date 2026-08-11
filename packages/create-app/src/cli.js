@@ -288,12 +288,14 @@ async function createProject(answers, flags) {
 
     // 2. Create Cloudflare resources
     let databaseId = 'YOUR_DATABASE_ID'
+    let kvId
     let resourcesCreated = false
     if (createResources) {
       spinner.start('Creating Cloudflare resources...')
       try {
         const result = await createCloudflareResources(databaseName, bucketName, targetDir)
         databaseId = result.databaseId || 'YOUR_DATABASE_ID'
+        kvId = result.kvId
         resourcesCreated = result.success
         if (resourcesCreated) {
           spinner.succeed('Created Cloudflare resources')
@@ -312,7 +314,7 @@ async function createProject(answers, flags) {
 
     // 3. Update wrangler.toml with database ID
     spinner.start('Updating configuration...')
-    await updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName })
+    await updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName, kvId })
     spinner.succeed('Updated configuration')
 
     // 4. Install dependencies
@@ -605,8 +607,10 @@ async function createCloudflareResources(databaseName, bucketName, targetDir) {
   }
 
   let databaseId
+  let kvId
   let dbCreated = false
   let bucketCreated = false
+  let kvCreated = false
 
   // Create D1 database
   try {
@@ -654,13 +658,44 @@ async function createCloudflareResources(databaseName, bucketName, targetDir) {
     console.log(kleur.dim(`  wrangler r2 bucket create ${bucketName}`))
   }
 
+  // Create KV namespace (powers the cache plugin + bootstrap fast-path).
+  // Without a bound CACHE_KV, every cold isolate re-runs the full D1 bootstrap
+  // and TTFB balloons to ~10s+ — so this is not optional for a healthy deploy.
+  try {
+    const { stdout } = await execa(wranglerCmd, [...wranglerArgs, 'kv', 'namespace', 'create', 'CACHE_KV'], {
+      cwd: targetDir
+    })
+
+    // Parse namespace id from output (wrangler prints `id = "..."`)
+    const match = stdout.match(/id\s*=\s*["']([^"']+)["']/)
+    if (match) {
+      kvId = match[1]
+      kvCreated = true
+    } else {
+      console.log('')
+      console.log(kleur.yellow('⚠ Warning: Could not parse KV namespace id from wrangler output'))
+      console.log(kleur.dim('  You may need to manually update wrangler.toml'))
+    }
+  } catch (error) {
+    console.log('')
+    console.log(kleur.yellow('⚠ KV namespace creation failed:'))
+    console.log(kleur.dim(`  ${error.message}`))
+    if (error.stderr) {
+      console.log(kleur.dim(`  ${error.stderr}`))
+    }
+    console.log('')
+    console.log(kleur.dim('  Create manually with:'))
+    console.log(kleur.dim('  wrangler kv namespace create CACHE_KV'))
+  }
+
   return {
     databaseId,
-    success: dbCreated && bucketCreated
+    kvId,
+    success: dbCreated && bucketCreated && kvCreated
   }
 }
 
-async function updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName }) {
+async function updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName, kvId }) {
   const wranglerPath = path.join(targetDir, 'wrangler.toml')
   let content = await fs.readFile(wranglerPath, 'utf-8')
 
@@ -672,6 +707,12 @@ async function updateWranglerConfig(targetDir, { databaseName, databaseId, bucke
 
   // Update bucket_name
   content = content.replace(/bucket_name\s*=\s*"[^"]*"/, `bucket_name = "${bucketName}"`)
+
+  // Update CACHE_KV namespace id (only when we actually created one; otherwise
+  // leave the YOUR_KV_NAMESPACE_ID placeholder so the user fills it in manually)
+  if (kvId) {
+    content = content.replace(/id\s*=\s*"YOUR_KV_NAMESPACE_ID"/, `id = "${kvId}"`)
+  }
 
   await fs.writeFile(wranglerPath, content)
 }
@@ -799,6 +840,16 @@ function printSuccessMessage(answers) {
   console.log()
   console.log(kleur.bold('Deploy to Cloudflare (when ready):'))
   console.log(kleur.cyan('  npm run deploy'))
+
+  if (createResources && !resourcesCreated) {
+    console.log()
+    console.log(kleur.yellow('⚠ Some Cloudflare resources were not created automatically.'))
+    console.log(kleur.dim('  Before deploying, fill in the placeholder ids in wrangler.toml:'))
+    console.log(kleur.dim('  - database_id       → wrangler d1 create <db-name>'))
+    console.log(kleur.dim('  - CACHE_KV id       → wrangler kv namespace create CACHE_KV'))
+    console.log(kleur.dim('  The CACHE_KV binding is required for good TTFB — without it every'))
+    console.log(kleur.dim('  cold isolate re-runs the full bootstrap (~10s+ first byte).'))
+  }
 
   console.log()
   console.log(kleur.dim('Need help? Visit https://sonicjs.com'))

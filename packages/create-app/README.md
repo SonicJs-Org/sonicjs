@@ -116,6 +116,11 @@ wrangler d1 create my-app-db
 # Copy the database_id to wrangler.toml
 
 wrangler r2 bucket create my-app-media
+
+wrangler kv namespace create CACHE_KV
+# Copy the id into the CACHE_KV binding in wrangler.toml.
+# Required for good TTFB — without it every cold isolate re-runs the full
+# database bootstrap (~10s+ first byte).
 ```
 
 ### 3. Run database migrations
@@ -182,6 +187,19 @@ For media storage, an R2 bucket is created.
 **Manual creation:**
 ```bash
 wrangler r2 bucket create my-app-media
+```
+
+### KV Namespace (CACHE_KV)
+
+Powers the cache plugin and the cross-isolate bootstrap fast-path. **Required
+for good TTFB** — without a bound `CACHE_KV`, every cold Worker isolate re-runs
+the full database bootstrap and first byte balloons to ~10s+. With it, only the
+first isolate per deploy pays that cost; the rest skip it via a ~10ms KV read.
+
+**Manual creation:**
+```bash
+wrangler kv namespace create CACHE_KV
+# Copy the id into the CACHE_KV binding in wrangler.toml
 ```
 
 ## Troubleshooting

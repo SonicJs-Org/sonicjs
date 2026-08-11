@@ -18,6 +18,14 @@ migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"
 binding = "MEDIA_BUCKET"
 bucket_name = "my-sonicjs-media"
 
+# KV namespace for the cache plugin + cross-isolate bootstrap fast-path.
+# REQUIRED for good TTFB: without it every cold isolate re-runs the full D1
+# bootstrap (~10s+ first byte). With it, only the first isolate per deploy pays
+# that cost and the rest skip it via a ~10ms KV read.
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "YOUR_KV_NAMESPACE_ID" # Run: wrangler kv namespace create CACHE_KV
+
 # Environment variables
 [vars]
 ENVIRONMENT = "development"

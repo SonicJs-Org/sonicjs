@@ -76,8 +76,17 @@ async function runTest() {
     // Verify wrangler.toml content
     const wranglerContent = await fs.readFile(path.join(testDir, 'wrangler.toml'), 'utf-8')
     console.log('\n⚙️  Verifying wrangler.toml...')
-    console.log(`   Has database config: ${wranglerContent.includes('database_name')}`)
-    console.log(`   Has bucket config: ${wranglerContent.includes('bucket_name')}`)
+    const hasDb = wranglerContent.includes('database_name')
+    const hasBucket = wranglerContent.includes('bucket_name')
+    // CACHE_KV binding is required for the bootstrap fast-path — without it every
+    // cold isolate re-runs the full D1 bootstrap and TTFB balloons to ~10s+.
+    const hasCacheKv =
+      wranglerContent.includes('binding = "CACHE_KV"') &&
+      wranglerContent.includes('[[kv_namespaces]]')
+    console.log(`   Has database config: ${hasDb}`)
+    console.log(`   Has bucket config: ${hasBucket}`)
+    console.log(`   ${hasCacheKv ? '✓' : '✗'} Has CACHE_KV binding`)
+    if (!hasDb || !hasBucket || !hasCacheKv) allPass = false
 
     if (allPass) {
       console.log('\n✅ All checks passed!')

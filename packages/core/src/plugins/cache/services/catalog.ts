@@ -85,9 +85,11 @@ async function kvSafeKey(cacheKey: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
 }
 
-/** Schedule a throttled KV write for the given cache key. Call after recordCatalogRequest(). */
-export function scheduleKvWrite(cacheKey: string, ctx: CtxLike): void {
-  if (!globalKv) return
+/** Schedule a throttled KV write for the given cache key. Call after recordCatalogRequest().
+ * `ctx` is undefined outside a Worker request (tests, non-Worker callers) — no ctx means no
+ * background write is possible, so no-op. */
+export function scheduleKvWrite(cacheKey: string, ctx: CtxLike | undefined): void {
+  if (!globalKv || !ctx) return
   const entry = catalog.get(cacheKey)
   if (!entry) return
   const now = Date.now()

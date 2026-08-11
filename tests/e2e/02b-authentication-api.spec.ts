@@ -108,13 +108,14 @@ test.describe('Authentication API @auth @api', () => {
 
     test('should validate required fields', async ({ request }) => {
       const invalidPayloads = [
-        { email: 'test@example.com' }, // Missing other fields
+        // Note: { email only, no password } is intentionally excluded — the server
+        // permits passwordless accounts (magic-link / social auth paths).
+        // Note: username is not a validated field in the registration schema.
         { ...testUser, email: '' }, // Empty email
         { ...testUser, email: 'invalid-email' }, // Invalid email format
-        { ...testUser, password: '123' }, // Too short password
-        { ...testUser, username: 'ab' }, // Too short username
-        { ...testUser, firstName: '' }, // Empty first name
-        { ...testUser, lastName: '' } // Empty last name
+        { ...testUser, password: '123' }, // Too short password (min 8)
+        { ...testUser, firstName: '' }, // Empty first name (min 1 when provided)
+        { ...testUser, lastName: '' } // Empty last name (min 1 when provided)
       ];
 
       for (const payload of invalidPayloads) {
@@ -352,8 +353,14 @@ test.describe('Authentication API @auth @api', () => {
       });
       expect(loginResponse.status()).toBe(200);
 
-      // Logout — Playwright's request context auto-sends the session cookie
-      const logoutResponse = await request.post('/auth/logout', {});
+      // Extract CSRF token set by login — /auth/logout requires double-submit validation.
+      const loginSetCookie = loginResponse.headers()['set-cookie'] ?? '';
+      const csrfMatch = loginSetCookie.match(/csrf_token=([^;]+)/);
+      const csrfToken = csrfMatch?.[1] ?? '';
+
+      const logoutResponse = await request.post('/auth/logout', {
+        headers: { 'X-CSRF-Token': csrfToken }
+      });
 
       expect(logoutResponse.status()).toBe(200);
 
@@ -439,9 +446,16 @@ test.describe('Authentication API @auth @api', () => {
       // Wait a moment to ensure different timestamp
       await new Promise(resolve => setTimeout(resolve, 1100));
 
+      // Extract CSRF token from login — /auth/refresh requires double-submit validation.
+      const loginSetCookie = loginResponse.headers()['set-cookie'] ?? '';
+      const csrfMatch = loginSetCookie.match(/csrf_token=([^;]+)/);
+      const csrfToken = csrfMatch?.[1] ?? '';
+
       // Refresh token — /auth/refresh reads auth_token cookie (set by /auth/login)
       // Playwright's request context auto-sends it
-      const refreshResponse = await request.post('/auth/refresh');
+      const refreshResponse = await request.post('/auth/refresh', {
+        headers: { 'X-CSRF-Token': csrfToken }
+      });
 
       expect(refreshResponse.status()).toBe(200);
 

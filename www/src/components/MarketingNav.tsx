@@ -32,6 +32,7 @@ const navLinks = [
   { href: '/quickstart', label: 'Docs' },
   { href: '/blog', label: 'Blog' },
   { href: '/compare', label: 'Compare' },
+  { href: '/support', label: 'Support' },
 ]
 
 export function MarketingNav() {

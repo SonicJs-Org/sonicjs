@@ -5,8 +5,11 @@ import { loginAsAdmin } from './utils/test-helpers'
  * Versioning is OFF by default (Phase 1) and the version-history / restore UI ships as the
  * versioning-plugin (Phase 2). A document type opts in via `settings.versioning: true`.
  *
- * blog_post → versioning OFF (edits in place, no history rows)
- * faq       → versioning ON  (via CollectionConfig.versioning: true)
+ * departments → versioning OFF (no versioning: true in CollectionConfig)
+ * faq         → versioning ON  (via CollectionConfig.versioning: true)
+ *
+ * Note: blog_post is a system type with versioning: true (bootstrapDocumentTypes) so it
+ * cannot be used as a versioning-OFF example.
  */
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -25,26 +28,21 @@ async function createFaq(request: import('@playwright/test').APIRequestContext, 
   return (await res.json()).data.rootId as string
 }
 
-async function createBlogPost(request: import('@playwright/test').APIRequestContext, suffix: string) {
+async function createDepartment(request: import('@playwright/test').APIRequestContext, suffix: string) {
   const res = await request.post('/admin/documents', {
     headers: JSON_HEADERS,
     data: {
-      typeId: 'blog_post',
-      title: `Blog Spec ${suffix}`,
-      slug: `blog-spec-${suffix}`,
-      data: {
-        title: `Blog Spec ${suffix}`,
-        content: 'v1 body',
-        author: 'admin',
-        difficulty: 'beginner',
-      },
+      typeId: 'departments',
+      title: `Dept Spec ${suffix}`,
+      slug: `dept-spec-${suffix}`,
+      data: { name: `Dept Spec ${suffix}` },
     },
   })
-  expect(res.ok(), `blog create failed: ${res.status()} ${await res.text()}`).toBeTruthy()
+  expect(res.ok(), `dept create failed: ${res.status()} ${await res.text()}`).toBeTruthy()
   return (await res.json()).data.rootId as string
 }
 
-test.describe('Versioning (optional, plugin-backed) @content', () => {
+test.describe('Versioning (optional, plugin-backed) @smoke @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })
@@ -116,37 +114,37 @@ test.describe('Versioning (optional, plugin-backed) @content', () => {
     expect(res.status()).toBe(404)
   })
 
-  // ── Blog post (versioning OFF) ────────────────────────────────────────────
+  // ── Departments (versioning OFF) ─────────────────────────────────────────
 
-  test('blog_post edits in place — no extra version rows', async ({ page }) => {
-    const suffix = `${Date.now()}-bp`
-    const rootId = await createBlogPost(page.request, suffix)
+  test('versioning-off type edits in place — no extra version rows', async ({ page }) => {
+    const suffix = `${Date.now()}-d`
+    const rootId = await createDepartment(page.request, suffix)
 
     // Three edits — with versioning OFF each saveDraft updates the single row
-    for (const content of ['edit1', 'edit2', 'edit3']) {
+    for (const name of ['edit1', 'edit2', 'edit3']) {
       const put = await page.request.put(`/admin/documents/${rootId}`, {
         headers: JSON_HEADERS,
-        data: { data: { content } },
+        data: { data: { name } },
       })
-      expect(put.ok(), `blog edit failed: ${put.status()} ${await put.text()}`).toBeTruthy()
+      expect(put.ok(), `dept edit failed: ${put.status()} ${await put.text()}`).toBeTruthy()
     }
 
-    // History route should 404 (versioning not opted in for blog_post)
+    // History route should 404 (versioning not opted in for departments)
     const histRes = await page.request.get(`/admin/versioning/${rootId}`)
     expect(histRes.status()).toBe(404)
   })
 
-  test('blog_post edit form shows Update button — no Save Draft or Publish', async ({ page }) => {
-    const suffix = `${Date.now()}-c`
-    const rootId = await createBlogPost(page.request, suffix)
+  test('versioning-off type edit form shows Update button — no Save Draft', async ({ page }) => {
+    const suffix = `${Date.now()}-e`
+    const rootId = await createDepartment(page.request, suffix)
 
-    await page.goto(`/admin/content/${rootId}/edit`)
+    await page.goto(`/admin/content/documents/departments/${rootId}/edit`)
     await page.waitForLoadState('networkidle', { timeout: 20000 })
     // Versioning OFF → single "Update" button
     await expect(page.getByRole('button', { name: 'Update' })).toBeVisible()
-    // No "Save Draft" or "Update & Publish" pair
-    await expect(page.getByRole('button', { name: 'Update & Publish' })).not.toBeVisible()
-    // No "View Version History" link
-    await expect(page.getByText('View Version History')).not.toBeVisible()
+    // No "Save Draft"
+    await expect(page.getByRole('button', { name: 'Save Draft' })).not.toBeVisible()
+    // No version history section
+    await expect(page.getByText('Version history')).not.toBeVisible()
   })
 })

@@ -22,7 +22,7 @@ import { Fragment, useRef } from 'react'
  * are SaaS content platforms, so "self-hostable" rows are honestly No and many
  * features are plan-gated.
  *
- * Data last verified June 2026. Update LAST_VERIFIED when refreshed.
+ * Data last verified July 2026. Update LAST_VERIFIED when refreshed.
  */
 
 const LAST_VERIFIED = 'July 2026'
@@ -252,7 +252,7 @@ const SECTIONS: Section[] = [
       {
         label: 'Rich text editor',
         cells: [
-          'TinyMCE',
+          'Lexical',
           'Lexical',
           'CKEditor',
           'TinyMCE',
@@ -513,7 +513,7 @@ const SECTIONS: Section[] = [
       },
       {
         label: 'Cron / scheduled jobs',
-        cells: [partial(), yes, yes, yes, partial(), partial()],
+        cells: [yes, yes, yes, yes, partial(), partial()],
       },
       {
         label: 'Background jobs / queues',
@@ -583,7 +583,7 @@ const SECTIONS: Section[] = [
       { label: 'Database transactions', cells: [yes, yes, yes, yes, yes, no] },
       {
         label: 'Multi-tenancy',
-        cells: [partial(), plugin(), no, partial(), partial(), yes],
+        cells: [plugin(), plugin(), no, partial(), partial(), yes],
       },
     ],
   },
@@ -601,7 +601,7 @@ const SECTIONS: Section[] = [
       {
         label: 'Official plugins / marketplace',
         cells: [
-          '~25 bundled',
+          '~29 bundled',
           '~10 official',
           'Marketplace',
           'Marketplace',

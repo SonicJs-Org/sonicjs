@@ -12,7 +12,8 @@ import { setBranchLabel } from "../templates/layouts/admin-layout-catalyst.templ
 
 type Bindings = {
   DB: D1Database;
-  KV: KVNamespace;
+  KV?: KVNamespace;
+  CACHE_KV?: KVNamespace;
   JWT_SECRET?: string;
   CORS_ORIGINS?: string;
   ENVIRONMENT?: string;
@@ -83,6 +84,26 @@ export function verifySecurityConfig(env: Bindings): void {
   }
 }
 
+// Better Auth stateless session/auth API paths that must never carry the
+// cold-start bootstrap tax (they only touch auth_* migration tables). Matched
+// as `/auth/<seg>` prefixes so `/auth/sign-in/email`, `/auth/callback/github`,
+// etc. are all covered. Deliberately excludes `/auth/login` (page render) and
+// `/auth/seed-admin` (self-seeds its own prerequisites).
+const BETTER_AUTH_SESSION_SEGMENTS = [
+  "sign-in",
+  "sign-up",
+  "sign-out",
+  "get-session",
+  "callback",
+  "token",
+] as const;
+
+export function isBetterAuthSessionPath(path: string): boolean {
+  return BETTER_AUTH_SESSION_SEGMENTS.some(
+    (seg) => path === `/auth/${seg}` || path.startsWith(`/auth/${seg}/`)
+  );
+}
+
 /**
  * Bootstrap middleware that ensures system initialization
  * Runs once per worker instance
@@ -112,21 +133,33 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       if (cacheKv) {
         const kvDone = await cacheKv.get(BOOTSTRAP_KV_KEY())
         if (kvDone === '1') {
-          // Hydrate in-memory state without touching D1.
-          try {
-            const kv = (c.env as any).CACHE_KV as KVNamespace
-            const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
-            setGlobalKVNamespace(kv)
-            const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
-            setGlobalCatalogKv(kv)
-            c.executionCtx.waitUntil(loadKvCatalog())
-          } catch { /* KV wiring optional */ }
-          try {
-            const configs = await loadCollectionConfigs()
-            getCollectionRegistry().register(configs)
-          } catch { /* registry optional in fast-path */ }
-          bootstrapComplete = true
-          return next()
+          // Guard against stale KV key + fresh D1 (e.g. CI re-creates D1 each run but
+          // reuses KV). If document_types is empty the KV flag is lying — fall through
+          // to full bootstrap so autoRegisterCollectionDocumentTypes runs.
+          const d1Fresh = await (c.env.DB as D1Database)
+            .prepare('SELECT COUNT(*) n FROM document_types LIMIT 1')
+            .first<{ n: number }>()
+            .then(r => !r || r.n === 0)
+            .catch(() => true)
+          if (!d1Fresh) {
+            // D1 has data — fast-path is valid.
+            try {
+              const kv = (c.env as any).CACHE_KV as KVNamespace
+              const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
+              setGlobalKVNamespace(kv)
+              const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
+              setGlobalCatalogKv(kv)
+              c.executionCtx.waitUntil(loadKvCatalog())
+            } catch { /* KV wiring optional */ }
+            try {
+              const configs = await loadCollectionConfigs()
+              getCollectionRegistry().register(configs)
+            } catch { /* registry optional in fast-path */ }
+            bootstrapComplete = true
+            return next()
+          }
+          // D1 is fresh — delete the stale KV key so the next cold start also re-bootstraps.
+          cacheKv.delete(BOOTSTRAP_KV_KEY()).catch(() => {})
         }
       }
     } catch { /* KV unavailable — fall through to full bootstrap */ }
@@ -143,6 +176,20 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       path.endsWith(".jpg") ||
       path.endsWith(".ico")
     ) {
+      return next();
+    }
+
+    // Skip the heavy D1 bootstrap for Better Auth's stateless session API. These
+    // endpoints only read/write the auth_* tables (created by migration 0001) —
+    // they never need the collection registry, document types, or RBAC seed. On
+    // a cold isolate the ~10s bootstrap otherwise runs on the same request as
+    // Better Auth's scrypt password verify, exhausting the Worker's CPU/time
+    // budget and returning a bare 500. Login is the first request in most flows,
+    // so this is exactly the request that must not carry the bootstrap tax.
+    // (Not /auth/login or /auth/seed-admin: the former is a page render, the
+    // latter self-seeds its own prerequisites — neither is a hot cold-start path
+    // that 500s.) The full bootstrap still runs on the next non-auth request.
+    if (isBetterAuthSessionPath(path)) {
       return next();
     }
 
@@ -282,7 +329,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
         // Stable installation ID via KV (generated once, persisted)
         let installationId = 'unknown';
         try {
-          const kv = c.env.KV as KVNamespace | undefined;
+          const kv = (c.env.CACHE_KV ?? c.env.KV) as KVNamespace | undefined;
           if (kv) {
             installationId = (await kv.get('_sonicjs_installation_id')) ?? '';
             if (!installationId) {
@@ -291,6 +338,13 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
             }
           }
         } catch { /* KV not available */ }
+
+        // Extract deploy origin (scheme + host only — no path, no query, no PII)
+        let deployUrl: string | undefined;
+        try {
+          const u = new URL(c.req.url);
+          deployUrl = u.origin; // e.g. "https://example.com"
+        } catch { /* malformed URL — skip */ }
 
         const telemetry = getTelemetryService();
         await telemetry.trackProjectSnapshot({
@@ -301,6 +355,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
           field_type_histogram: fieldTypeHistogram,
           doc_total: docTotal,
           sonicjs_version: SONICJS_VERSION,
+          deploy_url: deployUrl,
         });
       } catch { /* silent — telemetry must never break boot */ }
     } catch (error) {

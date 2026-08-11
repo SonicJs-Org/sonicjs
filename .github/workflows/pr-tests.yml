@@ -206,26 +206,31 @@ jobs:
           # Always include smoke
           TAGS="@smoke"
 
-          # Map changed paths to feature tags
-          if echo "$CHANGED" | grep -qE 'admin-media|services/media|media-documents'; then
+          # Strip test/spec files from consideration — only source changes should
+          # trigger extra E2E feature tags; test file renames/updates don't affect
+          # deployed behaviour and would otherwise pull in unrelated E2E suites.
+          CHANGED_SRC=$(echo "$CHANGED" | grep -vE '__tests__|\.test\.|\.spec\.' || true)
+
+          # Map changed source paths to feature tags
+          if echo "$CHANGED_SRC" | grep -qE 'admin-media|services/media|media-documents'; then
             TAGS="$TAGS|@media"
           fi
-          if echo "$CHANGED" | grep -qE 'admin-content|services/documents|document-repository|document-projection'; then
+          if echo "$CHANGED_SRC" | grep -qE 'admin-content|services/documents|document-repository|document-projection'; then
             TAGS="$TAGS|@content"
           fi
-          if echo "$CHANGED" | grep -qE 'routes/api|api-content|api-documents|api-media'; then
+          if echo "$CHANGED_SRC" | grep -qE 'routes/api|api-content|api-documents|api-media'; then
             TAGS="$TAGS|@api"
           fi
-          if echo "$CHANGED" | grep -qE 'middleware/auth|admin-settings|api-keys|services/api-key'; then
+          if echo "$CHANGED_SRC" | grep -qE 'middleware/auth|admin-settings|api-keys|services/api-key'; then
             TAGS="$TAGS|@auth|@api-keys"
           fi
-          if echo "$CHANGED" | grep -qE 'admin-database|database-tools'; then
+          if echo "$CHANGED_SRC" | grep -qE 'admin-database|database-tools'; then
             TAGS="$TAGS|@database"
           fi
-          if echo "$CHANGED" | grep -qE 'collection-registry|admin-collections'; then
+          if echo "$CHANGED_SRC" | grep -qE 'collection-registry|admin-collections'; then
             TAGS="$TAGS|@collections"
           fi
-          if echo "$CHANGED" | grep -qE 'migrations/'; then
+          if echo "$CHANGED_SRC" | grep -qE 'migrations/'; then
             TAGS="$TAGS|@content|@media|@api"
           fi
 

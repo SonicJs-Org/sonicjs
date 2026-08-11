@@ -306,6 +306,7 @@ export const navigation: Array<NavGroup> = [
       { title: 'FAQ', href: '/faq' },
       { title: 'Changelog', href: '/changelog' },
       { title: 'Community', href: '/community' },
+      { title: 'Commercial Support', href: '/commercial-support' },
       { title: 'Sponsor', href: '/sponsor' },
       { title: 'Contributing', href: '/contributing' },
       { title: 'AI Agents', href: '/ai-agents' },

@@ -5,10 +5,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   isPluginActive,
+  invalidatePluginStatusCache,
   requireActivePlugin,
   requireActivePlugins,
   getActivePlugins,
-  invalidatePluginStatusCache
 } from './plugin-middleware'
 
 // Mock D1Database
@@ -41,10 +41,9 @@ describe('isPluginActive', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
-    // Reset the module-level per-isolate plugin-status cache so a plugin id resolved
-    // in an earlier test (e.g. cached active=true) does not leak into this one.
     invalidatePluginStatusCache()
   })
 
@@ -113,10 +112,9 @@ describe('requireActivePlugin', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
-    // Reset the module-level per-isolate plugin-status cache so a plugin id resolved
-    // in an earlier test (e.g. cached active=true) does not leak into this one.
     invalidatePluginStatusCache()
   })
 
@@ -157,10 +155,9 @@ describe('requireActivePlugins', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
-    // Reset the module-level per-isolate plugin-status cache so a plugin id resolved
-    // in an earlier test (e.g. cached active=true) does not leak into this one.
     invalidatePluginStatusCache()
   })
 
@@ -222,10 +219,9 @@ describe('getActivePlugins', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
-    // Reset the module-level per-isolate plugin-status cache so a plugin id resolved
-    // in an earlier test (e.g. cached active=true) does not leak into this one.
     invalidatePluginStatusCache()
   })
 

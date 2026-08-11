@@ -3,9 +3,10 @@
 // is a no-op) is missing the q_* VIRTUAL generated columns, and every q_* query then 500s.
 // MigrationService self-heals at bootstrap by reconciling the columns from each active document type's
 // queryableFields (data-driven — no hardcoded column list). Real SQLite (better-sqlite3).
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { MigrationService } from '../../services/migrations'
+import { resetScalarSchemaCache } from '../../services/document-scalar-schema'
 
 // Minimal D1-like adapter over better-sqlite3 (prepare/bind/run/all/first) — enough for MigrationService.
 function adapter(sqlite: any) {
@@ -33,6 +34,13 @@ function seed(sqlite: any, typeId: string, queryableFields: any[], data: string)
 }
 
 describe('MigrationService D45 — documents generated columns self-heal (data-driven)', () => {
+  beforeEach(() => {
+    // Each test creates a fresh in-memory DB, so the module-level scalar-schema cache
+    // must be reset — otherwise the second test sees stale "column exists" hits and
+    // skips the ALTER TABLE on the new DB (same bug as createTestD1 / api-key-service).
+    resetScalarSchemaCache()
+  })
+
   it('adds the q_* generated columns + indexes declared by an active document type', async () => {
     const sqlite = new Database(':memory:')
     seed(sqlite, 'testimonial', [

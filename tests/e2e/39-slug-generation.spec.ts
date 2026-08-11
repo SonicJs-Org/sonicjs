@@ -141,7 +141,21 @@ test.describe('Slug Generation @content', () => {
     await expect(slugField).toHaveValue('test-duplicate-page')
 
     // Fill required fields before saving
-    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
+    // Fill the user-picker author field. Setting the hidden input alone is not enough:
+    // the field's submit handler overwrites the hidden value from the visible search box
+    // unless the display value matches dataset.linkedName. Set all three so it sticks.
+    await page.evaluate(() => {
+      const container = document.querySelector('.user-search-field-container')
+      if (container) {
+        const display = container.querySelector('input[type="text"]') as HTMLInputElement | null
+        const hidden = container.querySelector('input[type="hidden"]') as HTMLInputElement | null
+        if (display) { display.value = 'Test Author'; display.dataset.linkedName = 'Test Author' }
+        if (hidden) { hidden.value = 'Test Author' }
+      } else {
+        const el = document.querySelector('input[name="author"]') as HTMLInputElement | null
+        if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
+      }
+    })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'
@@ -225,7 +239,21 @@ test.describe('Slug Generation @content', () => {
     await expect(page.locator('input[name="slug"]')).toHaveValue(originalSlug)
 
     // Fill required fields before saving
-    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
+    // Fill the user-picker author field. Setting the hidden input alone is not enough:
+    // the field's submit handler overwrites the hidden value from the visible search box
+    // unless the display value matches dataset.linkedName. Set all three so it sticks.
+    await page.evaluate(() => {
+      const container = document.querySelector('.user-search-field-container')
+      if (container) {
+        const display = container.querySelector('input[type="text"]') as HTMLInputElement | null
+        const hidden = container.querySelector('input[type="hidden"]') as HTMLInputElement | null
+        if (display) { display.value = 'Test Author'; display.dataset.linkedName = 'Test Author' }
+        if (hidden) { hidden.value = 'Test Author' }
+      } else {
+        const el = document.querySelector('input[name="author"]') as HTMLInputElement | null
+        if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
+      }
+    })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'
@@ -268,7 +296,21 @@ test.describe('Slug Generation @content', () => {
     await page.waitForTimeout(1000)
 
     // Fill required fields before saving
-    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
+    // Fill the user-picker author field. Setting the hidden input alone is not enough:
+    // the field's submit handler overwrites the hidden value from the visible search box
+    // unless the display value matches dataset.linkedName. Set all three so it sticks.
+    await page.evaluate(() => {
+      const container = document.querySelector('.user-search-field-container')
+      if (container) {
+        const display = container.querySelector('input[type="text"]') as HTMLInputElement | null
+        const hidden = container.querySelector('input[type="hidden"]') as HTMLInputElement | null
+        if (display) { display.value = 'Test Author'; display.dataset.linkedName = 'Test Author' }
+        if (hidden) { hidden.value = 'Test Author' }
+      } else {
+        const el = document.querySelector('input[name="author"]') as HTMLInputElement | null
+        if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
+      }
+    })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'
@@ -342,7 +384,21 @@ test.describe('Slug Generation @content', () => {
     await page.waitForTimeout(1000)
 
     // Fill required fields before saving
-    await page.evaluate(() => { const el = document.querySelector('input[name="author"]') as HTMLInputElement; if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) } })
+    // Fill the user-picker author field. Setting the hidden input alone is not enough:
+    // the field's submit handler overwrites the hidden value from the visible search box
+    // unless the display value matches dataset.linkedName. Set all three so it sticks.
+    await page.evaluate(() => {
+      const container = document.querySelector('.user-search-field-container')
+      if (container) {
+        const display = container.querySelector('input[type="text"]') as HTMLInputElement | null
+        const hidden = container.querySelector('input[type="hidden"]') as HTMLInputElement | null
+        if (display) { display.value = 'Test Author'; display.dataset.linkedName = 'Test Author' }
+        if (hidden) { hidden.value = 'Test Author' }
+      } else {
+        const el = document.querySelector('input[name="author"]') as HTMLInputElement | null
+        if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
+      }
+    })
     await page.evaluate(() => {
       const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
       if (el) el.value = 'Test content'

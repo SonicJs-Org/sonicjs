@@ -83,6 +83,26 @@ export function verifySecurityConfig(env: Bindings): void {
   }
 }
 
+// Better Auth stateless session/auth API paths that must never carry the
+// cold-start bootstrap tax (they only touch auth_* migration tables). Matched
+// as `/auth/<seg>` prefixes so `/auth/sign-in/email`, `/auth/callback/github`,
+// etc. are all covered. Deliberately excludes `/auth/login` (page render) and
+// `/auth/seed-admin` (self-seeds its own prerequisites).
+const BETTER_AUTH_SESSION_SEGMENTS = [
+  "sign-in",
+  "sign-up",
+  "sign-out",
+  "get-session",
+  "callback",
+  "token",
+] as const;
+
+export function isBetterAuthSessionPath(path: string): boolean {
+  return BETTER_AUTH_SESSION_SEGMENTS.some(
+    (seg) => path === `/auth/${seg}` || path.startsWith(`/auth/${seg}/`)
+  );
+}
+
 /**
  * Bootstrap middleware that ensures system initialization
  * Runs once per worker instance
@@ -143,6 +163,20 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       path.endsWith(".jpg") ||
       path.endsWith(".ico")
     ) {
+      return next();
+    }
+
+    // Skip the heavy D1 bootstrap for Better Auth's stateless session API. These
+    // endpoints only read/write the auth_* tables (created by migration 0001) —
+    // they never need the collection registry, document types, or RBAC seed. On
+    // a cold isolate the ~10s bootstrap otherwise runs on the same request as
+    // Better Auth's scrypt password verify, exhausting the Worker's CPU/time
+    // budget and returning a bare 500. Login is the first request in most flows,
+    // so this is exactly the request that must not carry the bootstrap tax.
+    // (Not /auth/login or /auth/seed-admin: the former is a page render, the
+    // latter self-seeds its own prerequisites — neither is a hot cold-start path
+    // that 500s.) The full bootstrap still runs on the next non-auth request.
+    if (isBetterAuthSessionPath(path)) {
       return next();
     }
 

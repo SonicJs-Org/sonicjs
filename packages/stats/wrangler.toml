@@ -17,6 +17,11 @@ database_name = "sonicjs-stats-db"
 database_id = "93150491-63c3-4b9a-ac9a-792ba416a240"
 migrations_dir = "./migrations"
 
+# KV Cache — required by Better Auth (withCloudflare) for session storage
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "a16f8246fc294d809c90b0fb2df6d363"
+
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
@@ -31,6 +36,10 @@ binding = "DB"
 database_name = "sonicjs-stats-db"
 database_id = "93150491-63c3-4b9a-ac9a-792ba416a240"
 migrations_dir = "./migrations"
+
+[[env.production.kv_namespaces]]
+binding = "CACHE_KV"
+id = "a16f8246fc294d809c90b0fb2df6d363"
 
 # Observability
 [observability]

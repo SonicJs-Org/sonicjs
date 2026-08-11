@@ -199,6 +199,7 @@ export class TelemetryService {
     field_type_histogram: Record<string, number>
     doc_total: number
     sonicjs_version: string
+    deploy_url?: string
   }): Promise<void> {
     // Temporarily set identity so track() sends the event even if not initialized
     if (!this.identity) {
@@ -213,6 +214,7 @@ export class TelemetryService {
       field_type_histogram: JSON.stringify(data.field_type_histogram),
       doc_total: data.doc_total,
       sonicjs_version: data.sonicjs_version,
+      ...(data.deploy_url ? { deploy_url: data.deploy_url } : {}),
     })
   }
 

@@ -341,11 +341,27 @@ export async function loginAsAdmin(page: Page) {
   // Ensure admin exists (also creates auth_account for Better Auth)
   await ensureAdminUserExists(page);
 
-  // Use Better Auth's sign-in/email API — sets session cookie in the page context
-  const res = await page.request.post('/auth/sign-in/email', {
+  // Use Better Auth's sign-in/email API — sets session cookie in the page context.
+  // Retry on 5xx: preview CF Worker cold-starts can return 500 transiently while
+  // bootstrap completes under parallel worker load.
+  let res = await page.request.post('/auth/sign-in/email', {
     data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
     headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
   });
+  if (!res.ok() && res.status() >= 500) {
+    await page.waitForTimeout(3000);
+    res = await page.request.post('/auth/sign-in/email', {
+      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+    });
+  }
+  if (!res.ok() && res.status() >= 500) {
+    await page.waitForTimeout(5000);
+    res = await page.request.post('/auth/sign-in/email', {
+      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+    });
+  }
 
   if (!res.ok()) {
     throw new Error(`BA sign-in failed: ${res.status()} ${await res.text()}`);

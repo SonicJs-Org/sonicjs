@@ -12,7 +12,8 @@ import { setBranchLabel } from "../templates/layouts/admin-layout-catalyst.templ
 
 type Bindings = {
   DB: D1Database;
-  KV: KVNamespace;
+  KV?: KVNamespace;
+  CACHE_KV?: KVNamespace;
   JWT_SECRET?: string;
   CORS_ORIGINS?: string;
   ENVIRONMENT?: string;
@@ -132,21 +133,33 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       if (cacheKv) {
         const kvDone = await cacheKv.get(BOOTSTRAP_KV_KEY())
         if (kvDone === '1') {
-          // Hydrate in-memory state without touching D1.
-          try {
-            const kv = (c.env as any).CACHE_KV as KVNamespace
-            const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
-            setGlobalKVNamespace(kv)
-            const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
-            setGlobalCatalogKv(kv)
-            c.executionCtx.waitUntil(loadKvCatalog())
-          } catch { /* KV wiring optional */ }
-          try {
-            const configs = await loadCollectionConfigs()
-            getCollectionRegistry().register(configs)
-          } catch { /* registry optional in fast-path */ }
-          bootstrapComplete = true
-          return next()
+          // Guard against stale KV key + fresh D1 (e.g. CI re-creates D1 each run but
+          // reuses KV). If document_types is empty the KV flag is lying — fall through
+          // to full bootstrap so autoRegisterCollectionDocumentTypes runs.
+          const d1Fresh = await (c.env.DB as D1Database)
+            .prepare('SELECT COUNT(*) n FROM document_types LIMIT 1')
+            .first<{ n: number }>()
+            .then(r => !r || r.n === 0)
+            .catch(() => true)
+          if (!d1Fresh) {
+            // D1 has data — fast-path is valid.
+            try {
+              const kv = (c.env as any).CACHE_KV as KVNamespace
+              const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
+              setGlobalKVNamespace(kv)
+              const { setGlobalCatalogKv, loadKvCatalog } = await import("../plugins/cache/services/catalog")
+              setGlobalCatalogKv(kv)
+              c.executionCtx.waitUntil(loadKvCatalog())
+            } catch { /* KV wiring optional */ }
+            try {
+              const configs = await loadCollectionConfigs()
+              getCollectionRegistry().register(configs)
+            } catch { /* registry optional in fast-path */ }
+            bootstrapComplete = true
+            return next()
+          }
+          // D1 is fresh — delete the stale KV key so the next cold start also re-bootstraps.
+          cacheKv.delete(BOOTSTRAP_KV_KEY()).catch(() => {})
         }
       }
     } catch { /* KV unavailable — fall through to full bootstrap */ }
@@ -316,7 +329,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
         // Stable installation ID via KV (generated once, persisted)
         let installationId = 'unknown';
         try {
-          const kv = c.env.KV as KVNamespace | undefined;
+          const kv = (c.env.CACHE_KV ?? c.env.KV) as KVNamespace | undefined;
           if (kv) {
             installationId = (await kv.get('_sonicjs_installation_id')) ?? '';
             if (!installationId) {
@@ -325,6 +338,13 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
             }
           }
         } catch { /* KV not available */ }
+
+        // Extract deploy origin (scheme + host only — no path, no query, no PII)
+        let deployUrl: string | undefined;
+        try {
+          const u = new URL(c.req.url);
+          deployUrl = u.origin; // e.g. "https://example.com"
+        } catch { /* malformed URL — skip */ }
 
         const telemetry = getTelemetryService();
         await telemetry.trackProjectSnapshot({
@@ -335,6 +355,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
           field_type_histogram: fieldTypeHistogram,
           doc_total: docTotal,
           sonicjs_version: SONICJS_VERSION,
+          deploy_url: deployUrl,
         });
       } catch { /* silent — telemetry must never break boot */ }
     } catch (error) {

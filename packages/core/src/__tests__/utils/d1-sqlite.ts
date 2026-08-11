@@ -110,6 +110,10 @@ export function createTestD1(): TestD1 {
     raw: sqlite,
     close() {
       sqlite.close()
+      // Each in-memory DB is a fresh SQLite instance; reset the module-level column/index
+      // caches so the next createTestD1() probes its own schema rather than seeing stale
+      // columns from a previous test's DB.
+      resetScalarSchemaCache()
     },
   }
 }

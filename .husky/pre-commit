@@ -1,3 +1,36 @@
+#!/usr/bin/env sh
+
+# Resolve npm even when PATH is minimal or comes from a host-side git that
+# knows nothing about the devcontainer (node_modules + npm live inside the
+# container, on Docker volumes). The container installs node at /usr/local/bin;
+# nvm/fnm/asdf users have shims under $HOME.
+resolve_npm() {
+  command -v npm >/dev/null 2>&1 && return 0
+  for dir in /usr/local/bin "$HOME/.local/bin" "$HOME/.nvm" "$HOME/.fnm" "$HOME/.asdf"; do
+    [ -x "$dir/npm" ] && { PATH="$dir:$PATH"; export PATH; return 0; }
+    for v in "$dir"/versions/node/*/bin; do
+      [ -x "$v/npm" ] && { PATH="$v:$PATH"; export PATH; return 0; }
+    done
+  done
+  return 1
+}
+
+if ! resolve_npm; then
+  echo "WARNING: 'npm' not found on PATH."
+  echo "This repo's checks run inside the devcontainer (npm/node_modules live on"
+  echo "Docker volumes). Commits made from the host cannot run lint/type-check, so"
+  echo "they are skipped here — CI enforces them on every push."
+  exit 0
+fi
+
+# Even when an npm binary exists, node_modules may still be hidden behind the
+# container's Docker volumes from the host's point of view.
+if [ ! -f "$(dirname "$0")/../node_modules/.package-lock.json" ]; then
+  echo "WARNING: node_modules is not installed in this environment."
+  echo "Skipping lint/type-check for this commit — CI enforces them on every push."
+  exit 0
+fi
+
 echo "Running linting..."
 npm run lint --workspace=@sonicjs-cms/core
 

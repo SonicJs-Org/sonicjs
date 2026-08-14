@@ -141,25 +141,28 @@ Your app includes:
 
 ### For Package Developers (Contributing to SonicJS)
 
-```bash
-# Clone this repository
-git clone https://github.com/lane711/sonicjs.git
-cd sonicjs
+> Optionally, you can use our preconfigured [Devcontainer](https://containers.dev/) so the environment is identical
+> for every local machine — no manual Node/Cloudflare setup required. You just need
+> Docker and VS Code (or a JetBrains IDE with remote development support).
 
+This sets up a development environment with all dependencies installed and ready to go.
+To see your changes live, go to http://localhost:9115
+
+```bash
 # Install dependencies
 npm install
 
 # Build the core package
 npm run build:core
 
-# Create a test app to validate changes
-npx create-sonicjs@latest my-sonicjs-app
+# Prep the demo database
+npm run db:reset
 
-# Run tests
-npm test
+# Run the demo app
+npm run dev # open http://localhost:9115/
 ```
 
-#### Setting Up a Fresh Database
+### Setting Up a Fresh Database
 
 ```bash
 # Create a fresh D1 database for your branch (run from project root)

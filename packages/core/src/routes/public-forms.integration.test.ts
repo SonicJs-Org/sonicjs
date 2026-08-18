@@ -155,6 +155,27 @@ describe('public-forms.ts — real-SQLite regression coverage', () => {
     })
   })
 
+  describe('GET /:identifier/turnstile-config — is_public gate', () => {
+    // KNOWN PRE-EXISTING BUG, separate from this patch: migration 0004_forms.sql
+    // never added `turnstile_enabled`/`turnstile_settings` columns to `forms`,
+    // but this route's SELECT names them explicitly — so on the real schema it
+    // 500s unconditionally, for public and private forms alike, before the
+    // is_public condition is ever evaluated. The is_public fix below is still
+    // correct (defense in depth, matches the other GET routes) and will start
+    // actually gating once those columns exist; until then this test documents
+    // the current, real, degraded-but-fails-closed behavior rather than
+    // asserting something that isn't true today. See conversation/handoff notes
+    // for the missing-migration finding — not fixed here, flagged separately.
+    it('500s today regardless of is_public, due to the missing turnstile_* columns', async () => {
+      insertForm(harness.sqlite, { is_public: 1 })
+      const app = createTestApp(harness.db)
+
+      const res = await app.request('/api/forms/test_form/turnstile-config')
+
+      expect(res.status).toBe(500)
+    })
+  })
+
   describe('GET /:name — HTML escaping of admin-authored fields', () => {
     it('escapes display_name and description against stored XSS', async () => {
       insertForm(harness.sqlite, {

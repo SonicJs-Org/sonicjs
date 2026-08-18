@@ -21,7 +21,10 @@ function sanitizeDeep(value: unknown): unknown {
   if (value !== null && typeof value === 'object') {
     const result: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(value)) {
-      result[k] = sanitizeDeep(v)
+      // Keys are submitter-controlled too (arbitrary JSON), and get rendered
+      // unescaped by JSON.stringify wherever submission data is displayed —
+      // sanitize them the same as values, not just the values themselves.
+      result[sanitizeInput(k)] = sanitizeDeep(v)
     }
     return result
   }
@@ -64,9 +67,10 @@ publicFormsRoutes.get('/:identifier/turnstile-config', async (c) => {
     const db = c.env.DB
     const identifier = c.req.param('identifier')
 
-    // Get form
+    // Get form. is_public matches the other public GET routes below — without
+    // it this endpoint is a 200-vs-404 existence oracle for private forms.
     const form = await db.prepare(
-      'SELECT id, turnstile_enabled, turnstile_settings FROM forms WHERE (id = ? OR name = ?) AND is_active = 1'
+      'SELECT id, turnstile_enabled, turnstile_settings FROM forms WHERE (id = ? OR name = ?) AND is_active = 1 AND is_public = 1'
     ).bind(identifier, identifier).first()
 
     if (!form) {

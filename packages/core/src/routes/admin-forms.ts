@@ -473,7 +473,7 @@ adminFormsRoutes.get('/:id/submissions', async (c) => {
                 <tr>
                   <td>${sub.id.substring(0, 8)}</td>
                   <td>${new Date(sub.submitted_at).toLocaleString()}</td>
-                  <td><pre>${JSON.stringify(JSON.parse(sub.submission_data), null, 2)}</pre></td>
+                  <td><pre>${escapeHtml(JSON.stringify(JSON.parse(sub.submission_data), null, 2))}</pre></td>
                 </tr>
               `).join('')}
             </tbody>

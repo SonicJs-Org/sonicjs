@@ -193,6 +193,30 @@ describe('POST /api/forms/:identifier/submit — XSS sanitization', () => {
     expect(stored.name).toBe('Test')
   })
 
+  it('should HTML-encode script tags in object KEYS, not just values', async () => {
+    // sanitizeDeep previously only recursed into values via Object.entries(value),
+    // leaving keys — which a public, anonymous submitter fully controls — stored
+    // raw. Whatever renders submission data via JSON.stringify (e.g. the admin
+    // submissions page) then re-emits that key unescaped.
+    const db = createMockDb()
+    const app = createTestApp(db)
+
+    const res = await app.request('/api/forms/form-1/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: {
+          '<img src=x onerror=alert(1)>': 'value'
+        }
+      })
+    })
+
+    expect(res.status).toBe(200)
+    const stored = JSON.parse(capturedSubmissionData!)
+    expect(Object.keys(stored)).toEqual(['&lt;img src=x onerror=alert(1)&gt;'])
+    expect(Object.keys(stored)).not.toContain('<img src=x onerror=alert(1)>')
+  })
+
   it('should handle event handler injection attempts', async () => {
     const db = createMockDb()
     const app = createTestApp(db)

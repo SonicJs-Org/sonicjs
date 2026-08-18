@@ -145,7 +145,7 @@ export class Fts5Engine {
       documentId: r.document_id,
       typeId: r.type_id,
       title: renderHl(r.title_highlight),
-      slug: r.slug,
+      slug: escapeHtml(r.slug),
       status: r.status,
       snippet: renderHl(r.body_snippet),
       score: Math.abs(Number(r.score)), // bm25 is negative (more negative = better); expose magnitude

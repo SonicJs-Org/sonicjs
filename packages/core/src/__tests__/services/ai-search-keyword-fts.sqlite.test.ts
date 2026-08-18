@@ -118,6 +118,21 @@ describe('AISearchService keyword mode = FTS5 (T1.2)', () => {
     expect(hit.snippet).toContain('&lt;') // the bare `<` is escaped, not passed through raw
   })
 
+  it('escapes HTML in slug too, not just title/snippet (R8)', async () => {
+    // slug has no charset restriction at the schema layer, and unlike title/snippet it was never
+    // routed through the escape pipeline — inconsistent with the rest of this same hardening pass.
+    const x = await pub({
+      title: 'kestrel result',
+      slug: 'kestrel"><img src=x onerror=alert(1)>',
+      data: { body: 'about a kestrel' },
+    })
+    const svc = new AISearchService(db, undefined, undefined, 'default')
+    const hit = (await svc.search({ query: 'kestrel', mode: 'keyword', filters: {} })).results.find((r) => r.id === x.id)
+    expect(hit).toBeTruthy()
+    expect(hit.slug).not.toContain('<img')
+    expect(hit.slug).toContain('&lt;img')
+  })
+
   it('returns result timestamps in milliseconds, not seconds (response boundary)', async () => {
     const a = await pub({ title: 'chronometer', slug: 'c', data: { body: '' } })
     const svc = new AISearchService(db, undefined, undefined, 'default')

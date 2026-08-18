@@ -244,7 +244,7 @@ describe('two-factor round trip against real Better Auth', () => {
 
 describe('the shared TOTP helper produces codes Better Auth accepts', () => {
   it('verifies against BA, which is what de-risks the E2E spec', async () => {
-    // tests/e2e/101-two-factor-auth.spec.ts imports this same function. If it drifted — most
+    // tests/e2e/106-two-factor-auth.spec.ts imports this same function. If it drifted — most
     // likely by handing BA the base32 URI value instead of the decoded secret — the browser round
     // trip would fail in CI with a 401 indistinguishable from a real product bug.
     const session = await signUp()

@@ -12,7 +12,7 @@ import { totpFromOtpauthUri } from '../../packages/core/src/__tests__/utils/totp
  * organisation out of the portal until someone with Cloudflare credentials intervenes.
  *
  * ── Every test brings its own throwaway account ──
- * Same rule as `101-two-factor-auth.spec.ts`, for the same reason: `playwright.config.ts` sets
+ * Same rule as `106-two-factor-auth.spec.ts`, for the same reason: `playwright.config.ts` sets
  * `fullyParallel: true`, so enrolling the shared `admin@sonicjs.com` would make every other spec
  * running concurrently take a `{twoFactorRedirect:true}` on `loginAsAdmin` and fail. The accounts
  * are `…@example.com`, which the `/test-cleanup` sweep in global-setup/teardown already deletes.

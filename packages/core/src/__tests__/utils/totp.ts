@@ -8,7 +8,7 @@
  * Deliberately shared between two very different tiers:
  *   - `__tests__/services/two-factor-roundtrip.test.ts` drives real BA over real SQLite and proves
  *     the codes this produces are accepted by `createOTP(...).verify()`.
- *   - `tests/e2e/101-two-factor-auth.spec.ts` imports the SAME function for the browser round trip.
+ *   - `tests/e2e/106-two-factor-auth.spec.ts` imports the SAME function for the browser round trip.
  *
  * One implementation, and the cheap tier verifies it. Two copies would let the E2E copy drift and
  * fail in CI for a reason that looks like a product bug.

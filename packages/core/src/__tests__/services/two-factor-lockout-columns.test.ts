@@ -22,7 +22,7 @@ function columnsOf(sqlite: Database.Database, table: string): string[] {
   )
 }
 
-describe('migration 0003 (greenfield)', () => {
+describe('migration 0006 (greenfield)', () => {
   let db: TestD1
 
   beforeEach(() => {
@@ -69,7 +69,7 @@ describe('migration 0003 (greenfield)', () => {
 describe('ensureSchemaCompatibility self-heal', () => {
   let sqlite: Database.Database
 
-  /** A DB that ran 0001 + 0002 only — i.e. never got migration 0003. */
+  /** A DB that ran 0001 + 0002 only — i.e. never got migration 0006. */
   function legacyDb(): D1Database {
     sqlite = new Database(':memory:')
     sqlite.pragma('foreign_keys = OFF')

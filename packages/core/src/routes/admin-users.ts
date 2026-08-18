@@ -861,7 +861,7 @@ userRoutes.get('/users/:id/edit', async (c) => {
 
   try {
     // Get user data (removed bio - now in profile)
-    // two_factor_required (migration 0004) drives the Two-Factor Recovery panel. Safe to name
+    // two_factor_required (migration 0007) drives the Two-Factor Recovery panel. Safe to name
     // unconditionally: ensureTwoFactorRequiredColumn() adds it from both the bootstrap path and
     // the two-factor plugin's onBoot, which runs on every isolate.
     const userStmt = db.prepare(`

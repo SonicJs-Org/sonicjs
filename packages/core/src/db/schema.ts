@@ -31,7 +31,7 @@ export const authUser = sqliteTable('auth_user', {
   // `supportsBooleans` at its `true` default, so BA writes a JS `true`/`false` here and
   // drizzle must be the thing that converts it to 1/0. Matches emailVerified/isSuperAdmin.
   twoFactorEnabled: integer('two_factor_enabled', { mode: 'boolean' }).notNull().default(false),
-  // Set by an admin reset (migration 0004). Independent of twoFactorEnabled: `required && !enabled`
+  // Set by an admin reset (migration 0007). Independent of twoFactorEnabled: `required && !enabled`
   // is the state a reset leaves behind, and it forces the user to /admin/two-factor until they
   // enrol again. Plain integer rather than `mode: 'boolean'` — Better Auth never writes this
   // column, so nothing needs the boolean round-trip and the SQL reads/writes 0/1 directly.
@@ -113,7 +113,7 @@ export const authTwoFactor = sqliteTable('auth_two_factor', {
   // successful /two-factor/verify-totp — the window where enrolment has started but has not
   // been proven against a live code.
   verified: integer('verified', { mode: 'boolean' }).notNull().default(true),
-  // See migration 0003: NOT NULL DEFAULT 0 keeps BA's `count = count + 1` bump from
+  // See migration 0006: NOT NULL DEFAULT 0 keeps BA's `count = count + 1` bump from
   // evaluating to NULL, which would make the lockout silently unreachable.
   failedVerificationCount: integer('failed_verification_count').notNull().default(0),
   // timestamp_ms, matching auth_session.expires_at. BA hands the drizzle adapter a real

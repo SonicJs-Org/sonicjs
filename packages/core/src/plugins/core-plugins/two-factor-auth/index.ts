@@ -72,7 +72,7 @@ export const twoFactorAuthPlugin = definePlugin({
   /**
    * Three jobs, all idempotent.
    *
-   * 0. Repair the columns migrations 0003 and 0004 add — `auth_two_factor`'s lockout pair and
+   * 0. Repair the columns migrations 0006 and 0007 add — `auth_two_factor`'s lockout pair and
    *    `auth_user.two_factor_required` — if those migrations never ran. Both also live in
    *    `MigrationService.ensureSchemaCompatibility()`, but the bootstrap middleware skips that
    *    entirely once the `_sonicjs_bootstrap_<version>` KV marker is set (24h TTL) — so on most

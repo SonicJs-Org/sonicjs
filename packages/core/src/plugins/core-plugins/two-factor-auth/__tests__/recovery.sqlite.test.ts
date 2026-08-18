@@ -130,7 +130,7 @@ describe('resetUserTwoFactor — the SQL effect', () => {
   })
 
   it('clears an active lockout as a side effect of deleting the row', async () => {
-    // failed_verification_count and locked_until live on auth_two_factor (migration 0003), so
+    // failed_verification_count and locked_until live on auth_two_factor (migration 0006), so
     // the DELETE is also the lockout fix. If those columns ever move to auth_user, this test is
     // what should fail.
     await resetUserTwoFactor(db as never, TARGET.userId, true)
@@ -414,7 +414,7 @@ describe('guardRequiredSecondFactorDisable', () => {
   })
 })
 
-describe('ensureTwoFactorRequiredColumn — the 0004 self-heal', () => {
+describe('ensureTwoFactorRequiredColumn — the 0007 self-heal', () => {
   it('restores the column on a database that never got the migration', async () => {
     seedUser(TARGET, 1)
     db.raw.exec(`ALTER TABLE auth_user DROP COLUMN two_factor_required`)

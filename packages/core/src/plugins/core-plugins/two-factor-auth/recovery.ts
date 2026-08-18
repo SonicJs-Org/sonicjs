@@ -93,7 +93,7 @@ export interface TwoFactorResetOutcome {
  * a user who reads "Enabled" everywhere and is challenged by nothing.
  *
  * Deleting the `auth_two_factor` row also clears `failed_verification_count` and `locked_until`
- * (migration 0003 put both there), so this fixes a lockout as well as a lost device.
+ * (migration 0006 put both there), so this fixes a lockout as well as a lost device.
  *
  * Exported separately from the route so the DB effect is testable without a Hono context.
  */

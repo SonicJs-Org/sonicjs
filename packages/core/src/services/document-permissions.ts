@@ -91,6 +91,32 @@ export class DocumentPermissionsService {
     return (result.results ?? []) as unknown as DocumentPermissionRow[]
   }
 
+  /**
+   * Batch "deny wins" filter for read-time ACL: the set of `root_id`s that carry a `deny`
+   * override for `permission` matching ANY of `principalSet`, tenant-scoped. Lets a caller filter
+   * a fetched page in one query instead of a per-row `isAllowed` (avoids the 100-bind limit — no
+   * `root_id IN (…)` list; deny rows are rare, so the result set is tiny). An `allow` override is
+   * irrelevant here: callers use this only after a base-grant check already passed, and deny beats
+   * allow, so subtracting denied roots is exactly the remaining ACL layer.
+   */
+  async listDeniedRoots(
+    principalSet: PrincipalRef[],
+    permission: Permission,
+    tenantId: string,
+  ): Promise<Set<string>> {
+    if (principalSet.length === 0) return new Set()
+    const clauses = principalSet.map(() => '(principal_type = ? AND principal_id = ?)')
+    const params: (string | number)[] = [tenantId, permission]
+    for (const p of principalSet) params.push(p.type, p.id)
+    const sql = `
+      SELECT DISTINCT root_id FROM document_permissions
+      WHERE tenant_id = ? AND permission = ? AND effect = 'deny'
+        AND (${clauses.join(' OR ')})
+    `
+    const result = await this.db.prepare(sql).bind(...params).all()
+    return new Set((result.results ?? []).map((r) => (r as { root_id: string }).root_id))
+  }
+
   async grantPermission(opts: {
     tenantId: string
     rootId: string

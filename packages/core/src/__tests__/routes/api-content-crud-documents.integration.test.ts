@@ -79,4 +79,13 @@ describe('api-content-crud → documents (decommission step)', () => {
     expect(res.status).toBe(200)
     expect(db.raw.prepare('SELECT deleted_at FROM documents WHERE root_id=?').get(created.id).deleted_at).not.toBeNull()
   })
+
+  it('DELETE deindexes the root from documents_fts (raw deleted_at UPDATE bypasses DocumentProjection)', async () => {
+    const created = (await (await app.request('/api/content', json('POST', { collectionId: 'blog_post', title: 'Findable', slug: 'findable', status: 'published', data: { body: 'x' } }))).json()).data
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents_fts WHERE document_id=?').get(created.id).n).toBeGreaterThan(0)
+
+    const res = await app.request(`/api/content/${created.id}`, { method: 'DELETE' })
+    expect(res.status).toBe(200)
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents_fts WHERE document_id=?').get(created.id).n).toBe(0)
+  })
 })

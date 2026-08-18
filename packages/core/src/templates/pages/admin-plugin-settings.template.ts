@@ -684,6 +684,23 @@ function renderInformationTab(plugin: any): string {
     </div>
     ` : ''}
 
+    ${(plugin.settings?._howto?.length ?? 0) > 0 ? `
+    <!-- How to use -->
+    <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-4">How to Use</h2>
+      <ol class="space-y-4">
+        ${(plugin.settings._howto as Array<{ title: string; body: string }>).map((step, i) => `
+        <li class="flex gap-3">
+          <span class="shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-white/10 text-xs font-semibold text-gray-300">${i + 1}</span>
+          <div>
+            <p class="text-white font-medium">${step.title}</p>
+            <p class="text-gray-400 text-sm mt-0.5">${step.body}</p>
+          </div>
+        </li>`).join('')}
+      </ol>
+    </div>
+    ` : ''}
+
     ${(plugin.settings?._routes?.length ?? 0) > 0 ? `
     <!-- Routes -->
     <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">

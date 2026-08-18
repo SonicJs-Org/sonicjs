@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
-import { requireAuth } from '../middleware'
+import { requireAuth, requireRole } from '../middleware'
 import { renderFormsListPage } from '../templates/pages/admin-forms-list.template'
 import { renderFormBuilderPage, type FormBuilderPageData } from '../templates/pages/admin-forms-builder.template'
 import { renderFormCreatePage } from '../templates/pages/admin-forms-create.template'
 import { TurnstileService } from '../plugins/core-plugins/turnstile-plugin/services/turnstile'
+import { escapeHtml } from '../utils/sanitize'
 
 // Type definitions for forms
 interface Form {
@@ -84,8 +85,13 @@ const isTableMissing = (err: any) =>
 
 export const adminFormsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
-// Apply authentication middleware
+// Apply authentication + RBAC middleware. Every route in this file manages
+// form definitions or reads submission data (which may carry PII); the nav
+// item is already gated on the 'forms:manage' permission (manifest-registry.ts)
+// but that gate is UI-only (requirePermission is a no-op stub) — this is the
+// actual enforcement.
 adminFormsRoutes.use('*', requireAuth())
+adminFormsRoutes.use('*', requireRole(['admin', 'editor']))
 
 // Forms management - List all forms
 adminFormsRoutes.get('/', async (c) => {
@@ -438,7 +444,7 @@ adminFormsRoutes.get('/:id/submissions', async (c) => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Submissions - ${form.display_name}</title>
+        <title>Submissions - ${escapeHtml(form.display_name as string)}</title>
         <style>
           body { font-family: system-ui; padding: 20px; }
           h1 { margin-bottom: 20px; }
@@ -451,7 +457,7 @@ adminFormsRoutes.get('/:id/submissions', async (c) => {
       </head>
       <body>
         <a href="/admin/forms" class="back-link">← Back to Forms</a>
-        <h1>Submissions: ${form.display_name}</h1>
+        <h1>Submissions: ${escapeHtml(form.display_name as string)}</h1>
         <p>Total submissions: ${submissions.results.length}</p>
         ${submissions.results.length > 0 ? `
           <table>

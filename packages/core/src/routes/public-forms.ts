@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { TurnstileService } from '../plugins/core-plugins/turnstile-plugin/services/turnstile'
-import { sanitizeInput } from '../utils/sanitize'
+import { sanitizeInput, escapeHtml, jsonForScript } from '../utils/sanitize'
 // Note: form-collection-sync was removed in the drop-db-collections plan (PR 4).
 // Form submissions are still persisted to `form_submissions`; the legacy dual-write
 // to the `content` table is gone — content created by submissions will move to the
@@ -163,7 +163,7 @@ publicFormsRoutes.get('/:name', async (c) => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${form.display_name}</title>
+        <title>${escapeHtml(form.display_name as string)}</title>
         <link rel="stylesheet" href="https://cdn.form.io/formiojs/formio.full.min.css">
         
         <!-- Google Maps API will be loaded dynamically per component -->
@@ -218,8 +218,8 @@ publicFormsRoutes.get('/:name', async (c) => {
       </head>
       <body>
         <div class="container">
-          <h1>${form.display_name}</h1>
-          ${form.description ? `<p class="description">${form.description}</p>` : ''}
+          <h1>${escapeHtml(form.display_name as string)}</h1>
+          ${form.description ? `<p class="description">${escapeHtml(form.description as string)}</p>` : ''}
           
           <div id="formio-form"></div>
           
@@ -321,8 +321,8 @@ publicFormsRoutes.get('/:name', async (c) => {
         </script>
         
         <script>
-          const formioSchema = ${JSON.stringify(formioSchema)};
-          const settings = ${JSON.stringify(settings)};
+          const formioSchema = ${jsonForScript(formioSchema)};
+          const settings = ${jsonForScript(settings)};
           const formId = '${form.id}';
           let turnstileToken = null;
           let turnstileWidgetId = null;
@@ -520,9 +520,12 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
     const identifier = c.req.param('identifier')
     const body = await c.req.json()
 
-    // Get form by ID or name
+    // Get form by ID or name. is_public is required here to match the GET
+    // routes above (render + schema) — otherwise a form an admin marked
+    // private could still be submitted to directly, bypassing the gate the
+    // UI implies.
     const form = await db.prepare(
-      'SELECT * FROM forms WHERE (id = ? OR name = ?) AND is_active = 1'
+      'SELECT * FROM forms WHERE (id = ? OR name = ?) AND is_active = 1 AND is_public = 1'
     ).bind(identifier, identifier).first()
 
     if (!form) {

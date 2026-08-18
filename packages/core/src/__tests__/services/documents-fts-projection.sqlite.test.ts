@@ -7,6 +7,7 @@ import { createTestD1 } from '../utils/d1-sqlite'
 import { DocumentsService } from '../../services/documents'
 import { DocumentProjection } from '../../services/document-projection'
 import { bootstrapDocumentTypes } from '../../services/document-types-seed'
+import { MigrationService } from '../../services/migrations'
 
 const FTS_FIELDS = [{ name: 'body', kind: 'fulltext' }]
 
@@ -141,5 +142,22 @@ describe('FTS projection seam (T0.2) — real SQLite', () => {
     )
     expect(search(db, 'zebra')).toContain(doc.id) // body prose searchable
     expect(search(db, 'h2')).toHaveLength(0) // HTML tags stripped, not indexed
+  })
+
+  it('ensureSchemaCompatibility self-heals a missing documents_fts (upgrade-gap brick guard)', async () => {
+    // Simulate an install that upgraded core past 0003 but never ran `wrangler d1 migrations apply`.
+    db.raw.prepare('DROP TABLE IF EXISTS documents_fts').run()
+    expect(
+      db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='documents_fts'").get(),
+    ).toBeUndefined()
+
+    await new MigrationService(db).ensureSchemaCompatibility()
+
+    expect(
+      db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='documents_fts'").get(),
+    ).toBeTruthy()
+    // ...and the recreated table is a usable 10-col FTS5 index — a write path indexes again.
+    const doc = await svc(db).create({ typeId: 'article', tenantId: 'default', title: 'Rehealed', data: { body: 'aardvark' } }, 'u1')
+    expect(search(db, 'aardvark')).toContain(doc.id)
   })
 })

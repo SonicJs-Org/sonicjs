@@ -10,6 +10,8 @@ import type {
 import { CustomRAGService } from './custom-rag.service'
 import { getCollectionRegistry } from '../../../../services/collection-registry'
 import { Fts5Engine } from './fts5-engine'
+import { DocumentTypeRegistry } from '../../../../services/document-type-registry'
+import { documentSecondsToMs } from '../../../../services/documents'
 import { getFtsSettings } from './fts-settings.service'
 import { getCachedResult, putCachedResult } from './fts-search-cache'
 
@@ -307,6 +309,21 @@ export class AISearchService {
   }
 
   /**
+   * Document type ids whose base grants allow public read (settings.baseGrants.public includes
+   * 'read'). The unauthenticated /api/search path is restricted to these so that indexed-but-internal
+   * types never surface to anonymous callers (D5). Fails closed: any error yields an empty allowlist,
+   * which makes keyword search return nothing rather than over-share.
+   */
+  private async publicReadableTypeIds(): Promise<string[]> {
+    try {
+      const types = await new DocumentTypeRegistry(this.db).findAll(true)
+      return types.filter((t) => t.settings?.baseGrants?.public?.includes('read')).map((t) => t.id)
+    } catch {
+      return []
+    }
+  }
+
+  /**
    * Traditional keyword search
    */
   private async searchKeyword(
@@ -333,23 +350,40 @@ export class AISearchService {
         bodyBoost: fts.bodyBoost,
       })
 
-      // Restrict to requested types, else configured searchable types, else legacy selected, else all.
-      const typeIds = query.filters?.collections?.length
+      // SECURITY (D5): /api/search is unauthenticated, so keyword results are limited to document
+      // types that grant public read. Internal/admin-only types (api_key, security_event,
+      // analytics_event, user_profile, rbac_*, site_settings, …) are indexed for admin tooling but
+      // must never surface to an anonymous caller. Authed admin draft/all-type search is a separate
+      // future endpoint, not this one.
+      const publicTypeIds = await this.publicReadableTypeIds()
+
+      // Resolve the requested type set, then intersect with the public allowlist: a client-supplied
+      // `filters.collections` (or a misconfigured `searchableTypes`) can only ever NARROW the scope,
+      // never widen it to an internal type.
+      const requested = query.filters?.collections?.length
         ? query.filters.collections
         : fts.searchableTypes.length
           ? fts.searchableTypes
           : settings.selected_collections.length
             ? settings.selected_collections
-            : undefined
+            : publicTypeIds
+      const typeIds = requested.filter((t) => publicTypeIds.includes(t))
 
-      // Public search is published-only unless the caller explicitly asks for other statuses.
-      const wantsNonPublished = !!query.filters?.status?.some((s) => s !== 'published')
+      // No publicly-readable type in scope → return empty. This guard is REQUIRED: the engine treats
+      // an empty/omitted typeIds as "no type filter = ALL types", so calling it here would leak
+      // exactly the internal types the allowlist just excluded.
+      if (typeIds.length === 0) {
+        return { results: [], total: 0, query_time_ms: Date.now() - startTime, mode: query.mode }
+      }
 
       const { hits, total } = await engine.search({
         query: query.query,
         tenantId: this.tenantId,
         typeIds,
-        publishedOnly: !wantsNonPublished,
+        // Server-authoritative: the public endpoint returns published documents only. Never derived
+        // from client-supplied `filters.status` — that previously let `status:['draft']` drop the
+        // published gate and expose every draft in the tenant.
+        publishedOnly: true,
         limit: query.limit || fts.resultsLimit,
         offset: query.offset || 0,
       })
@@ -363,8 +397,10 @@ export class AISearchService {
         snippet: h.snippet,
         relevance_score: h.score,
         status: h.status,
-        created_at: h.createdAt,
-        updated_at: h.updatedAt,
+        // FTS snapshots documents.* in SECONDS; the response boundary is ms (search-modal renders
+        // `new Date(created_at)`). Convert here or every keyword hit dates to Jan 1970.
+        created_at: documentSecondsToMs(h.createdAt) ?? h.createdAt,
+        updated_at: documentSecondsToMs(h.updatedAt) ?? h.updatedAt,
       }))
 
       const response: SearchResponse = {

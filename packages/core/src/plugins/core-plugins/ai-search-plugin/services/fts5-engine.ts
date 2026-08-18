@@ -15,6 +15,18 @@
  */
 import type { D1Database } from '@cloudflare/workers-types'
 import { sanitizeFTS5Query } from './fts5-sanitize'
+import { escapeHtml } from '../../../../utils/sanitize'
+
+// Hard cap on rows a single search may return, regardless of caller-supplied limit — the public
+// /api/search endpoint is unauthenticated, so an unbounded limit is a cheap DoS lever.
+const MAX_LIMIT = 100
+
+// Private-use sentinels handed to FTS5 highlight()/snippet() as the match delimiters. FTS5 inserts
+// them into the RAW (unescaped) source text, so we escapeHtml the whole result first and only THEN
+// swap the sentinels for real <mark> tags — otherwise attacker HTML in a title/body (e.g.
+// `<img onerror=…>`) would reach the admin search modal's innerHTML unescaped (R8 / stored XSS).
+const HL_OPEN = String.fromCharCode(0xe000)
+const HL_CLOSE = String.fromCharCode(0xe001)
 
 export interface FtsEngineOptions {
   titleBoost?: number // default 5
@@ -95,16 +107,18 @@ export class Fts5Engine {
     }
     const where = conditions.join(' AND ')
 
-    const limit = params.limit && params.limit > 0 ? params.limit : 20
+    const limit = params.limit && params.limit > 0 ? Math.min(params.limit, MAX_LIMIT) : 20
     const offset = params.offset && params.offset > 0 ? params.offset : 0
 
     // bm25 weights: title, slug, body, then 7 UNINDEXED columns at 0 → 10 total (10-column table).
+    // highlight()/snippet() delimit matches with the private-use sentinels, NOT literal <mark> — the
+    // source text is escaped below before the sentinels become real tags (R8; see HL_OPEN comment).
     const sql = `
       SELECT
         fts.document_id, fts.type_id, fts.status, fts.slug, fts.created_at, fts.updated_at,
         bm25(documents_fts, ${this.titleBoost}, ${this.slugBoost}, ${this.bodyBoost}, 0, 0, 0, 0, 0, 0, 0) AS score,
-        snippet(documents_fts, 2, '<${this.tag}>', '</${this.tag}>', '...', ${this.snippetLength}) AS body_snippet,
-        highlight(documents_fts, 0, '<${this.tag}>', '</${this.tag}>') AS title_highlight
+        snippet(documents_fts, 2, ?, ?, '...', ${this.snippetLength}) AS body_snippet,
+        highlight(documents_fts, 0, ?, ?) AS title_highlight
       FROM documents_fts fts
       WHERE ${where}
       ORDER BY score
@@ -112,7 +126,7 @@ export class Fts5Engine {
     `
     const { results } = await this.db
       .prepare(sql)
-      .bind(...binds, limit, offset)
+      .bind(HL_OPEN, HL_CLOSE, HL_OPEN, HL_CLOSE, ...binds, limit, offset)
       .all<FtsRow>()
 
     const countResult = await this.db
@@ -120,13 +134,20 @@ export class Fts5Engine {
       .bind(...binds)
       .first<{ total: number }>()
 
+    // Escape the raw (possibly attacker-authored) title/body, THEN turn the sentinels into <mark>
+    // tags — so the only HTML that survives into the result is the highlight markup we control.
+    const openTag = `<${this.tag}>`
+    const closeTag = `</${this.tag}>`
+    const renderHl = (s: string | null | undefined): string =>
+      s ? escapeHtml(s).split(HL_OPEN).join(openTag).split(HL_CLOSE).join(closeTag) : ''
+
     const hits: FtsHit[] = (results ?? []).map((r) => ({
       documentId: r.document_id,
       typeId: r.type_id,
-      title: r.title_highlight,
+      title: renderHl(r.title_highlight),
       slug: r.slug,
       status: r.status,
-      snippet: r.body_snippet,
+      snippet: renderHl(r.body_snippet),
       score: Math.abs(Number(r.score)), // bm25 is negative (more negative = better); expose magnitude
       createdAt: Number(r.created_at),
       updatedAt: Number(r.updated_at),

@@ -9,7 +9,7 @@ import { loginAsAdmin } from './utils/test-helpers'
  * POST /api/search. This spec drives the full HTTP path: create → publish → search, and the
  * deindex paths (draft excluded, unpublish, delete).
  *
- * Prereq: the local D1 must have migration 0003 applied — `cd my-sonicjs-app && npm run setup:db`.
+ * Prereq: the local D1 must have migration 0005 applied — `cd my-sonicjs-app && npm run setup:db`.
  */
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -120,5 +120,79 @@ test.describe('FTS5 lexical search @api', () => {
     const res = await page.request.delete(`/admin/documents/${id}`)
     expect(res.ok(), `delete failed: ${res.status()}`).toBeTruthy()
     expect((await search(page.request, marker)).results.some((r) => r.id === id)).toBeFalsy()
+  })
+
+  // ── SECURITY regressions (fresh-review findings) ─────────────────────────────────────────────
+
+  test('a draft is NOT exposed even when the client sends filters.status:[draft] @smoke', async ({ page }) => {
+    // The exploit: an unauthenticated caller trying to relax the published gate via request filters.
+    const marker = `civet${Date.now()}`
+    await createBlogPost(page.request, marker) // left as a draft
+    const res = await page.request.post('/api/search', {
+      headers: JSON_HEADERS,
+      data: { query: marker, mode: 'keyword', filters: { status: ['draft'] } },
+    })
+    expect(res.ok(), `search failed: ${res.status()}`).toBeTruthy()
+    const data = (await res.json()).data
+    expect(data.results.some((r: { title?: string }) => r.title?.toLowerCase().includes(marker))).toBeFalsy()
+  })
+
+  test('deleting via /admin/content also removes a doc from public search', async ({ page }) => {
+    // The primary content-delete UI does a raw deleted_at UPDATE; it must still deindex FTS.
+    const marker = `stoat${Date.now()}`
+    const { rootId } = await createBlogPost(page.request, marker)
+    await publish(page.request, rootId)
+    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+
+    const res = await page.request.delete(`/admin/content/${rootId}`)
+    expect(res.ok(), `admin-content delete failed: ${res.status()}`).toBeTruthy()
+    expect((await search(page.request, marker)).results.some((r) => r.id === rootId)).toBeFalsy()
+  })
+
+  test('deleting via /api/:collection/:id also removes a doc from public search', async ({ page }) => {
+    // Same raw deleted_at UPDATE bypass as the admin-content route, in a separate handler.
+    const marker = `heron${Date.now()}`
+    const { rootId } = await createBlogPost(page.request, marker)
+    await publish(page.request, rootId)
+    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+
+    const res = await page.request.delete(`/api/blog-posts/${rootId}`)
+    expect(res.ok(), `api delete failed: ${res.status()}`).toBeTruthy()
+    expect((await search(page.request, marker)).results.some((r) => r.id === rootId)).toBeFalsy()
+  })
+
+  test('deleting via /api/content/:id also removes a doc from public search', async ({ page }) => {
+    // Same raw deleted_at UPDATE bypass, again in a third, separate handler.
+    const marker = `otter${Date.now()}`
+    const { rootId } = await createBlogPost(page.request, marker)
+    await publish(page.request, rootId)
+    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+
+    const res = await page.request.delete(`/api/content/${rootId}`)
+    expect(res.ok(), `api-content-crud delete failed: ${res.status()}`).toBeTruthy()
+    expect((await search(page.request, marker)).results.some((r) => r.id === rootId)).toBeFalsy()
+  })
+
+  test('HTML in a published title is escaped in search results — only <mark> survives (R8)', async ({ page }) => {
+    const marker = `lynx${Date.now()}`
+    const create = await page.request.post('/admin/documents', {
+      headers: JSON_HEADERS,
+      data: {
+        typeId: 'blog_post',
+        title: `${marker} <img src=x onerror=alert(1)>`,
+        slug: `xss-${Date.now()}`,
+        data: { title: `${marker} <img src=x onerror=alert(1)>`, content: 'plain body', author: 'admin', difficulty: 'beginner' },
+      },
+    })
+    expect(create.ok(), `create failed: ${create.status()} ${await create.text()}`).toBeTruthy()
+    const created = await create.json()
+    const id = (created.data.id ?? created.data.rootId) as string
+    await publish(page.request, id)
+
+    const hit = (await search(page.request, marker)).results.find((r) => r.id === id)
+    expect(hit, 'doc should be found').toBeTruthy()
+    expect(hit!.title).not.toContain('<img') // injected tag never reaches the client raw
+    expect(hit!.title).toContain('&lt;img') // it is escaped
+    expect(hit!.title).toContain('<mark>') // the highlight markup we control does survive
   })
 })

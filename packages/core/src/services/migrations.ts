@@ -95,7 +95,34 @@ export class MigrationService {
   async ensureSchemaCompatibility(): Promise<void> {
     if (await this.checkTablesExist(['documents'])) {
       await this.ensureDocumentGeneratedColumns()
+      await this.ensureFtsSchema()
     }
+  }
+
+  /**
+   * Ensure the `documents_fts` FTS5 index exists (migration 0005).
+   *
+   * Every DocumentsService write folds an unconditional `DELETE FROM documents_fts` into its batch, so
+   * the table is a hard dependency of ALL document writes — not just search. An existing install that
+   * upgrades `@sonicjs-cms/core` past 0005 but has not yet run `wrangler d1 migrations apply` would
+   * otherwise brick every write (content, media, api-key mint, audit log) with "no such table:
+   * documents_fts". This idempotent self-heal (same DDL as 0005, `IF NOT EXISTS`) closes that upgrade
+   * gap; on a DB that already ran 0005 it is a no-op. New rows are indexed on write; pre-existing rows
+   * enter the index via an admin reindex or scripts/backfill-fts.ts.
+   */
+  private async ensureFtsSchema(): Promise<void> {
+    if (await this.checkTablesExist(['documents_fts'])) return
+    // 10-column layout — MUST match 0005 exactly (positional bm25 weights; see the migration header).
+    await this.db
+      .prepare(
+        `CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
+           title, slug, body,
+           document_id UNINDEXED, type_id UNINDEXED, status UNINDEXED,
+           created_at UNINDEXED, updated_at UNINDEXED, tenant_id UNINDEXED, is_published UNINDEXED,
+           tokenize = 'porter unicode61 remove_diacritics 2'
+         )`,
+      )
+      .run()
   }
 
   /**

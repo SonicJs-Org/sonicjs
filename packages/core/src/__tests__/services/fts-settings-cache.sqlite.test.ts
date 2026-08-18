@@ -24,7 +24,7 @@ describe('FTS settings + result cache (T1.3)', () => {
     db.raw
       .prepare(
         `INSERT INTO document_types (id,name,display_name,schema,queryable_fields,settings,source,schema_version,is_system,is_active,created_at,updated_at)
-         VALUES ('article','article','Article','{}','[]','{}','system',1,1,1,1,1)`,
+         VALUES ('article','article','Article','{}','[]','{"baseGrants":{"public":["read"]}}','system',1,1,1,1,1)`,
       )
       .run()
     docs = new DocumentsService(db, { queryableFields: FTS_FIELDS, tenantId: 'default', typeSchemaVersion: 1, versioning: false })

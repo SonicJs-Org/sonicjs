@@ -314,6 +314,31 @@ authRoutes.post('/login',
       await setCsrfCookie(c)
 
       const baBody = await baRes.json() as any
+
+      // Second factor pending. Better Auth answers a 2FA challenge with HTTP **200** and a body
+      // of `{twoFactorRedirect:true}` — no `user`, no `token`, and it deletes the session it had
+      // just created. So `baRes.ok` above is TRUE and this is NOT a credential failure.
+      //
+      // This must be handled before the JWT mint below. `baBody.user` is absent here, so
+      // `generateToken(undefined, undefined, 'viewer', …)` would sign a token for a
+      // non-existent principal, set it as `auth_token`, and hand it back as `token` — and
+      // app.ts's Bearer-JWT fallback would then populate `c.get('user')` with
+      // `{userId: undefined}`, which `requireAuth()` accepts because the object is truthy.
+      //
+      // 200, not 401: the credentials were correct, and a 401 would teach API clients to
+      // re-prompt for the password. BA's signed challenge cookie has already been forwarded onto
+      // this response by the Set-Cookie loop above, which is what /auth/two-factor/verify-totp
+      // needs in order to resolve the challenge.
+      if (baBody?.twoFactorRedirect === true) {
+        return c.json({
+          twoFactorRequired: true,
+          // BA only ever reports 'totp'/'otp' here — never 'backup_code'. A client must offer
+          // backup-code entry unconditionally rather than keying off this list.
+          twoFactorMethods: baBody.twoFactorMethods ?? [],
+          redirectTo: '/auth/two-factor',
+        })
+      }
+
       const user = baBody.user ?? {}
 
       // Mint a JWT so API callers can use Bearer token auth (same as /register)
@@ -698,6 +723,30 @@ authRoutes.post('/login/form',
     }
 
     await setCsrfCookie(c)
+
+    // Second factor pending — see the sibling branch in POST /auth/login for the full note.
+    // The password was CORRECT and `baRes.ok` is true, so without this branch the handler
+    // reports "Login successful! Redirecting…" and sends the browser to /admin/content with no
+    // session, which bounces straight back to the login page. BA's signed challenge cookie is
+    // already on this response; send the browser to the challenge page instead.
+    const baChallengeBody = (await baRes
+      .clone()
+      .json()
+      .catch(() => null)) as { twoFactorRedirect?: boolean } | null
+    if (baChallengeBody?.twoFactorRedirect === true) {
+      const isHtmxChallenge = c.req.header('HX-Request') === 'true'
+      if (isHtmxChallenge) {
+        c.header('HX-Redirect', '/auth/two-factor')
+      }
+      return c.html(html`
+        <div id="form-response">
+          <p class="text-sm text-zinc-600 dark:text-zinc-300">Password accepted. Redirecting for two-step verification…</p>
+          <script>
+            window.location.href = '/auth/two-factor';
+          </script>
+        </div>
+      `)
+    }
 
     if (email === DEMO_EMAIL) {
       c.executionCtx?.waitUntil(trackDemoLogin(c.env.CACHE_KV))

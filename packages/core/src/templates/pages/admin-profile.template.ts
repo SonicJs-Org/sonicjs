@@ -309,16 +309,18 @@ export function renderProfilePage(data: ProfilePageData): string {
                 <span class="font-medium">Change Password</span>
               </button>
 
-              <button
-                type="button"
-                onclick="toggle2FA()"
+              <!-- Enrolment lives on the two-factor-auth plugin's own page, which owns the
+                   otpauth:// URI, the one-time backup codes, and the confirm-a-live-code step.
+                   A modal here could not host that flow honestly. -->
+              <a
+                href="/admin/two-factor"
                 class="w-full text-left flex items-center gap-x-3 px-3 py-2 text-sm text-zinc-950 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-lg transition-colors"
               >
                 <svg class="w-4 h-4 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                 </svg>
-                <span class="font-medium">${data.profile.two_factor_enabled ? 'Disable' : 'Enable'} 2FA</span>
-              </button>
+                <span class="font-medium">${data.profile.two_factor_enabled ? 'Manage' : 'Enable'} 2FA</span>
+              </a>
             </div>
           </div>
         </div>
@@ -408,11 +410,6 @@ export function renderProfilePage(data: ProfilePageData): string {
       function closePasswordModal() {
         document.getElementById('password-modal').classList.add('hidden');
         document.getElementById('password-form').reset();
-      }
-
-      function toggle2FA() {
-        // TODO: Implement 2FA toggle
-        alert('Two-factor authentication setup coming soon!');
       }
 
       // Close modal on escape key

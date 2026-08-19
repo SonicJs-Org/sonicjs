@@ -189,7 +189,7 @@ test.describe('Media Upload @media', () => { … })
 | `src/routes/admin-content*` or `src/services/documents*` | `@smoke @content` |
 | `src/routes/admin-media*` or `src/services/media*` | `@smoke @media` |
 | `src/routes/api*` | `@smoke @api` |
-| `src/middleware/auth*` or `src/routes/admin-settings*` | `@smoke @auth` |
+| `src/middleware/auth*`, `src/auth/*`, `src/routes/auth*`, `src/routes/admin-settings*`, anything `two-factor` | `@smoke @auth @api-keys` |
 | `src/services/api-keys*` or related | `@smoke @api-keys` |
 | `src/routes/admin-database*` | `@smoke @database` |
 | `packages/core/migrations/*` | `@smoke @content @media @api` |

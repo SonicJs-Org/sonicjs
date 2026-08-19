@@ -367,6 +367,19 @@ export async function loginAsAdmin(page: Page) {
     throw new Error(`BA sign-in failed: ${res.status()} ${await res.text()}`);
   }
 
+  // A pending second factor is HTTP **200** with `{twoFactorRedirect:true}` and NO session, so
+  // `res.ok()` above does not catch it. Without this check the failure surfaces as a 20-second
+  // waitForURL timeout in whatever spec happens to run next — which is what a 2FA spec that died
+  // before its cleanup would leave behind on the shared admin account.
+  const body = (await res.json().catch(() => null)) as { twoFactorRedirect?: boolean } | null;
+  if (body?.twoFactorRedirect === true) {
+    throw new Error(
+      'BA sign-in returned a two-factor challenge for the shared admin account: no session was ' +
+        'issued. A 2FA spec probably failed before disabling it — clear auth_two_factor for ' +
+        `${ADMIN_CREDENTIALS.email} and reset auth_user.two_factor_enabled to 0.`
+    );
+  }
+
   // Navigate to admin (session cookie is now in context)
   await page.goto('/admin');
   await page.waitForURL(/\/admin/, { timeout: 20000 });
@@ -570,10 +583,15 @@ export async function clearTestData(page: Page) {
 
 /**
  * Clean up test users (but preserve admin)
+ *
+ * `testCleanupRoutes` is mounted at the ROOT in app.ts, so the path is `/test-cleanup/users` —
+ * this previously posted to `/admin/api/test-cleanup/users`, which has never existed, so the
+ * request 404'd and the swallowed-error `catch` made it look like a successful sweep.
  */
 export async function cleanupTestUsers(page: Page) {
   try {
-    await page.request.post('/admin/api/test-cleanup/users');
+    const res = await page.request.post('/test-cleanup/users');
+    if (!res.ok()) console.log(`User cleanup returned ${res.status()}`);
   } catch (error) {
     console.log('User cleanup failed:', error);
   }

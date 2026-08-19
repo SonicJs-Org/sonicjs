@@ -75,7 +75,7 @@ userRoutes.get('/profile', async (c) => {
     // Get user profile data
     const userStmt = db.prepare(`
       SELECT id, email, first_name, last_name, phone, bio, avatar,
-             timezone, language, theme, email_notifications, 0 as two_factor_enabled,
+             timezone, language, theme, email_notifications, two_factor_enabled,
              role, created_at, last_login_at
       FROM auth_user
       WHERE id = ? AND is_active = 1
@@ -500,7 +500,7 @@ userRoutes.get('/users', async (c) => {
     const usersStmt = db.prepare(`
       SELECT u.id, u.email, u.first_name, u.last_name,
              u.role, u.avatar, u.created_at, u.last_login_at, u.updated_at,
-             u.email_verified, 0 as two_factor_enabled, u.is_active
+             u.email_verified, u.two_factor_enabled, u.is_active
       FROM auth_user u
       ${whereClause}
       ORDER BY u.created_at DESC
@@ -808,7 +808,7 @@ userRoutes.get('/users/:id', async (c) => {
     // Get user data (including inactive users for admin access)
     const userStmt = db.prepare(`
       SELECT id, email, first_name, last_name, phone, bio, avatar,
-             role, is_active, email_verified, 0 as two_factor_enabled, created_at, last_login_at
+             role, is_active, email_verified, two_factor_enabled, created_at, last_login_at
       FROM auth_user
       WHERE id = ?
     `)
@@ -861,9 +861,13 @@ userRoutes.get('/users/:id/edit', async (c) => {
 
   try {
     // Get user data (removed bio - now in profile)
+    // two_factor_required (migration 0007) drives the Two-Factor Recovery panel. Safe to name
+    // unconditionally: ensureTwoFactorRequiredColumn() adds it from both the bootstrap path and
+    // the two-factor plugin's onBoot, which runs on every isolate.
     const userStmt = db.prepare(`
       SELECT id, email, first_name, last_name, phone, avatar,
-             role, is_active, email_verified, 0 as two_factor_enabled, created_at, last_login_at
+             role, is_active, email_verified, two_factor_enabled, two_factor_required,
+             created_at, last_login_at
       FROM auth_user
       WHERE id = ?
     `)
@@ -905,6 +909,7 @@ userRoutes.get('/users/:id/edit', async (c) => {
       isActive: Boolean(userToEdit.is_active),
       emailVerified: Boolean(userToEdit.email_verified),
       twoFactorEnabled: Boolean(userToEdit.two_factor_enabled),
+      twoFactorRequired: Boolean(userToEdit.two_factor_required),
       createdAt: userToEdit.created_at,
       lastLoginAt: userToEdit.last_login_at,
       profile

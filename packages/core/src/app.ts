@@ -41,11 +41,19 @@ import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
 import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
+import {
+  twoFactorAuthPlugin,
+  twoFactorChallengeRoutes,
+  twoFactorRecoveryRoutes,
+  enforceTwoFactorEnrolment,
+  guardRequiredSecondFactorDisable,
+} from './plugins/core-plugins/two-factor-auth'
 import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
 import { formsPlugin } from './plugins/core-plugins/forms-plugin'
 import { requireAuth, requireRole, requireRbac, AuthManager } from './middleware/auth'
 import { createAuth } from './auth/config'
+import { guardPasswordlessSecondFactor } from './auth/passwordless-second-factor-guard'
 import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { menuMiddleware } from './middleware/menu'
@@ -283,6 +291,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
+    // Mounts /admin/two-factor (enrolment) and /auth/two-factor (login challenge). Must be in
+    // the BEFORE-catch-all list: the challenge page has to win the route match against the
+    // `/auth/*` Better Auth catch-all registered further down.
+    twoFactorAuthPlugin,
     apiKeysPlugin,
     aiSearchPlugin,
     oauthProvidersPlugin,
@@ -613,6 +625,21 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     }
   })
 
+  // Forced two-factor re-enrolment. Runs last of the /admin/* middleware — after requireAuth
+  // (it needs c.get('user')) and after the RBAC shell (a user who owes an enrolment should still
+  // land on a page they have permission for once they finish).
+  //
+  // Wired here rather than in the plugin's register(): Hono composes matched handlers in
+  // registration order, and plugin registration is interleaved with the app.route('/admin/...')
+  // calls below, so middleware added from a plugin would silently not run for any admin route
+  // mounted before it. See recovery.ts.
+  app.use('/admin/*', enforceTwoFactorEnrolment())
+
+  // The break-glass reset. Mounted unconditionally and on its own prefix — deactivating the
+  // two-factor plugin does not stop Better Auth from challenging enrolled users, so the recovery
+  // path must outlive the plugin's own surface. See recovery.ts.
+  app.route('/admin/two-factor-reset', twoFactorRecoveryRoutes)
+
   // Plugin-specific API routes that would otherwise be shadowed by the generic
   // /api/:collection/:id catch-all must be mounted BEFORE app.route('/api', apiRoutes).
   app.route('/api/security-audit', securityAuditApiRoutes as any)
@@ -675,13 +702,44 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/admin/logs', adminLogsRoutes)
   app.route('/admin/rbac', adminRbacRoutes)
   app.route('/admin', adminUsersRoutes)
+
+  // The 2FA login challenge, mounted from CORE and deliberately OUTSIDE the `disableAll` guard.
+  //
+  // `twoFactor()` is composed into Better Auth unconditionally (auth/config.ts), so an enrolled
+  // user is challenged on sign-in whether or not plugins are enabled. When the challenge PAGE was
+  // mounted by the plugin, `config.plugins.disableAll` short-circuited `boot()` before
+  // `wirePlugins()` and the redirect to `/auth/two-factor` landed on a 404 — locking every
+  // enrolled user out of an app that still demanded their second factor.
+  //
+  // Only the ENROLMENT surface (`/admin/two-factor`) belongs to the plugin, because turning the
+  // plugin off should stop new enrolments without stranding existing ones. These routes carry no
+  // plugin-active gate for the same reason.
+  app.route('/auth/two-factor', twoFactorChallengeRoutes)
+
   app.route('/auth', authRoutes)
 
   // Better Auth handler — serves /auth/sign-in/*, /auth/sign-up/*, /auth/sign-out,
   // /auth/get-session, /auth/callback/* etc. Registered AFTER authRoutes so the
   // page-render routes (GET /auth/login, /auth/register) take precedence; only
   // Better Auth's own API paths fall through to this catch-all.
-  app.on(['GET', 'POST'], '/auth/*', (c) => {
+  app.on(['GET', 'POST'], '/auth/*', async (c) => {
+    // Second-factor enforcement for the passwordless flows. BA's twoFactor plugin challenges
+    // only on /sign-in/email|username|phone-number, so magicLink and emailOTP would otherwise
+    // hand an enrolled account a session with no code. Runs BEFORE auth.handler so nothing is
+    // mailed; reads a body clone so the stream handed to BA is untouched.
+    const refused = await guardPasswordlessSecondFactor(c as unknown as Context<{ Bindings: { DB: D1Database } }>)
+    if (refused) return refused
+
+    // A user whose admin MANDATED a second factor may not turn it off. Also runs before
+    // auth.handler, because BA's /two-factor/disable deletes the enrolment row in its handler —
+    // an after-hook would fire once the account was already unprotected. The /admin/* enforcement
+    // middleware cannot cover this: wrong path, and the page hosting the disable form has to stay
+    // exempt so enrolment is possible at all.
+    const disableRefused = await guardRequiredSecondFactorDisable(
+      c as unknown as Context<{ Bindings: { DB: D1Database }; Variables: { user?: { userId?: string } } }>,
+    )
+    if (disableRefused) return disableRefused
+
     const reqUrl = new URL(c.req.url)
     const requestBaseURL = `${reqUrl.protocol}//${reqUrl.host}`
     const auth = createAuth(c.env, config.auth?.extendBetterAuth, requestBaseURL)

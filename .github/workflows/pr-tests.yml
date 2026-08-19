@@ -227,6 +227,9 @@ jobs:
           if echo "$CHANGED_SRC" | grep -qE 'admin-database|database-tools'; then
             TAGS="$TAGS|@database"
           fi
+          if echo "$CHANGED_SRC" | grep -qE 'views-plugin'; then
+            TAGS="$TAGS|@views"
+          fi
           if echo "$CHANGED_SRC" | grep -qE 'collection-registry|admin-collections'; then
             TAGS="$TAGS|@collections"
           fi

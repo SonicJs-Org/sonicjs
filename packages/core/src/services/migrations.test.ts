@@ -102,7 +102,7 @@ describe('MigrationService', () => {
       const service = new MigrationService(db as any)
       const migrations = await service.getAvailableMigrations()
 
-      expect(migrations.map(m => m.id)).toEqual(['0001', '0002', '0003', '0004'])
+      expect(migrations.map(m => m.id)).toEqual(['0001', '0002', '0003', '0004', '0005'])
       expect(migrations.find(m => m.id === '029')).toBeUndefined()
       expect(db._mocks.prepare).not.toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS migrations'))
     })
@@ -133,6 +133,7 @@ describe('MigrationService', () => {
           { name: '0002_documents.sql', applied_at: '2026-01-01T00:00:01.000Z' },
           { name: '0003_session_org.sql', applied_at: '2026-01-01T00:00:02.000Z' },
           { name: '0004_forms.sql', applied_at: '2026-01-01T00:00:03.000Z' },
+          { name: '0005_otp_codes.sql', applied_at: '2026-01-01T00:00:04.000Z' },
         ],
         existingTables: ['users', 'documents', 'document_types'],
         existingColumns: []
@@ -141,9 +142,9 @@ describe('MigrationService', () => {
       const service = new MigrationService(db as any)
       const status = await service.getMigrationStatus()
 
-      expect(status.appliedMigrations).toBe(4)
+      expect(status.appliedMigrations).toBe(5)
       expect(status.pendingMigrations).toBe(0)
-      expect(status.lastApplied).toBe('2026-01-01T00:00:03.000Z')
+      expect(status.lastApplied).toBe('2026-01-01T00:00:04.000Z')
     })
   })
 })

@@ -19,14 +19,6 @@
     "update:plugin": "tsx scripts/update-plugin.ts"
   },
   "dependencies": {},
-  "pnpm": {
-    "overrides": {
-      "@better-auth/core": "1.6.25",
-      "@better-auth/drizzle-adapter": "1.6.25",
-      "@better-auth/telemetry": "1.6.25",
-      "better-auth": "1.6.25"
-    }
-  },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260724.1",
     "@types/node": "^24.10.1",

@@ -1,4 +1,5 @@
 import { renderAdminLayoutCatalyst, AdminLayoutCatalystData } from '../layouts/admin-layout-catalyst.template'
+import { escapeHtml, jsonForScript } from '../../utils/sanitize'
 
 export interface FormBuilderPageData {
   id: string
@@ -653,11 +654,11 @@ export function renderFormBuilderPage(data: FormBuilderPageData): string {
             </a>
             <div>
               <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">
-                Form Builder: ${data.display_name}
+                Form Builder: ${escapeHtml(data.display_name)}
               </h1>
               <p class="mt-1 text-sm/6 text-zinc-500 dark:text-zinc-400">
                 <span class="inline-flex items-center rounded-md bg-cyan-50 dark:bg-cyan-500/10 px-2 py-1 text-xs font-medium text-cyan-700 dark:text-cyan-300 ring-1 ring-inset ring-cyan-700/10 dark:ring-cyan-400/20">
-                  ${data.name}
+                  ${escapeHtml(data.name)}
                 </span>
               </p>
             </div>
@@ -689,7 +690,7 @@ export function renderFormBuilderPage(data: FormBuilderPageData): string {
             </button>
 
             <a
-              href="/forms/${data.name}"
+              href="/forms/${escapeHtml(data.name)}"
               target="_blank"
               class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors"
               title="Open public form in new tab"
@@ -799,7 +800,7 @@ ${getTurnstileComponentScript()}
     <script>
       (function() {
         const formId = '${data.id}';
-        const existingSchema = ${JSON.stringify(formioSchema)};
+        const existingSchema = ${jsonForScript(formioSchema)};
         const GOOGLE_MAPS_API_KEY = '${googleMapsApiKey}'; // Global fallback
         let builder;
         let hasUnsavedChanges = false;
@@ -1232,7 +1233,7 @@ ${getTurnstileComponentScript()}
   `
 
   const layoutData: AdminLayoutCatalystData = {
-    title: `Form Builder: ${data.display_name}`,
+    title: `Form Builder: ${escapeHtml(data.display_name)}`,
     content: pageContent,
     user: data.user,
     version: data.version

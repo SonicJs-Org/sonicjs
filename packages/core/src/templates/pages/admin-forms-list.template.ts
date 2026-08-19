@@ -1,5 +1,6 @@
 import { renderAdminLayoutCatalyst, AdminLayoutCatalystData } from '../layouts/admin-layout-catalyst.template'
 import { renderTable } from '../components/table.template'
+import { escapeHtml } from '../../utils/sanitize'
 
 export interface Form {
   id: string
@@ -40,7 +41,7 @@ export function renderFormsListPage(data: FormsListPageData): string {
         render: (_value: any, form: any) => `
             <div class="flex items-center gap-2 ml-2">
                 <span class="inline-flex items-center rounded-md bg-cyan-50 dark:bg-cyan-500/10 px-2.5 py-1 text-sm font-medium text-cyan-700 dark:text-cyan-300 ring-1 ring-inset ring-cyan-700/10 dark:ring-cyan-400/20">
-                  ${form.name}
+                  ${escapeHtml(form.name)}
                 </span>
             </div>
           `
@@ -49,7 +50,8 @@ export function renderFormsListPage(data: FormsListPageData): string {
         key: 'display_name',
         label: 'Display Name',
         sortable: true,
-        sortType: 'string'
+        sortType: 'string',
+        render: (_value: any, form: any) => escapeHtml(form.display_name)
       },
       {
         key: 'category',
@@ -67,7 +69,7 @@ export function renderFormsListPage(data: FormsListPageData): string {
           const colorClass = categoryColors[form.category] || categoryColors['general']
           return `
             <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${colorClass}">
-              ${form.category || 'general'}
+              ${escapeHtml(form.category || 'general')}
             </span>
           `
         }
@@ -239,7 +241,7 @@ export function renderFormsListPage(data: FormsListPageData): string {
               type="text"
               name="search"
               placeholder="Search forms..."
-              value="${data.search || ''}"
+              value="${escapeHtml(data.search || '')}"
               class="block w-full rounded-lg border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
           </div>

@@ -10,6 +10,16 @@ import type {
 import { CustomRAGService } from './custom-rag.service'
 import { getCollectionRegistry } from '../../../../services/collection-registry'
 
+// Column names permitted in the keyword-search date-range filter. Because the
+// column reaches SQL in identifier position (it cannot be a bound `?`), only
+// values in this allowlist are ever interpolated; anything else falls back to
+// `created_at`. This is the guard against SQL injection via `dateRange.field`.
+const DATE_RANGE_FIELDS = new Set(['created_at', 'updated_at'])
+
+// Hard ceiling on the number of rows a single keyword search may return, so an
+// unauthenticated caller cannot request an unbounded page.
+const MAX_SEARCH_LIMIT = 100
+
 /**
  * AI Search Service
  * Handles search operations, settings management, and collection detection
@@ -342,9 +352,13 @@ export class AISearchService {
         conditions.push("c.status != 'deleted'")
       }
 
-      // Date range filter
+      // Date range filter — the column name is allowlisted, never interpolated
+      // raw from request input. `dateRange.field` reaches SQL in identifier
+      // position (it cannot be bound as a `?`), so an un-allowlisted value would
+      // be a SQL injection sink.
       if (query.filters?.dateRange) {
-        const field = query.filters.dateRange.field || 'created_at'
+        const requestedField = query.filters.dateRange.field || 'created_at'
+        const field = DATE_RANGE_FIELDS.has(requestedField) ? requestedField : 'created_at'
         if (query.filters.dateRange.start) {
           conditions.push(`c.${field} >= ?`)
           params.push(query.filters.dateRange.start.getTime())
@@ -372,9 +386,11 @@ export class AISearchService {
       const countResult = await countStmt.bind(...params).first<{ count: number }>()
       const total = countResult?.count || 0
 
-      // Get results
-      const limit = query.limit || settings.results_limit
-      const offset = query.offset || 0
+      // Get results — clamp the page size so an anonymous caller cannot request
+      // an unbounded result set (memory pressure / bulk exfiltration).
+      const requestedLimit = Number(query.limit) || settings.results_limit
+      const limit = Math.min(Math.max(1, requestedLimit), MAX_SEARCH_LIMIT)
+      const offset = Math.max(0, Number(query.offset) || 0)
 
       const resultsStmt = this.db.prepare(`
         SELECT 

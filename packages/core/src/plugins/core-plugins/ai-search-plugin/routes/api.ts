@@ -13,6 +13,18 @@ type Variables = {
 
 const apiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
+// Roles allowed to search across non-published content and to read search
+// analytics. Everyone else (including anonymous callers) is limited to published
+// results. The app-level session middleware populates `c.get('user')` on every
+// route, so this reflects the real signed-in principal even though these routes
+// carry no auth middleware of their own.
+const PRIVILEGED_SEARCH_ROLES = ['admin', 'editor', 'author']
+
+function isPrivilegedSearcher(c: { get: (k: 'user') => { role?: string } | undefined }): boolean {
+  const user = c.get('user')
+  return !!user && PRIVILEGED_SEARCH_ROLES.includes(user.role || '')
+}
+
 /**
  * POST /api/search
  * Execute search query
@@ -42,6 +54,13 @@ apiRoutes.post('/', async (c) => {
       if (typeof query.filters.dateRange.end === 'string') {
         query.filters.dateRange.end = new Date(query.filters.dateRange.end)
       }
+    }
+
+    // Non-privileged callers only ever see published content — override any
+    // status filter supplied in the body so drafts/archived rows cannot be
+    // requested from the public endpoint.
+    if (!isPrivilegedSearcher(c)) {
+      query.filters = { ...(query.filters || {}), status: ['published'] }
     }
 
     const results = await service.search(query)
@@ -103,6 +122,12 @@ apiRoutes.get('/suggest', async (c) => {
  * Get search analytics
  */
 apiRoutes.get('/analytics', async (c) => {
+  // Analytics exposes aggregate query volume and other users' popular search
+  // terms — restrict to privileged sessions. (This route is intended as
+  // /admin/api/search/analytics; the guard makes the current mount safe.)
+  if (!isPrivilegedSearcher(c)) {
+    return c.json({ success: false, error: 'Unauthorized' }, 403)
+  }
   try {
     const db = c.env.DB
     const ai = (c.env as any).AI

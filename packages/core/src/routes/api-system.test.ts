@@ -31,14 +31,20 @@ function createMockEnv(overrides: Partial<{
   }
 }
 
-// Create test app with mock environment
-function createTestApp(env: any = createMockEnv()) {
+// Create test app with mock environment. By default a signed-in user is set so
+// the auth-gated routes (/stats, /env) are reachable; pass `{ user: null }` to
+// simulate an anonymous caller.
+function createTestApp(env: any = createMockEnv(), opts: { user?: any | null } = {}) {
   const app = new Hono()
+  const user = opts.user === undefined
+    ? { userId: 'test-user', email: 'test@example.com', role: 'admin' }
+    : opts.user
 
   // Add middleware to set env
   app.use('*', async (c, next) => {
     c.env = env
     c.set('appVersion', '2.0.0')
+    if (user) c.set('user', user)
     await next()
   })
 
@@ -220,6 +226,12 @@ describe('API System Routes', () => {
       resetCollectionRegistry()
     })
 
+    it('returns 401 for an anonymous caller', async () => {
+      const app = createTestApp(createMockEnv(), { user: null })
+      const res = await app.request('/api/system/stats')
+      expect(res.status).toBe(401)
+    })
+
     it('should return system statistics', async () => {
       // Stats counts content from `documents` filtered by the registry's active,
       // non-internal collection type_ids — register one so the content query runs.
@@ -325,6 +337,12 @@ describe('API System Routes', () => {
   })
 
   describe('GET /api/system/env', () => {
+    it('returns 401 for an anonymous caller', async () => {
+      const app = createTestApp(createMockEnv(), { user: null })
+      const res = await app.request('/api/system/env')
+      expect(res.status).toBe(401)
+    })
+
     it('should return environment information', async () => {
       const env = createMockEnv({
         ENVIRONMENT: 'production',

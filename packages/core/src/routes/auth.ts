@@ -741,10 +741,26 @@ authRoutes.post('/login/form',
   }
 })
 
-// Test seeding endpoint (only for development/testing)
+// Environments where the known-credential admin seed is permitted. Anything else
+// (including 'production' and an unset value) is denied — same fail-closed allowlist
+// the test-cleanup routes use.
+const SEED_ADMIN_ALLOWED_ENVIRONMENTS = new Set(['development', 'test', 'e2e', 'preview', 'local'])
+
+// Test seeding endpoint (development/testing only).
+//
+// SECURITY: this endpoint has no authentication and upserts a fixed-credential
+// admin (`admin@sonicjs.com` / `sonicjs!`), overwriting an existing admin's
+// password. It must never be reachable on a real deployment, so it is gated
+// fail-closed to explicit non-production environments — an unset or 'production'
+// ENVIRONMENT is denied, so a default `wrangler deploy` cannot expose it.
+// Production admin provisioning goes through the bootstrap seed path, not this route.
 authRoutes.post('/seed-admin',
   rateLimit({ max: 10, windowMs: 60 * 1000, keyPrefix: 'seed-admin' }),
   async (c) => {
+  const environment = (c.env?.ENVIRONMENT ?? '').toString().toLowerCase()
+  if (!SEED_ADMIN_ALLOWED_ENVIRONMENTS.has(environment)) {
+    return c.json({ error: 'Seed endpoint not available in this environment' }, 403)
+  }
   try {
     const db = c.env.DB
     // Ensure document_types FK targets exist before RBAC seed — D1 enforces the FK

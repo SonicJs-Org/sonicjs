@@ -8,6 +8,7 @@
 import { Hono } from 'hono'
 import type { Bindings, Variables } from '../app'
 import { getCollectionRegistry } from '../services/collection-registry'
+import { requireAuth } from '../middleware'
 
 export const apiSystemRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -127,8 +128,12 @@ apiSystemRoutes.get('/info', (c) => {
 /**
  * System stats
  * GET /api/system/stats
+ *
+ * Requires authentication — exposes aggregate content/media/user counts
+ * (including the total user count), which is business-intelligence recon for an
+ * anonymous caller.
  */
-apiSystemRoutes.get('/stats', async (c) => {
+apiSystemRoutes.get('/stats', requireAuth(), async (c) => {
   try {
     const db = c.env.DB
 
@@ -211,8 +216,12 @@ apiSystemRoutes.get('/ping', async (c) => {
 /**
  * Environment check
  * GET /api/system/env
+ *
+ * Requires authentication — reveals which bindings/integrations are configured
+ * (DB, cache, R2, email queue, SendGrid, Cloudflare Images), an infrastructure
+ * fingerprint that should not be exposed to anonymous callers.
  */
-apiSystemRoutes.get('/env', (c) => {
+apiSystemRoutes.get('/env', requireAuth(), (c) => {
   return c.json({
     environment: c.env.ENVIRONMENT || 'production',
     features: {

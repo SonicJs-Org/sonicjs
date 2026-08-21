@@ -89,5 +89,20 @@ describe('plugin mounting via createSonicJSApp', () => {
       expect(hasPathPrefix(paths, '/admin/content')).toBe(true)
       expect(hasPathPrefix(paths, '/api')).toBe(true)
     })
+
+    it('mounts /api/search as a CORE route even when disableAll is true', () => {
+      // The public search API was promoted out of the ai-search plugin into core
+      // app.ts (mounted before the /api/:collection catch-all). A plugins-off
+      // "bare core" deploy must still expose a working, hardened /api/search — the
+      // endpoint must not vanish (nor fall through to the collection API) just
+      // because plugins are disabled. Behavioral proof (returns published results)
+      // lives in ai-search-disableall.integration.test.ts.
+      const app = createSonicJSApp({ plugins: { disableAll: true } })
+      const paths = routePaths(app)
+      expect(hasPathPrefix(paths, '/api/search')).toBe(true)
+      // The plugin's own admin surface stays gated by disableAll — proving the
+      // /api/search route above is core-owned, not resurrected plugin wiring.
+      expect(hasPathPrefix(paths, '/admin/plugins/ai-search')).toBe(false)
+    })
   })
 })

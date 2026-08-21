@@ -3,7 +3,7 @@ import { z } from 'zod'
 export type Permission = 'read' | 'create' | 'update' | 'delete' | 'publish' | 'manage'
 export type PrincipalType = 'user' | 'role' | 'group' | 'public' | 'token'
 export type RefStrength = 'strong' | 'weak'
-export type QueryableFieldKind = 'scalar' | 'facet' | 'reference'
+export type QueryableFieldKind = 'scalar' | 'facet' | 'reference' | 'fulltext'
 export type DocumentSource = 'code' | 'plugin' | 'system'
 export type DocumentStatus = 'draft' | 'published' | 'archived'
 
@@ -14,6 +14,8 @@ export interface QueryableField {
   type?: 'text' | 'number' | 'integer' | 'boolean' | 'date'
   column?: string
   refStrength?: RefStrength
+  /** bm25 boost for kind:'fulltext' fields routed into the FTS `body` slot (default 1.0). */
+  weight?: number
 }
 
 export interface DocumentTypeSettings {

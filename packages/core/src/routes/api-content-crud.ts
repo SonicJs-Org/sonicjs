@@ -380,6 +380,8 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor
 
       const now = Math.floor(Date.now() / 1000)
       await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, id, tenantId).run()
+      // Raw deleted_at UPDATE bypasses DocumentProjection — deindex FTS so the deleted doc leaves public search.
+      await db.prepare("DELETE FROM documents_fts WHERE document_id IN (SELECT id FROM documents WHERE root_id = ? AND tenant_id = ?)").bind(id, tenantId).run()
       const cache = getCacheService(CACHE_CONFIGS.api!)
       await cache.invalidate('api:content-filtered:*')
       await cache.invalidate(`api:collection-content-filtered:${docRow.type_id}:*`)

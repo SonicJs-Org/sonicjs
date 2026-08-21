@@ -29,7 +29,7 @@ class Stmt {
 function makeDb() {
   const sqlite = new Database(':memory:')
   sqlite.pragma('foreign_keys = OFF')
-  for (const m of ['0001_core.sql', '0002_documents.sql']) sqlite.exec(readFileSync(join(MIGRATIONS, m), 'utf8'))
+  for (const m of ['0001_core.sql', '0002_documents.sql', '0005_documents_fts.sql']) sqlite.exec(readFileSync(join(MIGRATIONS, m), 'utf8'))
   // Register the rbac document types (documents.type_id references document_types).
   for (const id of ['rbac_role', 'rbac_verb', 'rbac_user_roles']) {
     sqlite.prepare(

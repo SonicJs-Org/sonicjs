@@ -1,6 +1,7 @@
 import { D1Database } from '@cloudflare/workers-types'
 import { nanoid } from 'nanoid'
 import type { Document, QueryableField, DocumentRow } from '../schemas/document'
+import { extractSearchableText } from './searchable-text'
 
 // D1 hard limit: 100 bound parameters per statement. Keep under 90 for safety.
 const MAX_PARAMS = 90
@@ -131,6 +132,65 @@ export class DocumentProjection {
     ]
   }
 
+  // ─── Full-text projection (documents_fts) ─────────────────────────────────
+  // The FTS index is one more write-time projection alongside facets/references (spike Q6), keyed by
+  // document_id. Callers in DocumentsService fold these statements into the same atomic db.batch as the
+  // document row write, so the index can never silently diverge. Visibility/soft-delete is kept native
+  // (no query JOIN): a soft-deleted or visible=0 row emits the DELETE only, so the index holds only live,
+  // visible rows and the public query filters on is_published/tenant_id directly (LA2).
+
+  /** Render a document's declared `kind:'fulltext'` fields to the plain text indexed into `body`. */
+  private computeFtsBody(doc: Document, queryableFields: QueryableField[]): string {
+    const parts: string[] = []
+    for (const field of queryableFields) {
+      if (field.kind !== 'fulltext') continue
+      const raw = this.extractPath(doc.data, field.path ?? `$.${field.name}`)
+      const text = extractSearchableText(raw)
+      if (text) parts.push(text)
+    }
+    return parts.join(' ').replace(/\s+/g, ' ').trim()
+  }
+
+  /**
+   * Upsert a document's FTS row to match its CURRENT state. Always DELETEs the existing row first
+   * (idempotent re-index), then INSERTs only if the row is live + visible. `doc` must carry the
+   * post-mutation flags (e.g. is_published after publish), since the index snapshots is_published.
+   */
+  buildFtsUpsertStatements(doc: Document, queryableFields: QueryableField[]): D1PreparedStatement[] {
+    const statements: D1PreparedStatement[] = [
+      this.db.prepare('DELETE FROM documents_fts WHERE document_id = ?').bind(doc.id),
+    ]
+    if (doc.deletedAt == null && doc.visible) {
+      const body = this.computeFtsBody(doc, queryableFields)
+      // R5: 10 columns / 10 binds — matches the 10-column documents_fts layout (migration 0003).
+      statements.push(
+        this.db
+          .prepare(
+            `INSERT INTO documents_fts (title, slug, body, document_id, type_id, status, created_at, updated_at, tenant_id, is_published)
+             VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          )
+          .bind(
+            doc.title ?? '',
+            doc.slug ?? '',
+            body,
+            doc.id,
+            doc.typeId,
+            doc.status,
+            doc.createdAt,
+            doc.updatedAt,
+            doc.tenantId,
+            doc.isPublished ? 1 : 0,
+          ),
+      )
+    }
+    return statements
+  }
+
+  /** Deindex a document (used on supersede-to-history, soft delete, and erase). */
+  buildFtsDeleteStatements(documentId: string): D1PreparedStatement[] {
+    return [this.db.prepare('DELETE FROM documents_fts WHERE document_id = ?').bind(documentId)]
+  }
+
   // Rebuild derived rows for all current-draft and published rows of a type.
   // One bounded admin action; not chunked cron orchestration.
   async reindexType(typeId: string, tenantId: string, queryableFields: QueryableField[]): Promise<number> {
@@ -157,6 +217,8 @@ export class DocumentProjection {
         const doc = rowToDocument(row)
         statements.push(...this.buildDerivedDeleteStatements(doc.id))
         statements.push(...this.buildDerivedInsertStatements(doc, queryableFields, now))
+        // Rebuild the FTS row too (idempotent upsert) — this is also the backfill primitive (T0.5).
+        statements.push(...this.buildFtsUpsertStatements(doc, queryableFields))
       }
 
       if (statements.length > 0) {

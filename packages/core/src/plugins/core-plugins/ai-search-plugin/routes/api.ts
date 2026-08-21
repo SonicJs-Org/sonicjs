@@ -9,6 +9,7 @@ type Variables = {
     email: string
     role: string
   }
+  tenantId?: string
 }
 
 const apiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -22,7 +23,8 @@ apiRoutes.post('/', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    const tenantId = c.get('tenantId') || 'default'
+    const service = new AISearchService(db, ai, vectorize, tenantId, (c.env as any).CACHE_KV)
 
     const body = await c.req.json()
 
@@ -72,7 +74,8 @@ apiRoutes.get('/suggest', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    const tenantId = c.get('tenantId') || 'default'
+    const service = new AISearchService(db, ai, vectorize, tenantId, (c.env as any).CACHE_KV)
 
     const query = c.req.query('q') || ''
 

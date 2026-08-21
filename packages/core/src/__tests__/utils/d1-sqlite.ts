@@ -15,7 +15,7 @@ import { ensureScalarSchema, resetScalarSchemaCache } from '../../services/docum
 // services delete derived rows explicitly rather than relying on cascade.
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../../migrations')
-const DOC_MIGRATIONS = ['0001_core.sql', '0002_documents.sql']
+const DOC_MIGRATIONS = ['0001_core.sql', '0002_documents.sql', '0005_documents_fts.sql']
 
 // better-sqlite3 only accepts numbers/strings/bigints/buffers/null. Coerce the values the
 // services bind (undefined, booleans) the same way D1's binder tolerates them.

@@ -3,6 +3,7 @@ import { renderPagination, PaginationData } from '../pagination.template'
 import { renderTable, TableData, TableColumn } from '../table.template'
 import type { FilterBarData } from '../filter-bar.template'
 import { renderConfirmationDialog, getConfirmationDialogScript } from '../confirmation-dialog.template'
+import { escapeHtml } from '../../utils/sanitize'
 
 export interface ContentItem {
   id: string
@@ -111,9 +112,9 @@ export function renderContentListPage(data: ContentListPageData): string {
         <div class="flex items-center">
           <div>
             <div class="text-sm font-medium text-zinc-950 dark:text-white">
-              <a href="/admin/content/${row.id}/edit${currentParams ? `?ref=${encodeURIComponent(currentParams)}` : ''}" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">${row.title}</a>
+              <a href="/admin/content/${row.id}/edit${currentParams ? `?ref=${encodeURIComponent(currentParams)}` : ''}" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">${escapeHtml(row.title)}</a>
             </div>
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">${row.slug}</div>
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">${escapeHtml(row.slug)}</div>
           </div>
         </div>
       `

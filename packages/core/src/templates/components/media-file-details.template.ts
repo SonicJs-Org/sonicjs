@@ -1,4 +1,5 @@
 import { MediaFile } from './media-grid.template'
+import { escapeHtml } from '../../utils/sanitize'
 
 export interface MediaFileDetailsData {
   file: MediaFile & {
@@ -27,7 +28,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
       <div class="space-y-4">
         <div class="rounded-xl bg-zinc-50 dark:bg-zinc-800 p-4">
           ${file.isImage ? `
-            <img src="${file.public_url}" alt="${file.alt || file.filename}" class="w-full h-auto rounded-lg">
+            <img src="${file.public_url}" alt="${escapeHtml(file.alt || file.filename)}" class="w-full h-auto rounded-lg">
           ` : file.isVideo ? `
             <video src="${file.public_url}" controls class="w-full h-auto rounded-lg"></video>
           ` : `
@@ -60,7 +61,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1">Filename</label>
-          <p class="text-sm text-zinc-500 dark:text-zinc-400">${file.original_name}</p>
+          <p class="text-sm text-zinc-500 dark:text-zinc-400">${escapeHtml(file.original_name)}</p>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
@@ -89,7 +90,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
 
         <div>
           <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1">Folder</label>
-          <p class="text-sm text-zinc-500 dark:text-zinc-400">${file.folder}</p>
+          <p class="text-sm text-zinc-500 dark:text-zinc-400">${escapeHtml(file.folder || '')}</p>
         </div>
 
         <div>
@@ -115,7 +116,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
             <input
               type="text"
               name="alt"
-              value="${file.alt || ''}"
+              value="${escapeHtml(file.alt || '')}"
               class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors"
               placeholder="Describe this image..."
             >
@@ -128,7 +129,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
               rows="3"
               class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors"
               placeholder="Optional caption..."
-            >${file.caption || ''}</textarea>
+            >${escapeHtml(file.caption || '')}</textarea>
           </div>
 
           <div>
@@ -136,7 +137,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
             <input
               type="text"
               name="tags"
-              value="${file.tags.join(', ')}"
+              value="${escapeHtml(file.tags.join(', '))}"
               class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors"
               placeholder="tag1, tag2, tag3"
             >

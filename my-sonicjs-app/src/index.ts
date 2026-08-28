@@ -14,6 +14,7 @@ import {
   demoLoginPlugin,
   emailReconciliationPlugin,
   getHookSystem,
+  graphqlPlugin,
   mcpPlugin,
   redirectPlugin,
   registerCollections,
@@ -42,7 +43,7 @@ const config: SonicJSConfig = {
   plugins: {
     // Add plugins to this array to activate them. Each plugin's register()
     // runs synchronously at startup; onBoot() runs async on first request.
-    register: [redirectPlugin, examplePlugin, mcpPlugin(), demoLoginPlugin, versioningPlugin],
+    register: [redirectPlugin, examplePlugin, mcpPlugin(), graphqlPlugin(), demoLoginPlugin, versioningPlugin],
     disableAll: false,
   },
 };

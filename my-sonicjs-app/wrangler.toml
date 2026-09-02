@@ -35,7 +35,7 @@ name = "EMAIL"
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
-CORS_ORIGINS = "http://localhost:8787,http://localhost:4321"
+CORS_ORIGINS = "http://127.0.0.1:8787,http://127.0.0.1:4321"
 DEFAULT_FROM_EMAIL = "lane@sonicjs.com"
 # CI preview secret — not sensitive (fresh DB per PR, no real user data).
 # Production deployments must use `wrangler secret put BETTER_AUTH_SECRET` instead.

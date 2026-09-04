@@ -35,7 +35,7 @@ export interface PluginSettingsPageData {
     description: string
     version: string
     author: string
-    status: 'active' | 'inactive' | 'error'
+    status: 'active' | 'inactive' | 'error' | 'uninstalled'
     category: string
     icon: string
     downloadCount?: number
@@ -63,14 +63,15 @@ export interface PluginSettingsPageData {
 
 export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
   const { plugin, activity = [], user, settingsTabData } = data
+  const isUninstalled = plugin.status === 'uninstalled'
   // true only when the plugin has at least one user-configurable setting key
   // (_-prefixed keys are internal metadata, not settings the user can edit)
   const pluginDef = getPluginDefinition(plugin.id || plugin.name)
   const pluginId = plugin.id || plugin.name
-  const hasUserSettings = pluginDef?.settingsTabContent != null ||
+  const hasUserSettings = !isUninstalled && (pluginDef?.settingsTabContent != null ||
     Object.keys(plugin.settings || {}).some(k => !k.startsWith('_')) ||
-    hasCustomSettingsComponent(pluginId)
-  const defaultTab = hasUserSettings ? 'settings' : 'info'
+    hasCustomSettingsComponent(pluginId))
+  const defaultTab = isUninstalled ? 'info' : hasUserSettings ? 'settings' : 'info'
 
 
   const pageContent = `
@@ -202,6 +203,33 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
 
       window.addEventListener('hashchange', initTabFromHash);
       initTabFromHash();
+
+      async function installPlugin(pluginName) {
+        const button = event.target;
+        button.disabled = true;
+        button.textContent = 'Installing...';
+
+        try {
+          const response = await fetch('/admin/plugins/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: pluginName })
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            showNotification('Plugin installed successfully!', 'success');
+            setTimeout(() => location.reload(), 1500);
+          } else {
+            throw new Error(result.error || 'Failed to install plugin');
+          }
+        } catch (error) {
+          showNotification(error.message, 'error');
+          button.disabled = false;
+          button.textContent = 'Install';
+        }
+      }
 
       async function togglePlugin(pluginId, action) {
         const button = event.target;
@@ -375,13 +403,15 @@ function renderStatusBadge(status: string): string {
   const statusColors: Record<string, string> = {
     active: 'bg-green-900/50 text-green-300 border-green-600/30',
     inactive: 'bg-gray-800/50 text-gray-400 border-gray-600/30',
-    error: 'bg-red-900/50 text-red-300 border-red-600/30'
+    error: 'bg-red-900/50 text-red-300 border-red-600/30',
+    uninstalled: 'bg-zinc-800/50 text-zinc-400 border-zinc-600/30',
   }
 
   const statusIcons: Record<string, string> = {
     active: '<div class="w-2 h-2 bg-green-400 rounded-full mr-2"></div>',
     inactive: '<div class="w-2 h-2 bg-gray-500 rounded-full mr-2"></div>',
-    error: '<div class="w-2 h-2 bg-red-400 rounded-full mr-2"></div>'
+    error: '<div class="w-2 h-2 bg-red-400 rounded-full mr-2"></div>',
+    uninstalled: '<div class="w-2 h-2 bg-zinc-500 rounded-full mr-2"></div>',
   }
 
   return `
@@ -392,11 +422,15 @@ function renderStatusBadge(status: string): string {
 }
 
 function renderToggleButton(plugin: any): string {
+  if (plugin.status === 'uninstalled') {
+    return `<button onclick="installPlugin('${plugin.name || plugin.id}')" class="bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">Install</button>`
+  }
+
   if (plugin.isCore) {
     return '<span class="text-sm text-gray-400">Core Plugin</span>'
   }
 
-  return plugin.status === 'active' 
+  return plugin.status === 'active'
     ? `<button onclick="togglePlugin('${plugin.id}', 'deactivate')" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Deactivate</button>`
     : `<button onclick="togglePlugin('${plugin.id}', 'activate')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Activate</button>`
 }

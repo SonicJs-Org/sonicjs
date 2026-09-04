@@ -251,7 +251,7 @@ test.describe('Smoke Tests - Critical Path @smoke', () => {
     // Use the origin configured in CORS_ORIGINS (wrangler.toml)
     const response = await request.get('/api', {
       headers: {
-        'Origin': 'http://localhost:8787'
+        'Origin': 'http://127.0.0.1:8787'
       }
     });
 
@@ -259,7 +259,7 @@ test.describe('Smoke Tests - Critical Path @smoke', () => {
 
     // Verify CORS header echoes back the allowed origin
     const corsHeader = response.headers()['access-control-allow-origin'];
-    expect(corsHeader).toBe('http://localhost:8787');
+    expect(corsHeader).toBe('http://127.0.0.1:8787');
   });
 
   test('API returns correct content-type headers', async ({ request }) => {

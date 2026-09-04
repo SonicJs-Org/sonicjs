@@ -218,7 +218,7 @@ adminPluginRoutes.get('/:id', async (c) => {
 
     if (!plugin) {
       // Plugin not installed — show detail page from registry without auto-installing.
-      const availablePlugin = getAvailablePlugins().find(p => p.id === pluginId)
+      const availablePlugin = getAvailablePlugins().find(p => p.id === pluginId || p.name === pluginId)
       if (!availablePlugin) return c.text('Plugin not found', 404)
 
       const pageData: PluginSettingsPageData = {

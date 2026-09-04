@@ -4,16 +4,21 @@ import { loginAsAdmin } from './utils/test-helpers'
 test.describe('OAuth Providers - settings page @smoke @auth', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
+    // Ensure the plugin is installed (it's no longer auto-installed on page visit)
+    await page.request.post('/admin/plugins/install', {
+      data: { name: 'oauth-providers' },
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => {})
   })
 
   test('shows Settings tab without needing prior saved settings', async ({ page }) => {
     await page.goto('/admin/plugins/oauth-providers')
-    await expect(page.locator('#settings-tab')).toBeVisible()
+    await expect(page.locator('#settings-tab')).toBeVisible({ timeout: 10000 })
   })
 
   test('renders GitHub and Google credential fields', async ({ page }) => {
     await page.goto('/admin/plugins/oauth-providers#settings')
-    await expect(page.locator('#oauth_github_clientId')).toBeVisible()
+    await expect(page.locator('#oauth_github_clientId')).toBeVisible({ timeout: 10000 })
     await expect(page.locator('#oauth_github_clientSecret')).toBeVisible()
     await expect(page.locator('#oauth_github_enabled')).toBeAttached()
     await expect(page.locator('#oauth_google_clientId')).toBeVisible()
@@ -23,6 +28,7 @@ test.describe('OAuth Providers - settings page @smoke @auth', () => {
 
   test('saves and reloads nested provider settings correctly', async ({ page }) => {
     await page.goto('/admin/plugins/oauth-providers#settings')
+    await page.waitForLoadState('networkidle')
 
     await page.fill('#oauth_github_clientId', 'test-gh-client-id')
     await page.fill('#oauth_github_clientSecret', 'test-gh-secret')

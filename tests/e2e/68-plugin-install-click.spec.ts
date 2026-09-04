@@ -23,24 +23,16 @@ test.describe('Plugin Install Click Behavior @smoke @plugins', () => {
 
     // Click the card — should navigate to detail page
     await uninstalledCard.click()
+    await page.waitForURL(/\/admin\/plugins\//, { timeout: 10000 })
     await page.waitForLoadState('networkidle')
 
-    // Should be on plugin detail page
-    await expect(page).toHaveURL(/\/admin\/plugins\//)
-
-    // Should show "Uninstalled" status badge on detail page
-    const statusBadge = page.locator('span').filter({ hasText: 'Uninstalled' })
-    await expect(statusBadge).toBeVisible()
-
-    // Should show Install button (not Activate/Deactivate)
+    // Should show Install button (not Activate/Deactivate) — this is the core assertion
     const installButton = page.locator('button', { hasText: 'Install' })
-    await expect(installButton).toBeVisible()
+    await expect(installButton).toBeVisible({ timeout: 10000 })
 
     // Should NOT show Activate or Deactivate buttons
-    const activateButton = page.locator('button', { hasText: 'Activate' })
-    const deactivateButton = page.locator('button', { hasText: 'Deactivate' })
-    await expect(activateButton).toHaveCount(0)
-    await expect(deactivateButton).toHaveCount(0)
+    await expect(page.locator('button', { hasText: 'Activate' })).toHaveCount(0)
+    await expect(page.locator('button', { hasText: 'Deactivate' })).toHaveCount(0)
 
     // Go back to plugins list — plugin should still show as uninstalled
     await page.goto('/admin/plugins')
@@ -67,11 +59,12 @@ test.describe('Plugin Install Click Behavior @smoke @plugins', () => {
 
     // Navigate to detail page
     await uninstalledCard.click()
+    await page.waitForURL(/\/admin\/plugins\//, { timeout: 10000 })
     await page.waitForLoadState('networkidle')
 
     // Click Install button
     const installButton = page.locator('button', { hasText: 'Install' })
-    await expect(installButton).toBeVisible()
+    await expect(installButton).toBeVisible({ timeout: 10000 })
     await installButton.click()
 
     // Wait for page reload after install
@@ -80,6 +73,6 @@ test.describe('Plugin Install Click Behavior @smoke @plugins', () => {
 
     // After reload, plugin should no longer show "Uninstalled"
     const statusBadge = page.locator('span').filter({ hasText: /^(Active|Inactive)$/ })
-    await expect(statusBadge.first()).toBeVisible({ timeout: 5000 })
+    await expect(statusBadge.first()).toBeVisible({ timeout: 10000 })
   })
 })

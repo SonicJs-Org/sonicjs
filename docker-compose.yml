@@ -10,7 +10,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:3000}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       # Optional email provider.
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}

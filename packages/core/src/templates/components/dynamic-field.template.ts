@@ -891,14 +891,14 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       const renderMediaPreview = (url: unknown, alt: string, classes: string) => {
         if (typeof url !== 'string' || url === '') return ''
         if (isVideoUrl(url)) {
-          return `<video src="${url}" class="${classes}" muted></video>`
+          return `<video src="${escapeHtml(url)}" class="${classes}" muted></video>`
         }
-        return `<img src="${url}" alt="${alt}" class="${classes}">`
+        return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" class="${classes}">`
       }
 
       fieldHTML = `
         <div class="media-field-container">
-          <input type="hidden" id="${fieldId}" name="${fieldName}" value="${isMultiple ? mediaValues.join(',') : singleValue}" data-multiple="${isMultiple}">
+          <input type="hidden" id="${fieldId}" name="${fieldName}" value="${escapeHtml(String(isMultiple ? mediaValues.join(',') : singleValue))}" data-multiple="${isMultiple}">
 
           ${
             isMultiple
@@ -907,11 +907,11 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
               ${mediaValues
                 .map(
                   (url: string, idx: number) => `
-                <div class="relative media-preview-item" data-url="${url}">
+                <div class="relative media-preview-item" data-url="${escapeHtml(url)}">
                   ${renderMediaPreview(url, `Media ${idx + 1}`, 'w-full h-24 object-cover rounded-lg border border-white/20')}
                   <button
                     type="button"
-                    onclick="removeMediaFromMultiple('${fieldId}', '${url}')"
+                    onclick="removeMediaFromMultiple('${fieldId}', '${escapeJsAttr(url)}')"
                     data-media-remove="true"
                     class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700"
                     ${disabled ? 'disabled' : ''}
@@ -2647,4 +2647,23 @@ function escapeHtml(text: string): string {
     '"': '&quot;',
     "'": '&#39;'
   }[char] || char))
+}
+
+/**
+ * Escape a string for a single-quoted JS string inside an HTML attribute —
+ * e.g. onclick="f('${escapeJsAttr(x)}')". escapeHtml is insufficient: the browser
+ * HTML-decodes the attribute BEFORE the inline script parses, so &#39; decodes back
+ * to ' and terminates the string. Emits \xHH escapes so no raw '"<>&\ survives.
+ */
+function escapeJsAttr(value: unknown): string {
+  return String(value ?? '').replace(/[\\'"<>&\r\n]/g, (ch) => ({
+    '\\': '\\\\',
+    "'": '\\x27',
+    '"': '\\x22',
+    '<': '\\x3C',
+    '>': '\\x3E',
+    '&': '\\x26',
+    '\r': '\\r',
+    '\n': '\\n'
+  }[ch] || ch))
 }

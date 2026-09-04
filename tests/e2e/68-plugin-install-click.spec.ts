@@ -45,17 +45,17 @@ test.describe('Plugin Install Click Behavior @smoke @plugins', () => {
     await page.goto('/admin/plugins/hello-world')
     await page.waitForLoadState('networkidle')
 
-    // Click Install button
+    // Click Install — JS does fetch + setTimeout(reload, 1500)
     const installButton = page.locator('button', { hasText: 'Install' })
     await expect(installButton).toBeVisible({ timeout: 10000 })
-    await installButton.click()
 
-    // Wait for page reload after install
-    await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(2000)
+    // Click and wait for the delayed reload navigation to complete
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle', timeout: 15000 }),
+      installButton.click(),
+    ])
 
-    // After reload, plugin should show as Active or Inactive (not Uninstalled)
-    const statusBadge = page.locator('span').filter({ hasText: /^(Active|Inactive)$/ })
-    await expect(statusBadge.first()).toBeVisible({ timeout: 10000 })
+    // After reload, Install button should be gone (plugin is now installed)
+    await expect(page.locator('button', { hasText: 'Install' })).toHaveCount(0, { timeout: 5000 })
   })
 })

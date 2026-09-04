@@ -112,6 +112,29 @@ describe('normalizeTwoFactorPolicy', () => {
     expect(normalizeTwoFactorPolicy({ issuer: 'Evil:Corp?x#y' }).issuer).toBe('Evil Corp x y')
   })
 
+  it('strips every character that is structural in an otpauth:// URI', () => {
+    // A deny-list here has to enumerate all of these, and the first one missed forges a different
+    // account entry in the victim's authenticator: `/` and `?` end the label, `&` and `=` inject
+    // parameters (the issuer also lands in `issuer=`), `#` truncates, `%` fakes an escape.
+    expect(normalizeTwoFactorPolicy({ issuer: 'A&b=c/d?e#f%g\\h' }).issuer).toBe('A b c d e f g h')
+    expect(normalizeTwoFactorPolicy({ issuer: 'Acme</b><script>' }).issuer).toBe('Acme b script')
+  })
+
+  it('keeps ordinary punctuation and non-ASCII letters', () => {
+    // Authenticator apps display this string; mangling a legitimate company name would be a
+    // regression dressed up as hardening.
+    expect(normalizeTwoFactorPolicy({ issuer: "Société Générale (EU) Ltd." }).issuer).toBe(
+      "Société Générale (EU) Ltd.",
+    )
+    expect(normalizeTwoFactorPolicy({ issuer: "O'Brien_Media 24" }).issuer).toBe("O'Brien_Media 24")
+  })
+
+  it('falls back to the default when an issuer sanitizes away to nothing', () => {
+    expect(normalizeTwoFactorPolicy({ issuer: '://?#' }).issuer).toBe(
+      TWO_FACTOR_POLICY_DEFAULTS.issuer,
+    )
+  })
+
   it('bounds issuer length', () => {
     expect(normalizeTwoFactorPolicy({ issuer: 'z'.repeat(500) }).issuer).toHaveLength(64)
   })

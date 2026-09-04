@@ -112,7 +112,8 @@ function renderTwoFactorRecoverySection(u: UserEditData): string {
 
         <button
           type="button"
-          onclick="resetTwoFactor('${uid}')"
+          data-user-id="${uid}"
+          onclick="resetTwoFactor(this.dataset.userId)"
           id="tf-reset-button"
           class="mt-4 w-full inline-flex items-center justify-center rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60 transition-colors"
         >
@@ -529,6 +530,10 @@ export function renderUserEditPage(data: UserEditPageData): string {
       // Two-factor break-glass. Inline rather than a confirmation dialog because the confirmation
       // IS the typed email — a second "are you sure?" on top of that trains people to click
       // through both. The server re-checks the email regardless; this is not the gate.
+      //
+      // The id arrives via the button's data-user-id, never interpolated into this source:
+      // escapeHtml turns ' into &#039;, which the HTML parser decodes back to a bare quote before
+      // the JS parser ever sees it — so an id containing one would break out of the argument.
       function resetTwoFactor(userId) {
         const emailInput = document.getElementById('tf-confirm-email');
         const requireInput = document.getElementById('tf-require-reenrol');
@@ -569,7 +574,7 @@ export function renderUserEditPage(data: UserEditPageData): string {
             : 'Two-factor reset. This account is now password-only.', true);
           // Reload so the state badge and the rest of the page reflect the change rather than
           // showing a stale "Enrolled".
-          setTimeout(function () { window.location.href = '/admin/users/' + userId + '/edit?_t=' + Date.now(); }, 900);
+          setTimeout(function () { window.location.href = '/admin/users/' + encodeURIComponent(userId) + '/edit?_t=' + Date.now(); }, 900);
         })
         .catch(function (error) {
           console.error('Error:', error);

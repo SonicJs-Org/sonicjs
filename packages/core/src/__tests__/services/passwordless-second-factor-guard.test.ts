@@ -103,6 +103,14 @@ describe('guardPasswordlessSecondFactor — enrolled accounts', () => {
     expect(r.reachedBetterAuth).toBe(false)
   })
 
+  it('refuses a guarded path with a trailing slash, which routes to the same BA endpoint', async () => {
+    // The paths are compared exactly and Hono's `/auth/*` catch-all matches this too, so without
+    // normalization one extra character walks a magic link straight past the guard.
+    const r = await run('/auth/sign-in/magic-link/', { email: 'enrolled@test.local' })
+    expect(r.json).toEqual({ status: true })
+    expect(r.reachedBetterAuth).toBe(false)
+  })
+
   it('refuses a sign-in OTP request with BA\'s own {success:true}', async () => {
     // Deliberately a DIFFERENT shape from magic-link: matching each endpoint's own success body
     // is what makes the block indistinguishable from a real send.

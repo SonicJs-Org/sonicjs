@@ -11,6 +11,7 @@ import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData, readProfileData, writeProfileData } from '../plugins/core-plugins/user-profiles'
 import { TenantService, VALID_MEMBER_ROLES } from '../plugins/core-plugins/multi-tenant-plugin/services/tenant-service'
 import { RbacService } from '../services/rbac'
+import { ensureTwoFactorRequiredColumn } from '../services/migrations'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -861,18 +862,30 @@ userRoutes.get('/users/:id/edit', async (c) => {
 
   try {
     // Get user data (removed bio - now in profile)
-    // two_factor_required (migration 0007) drives the Two-Factor Recovery panel. Safe to name
-    // unconditionally: ensureTwoFactorRequiredColumn() adds it from both the bootstrap path and
-    // the two-factor plugin's onBoot, which runs on every isolate.
-    const userStmt = db.prepare(`
+    // two_factor_required (migration 0007) drives the Two-Factor Recovery panel.
+    // ensureTwoFactorRequiredColumn() adds it from the bootstrap path and from the two-factor
+    // plugin's onBoot, but neither is guaranteed to have run on this isolate: bootstrap is behind
+    // a 24h KV marker, and plugin onBoot does not run under `config.plugins.disableAll`. SQLite
+    // rejects the WHOLE statement for one unknown column, so naming it unconditionally turns a
+    // missing ALTER into a 500 on the user edit page. Self-heal, then retry.
+    const selectUserToEdit = (withRequired: boolean) => db.prepare(`
       SELECT id, email, first_name, last_name, phone, avatar,
-             role, is_active, email_verified, two_factor_enabled, two_factor_required,
+             role, is_active, email_verified, two_factor_enabled${withRequired ? ', two_factor_required' : ''},
              created_at, last_login_at
       FROM auth_user
       WHERE id = ?
-    `)
+    `).bind(userId).first() as Promise<any>
 
-    const userToEdit = await userStmt.bind(userId).first() as any
+    let userToEdit: any
+    try {
+      userToEdit = await selectUserToEdit(true)
+    } catch (e) {
+      console.warn('[admin-users] two_factor_required unavailable; attempting self-heal', e)
+      await ensureTwoFactorRequiredColumn(db)
+      // Still missing (the ALTER itself failed) → render without it. The recovery panel degrades
+      // to "not required", which is the pre-0007 behaviour, rather than losing the whole page.
+      userToEdit = await selectUserToEdit(true).catch(() => selectUserToEdit(false))
+    }
 
     if (!userToEdit) {
       return c.html(renderAlert({

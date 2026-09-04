@@ -41,6 +41,7 @@ import { z } from 'zod'
 import { requireAuth, requireRole } from '../../../middleware'
 import { isPluginActive } from '../../../middleware/plugin-middleware'
 import { TWO_FACTOR_PLUGIN_ID } from '../../../auth/two-factor-settings'
+import { normalizeAuthPath } from '../../../auth/passwordless-second-factor-guard'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { Bindings, Variables } from '../../../app'
 
@@ -108,6 +109,10 @@ export async function resetUserTwoFactor(
       .prepare(`UPDATE auth_user SET two_factor_enabled = 0, two_factor_required = ? WHERE id = ?`)
       .bind(requireReenrolment ? 1 : 0, userId),
   ])
+  // This is the only statement in the codebase that raises `two_factor_required`, so it is also
+  // the only thing that can invalidate a cached "owes nothing". Dropping the entry here is what
+  // lets {@link owesTwoFactorEnrolment} cache at all.
+  invalidateEnrolmentDebt(userId)
 }
 
 /** Both halves of a user's second-factor policy state, in one round trip. */
@@ -116,6 +121,11 @@ interface TwoFactorPolicyState {
   required: boolean
   /** A COMPLETED enrolment exists (`auth_two_factor.verified = 1`). */
   verified: boolean
+  /**
+   * The read actually reached the database. False means the other two fields are the fail-open
+   * defaults, not facts — so a caller must not cache them (see {@link owesTwoFactorEnrolment}).
+   */
+  ok: boolean
 }
 
 /**
@@ -129,7 +139,7 @@ interface TwoFactorPolicyState {
  * shows, the redirect that sent the user there, and the disable guard can never disagree.
  */
 async function readPolicyState(db: D1Database, userId: string): Promise<TwoFactorPolicyState> {
-  if (!userId) return { required: false, verified: false }
+  if (!userId) return { required: false, verified: false, ok: true }
   try {
     const row = await db
       .prepare(
@@ -140,11 +150,51 @@ async function readPolicyState(db: D1Database, userId: string): Promise<TwoFacto
       )
       .bind(userId)
       .first<{ required: number; verified: number | null }>()
-    return { required: row?.required === 1, verified: row?.verified === 1 }
+    return { required: row?.required === 1, verified: row?.verified === 1, ok: true }
   } catch (e) {
     console.error('[two-factor] policy state lookup failed; treating as unset', e)
-    return { required: false, verified: false }
+    return { required: false, verified: false, ok: false }
   }
+}
+
+/**
+ * Cache of users known NOT to owe an enrolment, as `userId → expiry ms`.
+ *
+ * `enforceTwoFactorEnrolment` runs on every `/admin/*` request, and for practically every request
+ * the answer is "owes nothing" — so without this, the feature bills one extra D1 read against the
+ * whole portal forever. `isPluginActive`, checked immediately before it, is cached for exactly the
+ * same reason.
+ *
+ * ── Why only the negative is cached ──
+ * "Owes an enrolment" is never cached, so finishing an enrolment takes effect on the very next
+ * request. Caching that direction would strand a user who just enrolled on the enrolment page for
+ * the length of the TTL, which is the one moment this feature must not feel broken.
+ *
+ * ── Why the negative is safe to hold ──
+ * Both states that produce it are stable for the TTL:
+ *   - `required = 0` — only {@link resetUserTwoFactor} raises that flag, and it evicts the entry.
+ *   - `required = 1, verified = 1` — would need the `auth_two_factor` row to vanish. The two
+ *     things that delete it are the same reset (evicts), and Better Auth's disable endpoint, which
+ *     {@link guardRequiredSecondFactorDisable} refuses while `required = 1`.
+ *
+ * The residual window is one TTL after a disable that slipped through that guard's own fail-open
+ * DB-error path — a policy gate degrading for a minute behind an already-degraded gate.
+ */
+const ENROLMENT_DEBT_TTL_MS = 60_000
+
+/**
+ * Hard cap on cache size. A Worker isolate serves an unbounded set of users over its life, and an
+ * unevicted map would grow with it. Cleared wholesale rather than evicted LRU: the entries are
+ * cheap to rebuild (one indexed lookup) and the bookkeeping is not worth its own bugs.
+ */
+const ENROLMENT_DEBT_MAX_ENTRIES = 1000
+
+const noEnrolmentDebtUntil = new Map<string, number>()
+
+/** Drop a user's cached "owes nothing". Exported for tests and for any future writer of the flag. */
+export function invalidateEnrolmentDebt(userId?: string): void {
+  if (userId) noEnrolmentDebtUntil.delete(userId)
+  else noEnrolmentDebtUntil.clear()
 }
 
 /**
@@ -154,8 +204,23 @@ async function readPolicyState(db: D1Database, userId: string): Promise<TwoFacto
  * set, and this must not act on it. Only `required && !verified` owes anything.
  */
 export async function owesTwoFactorEnrolment(db: D1Database, userId: string): Promise<boolean> {
-  const { required, verified } = await readPolicyState(db, userId)
-  return required && !verified
+  if (!userId) return false
+
+  const until = noEnrolmentDebtUntil.get(userId)
+  if (until !== undefined) {
+    if (until > Date.now()) return false
+    noEnrolmentDebtUntil.delete(userId)
+  }
+
+  const { required, verified, ok } = await readPolicyState(db, userId)
+  const owes = required && !verified
+  // `!ok` is the fail-open default, not a fact. Caching it would turn a one-request D1 blip into a
+  // minute of unenforced policy.
+  if (!owes && ok) {
+    if (noEnrolmentDebtUntil.size >= ENROLMENT_DEBT_MAX_ENTRIES) noEnrolmentDebtUntil.clear()
+    noEnrolmentDebtUntil.set(userId, Date.now() + ENROLMENT_DEBT_TTL_MS)
+  }
+  return owes
 }
 
 /**
@@ -323,10 +388,11 @@ twoFactorRecoveryRoutes.post('/', async (c) => {
  *     plugin is off, so enforcing then would redirect the user in a loop to a page that cannot
  *     exist. Deactivating the plugin is the operator's own escape hatch from a bad required-flag.
  *
- * Mounted from app.ts alongside the other `/admin/*` middleware rather than from the plugin's
- * `register()`, because Hono composes matched handlers in registration order: plugin registration
- * runs interleaved with `app.route('/admin/...')` calls, so middleware added there would silently
- * not run for the admin routes mounted before it.
+ * Mounted from app.ts on BOTH `/admin/*` and `/api/*`, rather than from the plugin's `register()`,
+ * because Hono composes matched handlers in registration order: plugin registration runs
+ * interleaved with the `app.route(...)` calls, so middleware added there would silently not run for
+ * the routes mounted before it. `/api/*` is covered because the same session cookie drives it —
+ * gating only the HTML portal would leave the whole JSON API as the way around the requirement.
  */
 export function enforceTwoFactorEnrolment(): MiddlewareHandler<{
   Bindings: Bindings
@@ -335,6 +401,13 @@ export function enforceTwoFactorEnrolment(): MiddlewareHandler<{
   return async (c, next) => {
     const user = c.get('user') as { userId?: string } | undefined
     if (!user?.userId) return next()
+
+    // A machine credential is not a person who can walk to an authenticator app. API keys are
+    // issued to a user but presented by scripts, so enforcing here would take a running
+    // integration offline for a requirement its holder cannot satisfy in-band — and the only
+    // place to mint a replacement key, /admin/api-keys, is behind this very gate. Keys are
+    // separately revocable, which is the right control for a credential you want to stop.
+    if (c.get('authMethod') === 'api-key') return next()
 
     const path = new URL(c.req.url).pathname
     // The enrolment surface itself, or the user could never satisfy the requirement. Covers
@@ -351,11 +424,20 @@ export function enforceTwoFactorEnrolment(): MiddlewareHandler<{
       return next()
     }
 
+    // No explanatory query parameter on either redirect: the enrolment page reads the same flag
+    // and renders the banner itself. A `?message=` would be attacker-controlled text on a security
+    // page — anyone could hand a colleague a link that claims their 2FA was reset.
+    //
+    // htmx is checked BEFORE `Accept`, because htmx sends `Accept: */*` — it would fall through to
+    // the JSON branch and swap a raw error object into the page. `HX-Redirect` on a 200 is how the
+    // rest of the admin UI navigates from a fetch (routes/auth.ts, admin-content.ts); a 302 would
+    // be followed by fetch itself and the enrolment page swapped into whatever target the caller
+    // named.
+    if (c.req.header('HX-Request')) {
+      return c.text('', 200, { 'HX-Redirect': ENROLMENT_PATH })
+    }
     const accept = c.req.header('Accept') || ''
     if (accept.includes('text/html')) {
-      // No explanatory query parameter: the enrolment page reads the same flag and renders the
-      // banner itself. A `?message=` would be attacker-controlled text on a security page —
-      // anyone could hand a colleague a link that claims their 2FA was reset.
       return c.redirect(ENROLMENT_PATH)
     }
     return c.json(
@@ -385,10 +467,9 @@ export const BA_DISABLE_PATH = '/auth/two-factor/disable'
  * So without this, a user told to enrol could enrol, walk back to the same page, and switch it
  * off. They would be bounced to the enrolment page on their next admin request, so it is a loop
  * rather than an escape — but in the interval the account is genuinely password-only: BA stops
- * challenging (its after-hook reads `user.twoFactorEnabled`), the passwordless sign-in paths
- * re-open (`hasVerifiedSecondFactor` keys off the row this deletes), and nothing gates `/api/*`.
- * Meanwhile the admin who set the requirement has no signal, because a BA disable writes none of
- * our audit events.
+ * challenging (its after-hook reads `user.twoFactorEnabled`) and the passwordless sign-in paths
+ * re-open (`hasVerifiedSecondFactor` keys off the row this deletes). Meanwhile the admin who set
+ * the requirement has no signal, because a BA disable writes none of our audit events.
  *
  * ── Why here ──
  * Same chokepoint and same reasoning as {@link guardPasswordlessSecondFactor}: the `/auth/*`
@@ -408,7 +489,9 @@ export async function guardRequiredSecondFactorDisable(
   c: Context<{ Bindings: { DB: D1Database }; Variables: { user?: { userId?: string } } }>,
 ): Promise<Response | null> {
   if (c.req.method !== 'POST') return null
-  if (new URL(c.req.url).pathname !== BA_DISABLE_PATH) return null
+  // Normalized for the same reason as the passwordless guard: `/auth/two-factor/disable/` reaches
+  // the same Better Auth endpoint, and an exact compare would miss it.
+  if (normalizeAuthPath(new URL(c.req.url).pathname) !== BA_DISABLE_PATH) return null
 
   // Resolved by the session middleware in app.ts, which runs on `*` ahead of this catch-all. No
   // session means BA will refuse the call itself (`sensitiveSessionMiddleware`), so there is

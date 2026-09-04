@@ -82,9 +82,16 @@ export function normalizeTwoFactorPolicy(raw: unknown): TwoFactorPolicy {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const issuer = typeof s.issuer === 'string' && s.issuer.trim() !== '' ? s.issuer.trim() : TWO_FACTOR_POLICY_DEFAULTS.issuer
   return {
-    // The issuer lands in an `otpauth://` URI. Strip the two characters that would let a
-    // stored value break out of the label segment and forge a different account entry.
-    issuer: issuer.replace(/[:?#]/g, ' ').slice(0, 64),
+    // The issuer lands in an `otpauth://` URI, in both the label segment and the `issuer=`
+    // parameter. Allow-list rather than deny-list: a deny-list here has to enumerate every
+    // character that is structural in a URI, and the first one missed lets a stored value forge a
+    // different account entry in the victim's authenticator (`/` and `?` end the label, `&` and
+    // `=` inject parameters, `#` truncates, `%` fakes an escape, `:` splits issuer from account).
+    // Authenticator apps display this string, so letters (any script — `\p{L}` keeps "Société
+    // Générale" intact), digits and a little punctuation is all it ever legitimately needs, and
+    // that cannot be under-specified the same way. Falls back to the default if a value sanitizes
+    // away to nothing, rather than shipping an empty issuer.
+    issuer: (issuer.replace(/[^\p{L}\p{N} ._'()-]+/gu, ' ').replace(/\s+/g, ' ').trim() || TWO_FACTOR_POLICY_DEFAULTS.issuer).slice(0, 64),
     maxFailedAttempts: clampInt(s.maxFailedAttempts, TWO_FACTOR_POLICY_DEFAULTS.maxFailedAttempts, BOUNDS.maxFailedAttempts),
     lockoutDurationSeconds: clampInt(s.lockoutDurationSeconds, TWO_FACTOR_POLICY_DEFAULTS.lockoutDurationSeconds, BOUNDS.lockoutDurationSeconds),
     backupCodeCount: clampInt(s.backupCodeCount, TWO_FACTOR_POLICY_DEFAULTS.backupCodeCount, BOUNDS.backupCodeCount),

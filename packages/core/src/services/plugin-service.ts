@@ -217,10 +217,12 @@ export class PluginService {
     // onto the Better Auth plugin options at construction time, so createAuth reads it from a
     // module-level cache synchronously. Re-read it here — a plain invalidation would leave this
     // isolate on the defaults, which is worse than stale.
+    //
+    // No error handling: `loadTwoFactorPolicy` catches and logs its own DB failure and returns the
+    // last-known-good policy, so this cannot reject. A `.catch()` here would read as "a failure is
+    // handled" when the handling actually lives one level down.
     if (pluginId === TWO_FACTOR_PLUGIN_ID) {
-      await refreshTwoFactorPolicy(this.db).catch((e) =>
-        console.error('[plugin-service] two-factor policy refresh failed', e)
-      )
+      await refreshTwoFactorPolicy(this.db)
     }
     await this.logActivity(pluginId, 'settings_updated', null)
   }

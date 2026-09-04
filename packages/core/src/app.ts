@@ -138,6 +138,15 @@ export interface Variables {
    * live bus instead of a no-op.
    */
   hookSystem?: import('./plugins/hooks/typed-hooks').HookSystemLike
+  /**
+   * How `user` was authenticated, when that distinction matters to policy.
+   *
+   * Only set for machine credentials (`'api-key'`); a session, a JWT cookie and a JWT bearer are
+   * all a person at a browser or a CLI who owns the account, and nothing needs to tell them apart.
+   * Consumed by the forced two-factor enrolment gate, which must not take a running integration
+   * offline for a requirement its holder cannot satisfy in-band.
+   */
+  authMethod?: 'api-key'
   /** Tenant slug resolved per request by tenantMiddleware ('default' when single-tenant). */
   tenantId?: string
   /** The authed user's role IN the resolved tenant (per-tenant RBAC); global role for 'default'. */
@@ -291,9 +300,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
-    // Mounts /admin/two-factor (enrolment) and /auth/two-factor (login challenge). Must be in
-    // the BEFORE-catch-all list: the challenge page has to win the route match against the
-    // `/auth/*` Better Auth catch-all registered further down.
+    // Mounts /admin/two-factor (enrolment) only. Must be in the BEFORE-catch-all list so it wins
+    // the route match against the bare `/admin` router registered further down. The login
+    // challenge at /auth/two-factor is deliberately NOT here — core mounts it unconditionally,
+    // because `disableAll` must not strand users Better Auth still challenges.
     twoFactorAuthPlugin,
     apiKeysPlugin,
     aiSearchPlugin,
@@ -634,6 +644,14 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // calls below, so middleware added from a plugin would silently not run for any admin route
   // mounted before it. See recovery.ts.
   app.use('/admin/*', enforceTwoFactorEnrolment())
+
+  // …and on the JSON API, for the same policy. Without it "you must enrol before using the portal"
+  // means only the HTML portal: the same session cookie drives /api/*, so a user who owes an
+  // enrolment could keep reading and writing content through the API indefinitely. Registered
+  // before every app.route('/api/…') below, because Hono composes matched handlers in registration
+  // order. Unauthenticated public API traffic is untouched — the middleware returns early when
+  // there is no c.get('user') — and API-key callers are exempted inside it.
+  app.use('/api/*', enforceTwoFactorEnrolment())
 
   // The break-glass reset. Mounted unconditionally and on its own prefix — deactivating the
   // two-factor plugin does not stop Better Auth from challenging enrolled users, so the recovery

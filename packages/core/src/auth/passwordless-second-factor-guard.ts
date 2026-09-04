@@ -78,6 +78,18 @@ const INITIATE_PATHS: Record<string, Record<string, boolean>> = {
 const COMPLETE_PATHS = new Set(['/auth/sign-in/email-otp'])
 
 /**
+ * Strip trailing slashes before matching.
+ *
+ * The guarded paths are compared exactly, and Hono's `/auth/*` catch-all happily matches
+ * `/auth/sign-in/magic-link/` as well. Better Auth's router treats that as the same endpoint, so
+ * without this a single extra character would walk a request past the guard and straight into a
+ * session mint. Cheap to normalize; expensive to be wrong about.
+ */
+export function normalizeAuthPath(pathname: string): string {
+  return pathname.length > 1 ? pathname.replace(/\/+$/, '') || '/' : pathname
+}
+
+/**
  * Better Auth's own answer to a bad OTP — `email-otp/routes.mjs` throws
  * `APIError.from('BAD_REQUEST', EMAIL_OTP_ERROR_CODES.INVALID_OTP)`. Mirrored verbatim so a
  * refusal is indistinguishable from a wrong code.
@@ -109,8 +121,10 @@ type UserLookup =
 export async function guardPasswordlessSecondFactor(
   c: Context<{ Bindings: { DB: D1Database } }>
 ): Promise<Response | null> {
-  const path = new URL(c.req.url).pathname
-  const initiateResponse = INITIATE_PATHS[path]
+  const path = normalizeAuthPath(new URL(c.req.url).pathname)
+  const initiateResponse = Object.prototype.hasOwnProperty.call(INITIATE_PATHS, path)
+    ? INITIATE_PATHS[path]
+    : undefined
   const isComplete = COMPLETE_PATHS.has(path)
   if (!initiateResponse && !isComplete) return null
   if (c.req.method !== 'POST') return null

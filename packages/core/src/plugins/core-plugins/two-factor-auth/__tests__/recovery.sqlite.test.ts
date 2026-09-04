@@ -7,7 +7,7 @@
  * rather than shapes. A mock DB would pass every one of them while the UPDATE silently touched
  * no rows (R10).
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import {
   twoFactorRecoveryRoutes,
@@ -16,6 +16,7 @@ import {
   enforceTwoFactorEnrolment,
   guardRequiredSecondFactorDisable,
   isTwoFactorRequired,
+  invalidateEnrolmentDebt,
   ENROLMENT_PATH,
 } from '../recovery'
 import { TWO_FACTOR_PLUGIN_ID } from '../../../../auth/two-factor-settings'
@@ -86,22 +87,43 @@ function postReset(body: unknown, user?: typeof ADMIN) {
   )
 }
 
-/** Drive the enforcement middleware in front of a trivial handler. */
-function requestGuarded(path: string, user?: typeof ADMIN, accept = 'text/html') {
-  const app = new Hono<{ Bindings: { DB: unknown }; Variables: { user?: typeof ADMIN } }>()
+/**
+ * Drive the enforcement middleware in front of a trivial handler.
+ *
+ * Mounted on `/admin/*` AND `/api/*`, matching app.ts — the gate has to cover the JSON API too, or
+ * the same session cookie walks around it.
+ */
+function requestGuarded(
+  path: string,
+  user?: typeof ADMIN,
+  accept = 'text/html',
+  extra: { headers?: Record<string, string>; authMethod?: 'api-key' } = {},
+) {
+  const app = new Hono<{
+    Bindings: { DB: unknown }
+    Variables: { user?: typeof ADMIN; authMethod?: 'api-key' }
+  }>()
   app.use('*', async (c, next) => {
     if (user) c.set('user', user)
+    if (extra.authMethod) c.set('authMethod', extra.authMethod)
     await next()
   })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test env binding
   app.use('/admin/*', enforceTwoFactorEnrolment() as any)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test env binding
+  app.use('/api/*', enforceTwoFactorEnrolment() as any)
   app.get('/admin/*', (c) => c.text('reached the handler'))
-  return app.request(path, { headers: { Accept: accept } }, { DB: db })
+  app.get('/api/*', (c) => c.text('reached the handler'))
+  return app.request(path, { headers: { Accept: accept, ...extra.headers } }, { DB: db })
 }
 
 beforeEach(() => {
   db = createTestD1()
   invalidatePluginStatusCache(TWO_FACTOR_PLUGIN_ID)
+  // Both caches outlive the database here: each test gets a fresh in-memory D1 but the same
+  // module instance, and the user ids are reused, so a verdict cached by an earlier case would
+  // answer for a different case's rows. Cleared on both sides of every test.
+  invalidateEnrolmentDebt()
   seedUser(ADMIN)
   seedUser(EDITOR)
 })
@@ -109,6 +131,7 @@ beforeEach(() => {
 afterEach(() => {
   db.close()
   invalidatePluginStatusCache(TWO_FACTOR_PLUGIN_ID)
+  invalidateEnrolmentDebt()
 })
 
 describe('resetUserTwoFactor — the SQL effect', () => {
@@ -273,6 +296,49 @@ describe('owesTwoFactorEnrolment', () => {
     await expect(owesTwoFactorEnrolment(db as never, 'ghost')).resolves.toBe(false)
     await expect(owesTwoFactorEnrolment(db as never, '')).resolves.toBe(false)
   })
+
+  describe('the "owes nothing" cache', () => {
+    it('does not re-query once a user is known to owe nothing', async () => {
+      const spy = vi.spyOn(db, 'prepare')
+      await expect(owesTwoFactorEnrolment(db as never, TARGET.userId)).resolves.toBe(false)
+      const afterFirst = spy.mock.calls.length
+      expect(afterFirst).toBeGreaterThan(0)
+
+      await owesTwoFactorEnrolment(db as never, TARGET.userId)
+      await owesTwoFactorEnrolment(db as never, TARGET.userId)
+      expect(spy.mock.calls.length).toBe(afterFirst)
+    })
+
+    it('never caches "owes an enrolment", so finishing one takes effect immediately', async () => {
+      db.raw.prepare(`UPDATE auth_user SET two_factor_required = 1 WHERE id = ?`).run(TARGET.userId)
+      await expect(owesTwoFactorEnrolment(db as never, TARGET.userId)).resolves.toBe(true)
+
+      // Better Auth writes this row when the user completes setup; it is outside our code, so the
+      // only thing that can make the change visible is not having cached the previous answer.
+      seedEnrolment(TARGET.userId, 1)
+      await expect(owesTwoFactorEnrolment(db as never, TARGET.userId)).resolves.toBe(false)
+    })
+
+    it('is evicted by a reset, which is the one thing that can raise the flag', async () => {
+      await expect(owesTwoFactorEnrolment(db as never, TARGET.userId)).resolves.toBe(false)
+
+      await resetUserTwoFactor(db as never, TARGET.userId, true)
+      await expect(owesTwoFactorEnrolment(db as never, TARGET.userId)).resolves.toBe(true)
+    })
+
+    it('does not cache a fail-open answer produced by a DB error', async () => {
+      const spy = vi.spyOn(db, 'prepare').mockImplementationOnce(() => {
+        throw new Error('D1 unavailable')
+      })
+      // Fails open — an enforcement gate must not lock the portal over a transient read.
+      await expect(owesTwoFactorEnrolment(db as never, TARGET.userId)).resolves.toBe(false)
+
+      spy.mockRestore()
+      db.raw.prepare(`UPDATE auth_user SET two_factor_required = 1 WHERE id = ?`).run(TARGET.userId)
+      // Caching the fail-open default would have suppressed enforcement for a whole TTL.
+      await expect(owesTwoFactorEnrolment(db as never, TARGET.userId)).resolves.toBe(true)
+    })
+  })
 })
 
 describe('enforceTwoFactorEnrolment', () => {
@@ -310,6 +376,33 @@ describe('enforceTwoFactorEnrolment', () => {
     const res = await requestGuarded('/admin/api/whatever', TARGET, 'application/json')
     expect(res.status).toBe(403)
     await expect(res.json()).resolves.toMatchObject({ enrolmentPath: ENROLMENT_PATH })
+  })
+
+  it('answers htmx with HX-Redirect instead of swapping JSON into the page', async () => {
+    // htmx sends `Accept: */*`, so content negotiation alone drops it into the JSON branch and the
+    // raw error object gets swapped into the DOM. A 302 is no good either — fetch follows it and
+    // htmx swaps the enrolment page into whatever target the caller named.
+    const res = await requestGuarded('/admin/content', TARGET, '*/*', {
+      headers: { 'HX-Request': 'true' },
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('HX-Redirect')).toBe(ENROLMENT_PATH)
+    await expect(res.text()).resolves.toBe('')
+  })
+
+  it('covers /api/* as well, so the JSON API is not the way around the requirement', async () => {
+    const res = await requestGuarded('/api/collections/posts', TARGET, 'application/json')
+    expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toMatchObject({ enrolmentPath: ENROLMENT_PATH })
+  })
+
+  it('stands aside for an API key, which no human can re-enrol on behalf of', async () => {
+    // A machine credential cannot satisfy a TOTP prompt, and the only place to mint a replacement
+    // key is behind this same gate. Revoking the key is the control for stopping one.
+    const res = await requestGuarded('/api/collections/posts', TARGET, 'application/json', {
+      authMethod: 'api-key',
+    })
+    await expect(res.text()).resolves.toContain('reached the handler')
   })
 
   it('stands aside for a user who owes nothing', async () => {

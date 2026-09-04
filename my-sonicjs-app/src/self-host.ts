@@ -58,7 +58,7 @@ const app = await createNodeSonicApp(sonicApp, {
     JWT_SECRET: process.env.JWT_SECRET,
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL ?? `http://localhost:${PORT}`,
-    CORS_ORIGINS: process.env.CORS_ORIGINS ?? `http://localhost:${PORT}`,
+    CORS_ORIGINS: process.env.CORS_ORIGINS ?? `http://127.0.0.1:${PORT}`,
     ENVIRONMENT: process.env.ENVIRONMENT ?? 'development',
   },
 })

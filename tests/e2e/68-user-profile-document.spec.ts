@@ -33,8 +33,14 @@ test.describe('User profile (document-backed) @auth', () => {
       const el = document.querySelector('input[name="profile_display_name"]') as HTMLInputElement;
       if (el) { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
     }, displayName);
+    // The form is HTMX (hx-put) and never navigates, so waiting on the URL would return
+    // immediately and race the save. Wait for the PUT itself to come back instead.
+    const saved = page.waitForResponse(
+      (r) => r.request().method() === 'PUT' && r.url().includes(`/admin/users/${userId}`),
+      { timeout: 20000 },
+    );
     await page.click('button[type="submit"]');
-    await page.waitForURL(/\/admin\/users/, { timeout: 20000 });
+    expect((await saved).ok()).toBeTruthy();
 
     // Reload the edit page; the value must survive a round-trip through the user_profile document.
     await page.goto(`/admin/users/${userId}/edit`);

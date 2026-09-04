@@ -313,6 +313,7 @@ export function renderProfilePage(data: ProfilePageData): string {
                    otpauth:// URI, the one-time backup codes, and the confirm-a-live-code step.
                    A modal here could not host that flow honestly. -->
               <a
+                id="profile-two-factor-link"
                 href="/admin/two-factor"
                 class="w-full text-left flex items-center gap-x-3 px-3 py-2 text-sm text-zinc-950 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-lg transition-colors"
               >

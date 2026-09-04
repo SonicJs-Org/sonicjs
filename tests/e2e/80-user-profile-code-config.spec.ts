@@ -1,15 +1,13 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
+// User profile fields are a CODE-DEFINED data model — `defineUserProfile()` in the app
+// entry point, not editable through the admin UI. The shipped app configures four fields
+// in `my-sonicjs-app/src/user-profile.model.ts` (bio, company, jobTitle, website), so these
+// tests assert the CONFIGURED state: the plugin page documents where the model lives and
+// lists what is currently declared, and the user forms render the declared fields.
+const DECLARED_FIELDS = ['bio', 'company', 'jobTitle', 'website']
 
-// User profile fields are a CODE-DEFINED data model (defineUserProfile() in the
-// app entry point), not editable through the admin UI. Until the developer calls
-// defineUserProfile(), the "Profile Information" section stays hidden on the user
-// create/edit pages, and the plugin detail page explains where to define fields.
-//
-// The default app entry (my-sonicjs-app/src/index.ts) does NOT call
-// defineUserProfile(), so these tests assert the "unconfigured" state.
 test.describe('User Profiles — code-defined config @auth', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page)
@@ -17,56 +15,71 @@ test.describe('User Profiles — code-defined config @auth', () => {
   })
 
   test('plugin detail page explains where to define fields in code', async ({ page }) => {
-    const resp = await page.goto(`${BASE_URL}/admin/plugins/user-profiles`)
+    const resp = await page.goto('/admin/plugins/user-profiles')
     await page.waitForLoadState('networkidle')
 
     expect(resp?.status()).not.toBe(404)
     expect(resp?.status()).not.toBe(500)
+
+    // The panel is the plugin's Settings tab. It has no editable keys, so it only shows
+    // when the page opts it in explicitly — a regression here hides the tab entirely.
+    await expect(page.locator('#settings-tab')).toBeVisible()
 
     const body = (await page.locator('body').textContent()) || ''
 
     // Points the developer at the code-defined data model.
     expect(body).toContain('defineUserProfile')
     expect(body).toContain('my-sonicjs-app/src/index.ts')
-
-    // Explains the section is hidden until fields are defined.
     expect(body.toLowerCase()).toContain('profile information')
-    expect(body).toContain('No profile fields defined yet')
+
+    // Reports the live configuration rather than a generic "not configured" notice.
+    expect(body).toContain('Profile fields configured')
+    expect(body).not.toContain('No profile fields defined yet')
+    expect(body).toContain('Configured Fields')
+    for (const name of DECLARED_FIELDS) {
+      expect(body).toContain(name)
+    }
   })
 
-  test('user edit page hides Profile Information when no fields are defined', async ({ page }) => {
-    // Grab the current admin user id from the users list.
-    await page.goto(`${BASE_URL}/admin/users`)
+  test('user edit page renders the declared profile fields', async ({ page }) => {
+    // Grab a user id from the users list. Rows are not anchors — they navigate from an
+    // onclick handler — so the edit path has to come out of that attribute.
+    await page.goto('/admin/users')
     await page.waitForLoadState('networkidle')
 
-    const editLink = page.locator('a[href*="/admin/users/"][href$="/edit"]').first()
-    await expect(editLink).toBeVisible({ timeout: 10000 })
-    const href = await editLink.getAttribute('href')
+    const row = page.locator('tr[onclick*="/admin/users/"]').first()
+    await expect(row).toBeVisible({ timeout: 10000 })
+    const onclick = await row.getAttribute('onclick')
+    const href = onclick?.match(/'(\/admin\/users\/[^']+\/edit)'/)?.[1]
     expect(href).toBeTruthy()
 
-    await page.goto(`${BASE_URL}${href}`)
+    await page.goto(href!)
     await page.waitForLoadState('networkidle')
 
-    // Basic Information always present; Profile Information only when configured.
     const body = (await page.locator('body').textContent()) || ''
     expect(body).toContain('Basic Information')
-    expect(body).not.toContain('Profile Information')
-    // The old hard-coded "edit the template" hint must be gone.
+    expect(body).toContain('Profile Information')
+    // The old hard-coded "edit the template" hint must be gone — fields come from code now.
     expect(body).not.toContain('admin-user-edit.template.ts')
 
-    // No display-name / custom profile inputs rendered.
-    await expect(page.locator('input[name="profile_display_name"]')).toHaveCount(0)
+    await expect(page.locator('input[name="profile_display_name"]')).toHaveCount(1)
+    for (const name of DECLARED_FIELDS) {
+      await expect(page.locator(`[name="custom_${name}"]`)).toHaveCount(1)
+    }
   })
 
-  test('new user page hides Profile Information when no fields are defined', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/users/new`)
+  test('new user page renders the declared profile fields', async ({ page }) => {
+    await page.goto('/admin/users/new')
     await page.waitForLoadState('networkidle')
 
     const body = (await page.locator('body').textContent()) || ''
     expect(body).toContain('Basic Information')
-    expect(body).not.toContain('Profile Information')
+    expect(body).toContain('Profile Information')
 
-    // No registration profile inputs (custom_* fields) rendered.
-    await expect(page.locator('input[name^="custom_"]')).toHaveCount(0)
+    // registrationFields is unset in the shipped model, which means "all declared fields"
+    // (see the regFieldNames fallback in routes/admin-users.ts).
+    for (const name of DECLARED_FIELDS) {
+      await expect(page.locator(`[name="custom_${name}"]`)).toHaveCount(1)
+    }
   })
 })

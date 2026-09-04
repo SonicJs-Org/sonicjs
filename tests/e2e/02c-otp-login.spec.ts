@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { TEST_ORIGIN } from './utils/test-helpers';
 
 /**
  * Email OTP Authentication E2E Tests (Better Auth)
@@ -12,9 +13,13 @@ function uniqueEmail(prefix: string): string {
   return `${prefix}.${Date.now()}.${Math.random().toString(36).substring(7)}@test.sonicjs.com`;
 }
 
+// Better Auth rejects a POST whose Origin is not a trusted one with 403 INVALID_ORIGIN, and it
+// trusts the base URL it was constructed with — the URL the request actually arrived on. So the
+// Origin has to track wherever the suite is pointed (a local dev server, a CI preview deploy),
+// never a hardcoded port.
 const BA_HEADERS = {
   'Content-Type': 'application/json',
-  'Origin': 'http://localhost:9704',
+  'Origin': TEST_ORIGIN,
 };
 
 test.describe('Email OTP Authentication (Better Auth) @auth', () => {

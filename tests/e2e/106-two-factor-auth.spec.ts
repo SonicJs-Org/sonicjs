@@ -126,13 +126,18 @@ test.describe('Two-Factor Authentication @auth', () => {
       // Not decoration — the passwordless guard really does refuse magic links for enrolled
       // accounts, so the consequence has to be stated before the user opts in.
       await page.goto('/admin/two-factor')
-      await expect(page.getByText(/magic links and emailed sign-in codes are disabled/i)).toBeVisible()
+      // \s+ rather than a literal space: the sentence wraps across source lines in the template,
+      // so the rendered text carries a newline between "are" and "disabled".
+      await expect(page.getByText(/magic links and emailed sign-in codes are\s+disabled/i)).toBeVisible()
     })
 
     test('is linked from the profile page security panel', async ({ page }) => {
       await page.goto('/admin/profile')
-      const link = page.locator('a[href="/admin/two-factor"]')
+      // The sidebar also links to /admin/two-factor (desktop + mobile copies), so target the
+      // security panel's own anchor by id rather than by href alone.
+      const link = page.locator('#profile-two-factor-link')
       await expect(link).toBeVisible()
+      await expect(link).toHaveAttribute('href', '/admin/two-factor')
       await expect(link).toContainText(/Enable|Manage/)
     })
 

@@ -91,11 +91,13 @@ test.describe('GraphQL endpoint @api', () => {
           id rootId typeId title slug status isPublished isCurrentDraft
         }
       }`,
-      { typeId: 'blog_posts', title: 'GraphQL E2E Test', slug: SLUG, data: { content: 'hello from graphql' } },
+      // Registered type id is singular (`blog_post`) — `blog_posts` does not exist and
+      // createDocument fails with INTERNAL_SERVER_ERROR.
+      { typeId: 'blog_post', title: 'GraphQL E2E Test', slug: SLUG, data: { content: 'hello from graphql' } },
     )
     expect(createBody.errors).toBeUndefined()
     const created = createBody.data.createDocument
-    expect(created.typeId).toBe('blog_posts')
+    expect(created.typeId).toBe('blog_post')
     expect(created.slug).toBe(SLUG)
     expect(created.isPublished).toBe(false)
     expect(created.isCurrentDraft).toBe(true)

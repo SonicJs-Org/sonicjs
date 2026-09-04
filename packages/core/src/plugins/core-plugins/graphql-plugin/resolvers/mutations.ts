@@ -1,4 +1,5 @@
 import { DocumentRepository } from '../../../../services/document-repository'
+import { DocumentTypeRegistry } from '../../../../services/document-type-registry'
 import { DocumentsService } from '../../../../services/documents'
 import { createDocumentSchema } from '../../../../schemas/document'
 import type { GraphqlResolverContext } from './context'
@@ -13,13 +14,15 @@ class GraphQLForbiddenError extends Error {
 
 async function requireWritePermission(
   repo: DocumentRepository,
-  documentId: string,
+  doc: Pick<Document, 'rootId' | 'typeId'>,
   permission: 'create' | 'update' | 'delete' | 'publish' | 'manage',
   ctx: GraphqlResolverContext,
-  typeSettings: Record<string, unknown> = {},
 ): Promise<void> {
-  const allowed = await repo.isAllowed(ctx.principalSet, documentId, permission, typeSettings as any)
-  if (!allowed) throw new GraphQLForbiddenError(`Not allowed to ${permission} document ${documentId}`)
+  // Base grants live on the document type. Passing no settings leaves isAllowed with only
+  // per-document ACL rows to go on, which denies every write — including an admin's.
+  const docType = await new DocumentTypeRegistry(ctx.db).findById(doc.typeId)
+  const allowed = await repo.isAllowed(ctx.principalSet, doc.rootId, permission, docType?.settings ?? {})
+  if (!allowed) throw new GraphQLForbiddenError(`Not allowed to ${permission} document ${doc.rootId}`)
 }
 
 interface CreateArgs {
@@ -59,7 +62,7 @@ export async function resolveUpdateDocument(args: UpdateArgs, ctx: GraphqlResolv
   const existing = await repo.getById(args.id)
   if (!existing) throw new Error(`Document not found: ${args.id}`)
 
-  await requireWritePermission(repo, existing.rootId, 'update', ctx)
+  await requireWritePermission(repo, existing, 'update', ctx)
 
   const svc = new DocumentsService(ctx.db, { tenantId: ctx.tenantId })
   return svc.saveDraft(
@@ -80,7 +83,7 @@ export async function resolvePublishDocument(args: { id: string }, ctx: GraphqlR
   const existing = await repo.getById(args.id)
   if (!existing) throw new Error(`Document not found: ${args.id}`)
 
-  await requireWritePermission(repo, existing.rootId, 'publish', ctx)
+  await requireWritePermission(repo, existing, 'publish', ctx)
 
   const svc = new DocumentsService(ctx.db, { tenantId: ctx.tenantId })
   return svc.publish(args.id, ctx.userId)
@@ -93,7 +96,7 @@ export async function resolveUnpublishDocument(args: { id: string }, ctx: Graphq
   const existing = await repo.getById(args.id)
   if (!existing) throw new Error(`Document not found: ${args.id}`)
 
-  await requireWritePermission(repo, existing.rootId, 'publish', ctx)
+  await requireWritePermission(repo, existing, 'publish', ctx)
 
   const svc = new DocumentsService(ctx.db, { tenantId: ctx.tenantId })
   return svc.unpublish(args.id)
@@ -106,7 +109,7 @@ export async function resolveDeleteDocument(args: { id: string }, ctx: GraphqlRe
   const existing = await repo.getById(args.id)
   if (!existing) throw new Error(`Document not found: ${args.id}`)
 
-  await requireWritePermission(repo, existing.rootId, 'delete', ctx)
+  await requireWritePermission(repo, existing, 'delete', ctx)
 
   const svc = new DocumentsService(ctx.db, { tenantId: ctx.tenantId })
   await svc.softDelete(args.id)

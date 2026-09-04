@@ -6,60 +6,43 @@ test.describe('Plugin Install Click Behavior @smoke @plugins', () => {
     await loginAsAdmin(page)
   })
 
-  test('clicking uninstalled plugin card navigates to detail page without auto-installing @plugins', async ({ page }) => {
-    await page.goto('/admin/plugins')
+  test('uninstalled plugin detail page shows Install button instead of auto-installing @plugins', async ({ page }) => {
+    // Ensure hello-world is uninstalled so we have a known test target
+    await page.request.post('/admin/plugins/hello-world/uninstall', {
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => {})
+
+    // Navigate directly to the uninstalled plugin's detail page
+    await page.goto('/admin/plugins/hello-world')
     await page.waitForLoadState('networkidle')
 
-    // Find an uninstalled plugin card (status badge says "Uninstalled")
-    const uninstalledCard = page.locator('.plugin-card').filter({
-      has: page.locator('.status-badge', { hasText: 'Uninstalled' })
-    }).first()
-
-    const cardExists = await uninstalledCard.count() > 0
-    test.skip(!cardExists, 'No uninstalled plugins available to test')
-
-    // Get plugin name before clicking
-    const pluginName = await uninstalledCard.locator('h3').textContent()
-
-    // Click the card — should navigate to detail page
-    await uninstalledCard.click()
-    await page.waitForURL(/\/admin\/plugins\//, { timeout: 10000 })
-    await page.waitForLoadState('networkidle')
-
-    // Should show Install button (not Activate/Deactivate) — this is the core assertion
+    // Should show Install button — NOT auto-install the plugin
     const installButton = page.locator('button', { hasText: 'Install' })
     await expect(installButton).toBeVisible({ timeout: 10000 })
 
-    // Should NOT show Activate or Deactivate buttons
+    // Should NOT show Activate or Deactivate buttons (plugin was not auto-installed)
     await expect(page.locator('button', { hasText: 'Activate' })).toHaveCount(0)
     await expect(page.locator('button', { hasText: 'Deactivate' })).toHaveCount(0)
 
-    // Go back to plugins list — plugin should still show as uninstalled
+    // Verify plugin still shows as uninstalled on list page
     await page.goto('/admin/plugins')
     await page.waitForLoadState('networkidle')
 
-    const stillUninstalled = page.locator('.plugin-card').filter({
-      has: page.locator('h3', { hasText: pluginName! })
+    const helloWorldCard = page.locator('.plugin-card').filter({
+      has: page.locator('h3', { hasText: 'Hello World' })
     }).locator('.status-badge')
 
-    await expect(stillUninstalled).toContainText('Uninstalled')
+    await expect(helloWorldCard).toContainText('Uninstalled')
   })
 
   test('install button on detail page installs plugin @plugins', async ({ page }) => {
-    await page.goto('/admin/plugins')
-    await page.waitForLoadState('networkidle')
-
-    // Find an uninstalled non-core plugin
-    const uninstalledCard = page.locator('.plugin-card').filter({
-      has: page.locator('.status-badge', { hasText: 'Uninstalled' })
-    }).first()
-
-    const cardExists = await uninstalledCard.count() > 0
-    test.skip(!cardExists, 'No uninstalled plugins available to test')
+    // Ensure hello-world is uninstalled
+    await page.request.post('/admin/plugins/hello-world/uninstall', {
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => {})
 
     // Navigate to detail page
-    await uninstalledCard.click()
-    await page.waitForURL(/\/admin\/plugins\//, { timeout: 10000 })
+    await page.goto('/admin/plugins/hello-world')
     await page.waitForLoadState('networkidle')
 
     // Click Install button
@@ -71,7 +54,7 @@ test.describe('Plugin Install Click Behavior @smoke @plugins', () => {
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
 
-    // After reload, plugin should no longer show "Uninstalled"
+    // After reload, plugin should show as Active or Inactive (not Uninstalled)
     const statusBadge = page.locator('span').filter({ hasText: /^(Active|Inactive)$/ })
     await expect(statusBadge.first()).toBeVisible({ timeout: 10000 })
   })

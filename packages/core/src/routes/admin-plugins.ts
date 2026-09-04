@@ -217,17 +217,38 @@ adminPluginRoutes.get('/:id', async (c) => {
     let plugin = await pluginService.getPlugin(pluginId)
 
     if (!plugin) {
-      // Auto-register definePlugin-based plugins that have never been explicitly installed.
-      const def = getPluginDefinition(pluginId)
-      if (!def) return c.text('Plugin not found', 404)
-      plugin = await pluginService.ensurePlugin(pluginId, {
-        displayName: def.displayName ?? pluginId,
-        version: def.version,
-        description: (def as any).description,
-        author: typeof (def as any).author === 'object'
-          ? (def as any).author?.name
-          : (def as any).author,
-      })
+      // Plugin not installed — show detail page from registry without auto-installing.
+      const availablePlugin = getAvailablePlugins().find(p => p.id === pluginId || p.name === pluginId)
+      if (!availablePlugin) return c.text('Plugin not found', 404)
+
+      const pageData: PluginSettingsPageData = {
+        plugin: {
+          id: availablePlugin.id,
+          name: availablePlugin.name,
+          displayName: availablePlugin.display_name,
+          description: availablePlugin.description,
+          version: availablePlugin.version,
+          author: availablePlugin.author,
+          status: 'uninstalled',
+          category: availablePlugin.category,
+          icon: availablePlugin.icon,
+          downloadCount: 0,
+          rating: 0,
+          lastUpdated: 'Not installed',
+          dependencies: availablePlugin.dependencies,
+          permissions: availablePlugin.permissions,
+          isCore: availablePlugin.is_core,
+          settings: {},
+        },
+        activity: [],
+        user: {
+          name: user?.email || 'User',
+          email: user?.email || '',
+          role: user?.role || 'user'
+        },
+      }
+
+      return c.html(renderPluginSettingsPage(pageData))
     }
 
     // Get activity log

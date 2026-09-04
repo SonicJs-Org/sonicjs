@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, waitForHTMX, ADMIN_CREDENTIALS } from './utils/test-helpers';
 
+// These tests require defineUserProfile() to be called in the app entry point
+// (my-sonicjs-app/src/user-profile.model.ts). The default demo app ships in
+// unconfigured state so the "Profile Information" section is hidden.
+// Enable by uncommenting defineUserProfile() in user-profile.model.ts.
 test.describe('User Profile Edit on User Edit Page @auth', () => {
   let testUserId: string | undefined;
   let authToken: string;
@@ -69,6 +73,7 @@ test.describe('User Profile Edit on User Edit Page @auth', () => {
   });
 
   test('should display Profile Information section on user edit page', async ({ page }) => {
+    test.fixme(true, 'Profile fields require defineUserProfile() — see user-profile.model.ts');
     test.skip(setupFailed || !testUserId, 'Skipping: test setup failed or testUserId not available');
 
     await loginAsAdmin(page);
@@ -91,6 +96,7 @@ test.describe('User Profile Edit on User Edit Page @auth', () => {
   });
 
   test('should save profile data when editing user', async ({ page }) => {
+    test.fixme(true, 'Profile fields require defineUserProfile() — see user-profile.model.ts');
     test.skip(setupFailed || !testUserId, 'Skipping: test setup failed or testUserId not available');
 
     await loginAsAdmin(page);
@@ -130,6 +136,7 @@ test.describe('User Profile Edit on User Edit Page @auth', () => {
   });
 
   test('should update existing profile data', async ({ page }) => {
+    test.fixme(true, 'Profile fields require defineUserProfile() — see user-profile.model.ts');
     test.skip(setupFailed || !testUserId, 'Skipping: test setup failed or testUserId not available');
 
     await loginAsAdmin(page);
@@ -160,6 +167,7 @@ test.describe('User Profile Edit on User Edit Page @auth', () => {
   });
 
   test('should validate website URL format', async ({ page }) => {
+    test.fixme(true, 'Profile fields require defineUserProfile() — see user-profile.model.ts');
     test.skip(setupFailed || !testUserId, 'Skipping: test setup failed or testUserId not available');
 
     await loginAsAdmin(page);
@@ -192,6 +200,7 @@ test.describe('User Profile Edit on User Edit Page @auth', () => {
   });
 
   test('should not create profile if no profile fields are filled', async ({ request }) => {
+    test.fixme(true, 'Profile fields require defineUserProfile() — see user-profile.model.ts');
     test.skip(setupFailed || !authToken, 'Skipping: test setup failed or authToken not available');
 
     // Create another test user without filling profile fields

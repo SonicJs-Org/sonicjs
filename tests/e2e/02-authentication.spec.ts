@@ -32,8 +32,8 @@ test.describe('Authentication @smoke @auth', () => {
     await page.fill('[name="password"]', 'wrongpassword');
     await page.click('button[type="submit"]');
     
-    // Should show error message
-    await expect(page.locator('.error, .bg-red-100')).toBeVisible();
+    // Should show error message (30s: HTMX async response can be slow on CF preview cold-start)
+    await expect(page.locator('.error, .bg-red-100')).toBeVisible({ timeout: 30000 });
   });
 
   test('should logout successfully', async ({ page }) => {

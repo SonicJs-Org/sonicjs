@@ -17,6 +17,7 @@ import { getEmailService, hasEmailService } from '../../../services/email/email-
 import { getJwtExpirySecondsFromDb } from '../../../middleware/auth'
 import { hasVerifiedSecondFactor } from '../../../auth/second-factor-guard'
 import { SettingsService } from '../../../services/settings'
+import { PluginService } from '../../../services/plugin-service'
 import { getCustomData } from '../user-profiles'
 import { dispatchHookEvent } from '../../hooks/dispatch-event'
 
@@ -48,6 +49,30 @@ const DEFAULT_SETTINGS: OTPSettings = {
 function buildOtpApi(): Hono {
   const otpAPI = new Hono()
 
+  /**
+   * Load OTP plugin settings.
+   *
+   * Settings live on the plugin's document (type_id='plugin', slug='otp-login')
+   * since the document-model migration — the admin UI saves them there via
+   * PluginService.updatePluginSettings, and PluginService.getPlugin reads that
+   * same row. Never throws: a missing plugin document or unparseable settings
+   * simply resolves to DEFAULT_SETTINGS.
+   */
+  async function loadOtpSettings(db: any): Promise<OTPSettings> {
+    try {
+      const plugin = await new PluginService(db).getPlugin('otp-login')
+      let saved: unknown = plugin?.settings ?? null
+      if (typeof saved === 'string') saved = JSON.parse(saved)
+      if (saved && typeof saved === 'object') {
+        return { ...DEFAULT_SETTINGS, ...(saved as Partial<OTPSettings>) }
+      }
+    } catch {
+      // missing plugin document / unparseable settings — use defaults
+    }
+
+    return { ...DEFAULT_SETTINGS }
+  }
+
   // POST /auth/otp/request - Request OTP code
   otpAPI.post('/request', async (c: any) => {
     try {
@@ -66,19 +91,8 @@ function buildOtpApi(): Hono {
       const db = c.env.DB
       const otpService = new OTPService(db)
 
-      // Load plugin settings from database
-      let settings: OTPSettings = { ...DEFAULT_SETTINGS }
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first() as { settings: string | null } | null
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings)
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings }
-        } catch (e) {
-          console.warn('Failed to parse OTP plugin settings, using defaults')
-        }
-      }
+      // Load plugin settings (document model, falls back to defaults)
+      const settings = await loadOtpSettings(db)
 
       // Get site name from general settings
       const settingsService = new SettingsService(db)
@@ -217,19 +231,8 @@ function buildOtpApi(): Hono {
       const db = c.env.DB
       const otpService = new OTPService(db)
 
-      // Load plugin settings from database
-      let settings = { ...DEFAULT_SETTINGS }
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first() as { settings: string | null } | null
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings)
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings }
-        } catch (e) {
-          console.warn('Failed to parse OTP plugin settings, using defaults')
-        }
-      }
+      // Load plugin settings (document model, falls back to defaults)
+      const settings = await loadOtpSettings(db)
 
       // Verify the code
       const verification = await otpService.verifyCode(normalizedEmail, code, settings)

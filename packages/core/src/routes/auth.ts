@@ -12,6 +12,7 @@ import { getEmailService, hasEmailService } from '../services/email/email-servic
 import { authValidationService, isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
 import type { RegistrationData } from '../services/auth-validation'
 import type { Bindings, Variables } from '../app'
+import type { KVNamespace } from '@cloudflare/workers-types'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import { RbacService } from '../services/rbac'

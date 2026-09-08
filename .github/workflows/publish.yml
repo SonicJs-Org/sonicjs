@@ -28,16 +28,22 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org/'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Clear npm auth token (OIDC trusted publishing handles auth)
+      - name: Remove cached npm auth token (OIDC trusted publishing handles auth)
         run: |
-          # setup-node writes to $NPM_CONFIG_USERCONFIG; remove the _authToken line
-          # so npm's OIDC trusted publishing exchange can take over
-          sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG" || true
-          cat "$NPM_CONFIG_USERCONFIG"
+          # setup-node with registry-url writes _authToken=${NODE_AUTH_TOKEN} to
+          # $NPM_CONFIG_USERCONFIG. Remove it so npm's OIDC exchange can take over.
+          if [ -n "$NPM_CONFIG_USERCONFIG" ] && [ -f "$NPM_CONFIG_USERCONFIG" ]; then
+            sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+            echo "Cleaned npmrc:"
+            cat "$NPM_CONFIG_USERCONFIG"
+          else
+            echo "NPM_CONFIG_USERCONFIG not set or file missing, skipping"
+          fi
 
       - name: Build core
         run: npm run build:core

@@ -1210,9 +1210,15 @@ adminContentRoutes.post('/', async (c) => {
     // Extract and validate field data
     const { data, errors } = extractFieldData(fields, formData)
 
-    // Defensive: title is always required regardless of schema
-    const titleVal = (formData.get('title') as string || '').trim()
-    if (!titleVal && !errors['title']) {
+    // Title may not be in schema — read from formData, then derive from common data fields
+    if (data.title === undefined) {
+      const formTitle = (formData.get('title') as string || '').trim()
+      data.title = formTitle || data.name || undefined
+    }
+    if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || undefined
+
+    // Title is required — check formData and derived sources
+    if (!data.title && !errors['title']) {
       errors['title'] = ['Title is required']
     }
 

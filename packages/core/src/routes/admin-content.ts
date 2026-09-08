@@ -1405,6 +1405,9 @@ adminContentRoutes.put('/:id', async (c) => {
       if (docType && dcoll) {
         const fields = await getCollectionFields(db, dcoll.id)
         const { data, errors } = extractFieldData(fields, formData)
+        // Title/slug live outside schema fields — read directly from formData
+        if (data.title === undefined) data.title = (formData.get('title') as string || '').trim() || undefined
+        if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || undefined
         if (Object.keys(errors).length > 0) {
           const flags = await loadContentEditorFlags(db)
           const errFormData = {
@@ -1425,7 +1428,7 @@ adminContentRoutes.put('/:id', async (c) => {
         if (action === 'save_and_publish') status = 'published'
 
         const svc = makeDocService(db, docType, tenantId)
-        const newDraft = await svc.saveDraft(id, { title: data.title ?? null, slug, data }, user?.userId)
+        const newDraft = await svc.saveDraft(id, { title: data.title || slug || null, slug, data }, user?.userId)
         // saveDraft always returns an unpublished draft; sync against the root's published row.
         const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = ?").bind(id, tenantId).first() as any
         if (status === 'published') await svc.publish(newDraft.id, user?.userId)
@@ -1496,6 +1499,9 @@ adminContentRoutes.put('/:id', async (c) => {
 
     // Extract and validate field data
     const { data, errors } = extractFieldData(fields, formData)
+    // Title/slug live outside schema fields — read directly from formData
+    if (data.title === undefined) data.title = (formData.get('title') as string || '').trim() || undefined
+    if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || undefined
 
     if (Object.keys(errors).length > 0) {
       const flags = await loadContentEditorFlags(db)
@@ -1650,6 +1656,7 @@ adminContentRoutes.post('/preview', requireRole(['admin', 'editor', 'author']), 
 
     // Extract field data for preview (skip validation)
     const { data } = extractFieldData(fields, formData, { skipValidation: true })
+    if (data.title === undefined) data.title = (formData.get('title') as string || '').trim() || undefined
 
     // Sanitize user-controlled values before rendering
     const safeTitle = escapeHtml(data.title || 'Untitled')

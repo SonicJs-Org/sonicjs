@@ -58,11 +58,11 @@ test.describe('Content title preserved after edit @content', () => {
     await page.fill('input[name="emoji"]', '🧪')
     await page.fill('input[name="description"]', 'E2E test mood')
 
-    // Save
+    // Save — POST success redirects to /admin/content/<ID>/edit, not the list
     await page.click('button:has-text("Save")')
-    await page.waitForURL(/\/admin\/content/, { timeout: 15000 })
+    await page.waitForURL(/\/admin\/content\/[^?]+\/edit/, { timeout: 15000 })
 
-    // Verify the list shows the name as the title
+    // Navigate to the Example collection list page
     await page.goto('/admin/content?collection=example')
     await page.waitForSelector('table')
 

@@ -125,7 +125,7 @@ function renderTwoFactorRecoverySection(u: UserEditData): string {
       </div>` : ''
 
   return `
-          <div class="rounded-xl bg-amber-50 dark:bg-amber-500/10 shadow-sm ring-1 ring-amber-600/20 dark:ring-amber-500/20 p-6">
+          <div class="rounded-xl bg-amber-50 dark:bg-amber-500/10 shadow-sm ring-1 ring-amber-600/20 dark:ring-amber-500/20 p-6 mb-6">
             <h3 class="text-base font-semibold text-amber-900 dark:text-amber-300 mb-2">Two-Factor Recovery</h3>
             <div class="flex items-center gap-2 mb-1">
               <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ring-1 ring-inset ${badgeTone[state.tone]}">${state.label}</span>

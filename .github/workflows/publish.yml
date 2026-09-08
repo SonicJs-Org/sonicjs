@@ -28,9 +28,13 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org/'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Clear npm auth token (OIDC trusted publishing handles auth)
+        run: npm config delete //registry.npmjs.org/:_authToken || true
 
       - name: Build core
         run: npm run build:core

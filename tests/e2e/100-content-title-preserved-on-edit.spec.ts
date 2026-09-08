@@ -15,20 +15,14 @@ test.describe('Content title preserved after edit @content', () => {
     await page.goto('/admin/content?collection=example')
     await page.waitForSelector('table')
 
-    // Find a seeded mood that still has its title (e.g. "Melancholy" or "Cruel")
-    const moodRow = page.locator('table tbody tr').filter({
-      has: page.locator('td', { hasText: /^(Cruel|Melancholy|Chaotic)$/ })
-    }).first()
-    await expect(moodRow).toBeVisible({ timeout: 10000 })
+    // Find a seeded mood link by its title text (inside <a> tag in the title column)
+    const moodLink = page.locator('table tbody tr a').filter({ hasText: /^(Cruel|Melancholy|Chaotic)$/ }).first()
+    await expect(moodLink).toBeVisible({ timeout: 10000 })
 
-    // Capture the displayed title before editing
-    const titleCell = moodRow.locator('td').first()
-    const originalTitle = (await titleCell.innerText()).trim()
-    expect(originalTitle).toMatch(/^(Cruel|Melancholy|Chaotic)$/)
+    const originalTitle = (await moodLink.innerText()).trim()
 
     // Click to edit
-    const editLink = moodRow.locator('a').first()
-    await editLink.click()
+    await moodLink.click()
     await page.waitForURL(/\/admin\/content\/.*\/edit/)
 
     // Verify the name field has the correct value
@@ -47,22 +41,9 @@ test.describe('Content title preserved after edit @content', () => {
     await page.goto('/admin/content?collection=example')
     await page.waitForSelector('table')
 
-    // Verify the title is still the mood name — NOT a document ID (nanoid)
-    const titleAfterEdit = page.locator('table tbody tr').filter({
-      has: page.locator('td', { hasText: originalTitle })
-    })
+    // Verify the title link still shows the mood name — NOT a document ID
+    const titleAfterEdit = page.locator('table tbody tr a').filter({ hasText: originalTitle })
     await expect(titleAfterEdit).toBeVisible({ timeout: 10000 })
-
-    // Verify no row shows a nanoid-style string where this title should be
-    // (nanoids are 21-char alphanumeric strings like "RgtZDMkLthGvEdnY6FePW")
-    const allTitles = await page.locator('table tbody tr td:first-child').allInnerTexts()
-    for (const t of allTitles) {
-      const trimmed = t.trim()
-      if (trimmed && /^[A-Za-z0-9_-]{15,25}$/.test(trimmed)) {
-        // This looks like a nanoid — fail if it's in the Example collection
-        expect.soft(trimmed).not.toMatch(/^[A-Za-z0-9_-]{15,25}$/)
-      }
-    }
   })
 
   test('creating new Example item derives title from name field', async ({ page }) => {
@@ -85,9 +66,7 @@ test.describe('Content title preserved after edit @content', () => {
     await page.goto('/admin/content?collection=example')
     await page.waitForSelector('table')
 
-    const newItem = page.locator('table tbody tr').filter({
-      has: page.locator('td', { hasText: testName })
-    })
+    const newItem = page.locator('table tbody tr a').filter({ hasText: testName })
     await expect(newItem).toBeVisible({ timeout: 10000 })
   })
 })

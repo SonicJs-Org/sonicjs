@@ -15,6 +15,7 @@ jobs:
   publish:
     name: Build and Publish
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
       contents: read
       id-token: write
@@ -42,8 +43,6 @@ jobs:
         run: npm run type-check
 
       - name: Publish @sonicjs-cms/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --workspace=@sonicjs-cms/core --provenance --access public --dry-run
@@ -52,8 +51,6 @@ jobs:
           fi
 
       - name: Publish @sonicjs-cms/sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --workspace=@sonicjs-cms/sdk --provenance --access public --dry-run
@@ -62,11 +59,16 @@ jobs:
           fi
 
       - name: Publish create-sonicjs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --workspace=create-sonicjs --provenance --access public --dry-run
           else
             npm publish --workspace=create-sonicjs --provenance --access public
           fi
+
+      - name: Tag beta dist-tag
+        if: inputs.dry_run != true
+        run: |
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          npm dist-tag add @sonicjs-cms/core@$VERSION beta || true
+          npm dist-tag add create-sonicjs@$VERSION beta || true

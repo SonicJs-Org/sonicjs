@@ -1397,7 +1397,7 @@ adminContentRoutes.put('/:id', async (c) => {
     // ── Option B: if :id is a document-backed root, save a new draft + sync publish state ──
     const tenantId = reqTenant(c)
     const docRowU = await db
-      .prepare("SELECT id, type_id FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = ?")
+      .prepare("SELECT id, type_id, title, slug FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = ?")
       .bind(id, tenantId).first() as any
     if (docRowU) {
       const docType = await getDocBackingType(db, docRowU.type_id)
@@ -1405,9 +1405,13 @@ adminContentRoutes.put('/:id', async (c) => {
       if (docType && dcoll) {
         const fields = await getCollectionFields(db, dcoll.id)
         const { data, errors } = extractFieldData(fields, formData)
-        // Title/slug live outside schema fields — read directly from formData
-        if (data.title === undefined) data.title = (formData.get('title') as string || '').trim() || undefined
-        if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || undefined
+        // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values,
+        // then derive from common data fields (e.g. collections with 'name' but no 'title' property)
+        if (data.title === undefined) {
+          const formTitle = (formData.get('title') as string || '').trim()
+          data.title = formTitle || docRowU.title || data.name || undefined
+        }
+        if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || docRowU.slug || undefined
         if (Object.keys(errors).length > 0) {
           const flags = await loadContentEditorFlags(db)
           const errFormData = {
@@ -1499,9 +1503,12 @@ adminContentRoutes.put('/:id', async (c) => {
 
     // Extract and validate field data
     const { data, errors } = extractFieldData(fields, formData)
-    // Title/slug live outside schema fields — read directly from formData
-    if (data.title === undefined) data.title = (formData.get('title') as string || '').trim() || undefined
-    if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || undefined
+    // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values
+    if (data.title === undefined) {
+      const formTitle = (formData.get('title') as string || '').trim()
+      data.title = formTitle || existingContent.title || data.name || undefined
+    }
+    if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || existingContent.slug || undefined
 
     if (Object.keys(errors).length > 0) {
       const flags = await loadContentEditorFlags(db)
@@ -1656,7 +1663,7 @@ adminContentRoutes.post('/preview', requireRole(['admin', 'editor', 'author']), 
 
     // Extract field data for preview (skip validation)
     const { data } = extractFieldData(fields, formData, { skipValidation: true })
-    if (data.title === undefined) data.title = (formData.get('title') as string || '').trim() || undefined
+    if (data.title === undefined) data.title = (formData.get('title') as string || '').trim() || data.name || undefined
 
     // Sanitize user-controlled values before rendering
     const safeTitle = escapeHtml(data.title || 'Untitled')

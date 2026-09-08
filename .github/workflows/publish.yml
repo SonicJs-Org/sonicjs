@@ -34,7 +34,11 @@ jobs:
         run: npm ci
 
       - name: Clear npm auth token (OIDC trusted publishing handles auth)
-        run: npm config delete //registry.npmjs.org/:_authToken || true
+        run: |
+          # setup-node writes to $NPM_CONFIG_USERCONFIG; remove the _authToken line
+          # so npm's OIDC trusted publishing exchange can take over
+          sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG" || true
+          cat "$NPM_CONFIG_USERCONFIG"
 
       - name: Build core
         run: npm run build:core

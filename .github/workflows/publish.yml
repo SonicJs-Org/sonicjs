@@ -33,14 +33,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get OIDC token for npm trusted publishing
+      - name: Remove cached npm auth token (let npm auto-detect OIDC trusted publishing)
         run: |
-          OIDC_TOKEN=$(curl -s \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://registry.npmjs.org" \
-            | jq -r '.value')
-          echo "::add-mask::$OIDC_TOKEN"
-          echo "NODE_AUTH_TOKEN=$OIDC_TOKEN" >> "$GITHUB_ENV"
+          if [ -n "$NPM_CONFIG_USERCONFIG" ] && [ -f "$NPM_CONFIG_USERCONFIG" ]; then
+            sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+            echo "Cleaned npmrc:"
+            cat "$NPM_CONFIG_USERCONFIG"
+          else
+            echo "NPM_CONFIG_USERCONFIG not set or file missing, skipping"
+          fi
 
       - name: Build core
         run: npm run build:core

@@ -33,16 +33,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Remove cached npm auth token (let npm auto-detect OIDC trusted publishing)
-        run: |
-          if [ -n "$NPM_CONFIG_USERCONFIG" ] && [ -f "$NPM_CONFIG_USERCONFIG" ]; then
-            sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
-            echo "Cleaned npmrc:"
-            cat "$NPM_CONFIG_USERCONFIG"
-          else
-            echo "NPM_CONFIG_USERCONFIG not set or file missing, skipping"
-          fi
-
       - name: Build core
         run: npm run build:core
 

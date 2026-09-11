@@ -673,6 +673,29 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
+
+  // ── Plugin routes (before the /api catch-all) ─────────────────────────────
+  // All plugin route mounting flows through registerPluginRoutes() (see
+  // plugins/mount.ts), which mounts each plugin's declarative routes[] and/or
+  // synchronous register(app) hook. These MUST be mounted before both the bare
+  // `/api` catch-all (whose /:collection param shadows /api/* plugin routes) and
+  // the `/admin` catch-all so plugin-owned pages are not shadowed.
+  //
+  // `disableAll` turns off every plugin — core AND user — for a bare core app.
+  if (!config.plugins?.disableAll) {
+    registerPluginRoutes(app, corePluginsBeforeCatchAll, { source: 'core' })
+
+    // Plugin routes - Cache (dashboard and management API)
+    // Fixes GitHub Issue #461: Cache routes were not registered
+    app.route('/admin/cache', cachePlugin.getRoutes())
+
+    // User-supplied plugins. Mounted here — before the catch-all — so consumers
+    // never have to edit core or hand-mount routes (#829, #621, #758).
+    if (config.plugins?.register && config.plugins.register.length > 0) {
+      registerPluginRoutes(app, config.plugins.register, { source: 'user' })
+    }
+  }
+
   app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
 
@@ -690,27 +713,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/admin/media', adminMediaRoutes)
   // Security audit middleware - logs auth events (login, register, logout)
   app.use('/auth/*', securityAuditMiddleware())
-
-  // ── Plugin routes (before the /admin catch-all) ───────────────────────────
-  // All plugin route mounting flows through registerPluginRoutes() (see
-  // plugins/mount.ts), which mounts each plugin's declarative routes[] and/or
-  // synchronous register(app) hook. These MUST be mounted before the bare
-  // `/admin` catch-all so plugin-owned `/admin/<x>` pages are not shadowed.
-  //
-  // `disableAll` turns off every plugin — core AND user — for a bare core app.
-  if (!config.plugins?.disableAll) {
-    registerPluginRoutes(app, corePluginsBeforeCatchAll, { source: 'core' })
-
-    // Plugin routes - Cache (dashboard and management API)
-    // Fixes GitHub Issue #461: Cache routes were not registered
-    app.route('/admin/cache', cachePlugin.getRoutes())
-
-    // User-supplied plugins. Mounted here — before the catch-all — so consumers
-    // never have to edit core or hand-mount routes (#829, #621, #758).
-    if (config.plugins?.register && config.plugins.register.length > 0) {
-      registerPluginRoutes(app, config.plugins.register, { source: 'user' })
-    }
-  }
 
   // Public event tracking API — POST /api/events (open), GET /api/events (admin)
   app.route('/api/events', eventsApiRoutes)

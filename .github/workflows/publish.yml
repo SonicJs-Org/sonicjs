@@ -45,25 +45,25 @@ jobs:
       - name: Publish @sonicjs-cms/core
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --workspace=@sonicjs-cms/core --provenance --access public --dry-run
+            npm publish --workspace=@sonicjs-cms/core --access public --dry-run
           else
-            npm publish --workspace=@sonicjs-cms/core --provenance --access public
+            npm publish --workspace=@sonicjs-cms/core --access public
           fi
 
       - name: Publish @sonicjs-cms/sdk
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --workspace=@sonicjs-cms/sdk --provenance --access public --dry-run
+            npm publish --workspace=@sonicjs-cms/sdk --access public --dry-run
           else
-            npm publish --workspace=@sonicjs-cms/sdk --provenance --access public
+            npm publish --workspace=@sonicjs-cms/sdk --access public
           fi
 
       - name: Publish create-sonicjs
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --workspace=create-sonicjs --provenance --access public --dry-run
+            npm publish --workspace=create-sonicjs --access public --dry-run
           else
-            npm publish --workspace=create-sonicjs --provenance --access public
+            npm publish --workspace=create-sonicjs --access public
           fi
 
       - name: Tag beta dist-tag

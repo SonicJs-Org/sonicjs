@@ -1,0 +1,14 @@
+{
+  "name": "postgres-portability-poc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Compile-only Kysely spike: proves DocumentRepository read + write paths compile to both SQLite (D1) and Postgres from one builder. Run: npm i && node list-read.mjs && node saveDraft-write.mjs",
+  "scripts": {
+    "read": "node list-read.mjs",
+    "write": "node saveDraft-write.mjs"
+  },
+  "dependencies": {
+    "kysely": "^0.27.0"
+  }
+}

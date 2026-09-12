@@ -80,9 +80,10 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
   const title = isEdit ? `Edit: ${data.title || 'Content'}` : `New ${data.collection.display_name}`
   const hasValidationErrors = Boolean(data.validationErrors && Object.keys(data.validationErrors).length > 0)
 
-  // Construct back URL with preserved filters
+  // Construct back URL with preserved filters. referrerParams is reflected from
+  // the `?ref=` query param, so escape it before it lands in an href attribute.
   const backUrl = data.referrerParams
-    ? `/admin/content?${data.referrerParams}`
+    ? `/admin/content?${escapeHtml(data.referrerParams)}`
     : `/admin/content?collection=${data.collection.id}`
 
   // Group fields by category
@@ -194,7 +195,7 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
           >
             <input type="hidden" name="collection_id" value="${data.collection.id}">
             ${isEdit ? `<input type="hidden" name="id" value="${data.id}">` : ''}
-            ${data.referrerParams ? `<input type="hidden" name="referrer_params" value="${data.referrerParams}">` : ''}
+            ${data.referrerParams ? `<input type="hidden" name="referrer_params" value="${escapeHtml(data.referrerParams)}">` : ''}
 
             <!-- Core Fields -->
             ${renderFieldGroup('Basic Information', coreFieldsHTML)}

@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/sanitize'
+
 export interface MediaFile {
   id: string;
   filename: string;
@@ -85,7 +87,7 @@ export function renderMediaFileCard(
               file.isImage
                 ? `
               <img src="${file.thumbnail_url || file.public_url}" alt="${
-                    file.alt || file.original_name
+                    escapeHtml(file.alt || file.original_name)
                   }"
                    class="w-16 h-16 object-cover rounded-lg ring-1 ring-zinc-950/10 dark:ring-white/10">
             `
@@ -100,9 +102,9 @@ export function renderMediaFileCard(
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
               <h4 class="text-sm font-medium text-zinc-950 dark:text-white truncate" title="${
-                file.original_name
+                escapeHtml(file.original_name)
               }">
-                ${file.original_name}
+                ${escapeHtml(file.original_name)}
               </h4>
               <div class="flex items-center space-x-2">
                 <span class="text-sm text-zinc-500 dark:text-zinc-400">${
@@ -183,7 +185,7 @@ export function renderMediaFileCard(
           file.isImage
             ? `
           <img src="${file.thumbnail_url || file.public_url}" alt="${
-                file.alt || file.original_name
+                escapeHtml(file.alt || file.original_name)
               }"
                class="w-full h-full object-cover">
         `
@@ -224,9 +226,9 @@ export function renderMediaFileCard(
 
       <div class="p-3">
         <h4 class="text-sm font-medium text-zinc-950 dark:text-white truncate" title="${
-          file.original_name
+          escapeHtml(file.original_name)
         }">
-          ${file.original_name}
+          ${escapeHtml(file.original_name)}
         </h4>
         <div class="flex justify-between items-center mt-1">
           <span class="text-xs text-zinc-500 dark:text-zinc-400">${

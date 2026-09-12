@@ -3,6 +3,7 @@ import {
   renderConfirmationDialog,
 } from "../components/confirmation-dialog.template";
 import { MediaFile, renderMediaGrid } from "../components/media-grid.template";
+import { escapeHtml } from "../../utils/sanitize";
 import {
   AdminLayoutCatalystData,
   renderAdminLayoutCatalyst,
@@ -91,13 +92,13 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
                   .map(
                     (folder) => `
                   <li>
-                    <a href="/admin/media?folder=${folder.folder}"
+                    <a href="/admin/media?folder=${encodeURIComponent(folder.folder)}"
                        class="block px-3 py-2 text-sm rounded-lg transition-colors ${
                          data.currentFolder === folder.folder
                            ? "bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 font-medium"
                            : "text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                        }">
-                      ${folder.folder} (${folder.count})
+                      ${escapeHtml(folder.folder)} (${folder.count})
                     </a>
                   </li>
                 `

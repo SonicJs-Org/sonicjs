@@ -58,6 +58,18 @@ export function sanitizeRichText(html: string): string {
 }
 
 /**
+ * Serializes a value for embedding inside an inline `<script>` tag.
+ * `JSON.stringify` alone does not escape `<`, so a string value containing
+ * `</script>` breaks out of the tag. Escaping `<` to its Unicode escape
+ * neutralizes that without changing the value the JSON parses back to.
+ * @param value - The value to serialize
+ * @returns A JSON string safe to interpolate inside `<script>...</script>`
+ */
+export function jsonForScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c')
+}
+
+/**
  * Sanitizes an object's string properties
  * @param obj - Object with string properties to sanitize
  * @param fields - Array of field names to sanitize

@@ -105,7 +105,8 @@ describe('MigrationService', () => {
       // The greenfield inventory. 0006 (auth_two_factor lockout columns) and 0007
       // (auth_user.two_factor_required) are ALTERs rather than edits to 0001, because D1 tracks
       // applied migrations by filename — an edit to 0001 would reach greenfield installs only.
-      expect(migrations.map(m => m.id)).toEqual(['0001', '0002', '0003', '0004', '0005', '0006', '0007'])
+      // 0008 (documents_fts) is a straight new migration, not an ALTER.
+      expect(migrations.map(m => m.id)).toEqual(['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008'])
       expect(migrations.find(m => m.id === '029')).toBeUndefined()
       expect(db._mocks.prepare).not.toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS migrations'))
     })
@@ -139,6 +140,7 @@ describe('MigrationService', () => {
           { name: '0005_otp_codes.sql', applied_at: '2026-01-01T00:00:04.000Z' },
           { name: '0006_two_factor_lockout.sql', applied_at: '2026-01-01T00:00:05.000Z' },
           { name: '0007_two_factor_required.sql', applied_at: '2026-01-01T00:00:06.000Z' },
+          { name: '0008_documents_fts.sql', applied_at: '2026-01-01T00:00:07.000Z' },
         ],
         existingTables: ['users', 'documents', 'document_types'],
         existingColumns: []
@@ -147,9 +149,9 @@ describe('MigrationService', () => {
       const service = new MigrationService(db as any)
       const status = await service.getMigrationStatus()
 
-      expect(status.appliedMigrations).toBe(7)
+      expect(status.appliedMigrations).toBe(8)
       expect(status.pendingMigrations).toBe(0)
-      expect(status.lastApplied).toBe('2026-01-01T00:00:06.000Z')
+      expect(status.lastApplied).toBe('2026-01-01T00:00:07.000Z')
     })
   })
 })

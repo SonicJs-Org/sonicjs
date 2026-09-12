@@ -247,6 +247,12 @@ export class MediaDocumentService {
       .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?')
       .bind(now, now, rootId, this.tenantId)
       .run()
+    // Raw deleted_at UPDATE bypasses DocumentProjection — deindex FTS so the deleted asset leaves
+    // public search. media_asset carries baseGrants.public:['read'], so it's reachable there.
+    await this.db
+      .prepare('DELETE FROM documents_fts WHERE document_id IN (SELECT id FROM documents WHERE root_id = ? AND tenant_id = ?)')
+      .bind(rootId, this.tenantId)
+      .run()
   }
 
   /** Update alt/caption/tags on a media_asset document (saveDraft + publish atomically). */

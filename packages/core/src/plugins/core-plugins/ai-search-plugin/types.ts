@@ -70,6 +70,7 @@ export interface SearchResponse {
   query_time_ms: number
   mode: 'ai' | 'keyword'
   suggestions?: string[] // Autocomplete suggestions
+  degraded?: boolean // true when an 'ai' request was served by the lexical (keyword) floor (LA4)
 }
 
 export interface SearchHistory {

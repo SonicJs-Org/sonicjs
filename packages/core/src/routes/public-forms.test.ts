@@ -218,3 +218,59 @@ describe('POST /api/forms/:identifier/submit — XSS sanitization', () => {
     expect(stored.field3).not.toContain('>')
   })
 })
+
+describe('POST /api/forms/:identifier/submit — payload DoS guards', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    capturedSubmissionData = null
+  })
+
+  it('rejects a deeply nested payload with 413 (no stack exhaustion)', async () => {
+    const app = createTestApp(createMockDb())
+    let deep: any = 'x'
+    for (let i = 0; i < 60; i++) deep = { a: deep } // exceeds MAX_SANITIZE_DEPTH (32)
+
+    const res = await app.request('/api/forms/form-1/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: deep }),
+    })
+
+    expect(res.status).toBe(413)
+    expect(capturedSubmissionData).toBeNull() // nothing persisted
+  })
+
+  it('rejects a payload with too many fields with 413', async () => {
+    const app = createTestApp(createMockDb())
+    const res = await app.request('/api/forms/form-1/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { arr: new Array(10_001).fill('x') } }), // > MAX_SANITIZE_NODES
+    })
+
+    expect(res.status).toBe(413)
+    expect(capturedSubmissionData).toBeNull()
+  })
+
+  it('rejects an oversized body by Content-Length with 413', async () => {
+    const app = createTestApp(createMockDb())
+    const res = await app.request('/api/forms/form-1/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': String(600 * 1024) },
+      body: JSON.stringify({ data: { note: 'small body, large declared length' } }),
+    })
+
+    expect(res.status).toBe(413)
+  })
+
+  it('still accepts a normal small submission', async () => {
+    const app = createTestApp(createMockDb())
+    const res = await app.request('/api/forms/form-1/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { name: 'Jane', message: 'hello' } }),
+    })
+
+    expect(res.status).toBe(200)
+  })
+})

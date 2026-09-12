@@ -221,7 +221,7 @@ jobs:
           if echo "$CHANGED_SRC" | grep -qE 'routes/api|api-content|api-documents|api-media'; then
             TAGS="$TAGS|@api"
           fi
-          if echo "$CHANGED_SRC" | grep -qE 'middleware/auth|admin-settings|api-keys|services/api-key'; then
+          if echo "$CHANGED_SRC" | grep -qE 'middleware/auth|admin-settings|api-keys|services/api-key|src/auth/|routes/auth|two-factor'; then
             TAGS="$TAGS|@auth|@api-keys"
           fi
           if echo "$CHANGED_SRC" | grep -qE 'admin-database|database-tools'; then

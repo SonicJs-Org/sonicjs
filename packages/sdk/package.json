@@ -1,6 +1,6 @@
 {
   "name": "@sonicjs-cms/sdk",
-  "version": "3.0.0-beta.27",
+  "version": "3.0.0-beta.28",
   "description": "Isomorphic TypeScript client + codegen CLI for the SonicJS headless CMS API.",
   "type": "module",
   "main": "./dist/index.cjs",

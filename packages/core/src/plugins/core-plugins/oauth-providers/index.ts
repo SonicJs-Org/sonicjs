@@ -23,6 +23,7 @@ import {
 } from './oauth-service'
 import { AuthManager } from '../../../middleware'
 import { getJwtExpirySecondsFromDb } from '../../../middleware/auth'
+import { hasVerifiedSecondFactor } from '../../../auth/second-factor-guard'
 
 const STATE_COOKIE_NAME = 'oauth_state'
 const STATE_COOKIE_MAX_AGE = 600 // 10 minutes
@@ -202,6 +203,24 @@ function buildOauthApi(): Hono {
           return c.redirect('/auth/login?error=Account is deactivated')
         }
 
+        // Second-factor gate. This branch mints a session without Better Auth, so BA's
+        // second-factor challenge never runs. Having linked the provider yourself does not
+        // substitute for the factor: the provider may enforce no MFA at all, so anyone holding
+        // the provider credential would skip a factor the account owner deliberately enrolled in
+        // — which is exactly the guarantee the enrolment page promises ("on every sign-in").
+        //
+        // This cannot strand anyone: BA requires password verification to reach
+        // /auth/two-factor/enable, so an enrolled account always has a usable password login.
+        //
+        // This route is mounted ahead of the /auth/* catch-all in app.ts, so
+        // guardPasswordlessSecondFactor never sees it; the check has to be here.
+        if (await hasVerifiedSecondFactor((c.env as any).DB, user.id)) {
+          return c.redirect(
+            '/auth/login?error=' +
+            encodeURIComponent('This account uses two-factor authentication. Sign in with your password, then enter your authenticator code.')
+          )
+        }
+
         const tokenTtl = await getJwtExpirySecondsFromDb((c.env as any).DB, c.env as any)
         const jwt = await AuthManager.generateToken(
           user.id, user.email, user.role,
@@ -218,6 +237,22 @@ function buildOauthApi(): Hono {
       if (existingUser) {
         if (!existingUser.is_active) {
           return c.redirect('/auth/login?error=Account is deactivated')
+        }
+
+        // Second-factor gate. This branch auto-links a provider identity to a pre-existing LOCAL
+        // account matched only by email address, then mints a session without Better Auth — so
+        // BA's second-factor challenge never runs, and an attacker who controls any provider
+        // account bearing the victim's email address would bypass a second factor the victim
+        // deliberately enrolled in. Even weaker than the already-linked branch above (where the
+        // owner at least chose the provider), since nothing here was ever confirmed by them.
+        //
+        // This route is mounted ahead of the /auth/* catch-all in app.ts, so
+        // guardPasswordlessSecondFactor never sees it; the check has to be here.
+        if (await hasVerifiedSecondFactor((c.env as any).DB, existingUser.id)) {
+          return c.redirect(
+            '/auth/login?error=' +
+            encodeURIComponent('This account uses two-factor authentication. Sign in with your password, then enter your authenticator code.')
+          )
         }
 
         // Link OAuth to existing account

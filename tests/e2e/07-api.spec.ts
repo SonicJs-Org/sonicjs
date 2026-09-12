@@ -58,7 +58,7 @@ test.describe('API Endpoints @smoke @api', () => {
     // Use the origin configured in CORS_ORIGINS (wrangler.toml)
     const response = await request.get('/api', {
       headers: {
-        'Origin': 'http://localhost:8787'
+        'Origin': 'http://127.0.0.1:8787'
       }
     });
 
@@ -66,7 +66,7 @@ test.describe('API Endpoints @smoke @api', () => {
 
     // Check for CORS headers — should echo back the allowed origin
     const corsHeader = response.headers()['access-control-allow-origin'];
-    expect(corsHeader).toBe('http://localhost:8787');
+    expect(corsHeader).toBe('http://127.0.0.1:8787');
   });
 
   test('should handle content negotiation', async ({ request }) => {

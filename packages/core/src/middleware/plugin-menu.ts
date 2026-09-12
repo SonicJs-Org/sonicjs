@@ -33,8 +33,24 @@ const ICON_SVG: Record<string, string> = {
   'pencil-square': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"/></svg>',
   'server': '<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm14 1a1 1 0 11-2 0 1 1 0 012 0zM2 13a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2zm14 1a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/></svg>',
   'building-office': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>',
+  'lock-closed': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>',
+  'book-open': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"/></svg>',
+  'variable': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.5 3c1.126 2.78 1.745 5.817 1.745 9s-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.105.401l1.444-.889"/></svg>',
+  'bolt': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"/></svg>',
 }
 
+/** Rendered when a menu entry supplies no icon, or a name this map does not know. */
+const FALLBACK_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`
+
+/**
+ * Resolve a menu entry's `icon` to SVG markup.
+ *
+ * Returns `''` for a name this map does not know — callers MUST substitute {@link FALLBACK_ICON}
+ * rather than falling back to the raw input. Passing the name through renders it as literal text
+ * in the sidebar ("lock-closed" appearing where the icon belongs), because the catalyst layout
+ * interpolates this value as markup. That is a rendering bug the type system cannot catch: both
+ * the resolved SVG and the unresolved name are `string`.
+ */
 function resolveIcon(iconName?: string): string {
   if (!iconName) return ''
   // If it's already SVG markup, return as-is
@@ -47,8 +63,7 @@ const MARKER = '<!-- DYNAMIC_PLUGIN_MENU -->'
 
 function renderMenuItem(item: { label: string; path: string; icon?: string }, currentPath: string): string {
   const isActive = currentPath === item.path || currentPath.startsWith(item.path)
-  const fallbackIcon = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`
-  const resolvedIcon = resolveIcon(item.icon) || fallbackIcon
+  const resolvedIcon = resolveIcon(item.icon) || FALLBACK_ICON
   return `
     <span class="relative">
       ${isActive ? '<span class="absolute inset-y-2 -left-4 w-0.5 rounded-full bg-cyan-500 dark:bg-cyan-400"></span>' : ''}
@@ -140,7 +155,11 @@ export function pluginMenuMiddleware() {
     }
     activeMenuItems.sort((a, b) => a.order - b.order)
 
-    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || m.icon || '' })))
+    // NOT `|| m.icon` — that passed an UNRESOLVED icon name through as if it were markup, and the
+    // catalyst layout interpolates this straight into the sidebar, so every plugin whose manifest
+    // named an icon absent from ICON_SVG rendered the literal string ("lock-closed", "book-open")
+    // where its icon should be.
+    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || FALLBACK_ICON })))
 
     await next()
 

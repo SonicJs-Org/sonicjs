@@ -770,6 +770,40 @@ All responses include security headers:
 
 ---
 
+## Two-Factor Authentication (TOTP)
+
+SonicJS supports **time-based one-time passwords (TOTP)** as a second factor via the `two-factor-auth` plugin.
+
+### Setup
+
+Enable the plugin in your app entry point:
+
+```ts
+import { twoFactorAuthPlugin } from '@sonicjs-cms/core'
+
+const plugins = [
+  twoFactorAuthPlugin(),
+  // ...other plugins
+]
+```
+
+### User Flow
+
+1. **Enroll** — user scans a QR code from `/admin/settings/security` into an authenticator app (Google Authenticator, Authy, 1Password, etc.)
+2. **Verify enrollment** — enter the 6-digit TOTP code to confirm the device is registered
+3. **Login with 2FA** — after password auth succeeds, user is prompted for a TOTP code or one of their backup codes
+
+### Backup Codes
+
+On enrollment, 10 single-use **backup codes** are generated and shown once. Users can regenerate them at any time from Security Settings. Each code is hashed before storage and is consumed on use.
+
+### Admin UI
+
+- **Security Settings** (`/admin/settings/security`) — enroll/unenroll, view recovery codes, regenerate backup codes
+- Enforced lockout after 5 consecutive failed TOTP attempts (5-minute cooldown)
+
+---
+
 ## Next Steps
 
 <div className="not-prose">

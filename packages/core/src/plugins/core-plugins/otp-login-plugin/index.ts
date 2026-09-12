@@ -15,7 +15,9 @@ import { renderOTPEmail } from './email-templates'
 import { AuthManager } from '../../../middleware'
 import { getEmailService, hasEmailService } from '../../../services/email/email-service-singleton'
 import { getJwtExpirySecondsFromDb } from '../../../middleware/auth'
+import { hasVerifiedSecondFactor } from '../../../auth/second-factor-guard'
 import { SettingsService } from '../../../services/settings'
+import { PluginService } from '../../../services/plugin-service'
 import { getCustomData } from '../user-profiles'
 import { dispatchHookEvent } from '../../hooks/dispatch-event'
 
@@ -47,6 +49,30 @@ const DEFAULT_SETTINGS: OTPSettings = {
 function buildOtpApi(): Hono {
   const otpAPI = new Hono()
 
+  /**
+   * Load OTP plugin settings.
+   *
+   * Settings live on the plugin's document (type_id='plugin', slug='otp-login')
+   * since the document-model migration — the admin UI saves them there via
+   * PluginService.updatePluginSettings, and PluginService.getPlugin reads that
+   * same row. Never throws: a missing plugin document or unparseable settings
+   * simply resolves to DEFAULT_SETTINGS.
+   */
+  async function loadOtpSettings(db: any): Promise<OTPSettings> {
+    try {
+      const plugin = await new PluginService(db).getPlugin('otp-login')
+      let saved: unknown = plugin?.settings ?? null
+      if (typeof saved === 'string') saved = JSON.parse(saved)
+      if (saved && typeof saved === 'object') {
+        return { ...DEFAULT_SETTINGS, ...(saved as Partial<OTPSettings>) }
+      }
+    } catch {
+      // missing plugin document / unparseable settings — use defaults
+    }
+
+    return { ...DEFAULT_SETTINGS }
+  }
+
   // POST /auth/otp/request - Request OTP code
   otpAPI.post('/request', async (c: any) => {
     try {
@@ -65,19 +91,8 @@ function buildOtpApi(): Hono {
       const db = c.env.DB
       const otpService = new OTPService(db)
 
-      // Load plugin settings from database
-      let settings: OTPSettings = { ...DEFAULT_SETTINGS }
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first() as { settings: string | null } | null
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings)
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings }
-        } catch (e) {
-          console.warn('Failed to parse OTP plugin settings, using defaults')
-        }
-      }
+      // Load plugin settings (document model, falls back to defaults)
+      const settings = await loadOtpSettings(db)
 
       // Get site name from general settings
       const settingsService = new SettingsService(db)
@@ -216,19 +231,8 @@ function buildOtpApi(): Hono {
       const db = c.env.DB
       const otpService = new OTPService(db)
 
-      // Load plugin settings from database
-      let settings = { ...DEFAULT_SETTINGS }
-      const pluginRow = await db.prepare(`
-        SELECT settings FROM plugins WHERE id = 'otp-login'
-      `).first() as { settings: string | null } | null
-      if (pluginRow?.settings) {
-        try {
-          const savedSettings = JSON.parse(pluginRow.settings)
-          settings = { ...DEFAULT_SETTINGS, ...savedSettings }
-        } catch (e) {
-          console.warn('Failed to parse OTP plugin settings, using defaults')
-        }
-      }
+      // Load plugin settings (document model, falls back to defaults)
+      const settings = await loadOtpSettings(db)
 
       // Verify the code
       const verification = await otpService.verifyCode(normalizedEmail, code, settings)
@@ -282,6 +286,20 @@ function buildOtpApi(): Hono {
       if (!user.is_active) {
         return c.json({
           error: 'Account is deactivated'
+        }, 403)
+      }
+
+      // Second-factor gate. This route mints a session WITHOUT Better Auth, so BA's second-factor
+      // challenge never runs here — which would leave an emailed code as a complete bypass of a
+      // second factor the user deliberately enrolled in, while /admin/profile still read
+      // "Enabled". It also sits ahead of the /auth/* catch-all in app.ts, so
+      // guardPasswordlessSecondFactor never sees it; the check has to be here.
+      //
+      // Deliberately placed AFTER the code has been consumed, so a refused attempt also spends
+      // the code — otherwise this becomes an oracle for probing which accounts have 2FA.
+      if (await hasVerifiedSecondFactor(db, user.id)) {
+        return c.json({
+          error: 'This account uses two-factor authentication. Sign in with your password, then enter your authenticator code.'
         }, 403)
       }
 

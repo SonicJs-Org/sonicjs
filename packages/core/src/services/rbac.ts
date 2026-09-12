@@ -16,6 +16,7 @@
  * The public API is unchanged from the relational implementation, so callers
  * (admin-rbac routes, permission checks) need no changes.
  */
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { DocumentsService } from './documents'
 
 export interface RbacRole {

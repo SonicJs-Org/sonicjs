@@ -464,6 +464,40 @@ Cloudflare Turnstile CAPTCHA integration for form protection.
 
 ---
 
+### Two-Factor Authentication Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+TOTP-based two-factor authentication for admin users.
+
+**Features:**
+- TOTP authenticator app support (Google Authenticator, Authy, 1Password, etc.)
+- QR code enrollment flow from Security Settings
+- 10 single-use backup codes generated at enrollment
+- Enforced lockout after 5 failed attempts (5-minute cooldown)
+
+**Usage:** Enable the `twoFactorAuthPlugin` and navigate to **Admin** → **Settings** → **Security**
+
+---
+
+### GraphQL Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Full GraphQL API over the SonicJS document model.
+
+**Features:**
+- Query and mutate documents via GraphQL
+- Full CRUD operations on all registered document types
+- Introspection support
+- Integrated GraphiQL explorer at `/graphql`
+
+**Usage:** Enable the `graphqlPlugin` to expose `/graphql` with the full document schema
+
+---
+
 ### QR Generator Plugin
 
 **Status:** Inactive by default

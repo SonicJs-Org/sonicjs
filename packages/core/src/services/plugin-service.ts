@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { invalidateTenantCache } from '../middleware/tenant'
 import { invalidatePluginStatusCache } from '../middleware/plugin-middleware'
+import { TWO_FACTOR_PLUGIN_ID, refreshTwoFactorPolicy } from '../auth/two-factor-settings'
 
 export interface PluginData {
   id: string
@@ -212,6 +213,17 @@ export class PluginService {
     `).bind(JSON.stringify(settings), now, pluginId, TYPE_ID, TENANT).run()
     // Multi-tenant resolver settings (header name, subdomain config) live in plugin settings.
     invalidateTenantCache()
+    // The two-factor policy (issuer, lockout thresholds, backup-code count) is snapshotted
+    // onto the Better Auth plugin options at construction time, so createAuth reads it from a
+    // module-level cache synchronously. Re-read it here — a plain invalidation would leave this
+    // isolate on the defaults, which is worse than stale.
+    //
+    // No error handling: `loadTwoFactorPolicy` catches and logs its own DB failure and returns the
+    // last-known-good policy, so this cannot reject. A `.catch()` here would read as "a failure is
+    // handled" when the handling actually lives one level down.
+    if (pluginId === TWO_FACTOR_PLUGIN_ID) {
+      await refreshTwoFactorPolicy(this.db)
+    }
     await this.logActivity(pluginId, 'settings_updated', null)
   }
 

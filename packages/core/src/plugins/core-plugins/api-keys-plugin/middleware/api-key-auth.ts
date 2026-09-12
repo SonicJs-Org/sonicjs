@@ -36,6 +36,10 @@ export function apiKeyAuthMiddleware() {
               exp: 0,
               iat: 0,
             })
+            // Marks the principal as a machine credential. Policy that only a human can satisfy
+            // — currently the forced two-factor enrolment gate — reads this to skip the request
+            // rather than take a running integration offline. See app.ts `Variables.authMethod`.
+            c.set('authMethod', 'api-key')
           }
         } catch {
           // Invalid/garbled key — leave unauthenticated.

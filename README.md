@@ -66,6 +66,7 @@ See the [Self-Hosting guide](https://sonicjs.com/self-hosting) for Docker Compos
 
 ### AI-Native Content Layer
 - **🤖 Native MCP Server**: Auto-generated tools let Claude Code, Cursor, and VS Code read, create, and publish content
+- **⚡ GraphQL API**: Full GraphQL endpoint with GraphiQL playground — opt-in plugin, zero config
 - **🔍 RAG-Powered Search**: Semantic search with natural-language queries — zero extra infra
 - **🛠 12 Specialized Claude Code Agents**: Purpose-built agents for development ([View all agents](https://sonicjs.com/ai-agents))
 
@@ -93,7 +94,7 @@ See the [Self-Hosting guide](https://sonicjs.com/self-hosting) for Docker Compos
 | **Global locations** | 300+ | 1 region | 1 region |
 | **Version history** | Free | Paywalled | Paywalled |
 | **SSO / Audit logs** | Free | $99+/mo | $99+/mo |
-| **AI / MCP** | Included | Upsold | Upsold |
+| **AI / MCP / GraphQL** | Included | Upsold | Upsold |
 | **License** | MIT (all features) | MIT (limited) | MIT (limited) |
 
 > SonicJS is the **only production-ready CMS** built specifically for edge computing.
@@ -299,6 +300,40 @@ export default createSonicJSApp({ plugins: { register: [] } })
 - `GET /api/content` - Get published content (paginated)
 - `GET /api/collections/:collection/content` - Get content by collection
 - `GET /api/collections` - List all collections
+
+### GraphQL API
+
+Opt-in plugin — add `graphqlPlugin()` to `plugins.register`:
+
+```typescript
+import { graphqlPlugin, createSonicJSApp } from '@sonicjs-cms/core'
+
+export default createSonicJSApp({
+  plugins: { register: [graphqlPlugin()] },
+})
+```
+
+- `GET /graphql` — GraphiQL playground (interactive browser IDE)
+- `POST /graphql` — Execute queries and mutations (Bearer API key auth)
+
+```graphql
+# Query published documents
+query {
+  documents(typeId: "blog_posts", status: "published", limit: 10) {
+    items { id title slug status publishedAt data }
+    cursor
+  }
+}
+
+# Create a document (requires API key)
+mutation {
+  createDocument(typeId: "blog_posts", title: "Hello", data: {}) {
+    id rootId isCurrentDraft
+  }
+}
+```
+
+Supports: `documents`, `document(id)` queries · `createDocument`, `updateDocument`, `publishDocument`, `unpublishDocument`, `deleteDocument` mutations · `JSON` scalar · keyset pagination.
 
 ## 🚀 Deployment
 

@@ -96,6 +96,8 @@ export class MigrationService {
     if (await this.checkTablesExist(['documents'])) {
       await this.ensureDocumentGeneratedColumns()
     }
+    await ensureTwoFactorLockoutColumns(this.db)
+    await ensureTwoFactorRequiredColumn(this.db)
   }
 
   /**
@@ -244,5 +246,79 @@ export class MigrationService {
       valid: issues.length === 0,
       issues
     }
+  }
+}
+
+/**
+ * Ensure `auth_two_factor` carries the two second-factor lockout columns.
+ *
+ * Migration 0006 adds them; this is the runtime safety net for a DB that has 0001 (which creates
+ * the table without them) but never got 0006 — a partially-migrated preview, or a deploy where
+ * `wrangler d1 migrations apply` was skipped. Without the columns, Better Auth's
+ * `/two-factor/enable` INSERT names `failed_verification_count` (drizzle emits every declared
+ * column) and hard-fails, so an operator would see enrolment 500 rather than a schema error they
+ * can act on.
+ *
+ * Module-level and exported, NOT a private method, because it needs two callers:
+ *   - `MigrationService.ensureSchemaCompatibility()` — the bootstrap path, which the bootstrap
+ *     middleware SKIPS entirely once the `_sonicjs_bootstrap_<version>` KV marker is set (24h
+ *     TTL). On its own, that would leave the repair unrun for up to a day on most cold isolates.
+ *   - the two-factor plugin's `onBoot`, which runs on EVERY isolate via app.ts's `boot()`.
+ *
+ * Same shape as `ensureDocumentGeneratedColumns`: `table_xinfo` probe + ALTER, fully idempotent,
+ * silent when there is nothing to do, and non-fatal on error (bootstrap must not fail on a repair).
+ */
+export async function ensureTwoFactorLockoutColumns(db: D1Database): Promise<void> {
+  try {
+    const exists = await db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='auth_two_factor'`)
+      .first()
+    if (!exists) return
+    const info = await db.prepare(`PRAGMA table_xinfo('auth_two_factor')`).all<{ name: string }>()
+    const present = new Set((info.results ?? []).map((r) => r.name))
+    // Column types mirror migration 0006 exactly — see that file for why
+    // failed_verification_count is NOT NULL DEFAULT 0 and locked_until is INTEGER (ms).
+    const wanted: Array<[string, string]> = [
+      ['failed_verification_count', 'INTEGER NOT NULL DEFAULT 0'],
+      ['locked_until', 'INTEGER'],
+    ]
+    for (const [column, definition] of wanted) {
+      if (present.has(column)) continue
+      await db.prepare(`ALTER TABLE auth_two_factor ADD COLUMN ${column} ${definition}`).run()
+      console.log(`[MigrationService] Self-healed auth_two_factor.${column}`)
+    }
+  } catch (error) {
+    console.error('[MigrationService] auth_two_factor lockout column repair failed:', error)
+  }
+}
+
+/**
+ * Runtime safety net for `auth_user.two_factor_required` (migration 0007).
+ *
+ * Same rationale and same callers as {@link ensureTwoFactorLockoutColumns}: a DB that has 0001 but
+ * never got 0007 would otherwise fail every admin-portal request, because the enrolment-enforcement
+ * middleware SELECTs this column on each one. A missing column there is a 500 on every page rather
+ * than a schema error anyone can act on.
+ *
+ * Separate from the lockout repair because the two touch different tables and either can be missing
+ * independently. Idempotent, silent when there is nothing to do, non-fatal on error.
+ */
+export async function ensureTwoFactorRequiredColumn(db: D1Database): Promise<void> {
+  try {
+    const exists = await db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='auth_user'`)
+      .first()
+    if (!exists) return
+    const info = await db.prepare(`PRAGMA table_xinfo('auth_user')`).all<{ name: string }>()
+    const present = new Set((info.results ?? []).map((r) => r.name))
+    if (present.has('two_factor_required')) return
+    // Mirrors migration 0007 exactly. DEFAULT 0 matters: existing users must not become
+    // retroactively locked out of the portal by the column appearing.
+    await db
+      .prepare(`ALTER TABLE auth_user ADD COLUMN two_factor_required INTEGER NOT NULL DEFAULT 0`)
+      .run()
+    console.log('[MigrationService] Self-healed auth_user.two_factor_required')
+  } catch (error) {
+    console.error('[MigrationService] auth_user.two_factor_required repair failed:', error)
   }
 }

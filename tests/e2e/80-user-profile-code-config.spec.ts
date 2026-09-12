@@ -17,6 +17,13 @@ test.describe('User Profiles — code-defined config @auth', () => {
   })
 
   test('plugin detail page explains where to define fields in code', async ({ page }) => {
+    // A fresh deploy has no `plugins` row for user-profiles, and an uninstalled plugin
+    // renders the Info tab only — the guidance panel lives behind the Settings tab.
+    // Install first (no-op once installed) so the panel is on the page.
+    await page.request
+      .post(`${BASE_URL}/admin/plugins/install`, { data: { name: 'user-profiles' } })
+      .catch(() => {})
+
     const resp = await page.goto(`${BASE_URL}/admin/plugins/user-profiles`)
     await page.waitForLoadState('networkidle')
 
@@ -39,9 +46,11 @@ test.describe('User Profiles — code-defined config @auth', () => {
     await page.goto(`${BASE_URL}/admin/users`)
     await page.waitForLoadState('networkidle')
 
-    const editLink = page.locator('a[href*="/admin/users/"][href$="/edit"]').first()
-    await expect(editLink).toBeVisible({ timeout: 10000 })
-    const href = await editLink.getAttribute('href')
+    // Rows navigate via `onclick`, not an anchor — an <a href$="/edit"> locator finds nothing.
+    const row = page.locator('tr[onclick*="/admin/users/"]').first()
+    await expect(row).toBeVisible({ timeout: 10000 })
+    const onclick = await row.getAttribute('onclick')
+    const href = onclick?.match(/'(\/admin\/users\/[^']+\/edit)'/)?.[1]
     expect(href).toBeTruthy()
 
     await page.goto(`${BASE_URL}${href}`)

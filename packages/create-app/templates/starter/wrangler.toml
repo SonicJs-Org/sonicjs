@@ -29,7 +29,7 @@ id = "YOUR_KV_NAMESPACE_ID" # Run: wrangler kv namespace create CACHE_KV
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
-CORS_ORIGINS = "http://localhost:8787,http://localhost:4321"
+CORS_ORIGINS = "http://127.0.0.1:8787,http://127.0.0.1:4321"
 
 # Production environment
 [env.production]

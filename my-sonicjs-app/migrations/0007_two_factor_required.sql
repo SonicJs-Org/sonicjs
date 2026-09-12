@@ -1,0 +1,23 @@
+-- Migration 0007: force re-enrolment after an administrative two-factor reset.
+--
+-- When an admin resets a locked-out user (lost phone AND lost backup codes — the only recovery
+-- path this feature otherwise has is direct database access), that user is left with NO second
+-- factor. Without a way to demand they set it up again, "reset" silently becomes "permanently
+-- downgrade", because nothing ever prompts them and the account quietly stays password-only.
+--
+-- `two_factor_required` is that demand. Set it and the user is redirected to /admin/two-factor and
+-- cannot use the rest of the admin portal until they enrol. It is INDEPENDENT of
+-- `two_factor_enabled`:
+--
+--   required=0, enabled=0  → optional, not enrolled (the default)
+--   required=0, enabled=1  → enrolled voluntarily
+--   required=1, enabled=0  → MUST enrol before using the portal  ← what a reset leaves behind
+--   required=1, enabled=1  → enrolled, and may not turn it off
+--
+-- Kept on auth_user rather than auth_two_factor because it has to outlive the reset: the reset
+-- DELETEs the auth_two_factor row, so a flag stored there would be destroyed by the very action
+-- that needs to set it.
+--
+-- NOT NULL DEFAULT 0 so every existing row is "not required" — enabling this feature must never
+-- retroactively lock out an existing user.
+ALTER TABLE auth_user ADD COLUMN two_factor_required INTEGER NOT NULL DEFAULT 0;

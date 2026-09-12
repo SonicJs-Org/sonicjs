@@ -89,5 +89,17 @@ describe('plugin mounting via createSonicJSApp', () => {
       expect(hasPathPrefix(paths, '/admin/content')).toBe(true)
       expect(hasPathPrefix(paths, '/api')).toBe(true)
     })
+
+    it('still serves the 2FA login challenge when disableAll is true', () => {
+      // Better Auth composes `twoFactor()` unconditionally (auth/config.ts), so turning plugins
+      // off does NOT stop enrolled users being challenged at sign-in. While the challenge page was
+      // mounted by the plugin, those users were redirected to `/auth/two-factor` and got a 404 —
+      // locked out of an app that still demanded their second factor. Core mounts it now.
+      const paths = routePaths(createSonicJSApp({ plugins: { disableAll: true } }))
+      expect(hasPathPrefix(paths, '/auth/two-factor')).toBe(true)
+      // The ENROLMENT surface is plugin-owned and must still be gone: disabling plugins should
+      // stop new enrolments without stranding existing ones.
+      expect(hasPathPrefix(paths, '/admin/two-factor')).toBe(false)
+    })
   })
 })

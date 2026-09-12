@@ -1424,6 +1424,8 @@ apiRoutes.delete('/:collection/:id', requireAuth(), requireRole(['admin', 'edito
 
     const now = Math.floor(Date.now() / 1000)
     await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = 'default'").bind(now, now, id).run()
+    // Raw deleted_at UPDATE bypasses DocumentProjection — deindex FTS so the deleted doc leaves public search.
+    await db.prepare("DELETE FROM documents_fts WHERE document_id IN (SELECT id FROM documents WHERE root_id = ? AND tenant_id = 'default')").bind(id).run()
     const cache = getCacheService(CACHE_CONFIGS.api!)
     // Deliberately no SWR stash here — `getAndConsumeStale` would hand the value this write
     // just retired to the next reader, with no revalidation behind it. See services/swr.ts.

@@ -71,6 +71,13 @@ export const bundledMigrations: BundledMigration[] = [
     filename: '0008_documents_list_index.sql',
     description: 'Migration 0008: Documents List Index',
     sql: "-- Migration 0008: index for the /admin/content \"All\" view.\n--\n-- The All view lists every current, non-deleted document for a tenant ordered by updated_at.\n-- Without an index matching that filter + sort, SQLite reads every document and sorts it in a\n-- temp B-tree on each page load. On telemetry-heavy installs (stats.sonicjs.com: ~260k documents,\n-- 1.4 GB) that read ~785k rows per request and tripped D1's \"overloaded / too many resources\n-- consumed within a 10 second window\" limit. With this index the planner walks it in order and\n-- stops after LIMIT rows.\nCREATE INDEX IF NOT EXISTS idx_docs_tenant_draft_updated\n  ON documents(tenant_id, is_current_draft, deleted_at, updated_at DESC);\n"
+  },
+  {
+    id: '0009',
+    name: 'Documents Fts',
+    filename: '0009_documents_fts.sql',
+    description: 'Migration 0009: Documents Fts',
+    sql: "-- Migration 0009: Full-text search index (documents_fts)\n-- Lexical FTS5 index over the document model. Fed write-time by DocumentProjection\n-- (the same batch that projects document_facets), keyed by document_id.\n--\n-- EXACT 10-column layout (3 indexed + 7 UNINDEXED), matching the design spike this ported\n-- from, so the engine's bm25(documents_fts, w0..w9) 10-weight vector maps 1:1.\n-- DO NOT add columns (e.g. root_id): FTS5 weights are positional and a column-count change\n-- breaks the ported bm25() call with \"wrong number of arguments to function bm25()\".\n-- root_id / deleted_at / visible are intentionally NOT here — results JOIN back to documents\n-- on document_id when those are needed; visibility is kept native by deindexing at write time.\n--\n-- FTS5 has no ALTER TABLE ADD COLUMN: any future column change is a new migration that\n-- drops + recreates this table followed by a backfill (scripts/backfill-fts.ts).\n\nCREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(\n  title,                  -- col 0 (indexed)\n  slug,                   -- col 1 (indexed)\n  body,                   -- col 2 (indexed)\n  document_id UNINDEXED,  -- col 3\n  type_id UNINDEXED,      -- col 4\n  status UNINDEXED,       -- col 5\n  created_at UNINDEXED,   -- col 6\n  updated_at UNINDEXED,   -- col 7\n  tenant_id UNINDEXED,    -- col 8\n  is_published UNINDEXED, -- col 9\n  tokenize = 'porter unicode61 remove_diacritics 2'\n);\n"
   }
 ]
 

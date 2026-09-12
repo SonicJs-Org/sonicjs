@@ -725,6 +725,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
+  // ai-search plugin API (POST /api/search, GET /api/search/suggest|analytics) — must be mounted
+  // here, before the /api/:collection catch-all, or it is shadowed (the plugin's register() runs
+  // after this line, so it cannot mount /api/search itself).
+  app.route('/api/search', aiSearchApiRoutes)
   app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
 

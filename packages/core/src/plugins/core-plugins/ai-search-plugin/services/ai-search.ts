@@ -1,4 +1,4 @@
-import type { D1Database } from '@cloudflare/workers-types'
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import type {
   AISearchSettings,
   SearchQuery,
@@ -9,6 +9,11 @@ import type {
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
 import { getCollectionRegistry } from '../../../../services/collection-registry'
+import { Fts5Engine } from './fts5-engine'
+import { DocumentTypeRegistry } from '../../../../services/document-type-registry'
+import { documentSecondsToMs } from '../../../../services/documents'
+import { getFtsSettings } from './fts-settings.service'
+import { getCachedResult, putCachedResult } from './fts-search-cache'
 
 /**
  * AI Search Service
@@ -21,7 +26,9 @@ export class AISearchService {
   constructor(
     private db: D1Database,
     private ai?: any, // Workers AI for embeddings
-    private vectorize?: any // Vectorize for vector search
+    private vectorize?: any, // Vectorize for vector search
+    private tenantId: string = 'default', // tenant scope for lexical (FTS5) search
+    private kv?: KVNamespace, // CACHE_KV — lexical settings + result cache
   ) {
     // Initialize Custom RAG if bindings are available
     if (this.ai && this.vectorize) {
@@ -256,7 +263,6 @@ export class AISearchService {
    * Execute search query
    */
   async search(query: SearchQuery): Promise<SearchResponse> {
-    const startTime = Date.now()
     const settings = await this.getSettings()
 
     if (!settings?.enabled) {
@@ -268,25 +274,27 @@ export class AISearchService {
       }
     }
 
-    // Use AI Search if enabled and mode is 'ai'
-    if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+    // Use AI Search if enabled, mode is 'ai', and the bindings exist.
+    const wantAI = query.mode === 'ai'
+    if (wantAI && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
       return this.searchAI(query, settings)
     }
 
-    // Fallback to keyword search
-    return this.searchKeyword(query, settings)
+    // Lexical (keyword) floor over documents_fts.
+    const result = await this.searchKeyword(query, settings)
+    // LA4 degrade contract: an 'ai' request served by the lexical floor is flagged, never broken.
+    if (wantAI) result.degraded = true
+    return result
   }
 
   /**
    * AI-powered semantic search using Custom RAG
    */
   private async searchAI(query: SearchQuery, settings: AISearchSettings): Promise<SearchResponse> {
-    const startTime = Date.now()
-    
     try {
       if (!this.customRAG) {
         console.warn('[AISearchService] CustomRAG not available, falling back to keyword search')
-        return this.searchKeyword(query, settings)
+        return { ...(await this.searchKeyword(query, settings)), degraded: true }
       }
 
       // Use Custom RAG for semantic search - pass the full query object and settings
@@ -295,8 +303,23 @@ export class AISearchService {
       return result
     } catch (error) {
       console.error('[AISearchService] AI search error, falling back to keyword:', error)
-      // Fallback to keyword search
-      return this.searchKeyword(query, settings)
+      // Fallback to keyword search (LA4: degraded, never broken).
+      return { ...(await this.searchKeyword(query, settings)), degraded: true }
+    }
+  }
+
+  /**
+   * Document type ids whose base grants allow public read (settings.baseGrants.public includes
+   * 'read'). The unauthenticated /api/search path is restricted to these so that indexed-but-internal
+   * types never surface to anonymous callers (D5). Fails closed: any error yields an empty allowlist,
+   * which makes keyword search return nothing rather than over-share.
+   */
+  private async publicReadableTypeIds(): Promise<string[]> {
+    try {
+      const types = await new DocumentTypeRegistry(this.db).findAll(true)
+      return types.filter((t) => t.settings?.baseGrants?.public?.includes('read')).map((t) => t.id)
+    } catch {
+      return []
     }
   }
 
@@ -310,127 +333,91 @@ export class AISearchService {
     const startTime = Date.now()
 
     try {
-      const conditions: string[] = []
-      const params: any[] = []
+      // FTS settings (bm25 weights, result limit, cache TTL, searchable types) persist in CACHE_KV.
+      const fts = await getFtsSettings(this.kv)
+      const cacheable = !!this.kv && fts.cacheTtlSeconds > 0
 
-      // Search query
-      if (query.query) {
-        conditions.push('(c.title LIKE ? OR c.slug LIKE ? OR c.data LIKE ?)')
-        const searchTerm = `%${query.query}%`
-        params.push(searchTerm, searchTerm, searchTerm)
+      // Best-effort result cache, keyed by normalized query + tenant.
+      if (cacheable) {
+        const cached = await getCachedResult(this.kv!, query, this.tenantId)
+        if (cached) return { ...cached, query_time_ms: Date.now() - startTime }
       }
 
-      // Collection filter
-      if (query.filters?.collections && query.filters.collections.length > 0) {
-        const placeholders = query.filters.collections.map(() => '?').join(',')
-        conditions.push(`c.collection_id IN (${placeholders})`)
-        params.push(...query.filters.collections)
-      } else if (settings.selected_collections.length > 0) {
-        // Only search indexed collections
-        const placeholders = settings.selected_collections.map(() => '?').join(',')
-        conditions.push(`c.collection_id IN (${placeholders})`)
-        params.push(...settings.selected_collections)
+      // Lexical FTS5 search over documents_fts (replaces the legacy `content LIKE` scan).
+      const engine = new Fts5Engine(this.db, {
+        titleBoost: fts.titleBoost,
+        slugBoost: fts.slugBoost,
+        bodyBoost: fts.bodyBoost,
+      })
+
+      // SECURITY (D5): /api/search is unauthenticated, so keyword results are limited to document
+      // types that grant public read. Internal/admin-only types (api_key, security_event,
+      // analytics_event, user_profile, rbac_*, site_settings, …) are indexed for admin tooling but
+      // must never surface to an anonymous caller. Authed admin draft/all-type search is a separate
+      // future endpoint, not this one.
+      const publicTypeIds = await this.publicReadableTypeIds()
+
+      // Resolve the requested type set, then intersect with the public allowlist: a client-supplied
+      // `filters.collections` (or a misconfigured `searchableTypes`) can only ever NARROW the scope,
+      // never widen it to an internal type.
+      const requested = query.filters?.collections?.length
+        ? query.filters.collections
+        : fts.searchableTypes.length
+          ? fts.searchableTypes
+          : settings.selected_collections.length
+            ? settings.selected_collections
+            : publicTypeIds
+      const typeIds = requested.filter((t) => publicTypeIds.includes(t))
+
+      // No publicly-readable type in scope → return empty. This guard is REQUIRED: the engine treats
+      // an empty/omitted typeIds as "no type filter = ALL types", so calling it here would leak
+      // exactly the internal types the allowlist just excluded.
+      if (typeIds.length === 0) {
+        return { results: [], total: 0, query_time_ms: Date.now() - startTime, mode: query.mode }
       }
 
-      // Status filter
-      if (query.filters?.status && query.filters.status.length > 0) {
-        const placeholders = query.filters.status.map(() => '?').join(',')
-        conditions.push(`c.status IN (${placeholders})`)
-        params.push(...query.filters.status)
-      } else {
-        // Exclude deleted by default
-        conditions.push("c.status != 'deleted'")
-      }
+      const { hits, total } = await engine.search({
+        query: query.query,
+        tenantId: this.tenantId,
+        typeIds,
+        // Server-authoritative: the public endpoint returns published documents only. Never derived
+        // from client-supplied `filters.status` — that previously let `status:['draft']` drop the
+        // published gate and expose every draft in the tenant.
+        publishedOnly: true,
+        limit: query.limit || fts.resultsLimit,
+        offset: query.offset || 0,
+      })
 
-      // Date range filter
-      if (query.filters?.dateRange) {
-        const field = query.filters.dateRange.field || 'created_at'
-        if (query.filters.dateRange.start) {
-          conditions.push(`c.${field} >= ?`)
-          params.push(query.filters.dateRange.start.getTime())
-        }
-        if (query.filters.dateRange.end) {
-          conditions.push(`c.${field} <= ?`)
-          params.push(query.filters.dateRange.end.getTime())
-        }
-      }
-
-      // Author filter
-      if (query.filters?.author) {
-        conditions.push('c.author_id = ?')
-        params.push(query.filters.author)
-      }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
-
-      // Get total count
-      const countStmt = this.db.prepare(`
-        SELECT COUNT(*) as count 
-        FROM content c
-        ${whereClause}
-      `)
-      const countResult = await countStmt.bind(...params).first<{ count: number }>()
-      const total = countResult?.count || 0
-
-      // Get results
-      const limit = query.limit || settings.results_limit
-      const offset = query.offset || 0
-
-      const resultsStmt = this.db.prepare(`
-        SELECT 
-          c.id, c.title, c.slug, c.collection_id, c.status,
-          c.created_at, c.updated_at, c.author_id, c.data,
-          col.name as collection_name, col.display_name as collection_display_name,
-          u.email as author_email
-        FROM content c
-        JOIN collections col ON c.collection_id = col.id
-        LEFT JOIN auth_user u ON c.author_id = u.id
-        ${whereClause}
-        ORDER BY c.updated_at DESC
-        LIMIT ? OFFSET ?
-      `)
-
-      const { results } = await resultsStmt.bind(...params, limit, offset).all<{
-        id: string
-        title: string
-        slug: string
-        collection_id: number
-        collection_name: string
-        collection_display_name: string
-        status: string
-        created_at: number
-        updated_at: number
-        author_id?: string
-        author_email?: string
-        data: string
-      }>()
-
-      const searchResults: SearchResult[] = (results || []).map((row) => ({
-        id: String(row.id),
-        title: row.title || 'Untitled',
-        slug: row.slug || '',
-        collection_id: String(row.collection_id),
-        collection_name: row.collection_display_name || row.collection_name,
-        snippet: this.extractSnippet(row.data, query.query),
-        status: row.status,
-        created_at: Number(row.created_at),
-        updated_at: Number(row.updated_at),
-        author_name: row.author_email,
+      const searchResults: SearchResult[] = hits.map((h) => ({
+        id: h.documentId,
+        title: h.title || 'Untitled',
+        slug: h.slug,
+        collection_id: h.typeId,
+        collection_name: h.typeId,
+        snippet: h.snippet,
+        relevance_score: h.score,
+        status: h.status,
+        // FTS snapshots documents.* in SECONDS; the response boundary is ms (search-modal renders
+        // `new Date(created_at)`). Convert here or every keyword hit dates to Jan 1970.
+        created_at: documentSecondsToMs(h.createdAt) ?? h.createdAt,
+        updated_at: documentSecondsToMs(h.updatedAt) ?? h.updatedAt,
       }))
 
-      const queryTime = Date.now() - startTime
-
-      // Log search history
-      await this.logSearch(query.query, query.mode, searchResults.length)
-
-      return {
+      const response: SearchResponse = {
         results: searchResults,
         total,
-        query_time_ms: queryTime,
+        query_time_ms: Date.now() - startTime,
         mode: query.mode,
       }
+
+      if (cacheable) await putCachedResult(this.kv!, query, this.tenantId, response, fts.cacheTtlSeconds)
+
+      // Log search history (best-effort; ai_search_history has no greenfield migration — L27).
+      await this.logSearch(query.query, query.mode, searchResults.length).catch(() => {})
+
+      return response
     } catch (error) {
-      console.error('Keyword search error:', error)
+      console.error('Keyword (FTS5) search error:', error)
       return {
         results: [],
         total: 0,

@@ -53,6 +53,8 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     queryableFields: [
       { name: 'difficulty', kind: 'scalar', type: 'text', column: 'q_blog_difficulty' },
       { name: 'author',     kind: 'scalar', type: 'text', column: 'q_blog_author' },
+      // Post body → documents_fts.body: makes article text keyword-searchable with snippets.
+      { name: 'content', kind: 'fulltext' },
     ],
   })
 

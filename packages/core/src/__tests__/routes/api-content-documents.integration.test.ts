@@ -182,4 +182,14 @@ describe('document-backed content API — regression-audit fixes (§7)', () => {
     expect((await del(rootId)).status).toBe(404)
     expect((await put(rootId, { title: 'zombie' })).status).toBe(404)
   })
+
+  it('DELETE /api/:collection/:id deindexes the root from documents_fts (raw deleted_at UPDATE bypasses DocumentProjection)', async () => {
+    const res = await post({ collectionId: COLL, title: 'Findable', slug: 'findable-generic', status: 'published', data: {} })
+    const rootId = (await res.json()).data.id
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents_fts WHERE document_id=?').get(rootId).n).toBeGreaterThan(0)
+
+    const delRes = await app.request(`/api/${COLL}/${rootId}`, { method: 'DELETE', headers: json('admin') })
+    expect(delRes.status).toBe(200)
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents_fts WHERE document_id=?').get(rootId).n).toBe(0)
+  })
 })

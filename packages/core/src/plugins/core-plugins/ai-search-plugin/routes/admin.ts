@@ -5,6 +5,8 @@ import { AISearchService } from '../services/ai-search'
 import { IndexManager } from '../services/indexer'
 import { renderSettingsPage } from '../components/settings-page'
 import type { AISearchSettings, SearchQuery } from '../types'
+import { getFtsSettings, saveFtsSettings, type FtsSettings } from '../services/fts-settings.service'
+import { invalidateResultCache } from '../services/fts-search-cache'
 
 type Variables = {
   user: {
@@ -18,6 +20,35 @@ const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Apply authentication middleware
 adminRoutes.use('*', requireAuth())
+
+/**
+ * GET /admin/plugins/ai-search/fts-settings
+ * Read lexical FTS5 settings (bm25 weights, result limit, cache TTL, searchable types).
+ */
+adminRoutes.get('/fts-settings', async (c) => {
+  const kv = (c.env as any).CACHE_KV
+  return c.json({ success: true, data: await getFtsSettings(kv) })
+})
+
+/**
+ * POST /admin/plugins/ai-search/fts-settings
+ * Save lexical FTS5 settings and bust the result cache (ranking changed → cache is stale).
+ */
+adminRoutes.post('/fts-settings', async (c) => {
+  const kv = (c.env as any).CACHE_KV
+  if (!kv) return c.json({ success: false, error: 'CACHE_KV binding not configured' }, 500)
+  const body = await c.req.json().catch(() => ({}) as Record<string, unknown>)
+  const partial: Partial<FtsSettings> = {}
+  for (const k of ['titleBoost', 'slugBoost', 'bodyBoost', 'resultsLimit', 'cacheTtlSeconds'] as const) {
+    if (typeof body[k] === 'number' && Number.isFinite(body[k])) partial[k] = body[k] as number
+  }
+  if (Array.isArray(body.searchableTypes)) {
+    partial.searchableTypes = (body.searchableTypes as unknown[]).filter((t): t is string => typeof t === 'string')
+  }
+  const saved = await saveFtsSettings(kv, partial)
+  await invalidateResultCache(kv)
+  return c.json({ success: true, data: saved })
+})
 
 /**
  * GET /admin/plugins/ai-search

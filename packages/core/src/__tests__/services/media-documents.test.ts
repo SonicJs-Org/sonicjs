@@ -178,4 +178,16 @@ describe('media-as-document (Phase 6)', () => {
     expect(impact.canHardDelete).toBe(false)
     expect(impact.strongRefs).toHaveLength(1)
   })
+
+  it('softDeleteRoot deindexes the asset from documents_fts (raw deleted_at UPDATE bypasses DocumentProjection)', async () => {
+    // media_asset carries baseGrants.public:['read'] — it's in the public /api/search allowlist, so a
+    // stale FTS row here means a deleted file's filename stays publicly searchable indefinitely.
+    const mediaSvc = new MediaDocumentService(db)
+    const media = await mediaSvc.createFromUpload(META, 'u1')
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents_fts WHERE document_id=?').get(media.id).n).toBeGreaterThan(0)
+
+    await mediaSvc.softDeleteRoot(media.rootId)
+
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents_fts WHERE document_id=?').get(media.id).n).toBe(0)
+  })
 })

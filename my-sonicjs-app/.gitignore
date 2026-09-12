@@ -38,3 +38,7 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Local-only dev seed scripts (not part of any shipped feature)
+scripts/seed-local-demo.mjs
+scripts/seed-local-rbac.mjs

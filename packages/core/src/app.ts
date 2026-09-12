@@ -58,6 +58,8 @@ import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { menuMiddleware } from './middleware/menu'
 import { menuPlugin } from './plugins/core-plugins/menu-plugin'
+import { viewsPlugin } from './plugins/core-plugins/views-plugin'
+import { apiViewsRoutes } from './plugins/core-plugins/views-plugin/routes/api-views'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
@@ -321,6 +323,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     lexicalEditorPlugin,
     versioningPlugin,
     menuPlugin,
+    viewsPlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
@@ -673,6 +676,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
+  app.route('/api/views', apiViewsRoutes) // views-plugin public read API (shadowed by /:collection otherwise)
   app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
 

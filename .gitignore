@@ -95,3 +95,6 @@ test-install/my-sonicjs-app/package-lock.json
 
 # Codegraph index (local, auto-generated)
 .codegraph/
+
+# Local git worktrees
+.worktrees/

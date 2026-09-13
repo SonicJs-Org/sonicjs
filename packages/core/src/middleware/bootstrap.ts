@@ -84,6 +84,41 @@ export function verifySecurityConfig(env: Bindings): void {
   }
 }
 
+// Per-isolate memo of the security verification.
+//
+// `verifySecurityConfig` is called on every request so a misconfigured
+// production deploy fails closed on all of them, not just the first. But the
+// three bindings it reads are fixed for the life of an isolate, so its verdict
+// is too — re-running it would only repeat the same console.warn lines on
+// every request (two per request measured in a bare dev env, one per asset
+// fetch under `wrangler dev`). So: verify once per distinct set of values,
+// remember the outcome, log the warnings once, and rethrow the SAME error on
+// every later request. Keyed on the values rather than on the env object,
+// because the Node adapter builds a fresh env per request and tests pass a
+// different env per request.
+let verifiedSecurityKey: string | null = null;
+let verifiedSecurityError: Error | null = null;
+
+function securityKey(env: Bindings): string {
+  return `${env.JWT_SECRET ?? ""}\u0000${env.CORS_ORIGINS ?? ""}\u0000${env.ENVIRONMENT ?? ""}`;
+}
+
+function verifySecurityConfigPerIsolate(env: Bindings): void {
+  const key = securityKey(env);
+  if (key !== verifiedSecurityKey) {
+    verifiedSecurityKey = key;
+    verifiedSecurityError = null;
+    try {
+      verifySecurityConfig(env);
+    } catch (e) {
+      verifiedSecurityError = e instanceof Error ? e : new Error(String(e));
+    }
+  }
+  if (verifiedSecurityError !== null) {
+    throw verifiedSecurityError;
+  }
+}
+
 // Better Auth stateless session/auth API paths that must never carry the
 // cold-start bootstrap tax (they only touch auth_* migration tables). Matched
 // as `/auth/<seg>` prefixes so `/auth/sign-in/email`, `/auth/callback/github`,
@@ -110,6 +145,18 @@ export function isBetterAuthSessionPath(path: string): boolean {
  */
 export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Array<{ name?: string; id?: string }>) {
   return async (c: Context<{ Bindings: Bindings; Variables: { hookSystem?: unknown } }>, next: Next) => {
+    // Verify security-critical env config on EVERY request, before either
+    // "already bootstrapped" short-circuit below. This used to run once, deep
+    // in the full cold-start path, AFTER `bootstrapComplete = true` was
+    // already set — so a production deploy with a missing/default JWT_SECRET
+    // only had a chance to hard-fail on a single request, and the KV fast-path
+    // (the normal path once any isolate has bootstrapped once) skipped it
+    // entirely, forever. #1043.
+    //
+    // Memoised per isolate (see verifySecurityConfigPerIsolate): the verdict
+    // is re-applied on every request, the warnings are logged once.
+    verifySecurityConfigPerIsolate(c.env as Bindings);
+
     // Attach the hook system to the request BEFORE any heavy bootstrap work
     // runs, so anything that emits a hook during bootstrap (cron cold starts,
     // RBAC seed, document-type registration, plugin onBoot via createPluginWirer)
@@ -380,19 +427,18 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       // Don't prevent the app from starting, but log the error
     }
 
-    // 4. Verify security configuration (outside try/catch so critical
-    // errors in production propagate and prevent insecure deployments)
-    verifySecurityConfig(c.env as Bindings);
-
     return next();
   };
 }
 
 /**
- * Reset bootstrap flag (useful for testing)
+ * Reset (or force) the bootstrap flag, and forget the memoised security
+ * verdict — useful for testing.
  */
-export function resetBootstrap() {
-  bootstrapComplete = false;
+export function resetBootstrap(value: boolean = false) {
+  bootstrapComplete = value;
+  verifiedSecurityKey = null;
+  verifiedSecurityError = null;
 }
 
 /**

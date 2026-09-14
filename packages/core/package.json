@@ -108,7 +108,7 @@
     "@cf-wasm/resvg": "^0.3.3",
     "better-auth": "^1.6.13",
     "better-auth-cloudflare": "^0.3.0",
-    "csv-parse": "^6.2.1",
+    "csv-parse": "^7.0.2",
     "drizzle-zod": "^0.8.3",
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.21.2",

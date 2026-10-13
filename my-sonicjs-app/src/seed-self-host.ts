@@ -27,6 +27,12 @@ const ADMIN_EMAIL = process.env.SONICJS_ADMIN_EMAIL ?? 'admin@sonicjs.com'
 const ADMIN_PASSWORD = process.env.SONICJS_ADMIN_PASSWORD ?? 'sonicjs!'
 
 async function seed() {
+  // Checked before the DB file exists: a failed first boot must not leave a DB that later
+  // boots treat as already seeded. Better Auth refuses longer passwords at sign-in.
+  if (ADMIN_PASSWORD.length > 128) {
+    throw new Error('SONICJS_ADMIN_PASSWORD must be at most 128 characters')
+  }
+
   // Ensure data directory exists before opening DB.
   mkdirSync(dirname(DB_PATH), { recursive: true })
 

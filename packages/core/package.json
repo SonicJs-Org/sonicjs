@@ -98,16 +98,17 @@
   "homepage": "https://sonicjs.com",
   "peerDependencies": {
     "@cloudflare/workers-types": "^4.0.0 || ^5.0.0",
-    "drizzle-orm": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.0.0",
     "zod": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {
-    "@better-auth/drizzle-adapter": "^1.6.23",
-    "@better-auth/telemetry": "^1.6.23",
+    "@better-auth/core": "1.7.7",
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@better-auth/telemetry": "1.7.7",
     "@cf-wasm/resvg": "^0.3.3",
-    "better-auth": "^1.6.13",
-    "better-auth-cloudflare": "^0.3.0",
+    "better-auth": "1.7.7",
+    "better-auth-cloudflare": "0.4.1",
     "csv-parse": "^6.2.1",
     "drizzle-zod": "^0.8.3",
     "graphql": "^16.14.2",

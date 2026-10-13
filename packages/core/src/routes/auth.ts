@@ -9,7 +9,7 @@ import { renderLoginPage, LoginPageData } from '../templates/pages/auth-login.te
 import { renderRegisterPage, RegisterPageData } from '../templates/pages/auth-register.template'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import { getEmailService, hasEmailService } from '../services/email/email-service-singleton'
-import { authValidationService, isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
+import { authValidationService, isRegistrationEnabled, isFirstUserRegistration, MAX_PASSWORD_LENGTH } from '../services/auth-validation'
 import type { RegistrationData } from '../services/auth-validation'
 import type { Bindings, Variables } from '../app'
 import type { KVNamespace } from '@cloudflare/workers-types'
@@ -1052,6 +1052,10 @@ authRoutes.post('/accept-invitation', async (c) => {
       return c.json({ error: 'Password must be at least 8 characters long' }, 400)
     }
 
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return c.json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long` }, 400)
+    }
+
     const db = c.env.DB
 
     // Check if invitation token is valid
@@ -1388,6 +1392,10 @@ authRoutes.post('/reset-password', async (c) => {
 
     if (password.length < 8) {
       return c.json({ error: 'Password must be at least 8 characters long' }, 400)
+    }
+
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return c.json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long` }, 400)
     }
 
     const db = c.env.DB

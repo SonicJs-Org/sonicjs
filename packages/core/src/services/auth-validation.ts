@@ -140,9 +140,15 @@ export const emailSchema = z
     { message: 'Valid email is required' }
   )
 
+/** Better Auth (1.7+) refuses longer passwords at sign-in, so nothing may store one. */
+export const MAX_PASSWORD_LENGTH = 128
+
 const baseRegistrationSchema = z.object({
   email: emailSchema,
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(MAX_PASSWORD_LENGTH, `Password must be at most ${MAX_PASSWORD_LENGTH} characters`),
   firstName: z.string().min(1, 'First name is required').optional(),
   lastName: z.string().min(1, 'Last name is required').optional()
 })

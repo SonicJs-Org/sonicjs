@@ -11,6 +11,7 @@ import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData, readProfileData, writeProfileData } from '../plugins/core-plugins/user-profiles'
 import { TenantService, VALID_MEMBER_ROLES } from '../plugins/core-plugins/multi-tenant-plugin/services/tenant-service'
 import { RbacService } from '../services/rbac'
+import { MAX_PASSWORD_LENGTH } from '../services/auth-validation'
 import { ensureTwoFactorRequiredColumn } from '../services/migrations'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -383,6 +384,13 @@ userRoutes.post('/profile/password', async (c) => {
         dismissible: true 
       }))
     }
+    if (newPassword.length > MAX_PASSWORD_LENGTH) {
+      return c.html(renderAlert({
+        type: 'error',
+        message: `New password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+        dismissible: true
+      }))
+    }
 
     // Get current user data
     const userStmt = db.prepare(`
@@ -722,6 +730,13 @@ userRoutes.post('/users/new', async (c) => {
         dismissible: true
       }))
     }
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return c.html(renderAlert({
+        type: 'error',
+        message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+        dismissible: true
+      }))
+    }
 
     if (password !== confirmPassword) {
       return c.html(renderAlert({
@@ -1056,6 +1071,13 @@ userRoutes.put('/users/:id', async (c) => {
         return c.html(renderAlert({
           type: 'error',
           message: 'Password must be at least 8 characters long.',
+          dismissible: true
+        }))
+      }
+      if (newPassword.length > MAX_PASSWORD_LENGTH) {
+        return c.html(renderAlert({
+          type: 'error',
+          message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
           dismissible: true
         }))
       }

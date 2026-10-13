@@ -736,6 +736,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   app.route('/auth', authRoutes)
 
+  // Better Auth's organization endpoints stay closed. SonicJS manages tenants through
+  // TenantService (multi-tenant plugin), which owns slug/domain uniqueness and the host routing
+  // in middleware/tenant.ts; the BA plugin is composed only for its schema. On Better Auth 1.6
+  // these endpoints failed on the `tenant_id` field mapping; with that mapping corrected they
+  // would let any signed-in user create a tenant, own it, and set its domain.
+  app.on(['GET', 'POST'], '/auth/organization/*', (c) => c.json({ error: 'Not Found' }, 404))
+
   // Better Auth handler — serves /auth/sign-in/*, /auth/sign-up/*, /auth/sign-out,
   // /auth/get-session, /auth/callback/* etc. Registered AFTER authRoutes so the
   // page-render routes (GET /auth/login, /auth/register) take precedence; only

@@ -125,8 +125,21 @@ async function main() {
   }
 }
 
+// Better Auth refuses passwords longer than 128 characters at sign-in.
+function validateAdminPassword(value) {
+  if (!value) return 'Admin password is required'
+  if (value.length < 8) return 'Password must be at least 8 characters'
+  if (value.length > 128) return 'Password must be at most 128 characters'
+  return true
+}
+
 async function getProjectDetails(initialName) {
   const questions = []
+
+  if (flags.adminPassword) {
+    const invalid = validateAdminPassword(flags.adminPassword)
+    if (invalid !== true) throw new Error(`--admin-password: ${invalid}`)
+  }
 
   // Project name
   if (!initialName) {
@@ -201,11 +214,7 @@ async function getProjectDetails(initialName) {
       type: (prev, values) => values.seedAdmin ? 'password' : null,
       name: 'adminPassword',
       message: 'Admin password:',
-      validate: (value) => {
-        if (!value) return 'Admin password is required'
-        if (value.length < 8) return 'Password must be at least 8 characters'
-        return true
-      }
+      validate: validateAdminPassword
     })
   }
 

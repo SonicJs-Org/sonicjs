@@ -16,7 +16,9 @@ import type { KVNamespace } from '@cloudflare/workers-types'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import { RbacService } from '../services/rbac'
+import { siteOrigin } from '../utils/site-origin'
 import { bootstrapDocumentTypes } from '../services/document-types-seed'
+import { credentialPasswordStatements } from '../auth/credential-account'
 import { isDemoModeActive } from '../services/demo-mode'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
@@ -1077,24 +1079,25 @@ authRoutes.post('/accept-invitation', async (c) => {
     // Hash password
     const passwordHash = await AuthManager.hashPassword(password)
 
-    // Activate user account
-    const updateStmt = db.prepare(`
-      UPDATE auth_user SET
-        password_hash = ?,
-        is_active = 1,
-        email_verified = 1,
-        invitation_token = NULL,
-        accepted_invitation_at = ?,
-        updated_at = ?
-      WHERE id = ?
-    `)
-
-    await updateStmt.bind(
-      passwordHash,
-      Date.now(),
-      Date.now(),
-      invitedUser.id
-    ).run()
+    // Activate user account (and write the credential row Better Auth signs in with)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET
+          password_hash = ?,
+          is_active = 1,
+          email_verified = 1,
+          invitation_token = NULL,
+          accepted_invitation_at = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).bind(
+        passwordHash,
+        Date.now(),
+        Date.now(),
+        invitedUser.id
+      ),
+      ...credentialPasswordStatements(db, invitedUser.id, passwordHash),
+    ])
 
     // Generate JWT token for auto-login
     const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
@@ -1190,7 +1193,7 @@ authRoutes.post('/request-password-reset',
 
     // Send the reset link via email. The link is NEVER returned in the API
     // response — doing so previously leaked a valid reset token to any caller.
-    const resetLink = `${c.req.header('origin') || 'http://localhost:8787'}/auth/reset-password?token=${resetToken}`
+    const resetLink = `${siteOrigin(c)}/auth/reset-password?token=${resetToken}`
 
     if (hasEmailService()) {
       try {
@@ -1429,21 +1432,22 @@ authRoutes.post('/reset-password', async (c) => {
       console.warn('Could not store password history:', historyError)
     }
 
-    // Update user password and clear reset token
-    const updateStmt = db.prepare(`
-      UPDATE auth_user SET
-        password_hash = ?,
-        password_reset_token = NULL,
-        password_reset_expires = NULL,
-        updated_at = ?
-      WHERE id = ?
-    `)
-
-    await updateStmt.bind(
-      newPasswordHash,
-      Date.now(),
-      user.id
-    ).run()
+    // Update user password and clear reset token (and the credential row Better Auth signs in with)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET
+          password_hash = ?,
+          password_reset_token = NULL,
+          password_reset_expires = NULL,
+          updated_at = ?
+        WHERE id = ?
+      `).bind(
+        newPasswordHash,
+        Date.now(),
+        user.id
+      ),
+      ...credentialPasswordStatements(db, user.id, newPasswordHash),
+    ])
 
     // Fire auth:password-reset:completed for audit/notification plugins.
     dispatchHookEvent(

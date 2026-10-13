@@ -12,6 +12,8 @@ import { getUserProfileConfig, getRegistrationFields, renderCustomProfileSection
 import { TenantService, VALID_MEMBER_ROLES } from '../plugins/core-plugins/multi-tenant-plugin/services/tenant-service'
 import { RbacService } from '../services/rbac'
 import { ensureTwoFactorRequiredColumn } from '../services/migrations'
+import { credentialPasswordStatements } from '../auth/credential-account'
+import { siteOrigin } from '../utils/site-origin'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -423,12 +425,14 @@ userRoutes.post('/profile/password', async (c) => {
       Date.now()
     ).run()
 
-    // Update user password
-    const updateStmt = db.prepare(`
-      UPDATE auth_user SET password_hash = ?, updated_at = ?
-      WHERE id = ?
-    `)
-    await updateStmt.bind(newPasswordHash, Date.now(), user!.userId).run()
+    // Update user password (and the credential row Better Auth signs in with)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET password_hash = ?, updated_at = ?
+        WHERE id = ?
+      `).bind(newPasswordHash, Date.now(), user!.userId),
+      ...credentialPasswordStatements(db, user!.userId, newPasswordHash),
+    ])
 
     // Log the activity
     await logActivity(
@@ -751,18 +755,19 @@ userRoutes.post('/users/new', async (c) => {
 
     // Create user
     const userId = crypto.randomUUID()
-    const createStmt = db.prepare(`
-      INSERT INTO auth_user (
-        id, email, first_name, last_name, phone, bio,
-        password_hash, role, is_active, email_verified, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    await createStmt.bind(
-      userId, email, firstName, lastName, phone, bio,
-      passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
-      Date.now(), Date.now()
-    ).run()
+    await db.batch([
+      db.prepare(`
+        INSERT INTO auth_user (
+          id, email, first_name, last_name, phone, bio,
+          password_hash, role, is_active, email_verified, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        userId, email, firstName, lastName, phone, bio,
+        passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
+        Date.now(), Date.now()
+      ),
+      ...credentialPasswordStatements(db, userId, passwordHash),
+    ])
 
     // Save registration profile fields if profile plugin is configured
     if (sanitizedRegistrationCustom !== null && Object.keys(sanitizedRegistrationCustom).length > 0) {
@@ -1101,10 +1106,12 @@ userRoutes.put('/users/:id', async (c) => {
     // Update password if provided
     if (newPassword) {
       const passwordHash = await AuthManager.hashPassword(newPassword)
-      const updatePasswordStmt = db.prepare(`
-        UPDATE auth_user SET password_hash = ?, updated_at = ? WHERE id = ?
-      `)
-      await updatePasswordStmt.bind(passwordHash, Date.now(), userId).run()
+      await db.batch([
+        db.prepare(`
+          UPDATE auth_user SET password_hash = ?, updated_at = ? WHERE id = ?
+        `).bind(passwordHash, Date.now(), userId),
+        ...credentialPasswordStatements(db, userId, passwordHash),
+      ])
     }
 
     // Check if any profile field has data
@@ -1336,7 +1343,7 @@ userRoutes.post('/invite-user', async (c) => {
 
     // In a real implementation, you would send an email here
     // For now, we'll return the invitation link
-    const invitationLink = `${c.req.header('origin') || 'http://localhost:8787'}/auth/accept-invitation?token=${invitationToken}`
+    const invitationLink = `${siteOrigin(c)}/auth/accept-invitation?token=${invitationToken}`
 
     return c.json({
       success: true,
@@ -1406,7 +1413,7 @@ userRoutes.post('/resend-invitation/:id', async (c) => {
     )
 
     // Generate new invitation link
-    const invitationLink = `${c.req.header('origin') || 'http://localhost:8787'}/auth/accept-invitation?token=${newInvitationToken}`
+    const invitationLink = `${siteOrigin(c)}/auth/accept-invitation?token=${newInvitationToken}`
 
     return c.json({
       success: true,

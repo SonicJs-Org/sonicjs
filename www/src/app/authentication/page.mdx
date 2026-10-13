@@ -740,8 +740,10 @@ Authentication endpoints are protected with KV-based rate limiting:
 |----------|-------|--------|
 | `POST /auth/login` | 5 attempts | 60 seconds |
 | `POST /auth/register` | 3 attempts | 60 seconds |
-| `POST /auth/seed-admin` | 2 attempts | 60 seconds |
+| `POST /auth/seed-admin` | 10 attempts | 60 seconds |
 | `POST /auth/request-password-reset` | 3 attempts | 15 minutes |
+
+`POST /auth/seed-admin` is for development and testing only. It returns 403 unless `ENABLE_SEED_ADMIN = "true"` is set and `ENVIRONMENT` is one of `development`, `test`, `e2e`, `preview`, `local`.
 
 Rate limiting uses Cloudflare KV for distributed state and gracefully degrades if KV is unavailable. Responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
 

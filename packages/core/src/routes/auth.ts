@@ -791,10 +791,34 @@ authRoutes.post('/login/form',
   }
 })
 
-// Test seeding endpoint (only for development/testing)
+// Environments where the known-credential admin seed is permitted. Anything else
+// (including 'production' and an unset value) is denied — same fail-closed allowlist
+// the test-cleanup routes use.
+const SEED_ADMIN_ALLOWED_ENVIRONMENTS = new Set(['development', 'test', 'e2e', 'preview', 'local'])
+
+// Test seeding endpoint (development/testing only).
+//
+// SECURITY: this endpoint has no authentication and upserts a fixed-credential
+// admin (`admin@sonicjs.com` / `sonicjs!`), overwriting an existing admin's
+// password. It must never be reachable on a real deployment, so it needs BOTH:
+//   - an explicit opt-in, `ENABLE_SEED_ADMIN = "true"` (set only in this repo's
+//     my-sonicjs-app/wrangler.toml, for E2E and local dev), and
+//   - a non-production ENVIRONMENT (unset or 'production' is denied).
+// The ENVIRONMENT check alone is not enough: the create-sonicjs starter sets
+// ENVIRONMENT = "development" in its top-level [vars], so its `npm run deploy`
+// (a plain `wrangler deploy`) ships with ENVIRONMENT=development.
+// On a real deployment the first account registered becomes the admin.
 authRoutes.post('/seed-admin',
   rateLimit({ max: 10, windowMs: 60 * 1000, keyPrefix: 'seed-admin' }),
   async (c) => {
+  const environment = (c.env?.ENVIRONMENT ?? '').toString().toLowerCase()
+  const enabled = (c.env as { ENABLE_SEED_ADMIN?: unknown } | undefined)?.ENABLE_SEED_ADMIN
+  if (!SEED_ADMIN_ALLOWED_ENVIRONMENTS.has(environment)) {
+    return c.json({ error: 'Seed endpoint not available in this environment' }, 403)
+  }
+  if (String(enabled).toLowerCase() !== 'true') {
+    return c.json({ error: 'Seed endpoint is disabled. Set ENABLE_SEED_ADMIN = "true" to use it in development.' }, 403)
+  }
   try {
     const db = c.env.DB
     // Ensure document_types FK targets exist before RBAC seed — D1 enforces the FK

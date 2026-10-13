@@ -34,6 +34,9 @@ name = "EMAIL"
 
 # Environment variables
 [vars]
+# Opens POST /auth/seed-admin (fixed admin@sonicjs.com / sonicjs! credentials) for E2E and
+# local dev. Never set this on a real deployment.
+ENABLE_SEED_ADMIN = "true"
 ENVIRONMENT = "development"
 CORS_ORIGINS = "http://127.0.0.1:8787,http://127.0.0.1:4321"
 DEFAULT_FROM_EMAIL = "lane@sonicjs.com"

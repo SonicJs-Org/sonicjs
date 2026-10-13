@@ -58,7 +58,7 @@ Variables are automatically managed:
 - `GET /api/system/env` - Environment and feature flags
 
 ### Authentication
-- `POST /auth/seed-admin` - Create initial admin user
+- `POST /auth/seed-admin` - Create initial admin user (dev/test only; needs `ENABLE_SEED_ADMIN = "true"`)
 - `POST /auth/register` - Register new user
 - `POST /auth/login` - Login with email/password
 - `GET /auth/me` - Get current user

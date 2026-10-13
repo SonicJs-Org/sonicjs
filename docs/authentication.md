@@ -98,7 +98,7 @@ These wrap Better Auth with SonicJS-specific logic (HTML forms, invitations, RBA
 | POST | `/auth/reset-password` | Process password reset |
 | GET | `/auth/accept-invitation` | Invitation acceptance form |
 | POST | `/auth/accept-invitation` | Process invitation |
-| POST | `/auth/seed-admin` | Dev/test: create seed users |
+| POST | `/auth/seed-admin` | Dev/test only: create or reset the fixed seed users. Returns 403 unless `ENABLE_SEED_ADMIN = "true"` and `ENVIRONMENT` is one of `development`, `test`, `e2e`, `preview`, `local` |
 
 ### Login Example (API Client)
 

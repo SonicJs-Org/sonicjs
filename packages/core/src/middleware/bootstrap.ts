@@ -21,6 +21,36 @@ type Bindings = {
 
 // Track if bootstrap has been run in this worker instance
 let bootstrapComplete = false;
+// Single-flight latch: the in-progress bootstrap for THIS isolate, or null.
+// `bootstrapComplete` only flips at the END of a successful run, so without this a
+// second request arriving on a cold isolate mid-bootstrap passes the completion/KV
+// checks and starts a SECOND concurrent seed — re-opening the document_types-vs-
+// documents FK window across the two runs and duplicating writes. Concurrent callers
+// await `done` instead. `done` is a gate separate from the run itself so
+// `resetBootstrap()` can release waiters, and `startedAt` lets a later request treat
+// a run that never settled as dead (see BOOTSTRAP_STALE_MS).
+type InFlightBootstrap = { done: Promise<void>; release: () => void; startedAt: number };
+let bootstrapInFlight: InFlightBootstrap | null = null;
+// When the last full bootstrap finished WITH ERRORS (ms epoch), or 0. Drives the retry
+// backoff so a persistent failure doesn't re-run the whole bootstrap on every request.
+let lastBootstrapFailureAt = 0;
+
+// Timing knobs (ms). Mutable only through `_setBootstrapTimingForTests`.
+const DEFAULT_BOOTSTRAP_TIMING = {
+  // How long a request waits on the in-flight bootstrap before serving anyway. A cold
+  // D1 bootstrap takes ~10s; past this the run is presumed stuck (e.g. its request was
+  // cancelled and its D1 I/O never resolved), and blocking the request further helps
+  // no one. The request then proceeds rather than starting its own run: a second
+  // concurrent seed is exactly what single-flight exists to prevent, and a run that is
+  // truly dead is replaced once its latch goes stale (staleMs).
+  waitMs: 20_000,
+  // A latch older than this is treated as dead and a fresh run may start. Longer than
+  // waitMs plus Workers' 30s waitUntil grace, so a slow-but-alive run is never doubled.
+  staleMs: 60_000,
+  // Minimum gap between full-bootstrap attempts after one finished with errors.
+  retryBackoffMs: 30_000,
+};
+let bootstrapTiming = { ...DEFAULT_BOOTSTRAP_TIMING };
 
 // KV key for cross-isolate bootstrap state. Version-keyed so a code deployment
 // (SONICJS_VERSION bump) automatically invalidates the cached flag and forces
@@ -133,16 +163,15 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       if (cacheKv) {
         const kvDone = await cacheKv.get(BOOTSTRAP_KV_KEY())
         if (kvDone === '1') {
-          // Guard against stale KV key + fresh D1 (e.g. CI re-creates D1 each run but
-          // reuses KV). If document_types is empty the KV flag is lying — fall through
-          // to full bootstrap so autoRegisterCollectionDocumentTypes runs.
-          const d1Fresh = await (c.env.DB as D1Database)
-            .prepare('SELECT COUNT(*) n FROM document_types LIMIT 1')
-            .first<{ n: number }>()
-            .then(r => !r || r.n === 0)
-            .catch(() => true)
-          if (!d1Fresh) {
-            // D1 has data — fast-path is valid.
+          // The KV marker is keyed by version only, not by database, so it can be lying:
+          // CI re-creates D1 per run but every PR preview shares one KV namespace, and a
+          // marker written over one DB says nothing about another. Trust it only when
+          // THIS database has the seed the marker vouches for — the admin role and, unless
+          // plugins are disabled, the core-auth plugin document. Otherwise fall through to
+          // the full bootstrap.
+          const seeded = await isSystemSeedPresent(c.env.DB as D1Database, !config.plugins?.disableAll)
+          if (seeded) {
+            // D1 has the system seed — fast-path is valid.
             try {
               const kv = (c.env as any).CACHE_KV as KVNamespace
               const { setGlobalKVNamespace } = await import("../plugins/cache/services/cache")
@@ -170,7 +199,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
             bootstrapComplete = true
             return next()
           }
-          // D1 is fresh — delete the stale KV key so the next cold start also re-bootstraps.
+          // D1 is unseeded — delete the stale KV key so the next cold start also re-bootstraps.
           cacheKv.delete(BOOTSTRAP_KV_KEY()).catch(() => {})
         }
       }
@@ -211,6 +240,64 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
     const gitBranch = (c.env as any).GIT_BRANCH as string | undefined;
     setBranchLabel(isLocalhost && gitBranch ? gitBranch : undefined);
 
+    // Single-flight: if another request on this cold isolate is already running the
+    // full bootstrap, await THAT run (bounded) and proceed — never start a second
+    // concurrent seed. The check-and-set below is synchronous (no await between), so
+    // exactly one request wins the latch.
+    const now = Date.now();
+    if (bootstrapInFlight && now - bootstrapInFlight.startedAt < bootstrapTiming.staleMs) {
+      await waitBounded(bootstrapInFlight.done);
+      verifySecurityConfig(c.env as Bindings);
+      return next();
+    }
+
+    // Backoff: the last full run finished with errors less than retryBackoffMs ago. Serve
+    // without re-running it — every attempt is ~10s of D1 work, and a failure that
+    // persists (a deterministic seed error) would otherwise make every request pay it.
+    // The next request after the window retries.
+    if (!bootstrapInFlight && lastBootstrapFailureAt && now - lastBootstrapFailureAt < bootstrapTiming.retryBackoffMs) {
+      verifySecurityConfig(c.env as Bindings);
+      return next();
+    }
+
+    // Win the latch. Any earlier latch is stale here (its run never settled), so this
+    // replaces it; the stale run's own cleanup only clears the latch if it still owns it.
+    let release: () => void = () => {};
+    const entry: InFlightBootstrap = {
+      done: new Promise<void>((resolve) => { release = resolve; }),
+      release: () => release(),
+      startedAt: now,
+    };
+    bootstrapInFlight = entry;
+
+    const run = runFullBootstrap(c).finally(() => {
+      if (bootstrapInFlight === entry) bootstrapInFlight = null;
+      entry.release();
+    });
+    // Let the run outlive this request: if the first visitor's request is cancelled
+    // mid-bootstrap, Workers would otherwise drop its pending D1 I/O and the run would
+    // never settle. No ExecutionContext in tests / non-Workers runtimes — the getter throws.
+    try {
+      c.executionCtx.waitUntil(run);
+    } catch { /* no ExecutionContext */ }
+    await waitBounded(entry.done);
+
+    // 4. Verify security configuration (outside try/catch so critical
+    // errors in production propagate and prevent insecure deployments)
+    verifySecurityConfig(c.env as Bindings);
+
+    return next();
+  };
+
+  /**
+   * The full D1 bootstrap (declared after the handler; hoisted). Never rejects. Sets
+   * `bootstrapComplete` (and the KV marker) only when every step succeeded; otherwise
+   * records the failure time for the retry backoff.
+   */
+  async function runFullBootstrap(
+    c: Context<{ Bindings: Bindings; Variables: { hookSystem?: unknown } }>,
+  ): Promise<void> {
+    let bootstrapOk = false;
     try {
       console.log("[Bootstrap] Starting system initialization...");
 
@@ -252,67 +339,97 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
         console.error("[Bootstrap] Error populating collection registry:", error);
       }
 
-      // 3–4. Independent D1 operations — run in parallel to minimise cold-start latency.
-      // Each step has its own error handling so one failure doesn't block the others.
+      // 3–4. System-data seeding. Ordered in two phases because of a foreign-key
+      // dependency that a flat parallel batch violates on a fresh DB:
+      //   - PRODUCERS create `document_types` rows.
+      //   - CONSUMERS `INSERT INTO documents`, whose `type_id` FK-references those rows.
+      // Running all five in one Promise.all let a consumer insert win the race against
+      // its producer on a cold DB → `FOREIGN KEY constraint failed`, caught+swallowed
+      // per step, leaving RBAC roles / core plugins unseeded (issue #1017).
       console.log("[Bootstrap] Registering document types and seeding system data...");
       const { RbacService } = await import("../services/rbac");
       const rbacService = new RbacService(c.env.DB, (c.env as any).CACHE_KV);
 
+      // Track step failures so we never cache a PARTIAL bootstrap as "done" (below).
+      bootstrapOk = true;
+      const runStep = async (label: string, fn: () => Promise<unknown>) => {
+        try {
+          await fn();
+        } catch (e) {
+          bootstrapOk = false;
+          console.error(`[Bootstrap] Error ${label}:`, e);
+        }
+      };
+
+      // Phase A — PRODUCERS: register every document type FIRST and await them, so the
+      // `document_types` rows are committed before any `documents` insert references them.
+      await runStep("registering document types", () => bootstrapDocumentTypes(c.env.DB));
+      await runStep("auto-registering collection document types", async () => {
+        const auto = await autoRegisterCollectionDocumentTypes(c.env.DB);
+        if (auto.length) console.log(`[Bootstrap] Document-backed collections registered: ${auto.join(", ")}`);
+      });
+
+      // Phase B — CONSUMERS (+ the independent credential-account repair): the types now
+      // exist, so these can safely run in parallel to keep cold-start latency low.
       await Promise.all([
-        // 3. Register document types (idempotent)
-        bootstrapDocumentTypes(c.env.DB).catch((e) =>
-          console.error("[Bootstrap] Error registering document types:", e)
-        ),
+        // Independent of document types (operates on auth `account` rows).
+        runStep("repairing credential accounts", () => repairMissingCredentialAccounts(c.env.DB)),
 
-        // 3b. Make every content collection document-backed.
-        autoRegisterCollectionDocumentTypes(c.env.DB)
-          .then((auto) => {
-            if (auto.length) console.log(`[Bootstrap] Document-backed collections registered: ${auto.join(", ")}`)
-          })
-          .catch((e) => console.error("[Bootstrap] Error auto-registering collection document types:", e)),
+        // Seeds system RBAC roles/verbs/grants as `documents` (FK → document_types).
+        runStep("seeding RBAC documents", () => rbacService.ensureSystemRbacSeed()),
 
-        // 2c. Repair legacy credential accounts.
-        repairMissingCredentialAccounts(c.env.DB).catch((e) =>
-          console.error("[Bootstrap] Error repairing credential accounts:", e)
-        ),
-
-        // 3a. Seed system RBAC roles/verbs/grants.
-        rbacService.ensureSystemRbacSeed().catch((e) =>
-          console.error("[Bootstrap] Error seeding RBAC documents:", e)
-        ),
-
-        // 4. Bootstrap core plugins.
-        config.plugins?.disableAll
-          ? Promise.resolve()
-          : (async () => {
-              const bootstrapService = new PluginBootstrapService(c.env.DB)
-              const needsBootstrap = await bootstrapService.isBootstrapNeeded()
-              if (needsBootstrap) {
-                console.log("[Bootstrap] Bootstrapping core plugins...")
-                await bootstrapService.bootstrapCorePlugins()
-              }
-            })().catch((e) => console.error("[Bootstrap] Error bootstrapping plugins:", e)),
-      ])
+        // Bootstraps core plugins; installPlugin writes plugin `documents` (FK → document_types).
+        runStep("bootstrapping plugins", async () => {
+          if (config.plugins?.disableAll) return;
+          const bootstrapService = new PluginBootstrapService(c.env.DB);
+          if (await bootstrapService.isBootstrapNeeded()) {
+            console.log("[Bootstrap] Bootstrapping core plugins...");
+            // bootstrapCorePlugins keeps going past a failed plugin; report the failures
+            // here so this run does not write the KV marker. Limit: isBootstrapNeeded() only
+            // looks at the `core-*` plugins, so a later run that finds those present skips this
+            // step and can write the marker while another bootstrapped plugin is still missing.
+            // Widening that check would also reinstall plugins a user uninstalled (soft delete).
+            const failed = await bootstrapService.bootstrapCorePlugins();
+            if (failed.length) throw new Error(`core plugin(s) not installed: ${failed.join(", ")}`);
+          }
+        }),
+      ]);
 
       // Seed starter content after types are registered (idempotent no-op when present).
+      // Deliberately NOT run through runStep/bootstrapOk: this is a decorative demo post,
+      // not a security-critical step like RBAC or plugin seeding. Gating the completion
+      // latch on it would mean a persistent failure here (unlike a missing FK dependency,
+      // which can't happen — its type is registered unconditionally above) forces every
+      // subsequent request to redo the full ~10s bootstrap forever just to retry seeding
+      // one blog post. Logged on failure like before, but never blocks the latch.
       await bootstrapDefaultContent(c.env.DB).catch((e) =>
         console.error("[Bootstrap] Error seeding default content:", e)
-      )
+      );
 
-      // Mark bootstrap as complete for this worker instance and persist to KV
-      // so subsequent cold-start isolates can skip the D1 work entirely.
-      bootstrapComplete = true;
-      console.log("[Bootstrap] System initialization completed");
-      try {
-        const cacheKv = (c.env as any).CACHE_KV as KVNamespace | undefined
-        if (cacheKv) {
-          // 24h TTL — long enough that hot instances never re-bootstrap, short
-          // enough that a DB reset auto-heals within a day.
-          await cacheKv.put(BOOTSTRAP_KV_KEY(), '1', { expirationTtl: 86400 })
-        }
-      } catch { /* KV write failure is non-fatal */ }
+      // Mark bootstrap complete ONLY when every step succeeded. A partial bootstrap must
+      // not latch the in-memory flag or persist the KV skip marker: doing so would cache
+      // the broken state for the isolate's lifetime AND for the KV TTL (24h), so every
+      // later request/isolate skips the D1 work while roles/plugins stay missing. Leaving
+      // both unset lets the next request retry the (idempotent) bootstrap and converge
+      // once the transient condition clears.
+      if (bootstrapOk) {
+        bootstrapComplete = true;
+        console.log("[Bootstrap] System initialization completed");
+        try {
+          const cacheKv = (c.env as any).CACHE_KV as KVNamespace | undefined
+          if (cacheKv) {
+            // 24h TTL — long enough that hot instances never re-bootstrap, short
+            // enough that a DB reset auto-heals within a day.
+            await cacheKv.put(BOOTSTRAP_KV_KEY(), '1', { expirationTtl: 86400 })
+          }
+        } catch { /* KV write failure is non-fatal */ }
+      } else {
+        console.warn(`[Bootstrap] System initialization completed WITH ERRORS — not caching the skip marker; retrying after ${bootstrapTiming.retryBackoffMs}ms.`);
+      }
 
-      // Fire project snapshot telemetry (fire-and-forget, never blocks boot)
+      // Project snapshot telemetry — successful runs only. A failed run is retried, and
+      // every retry would otherwise send another snapshot.
+      if (!bootstrapOk) return;
       try {
         const registry = getCollectionRegistry();
         const collections = registry.listActive();
@@ -376,23 +493,70 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
         });
       } catch { /* silent — telemetry must never break boot */ }
     } catch (error) {
+      bootstrapOk = false;
       console.error("[Bootstrap] Error during system initialization:", error);
       // Don't prevent the app from starting, but log the error
+    } finally {
+      if (!bootstrapOk) lastBootstrapFailureAt = Date.now();
     }
-
-    // 4. Verify security configuration (outside try/catch so critical
-    // errors in production propagate and prevent insecure deployments)
-    verifySecurityConfig(c.env as Bindings);
-
-    return next();
-  };
+  }
 }
+
+/** Await `p`, but give up after bootstrapTiming.waitMs. Never rejects. */
+async function waitBounded(p: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn(`[Bootstrap] Still running after ${bootstrapTiming.waitMs}ms — serving this request without waiting further.`);
+      resolve();
+    }, bootstrapTiming.waitMs);
+  });
+  try {
+    await Promise.race([p, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * True when this database carries the system seed a KV bootstrap marker vouches for:
+ * the `role-admin` RBAC document and, when plugins are enabled, the `core-auth` plugin
+ * document. Any query error counts as "not seeded".
+ */
+async function isSystemSeedPresent(db: D1Database, requirePlugins: boolean): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM documents WHERE type_id = 'rbac_role' AND slug = 'role-admin'
+              AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL) AS roles,
+           (SELECT COUNT(*) FROM documents WHERE type_id = 'plugin' AND slug = 'core-auth'
+              AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL) AS auth`,
+      )
+      .first<{ roles: number; auth: number }>();
+    if (!row || !row.roles) return false;
+    return !requirePlugins || row.auth > 0;
+  } catch {
+    return false;
+  }
+}
+
 
 /**
  * Reset bootstrap flag (useful for testing)
  */
 export function resetBootstrap() {
   bootstrapComplete = false;
+  // Release anyone awaiting the old run, so a reset between tests never strands them.
+  bootstrapInFlight?.release();
+  bootstrapInFlight = null;
+  lastBootstrapFailureAt = 0;
+  bootstrapTiming = { ...DEFAULT_BOOTSTRAP_TIMING };
+}
+
+/** Test-only: shorten the bootstrap wait / stale / backoff windows. Undone by resetBootstrap(). */
+export function _setBootstrapTimingForTests(timing: Partial<typeof DEFAULT_BOOTSTRAP_TIMING>) {
+  bootstrapTiming = { ...bootstrapTiming, ...timing };
 }
 
 /**

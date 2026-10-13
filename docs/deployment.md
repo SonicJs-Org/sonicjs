@@ -482,9 +482,6 @@ cache:collection-content:blog-posts:limit:50
 # Generate a secure random string
 openssl rand -base64 32 | wrangler secret put JWT_SECRET --env production
 
-# Admin password for initial setup (optional)
-echo "your-secure-admin-password" | wrangler secret put ADMIN_PASSWORD --env production
-
 # R2 Access credentials (if using external access)
 echo "your-r2-access-key-id" | wrangler secret put R2_ACCESS_KEY_ID --env production
 echo "your-r2-secret-key" | wrangler secret put R2_SECRET_ACCESS_KEY --env production

@@ -220,8 +220,6 @@ Runtime configuration via environment variables.
 |----------|---------|-------------|
 | `ENVIRONMENT` | `development` | Environment name |
 | `JWT_SECRET` | - | Secret for JWT signing |
-| `ADMIN_EMAIL` | - | Initial admin email |
-| `ADMIN_PASSWORD` | - | Initial admin password |
 
 ### Email Configuration
 
@@ -539,7 +537,6 @@ ENVIRONMENT = "staging"
 # Production secrets (set via wrangler secret)
 # wrangler secret put JWT_SECRET
 # wrangler secret put SENDGRID_API_KEY
-# wrangler secret put ADMIN_PASSWORD
 ```
 
 </CodeGroup>
@@ -555,9 +552,6 @@ npx wrangler secret put JWT_SECRET
 
 # Set SendGrid API key
 npx wrangler secret put SENDGRID_API_KEY
-
-# Set initial admin password
-npx wrangler secret put ADMIN_PASSWORD
 
 # For specific environment
 npx wrangler secret put JWT_SECRET --env production

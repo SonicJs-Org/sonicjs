@@ -108,8 +108,8 @@ if (response.ok) {
 // Available roles (most to least privileged)
 const roles = ['admin', 'editor', 'author', 'viewer']
 
-// Admin user is created via bootstrap using ADMIN_EMAIL/ADMIN_PASSWORD env vars
-// Demo credentials: admin@sonicjs.com / sonicjs!
+// The first account registered at /auth/register becomes the admin
+// Demo credentials (local development only): admin@sonicjs.com / sonicjs!
 // Additional users are created through the admin UI or Better Auth registration flow
 ```
 
@@ -629,26 +629,9 @@ await runMigrations(db)
 <CodeGroup title="Create Admin User">
 
 ```bash
-# Set initial admin via environment
-# wrangler.toml or secrets
-ADMIN_EMAIL=admin@sonicjs.com
-ADMIN_PASSWORD=your-secure-password
-```
-
-</CodeGroup>
-
-Or create via API (if registration is enabled):
-
-<CodeGroup title="Create Admin via API">
-
-```bash
-curl -X POST https://your-app.workers.dev/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@sonicjs.com",
-    "password": "your-secure-password",
-    "username": "admin"
-  }'
+# On a site with no users yet, the first account registered becomes the admin.
+# Open the register page and create it:
+#   https://your-site.example.com/auth/register
 ```
 
 </CodeGroup>

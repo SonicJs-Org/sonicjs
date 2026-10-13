@@ -154,9 +154,8 @@ SonicJS evaluated several auth libraries and chose Better Auth for a few reasons
 // Auth is configured via env vars, not plugin settings:
 // JWT_SECRET        — signing secret for API tokens
 // JWT_EXPIRES_IN    — token TTL (default: '1h')
-// ADMIN_EMAIL       — bootstrap admin email
-// ADMIN_PASSWORD    — bootstrap admin password
 //
+// The first account registered at /auth/register becomes the admin.
 // Better Auth session uses its own cookie (better-auth.session_token).
 // RBAC roles are seeded by RbacService into rbac_role/rbac_verb/rbac_user_roles.
 ```

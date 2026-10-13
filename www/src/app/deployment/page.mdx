@@ -200,14 +200,15 @@ Create an admin user and initial collections:
 <CodeGroup title="Seed Data">
 
 ```bash {{ title: 'Create Admin User' }}
-# Admin user is created automatically at bootstrap.
-# Set these secrets before first deploy:
-echo "admin@yourdomain.com" | wrangler secret put ADMIN_EMAIL --env production
-echo "your-secure-password" | wrangler secret put ADMIN_PASSWORD --env production
-
-# If using the seed script, demo credentials are:
-# Email:    admin@sonicjs.com
-# Password: sonicjs!
+# The first account registered on a new site becomes the admin.
+# Right after the first deploy, open the register page and create it:
+#   https://your-site.example.com/auth/register
+#
+# Do this straight away: until it exists, anyone who reaches the
+# register page first gets the admin account.
+#
+# The demo credentials (admin@sonicjs.com / sonicjs!) exist only in
+# local development, via the local seed script.
 ```
 
 ```bash {{ title: 'From SQL File' }}
@@ -368,12 +369,6 @@ Set up required secrets for production:
 ```bash {{ title: 'JWT Secret' }}
 # Generate and set JWT secret (required)
 openssl rand -base64 32 | wrangler secret put JWT_SECRET --env production
-```
-
-```bash {{ title: 'Admin Password' }}
-# Set admin password (optional)
-echo "your-secure-admin-password" | \
-  wrangler secret put ADMIN_PASSWORD --env production
 ```
 
 ```bash {{ title: 'Email Service' }}

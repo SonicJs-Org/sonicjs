@@ -582,46 +582,84 @@ authRoutes.post('/register/form',
 
     // Determine role: first user gets admin, others get viewer
     const role = isFirstUser ? 'admin' : 'viewer'
+    const rbacService = new RbacService(db)
+
+    // Admin access is RBAC-backed, so the first user needs the system roles to exist. A failed
+    // first boot can leave them unseeded (#1017). Seed them before creating the account; types
+    // first, because D1 enforces the documents → document_types FK (same as /auth/seed-admin).
+    // This runs once per site, so the cost doesn't matter.
+    if (isFirstUser) {
+      await bootstrapDocumentTypes(db)
+      await rbacService.ensureSystemRbacSeed()
+    }
 
     // Create user
     const userId = crypto.randomUUID()
     const now = new Date()
+    const nowSec = Math.floor(now.getTime() / 1000)
 
-    await db.prepare(`
-      INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      userId,
-      normalizedEmail,
-      firstName,
-      lastName,
-      passwordHash,
-      role,
-      1, // is_active
-      now.getTime(),
-      now.getTime()
-    ).run()
+    await db.batch([
+      db.prepare(`
+        INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        userId,
+        normalizedEmail,
+        firstName,
+        lastName,
+        passwordHash,
+        role,
+        1, // is_active
+        now.getTime(),
+        now.getTime()
+      ),
+      // Better Auth sign-in/email requires an auth_account credential row — create it alongside auth_user
+      db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+        VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+        .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+    ])
 
-    // Save custom profile fields if configured
+    // Assign the RBAC role before anything optional. For the first user this is what makes them
+    // the admin. If it can't be assigned, remove the account again: an "admin" without the role
+    // gets 403 everywhere, and with no admin on record the next sign-up would claim the slot.
+    try {
+      await rbacService.addUserRoleByName(userId, role)
+      if (isFirstUser) {
+        const assigned = await rbacService.getRolesForUser(userId)
+        if (!assigned.some((r) => r.name === 'admin')) {
+          throw new Error('Admin role could not be assigned to the first user')
+        }
+      }
+    } catch (error) {
+      await db.batch([
+        db.prepare('DELETE FROM auth_account WHERE user_id = ?').bind(userId),
+        db.prepare('DELETE FROM auth_user WHERE id = ?').bind(userId),
+      ])
+      throw error
+    }
+
+    // Save custom profile fields if configured. The account is complete and can sign in by now,
+    // so a failure here is logged instead of reported as "Registration failed": a retry would
+    // only get "User with this email already exists". The fields can be filled in later.
     const profileConfig = getUserProfileConfig()
     if (profileConfig) {
       const regFields = getRegistrationFields()
       if (regFields.length > 0) {
-        const customData: Record<string, any> = { ...getProfileFieldDefaults() }
-        for (const field of regFields) {
-          const raw = formData.get(field.name)?.toString()
-          if (raw !== undefined && raw !== null) {
-            customData[field.name] = raw
+        try {
+          const customData: Record<string, any> = { ...getProfileFieldDefaults() }
+          for (const field of regFields) {
+            const raw = formData.get(field.name)?.toString()
+            if (raw !== undefined && raw !== null) {
+              customData[field.name] = raw
+            }
           }
+          const sanitized = sanitizeCustomData(customData, profileConfig)
+          await saveCustomData(db, userId, sanitized)
+        } catch (error) {
+          console.error('Registration: saving custom profile fields failed:', error)
         }
-        const sanitized = sanitizeCustomData(customData, profileConfig)
-        await saveCustomData(db, userId, sanitized)
       }
     }
-
-    // Assign RBAC role so the new user passes requireRbac('portal', 'access')
-    const rbacService = new RbacService(db)
-    await rbacService.addUserRoleByName(userId, role)
 
     // Fire auth:registration:completed (fire-and-forget — does not block the response)
     dispatchHookEvent(

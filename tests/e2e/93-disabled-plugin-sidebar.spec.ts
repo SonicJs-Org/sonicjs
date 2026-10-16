@@ -12,6 +12,13 @@ test.describe('Disabled plugin hidden from sidebar (#971)', () => {
     await loginAsAdmin(page)
   })
 
+  // Always re-enable core-media in case the test fails mid-execution
+  test.afterEach(async ({ page }) => {
+    await page.request.post('/admin/plugins/core-media/enable', {
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => {})
+  })
+
   test('disabling a plugin removes it from the sidebar', async ({ page }) => {
     // Find a plugin that has an admin sidebar entry. Core-media is a safe choice.
     const pluginId = 'core-media'

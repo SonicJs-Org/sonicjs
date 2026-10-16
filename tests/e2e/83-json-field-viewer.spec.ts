@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, TEST_ORIGIN } from './utils/test-helpers'
 
-const COLLECTION = 'e2e_test'
+const COLLECTION = 'blog_post'
 const SAMPLE_JSON = { version: 1, tags: ['a', 'b'], nested: { active: true } }
 
 test.describe('JSON field viewer @database', () => {

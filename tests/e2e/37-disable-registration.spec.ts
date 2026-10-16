@@ -42,8 +42,8 @@ test.describe('Disable User Registration @auth', () => {
 
     await logout(page);
 
-    // Small delay to ensure setting is persisted
-    await page.waitForTimeout(300);
+    // Allow setting to propagate (CF Worker may take a moment)
+    await page.waitForTimeout(1000);
 
     return status === 200;
   }

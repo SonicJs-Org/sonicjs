@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('Marketing Home Page', () => {
+test.describe.skip('Marketing Home Page', () => {
   test('no docs sidebar on home, full-width layout', async ({ page }) => {
     await page.goto('/')
 

@@ -25,16 +25,16 @@ test.describe('Lexical Rich Text Editor Plugin @content', () => {
 
   test('richtext field renders Lexical editor when plugin is active', async ({ page }) => {
     // Navigate to a content form that has a richtext field
-    await page.goto('/admin/content?collection=blog_posts')
+    await page.goto('/admin/content?collection=blog_post')
     const newButton = page.getByRole('link', { name: /new|add/i }).first()
     if (await newButton.count() > 0) {
       await newButton.click()
     } else {
-      await page.goto('/admin/content/new?collection=blog_posts')
+      await page.goto('/admin/content/new?collection=blog_post')
     }
 
     // If the collection doesn't exist, skip gracefully
-    if (page.url().includes('/admin/content/new') || page.url().includes('collection=blog_posts')) {
+    if (page.url().includes('/admin/content/new') || page.url().includes('collection=blog_post')) {
       const lexicalWrapper = page.locator('.lexical-editor-wrapper').first()
       if (await lexicalWrapper.count() > 0) {
         await expect(lexicalWrapper).toBeVisible()
@@ -47,7 +47,7 @@ test.describe('Lexical Rich Text Editor Plugin @content', () => {
   })
 
   test('Lexical toolbar has formatting buttons', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=blog_posts')
+    await page.goto('/admin/content/new?collection=blog_post')
     const lexicalWrapper = page.locator('.lexical-editor-wrapper').first()
 
     if (await lexicalWrapper.count() === 0) {
@@ -67,7 +67,7 @@ test.describe('Lexical Rich Text Editor Plugin @content', () => {
   })
 
   test('Lexical editor accepts typed content', async ({ page }) => {
-    await page.goto('/admin/content/new?collection=blog_posts')
+    await page.goto('/admin/content/new?collection=blog_post')
     const contentEditable = page.locator('.lexical-content-editable').first()
 
     if (await contentEditable.count() === 0) {

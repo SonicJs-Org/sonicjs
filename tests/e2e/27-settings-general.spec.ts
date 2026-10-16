@@ -86,17 +86,13 @@ test.describe('Settings - General Tab @auth', () => {
     await page.goto('/admin/settings/general');
     await page.waitForLoadState('networkidle');
 
-    // Find the maintenance mode checkbox
     const maintenanceModeCheckbox = page.locator('input[name="maintenanceMode"]');
     await expect(maintenanceModeCheckbox).toBeVisible();
 
-    // Get current state
     const initialState = await maintenanceModeCheckbox.isChecked();
 
     // Toggle it
     await maintenanceModeCheckbox.click();
-
-    // Save settings
     await page.locator('button:has-text("Save Changes")').click();
     await page.waitForTimeout(1000);
 
@@ -106,6 +102,13 @@ test.describe('Settings - General Tab @auth', () => {
 
     const newState = await page.locator('input[name="maintenanceMode"]').isChecked();
     expect(newState).toBe(!initialState);
+
+    // Restore original state to avoid leaking into other tests
+    if (newState !== initialState) {
+      await page.locator('input[name="maintenanceMode"]').click();
+      await page.locator('button:has-text("Save Changes")').click();
+      await page.waitForTimeout(1000);
+    }
   });
 
   test('should validate required fields', async ({ page }) => {
@@ -137,6 +140,8 @@ test.describe('Settings - General Tab @auth', () => {
     await page.goto('/admin/settings/general');
     await page.waitForLoadState('networkidle');
 
+    // Capture original to restore after test
+    const originalEmail = await page.locator('input[name="adminEmail"]').inputValue();
     const newAdminEmail = `admin-${Date.now()}@example.com`;
 
     await page.locator('input[name="adminEmail"]').fill(newAdminEmail);
@@ -149,6 +154,11 @@ test.describe('Settings - General Tab @auth', () => {
 
     const savedEmail = await page.locator('input[name="adminEmail"]').inputValue();
     expect(savedEmail).toBe(newAdminEmail);
+
+    // Restore original email
+    await page.locator('input[name="adminEmail"]').fill(originalEmail);
+    await page.locator('button:has-text("Save Changes")').click();
+    await page.waitForTimeout(1000);
   });
 
   test('should switch between settings tabs', async ({ page }) => {

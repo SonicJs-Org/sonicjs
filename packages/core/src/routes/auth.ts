@@ -16,6 +16,7 @@ import type { KVNamespace } from '@cloudflare/workers-types'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import { RbacService } from '../services/rbac'
+import { syncCredentialPassword } from '../auth/credential-account'
 import { bootstrapDocumentTypes } from '../services/document-types-seed'
 import { isDemoModeActive } from '../services/demo-mode'
 
@@ -583,45 +584,82 @@ authRoutes.post('/register/form',
     // Determine role: first user gets admin, others get viewer
     const role = isFirstUser ? 'admin' : 'viewer'
 
+    const rbacService = new RbacService(db)
+
+    // First user needs system RBAC roles to exist before assignment. Seed them
+    // here (same as /auth/seed-admin) — a failed first boot must not leave an
+    // admin without roles.
+    if (isFirstUser) {
+      await bootstrapDocumentTypes(db)
+      await rbacService.ensureSystemRbacSeed()
+    }
+
     // Create user
     const userId = crypto.randomUUID()
     const now = new Date()
+    const nowSec = Math.floor(now.getTime() / 1000)
 
-    await db.prepare(`
-      INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      userId,
-      normalizedEmail,
-      firstName,
-      lastName,
-      passwordHash,
-      role,
-      1, // is_active
-      now.getTime(),
-      now.getTime()
-    ).run()
+    await db.batch([
+      db.prepare(`
+        INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        userId,
+        normalizedEmail,
+        firstName,
+        lastName,
+        passwordHash,
+        role,
+        1, // is_active
+        now.getTime(),
+        now.getTime()
+      ),
+      // Better Auth sign-in/email requires an auth_account credential row
+      db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+        VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+        .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+    ])
 
-    // Save custom profile fields if configured
+    // Assign RBAC role before anything optional — for the first user this makes
+    // them the admin. If it fails, remove the account: an admin without the role
+    // gets 403 everywhere.
+    try {
+      await rbacService.addUserRoleByName(userId, role)
+      if (isFirstUser) {
+        const assigned = await rbacService.getRolesForUser(userId)
+        if (!assigned.some((r) => r.name === 'admin')) {
+          throw new Error('Admin role could not be assigned to the first user')
+        }
+      }
+    } catch (error) {
+      await db.batch([
+        db.prepare('DELETE FROM auth_account WHERE user_id = ?').bind(userId),
+        db.prepare('DELETE FROM auth_user WHERE id = ?').bind(userId),
+      ])
+      throw error
+    }
+
+    // Save custom profile fields if configured. Account is complete and can
+    // sign in by now, so a failure here is logged instead of blocking.
     const profileConfig = getUserProfileConfig()
     if (profileConfig) {
       const regFields = getRegistrationFields()
       if (regFields.length > 0) {
-        const customData: Record<string, any> = { ...getProfileFieldDefaults() }
-        for (const field of regFields) {
-          const raw = formData.get(field.name)?.toString()
-          if (raw !== undefined && raw !== null) {
-            customData[field.name] = raw
+        try {
+          const customData: Record<string, any> = { ...getProfileFieldDefaults() }
+          for (const field of regFields) {
+            const raw = formData.get(field.name)?.toString()
+            if (raw !== undefined && raw !== null) {
+              customData[field.name] = raw
+            }
           }
+          const sanitized = sanitizeCustomData(customData, profileConfig)
+          await saveCustomData(db, userId, sanitized)
+        } catch (profileError) {
+          console.error('Failed to save custom profile fields:', profileError)
         }
-        const sanitized = sanitizeCustomData(customData, profileConfig)
-        await saveCustomData(db, userId, sanitized)
       }
     }
-
-    // Assign RBAC role so the new user passes requireRbac('portal', 'access')
-    const rbacService = new RbacService(db)
-    await rbacService.addUserRoleByName(userId, role)
 
     // Fire auth:registration:completed (fire-and-forget — does not block the response)
     dispatchHookEvent(
@@ -791,10 +829,22 @@ authRoutes.post('/login/form',
   }
 })
 
-// Test seeding endpoint (only for development/testing)
+// Environments where the known-credential admin seed is permitted.
+const SEED_ADMIN_ALLOWED_ENVIRONMENTS = new Set(['development', 'test', 'e2e', 'preview', 'local'])
+
+// SECURITY: upserts a fixed-credential admin (admin@sonicjs.com / sonicjs!).
+// Needs ENABLE_SEED_ADMIN="true" AND a non-production ENVIRONMENT.
 authRoutes.post('/seed-admin',
   rateLimit({ max: 10, windowMs: 60 * 1000, keyPrefix: 'seed-admin' }),
   async (c) => {
+  const environment = (c.env?.ENVIRONMENT ?? '').toString().toLowerCase()
+  const enabled = (c.env as { ENABLE_SEED_ADMIN?: unknown } | undefined)?.ENABLE_SEED_ADMIN
+  if (!SEED_ADMIN_ALLOWED_ENVIRONMENTS.has(environment)) {
+    return c.json({ error: 'Seed endpoint not available in this environment' }, 403)
+  }
+  if (String(enabled).toLowerCase() !== 'true') {
+    return c.json({ error: 'Seed endpoint is disabled. Set ENABLE_SEED_ADMIN = "true" to use it in development.' }, 403)
+  }
   try {
     const db = c.env.DB
     // Ensure document_types FK targets exist before RBAC seed — D1 enforces the FK
@@ -1077,24 +1127,25 @@ authRoutes.post('/accept-invitation', async (c) => {
     // Hash password
     const passwordHash = await AuthManager.hashPassword(password)
 
-    // Activate user account
-    const updateStmt = db.prepare(`
-      UPDATE auth_user SET
-        password_hash = ?,
-        is_active = 1,
-        email_verified = 1,
-        invitation_token = NULL,
-        accepted_invitation_at = ?,
-        updated_at = ?
-      WHERE id = ?
-    `)
-
-    await updateStmt.bind(
-      passwordHash,
-      Date.now(),
-      Date.now(),
-      invitedUser.id
-    ).run()
+    // Activate user account (and sync credential row Better Auth signs in with)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET
+          password_hash = ?,
+          is_active = 1,
+          email_verified = 1,
+          invitation_token = NULL,
+          accepted_invitation_at = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).bind(
+        passwordHash,
+        Date.now(),
+        Date.now(),
+        invitedUser.id
+      ),
+      ...syncCredentialPassword(db, invitedUser.id as string, passwordHash),
+    ])
 
     // Generate JWT token for auto-login
     const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
@@ -1429,21 +1480,22 @@ authRoutes.post('/reset-password', async (c) => {
       console.warn('Could not store password history:', historyError)
     }
 
-    // Update user password and clear reset token
-    const updateStmt = db.prepare(`
-      UPDATE auth_user SET
-        password_hash = ?,
-        password_reset_token = NULL,
-        password_reset_expires = NULL,
-        updated_at = ?
-      WHERE id = ?
-    `)
-
-    await updateStmt.bind(
-      newPasswordHash,
-      Date.now(),
-      user.id
-    ).run()
+    // Update user password and clear reset token (and sync credential row)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET
+          password_hash = ?,
+          password_reset_token = NULL,
+          password_reset_expires = NULL,
+          updated_at = ?
+        WHERE id = ?
+      `).bind(
+        newPasswordHash,
+        Date.now(),
+        user.id
+      ),
+      ...syncCredentialPassword(db, user.id as string, newPasswordHash),
+    ])
 
     // Fire auth:password-reset:completed for audit/notification plugins.
     dispatchHookEvent(

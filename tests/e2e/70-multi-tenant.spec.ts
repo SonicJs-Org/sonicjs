@@ -31,6 +31,18 @@ test.describe.serial('Multi-Tenant plugin @auth', () => {
     await loginAsAdmin(page)
   })
 
+  // Always deactivate on cleanup so other tests see single-tenant
+  test.afterAll(async ({ request }) => {
+    if (!featureAvailable) return
+    const baseURL = process.env.BASE_URL || 'http://localhost:8787'
+    await request.post('/auth/seed-admin').catch(() => {})
+    await request.post('/auth/sign-in/email', {
+      data: { email: 'admin@sonicjs.com', password: 'sonicjs!' },
+      headers: { 'Content-Type': 'application/json', Origin: baseURL },
+    }).catch(() => {})
+    await request.post(`/admin/plugins/${PLUGIN_ID}/deactivate`).catch(() => {})
+  })
+
   test('is off by default: Tenants page shows inactive notice, no nav, no switcher', async ({ page }) => {
     // Establish the inactive baseline (idempotent — a prior run may have left it active).
     await setPluginState(page, 'deactivate')

@@ -104,6 +104,30 @@ export function isBetterAuthSessionPath(path: string): boolean {
   );
 }
 
+// Per-isolate memo so verifySecurityConfig logs warnings once but throws on
+// every production request with a bad JWT_SECRET.
+let lastSecurityBindings: string | null = null
+let lastSecurityError: Error | null = null
+let securityWarned = false
+
+function verifySecurityConfigMemoized(env: Bindings): void {
+  const sig = `${env.JWT_SECRET ?? ''}|${env.CORS_ORIGINS ?? ''}|${env.ENVIRONMENT ?? ''}`
+  if (sig !== lastSecurityBindings) {
+    lastSecurityBindings = sig
+    lastSecurityError = null
+    securityWarned = false
+  }
+  if (lastSecurityError) throw lastSecurityError
+  if (securityWarned) return
+  try {
+    verifySecurityConfig(env)
+    securityWarned = true
+  } catch (e) {
+    lastSecurityError = e instanceof Error ? e : new Error(String(e))
+    throw lastSecurityError
+  }
+}
+
 /**
  * Bootstrap middleware that ensures system initialization
  * Runs once per worker instance
@@ -119,6 +143,10 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Variables typed loosely here; concrete type lives in app.ts
       (c as any).set("hookSystem", getHookSystem());
     }
+
+    // Security check runs on EVERY request — before any short-circuit.
+    // Production with a bad/missing JWT_SECRET must fail closed.
+    verifySecurityConfigMemoized(c.env as Bindings);
 
     // Skip if already bootstrapped in this worker instance
     if (bootstrapComplete) {
@@ -380,10 +408,6 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       // Don't prevent the app from starting, but log the error
     }
 
-    // 4. Verify security configuration (outside try/catch so critical
-    // errors in production propagate and prevent insecure deployments)
-    verifySecurityConfig(c.env as Bindings);
-
     return next();
   };
 }
@@ -391,8 +415,11 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
 /**
  * Reset bootstrap flag (useful for testing)
  */
-export function resetBootstrap() {
-  bootstrapComplete = false;
+export function resetBootstrap(complete?: boolean) {
+  bootstrapComplete = complete ?? false;
+  lastSecurityBindings = null
+  lastSecurityError = null
+  securityWarned = false
 }
 
 /**

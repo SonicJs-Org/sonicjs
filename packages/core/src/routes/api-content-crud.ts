@@ -9,7 +9,10 @@ import { DocumentTypeRegistry } from '../services/document-type-registry'
 import { getCollectionRegistry } from '../services/collection-registry'
 import { createDocumentSchema } from '../schemas/document'
 import { getRequestTenant } from '../services/document-request-context'
+import { contentWriteRefusal } from './content-write-access'
+import type { DocumentType, Permission } from '../schemas/document'
 import type { D1Database } from '@cloudflare/workers-types'
+import type { Context } from 'hono'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
 import type { HookActor } from '../plugins/hooks/catalog'
 
@@ -41,6 +44,21 @@ export async function resolveDocBacking(db: D1Database, collectionIdOrName: stri
 export function slugify(s?: string | null): string | null {
   if (!s) return null
   return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || null
+}
+
+export async function denyContentWrite(
+  c: Context,
+  db: D1Database,
+  docType: DocumentType | null | undefined,
+  rootId: string,
+  permissions: Permission[],
+  writesToDefaultTenant = false,
+) {
+  // PII types need the hard-erase path; this API can only soft-delete.
+  if (docType?.settings?.pii && permissions.includes('delete')) return c.json({ error: rootId ? 'Content not found' : 'Collection not found' }, 404)
+  const refused = await contentWriteRefusal(c, db, docType, rootId, permissions, writesToDefaultTenant)
+  if (refused === 404) return c.json({ error: rootId ? 'Content not found' : 'Collection not found' }, 404)
+  return refused ? c.json({ error: 'Forbidden' }, 403) : null
 }
 
 // GET /api/content/check-slug - Check if slug is available in collection
@@ -200,6 +218,10 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
     // Document-backed collection → create a document (legacy content decommission).
     const backing = await resolveDocBacking(db, collectionId)
     if (backing) {
+      const publishing = (status || 'draft') === 'published'
+      const denied = await denyContentWrite(c, db, backing.docType, '', publishing ? ['create', 'publish'] : ['create'])
+      if (denied) return denied
+
       const dup = await db
         // D37: reject if the slug is used by any live revision (current draft OR served published row).
         .prepare("SELECT root_id FROM documents WHERE type_id = ? AND tenant_id = ? AND (is_current_draft = 1 OR is_published = 1) AND deleted_at IS NULL AND slug = ?")
@@ -238,7 +260,7 @@ apiContentCrudRoutes.post('/', requireAuth(), requireRole(['admin', 'editor', 'a
       const doc = await svc.create(
         createDocumentSchema.parse({
           typeId: backing.coll.name, tenantId, locale: 'default',
-          title, slug: finalSlug, data: hookData, publishOnCreate: (status || 'draft') === 'published',
+          title, slug: finalSlug, data: hookData, publishOnCreate: publishing,
         }),
         user?.userId,
       )
@@ -285,6 +307,13 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
       .bind(id, tenantId)
       .first() as any
     if (docRow) {
+      const docType = await new DocumentTypeRegistry(db).findById(docRow.type_id)
+      const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = ?").bind(id, tenantId).first() as any
+      // Republishing (no status on a published doc) and unpublishing both change the live row.
+      const publishing = body.status === 'published' || (body.status === undefined && !!pub) || (body.status === 'draft' && !!pub)
+      const denied = await denyContentWrite(c, db, docType, id!, publishing ? ['update', 'publish'] : ['update'])
+      if (denied) return denied
+
       const actor: HookActor | undefined = user
         ? { id: user.userId, email: user.email ?? '', role: user.role }
         : undefined
@@ -303,7 +332,6 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
         return c.json({ error: 'Write cancelled by plugin', details: String(err) }, 400)
       }
 
-      const docType = await new DocumentTypeRegistry(db).findById(docRow.type_id)
       const svc = new DocumentsService(db, {
         queryableFields: docType?.queryableFields ?? [],
         typeSchemaVersion: docType?.schemaVersion ?? 1,
@@ -316,7 +344,6 @@ apiContentCrudRoutes.put('/:id', requireAuth(), requireRole(['admin', 'editor', 
       if (body.slug !== undefined) input.slug = slugify(body.slug)
       if (hookData !== undefined) input.data = hookData
       const newDraft = await svc.saveDraft(id!, input, user?.userId)
-      const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = ?").bind(id, tenantId).first() as any
       // D38: an explicit status wins; with NO status, preserve the prior effective state.
       const wasPublished = !!pub
       if (body.status === 'published' || (body.status === undefined && pub)) {
@@ -367,6 +394,10 @@ apiContentCrudRoutes.delete('/:id', requireAuth(), requireRole(['admin', 'editor
     const tenantId = getRequestTenant(c)
     const docRow = await db.prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1").bind(id, tenantId).first() as any
     if (docRow) {
+      const docType = await new DocumentTypeRegistry(db).findById(docRow.type_id)
+      const denied = await denyContentWrite(c, db, docType, id!, ['delete'])
+      if (denied) return denied
+
       const actor: HookActor | undefined = user
         ? { id: user.userId, email: user.email ?? '', role: user.role }
         : undefined

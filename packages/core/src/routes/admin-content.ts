@@ -17,7 +17,8 @@ import { DocumentTypeRegistry } from '../services/document-type-registry'
 import { DocumentsService } from '../services/documents'
 import { renderDocumentFormPage } from '../templates/pages/admin-documents-form.template'
 import { createDocumentSchema } from '../schemas/document'
-import type { QueryableField } from '../schemas/document'
+import type { DocumentType, Permission, QueryableField } from '../schemas/document'
+import { contentWriteRefusal } from './content-write-access'
 import { loadCollectionConfigs, getVisibleCollections } from '../services/collection-loader'
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -367,7 +368,8 @@ async function getDocBackingType(db: D1Database, collectionName?: string | null)
 // Soft-delete every version row of a document root (Option B). Shared by the HTMX DELETE
 // endpoint and the POST-from-confirmation-page endpoint so the two stay in sync.
 // Returns the root's type_id on success, or null if the root isn't a recognized document.
-async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: string): Promise<string | null> {
+// Returns the deleted root's type id, a refusal response, or null when there is nothing deletable.
+async function softDeleteDocumentRoot(c: Context, db: D1Database, tenantId: string, rootId: string): Promise<string | Response | null> {
   const docDel = await db
     .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
     .bind(rootId, tenantId).first() as any
@@ -378,9 +380,16 @@ async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: 
   if (!docDel || !docDelType || docDelType.settings.internal || docDelType.isAuth) {
     return null
   }
+  const denied = await refuseWrite(c, db, docDelType, rootId, ['delete'])
+  if (denied) return denied
 
-  const now = Math.floor(Date.now() / 1000)
-  await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, rootId, tenantId).run()
+  // PII must be hard-erased, never left behind in a soft-deleted row.
+  if (docDelType.settings.pii) {
+    await makeDocService(db, docDelType, tenantId).erase(rootId, tenantId)
+  } else {
+    const now = Math.floor(Date.now() / 1000)
+    await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, rootId, tenantId).run()
+  }
   await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
   const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
   await apiCacheDel.invalidate('api:content-filtered:*')
@@ -1308,6 +1317,8 @@ adminContentRoutes.post('/', async (c) => {
     // ── Option B: document-backed collection → store in `documents`, not `content` ──
     const createDocType = await getDocBackingType(db, collection.name)
     if (createDocType) {
+      const denied = await refuseWrite(c, db, createDocType, '', status === 'published' ? ['create', 'publish'] : ['create'])
+      if (denied) return denied
       const tenantId = reqTenant(c)
       const svc = makeDocService(db, createDocType, tenantId)
       const doc = await svc.create(createDocumentSchema.parse({
@@ -1446,6 +1457,11 @@ const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
       const docType = await getDocBackingType(db, docRowU.type_id)
       const dcoll = docType ? await getCollectionByName(db, docRowU.type_id) : null
       if (docType && dcoll) {
+        // Saving either publishes or unpublishes a live doc, so both paths need `publish` then.
+        const isLive = !!(await db.prepare("SELECT 1 FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = ?").bind(id, tenantId).first())
+        const publishing = isLive || action === 'save_and_publish' || formData.get('status') === 'published'
+        const denied = await refuseWrite(c, db, docType, id, publishing ? ['update', 'publish'] : ['update'])
+        if (denied) return denied
         const fields = await getCollectionFields(db, dcoll.id)
         const { data, errors } = extractFieldData(fields, formData)
         // Title/slug may live outside schema fields — read from formData, then fall back to
@@ -1786,6 +1802,9 @@ adminContentRoutes.post('/duplicate', async (c) => {
     if (docOriginal) {
       const docType = await getDocBackingType(db, docOriginal.type_id)
       if (docType) {
+        const refused =
+          (await contentWriteRefusal(c, db, docType, originalId, ['read'])) ?? (await contentWriteRefusal(c, db, docType, '', ['create']))
+        if (refused) return c.json({ success: false, error: refused === 404 ? 'Content not found' : 'Forbidden' }, refused)
         const svc = makeDocService(db, docType, tenantId)
         const originalData = docOriginal.data ? JSON.parse(docOriginal.data) : {}
         const copyData = {
@@ -1974,15 +1993,29 @@ adminContentRoutes.post('/bulk-action', async (c) => {
     const contentIds = (ids as string[]).filter(id => !docRootIds.has(id))
 
     // ── Document-backed rows ──────────────────────────────────────────────────
+    // All-or-nothing: one refused root refuses the whole action.
+    const bulkPermission: Permission = action === 'delete' ? 'delete' : 'publish'
+    const registry = new DocumentTypeRegistry(db)
+    const piiTypes = new Map<string, DocumentType>()
+    for (const root of docRoots) {
+      const docType = await registry.findById(root.type_id)
+      const refused = await contentWriteRefusal(c, db, docType, root.root_id, [bulkPermission])
+      if (refused) return c.json({ success: false, error: 'Forbidden' }, 403)
+      if (docType?.settings?.pii) piiTypes.set(root.root_id, docType)
+    }
     if (docRoots.length > 0) {
       if (action === 'delete') {
+        for (const [rootId, docType] of piiTypes) await makeDocService(db, docType, tenantId).erase(rootId, tenantId)
         // Soft-delete every version row of each root (mirror the single-row DELETE). Seconds (D29).
-        const nowSec = Math.floor(now / 1000)
-        const dph = docRoots.map(() => '?').join(',')
-        await db
-          .prepare(`UPDATE documents SET deleted_at = ?, updated_at = ? WHERE tenant_id = ? AND root_id IN (${dph})`)
-          .bind(nowSec, nowSec, tenantId, ...docRoots.map(r => r.root_id))
-          .run()
+        const softRoots = docRoots.filter(r => !piiTypes.has(r.root_id))
+        if (softRoots.length > 0) {
+          const nowSec = Math.floor(now / 1000)
+          const dph = softRoots.map(() => '?').join(',')
+          await db
+            .prepare(`UPDATE documents SET deleted_at = ?, updated_at = ? WHERE tenant_id = ? AND root_id IN (${dph})`)
+            .bind(nowSec, nowSec, tenantId, ...softRoots.map(r => r.root_id))
+            .run()
+        }
       } else {
         // publish / draft → run through DocumentsService so the published flag, prev-published
         // demotion and derived rows stay consistent (one row per root).
@@ -2101,7 +2134,8 @@ adminContentRoutes.post('/:id/delete', async (c) => {
     const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
 
     const tenantId = reqTenant(c)
-    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    const deletedTypeId = await softDeleteDocumentRoot(c, db, tenantId, id)
+    if (deletedTypeId instanceof Response) return deletedTypeId
     if (!deletedTypeId) {
       return c.redirect('/admin/content')
     }
@@ -2123,7 +2157,8 @@ adminContentRoutes.delete('/:id', async (c) => {
 
     // ── Option B: if :id is a document-backed root, soft-delete every version row of the root ──
     const tenantId = reqTenant(c)
-    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    const deletedTypeId = await softDeleteDocumentRoot(c, db, tenantId, id)
+    if (deletedTypeId instanceof Response) return deletedTypeId
     if (deletedTypeId) {
       return c.html(`
         <div id="content-list" hx-get="/admin/content?model=${deletedTypeId}" hx-trigger="load" hx-swap="outerHTML">
@@ -2291,6 +2326,26 @@ function parseDocFormData(
   return { title, slug, data }
 }
 
+// Same write policy as the content API. htmx won't swap a 4xx, so htmx callers get an alert appended to
+// <body>: retargeting keeps the caller's own target (e.g. the whole content list) from being replaced.
+async function refuseWrite(c: Context, db: D1Database, docType: DocumentType | null | undefined, rootId: string, permissions: Permission[]) {
+  const refused = await contentWriteRefusal(c, db, docType, rootId, permissions)
+  if (!refused) return null
+  const msg = refused === 404 ? 'Content not found.' : 'You do not have permission to do that.'
+  if (c.req.header('HX-Request') === 'true') {
+    c.header('HX-Retarget', 'body')
+    c.header('HX-Reswap', 'beforeend')
+    return c.html(`<div class="fixed top-4 right-4 z-50 p-3 rounded-lg bg-red-500/90 text-white text-sm shadow-lg" role="alert" onclick="this.remove()">${msg}</div>`)
+  }
+  return c.html(`<p>${msg}</p>`, refused)
+}
+
+// The URL's typeId must match the row, or a writable type could front for any document.
+async function docRowOfType(db: D1Database, column: 'id' | 'root_id', value: string, typeId: string, tenantId: string) {
+  const row = await db.prepare(`SELECT root_id, type_id FROM documents WHERE ${column} = ? AND tenant_id = ? LIMIT 1`).bind(value, tenantId).first() as { root_id: string; type_id: string } | null
+  return row?.type_id === typeId ? row : null
+}
+
 async function getDocService(db: D1Database, typeId: string, tenantId: string) {
   const registry = new DocumentTypeRegistry(db)
   const docType = await registry.findById(typeId)
@@ -2322,6 +2377,8 @@ adminContentRoutes.post('/documents/:typeId/new', async (c) => {
     const tenantId = reqTenant(c)
     const { svc, docType } = await getDocService(db, typeId, tenantId)
     if (!docType) return c.html('<p>Unknown document type.</p>', 404)
+    const denied = await refuseWrite(c, db, docType, '', ['create'])
+    if (denied) return denied
     const formData = await c.req.formData()
     const { title, slug, data } = parseDocFormData(formData, docType.queryableFields)
     const doc = await svc.create(createDocumentSchema.parse({
@@ -2386,7 +2443,10 @@ adminContentRoutes.post('/documents/:typeId/:rootId', async (c) => {
     const formData = await c.req.formData()
     const _method = formData.get('_method') as string | null
     if (_method !== 'PUT') return c.redirect(`/admin/content/documents/${typeId}/${rootId}/edit?message=Unknown+action`)
+    if (!(await docRowOfType(db, 'root_id', rootId, typeId, reqTenant(c)))) return c.html('<p>Content not found.</p>', 404)
     const { svc, docType } = await getDocService(db, typeId, reqTenant(c))
+    const denied = await refuseWrite(c, db, docType, rootId, ['update'])
+    if (denied) return denied
     const { title, slug, data } = parseDocFormData(formData, docType?.queryableFields ?? [])
     await svc.saveDraft(rootId, { title, slug, data }, user?.userId)
     return c.redirect(`/admin/content/documents/${typeId}/${rootId}/edit?message=Draft+saved`)
@@ -2402,8 +2462,11 @@ adminContentRoutes.post('/documents/:typeId/:documentId/publish', async (c) => {
   const user = c.get('user') as any
   try {
     const tenantId = reqTenant(c)
-    const row = await db.prepare('SELECT root_id FROM documents WHERE id = ? AND tenant_id = ?').bind(documentId, tenantId).first() as any
-    const { svc } = await getDocService(db, typeId, tenantId)
+    const row = await docRowOfType(db, 'id', documentId, typeId, tenantId)
+    if (!row) return c.html('<p>Content not found.</p>', 404)
+    const { svc, docType } = await getDocService(db, typeId, tenantId)
+    const denied = await refuseWrite(c, db, docType, row.root_id, ['publish'])
+    if (denied) return denied
     await svc.publish(documentId, user?.userId)
     return c.redirect(`/admin/content/documents/${typeId}/${row?.root_id}/edit?message=Published`)
   } catch (err: any) {
@@ -2417,8 +2480,11 @@ adminContentRoutes.post('/documents/:typeId/:documentId/unpublish', async (c) =>
   const db = c.env.DB
   try {
     const tenantId = reqTenant(c)
-    const row = await db.prepare('SELECT root_id FROM documents WHERE id = ? AND tenant_id = ?').bind(documentId, tenantId).first() as any
-    const { svc } = await getDocService(db, typeId, tenantId)
+    const row = await docRowOfType(db, 'id', documentId, typeId, tenantId)
+    if (!row) return c.html('<p>Content not found.</p>', 404)
+    const { svc, docType } = await getDocService(db, typeId, tenantId)
+    const denied = await refuseWrite(c, db, docType, row.root_id, ['publish'])
+    if (denied) return denied
     await svc.unpublish(documentId)
     return c.redirect(`/admin/content/documents/${typeId}/${row?.root_id}/edit?message=Unpublished`)
   } catch (err: any) {
@@ -2511,6 +2577,8 @@ adminContentRoutes.post('/documents/:typeId/:rootId/delete', async (c) => {
     if (!docType || docType.settings.internal || docType.isAuth) {
       return c.redirect('/admin/content')
     }
+    const denied = await refuseWrite(c, db, docType, rootId, ['delete'])
+    if (denied) return denied
 
     if (docType.settings.pii) {
       await svc.erase(rootId, tenantId)

@@ -47,7 +47,7 @@ test.describe('Content Delete Confirmation Page @content', () => {
     // Verify confirmation page elements
     await expect(page.locator('h1:has-text("Delete Content")')).toBeVisible()
     await expect(page.locator('text=Review before permanently removing')).toBeVisible()
-    await expect(page.locator('text=This action cannot be undone')).toBeVisible()
+    await expect(page.locator('text=removed from the site and hidden from all lists')).toBeVisible()
 
     // Verify content title displayed
     await expect(page.locator(`text=${record.title}`)).toBeVisible()

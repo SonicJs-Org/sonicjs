@@ -34,7 +34,7 @@ test.describe('Content save-and-close redirects to unfiltered list @smoke @conte
 
     const saveCloseBtn = page.locator('button[value="save_and_close"]')
     await saveCloseBtn.click()
-    await page.waitForURL('**/admin/content**', { timeout: 10000 })
+    await page.waitForURL(url => url.pathname === '/admin/content', { timeout: 10000 })
 
     // Verify redirected to unfiltered list (no collection= or model= param)
     const url = new URL(page.url())
@@ -91,7 +91,7 @@ test.describe('Content save-and-close redirects to unfiltered list @smoke @conte
     // Save and close
     const saveCloseBtn = page.locator('button[value="save_and_close"]')
     await saveCloseBtn.click()
-    await page.waitForURL('**/admin/content**', { timeout: 10000 })
+    await page.waitForURL(url => url.pathname === '/admin/content', { timeout: 10000 })
 
     // The content list must show the new name as the title
     await waitForHTMX(page)
@@ -122,7 +122,7 @@ test.describe('Content save-and-close redirects to unfiltered list @smoke @conte
 
     const saveCloseBtn = page.locator('button[value="save_and_close"]')
     await saveCloseBtn.click()
-    await page.waitForURL('**/admin/content**', { timeout: 10000 })
+    await page.waitForURL(url => url.pathname === '/admin/content', { timeout: 10000 })
 
     const url = new URL(page.url())
     expect(url.searchParams.get('model')).toBe('blog_post')

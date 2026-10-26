@@ -24,7 +24,7 @@ test.describe('Content save-and-close redirects to unfiltered list @smoke @conte
     })
     expect(createRes.ok()).toBeTruthy()
     const created = await createRes.json()
-    const rootId = created.rootId || created.id
+    const rootId = created.data?.rootId ?? created.rootId ?? created.id
 
     await page.goto(`/admin/content/${rootId}/edit`)
     await waitForHTMX(page)
@@ -62,7 +62,7 @@ test.describe('Content save-and-close redirects to unfiltered list @smoke @conte
     })
     expect(createRes.ok(), 'create example doc').toBeTruthy()
     const created = await createRes.json()
-    const rootId = created.rootId || created.id
+    const rootId = created.data?.rootId ?? created.rootId ?? created.id
 
     await page.goto(`/admin/content/${rootId}/edit`)
     await waitForHTMX(page)
@@ -95,7 +95,7 @@ test.describe('Content save-and-close redirects to unfiltered list @smoke @conte
     })
     expect(createRes.ok()).toBeTruthy()
     const created = await createRes.json()
-    const rootId = created.rootId || created.id
+    const rootId = created.data?.rootId ?? created.rootId ?? created.id
 
     await page.goto(`/admin/content/${rootId}/edit?ref=${encodeURIComponent('model=blog_post')}`)
     await waitForHTMX(page)

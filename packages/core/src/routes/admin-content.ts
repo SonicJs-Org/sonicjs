@@ -1371,7 +1371,7 @@ adminContentRoutes.post('/', async (c) => {
       ? `/admin/content/${contentId}/edit?success=Content saved successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ''}`
       : referrerParams
         ? `/admin/content?${referrerParams}&success=Content created successfully!`
-        : `/admin/content?collection=${collectionId}&success=Content created successfully!`
+        : `/admin/content?success=Content created successfully!`
 
     // Check if this is an HTMX request
     const isHTMX = c.req.header('HX-Request') === 'true'
@@ -1422,11 +1422,12 @@ const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
       if (docType && dcoll) {
         const fields = await getCollectionFields(db, dcoll.id)
         const { data, errors } = extractFieldData(fields, formData)
-        // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values,
-        // then derive from common data fields (e.g. collections with 'name' but no 'title' property)
+        // Title/slug may live outside schema fields — read from formData, then fall back to
+        // data.name (current form value), then to existing DB title. data.name must take
+        // priority over docRowU.title so renaming a 'name' field updates the list title.
         if (data.title === undefined) {
           const formTitle = (formData.get('title') as string || '').trim()
-          data.title = formTitle || docRowU.title || data.name || undefined
+          data.title = formTitle || data.name || docRowU.title || undefined
         }
         if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || docRowU.slug || undefined
         if (Object.keys(errors).length > 0) {
@@ -1464,7 +1465,7 @@ const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
         const referrerParams = ((formData.get('referrer_params') as string | null) || '').replace(/[\r\n]/g, '') || null
         const listUrl = referrerParams
           ? `/admin/content?${referrerParams}`
-          : `/admin/content?collection=${dcoll.id}`
+          : '/admin/content'
 
         if (action === 'save_and_close') {
           return isHTMX
@@ -1520,10 +1521,11 @@ const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
 
     // Extract and validate field data
     const { data, errors } = extractFieldData(fields, formData)
-    // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values
+    // Title/slug may live outside schema fields — read from formData, then fall back to
+    // data.name (current form value), then to existing DB title.
     if (data.title === undefined) {
       const formTitle = (formData.get('title') as string || '').trim()
-      data.title = formTitle || existingContent.title || data.name || undefined
+      data.title = formTitle || data.name || existingContent.title || undefined
     }
     if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || existingContent.slug || undefined
 

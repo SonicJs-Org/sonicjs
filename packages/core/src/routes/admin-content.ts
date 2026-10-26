@@ -372,7 +372,10 @@ async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: 
     .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
     .bind(rootId, tenantId).first() as any
 
-  if (!docDel || !(await getDocBackingType(db, docDel.type_id))) {
+  const docDelType = docDel ? await getDocBackingType(db, docDel.type_id) : null
+  // Internal/auth-backed types aren't user-manageable collections — block them here so neither
+  // the HTMX DELETE nor the POST-from-confirmation-page caller can delete them by root_id alone.
+  if (!docDel || !docDelType || docDelType.settings.internal || docDelType.isAuth) {
     return null
   }
 
@@ -2096,7 +2099,10 @@ adminContentRoutes.post('/:id/delete', async (c) => {
     const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
 
     const tenantId = reqTenant(c)
-    await softDeleteDocumentRoot(db, tenantId, id)
+    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    if (!deletedTypeId) {
+      return c.redirect('/admin/content')
+    }
 
     const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?collection=${collection}`
     return c.redirect(redirectUrl)

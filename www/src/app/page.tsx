@@ -122,7 +122,7 @@ export default function HomePage() {
                   What&apos;s new
                 </span>
                 <span className="inline-flex items-center space-x-2 text-sm/6 font-medium text-gray-300">
-                  <span>Just shipped v3.0.0-beta</span>
+                  <span>Just shipped v3.0.0</span>
                   <svg
                     viewBox="0 0 20 20"
                     fill="currentColor"

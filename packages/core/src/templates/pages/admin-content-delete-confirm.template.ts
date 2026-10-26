@@ -135,7 +135,7 @@ export function renderContentDeleteConfirmPage(data: ContentDeleteConfirmData): 
         <!-- Actions -->
         <div class="bg-zinc-800/30 border-t border-white/5 px-6 py-4 flex items-center justify-between gap-4">
           <a
-            href="${backUrl}"
+            href="${escapeHtml(backUrl)}"
             class="inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-inset ring-white/10 hover:bg-zinc-700 transition-colors"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">

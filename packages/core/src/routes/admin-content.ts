@@ -2451,10 +2451,18 @@ adminContentRoutes.get('/documents/:typeId/:rootId/delete', async (c) => {
       }
     }
 
+    const url = new URL(c.req.url)
+    const referrerParams = url.searchParams.get('ref') || ''
+    const source = url.searchParams.get('source') || 'edit'
+    const id = `documents/${typeId}/${rootId}`
+    const cancelUrl = source === 'list'
+      ? (referrerParams ? `/admin/content?${referrerParams}` : '/admin/content')
+      : (referrerParams ? `/admin/content/${id}/edit?ref=${encodeURIComponent(referrerParams)}` : `/admin/content/${id}/edit`)
+
     // id = "documents/:typeId/:rootId" so the template's default form action and Cancel link
     // (which append /delete and /edit to data.id) resolve to this file's own doc-backed routes.
     const confirmData: ContentDeleteConfirmData = {
-      id: `documents/${typeId}/${rootId}`,
+      id,
       title: draftRow.title,
       slug: draftRow.slug,
       collectionName: typeId,
@@ -2464,6 +2472,8 @@ adminContentRoutes.get('/documents/:typeId/:rootId/delete', async (c) => {
       updatedAt: draftRow.updated_at,
       publishedAt: draftRow.published_at,
       authorName,
+      referrerParams: referrerParams || undefined,
+      cancelUrl,
       user: userCtx(c),
       version: c.get('appVersion'),
     }
@@ -2484,8 +2494,23 @@ adminContentRoutes.post('/documents/:typeId/:rootId/delete', async (c) => {
   const db = c.env.DB
   try {
     const tenantId = reqTenant(c)
+
+    const rootRow = await db
+      .prepare('SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1')
+      .bind(rootId, tenantId).first() as any
+    // The URL's :typeId picks which DocumentsService/eligibility rules apply below — so verify it
+    // actually matches the root being deleted, or a caller could delete an unrelated root (e.g. an
+    // internal/auth-backed one) by pairing its rootId with a harmless typeId.
+    if (!rootRow || rootRow.type_id !== typeId) {
+      return c.redirect('/admin/content')
+    }
+
     const { svc, docType } = await getDocService(db, typeId, tenantId)
-    if (docType?.settings?.pii) {
+    if (!docType || docType.settings.internal || docType.isAuth) {
+      return c.redirect('/admin/content')
+    }
+
+    if (docType.settings.pii) {
       await svc.erase(rootId, tenantId)
     } else {
       const now = Math.floor(Date.now() / 1000)
@@ -2497,7 +2522,11 @@ adminContentRoutes.post('/documents/:typeId/:rootId/delete', async (c) => {
     const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
     await apiCacheDel.invalidate('api:content-filtered:*')
     await apiCacheDel.invalidate(`api:collection-content-filtered:${typeId}:*`)
-    return c.redirect(`/admin/content?model=doc:${typeId}&message=Deleted`)
+
+    const formData = await c.req.formData()
+    const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
+    const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?model=doc:${typeId}`
+    return c.redirect(`${redirectUrl}&message=Deleted`)
   } catch (err: any) {
     return c.redirect(`/admin/content?model=doc:${typeId}&message=${encodeURIComponent(err?.message ?? 'Delete failed')}`)
   }

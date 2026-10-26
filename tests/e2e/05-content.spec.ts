@@ -183,7 +183,7 @@ test.describe('Content Management @smoke @content', () => {
     const row = rowFor(page, record);
     await expect(row.locator('button[title="Edit"]')).toBeVisible();
     await expect(row.locator('button[title="View API"]')).toBeVisible();
-    await expect(row.locator('button[title="Delete"]')).toBeVisible();
+    await expect(row.locator('a[title="Delete"]')).toBeVisible();
 
     // Edit must reach this record's form, not whichever row the list happened to render first.
     await row.locator('button[title="Edit"]').click();

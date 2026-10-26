@@ -9,6 +9,7 @@ import { CACHE_CONFIGS, getCacheService } from '../services/cache'
 import { PluginService } from '../services/plugin-service'
 import { ContentFormData, renderContentFormPage } from '../templates/pages/admin-content-form.template'
 import { ContentListPageData, renderContentListPage } from '../templates/pages/admin-content-list.template'
+import { ContentDeleteConfirmData, renderContentDeleteConfirmPage } from '../templates/pages/admin-content-delete-confirm.template'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
 import { escapeHtml, sanitizeRichText } from '../utils/sanitize'
 import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
@@ -1993,7 +1994,98 @@ adminContentRoutes.post('/bulk-action', async (c) => {
   }
 })
 
-// Delete content
+// Delete confirmation page
+adminContentRoutes.get('/:id/delete', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const user = c.get('user')
+    const db = c.env.DB
+    const url = new URL(c.req.url)
+    const referrerParams = url.searchParams.get('ref') || ''
+
+    const tenantId = reqTenant(c)
+    const docRow = await db
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = ? AND deleted_at IS NULL")
+      .bind(id, tenantId).first() as any
+
+    if (!docRow) {
+      return c.redirect('/admin/content')
+    }
+
+    const docType = await getDocBackingType(db, docRow.type_id)
+    const dcoll = docType ? await getCollectionByName(db, docRow.type_id) : null
+
+    if (!dcoll) {
+      return c.redirect('/admin/content')
+    }
+
+    let authorName: string | undefined
+    if (docRow.created_by) {
+      const authorRow = await db
+        .prepare("SELECT name, first_name, last_name, email FROM auth_user WHERE id = ?")
+        .bind(docRow.created_by).first() as any
+      if (authorRow) {
+        authorName = authorRow.name ||
+          [authorRow.first_name, authorRow.last_name].filter(Boolean).join(' ') ||
+          authorRow.email
+      }
+    }
+
+    const confirmData: ContentDeleteConfirmData = {
+      id: docRow.root_id,
+      title: docRow.title,
+      slug: docRow.slug,
+      collectionName: dcoll.name,
+      collectionDisplayName: dcoll.display_name,
+      status: docRow.is_published ? 'published' : (docRow.status ?? 'draft'),
+      createdAt: docRow.created_at,
+      updatedAt: docRow.updated_at,
+      publishedAt: docRow.published_at,
+      authorName,
+      referrerParams,
+      user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+      version: c.get('appVersion'),
+    }
+
+    return c.html(renderContentDeleteConfirmPage(confirmData))
+  } catch (error) {
+    console.error('Delete confirmation page error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// Delete content (POST from confirmation page)
+adminContentRoutes.post('/:id/delete', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const db = c.env.DB
+    const formData = await c.req.formData()
+    const collection = formData.get('collection') as string || ''
+    const referrer = formData.get('referrer') as string || ''
+
+    const tenantId = reqTenant(c)
+    const docDel = await db
+      .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
+      .bind(id, tenantId).first() as any
+
+    if (docDel && (await getDocBackingType(db, docDel.type_id))) {
+      const now = Math.floor(Date.now() / 1000)
+      await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, id, tenantId).run()
+      await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+      const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
+      await apiCacheDel.invalidate('api:content-filtered:*')
+      await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
+    }
+
+    const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?collection=${collection}`
+    return c.redirect(redirectUrl)
+  } catch (error) {
+    console.error('Delete content error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// Delete content (HTMX DELETE)
 adminContentRoutes.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id')

@@ -84,7 +84,7 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
   // the `?ref=` query param, so escape it before it lands in an href attribute.
   const backUrl = data.referrerParams
     ? `/admin/content?${escapeHtml(data.referrerParams)}`
-    : `/admin/content?collection=${data.collection.id}`
+    : '/admin/content'
 
   // Group fields by category
   const coreFields = data.fields.filter(f => ['title', 'slug', 'content'].includes(f.field_name))

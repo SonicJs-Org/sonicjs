@@ -48,10 +48,6 @@ export function renderContentDeleteConfirmPage(data: ContentDeleteConfirmData): 
     ? `/admin/content/${data.id}/edit?ref=${encodeURIComponent(data.referrerParams)}`
     : `/admin/content/${data.id}/edit`
 
-  const listUrl = data.referrerParams
-    ? `/admin/content?${data.referrerParams}`
-    : `/admin/content?collection=${data.collectionName}`
-
   const content = `
     <div class="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
       <div class="rounded-xl bg-zinc-900 ring-1 ring-white/10 shadow-lg overflow-hidden">

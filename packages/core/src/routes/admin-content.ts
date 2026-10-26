@@ -364,6 +364,28 @@ async function getDocBackingType(db: D1Database, collectionName?: string | null)
   return dt && dt.isActive ? dt : null
 }
 
+// Soft-delete every version row of a document root (Option B). Shared by the HTMX DELETE
+// endpoint and the POST-from-confirmation-page endpoint so the two stay in sync.
+// Returns the root's type_id on success, or null if the root isn't a recognized document.
+async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: string): Promise<string | null> {
+  const docDel = await db
+    .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
+    .bind(rootId, tenantId).first() as any
+
+  if (!docDel || !(await getDocBackingType(db, docDel.type_id))) {
+    return null
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, rootId, tenantId).run()
+  await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+  const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
+  await apiCacheDel.invalidate('api:content-filtered:*')
+  await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
+
+  return docDel.type_id
+}
+
 async function getCollectionByName(db: D1Database, name: string) {
   console.log(`[getCollectionByName] Loading collection by name: ${name}`)
   const row = await db.prepare('SELECT * FROM document_types WHERE name = ? AND is_active = 1').bind(name).first() as any
@@ -2060,22 +2082,13 @@ adminContentRoutes.post('/:id/delete', async (c) => {
     const id = c.req.param('id')
     const db = c.env.DB
     const formData = await c.req.formData()
-    const collection = formData.get('collection') as string || ''
-    const referrer = formData.get('referrer') as string || ''
+    // Strip CR/LF before these ever reach a redirect Location header — same guard used for
+    // referrer_params elsewhere in this file (header-injection / response-splitting defense).
+    const collection = ((formData.get('collection') as string) || '').replace(/[\r\n]/g, '')
+    const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
 
     const tenantId = reqTenant(c)
-    const docDel = await db
-      .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
-      .bind(id, tenantId).first() as any
-
-    if (docDel && (await getDocBackingType(db, docDel.type_id))) {
-      const now = Math.floor(Date.now() / 1000)
-      await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, id, tenantId).run()
-      await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
-      const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
-      await apiCacheDel.invalidate('api:content-filtered:*')
-      await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
-    }
+    await softDeleteDocumentRoot(db, tenantId, id)
 
     const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?collection=${collection}`
     return c.redirect(redirectUrl)
@@ -2094,18 +2107,10 @@ adminContentRoutes.delete('/:id', async (c) => {
 
     // ── Option B: if :id is a document-backed root, soft-delete every version row of the root ──
     const tenantId = reqTenant(c)
-    const docDel = await db
-      .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
-      .bind(id, tenantId).first() as any
-    if (docDel && (await getDocBackingType(db, docDel.type_id))) {
-      const now = Math.floor(Date.now() / 1000)
-      await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, id, tenantId).run()
-      await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
-      const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
-      await apiCacheDel.invalidate('api:content-filtered:*')
-      await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
+    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    if (deletedTypeId) {
       return c.html(`
-        <div id="content-list" hx-get="/admin/content?model=${docDel.type_id}" hx-trigger="load" hx-swap="outerHTML">
+        <div id="content-list" hx-get="/admin/content?model=${deletedTypeId}" hx-trigger="load" hx-swap="outerHTML">
           <div class="flex items-center justify-center p-8"><span class="text-zinc-500">Deleting…</span></div>
         </div>
       `)

@@ -54,7 +54,7 @@ test.describe('Content Delete Confirmation Page @content', () => {
 
     // Verify action buttons
     await expect(page.locator('a:has-text("Cancel")')).toBeVisible()
-    await expect(page.locator('button:has-text("Delete Permanently")')).toBeVisible()
+    await expect(page.locator('button:has-text("Delete Content")')).toBeVisible()
   })
 
   test('cancel button returns to edit page', async ({ page }) => {
@@ -78,18 +78,21 @@ test.describe('Content Delete Confirmation Page @content', () => {
     await expect(page.locator('h1:has-text("Delete Content")')).toBeVisible()
 
     // Confirm delete
-    await page.locator('button:has-text("Delete Permanently")').click()
+    await page.locator('button:has-text("Delete Content")').click()
 
     // Should redirect to content list
     await page.waitForURL('**/admin/content**')
     expect(page.url()).not.toContain(record.id)
 
-    // Verify content is gone - navigating to edit should show error or redirect
+    // Verify content is gone - the edit page for a deleted record must not render the editor
     await page.goto(`/admin/content/${record.id}/edit`)
     const finalUrl = page.url()
-    const isGone = !finalUrl.includes(record.id) || finalUrl.includes('/admin/content')
-    const contentNotFound = await page.locator('text=Content not found').isVisible().catch(() => false)
-    expect(isGone || contentNotFound).toBeTruthy()
+    const stillOnEditPage = finalUrl.includes(`/admin/content/${record.id}/edit`)
+    if (stillOnEditPage) {
+      await expect(page.locator('text=Content not found')).toBeVisible()
+    } else {
+      expect(finalUrl).not.toContain(record.id)
+    }
   })
 
   test('confirmation page shows content metadata', async ({ page }) => {

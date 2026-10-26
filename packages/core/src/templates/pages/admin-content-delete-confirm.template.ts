@@ -13,6 +13,8 @@ export interface ContentDeleteConfirmData {
   publishedAt?: number
   authorName?: string
   referrerParams?: string
+  /** Overrides the default edit-page Cancel link, e.g. to return to the originating list. */
+  cancelUrl?: string
   user?: {
     name: string
     email: string
@@ -44,9 +46,9 @@ function getStatusBadge(status: string): string {
 }
 
 export function renderContentDeleteConfirmPage(data: ContentDeleteConfirmData): string {
-  const backUrl = data.referrerParams
+  const backUrl = data.cancelUrl ?? (data.referrerParams
     ? `/admin/content/${data.id}/edit?ref=${encodeURIComponent(data.referrerParams)}`
-    : `/admin/content/${data.id}/edit`
+    : `/admin/content/${data.id}/edit`)
 
   const content = `
     <div class="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
@@ -76,7 +78,7 @@ export function renderContentDeleteConfirmPage(data: ContentDeleteConfirmData): 
               </svg>
               <div>
                 <h3 class="text-sm font-medium text-red-400">Warning</h3>
-                <p class="mt-1 text-sm text-zinc-400">This action cannot be undone. The content will be permanently deleted.</p>
+                <p class="mt-1 text-sm text-zinc-400">This content will be removed from the site and hidden from all lists. It will no longer be publicly accessible.</p>
               </div>
             </div>
           </div>
@@ -152,7 +154,7 @@ export function renderContentDeleteConfirmPage(data: ContentDeleteConfirmData): 
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>
               </svg>
-              Delete Permanently
+              Delete Content
             </button>
           </form>
         </div>
@@ -161,7 +163,7 @@ export function renderContentDeleteConfirmPage(data: ContentDeleteConfirmData): 
   `
 
   const layoutData: AdminLayoutCatalystData = {
-    title: `Delete: ${data.title || 'Content'}`,
+    title: `Delete: ${escapeHtml(data.title || 'Content')}`,
     pageTitle: 'Delete Content',
     currentPath: '/admin/content',
     version: data.version,

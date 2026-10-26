@@ -2024,6 +2024,9 @@ adminContentRoutes.get('/:id/delete', async (c) => {
     const db = c.env.DB
     const url = new URL(c.req.url)
     const referrerParams = url.searchParams.get('ref') || ''
+    // 'list' when the delete link came from a content-list row, so Cancel returns to that list
+    // (with its filters) instead of the edit page the user never visited.
+    const source = url.searchParams.get('source') || 'edit'
 
     const tenantId = reqTenant(c)
     const docRow = await db
@@ -2040,6 +2043,10 @@ adminContentRoutes.get('/:id/delete', async (c) => {
     if (!dcoll) {
       return c.redirect('/admin/content')
     }
+
+    const cancelUrl = source === 'list'
+      ? (referrerParams ? `/admin/content?${referrerParams}` : '/admin/content')
+      : (referrerParams ? `/admin/content/${id}/edit?ref=${encodeURIComponent(referrerParams)}` : `/admin/content/${id}/edit`)
 
     let authorName: string | undefined
     if (docRow.created_by) {
@@ -2065,6 +2072,7 @@ adminContentRoutes.get('/:id/delete', async (c) => {
       publishedAt: docRow.published_at,
       authorName,
       referrerParams,
+      cancelUrl,
       user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
       version: c.get('appVersion'),
     }
@@ -2410,19 +2418,79 @@ adminContentRoutes.post('/documents/:typeId/:documentId/unpublish', async (c) =>
   }
 })
 
+// ─── Delete confirmation page (doc-backed, no collection) ────────────────────
+adminContentRoutes.get('/documents/:typeId/:rootId/delete', async (c) => {
+  const { typeId, rootId } = c.req.param()
+  const db = c.env.DB
+  try {
+    const tenantId = reqTenant(c)
+    const registry = new DocumentTypeRegistry(db)
+    const docType = await registry.findById(typeId)
+    if (!docType) return c.redirect('/admin/content')
+
+    const draftRow = await db
+      .prepare('SELECT * FROM documents WHERE root_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL')
+      .bind(rootId, tenantId).first() as any
+    if (!draftRow) return c.redirect('/admin/content')
+
+    let authorName: string | undefined
+    if (draftRow.created_by) {
+      const authorRow = await db
+        .prepare('SELECT name, first_name, last_name, email FROM auth_user WHERE id = ?')
+        .bind(draftRow.created_by).first() as any
+      if (authorRow) {
+        authorName = authorRow.name ||
+          [authorRow.first_name, authorRow.last_name].filter(Boolean).join(' ') ||
+          authorRow.email
+      }
+    }
+
+    // id = "documents/:typeId/:rootId" so the template's default form action and Cancel link
+    // (which append /delete and /edit to data.id) resolve to this file's own doc-backed routes.
+    const confirmData: ContentDeleteConfirmData = {
+      id: `documents/${typeId}/${rootId}`,
+      title: draftRow.title,
+      slug: draftRow.slug,
+      collectionName: typeId,
+      collectionDisplayName: docType.displayName ?? typeId,
+      status: draftRow.is_published ? 'published' : (draftRow.status ?? 'draft'),
+      createdAt: draftRow.created_at,
+      updatedAt: draftRow.updated_at,
+      publishedAt: draftRow.published_at,
+      authorName,
+      user: userCtx(c),
+      version: c.get('appVersion'),
+    }
+
+    return c.html(renderContentDeleteConfirmPage(confirmData))
+  } catch (error) {
+    console.error('Document delete confirmation page error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
 // ─── Delete (soft) ────────────────────────────────────────────────────────────
-adminContentRoutes.post('/documents/:typeId/:documentId/delete', async (c) => {
-  const { typeId, documentId } = c.req.param()
+// :rootId here (not a specific version's :documentId) — deletes every version row of the root,
+// matching softDeleteDocumentRoot's semantics for collection-backed content (R7). No prior
+// caller passed a documentId into this route, so retargeting it to root_id breaks nothing.
+adminContentRoutes.post('/documents/:typeId/:rootId/delete', async (c) => {
+  const { typeId, rootId } = c.req.param()
   const db = c.env.DB
   try {
     const tenantId = reqTenant(c)
     const { svc, docType } = await getDocService(db, typeId, tenantId)
     if (docType?.settings?.pii) {
-      const row = await db.prepare('SELECT root_id FROM documents WHERE id = ? AND tenant_id = ?').bind(documentId, tenantId).first() as any
-      if (row) await svc.erase(row.root_id, tenantId)
+      await svc.erase(rootId, tenantId)
     } else {
-      await svc.softDelete(documentId)
+      const now = Math.floor(Date.now() / 1000)
+      await db
+        .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?')
+        .bind(now, now, rootId, tenantId).run()
     }
+    await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+    const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
+    await apiCacheDel.invalidate('api:content-filtered:*')
+    await apiCacheDel.invalidate(`api:collection-content-filtered:${typeId}:*`)
     return c.redirect(`/admin/content?model=doc:${typeId}&message=Deleted`)
   } catch (err: any) {
     return c.redirect(`/admin/content?model=doc:${typeId}&message=${encodeURIComponent(err?.message ?? 'Delete failed')}`)

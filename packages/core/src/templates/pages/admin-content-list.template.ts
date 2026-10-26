@@ -173,7 +173,7 @@ export function renderContentListPage(data: ContentListPageData): string {
             </svg>
           </button>
           <a
-            href="/admin/content/${row.id}/delete${currentParams ? `?ref=${encodeURIComponent(currentParams)}` : ''}"
+            href="/admin/content/${row.id}/delete?source=list${currentParams ? `&ref=${encodeURIComponent(currentParams)}` : ''}"
             class="inline-flex items-center justify-center p-1.5 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
             title="Delete"
           >

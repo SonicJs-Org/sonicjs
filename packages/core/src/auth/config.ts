@@ -11,7 +11,7 @@
  * providers, magic link, 2FA, etc.
  */
 /** Send an email via the SonicJS email plugin (Resend).
- *  Loads apiKey/fromEmail/fromName from the `plugins` table at runtime.
+ *  Loads apiKey/fromEmail/fromName from the documents table at runtime (v3).
  *  Falls back to console.log when the plugin is unconfigured (local dev). */
 async function sendViaEmailPlugin(
   db: D1Database,
@@ -20,17 +20,25 @@ async function sendViaEmailPlugin(
   html: string
 ): Promise<void> {
   try {
-    const row = (await db
-      .prepare("SELECT settings FROM plugins WHERE id = 'email'")
-      .first()) as { settings: string } | null
-    if (row?.settings) {
-      const { apiKey, fromEmail, fromName } = JSON.parse(row.settings) as {
-        apiKey?: string; fromEmail?: string; fromName?: string
+    const row = (await (db as unknown as { prepare(q: string): { first(): Promise<{ data: string | null } | null> } })
+      .prepare(
+        `SELECT data FROM documents
+         WHERE type_id = 'plugin'
+           AND slug = 'email'
+           AND is_current_draft = 1
+           AND deleted_at IS NULL
+         LIMIT 1`
+      )
+      .first()) as { data: string } | null
+    if (row?.data) {
+      const { apiKey, resendApiKey, fromEmail, fromName } = JSON.parse(row.data) as {
+        apiKey?: string; resendApiKey?: string; fromEmail?: string; fromName?: string
       }
-      if (apiKey && fromEmail) {
+      const key = resendApiKey || apiKey
+      if (key && fromEmail) {
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             from: `${fromName ?? 'SonicJS'} <${fromEmail}>`,
             to: [to],

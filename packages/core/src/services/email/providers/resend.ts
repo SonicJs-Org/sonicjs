@@ -25,7 +25,7 @@ export class ResendProvider implements EmailProvider {
   constructor(options: ResendProviderOptions = {}) {
     this.apiKey = options.apiKey
     this.endpoint = options.endpoint ?? RESEND_ENDPOINT
-    this.fetchImpl = options.fetchImpl ?? fetch
+    this.fetchImpl = options.fetchImpl ?? fetch.bind(globalThis)
   }
 
   isConfigured(): boolean {

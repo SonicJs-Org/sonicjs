@@ -276,8 +276,8 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
   }
 
   // Best-effort: add the `settings` column if the table was created by an older
-  // version of wire.ts that didn't include it.  ALTER TABLE ADD COLUMN is a no-op
-  // if the column already exists in SQLite (returns error, silently caught).
+  // version of wire.ts that didn't include it.  SQLite throws "duplicate column
+  // name: settings" if it already exists — that error is expected and silently caught.
   try {
     await db.prepare('ALTER TABLE plugins ADD COLUMN settings TEXT').bind().run()
   } catch { /* column already exists — expected */ }

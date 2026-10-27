@@ -220,7 +220,7 @@ export function createMagicLinkAuthPlugin(): Plugin {
       // response's cookies.  Appending directly onto c's header set before
       // returning the redirect ensures both cookies survive — same fix applied to
       // the Better Auth handler in app.ts.
-      const isDev = !(c.env as any)?.ENVIRONMENT || (c.env as any)?.ENVIRONMENT === 'development'
+      const isDev = (c.env as any)?.ENVIRONMENT === 'development'
       const cookieParts = [
         `auth_token=${jwtToken}`,
         'HttpOnly',

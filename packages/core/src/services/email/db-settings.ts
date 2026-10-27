@@ -25,31 +25,21 @@ export interface DbEmailSettings {
 
 /** Minimal D1 surface needed to read the settings row. */
 interface SettingsDb {
-  prepare(query: string): { first(): Promise<{ data: string | null } | null> }
+  prepare(query: string): { first(): Promise<{ settings: string | null } | null> }
 }
 
 /**
  * Load the admin-UI email settings, or null if the row is absent/unparseable.
  * Never throws — a bad settings blob just yields null.
- *
- * v3 stores plugin settings in the `documents` table (type_id='plugin', slug='email'),
- * not the legacy `plugins` table which no longer exists on greenfield installs.
  */
 export async function loadDbEmailSettings(db: SettingsDb | EmailLogDb | undefined): Promise<DbEmailSettings | null> {
   if (!db || typeof (db as SettingsDb).prepare !== 'function') return null
   try {
     const row = await (db as SettingsDb)
-      .prepare(
-        `SELECT data FROM documents
-         WHERE type_id = 'plugin'
-           AND slug = 'email'
-           AND is_current_draft = 1
-           AND deleted_at IS NULL
-         LIMIT 1`
-      )
+      .prepare(`SELECT settings FROM plugins WHERE id = 'email'`)
       .first()
-    if (!row?.data) return null
-    const parsed = JSON.parse(row.data) as DbEmailSettings
+    if (!row?.settings) return null
+    const parsed = JSON.parse(row.settings) as DbEmailSettings
     return parsed && typeof parsed === 'object' ? parsed : null
   } catch {
     return null

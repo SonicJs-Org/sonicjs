@@ -247,6 +247,41 @@ async function pruneStaleUserPlugins(wired: WirablePlugin[], db: D1DatabaseLike)
  * Non-fatal on any error.
  */
 async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike): Promise<void> {
+  // Ensure the plugins table exists — it is not in the migrations bundle so fresh
+  // installs have no guarantee it was created.  The settings column is required
+  // by the email plugin (and others) to persist admin-configured values.
+  try {
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS plugins (
+           id           TEXT PRIMARY KEY,
+           name         TEXT NOT NULL,
+           display_name TEXT NOT NULL DEFAULT '',
+           description  TEXT NOT NULL DEFAULT '',
+           version      TEXT NOT NULL DEFAULT '0.0.0',
+           author       TEXT,
+           category     TEXT,
+           status       TEXT NOT NULL DEFAULT 'inactive',
+           is_core      INTEGER NOT NULL DEFAULT 0,
+           installed_at INTEGER,
+           last_updated INTEGER,
+           settings     TEXT
+         )`
+      )
+      .bind()
+      .run()
+  } catch {
+    // If the CREATE fails (e.g. incompatible schema), the best-effort INSERTs
+    // below will also fail silently — no action needed here.
+  }
+
+  // Best-effort: add the `settings` column if the table was created by an older
+  // version of wire.ts that didn't include it.  ALTER TABLE ADD COLUMN is a no-op
+  // if the column already exists in SQLite (returns error, silently caught).
+  try {
+    await db.prepare('ALTER TABLE plugins ADD COLUMN settings TEXT').bind().run()
+  } catch { /* column already exists — expected */ }
+
   const now = Date.now()
   for (const plugin of plugins) {
     const id = (plugin as any).id ?? plugin.name

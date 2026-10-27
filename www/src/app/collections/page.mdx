@@ -571,6 +571,14 @@ Order the array to match your preferred column order. Omit rich-text and large J
 searchFields: ['title', 'excerpt'],
 ```
 
+### Deleting Content
+
+Clicking **Delete** on a content item (from the list or the edit form) navigates to a confirmation page — not a native browser popup. The page shows the item's title, collection, slug, status, author, and dates before the delete is permanent.
+
+### Saving Content
+
+**Save and close** returns you to the unfiltered content list at `/admin/content`, regardless of which collection you were editing, so the saved item is visible immediately. The list title reflects the most recently submitted data — including a renamed `name`-field value — rather than a stale database title.
+
 ### API Endpoints
 
 Collections automatically get REST API endpoints:

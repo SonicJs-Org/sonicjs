@@ -815,25 +815,27 @@ async function signInAsAdmin(page: Page) {
   await ensureAdminUserExists(page);
 
   // Use Better Auth's sign-in/email API — sets session cookie in the page context.
-  // Retry on 5xx: preview CF Worker cold-starts can return 500 transiently while
-  // bootstrap completes under parallel worker load.
-  let res = await page.request.post('/auth/sign-in/email', {
-    data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-    headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
-  });
-  if (!res.ok() && res.status() >= 500) {
+  // Retry on 5xx OR network timeout: preview CF Worker cold-starts can return 500
+  // transiently or time-out during bootstrap under parallel worker load.
+  const signInAttempt = () =>
+    page.request.post('/auth/sign-in/email', {
+      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+      timeout: 45_000,
+    });
+
+  let res = await signInAttempt().catch(() => null);
+  if (!res || (!res.ok() && res.status() >= 500)) {
     await page.waitForTimeout(3000);
-    res = await page.request.post('/auth/sign-in/email', {
-      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
-    });
+    res = await signInAttempt().catch(() => null);
   }
-  if (!res.ok() && res.status() >= 500) {
+  if (!res || (!res.ok() && res.status() >= 500)) {
     await page.waitForTimeout(5000);
-    res = await page.request.post('/auth/sign-in/email', {
-      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
-    });
+    res = await signInAttempt().catch(() => null);
+  }
+  if (!res || (!res.ok() && res.status() >= 500)) {
+    await page.waitForTimeout(8000);
+    res = await signInAttempt();
   }
 
   if (!res.ok()) {
@@ -869,6 +871,15 @@ async function signInAsAdmin(page: Page) {
     const retry = await page.request.post('/auth/sign-in/email', {
       data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
       headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+      timeout: 45_000,
+    }).catch(async () => {
+      // Timeout on retry — wait and try once more before giving up
+      await page.waitForTimeout(5000);
+      return page.request.post('/auth/sign-in/email', {
+        data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+        headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+        timeout: 45_000,
+      });
     });
     if (!retry.ok()) {
       throw new Error(`BA sign-in failed on a cleared jar: ${retry.status()} ${await retry.text()}`);

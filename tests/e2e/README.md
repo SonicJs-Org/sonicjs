@@ -20,8 +20,10 @@ production, a shared developer server, or somebody else's preview. Do not run
 `npm run setup:db` for this recipe: it may create remote worktree resources.
 `E2E_PERSIST_DIR` must be absolute and must match the migration, server and `d1Exec`
 paths. Without it, Wrangler uses the existing app-local state, so prefer the isolated recipe.
-Stop other servers on 8787 before a controlled run; local server reuse remains enabled
-for interactive debugging, but CI refuses server reuse.
+Stop other servers on 8787 before a controlled run. Server reuse is disabled by
+default, including locally, so a stale server cannot be silently selected. Set
+`E2E_REUSE_SERVER=1` only for an intentionally owned interactive server; CI always
+refuses server reuse.
 
 Wrangler loads ignored `my-sonicjs-app/.dev.vars` when present. Authentication requires
 `BETTER_AUTH_SECRET` of at least 16 characters, `ENABLE_SEED_ADMIN=true` and an explicit
@@ -137,4 +139,5 @@ infrastructure diagnosis. CI fails on recovered flakes as well as final failures
 Artifacts upload under `always()`; hard runner termination can still prevent final
 report creation/upload. Traces can contain disposable session cookies and test data:
 retain briefly, restrict artifact access and never add `.dev.vars` or raw credentials.
-See `docs/testing/e2e-infrastructure-audit.md` for measured evidence and limitations.
+See the [infrastructure audit](../../docs/testing/e2e-infrastructure-audit.md) for
+measured evidence and limitations.

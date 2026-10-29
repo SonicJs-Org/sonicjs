@@ -68,14 +68,13 @@ async function addRootMemberAndWaitForCount(
 async function confirmRepeaterDelete(page: Page) {
   const dialog = page.locator('#delete-repeater-item-confirm')
   await expect(dialog).toHaveJSProperty('open', true)
-  // el-dialog swallows dialog.close() while its enter transition is still running, so a confirm
-  // click landing within ~300ms of the dialog opening removes the item but leaves the modal up,
-  // blocking every later interaction. Re-click until the dialog actually reports closed —
-  // performRepeaterDelete nulls its pending callback, so extra clicks are no-ops.
-  await expect(async () => {
-    await dialog.locator('.confirm-button').click()
-    await expect(dialog).toHaveJSProperty('open', false, { timeout: 1000 })
-  }).toPass({ timeout: 15000 })
+  // Wait for real entrance animations, then perform the side effect exactly once.
+  // Re-clicking inside toPass can hide a broken dialog lifecycle or replay a deletion.
+  await dialog.evaluate(async element => {
+    await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished))
+  })
+  await dialog.locator('.confirm-button').click()
+  await expect(dialog).toHaveJSProperty('open', false)
 }
 
 /**
@@ -291,6 +290,9 @@ test.describe('Nested Array Serialization Scope @content', () => {
 
     // Removing a repeater item opens the shared confirmation dialog (requestRepeaterDelete →
     // showConfirmDialog('delete-repeater-item-confirm')); the item is only detached on confirm.
+    // Require the custom-element lifecycle before opening. This is readiness only;
+    // the subsequent one-click close assertion must still catch lifecycle regressions.
+    await expect(page.locator('el-dialog:defined > #delete-repeater-item-confirm')).toHaveCount(1)
     await firstChild.locator('[data-action="remove-item"]').first().click()
     await confirmRepeaterDelete(page)
     await expect(childrenField.locator(':scope > [data-structured-array-list] > .structured-array-item')).toHaveCount(0)

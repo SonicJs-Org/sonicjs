@@ -43,7 +43,7 @@ export default defineConfig({
       (process.env.E2E_PERSIST_DIR ? ' --persist-to "$E2E_PERSIST_DIR"' : ''),
     cwd: resolve(here, '../my-sonicjs-app'),
     url: baseURL,
-    reuseExistingServer: !ci,
+    reuseExistingServer: !ci && process.env.E2E_REUSE_SERVER === '1',
     timeout: 180_000,
   },
 })

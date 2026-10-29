@@ -68,11 +68,9 @@ async function addRootMemberAndWaitForCount(
 async function confirmRepeaterDelete(page: Page) {
   const dialog = page.locator('#delete-repeater-item-confirm')
   await expect(dialog).toHaveJSProperty('open', true)
-  // Wait for real entrance animations, then perform the side effect exactly once.
-  // Re-clicking inside toPass can hide a broken dialog lifecycle or replay a deletion.
-  await dialog.evaluate(async element => {
-    await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished))
-  })
+  // One click, one close. The confirm button routes through closeConfirmDialog(), which
+  // guards against el-dialog v1 dropping a close that reverses its in-flight enter
+  // transition. Re-clicking here would hide that regression and replay the deletion.
   await dialog.locator('.confirm-button').click()
   await expect(dialog).toHaveJSProperty('open', false)
 }

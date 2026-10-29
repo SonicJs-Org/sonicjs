@@ -4,8 +4,8 @@ on:
   pull_request_target:
     branches: [main, v3]
   push:
-    # Validate the head workflow before pull_request_target rollout.
-    # The old base workflow still fails the disposable-target guard until rollout.
+    # PR1146 rollout: verify the head workflow with the secret-free local full suite.
+    # Keep remote previews limited to trusted PRs and main/v3 pushes.
     branches: [main, v3, test/e2e-infrastructure-hardening]
 
 permissions:
@@ -25,8 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
-      # Approval does not make fork code trusted. Forks/Dependabot run the full suite locally.
-      TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      # Approval does not make fork code trusted.
+      # Rollout branch pushes, forks and Dependabot run the full suite locally without secrets.
+      TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
       E2E_DISPOSABLE_TARGET: '1'
       CI: 'true'
     steps:
@@ -44,7 +45,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          # Privileged pull_request_target caches must not be shared with untrusted code.
+          # Privileged caches are reserved for trusted previews; local verification never uses them.
           cache: ${{ env.TRUSTED_PREVIEW == 'true' && 'npm' || '' }}
 
       - name: Install locked dependencies
@@ -137,7 +138,7 @@ jobs:
           set -euo pipefail
           mkdir -p ../e2e-logs
           CHECKOUT_SHA=$(git rev-parse HEAD)
-          npx wrangler deploy --name "$WORKER_NAME" --tag "$CHECKOUT_SHA" \
+          npx wrangler deploy ../tests/e2e/preview-worker.ts --config wrangler.toml --name "$WORKER_NAME" --tag "$CHECKOUT_SHA" \
             --var "E2E_RUN_KEY:$E2E_RUN_KEY" \
             --var "E2E_BUILD_SHA:$CHECKOUT_SHA" \
             --var "E2E_RESOURCE_NAME:$WORKER_NAME" \
@@ -148,7 +149,7 @@ jobs:
           echo "E2E_RUN_KEY=$E2E_RUN_KEY" >> "$GITHUB_ENV"
           printf 'run_id=%s\nattempt=%s\ncheckout=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$CHECKOUT_SHA" > ../e2e-logs/build.txt
 
-      - name: Prepare isolated local D1 for forks and Dependabot
+      - name: Prepare isolated local D1 for rollout, forks and Dependabot
         if: env.TRUSTED_PREVIEW != 'true'
         working-directory: my-sonicjs-app
         run: npx wrangler d1 migrations apply DB --local --persist-to "$E2E_PERSIST_DIR"

@@ -159,7 +159,14 @@ test.describe('Forms Smoke Test @forms', () => {
     const response = await page.goto('/admin/forms/examples');
     expect(response?.status()).toBe(200);
 
-    await page.waitForLoadState('networkidle');
+    await expect(page).toHaveURL(/\/admin\/forms\/examples$/);
+    await expect(page).toHaveTitle('Forms Examples - SonicJS AI Admin');
+    await expect(page.getByRole('heading', { name: 'Form Examples', exact: true })).toBeVisible();
+
+    const activeExample = page.locator('.examples-content #kitchen-sink.example-section.active');
+    await expect(activeExample).toBeVisible();
+    await expect(activeExample.getByRole('heading', { name: '🍳 Kitchen Sink', exact: true })).toBeVisible();
+    await expect(activeExample.locator('#form-kitchen-sink').getByRole('textbox', { name: /First Name/ })).toBeVisible();
 
     // Should have examples content
     const bodyText = await page.locator('body').textContent();

@@ -28,4 +28,34 @@ describe('disposable preview wrapper', () => {
     expect(await (await previewFetch(request('/admin'), env, app)).text()).toBe('real application')
     expect(app).toHaveBeenCalledTimes(1)
   })
+
+  it('paginates R2 cleanup through multiple truncated pages', async () => {
+    const env = environment()
+    let callCount = 0
+    env.MEDIA_BUCKET.list = vi.fn(async () => {
+      callCount++
+      if (callCount === 1) return { objects: [{ key: 'a' }, { key: 'b' }], truncated: true, cursor: 'page2' }
+      if (callCount === 2) return { objects: [{ key: 'c' }], truncated: false, cursor: undefined }
+      throw new Error('unexpected extra call')
+    })
+    const res = await previewFetch(request('/__e2e__/storage', 'owned', 'DELETE'), env, vi.fn())
+    expect(res.status).toBe(200)
+    expect(env.MEDIA_BUCKET.delete).toHaveBeenCalledTimes(2)
+    expect(env.MEDIA_BUCKET.delete).toHaveBeenNthCalledWith(1, ['a', 'b'])
+    expect(env.MEDIA_BUCKET.delete).toHaveBeenNthCalledWith(2, ['c'])
+  })
+
+  it('throws when R2 returns a truncated page without a cursor', async () => {
+    const env = environment()
+    env.MEDIA_BUCKET.list = vi.fn(async () => ({ objects: [{ key: 'x' }], truncated: true, cursor: undefined }))
+    await expect(previewFetch(request('/__e2e__/storage', 'owned', 'DELETE'), env, vi.fn()))
+      .rejects.toThrow('truncated page without a cursor')
+  })
+
+  it('rejects a resource name that does not match the run-owned pattern', async () => {
+    const env = environment()
+    env.E2E_RESOURCE_NAME = 'production-worker'
+    const res = await previewFetch(request('/__e2e__/identity'), env, vi.fn())
+    expect(res.status).toBe(403)
+  })
 })

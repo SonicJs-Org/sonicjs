@@ -89,6 +89,37 @@ jobs:
           sed -i "s/database_id = \"[^\"]*\"/database_id = \"$DB_ID\"/; s/database_name = \"[^\"]*\"/database_name = \"$NAME\"/" wrangler.toml
           npx wrangler d1 migrations apply DB --remote
 
+      - name: Allocate run-owned R2 bucket
+        if: env.TRUSTED_PREVIEW == 'true'
+        id: r2bucket
+        working-directory: my-sonicjs-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          NAME="${{ steps.database.outputs.name }}-media"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          npx wrangler r2 bucket create "$NAME"
+          sed -i "s/bucket_name = \"sonicjs-ci-media\"/bucket_name = \"$NAME\"/" wrangler.toml
+
+      - name: Allocate run-owned KV namespace
+        if: env.TRUSTED_PREVIEW == 'true'
+        id: kvnamespace
+        working-directory: my-sonicjs-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          TITLE="${{ steps.database.outputs.name }}-cache"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          RESULT=$(npx wrangler kv namespace create "$TITLE" 2>&1)
+          KV_ID=$(echo "$RESULT" | grep -oP '(?<=id = ")[^"]+')
+          test -n "$KV_ID"
+          echo "id=$KV_ID" >> "$GITHUB_OUTPUT"
+          sed -i "s/id = \"a16f8246fc294d809c90b0fb2df6d363\"/id = \"$KV_ID\"/" wrangler.toml
+
       - name: Deploy run-owned Workers preview
         if: env.TRUSTED_PREVIEW == 'true'
         id: deploy
@@ -97,14 +128,21 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WORKER_NAME: ${{ steps.database.outputs.name }}
+          E2E_RUN_KEY: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
         run: |
           set -euo pipefail
           mkdir -p ../e2e-logs
-          npx wrangler deploy --name "$WORKER_NAME" --tag "$(git rev-parse HEAD)" 2>&1 | tee ../e2e-logs/deploy.log
+          CHECKOUT_SHA=$(git rev-parse HEAD)
+          npx wrangler deploy --name "$WORKER_NAME" --tag "$CHECKOUT_SHA" \
+            --var "E2E_RUN_KEY:$E2E_RUN_KEY" \
+            --var "E2E_BUILD_SHA:$CHECKOUT_SHA" \
+            --var "E2E_RESOURCE_NAME:$WORKER_NAME" \
+            2>&1 | tee ../e2e-logs/deploy.log
           PREVIEW_URL=$(grep -oE "https://${WORKER_NAME}\.[a-zA-Z0-9-]+\.workers\.dev" ../e2e-logs/deploy.log | sort -u)
           test -n "$PREVIEW_URL"
           echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
-          printf 'run_id=%s\nattempt=%s\ncheckout=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$(git rev-parse HEAD)" > ../e2e-logs/build.txt
+          echo "E2E_RUN_KEY=$E2E_RUN_KEY" >> "$GITHUB_ENV"
+          printf 'run_id=%s\nattempt=%s\ncheckout=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$CHECKOUT_SHA" > ../e2e-logs/build.txt
 
       - name: Prepare isolated local D1 for forks and Dependabot
         if: env.TRUSTED_PREVIEW != 'true'
@@ -119,6 +157,17 @@ jobs:
           # Only a bounded safe GET is retried. Auth/schema/seed failures are not retried.
           curl --fail --silent --show-error --location --connect-timeout 5 --max-time 15 \
             --retry 8 --retry-delay 2 --retry-connrefused "$BASE_URL/auth/login" -o /dev/null
+          # Verify the deployed build matches our checkout
+          IDENTITY=$(curl --fail --silent --show-error \
+            -H "X-E2E-Run-Key: $E2E_RUN_KEY" \
+            "$BASE_URL/__e2e__/identity")
+          DEPLOYED_SHA=$(echo "$IDENTITY" | jq -r '.sha')
+          EXPECTED_SHA=$(git rev-parse HEAD)
+          if [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Build identity mismatch: deployed=$DEPLOYED_SHA expected=$EXPECTED_SHA"
+            exit 1
+          fi
+          echo "Build identity verified: $DEPLOYED_SHA"
           npx tsx scripts/e2e-readiness.ts
 
       - name: Run full E2E regression suite
@@ -140,6 +189,13 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Clean run-owned R2 storage via preview handler
+        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.deploy.outcome == 'success'
+        run: |
+          curl --fail --silent --show-error -X DELETE \
+            -H "X-E2E-Run-Key: $E2E_RUN_KEY" \
+            "$BASE_URL/__e2e__/storage" || true
+
       - name: Delete run-owned Worker
         if: always() && env.TRUSTED_PREVIEW == 'true' && steps.deploy.outcome != 'skipped' && steps.database.outputs.name != ''
         working-directory: my-sonicjs-app
@@ -157,3 +213,19 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DB_NAME: ${{ steps.database.outputs.name }}
         run: npx wrangler d1 delete "$DB_NAME" --skip-confirmation
+
+      - name: Delete run-owned R2 bucket
+        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.r2bucket.outputs.name != ''
+        working-directory: my-sonicjs-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler r2 bucket delete "${{ steps.r2bucket.outputs.name }}"
+
+      - name: Delete run-owned KV namespace
+        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.kvnamespace.outputs.id != ''
+        working-directory: my-sonicjs-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler kv namespace delete --namespace-id="${{ steps.kvnamespace.outputs.id }}"

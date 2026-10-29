@@ -4,7 +4,9 @@ on:
   pull_request_target:
     branches: [main, v3]
   push:
-    branches: [main, v3]
+    # Validate the head workflow before pull_request_target rollout.
+    # The old base workflow still fails the disposable-target guard until rollout.
+    branches: [main, v3, test/e2e-infrastructure-hardening]
 
 permissions:
   contents: read
@@ -26,9 +28,11 @@ jobs:
       # Approval does not make fork code trusted. Forks/Dependabot run the full suite locally.
       TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
       E2E_DISPOSABLE_TARGET: '1'
-      E2E_PERSIST_DIR: ${{ runner.temp }}/sonicjs-e2e-state
       CI: 'true'
     steps:
+      - name: Initialize isolated E2E state path
+        run: echo "E2E_PERSIST_DIR=$RUNNER_TEMP/sonicjs-e2e-state" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:

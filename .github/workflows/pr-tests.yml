@@ -2,249 +2,158 @@ name: PR Tests
 
 on:
   pull_request_target:
-    branches:
-      - main
-      - v3
+    branches: [main, v3]
   push:
-    branches:
-      - main
-      - v3
+    branches: [main, v3]
+
+permissions:
+  contents: read
 
 jobs:
-  # Authorization job - gates fork PRs behind environment approval
   authorize:
     runs-on: ubuntu-latest
-    # Use 'external' environment (requires approval) for fork PRs, 'internal' for same-repo PRs
     environment:
       name: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'external' || 'internal' }}
     steps:
       - name: Authorize
-        run: |
-          echo "✅ Workflow authorized"
-          echo "Event: ${{ github.event_name }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "PR Head Repo: ${{ github.event.pull_request.head.repo.full_name || 'N/A' }}"
-          echo "Is Fork: ${{ github.event.pull_request.head.repo.full_name != github.repository }}"
+        run: echo 'Workflow authorized; fork code never receives deployment secrets.'
 
   test:
     needs: authorize
     runs-on: ubuntu-latest
-    # 150, not 90. The suite is ~740 tests at 2 workers with retries: 3; the selected subset was
-    # 507 in 37.9 min (job 53 min), and an earlier unfiltered run was still going at 88 min and
-    # was killed by the old 90-minute cap — which uploads videos but no report, so it tells you
-    # nothing. Full runs need headroom for the retry tail, not just the median.
     timeout-minutes: 150
-
+    env:
+      # Approval does not make fork code trusted. Forks/Dependabot run the full suite locally.
+      TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      E2E_DISPOSABLE_TARGET: '1'
+      E2E_PERSIST_DIR: ${{ runner.temp }}/sonicjs-e2e-state
+      CI: 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For pull_request_target, we need to checkout the PR head
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
+          persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          # Privileged pull_request_target caches must not be shared with untrusted code.
+          cache: ${{ env.TRUSTED_PREVIEW == 'true' && 'npm' || '' }}
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install locked dependencies
+        run: npm ci
 
       - name: Type check
         run: npm run type-check
 
-      - name: Lint E2E tests for banned skip patterns
+      - name: Lint E2E skip patterns and tags
         run: |
-          # Only lint E2E spec files changed in this PR/push — incremental enforcement.
-          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
-            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'tests/e2e/*.spec.ts' 2>/dev/null || echo "")
-          else
-            CHANGED=$(git diff --name-only HEAD~1 -- 'tests/e2e/*.spec.ts' 2>/dev/null || echo "")
-          fi
-          if [ -z "$CHANGED" ]; then
-            echo "No E2E spec files changed — skipping lint."
-            exit 0
-          fi
-          echo "Linting changed E2E specs:"
-          echo "$CHANGED"
-          bash scripts/lint-e2e-no-skip.sh $CHANGED
-
-      # Whole-suite, not just the changed files: the property is that no test is
-      # invisible to the tag filter below, and a test can lose its only tag
-      # through an edit to a describe several lines above it.
-      - name: Lint E2E tests for missing CI tags
-        run: bash scripts/lint-e2e-tags.sh
+          bash scripts/lint-e2e-no-skip.sh
+          bash scripts/lint-e2e-tags.sh
 
       - name: Run unit tests with coverage
         run: npm run test:cov
 
       - name: Upload coverage to Codecov
+        if: env.TRUSTED_PREVIEW == 'true'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./packages/core/coverage/coverage-final.json
           flags: unittests
           fail_ci_if_error: false
-          verbose: true
 
       - name: Build core package
         run: npm run build:core
 
-      # Skip Cloudflare deployment and E2E tests for Dependabot PRs (no access to secrets)
-      - name: Create fresh D1 database for PR
-        if: github.actor != 'dependabot[bot]'
-        id: create-db
-        run: |
-          cd my-sonicjs-app
-          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          # Limit to 43 chars to allow for "sonicjs-pr-" prefix (11 chars) = 54 total
-          # Remove trailing hyphens to avoid invalid worker names
-          SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9-]/-/g' | cut -c1-43 | sed 's/-*$//')
-          DB_NAME="sonicjs-pr-${SAFE_BRANCH}"
-
-          echo "Creating fresh D1 database: $DB_NAME"
-
-          # Check if database already exists
-          EXISTING_DB=$(npx wrangler d1 list --json | jq -r ".[] | select(.name == \"$DB_NAME\") | .uuid" 2>/dev/null || echo "")
-
-          if [ -n "$EXISTING_DB" ]; then
-            echo "Database $DB_NAME already exists with ID: $EXISTING_DB"
-            echo "Deleting existing database to ensure fresh migrations..."
-            npx wrangler d1 delete "$DB_NAME" -y || true
-            sleep 2
-          fi
-
-          # Create new database (always fresh)
-          CREATE_OUTPUT=$(npx wrangler d1 create "$DB_NAME" 2>&1)
-          echo "$CREATE_OUTPUT"
-
-          # Extract database ID from creation output
-          DB_ID=$(echo "$CREATE_OUTPUT" | grep -oP 'database_id\s*=\s*"\K[^"]+' || echo "")
-
-          if [ -z "$DB_ID" ]; then
-            # Try alternative extraction method
-            DB_ID=$(npx wrangler d1 list --json | jq -r ".[] | select(.name == \"$DB_NAME\") | .uuid")
-          fi
-
-          if [ -z "$DB_ID" ]; then
-            echo "Error: Failed to get database ID"
-            exit 1
-          fi
-
-          echo "Database ID: $DB_ID"
-          echo "db_id=$DB_ID" >> $GITHUB_OUTPUT
-          echo "db_name=$DB_NAME" >> $GITHUB_OUTPUT
-
-          # Update wrangler.toml with the new database ID
-          sed -i "s/database_id = \"[^\"]*\"/database_id = \"$DB_ID\"/" wrangler.toml
-          sed -i "s/database_name = \"[^\"]*\"/database_name = \"$DB_NAME\"/" wrangler.toml
-
-          echo "Updated wrangler.toml with new database"
-          grep -A2 "d1_databases" wrangler.toml
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Run D1 migrations
-        if: github.actor != 'dependabot[bot]'
-        run: |
-          cd my-sonicjs-app
-          echo "Applying migrations to database: ${{ steps.create-db.outputs.db_name }}"
-          npx wrangler d1 migrations apply ${{ steps.create-db.outputs.db_name }} --remote
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Deploy to Cloudflare Workers Preview
-        if: github.actor != 'dependabot[bot]'
-        id: deploy
-        run: |
-          cd my-sonicjs-app
-          # Deploy to preview with unique name based on PR/branch
-          # Cloudflare Workers has a 54 character limit for script names with previews
-          # Prefix "sonicjs-pr-" is 11 chars, so max branch name is 43 chars
-          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          # Limit to 43 chars to allow for "sonicjs-pr-" prefix (11 chars) = 54 total
-          # Remove trailing hyphens to avoid invalid worker names
-          SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9-]/-/g' | cut -c1-43 | sed 's/-*$//')
-
-          # Deploy and capture the URL (don't exit on error)
-          set +e
-          echo "Deploying to preview environment: sonicjs-pr-${SAFE_BRANCH}"
-          DEPLOY_OUTPUT=$(npx wrangler deploy --name "sonicjs-pr-${SAFE_BRANCH}" 2>&1)
-          DEPLOY_EXIT_CODE=$?
-          set -e
-
-          echo "=== Wrangler Deploy Output ==="
-          echo "$DEPLOY_OUTPUT"
-          echo "=== End Deploy Output ==="
-
-          if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
-            echo "Error: Wrangler deploy failed with exit code $DEPLOY_EXIT_CODE"
-            exit 1
-          fi
-
-          # Extract the URL from wrangler output
-          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -oP 'https://[^\s]+\.workers\.dev' | head -1)
-
-          if [ -z "$PREVIEW_URL" ]; then
-            echo "Failed to extract preview URL from wrangler output"
-            exit 1
-          fi
-
-          echo "Preview URL: $PREVIEW_URL"
-          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Wait for preview deployment
-        if: github.actor != 'dependabot[bot]'
-        run: |
-          echo "Waiting for preview to be ready..."
-          for i in {1..30}; do
-            if curl -s -o /dev/null -w "%{http_code}" "${{ steps.deploy.outputs.preview_url }}" | grep -q "200\|301\|302"; then
-              echo "Preview is ready!"
-              exit 0
-            fi
-            echo "Attempt $i/30: Preview not ready yet, waiting..."
-            sleep 10
-          done
-          echo "Preview failed to become ready"
-          exit 1
-
-      - name: Install Playwright browsers
-        if: github.actor != 'dependabot[bot]'
+      - name: Install matching Playwright browser and OS dependencies
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests against preview
-        if: github.actor != 'dependabot[bot]'
-        # Every PR runs the WHOLE suite. Changed-area tag selection used to narrow this to
-        # @smoke plus whatever a path matcher happened to map, which meant a defect was invisible
-        # to CI whenever the specs that cover it carried a tag the diff did not select — the
-        # escapeHtmlAttr 500 on /admin/plugins/ai-search (#1066) shipped green exactly that way:
-        # a templates/pages diff selects @smoke only, and the ai-search specs are @plugins.
-        run: npx playwright test --config=tests/playwright.config.ts
+      - name: Allocate run-owned D1 database
+        if: env.TRUSTED_PREVIEW == 'true'
+        id: database
+        working-directory: my-sonicjs-app
         env:
-          CI: true
-          BASE_URL: ${{ steps.deploy.outputs.preview_url }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          NAME="sonicjs-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          npx wrangler d1 create "$NAME"
+          DB_ID=$(npx wrangler d1 list --json | jq -er --arg name "$NAME" '.[] | select(.name == $name) | .uuid')
+          test -n "$DB_ID"
+          sed -i "s/database_id = \"[^\"]*\"/database_id = \"$DB_ID\"/; s/database_name = \"[^\"]*\"/database_name = \"$NAME\"/" wrangler.toml
+          npx wrangler d1 migrations apply DB --remote
 
-      - name: Upload test results
-        if: always() && github.actor != 'dependabot[bot]'
+      - name: Deploy run-owned Workers preview
+        if: env.TRUSTED_PREVIEW == 'true'
+        id: deploy
+        working-directory: my-sonicjs-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ steps.database.outputs.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p ../e2e-logs
+          npx wrangler deploy --name "$WORKER_NAME" --tag "$(git rev-parse HEAD)" 2>&1 | tee ../e2e-logs/deploy.log
+          PREVIEW_URL=$(grep -oE "https://${WORKER_NAME}\.[a-zA-Z0-9-]+\.workers\.dev" ../e2e-logs/deploy.log | sort -u)
+          test -n "$PREVIEW_URL"
+          echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+          printf 'run_id=%s\nattempt=%s\ncheckout=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$(git rev-parse HEAD)" > ../e2e-logs/build.txt
+
+      - name: Prepare isolated local D1 for forks and Dependabot
+        if: env.TRUSTED_PREVIEW != 'true'
+        working-directory: my-sonicjs-app
+        run: npx wrangler d1 migrations apply DB --local --persist-to "$E2E_PERSIST_DIR"
+
+      - name: Deployment and authenticated application readiness
+        if: env.TRUSTED_PREVIEW == 'true'
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          # Only a bounded safe GET is retried. Auth/schema/seed failures are not retried.
+          curl --fail --silent --show-error --location --connect-timeout 5 --max-time 15 \
+            --retry 8 --retry-delay 2 --retry-connrefused "$BASE_URL/auth/login" -o /dev/null
+          npx tsx scripts/e2e-readiness.ts
+
+      - name: Run full E2E regression suite
+        timeout-minutes: 140
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-logs
+          npx playwright test --config=tests/playwright.config.ts 2>&1 | tee e2e-logs/playwright.log
+
+      - name: Upload E2E reports, failed-attempt traces and logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
-
-      - name: Upload test videos
-        if: always() && github.actor != 'dependabot[bot]'
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-videos
+          name: e2e-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            test-results/**/*.webm
-            playwright-report/**/*.webm
+            playwright-report/
+            test-results/
+            e2e-logs/
           retention-days: 7
+          if-no-files-found: warn
+
+      - name: Delete run-owned Worker
+        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.deploy.outcome != 'skipped' && steps.database.outputs.name != ''
+        working-directory: my-sonicjs-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ steps.database.outputs.name }}
+        run: npx wrangler delete "$WORKER_NAME" --force
+
+      - name: Delete run-owned D1 database
+        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.database.outputs.name != ''
+        working-directory: my-sonicjs-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DB_NAME: ${{ steps.database.outputs.name }}
+        run: npx wrangler d1 delete "$DB_NAME" --skip-confirmation

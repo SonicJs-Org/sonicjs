@@ -32,7 +32,9 @@ export function d1Exec(sql: string) {
   const ATTEMPTS = 5;
   for (let attempt = 1; ; attempt++) {
     try {
-      execFileSync('npx', ['wrangler', 'd1', 'execute', 'DB', '--local', '--command', sql], {
+      execFileSync('npx', ['wrangler', 'd1', 'execute', 'DB', '--local',
+        ...(process.env.E2E_PERSIST_DIR ? ['--persist-to', process.env.E2E_PERSIST_DIR] : []),
+        '--command', sql], {
         cwd: APP_DIR,
         stdio: 'pipe',
       });
@@ -81,7 +83,7 @@ export async function submitAndWaitForDocument(
   click: () => Promise<void>
 ): Promise<void> {
   const matches = (p: string) => (typeof pathname === 'string' ? p === pathname : pathname.test(p))
-  await Promise.all([
+  const [response] = await Promise.all([
     page.waitForResponse(
       (r) =>
         r.request().resourceType() === 'document' &&
@@ -90,6 +92,9 @@ export async function submitAndWaitForDocument(
     ),
     click(),
   ])
+  expect(response.ok(), `Document ${response.url()} failed: ${response.status()}`).toBeTruthy()
+  const error = await response.finished()
+  if (error) throw error
   await page.waitForLoadState('domcontentloaded')
 }
 
@@ -108,11 +113,22 @@ export async function submitAndWaitForXhr(
   urlPart: string,
   click: () => Promise<void>
 ): Promise<void> {
+  // Match pathname exactly: /one must not accept /one-other or a query containing /one.
+  const endpoint = new URL(urlPart, page.url())
   const [res] = await Promise.all([
-    page.waitForResponse((r) => r.request().method() === method && r.url().includes(urlPart)),
+    page.waitForResponse((r) => {
+      const actual = new URL(r.url())
+      return r.request().method() === method.toUpperCase() &&
+        actual.origin === endpoint.origin && actual.pathname === endpoint.pathname &&
+        (!endpoint.search || actual.search === endpoint.search)
+    }),
     click(),
   ])
   expect(res.ok(), `${method} ${urlPart} failed: ${res.status()}`).toBeTruthy()
+  const error = await res.finished()
+  if (error) throw error
+  // HTTP completion is not DOM readiness. Callers must assert the resulting swap/redirect
+  // before navigating away; never substitute networkidle or replay the click here.
 }
 
 /**
@@ -228,14 +244,11 @@ export async function getCsrfTokenFromPage(page: Page): Promise<string> {
  * first attempt landed that way nobody would seed at all while all four believed somebody had.
  * `res.ok()` is the only thing that means the handler ran.
  *
- * Retries are capped rather than unbounded: if the endpoint is refusing for a reason waiting will
- * not fix — `ENABLE_SEED_ADMIN` unset, a production `ENVIRONMENT` — then every test's beforeEach
- * would otherwise POST again, spending the 10/min window on requests that cannot succeed. Three
- * attempts is enough to ride out a cold start or one worker's 429 without becoming a storm.
+ * Global setup seeds once and marks E2E_ADMIN_SEEDED for the workers. Direct callers without
+ * that setup seed once per process, failing immediately on HTTP or transport errors.
+ * Mutations are not automatically replayed after ambiguous failures.
  */
-const MAX_SEED_ATTEMPTS = 3;
-let seeded = false;
-let seedAttempts = 0;
+let seeded = process.env.E2E_ADMIN_SEEDED === '1';
 let seedInFlight: Promise<void> | null = null;
 
 type SeedClient = {
@@ -243,14 +256,13 @@ type SeedClient = {
 };
 
 async function seedAdminOnce(client: SeedClient) {
-  if (seeded || seedAttempts >= MAX_SEED_ATTEMPTS) return;
+  if (seeded) return;
   if (!seedInFlight) {
-    seedAttempts += 1;
-    seedInFlight = client
-      .post('/auth/seed-admin')
-      .then((res) => { seeded = res.ok(); })
-      .catch(() => { /* transport error — not latched, so the next caller retries */ })
-      .finally(() => { seedInFlight = null; });
+    seedInFlight = (async () => {
+      const res = await client.post('/auth/seed-admin');
+      if (!res.ok()) throw new Error(`Admin seed failed: HTTP ${res.status()}`);
+      seeded = true;
+    })().finally(() => { seedInFlight = null; });
   }
   await seedInFlight;
 }
@@ -733,11 +745,10 @@ let cachedSessionCookies: SessionCookies | null = null
 
 /** The email the cookie jar currently authenticates as, lowercased, or null if nobody. */
 async function signedInAs(page: Page): Promise<string | null> {
-  const res = await page.request
-    .get('/auth/get-session', { headers: { Origin: TEST_ORIGIN } })
-    .catch(() => null)
-  if (!res || !res.ok()) return null
-  const body = (await res.json().catch(() => null)) as { user?: { email?: string } } | null
+  const res = await page.request.get('/auth/get-session', { headers: { Origin: TEST_ORIGIN } })
+  if (res.status() === 401) return null
+  if (!res.ok()) throw new Error(`Admin session check failed: HTTP ${res.status()}`)
+  const body = await res.json() as { user?: { email?: string } } | null
   return body?.user?.email?.toLowerCase() ?? null
 }
 
@@ -814,29 +825,11 @@ async function signInAsAdmin(page: Page) {
   // Ensure admin exists (also creates auth_account for Better Auth)
   await ensureAdminUserExists(page);
 
-  // Use Better Auth's sign-in/email API — sets session cookie in the page context.
-  // Retry on 5xx OR network timeout: preview CF Worker cold-starts can return 500
-  // transiently or time-out during bootstrap under parallel worker load.
-  const signInAttempt = () =>
-    page.request.post('/auth/sign-in/email', {
-      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
-      timeout: 45_000,
-    });
-
-  let res = await signInAttempt().catch(() => null);
-  if (!res || (!res.ok() && res.status() >= 500)) {
-    await page.waitForTimeout(3000);
-    res = await signInAttempt().catch(() => null);
-  }
-  if (!res || (!res.ok() && res.status() >= 500)) {
-    await page.waitForTimeout(5000);
-    res = await signInAttempt().catch(() => null);
-  }
-  if (!res || (!res.ok() && res.status() >= 500)) {
-    await page.waitForTimeout(8000);
-    res = await signInAttempt();
-  }
+  // One attempt: sign-in creates a session, so a timeout must not be blindly replayed.
+  const res = await page.request.post('/auth/sign-in/email', {
+    data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+    headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+  });
 
   if (!res.ok()) {
     throw new Error(`BA sign-in failed: ${res.status()} ${await res.text()}`);
@@ -872,14 +865,6 @@ async function signInAsAdmin(page: Page) {
       data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
       headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
       timeout: 45_000,
-    }).catch(async () => {
-      // Timeout on retry — wait and try once more before giving up
-      await page.waitForTimeout(5000);
-      return page.request.post('/auth/sign-in/email', {
-        data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-        headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
-        timeout: 45_000,
-      });
     });
     if (!retry.ok()) {
       throw new Error(`BA sign-in failed on a cleared jar: ${retry.status()} ${await retry.text()}`);

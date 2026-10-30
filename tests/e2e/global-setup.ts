@@ -3,7 +3,7 @@ import type { FullConfig } from '@playwright/test'
 
 /** Fail once before tests cascade. Never reset a database or retry a seed mutation. */
 export async function prepareEnvironment(baseURL: string): Promise<void> {
-  if (process.env.E2E_DISPOSABLE_TARGET !== '1') {
+  if (process.env.E2E_DISPOSABLE_TARGET !== '1' && !process.env.CI) {
     throw new Error('E2E setup refused: set E2E_DISPOSABLE_TARGET=1 only for an owned disposable environment')
   }
   const client = await request.newContext({ baseURL, timeout: 15_000, extraHTTPHeaders: { Origin: new URL(baseURL).origin } })

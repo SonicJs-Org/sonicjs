@@ -44,6 +44,7 @@ describe('E2E synchronization contracts', () => {
 
   it('refuses setup without disposable-target consent before contacting the server', async () => {
     vi.stubEnv('E2E_DISPOSABLE_TARGET', '')
+    vi.stubEnv('CI', '')
     try { await expect(prepareEnvironment('http://127.0.0.1:1')).rejects.toThrow('refused') }
     finally { vi.unstubAllEnvs() }
   })

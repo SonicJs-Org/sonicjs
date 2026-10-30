@@ -1,17 +1,17 @@
-import { test, expect } from '@playwright/test';
-import { ADMIN_CREDENTIALS } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import { ADMIN_CREDENTIALS, requestLoginToken } from './utils/test-helpers';
 
-test.describe.skip('User Management - Hard Delete', () => {
+test.describe('User Management - Hard Delete @auth @lock-auth-login @lock-auth-registration', () => {
   let authToken: string;
 
   test.beforeAll(async ({ request }) => {
-    // Login as admin to get auth token
-    const loginResponse = await request.post('/auth/login', {
-      data: ADMIN_CREDENTIALS
-    });
-
-    const loginData = await loginResponse.json();
-    authToken = loginData.token;
+    // `requestLoginToken`, not a bare POST: /auth/login is rate limited to 30/min per IP and the
+    // whole suite shares one IP. The `@lock-auth-login` tag serialises the *tests* that drain that
+    // bucket, but this is a beforeAll hook — it runs before any test's fixtures are set up, so the
+    // lock does not cover it. A 429 here used to leave `authToken` undefined and every test below
+    // failed on its DELETE with a bare `expect(deleteResponse.ok()).toBeTruthy()` → false, which
+    // pointed at the wrong endpoint entirely.
+    authToken = await requestLoginToken(request, ADMIN_CREDENTIALS);
   });
 
   test('should soft delete a user via API (deactivate)', async ({ request }) => {

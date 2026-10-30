@@ -1,8 +1,18 @@
 /**
  * Test Cleanup Routes
  *
- * Provides endpoints to clean up test data after e2e tests
- * WARNING: These endpoints should only be available in development/test environments
+ * Endpoints that wipe disposable test data between e2e runs.
+ *
+ * Data model: the document model is authoritative. Test artifacts are `documents`
+ * rows (matched by title pattern or by a `test_*` type_id) plus test `auth_user`
+ * rows. Legacy tables (`content`, `collections`, `media`, …) were decommissioned in
+ * the v3 migration; every reference to them here is guarded so a greenfield schema
+ * (which never creates them) does not throw.
+ *
+ * SECURITY: these endpoints delete data and require no auth. They are gated
+ * fail-closed — only reachable when `ENVIRONMENT` is an explicit non-production
+ * value (development/test/e2e/preview/local). An unset or production ENVIRONMENT
+ * is denied, so a default `wrangler deploy` cannot expose them.
  */
 
 import { Hono } from 'hono'
@@ -11,306 +21,268 @@ import type { D1Database } from '@cloudflare/workers-types'
 
 const app = new Hono()
 
+// Environments where destructive cleanup is permitted. Anything else (including
+// 'production' and an unset value) is denied.
+const ALLOWED_ENVIRONMENTS = new Set(['development', 'test', 'e2e', 'preview', 'local'])
+
+function cleanupAllowed(c: Context): boolean {
+  const env = (c.env.ENVIRONMENT ?? '').toString().toLowerCase()
+  return ALLOWED_ENVIRONMENTS.has(env)
+}
+
+function denyResponse(c: Context) {
+  return c.json({ error: 'Cleanup endpoint not available in this environment' }, 403)
+}
+
+async function tableExists(db: D1Database, tableName: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .bind(tableName)
+    .first()
+  return !!row
+}
+
+// Run a delete and return the row count. Swallows "no such table" so statements that
+// touch decommissioned legacy tables are safe on a greenfield (document-model) schema.
+async function tryDelete(db: D1Database, sql: string, ...binds: unknown[]): Promise<number> {
+  try {
+    const stmt = binds.length ? db.prepare(sql).bind(...(binds as never[])) : db.prepare(sql)
+    const res = await stmt.run()
+    return res.meta?.changes || 0
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    if (/no such table|no such column/i.test(msg)) return 0
+    throw error
+  }
+}
+
+const TEST_TITLE_PATTERN =
+  "title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'"
+
 /**
- * Clean up all test data (collections, content, users except admin)
+ * Clean up all disposable test data.
  * POST /test-cleanup
  */
 app.post('/test-cleanup', async (c: Context) => {
+  if (!cleanupAllowed(c)) return denyResponse(c)
   const db = c.env.DB as D1Database
-
-  // Only allow in development/test environments
-  if (c.env.ENVIRONMENT === 'production') {
-    return c.json({ error: 'Cleanup endpoint not available in production' }, 403)
-  }
 
   try {
     let deletedCount = 0
 
-    // Use pattern-based deletes to avoid SQL variable limits
-    // This approach uses subqueries instead of building large IN lists
+    // ── Document model (authoritative) ──────────────────────────────────────
+    // Test content/media by title pattern.
+    deletedCount += await tryDelete(
+      db,
+      `DELETE FROM documents WHERE tenant_id = 'default' AND (${TEST_TITLE_PATTERN})`,
+    )
+    // Documents belonging to disposable test types (collections are code-only now,
+    // so a "test collection" is just a type_id).
+    deletedCount += await tryDelete(
+      db,
+      `DELETE FROM documents
+       WHERE tenant_id = 'default'
+         AND (type_id LIKE 'test_%' OR type_id IN ('test_collection', 'products', 'articles'))`,
+    )
 
-    // Step 1: Delete child data for test content (by pattern)
-    await db.prepare(`
-      DELETE FROM content_versions
-      WHERE content_id IN (
-        SELECT id FROM content
-        WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
-      )
-    `).run()
+    // ── Test users + their child rows ───────────────────────────────────────
+    const TEST_USER =
+      "email != 'admin@sonicjs.com' AND (email LIKE '%test%' OR email LIKE '%example.com%')"
+    await tryDelete(db, `DELETE FROM auth_api_tokens WHERE user_id IN (SELECT id FROM auth_user WHERE ${TEST_USER})`)
+    deletedCount += await tryDelete(db, `DELETE FROM auth_user WHERE ${TEST_USER}`)
 
-    await db.prepare(`
-      DELETE FROM workflow_history
-      WHERE content_id IN (
-        SELECT id FROM content
-        WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
-      )
-    `).run()
-
-    // Note: content_data table may not exist in all schemas
-    try {
-      await db.prepare(`
-        DELETE FROM content_data
-        WHERE content_id IN (
-          SELECT id FROM content
-          WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
+    // ── Legacy tables (guarded — absent on greenfield) ──────────────────────
+    if (await tableExists(db, 'content')) {
+      const childByPattern = (table: string) =>
+        tryDelete(
+          db,
+          `DELETE FROM ${table} WHERE content_id IN (SELECT id FROM content WHERE ${TEST_TITLE_PATTERN})`,
         )
-      `).run()
-    } catch (e) {
-      // Table doesn't exist, skip
+      await childByPattern('content_versions')
+      await childByPattern('workflow_history')
+      await childByPattern('content_data')
+      deletedCount += await tryDelete(db, `DELETE FROM content WHERE ${TEST_TITLE_PATTERN}`)
+      // Orphan sweep.
+      await tryDelete(db, 'DELETE FROM content_data WHERE content_id NOT IN (SELECT id FROM content)')
+      await tryDelete(db, 'DELETE FROM content_versions WHERE content_id NOT IN (SELECT id FROM content)')
+      await tryDelete(db, 'DELETE FROM workflow_history WHERE content_id NOT IN (SELECT id FROM content)')
     }
+    // Trim activity log (guarded).
+    await tryDelete(
+      db,
+      'DELETE FROM activity_logs WHERE id NOT IN (SELECT id FROM activity_logs ORDER BY created_at DESC LIMIT 100)',
+    )
 
-    // Step 2: Delete test content by pattern
-    const contentResult = await db.prepare(`
-      DELETE FROM content
-      WHERE title LIKE 'Test %' OR title LIKE '%E2E%' OR title LIKE '%Playwright%' OR title LIKE '%Sample%'
-    `).run()
-    deletedCount += contentResult.meta?.changes || 0
-
-    // Step 3: Delete child data for test users
-    await db.prepare(`
-      DELETE FROM api_tokens
-      WHERE user_id IN (
-        SELECT id FROM users
-        WHERE email != 'admin@sonicjs.com' AND (email LIKE '%test%' OR email LIKE '%example.com%')
-      )
-    `).run()
-
-    await db.prepare(`
-      DELETE FROM media
-      WHERE uploaded_by IN (
-        SELECT id FROM users
-        WHERE email != 'admin@sonicjs.com' AND (email LIKE '%test%' OR email LIKE '%example.com%')
-      )
-    `).run()
-
-    // Step 4: Delete test users
-    const usersResult = await db.prepare(`
-      DELETE FROM users
-      WHERE email != 'admin@sonicjs.com' AND (email LIKE '%test%' OR email LIKE '%example.com%')
-    `).run()
-    deletedCount += usersResult.meta?.changes || 0
-
-    // Step 5: Delete child data for test collections
-    try {
-      await db.prepare(`
-        DELETE FROM collection_fields
-        WHERE collection_id IN (
-          SELECT id FROM collections
-          WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
-        )
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
-    }
-
-    // Delete remaining content from test collections
-    await db.prepare(`
-      DELETE FROM content
-      WHERE collection_id IN (
-        SELECT id FROM collections
-        WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
-      )
-    `).run()
-
-    // Step 6: Delete test collections
-    const collectionsResult = await db.prepare(`
-      DELETE FROM collections
-      WHERE name LIKE 'test_%' OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
-    `).run()
-    deletedCount += collectionsResult.meta?.changes || 0
-
-    // Step 7: Clean up orphaned data (skip if tables don't exist)
-    try {
-      await db.prepare(`
-        DELETE FROM content_data WHERE content_id NOT IN (SELECT id FROM content)
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
-    }
-
-    try {
-      await db.prepare(`
-        DELETE FROM collection_fields WHERE collection_id NOT IN (SELECT id FROM collections)
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
-    }
-
-    try {
-      await db.prepare(`
-        DELETE FROM content_versions WHERE content_id NOT IN (SELECT id FROM content)
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
-    }
-
-    try {
-      await db.prepare(`
-        DELETE FROM workflow_history WHERE content_id NOT IN (SELECT id FROM content)
-      `).run()
-    } catch (e) {
-      // Table doesn't exist
-    }
-
-    // Step 8: Delete old activity logs (keep only last 100)
-    await db.prepare(`
-      DELETE FROM activity_logs
-      WHERE id NOT IN (
-        SELECT id FROM activity_logs
-        ORDER BY created_at DESC
-        LIMIT 100
-      )
-    `).run()
-
-    return c.json({
-      success: true,
-      deletedCount,
-      message: 'Test data cleaned up successfully'
-    })
+    return c.json({ success: true, deletedCount, message: 'Test data cleaned up successfully' })
   } catch (error) {
     console.error('Test cleanup error:', error)
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
   }
 })
 
 /**
- * Clean up test users only
+ * Clean up test users only.
  * POST /test-cleanup/users
  */
 app.post('/test-cleanup/users', async (c: Context) => {
+  if (!cleanupAllowed(c)) return denyResponse(c)
   const db = c.env.DB as D1Database
 
-  // Only allow in development/test environments
-  if (c.env.ENVIRONMENT === 'production') {
-    return c.json({ error: 'Cleanup endpoint not available in production' }, 403)
-  }
-
   try {
-    // Delete test users (preserve admin)
-    const result = await db.prepare(`
-      DELETE FROM users
-      WHERE email != 'admin@sonicjs.com'
-      AND (
-        email LIKE '%test%'
-        OR email LIKE '%example.com%'
-        OR first_name = 'Test'
-      )
-    `).run()
-
-    return c.json({
-      success: true,
-      deletedCount: result.meta?.changes || 0,
-      message: 'Test users cleaned up successfully'
-    })
+    const deletedCount = await tryDelete(
+      db,
+      `DELETE FROM auth_user
+       WHERE email != 'admin@sonicjs.com'
+         AND (email LIKE '%test%' OR email LIKE '%example.com%' OR first_name = 'Test')`,
+    )
+    return c.json({ success: true, deletedCount, message: 'Test users cleaned up successfully' })
   } catch (error) {
     console.error('User cleanup error:', error)
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
   }
 })
 
 /**
- * Clean up test collections only
+ * Clean up disposable test "collections" — now just documents of a test type_id.
  * POST /test-cleanup/collections
  */
 app.post('/test-cleanup/collections', async (c: Context) => {
+  if (!cleanupAllowed(c)) return denyResponse(c)
   const db = c.env.DB as D1Database
 
-  // Only allow in development/test environments
-  if (c.env.ENVIRONMENT === 'production') {
-    return c.json({ error: 'Cleanup endpoint not available in production' }, 403)
-  }
-
   try {
-    let deletedCount = 0
+    let deletedCount = await tryDelete(
+      db,
+      `DELETE FROM documents
+       WHERE tenant_id = 'default'
+         AND (type_id LIKE 'test_%' OR type_id IN ('test_collection', 'products', 'articles'))`,
+    )
+    // Legacy collection rows, if the table still exists.
+    deletedCount += await tryDelete(
+      db,
+      "DELETE FROM collections WHERE name LIKE 'test_%' OR name IN ('test_collection', 'products', 'articles')",
+    )
+    await tryDelete(db, 'DELETE FROM collection_fields WHERE collection_id NOT IN (SELECT id FROM collections)')
 
-    // Get test collection IDs first
-    const collections = await db.prepare(`
-      SELECT id FROM collections
-      WHERE name LIKE 'test_%'
-      OR name IN ('blog_posts', 'test_collection', 'products', 'articles')
-    `).all()
-
-    if (collections.results && collections.results.length > 0) {
-      const collectionIds = collections.results.map((c: any) => c.id)
-
-      // Delete associated fields
-      for (const id of collectionIds) {
-        await db.prepare('DELETE FROM collection_fields WHERE collection_id = ?').bind(id).run()
-      }
-
-      // Delete associated content
-      for (const id of collectionIds) {
-        await db.prepare('DELETE FROM content WHERE collection_id = ?').bind(id).run()
-      }
-
-      // Delete the collections
-      const result = await db.prepare(`
-        DELETE FROM collections
-        WHERE id IN (${collectionIds.map(() => '?').join(',')})
-      `).bind(...collectionIds).run()
-
-      deletedCount = result.meta?.changes || 0
-    }
-
-    return c.json({
-      success: true,
-      deletedCount,
-      message: 'Test collections cleaned up successfully'
-    })
+    return c.json({ success: true, deletedCount, message: 'Test collections cleaned up successfully' })
   } catch (error) {
     console.error('Collection cleanup error:', error)
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
   }
 })
 
 /**
- * Clean up test content only
+ * Clean up test content only.
  * POST /test-cleanup/content
  */
 app.post('/test-cleanup/content', async (c: Context) => {
+  if (!cleanupAllowed(c)) return denyResponse(c)
   const db = c.env.DB as D1Database
 
-  // Only allow in development/test environments
-  if (c.env.ENVIRONMENT === 'production') {
-    return c.json({ error: 'Cleanup endpoint not available in production' }, 403)
-  }
-
   try {
-    // Delete test content
-    const result = await db.prepare(`
-      DELETE FROM content
-      WHERE title LIKE 'Test %'
-      OR title LIKE '%E2E%'
-      OR title LIKE '%Playwright%'
-      OR title LIKE '%Sample%'
-    `).run()
-
-    // Clean up orphaned content_data
-    await db.prepare(`
-      DELETE FROM content_data
-      WHERE content_id NOT IN (SELECT id FROM content)
-    `).run()
-
-    return c.json({
-      success: true,
-      deletedCount: result.meta?.changes || 0,
-      message: 'Test content cleaned up successfully'
-    })
+    let deletedCount = await tryDelete(
+      db,
+      `DELETE FROM documents WHERE tenant_id = 'default' AND (${TEST_TITLE_PATTERN})`,
+    )
+    if (await tableExists(db, 'content')) {
+      deletedCount += await tryDelete(db, `DELETE FROM content WHERE ${TEST_TITLE_PATTERN}`)
+      await tryDelete(db, 'DELETE FROM content_data WHERE content_id NOT IN (SELECT id FROM content)')
+    }
+    return c.json({ success: true, deletedCount, message: 'Test content cleaned up successfully' })
   } catch (error) {
     console.error('Content cleanup error:', error)
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+  }
+})
+
+/**
+ * Re-seed default content required by E2E specs.
+ * POST /test-seed-defaults
+ *
+ * Idempotent: creates the welcome blog post if absent or soft-deleted,
+ * skips if already present. Should be called from global-setup after cleanup.
+ */
+app.post('/test-seed-defaults', async (c: Context) => {
+  if (!cleanupAllowed(c)) return denyResponse(c)
+  const db = c.env.DB as D1Database
+
+  try {
+    const BLOG_POST_TYPE = 'blog_post'
+    const WELCOME_SLUG = 'welcome-to-sonicjs'
+
+    const existing = await db
+      .prepare(
+        `SELECT id, deleted_at, is_published FROM documents
+         WHERE type_id = ? AND tenant_id = 'default' AND slug = ? AND is_current_draft = 1`,
+      )
+      .bind(BLOG_POST_TYPE, WELCOME_SLUG)
+      .first() as any
+
+    const nowSec = Math.floor(Date.now() / 1000)
+
+    if (existing && !existing.deleted_at) {
+      if (existing.is_published) {
+        return c.json({ success: true, action: 'skipped', message: 'Welcome post already exists and is published' })
+      }
+      // Exists but unpublished (e.g. bulk-drafted by another test) — re-publish.
+      await db
+        .prepare(`UPDATE documents SET is_published = 1, updated_at = ? WHERE id = ?`)
+        .bind(nowSec, existing.id)
+        .run()
+      return c.json({ success: true, action: 'republished', message: 'Welcome post re-published' })
+    }
+
+    if (existing && existing.deleted_at) {
+      // Restore soft-deleted post
+      await db
+        .prepare(
+          `UPDATE documents SET deleted_at = NULL, updated_at = ?, is_published = 1, is_current_draft = 1
+           WHERE id = ?`,
+        )
+        .bind(nowSec, existing.id)
+        .run()
+      return c.json({ success: true, action: 'restored', message: 'Welcome post restored' })
+    }
+
+    // Ensure blog_post document type exists. `document_types` is tenant-global -- it has no
+    // tenant_id column, so the predicate that used to be here threw `no such column: tenant_id`
+    // and the catch turned it into a 500. That only showed on a freshly migrated database,
+    // because the branch is unreachable while the welcome post is still there.
+    const typeExists = await db
+      .prepare(`SELECT id FROM document_types WHERE id = ?`)
+      .bind(BLOG_POST_TYPE)
+      .first()
+    if (!typeExists) {
+      return c.json({ success: false, error: 'blog_post document type not seeded yet' }, 500)
+    }
+
+    const id = `blog-post-welcome-seed`
+    const dataJson = JSON.stringify({
+      title: 'Welcome to SonicJS',
+      slug: WELCOME_SLUG,
+      excerpt: 'Start building with the Cloudflare-native SonicJS CMS.',
+      content: '<p>Welcome to SonicJS. This first post confirms your default blog content is ready.</p>',
+      author: 'SonicJS',
+      status: 'published',
+      difficulty: 'beginner',
+      tags: 'welcome,sonicjs',
+    })
+
+    await db
+      .prepare(
+        `INSERT INTO documents
+           (id, root_id, version_number, type_id, tenant_id, locale, slug, title,
+            data, sort_order, visible, is_current_draft, is_published, status,
+            created_at, updated_at, deleted_at)
+         VALUES (?, ?, 1, ?, 'default', 'default', ?, ?, ?, 0, 1, 1, 1, 'published', ?, ?, NULL)`,
+      )
+      .bind(id, id, BLOG_POST_TYPE, WELCOME_SLUG, 'Welcome to SonicJS', dataJson, nowSec, nowSec)
+      .run()
+
+    return c.json({ success: true, action: 'created', message: 'Welcome post created' })
+  } catch (error) {
+    console.error('Seed defaults error:', error)
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
   }
 })
 

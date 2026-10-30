@@ -43,7 +43,7 @@ openGraph:
 - 100,000 PBKDF2 iterations for password hashing (SHA-256)
 - 5-minute KV cache for token verification — verify in under 5ms
 - 30-day default JWT TTL with sliding 7-day refresh window
-- 3 built-in RBAC roles: `admin`, `editor`, `viewer`
+- 4 built-in RBAC roles: `admin`, `editor`, `author`, `viewer`
 </TLDRBox>
 
 Authentication is the part of your CMS that most people forget about until something breaks — or until a security audit lands on the calendar. The good news: if you're building on **SonicJS**, the heavy lifting is already done. SonicJS gives you four production-ready login methods, hardened defaults, and a JWT model designed for the edge.
@@ -181,6 +181,8 @@ JWTs are stateless, so you *could* verify them on every request with no external
 
 This pattern — stateless verification + edge cache — is what lets SonicJS handle a global audience without a central session store. For a deeper dive into the same trick applied to content reads, see our [caching strategy guide](/blog/sonicjs-caching-strategy).
 
+> **Note:** The admin UI uses a separate **Better Auth session cookie** (`better-auth.session_token`) for browser-based authentication. The JWT path described above is for programmatic/API access; both mechanisms coexist in the same SonicJS instance.
+
 ### Refresh Tokens
 
 Long-lived JWTs aren't the right answer for every app. SonicJS exposes a refresh endpoint that swaps an expired token (within the grace window) for a fresh one without re-prompting the user:
@@ -269,13 +271,16 @@ app.get('/api/posts', optionalAuth(), async (c) => {
 
 ## Role-Based Access Control (RBAC)
 
-SonicJS ships with three core roles. The first user to register is automatically promoted to `admin`; subsequent registrations default to `viewer`.
+SonicJS ships with four core roles. The first user to register is automatically promoted to `admin`; subsequent registrations default to `viewer`.
 
 | Role | Collections | Content | Users | Settings |
 |---|---|---|---|---|
 | **admin** | Full CRUD | Create / publish | Invite, demote, delete | Full access |
 | **editor** | Read | Create / publish | — | — |
+| **author** | Read | Create (own) | — | — |
 | **viewer** | Read | Read only | — | — |
+
+Write routes gate on `admin`, `editor`, and `author` roles. Roles are backed by document-based RBAC (`rbac_role` / `rbac_verb` / `rbac_user_roles`), seeded by `RbacService`.
 
 Roles are stored on the `users` row and embedded in the JWT, so the role check happens at the edge with zero database lookups. If you need finer-grained per-collection access, you can layer custom checks inside your route handlers or write a plugin that extends the role list — the [roadmap](/roadmap) tracks built-in fine-grained ACLs as an upcoming feature.
 
@@ -340,7 +345,7 @@ Putting it all together, here's a minimal SonicJS project with all four auth met
 ```typescript
 // src/index.ts
 import { Hono } from 'hono'
-import { createSonicJS } from '@sonicjs-cms/core'
+import { registerPlugins } from '@sonicjs-cms/core'
 import {
   authPlugin,
   oauthPlugin,
@@ -351,23 +356,19 @@ import { postsCollection } from './collections/posts'
 
 const app = new Hono<{ Bindings: Env }>()
 
-const cms = createSonicJS({
-  collections: [postsCollection],
-  plugins: [
-    authPlugin(),
-    oauthPlugin({ providers: ['github', 'google'] }),
-    magicLinkPlugin(),
-    otpLoginPlugin({
-      codeLength: 6,
-      codeExpiryMinutes: 15,
-      maxAttempts: 3,
-      rateLimitPerHour: 5,
-      allowNewUserRegistration: true,
-    }),
-  ],
-})
+registerPlugins(app, [
+  authPlugin(),
+  oauthPlugin({ providers: ['github', 'google'] }),
+  magicLinkPlugin(),
+  otpLoginPlugin({
+    codeLength: 6,
+    codeExpiryMinutes: 15,
+    maxAttempts: 3,
+    rateLimitPerHour: 5,
+    allowNewUserRegistration: true,
+  }),
+], { hookSystem, env })
 
-app.route('/', cms.app)
 export default app
 ```
 

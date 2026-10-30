@@ -52,7 +52,4 @@ export const PermissionManager: any = {}
 export const requirePermission: any = () => async (_c: any, next: any) => await next()
 export const requireAnyPermission: any = () => async (_c: any, next: any) => await next()
 export const logActivity: any = () => {}
-export const requireActivePlugin: any = () => async (_c: any, next: any) => await next()
-export const requireActivePlugins: any = () => async (_c: any, next: any) => await next()
-export const getActivePlugins: any = () => []
-export const isPluginActive: any = () => false
+export { requireActivePlugin, requireActivePlugins, getActivePlugins, isPluginActive } from './plugin-middleware'

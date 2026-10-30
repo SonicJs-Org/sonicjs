@@ -124,7 +124,7 @@ const PluginSchema = z.object({
 
 export class PluginValidator implements IPluginValidator {
   private static readonly RESERVED_NAMES = [
-    'core', 'system', 'admin', 'api', 'auth', 'content', 'media', 'users', 'collections'
+    'core', 'system', 'admin', 'api', 'auth', 'content', 'media', 'auth_user', 'collections'
   ]
 
   private static readonly RESERVED_PATHS = [
@@ -189,7 +189,7 @@ export class PluginValidator implements IPluginValidator {
           }
           
           // Check for system table conflicts
-          const systemTables = ['users', 'collections', 'content', 'content_versions', 'media', 'api_tokens']
+          const systemTables = ['auth_user', 'collections', 'content', 'content_versions', 'media', 'auth_api_tokens']
           if (systemTables.includes(model.tableName)) {
             errors.push(`Table name "${model.tableName}" conflicts with system table`)
           }

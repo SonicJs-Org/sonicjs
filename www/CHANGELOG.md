@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Updated Vite from 5.4.20 to 7.2.2** (major version bump)
-- **Default admin password changed from "admin123" to "sonicjs!"**
+- **Default admin password changed from "sonicjs!" to "sonicjs!"**
 - Replaced MDXEditor with EasyMDE for richtext fields
 - Conditional field type options based on plugin activation
 - Improved managed collections display with normalized naming

@@ -9,6 +9,7 @@ import '@/styles/tailwind.css'
 import allSections from './allSections.json'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://sonicjs.com'),
   title: {
     template: '%s | SonicJS Docs',
     default: 'SonicJS - Modern Headless CMS for Cloudflare Workers',

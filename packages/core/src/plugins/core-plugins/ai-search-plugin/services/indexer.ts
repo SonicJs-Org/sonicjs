@@ -1,6 +1,33 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type { AISearchSettings, IndexStatus } from '../types'
 import { CustomRAGService } from './custom-rag.service'
+import { getCollectionRegistry } from '../../../../services/collection-registry'
+
+/**
+ * Index metadata is document-backed, one document per collection keyed by slug. The
+ * `ai_search_index_meta` table this service was written against appears in no migration and
+ * exists on no install: every status write threw `no such table`, so `indexCollection` reported
+ * success while the settings page's index status stayed permanently empty.
+ */
+const META_TYPE = 'ai_search_index_meta'
+const TENANT = 'default'
+const META_SCOPE =
+  "type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL"
+
+type MetaRow = { slug: string; data: string }
+
+function rowToStatus(row: MetaRow): IndexStatus {
+  const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {}) as Partial<IndexStatus>
+  return {
+    collection_id: row.slug,
+    collection_name: d.collection_name || row.slug,
+    total_items: d.total_items || 0,
+    indexed_items: d.indexed_items || 0,
+    last_sync_at: d.last_sync_at,
+    status: (d.status as IndexStatus['status']) || 'pending',
+    error_message: d.error_message,
+  }
+}
 
 /**
  * Index Manager Service
@@ -26,18 +53,17 @@ export class IndexManager {
    */
   async indexCollection(collectionId: string): Promise<IndexStatus> {
     try {
-      // Get collection info
-      const collectionStmt = this.db.prepare(
-        'SELECT id, name, display_name FROM collections WHERE id = ?'
-      )
-      const collection = await collectionStmt.bind(collectionId).first<{
-        id: string
-        name: string
-        display_name: string
-      }>()
-
-      if (!collection) {
+      // Get collection info from the in-memory registry. For code-defined
+      // collections id == name, so getById and getByName both succeed.
+      const registry = getCollectionRegistry()
+      const record = registry.getById(collectionId) ?? registry.getByName(collectionId)
+      if (!record) {
         throw new Error(`Collection ${collectionId} not found`)
+      }
+      const collection = {
+        id: record.id,
+        name: record.name,
+        display_name: record.displayName,
       }
 
       // Update status to indexing
@@ -257,33 +283,12 @@ export class IndexManager {
        */
       async getIndexStatus(collectionId: string): Promise<IndexStatus | null> {
     try {
-      const stmt = this.db.prepare(
-        'SELECT * FROM ai_search_index_meta WHERE collection_id = ?'
-      )
-      const result = await stmt.bind(collectionId).first<{
-        id: number
-        collection_id: string
-        collection_name: string
-        total_items: number
-        indexed_items: number
-        last_sync_at?: number
-        status: string
-        error_message?: string
-      }>()
+      const result = await this.db
+        .prepare(`SELECT slug, data FROM documents WHERE ${META_SCOPE} AND slug = ?`)
+        .bind(META_TYPE, TENANT, collectionId)
+        .first<MetaRow>()
 
-      if (!result) {
-        return null
-      }
-
-      return {
-        collection_id: String(result.collection_id),
-        collection_name: result.collection_name,
-        total_items: result.total_items,
-        indexed_items: result.indexed_items,
-        last_sync_at: result.last_sync_at,
-        status: result.status as IndexStatus['status'],
-        error_message: result.error_message,
-      }
+      return result ? rowToStatus(result) : null
     } catch (error) {
       console.error(`Error getting index status for collection ${collectionId}:`, error)
       return null
@@ -295,31 +300,14 @@ export class IndexManager {
        */
       async getAllIndexStatus(): Promise<Record<string, IndexStatus>> {
     try {
-      const stmt = this.db.prepare('SELECT * FROM ai_search_index_meta')
-      const { results } = await stmt.all<{
-        id: number
-        collection_id: number
-        collection_name: string
-        total_items: number
-        indexed_items: number
-        last_sync_at?: number
-        status: string
-        error_message?: string
-      }>()
+      const { results } = await this.db
+        .prepare(`SELECT slug, data FROM documents WHERE ${META_SCOPE}`)
+        .bind(META_TYPE, TENANT)
+        .all<MetaRow>()
 
-          const statusMap: Record<string, IndexStatus> = {}
-
-          for (const row of results || []) {
-            const collectionId = String(row.collection_id)
-            statusMap[collectionId] = {
-              collection_id: collectionId,
-          collection_name: row.collection_name,
-          total_items: row.total_items,
-          indexed_items: row.indexed_items,
-          last_sync_at: row.last_sync_at,
-          status: row.status as IndexStatus['status'],
-          error_message: row.error_message,
-        }
+      const statusMap: Record<string, IndexStatus> = {}
+      for (const row of results || []) {
+        statusMap[row.slug] = rowToStatus(row)
       }
 
       return statusMap
@@ -334,55 +322,45 @@ export class IndexManager {
        */
       private async updateIndexStatus(collectionId: string, status: IndexStatus): Promise<void> {
         try {
-          // Check if record exists
-          const checkStmt = this.db.prepare(
-            'SELECT id FROM ai_search_index_meta WHERE collection_id = ?'
-          )
-          const existing = await checkStmt.bind(collectionId).first<{ id: number }>()
+          const now = Math.floor(Date.now() / 1000)
+          const data = JSON.stringify({
+            collection_name: status.collection_name,
+            total_items: status.total_items,
+            indexed_items: status.indexed_items,
+            last_sync_at: status.last_sync_at ?? null,
+            status: status.status,
+            error_message: status.error_message ?? null,
+          })
+
+          const existing = await this.db
+            .prepare(`SELECT id FROM documents WHERE ${META_SCOPE} AND slug = ?`)
+            .bind(META_TYPE, TENANT, collectionId)
+            .first<{ id: string }>()
 
           if (existing) {
-            // Update existing
-            const stmt = this.db.prepare(`
-              UPDATE ai_search_index_meta 
-              SET collection_name = ?,
-                  total_items = ?,
-                  indexed_items = ?,
-                  last_sync_at = ?,
-                  status = ?,
-                  error_message = ?
-              WHERE collection_id = ?
-            `)
-            await stmt
-              .bind(
-                status.collection_name,
-                status.total_items,
-                status.indexed_items,
-                status.last_sync_at || null,
-                status.status,
-                status.error_message || null,
-                String(collectionId)
-              )
+            await this.db
+              .prepare(`UPDATE documents SET data = json(?), updated_at = ? WHERE id = ?`)
+              .bind(data, now, existing.id)
               .run()
-          } else {
-            // Insert new
-            const stmt = this.db.prepare(`
-              INSERT INTO ai_search_index_meta (
-                collection_id, collection_name, total_items, indexed_items,
-                last_sync_at, status, error_message
-              ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            `)
-            await stmt
-              .bind(
-                String(status.collection_id),
-                status.collection_name,
-                status.total_items,
-                status.indexed_items,
-                status.last_sync_at || null,
-                status.status,
-                status.error_message || null
-              )
-              .run()
+            return
           }
+
+          const docId = crypto.randomUUID()
+          // R5: 17 columns, 8 ? binds (docId x2, slug, title, data, now x2 — plus tenant) — verified
+          await this.db
+            .prepare(`
+              INSERT INTO documents (
+                id, root_id, type_id, version_number, is_current_draft, is_published, status,
+                parent_root_id, slug, title, tenant_id, locale, translation_group_id,
+                data, metadata, created_at, updated_at
+              ) VALUES (
+                ?, ?, '${META_TYPE}', 1, 1, 0, 'draft',
+                '', ?, ?, '${TENANT}', 'default', '',
+                json(?), '{}', ?, ?
+              )
+            `)
+            .bind(docId, docId, collectionId, status.collection_name, data, now, now)
+            .run()
         } catch (error) {
           console.error(`Error updating index status for collection ${collectionId}:`, error)
           throw error

@@ -97,10 +97,10 @@ Every collection you register is automatically exposed under `/api/collections/{
 | `GET /api/collections/{name}/content` | List items (supports `limit`, `offset`, `sort`, `filter[…]`) |
 | `GET /api/collections/{name}/content/{id}` | Fetch a single item by ID |
 | `POST /api/collections/{name}/content` | Create (requires `Authorization: Bearer …`) |
-| `PATCH /api/collections/{name}/content/{id}` | Update (auth) |
+| `PUT /api/collections/{name}/content/{id}` | Update (auth) |
 | `DELETE /api/collections/{name}/content/{id}` | Delete (auth) |
 
-Read endpoints are public by default. Write endpoints require a JWT — see the [authentication guide](/authentication). For the full payload shapes, query parameters, and pagination metadata, the [API reference](/api) is the canonical source.
+Read endpoints are public by default. Write endpoints require auth (API-token Bearer from POST /auth/login, or Better Auth session cookie) — see the [authentication guide](/authentication). For the full payload shapes, query parameters, and pagination metadata, the [API reference](/api) is the canonical source.
 
 ---
 
@@ -370,7 +370,7 @@ export default async function PostPage({
         />
       )}
 
-      {/* Content from SonicJS Quill editor is sanitized HTML */}
+      {/* Content from SonicJS Lexical editor is sanitized HTML */}
       <div
         className="prose prose-slate max-w-none"
         dangerouslySetInnerHTML={{ __html: post.data.content }}
@@ -418,7 +418,7 @@ export default config
 
 ## Part 5: Authenticated Mutations via Route Handlers
 
-Read endpoints are public, but writes (create / update / delete) require a JWT. The safest pattern is a **Route Handler** that runs on the server, attaches the token, and proxies the request — your token never reaches the browser.
+Read endpoints are public, but writes (create / update / delete) require auth (API-token Bearer from POST /auth/login, or Better Auth session cookie). The safest pattern is a **Route Handler** that runs on the server, attaches the token, and proxies the request — your token never reaches the browser.
 
 ```typescript
 // src/app/api/posts/route.ts
@@ -465,7 +465,7 @@ async function getSession(_req: NextRequest) {
 }
 ```
 
-The same pattern works for `PATCH`, `DELETE`, file uploads to `/api/media`, and any other mutation endpoint. See the [SDKs page](/sdks) for typed clients that wrap these endpoints if you'd rather skip the manual `fetch`.
+The same pattern works for `PUT`, `DELETE`, file uploads to `/api/media`, and any other mutation endpoint. See the [SDKs page](/sdks) for typed clients that wrap these endpoints if you'd rather skip the manual `fetch`.
 
 ### Webhook-Driven Revalidation
 

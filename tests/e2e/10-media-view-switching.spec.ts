@@ -1,11 +1,25 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { test, expect, type Page } from './fixtures';
+import { loginAsAdmin, gotoMediaLibrary } from './utils/test-helpers';
 
-test.describe.skip('Media View Switching', () => {
+/**
+ * Pick a view and wait for the resulting navigation.
+ *
+ * The View select is not htmx — its `onchange` runs
+ * `window.location.href = updateUrlParam('view', this.value)`, so every change is a full page
+ * load of the same route with `?view=<value>`. Nothing here is instantaneous, and the assertions
+ * below are about which container the *server* rendered, so the URL has to have changed before
+ * they mean anything.
+ */
+async function selectView(page: Page, view: 'grid' | 'list') {
+  const viewSelector = page.locator('select').filter({ has: page.locator('option:has-text("Grid")') });
+  await viewSelector.selectOption(view);
+  await page.waitForURL(new RegExp(`[?&]view=${view}(&|$)`));
+}
+
+test.describe('Media View Switching @media', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.goto('/admin/media');
-    await page.waitForLoadState('networkidle');
+    await loginAsAdmin(page, false);
+    await gotoMediaLibrary(page);
   });
 
   test('should switch between grid and list views bidirectionally', async ({ page }) => {
@@ -21,8 +35,7 @@ test.describe.skip('Media View Switching', () => {
     await expect(viewSelector).toHaveValue('grid');
 
     // Switch to list view
-    await viewSelector.selectOption('list');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'list');
 
     // Verify list view is active - list view uses space-y-4 class
     const listViewContainer = page.locator('#media-grid > div.space-y-4');
@@ -31,8 +44,7 @@ test.describe.skip('Media View Switching', () => {
     await expect(viewSelector).toHaveValue('list');
 
     // Switch back to grid view
-    await viewSelector.selectOption('grid');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'grid');
 
     // Verify grid view is active again
     await expect(mediaGridContainer).toBeVisible();
@@ -40,18 +52,15 @@ test.describe.skip('Media View Switching', () => {
     await expect(viewSelector).toHaveValue('grid');
 
     // Test multiple switches to ensure consistency
-    await viewSelector.selectOption('list');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'list');
     await expect(listViewContainer).toBeVisible();
     await expect(viewSelector).toHaveValue('list');
 
-    await viewSelector.selectOption('grid');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'grid');
     await expect(mediaGridContainer).toBeVisible();
     await expect(viewSelector).toHaveValue('grid');
 
-    await viewSelector.selectOption('list');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'list');
     await expect(listViewContainer).toBeVisible();
     await expect(viewSelector).toHaveValue('list');
   });
@@ -60,8 +69,7 @@ test.describe.skip('Media View Switching', () => {
     const viewSelector = page.locator('select').filter({ has: page.locator('option:has-text("Grid")') });
 
     // Switch to list view
-    await viewSelector.selectOption('list');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'list');
 
     // Verify list view is active
     const listViewContainer = page.locator('#media-grid > div.space-y-4');
@@ -70,19 +78,17 @@ test.describe.skip('Media View Switching', () => {
 
     // Reload page
     await page.reload();
-    await page.waitForLoadState('networkidle');
 
     // Verify list view is still active after reload
     await expect(listViewContainer).toBeVisible();
     await expect(viewSelector).toHaveValue('list');
 
-    // Switch back to grid and reload
-    await viewSelector.selectOption('grid');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
-
+    // Switch back to grid, then reload. `reload()` re-requests whatever URL the page is
+    // currently on, so it has to run after the `?view=grid` navigation has committed — the
+    // 500ms sleep that used to stand in for that wait expired first on a slow preview, the
+    // reload re-fetched `?view=list`, and the grid container was never in the document.
+    await selectView(page, 'grid');
     await page.reload();
-    await page.waitForLoadState('networkidle');
 
     // Verify grid view is active after reload
     const mediaGridContainer = page.locator('#media-grid > div.media-grid');
@@ -97,15 +103,13 @@ test.describe.skip('Media View Switching', () => {
     await expect(viewSelector).toHaveValue('grid');
 
     // Switch to list view
-    await viewSelector.selectOption('list');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'list');
 
     // List should now be selected
     await expect(viewSelector).toHaveValue('list');
 
     // Switch back to grid
-    await viewSelector.selectOption('grid');
-    await page.waitForLoadState('networkidle');
+    await selectView(page, 'grid');
 
     // Grid should be selected again
     await expect(viewSelector).toHaveValue('grid');

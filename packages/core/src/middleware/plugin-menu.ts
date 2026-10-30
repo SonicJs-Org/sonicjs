@@ -1,14 +1,16 @@
 import type { Context, Next } from 'hono'
 import type { Bindings, Variables } from '../app'
 import { PLUGIN_REGISTRY } from '../plugins/manifest-registry'
+import { resolvePluginMenuItems } from '../services/plugin-menu-singleton'
 
 // Build menu plugin data from the auto-generated registry.
 // Any plugin with an adminMenu entry in its manifest.json will
 // automatically appear in the sidebar when active.
+// `id` matches the `slug` column in the documents table (how plugins are stored).
 const REGISTRY_MENU_PLUGINS = Object.values(PLUGIN_REGISTRY)
   .filter(p => p.adminMenu !== null)
   .map(p => ({
-    codeName: p.codeName,
+    id: p.id,
     label: p.adminMenu!.label,
     path: p.adminMenu!.path,
     icon: p.adminMenu!.icon,
@@ -27,8 +29,28 @@ const ICON_SVG: Record<string, string> = {
   'arrow-right': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></svg>',
   'shield-check': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
   'credit-card': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z"/></svg>',
+  'document-text': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>',
+  'pencil-square': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"/></svg>',
+  'server': '<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm14 1a1 1 0 11-2 0 1 1 0 012 0zM2 13a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2zm14 1a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/></svg>',
+  'building-office': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>',
+  'lock-closed': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>',
+  'book-open': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"/></svg>',
+  'variable': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.5 3c1.126 2.78 1.745 5.817 1.745 9s-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.105.401l1.444-.889"/></svg>',
+  'bolt': '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"/></svg>',
 }
 
+/** Rendered when a menu entry supplies no icon, or a name this map does not know. */
+const FALLBACK_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`
+
+/**
+ * Resolve a menu entry's `icon` to SVG markup.
+ *
+ * Returns `''` for a name this map does not know — callers MUST substitute {@link FALLBACK_ICON}
+ * rather than falling back to the raw input. Passing the name through renders it as literal text
+ * in the sidebar ("lock-closed" appearing where the icon belongs), because the catalyst layout
+ * interpolates this value as markup. That is a rendering bug the type system cannot catch: both
+ * the resolved SVG and the unresolved name are `string`.
+ */
 function resolveIcon(iconName?: string): string {
   if (!iconName) return ''
   // If it's already SVG markup, return as-is
@@ -41,17 +63,16 @@ const MARKER = '<!-- DYNAMIC_PLUGIN_MENU -->'
 
 function renderMenuItem(item: { label: string; path: string; icon?: string }, currentPath: string): string {
   const isActive = currentPath === item.path || currentPath.startsWith(item.path)
-  const fallbackIcon = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`
-  const resolvedIcon = resolveIcon(item.icon) || fallbackIcon
+  const resolvedIcon = resolveIcon(item.icon) || FALLBACK_ICON
   return `
     <span class="relative">
       ${isActive ? '<span class="absolute inset-y-2 -left-4 w-0.5 rounded-full bg-cyan-500 dark:bg-cyan-400"></span>' : ''}
       <a
         href="${item.path}"
-        class="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm/5 font-medium ${
+        class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm/5 font-medium ${
           isActive
             ? 'text-zinc-950 dark:text-white'
-            : 'text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5'
+            : 'text-zinc-600 hover:bg-zinc-950/5 dark:text-zinc-400 dark:hover:bg-white/5'
         }"
         ${isActive ? 'data-current="true"' : ''}
       >
@@ -63,6 +84,54 @@ function renderMenuItem(item: { label: string; path: string; icon?: string }, cu
     </span>`
 }
 
+/** D1 caps a statement at 100 bound parameters; stay clear of it with room for the literals. */
+const MAX_SLUG_BINDS = 90
+
+/**
+ * Plugins that contribute no sidebar entry of their own but whose active status another `/admin`
+ * middleware needs in the same request.
+ *
+ * `menu` declares `adminMenu: null`, so it is absent from {@link REGISTRY_MENU_PLUGINS} — yet
+ * `menuMiddleware`, which runs immediately after this one, asked the identical question with its
+ * own query. Folding the slug in here costs one extra bind on a statement already being sent and
+ * saves that round trip on every HTML admin response.
+ */
+const STATUS_ONLY_PLUGIN_IDS = ['menu'] as const
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/**
+ * Which of `slugs` name a plugin whose document row is active.
+ *
+ * Fails open (empty set) rather than throwing: on a fresh install the plugin rows may not exist
+ * yet, and a sidebar missing its plugin entries beats a 500 on every admin page.
+ */
+async function selectActivePluginSlugs(db: Bindings['DB'], slugs: string[]): Promise<Set<string>> {
+  if (slugs.length === 0) return new Set()
+  try {
+    const batches = await Promise.all(
+      chunk(slugs, MAX_SLUG_BINDS).map(ids =>
+        db
+          .prepare(
+            `SELECT slug FROM documents WHERE type_id = 'plugin' AND tenant_id = 'default' AND slug IN (${ids
+              .map(() => '?')
+              .join(',')}) AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+          )
+          .bind(...ids)
+          .all()
+      )
+    )
+    return new Set(batches.flatMap(r => (r.results || []).map((row: any) => row.slug)))
+  } catch {
+    // DB not ready or the plugin rows don't exist yet.
+    return new Set()
+  }
+}
+
 export function pluginMenuMiddleware() {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const path = new URL(c.req.url).pathname
@@ -70,49 +139,73 @@ export function pluginMenuMiddleware() {
       return next()
     }
 
-    // Collect menu items from active plugins using the registry
-    let activeMenuItems: Array<{ label: string; path: string; icon?: string; order: number }> = []
-    try {
-      const db = c.env.DB
-      const pluginCodeNames = REGISTRY_MENU_PLUGINS.map(p => p.codeName)
-      if (pluginCodeNames.length > 0) {
-        const placeholders = pluginCodeNames.map(() => '?').join(',')
-        const result = await db.prepare(
-          `SELECT name FROM plugins WHERE name IN (${placeholders}) AND status = 'active'`
-        ).bind(...pluginCodeNames).all()
+    const db = c.env.DB
 
-        const activeNames = new Set((result.results || []).map((r: any) => r.name))
+    // Menu items come from two places: the compiled manifest registry, and the singleton that
+    // `config.plugins.register` feeds (issue #971 — a plugin disabled in the admin UI stays in
+    // config, so both sources need their active status checked against the DB).
+    //
+    // `resolvePluginMenuItems` is an in-memory lookup, so both id lists are known up front and the
+    // two active-status checks — same query, same table, same tenant — collapse into one round
+    // trip. This middleware runs on EVERY /admin request, including each of the four dashboard
+    // fragments, so it used to spend two serial D1 queries per request on an answer that is
+    // identical across all of them.
+    const user = c.get('user') as { role?: string } | undefined
+    const singletonItems = resolvePluginMenuItems(user ? { role: user.role } : undefined)
+    const singletonPluginIds = [...new Set(
+      singletonItems.map(i => i.pluginId).filter((id): id is string => !!id)
+    )]
+    const activeIds = await selectActivePluginSlugs(db, [
+      ...new Set([
+        ...REGISTRY_MENU_PLUGINS.map(p => p.id),
+        ...singletonPluginIds,
+        ...STATUS_ONLY_PLUGIN_IDS,
+      ]),
+    ])
 
-        for (const plugin of REGISTRY_MENU_PLUGINS) {
-          if (activeNames.has(plugin.codeName)) {
-            activeMenuItems.push({
-              label: plugin.label,
-              path: plugin.path,
-              icon: plugin.icon,
-              order: plugin.order,
-            })
-          }
-        }
+    // Published for the rest of the /admin chain so nobody re-asks the DB which plugins are on.
+    // Consumers must treat an absent value as "unknown" and fall back, since this middleware is
+    // only mounted on /admin.
+    c.set('activePluginSlugs', activeIds)
 
-        // Sort by order
-        activeMenuItems.sort((a, b) => a.order - b.order)
+    const activeMenuItems: Array<{ label: string; path: string; icon?: string; order: number }> =
+      REGISTRY_MENU_PLUGINS.filter(p => activeIds.has(p.id)).map(p => ({
+        label: p.label,
+        path: p.path,
+        icon: p.icon,
+        order: p.order,
+      }))
+
+    const existingPaths = new Set(activeMenuItems.map(i => i.path))
+    for (const item of singletonItems) {
+      // If item has a pluginId, require it to be active; items without pluginId always show.
+      const isActive = !item.pluginId || activeIds.has(item.pluginId)
+      if (isActive && !existingPaths.has(item.path)) {
+        activeMenuItems.push({ label: item.label, path: item.path, icon: item.icon, order: item.order })
       }
-    } catch {
-      // DB not ready or plugin table doesn't exist yet
     }
+    activeMenuItems.sort((a, b) => a.order - b.order)
 
-    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || '' })))
+    // NOT `|| m.icon` — that passed an UNRESOLVED icon name through as if it were markup, and the
+    // catalyst layout interpolates this straight into the sidebar, so every plugin whose manifest
+    // named an icon absent from ICON_SVG rendered the literal string ("lock-closed", "book-open")
+    // where its icon should be.
+    c.set('pluginMenuItems', activeMenuItems.map(m => ({ label: m.label, path: m.path, icon: resolveIcon(m.icon) || FALLBACK_ICON })))
 
     await next()
 
-    // Inject menu items into HTML response by replacing the marker
-    if (activeMenuItems.length > 0 && c.res.headers.get('content-type')?.includes('text/html')) {
+    // Inject menu items into HTML response by replacing the marker.
+    // Read from context var (not activeMenuItems) so plugins that self-inject
+    // via app.use('/admin/*', ...) pre-next are included even when they're not
+    // in the compiled manifest registry (e.g. external/stats plugin).
+    const finalItems = (c.get('pluginMenuItems') as Array<{ label: string; path: string; icon: string }>) ?? []
+    if (finalItems.length > 0 && c.res.headers.get('content-type')?.includes('text/html')) {
       const status = c.res.status
       const headers = new Headers(c.res.headers)
       const html = await c.res.text()
 
       if (html.includes(MARKER)) {
-        const renderedItems = activeMenuItems.map(item => renderMenuItem(item, path)).join('')
+        const renderedItems = finalItems.map(item => renderMenuItem(item, path)).join('')
         const newHtml = html.split(MARKER).join(renderedItems)
         c.res = new Response(newHtml, { status, headers })
       } else {

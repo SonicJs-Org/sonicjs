@@ -1,142 +1,140 @@
-import { test, expect } from '@playwright/test'
-import { loginAsAdmin, navigateToAdminSection, waitForHTMX } from './utils/test-helpers'
+import { test, expect, Page } from './fixtures'
+import { loginAsAdmin } from './utils/test-helpers'
 
 /**
  * E2E Test: Field Type Editor Options
  *
- * Tests that the field type dropdown in the collection editor shows only
- * the editor options for plugins that are currently active:
- * - TinyMCE should be listed (active)
- * - Quill should be listed (active)
- * - MDXEditor should be listed (active)
+ * The collection field modal's type dropdown offers an editor option only while the
+ * corresponding editor plugin is active (see `admin-collections-form.template.ts`):
+ *   tinymce-plugin -> <option value="richtext">Rich Text (TinyMCE)</option>
+ *   quill-editor   -> <option value="quill">Rich Text (Quill)</option>
+ *   easy-mdx       -> <option value="markdown">Markdown</option>
+ * Everything else in the dropdown is built in and always offered.
+ *
+ * These tests read the live plugin state from /admin/plugins and assert the dropdown
+ * matches it exactly, in both directions. They never install/activate/deactivate anything:
+ * the old version toggled tinymce-plugin mid-run, which mutated state shared with every
+ * other spec hitting the same server.
  */
 
-test.describe.skip('Field Type Editor Options', () => {
+const EDITOR_OPTIONS = [
+  { plugin: 'TinyMCE Rich Text Editor', value: 'richtext', label: 'Rich Text (TinyMCE)' },
+  { plugin: 'Quill Rich Text Editor', value: 'quill', label: 'Rich Text (Quill)' },
+  { plugin: 'EasyMDE Markdown Editor', value: 'markdown', label: 'Markdown' },
+]
+
+// Built-in field types, offered no matter which plugins are installed.
+const BUILTIN_OPTIONS = [
+  { value: 'text', label: 'Text' },
+  { value: 'slug', label: 'URL Slug' },
+  { value: 'number', label: 'Number' },
+  { value: 'boolean', label: 'Boolean' },
+  { value: 'date', label: 'Date' },
+  { value: 'radio', label: 'Radio' },
+  { value: 'select', label: 'Select' },
+  { value: 'media', label: 'Media' },
+  { value: 'reference', label: 'Reference' },
+]
+
+async function readPluginStatuses(page: Page): Promise<Map<string, string>> {
+  await page.goto('/admin/plugins', { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.plugin-card', { timeout: 15000 })
+
+  const entries = await page.locator('.plugin-card').evaluateAll((cards) =>
+    cards.map((c) => [c.getAttribute('data-name') || '', c.getAttribute('data-status') || ''])
+  )
+  const statuses = new Map(entries as [string, string][])
+
+  // Every editor plugin must at least be registered, otherwise the assertions below are void
+  for (const editor of EDITOR_OPTIONS) {
+    expect(statuses.has(editor.plugin), `${editor.plugin} listed on /admin/plugins`).toBe(true)
+  }
+  return statuses
+}
+
+/**
+ * Open the Add Field modal on a real collection page.
+ * `/admin/collections/new` is now a documentation page with no form, so the modal lives on
+ * `/admin/collections/<slug>`. Managed collections render the modal markup but no button
+ * wired to `showAddFieldModal()`, so the page's own opener is invoked directly.
+ */
+async function openFieldTypeDropdown(page: Page) {
+  await page.goto('/admin/collections/blog_post', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('h1')).toContainText('Edit Collection')
+
+  await page.waitForFunction(() => typeof (window as any).showAddFieldModal === 'function')
+  await page.evaluate(() => (window as any).showAddFieldModal())
+
+  await page.waitForSelector('#field-modal:not(.hidden)', { timeout: 10000 })
+  await page.waitForSelector('select#field-type', { state: 'visible', timeout: 10000 })
+}
+
+test.describe('Field Type Editor Options @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })
 
   test('should show all active editor options in field type dropdown', async ({ page }) => {
-    // Navigate to collections page
-    await page.goto('http://localhost:8787/admin/collections')
-    await page.waitForLoadState('networkidle')
+    const statuses = await readPluginStatuses(page)
 
-    // Click "New Collection" button
-    await page.click('button:has-text("New Collection"), a:has-text("New Collection")')
-    await page.waitForLoadState('networkidle')
+    await openFieldTypeDropdown(page)
 
-    // Click "Add Field" button to open the modal
-    await page.click('button:has-text("Add Field")')
-    await page.waitForTimeout(500)
-
-    // Wait for the modal and select to be visible
-    await page.waitForSelector('select#field-type', { state: 'visible', timeout: 10000 })
-
-    // Get all options in the field type dropdown
     const fieldTypeOptions = await page.locator('select#field-type option').allTextContents()
 
-    console.log('Field type options found:', fieldTypeOptions)
+    // Built-in types are always present
+    for (const builtin of BUILTIN_OPTIONS) {
+      expect(fieldTypeOptions).toContain(builtin.label)
+    }
 
-    // Verify that all three editor options are present
-    expect(fieldTypeOptions).toContain('Rich Text (TinyMCE)')
-    expect(fieldTypeOptions).toContain('Rich Text (Quill)')
-    expect(fieldTypeOptions).toContain('Rich Text (MDXEditor)')
-
-    // Also verify the values are correct
-    const tinymceOption = page.locator('select#field-type option[value="richtext"]')
-    await expect(tinymceOption).toBeVisible()
-
-    const quillOption = page.locator('select#field-type option[value="quill"]')
-    await expect(quillOption).toBeVisible()
-
-    const mdxeditorOption = page.locator('select#field-type option[value="mdxeditor"]')
-    await expect(mdxeditorOption).toBeVisible()
+    // An editor option must be offered exactly when its plugin is active
+    for (const editor of EDITOR_OPTIONS) {
+      const isActive = statuses.get(editor.plugin) === 'active'
+      expect(
+        fieldTypeOptions.includes(editor.label),
+        `"${editor.label}" offered while ${editor.plugin} is ${statuses.get(editor.plugin)}`
+      ).toBe(isActive)
+      await expect(page.locator(`select#field-type option[value="${editor.value}"]`)).toHaveCount(
+        isActive ? 1 : 0
+      )
+    }
   })
 
   test('should not show inactive editor options', async ({ page }) => {
-    // First, deactivate TinyMCE
-    await page.goto('http://localhost:8787/admin/plugins')
-    await page.waitForLoadState('networkidle')
+    const statuses = await readPluginStatuses(page)
 
-    // Find and deactivate TinyMCE
-    const tinymceCard = page.locator('[data-plugin-id="tinymce-plugin"]')
-    const deactivateButton = tinymceCard.locator('button:has-text("Deactivate")')
+    await openFieldTypeDropdown(page)
 
-    if (await deactivateButton.isVisible()) {
-      await deactivateButton.click()
-      await page.waitForLoadState('networkidle')
-      await page.waitForTimeout(1000) // Give it a moment to update
-    }
-
-    // Navigate to collections page
-    await page.goto('http://localhost:8787/admin/collections')
-    await page.waitForLoadState('networkidle')
-
-    // Click "New Collection" button
-    await page.click('button:has-text("New Collection"), a:has-text("New Collection")')
-    await page.waitForLoadState('networkidle')
-
-    // Click "Add Field" button to open the modal
-    await page.click('button:has-text("Add Field")')
-    await page.waitForTimeout(500)
-
-    // Wait for the modal and select to be visible
-    await page.waitForSelector('select#field-type', { state: 'visible', timeout: 10000 })
-
-    // Get all options in the field type dropdown
     const fieldTypeOptions = await page.locator('select#field-type option').allTextContents()
 
-    console.log('Field type options after deactivating TinyMCE:', fieldTypeOptions)
+    // Sanity: the dropdown really is populated, so a missing editor option means "filtered
+    // out", not "nothing rendered".
+    expect(fieldTypeOptions).toContain('Text')
 
-    // Verify that TinyMCE is NOT in the list
-    expect(fieldTypeOptions).not.toContain('Rich Text (TinyMCE)')
-
-    // But Quill and MDXEditor should still be there
-    expect(fieldTypeOptions).toContain('Rich Text (Quill)')
-    expect(fieldTypeOptions).toContain('Rich Text (MDXEditor)')
-
-    // Re-activate TinyMCE for other tests
-    await page.goto('http://localhost:8787/admin/plugins')
-    await page.waitForLoadState('networkidle')
-
-    const tinymceCardAgain = page.locator('[data-plugin-id="tinymce-plugin"]')
-    const activateButton = tinymceCardAgain.locator('button:has-text("Activate")')
-
-    if (await activateButton.isVisible()) {
-      await activateButton.click()
-      await page.waitForLoadState('networkidle')
+    for (const editor of EDITOR_OPTIONS) {
+      if (statuses.get(editor.plugin) === 'active') continue
+      expect(fieldTypeOptions).not.toContain(editor.label)
+      await expect(page.locator(`select#field-type option[value="${editor.value}"]`)).toHaveCount(0)
     }
   })
 
   test('should be able to select each editor type', async ({ page }) => {
-    // Navigate to collections page
-    await page.goto('http://localhost:8787/admin/collections')
-    await page.waitForLoadState('networkidle')
+    const statuses = await readPluginStatuses(page)
 
-    // Click "New Collection" button
-    await page.click('button:has-text("New Collection"), a:has-text("New Collection")')
-    await page.waitForLoadState('networkidle')
+    await openFieldTypeDropdown(page)
 
-    // Click "Add Field" button to open the modal
-    await page.click('button:has-text("Add Field")')
-    await page.waitForTimeout(500)
+    const select = page.locator('select#field-type')
 
-    // Wait for the modal and select to be visible
-    await page.waitForSelector('select#field-type', { state: 'visible', timeout: 10000 })
+    // Every editor whose plugin is active must be selectable
+    for (const editor of EDITOR_OPTIONS) {
+      if (statuses.get(editor.plugin) !== 'active') continue
+      await page.selectOption('select#field-type', editor.value)
+      expect(await select.inputValue()).toBe(editor.value)
+    }
 
-    // Test selecting TinyMCE
-    await page.selectOption('select#field-type', 'richtext')
-    let selectedValue = await page.locator('select#field-type').inputValue()
-    expect(selectedValue).toBe('richtext')
-
-    // Test selecting Quill
-    await page.selectOption('select#field-type', 'quill')
-    selectedValue = await page.locator('select#field-type').inputValue()
-    expect(selectedValue).toBe('quill')
-
-    // Test selecting MDXEditor
-    await page.selectOption('select#field-type', 'mdxeditor')
-    selectedValue = await page.locator('select#field-type').inputValue()
-    expect(selectedValue).toBe('mdxeditor')
+    // Built-in types must always be selectable
+    for (const builtin of BUILTIN_OPTIONS) {
+      await page.selectOption('select#field-type', builtin.value)
+      expect(await select.inputValue()).toBe(builtin.value)
+    }
   })
 })

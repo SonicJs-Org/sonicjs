@@ -397,20 +397,17 @@ When building plugins, use the middleware factory:
 
 <CodeGroup title="Plugin Usage">
 
-```typescript
-import { PluginBuilder } from '@sonicjs-cms/core'
+```javascript
+import { definePlugin } from '@sonicjs-cms/core'
 import { verifyTurnstile } from '@sonicjs-cms/core/plugins'
 
-const myPlugin = new PluginBuilder({
+const myPlugin = definePlugin({
   name: 'my-plugin',
-  version: '1.0.0'
+  register(app) {
+    app.route('/api/my-plugin/submit', submitRoutes)
+    app.use('/api/my-plugin/submit', verifyTurnstile)
+  },
 })
-  .addRoute('/api/my-plugin/submit', submitRoutes)
-  .addMiddleware('turnstile', verifyTurnstile, {
-    description: 'Verify bot protection',
-    routes: ['/api/my-plugin/submit']
-  })
-  .build()
 ```
 
 </CodeGroup>

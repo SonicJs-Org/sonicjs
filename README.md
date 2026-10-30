@@ -12,7 +12,7 @@
 [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Flane711%2F4fc1969ff683812bc49788d43fb4d7e2%2Fraw%2Ftest-count.json)](https://github.com/lane711/sonicjs)
 [![npm version](https://img.shields.io/npm/v/@sonicjs-cms/core.svg)](https://www.npmjs.com/package/@sonicjs-cms/core)
 
-**The edge-native headless CMS for Cloudflare Workers.** Sub-100ms response times globally. Zero cold starts. TypeScript-first.
+**The only headless CMS born on the edge.** Zero cold starts. 15–50ms API responses. 300+ global locations. TypeScript-first. 100% MIT open source — every feature free, no Enterprise gate, ever.
 
 **[sonicjs.com](https://sonicjs.com)**
 
@@ -22,6 +22,8 @@
 npx create-sonicjs@latest my-app
 ```
 
+$0 to start · No signup required · Runs anywhere SQLite runs
+
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/lane711)
 [![Open Collective](https://img.shields.io/badge/Open_Collective-Support-7FADF2?style=for-the-badge&logo=opencollective)](https://opencollective.com/sonicjs)
 
@@ -29,60 +31,73 @@ npx create-sonicjs@latest my-app
 
 > **⚠️ Note:** This repository is for **developing the SonicJS core package**. To build an application with SonicJS, use the command above to create a new project.
 
+## 🐳 Self-Hosting with Docker
+
+No Cloudflare account? Run SonicJS on any server with Docker and SQLite:
+
+```bash
+docker build -t sonicjs .
+docker run -d --name sonicjs -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e JWT_SECRET=$(openssl rand -base64 32) \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  sonicjs
+
+# Create the first admin user
+docker exec sonicjs npm run reset
+# → admin@sonicjs.com / sonicjs! (change after first login)
+```
+
+See the [Self-Hosting guide](https://sonicjs.com/self-hosting) for Docker Compose, Node.js, backup strategy, and production hardening.
+
 ## 🚀 Features
 
-### Core Platform
-- **⚡ Edge-First**: Built specifically for Cloudflare Workers with global performance
-- **🔧 Developer-Centric**: Configuration over UI, TypeScript-first approach
-- **🤖 AI-Friendly**: Structured codebase designed for AI-assisted development
-- **🔌 Plugin System**: Extensible architecture without core modifications
-- **📱 Modern Stack**: Hono.js, TypeScript, D1, R2, and HTMX
-- **🚀 Fast & Lightweight**: Optimized for edge computing performance
+### Edge Performance
+- **⚡ Zero Cold Starts**: 0–5ms cold start vs 500–2000ms on Node.js CMSs
+- **🌍 Global by Default**: 300+ edge locations — not one region, one continent
+- **🚀 Sub-50ms APIs**: 15–50ms API responses vs 1–4s with relations elsewhere
+- **📈 Auto-Scaling**: Cloudflare handles traffic spikes — no ops required
 
-### Advanced Content Management (Stage 5)
+### Developer Experience
+- **🔧 Schema-as-Code**: Define your content model in TypeScript; SonicJS generates the REST API and admin UI
+- **📦 `create-sonicjs` CLI**: From schema to global API in minutes
+- **🔥 Hot Reload**: Fast local development with Wrangler
+- **📱 Modern Stack**: Hono.js, TypeScript, D1, R2, HTMX
+
+### AI-Native Content Layer
+- **🤖 Native MCP Server**: Auto-generated tools let Claude Code, Cursor, and VS Code read, create, and publish content
+- **⚡ GraphQL API**: Full GraphQL endpoint with GraphiQL playground — opt-in plugin, zero config
+- **🔍 RAG-Powered Search**: Semantic search with natural-language queries — zero extra infra
+- **🛠 12 Specialized Claude Code Agents**: Purpose-built agents for development ([View all agents](https://sonicjs.com/ai-agents))
+
+### Content Management
 - **📝 Rich Text Editor**: TinyMCE integration with customizable toolbars
-- **🎛️ Dynamic Fields**: Custom field types (text, number, date, boolean, select, media)
-- **📚 Content Versioning**: Complete revision history with restore functionality
+- **🎛️ Dynamic Fields**: Text, number, date, boolean, select, media, slug, and more
+- **📚 Content Versioning**: Complete revision history with restore — free, no paywall
 - **⏰ Content Scheduling**: Publish/unpublish automation with date controls
-- **🔄 Workflow System**: Draft → Review → Published → Archived with role-based permissions
+- **🔄 Draft → Published Workflow**: Role-based permissions throughout
 - **💾 Auto-Save**: Automatic content saving every 30 seconds
-- **👁️ Live Preview**: Real-time content preview before publishing
-- **📋 Content Duplication**: One-click content copying and templates
 - **🛡️ XSS Protection**: Comprehensive input validation and HTML escaping
+
+### No Lock-In, No Paywalls
+- **100% MIT**: Every feature in the core. No Growth tier. No Enterprise gate. Ever.
+- **No VC Clock**: No license rug-pull. No infra lock-in.
+- **Runs Anywhere**: Edge-native on Cloudflare Workers, or self-host on Docker/VPS — anywhere SQLite runs.
 
 ## 📊 How SonicJS Compares
 
 | | SonicJS | Strapi | Payload |
 |--|---------|--------|---------|
-| **Edge-native** | Yes | No | No |
-| **Cloudflare Workers** | Yes | No | Limited |
-| **Cold starts** | None | 2-5s | 1-3s |
-| **Response time** | <100ms | 200-500ms | 150-400ms |
-| **Database** | D1 (SQLite at edge) | PostgreSQL/MySQL | MongoDB/PostgreSQL |
-| **Global distribution** | Built-in | Requires setup | Requires setup |
+| **Edge-native** | ✅ Yes | ❌ No | ❌ No |
+| **Cold start** | 0–5ms | 500–2000ms | 500–2000ms |
+| **API response** | 15–50ms | 1–4s | 1–4s |
+| **Global locations** | 300+ | 1 region | 1 region |
+| **Version history** | Free | Paywalled | Paywalled |
+| **SSO / Audit logs** | Free | $99+/mo | $99+/mo |
+| **AI / MCP / GraphQL** | Included | Upsold | Upsold |
+| **License** | MIT (all features) | MIT (limited) | MIT (limited) |
 
-> SonicJS is the **only production-ready CMS** built specifically for edge computing. We have 46x more development activity per GitHub star than Strapi.
-
-## 🌟 Why SonicJS?
-
-### Edge Performance
-- Global distribution via Cloudflare's network
-- Sub-100ms response times worldwide
-- Automatic scaling and DDoS protection
-- No cold starts - instant responses
-
-### Developer Experience
-- TypeScript-first with full type safety
-- Hot reload development environment
-- `create-sonicjs` CLI for instant setup
-- Comprehensive documentation
-
-### AI-Friendly Architecture
-- Clean, structured codebase
-- TypeScript types for autocomplete
-- Clear conventions and patterns
-- Built for AI-assisted development
-- **12 specialized Claude Code agents** for development ([View all agents](https://sonicjs.com/ai-agents))
+> SonicJS is the **only production-ready CMS** built specifically for edge computing.
 
 ## 🛠 Technology Stack
 
@@ -108,22 +123,17 @@ npx create-sonicjs@latest my-app
 
 ### For Application Developers (Using SonicJS)
 
-If you want to **build an application** with SonicJS:
-
 ```bash
 # Create a new SonicJS application
 npx create-sonicjs@latest my-app
 
-# Navigate to your app
 cd my-app
-
-# Start development server
 npm run dev
 
 # Visit http://localhost:8787
 ```
 
-Your app will be created with:
+Your app includes:
 - ✅ SonicJS CMS pre-configured
 - ✅ Database migrations ready
 - ✅ Example content collections
@@ -132,12 +142,10 @@ Your app will be created with:
 
 ### For Package Developers (Contributing to SonicJS)
 
-If you want to **contribute to the SonicJS core package**:
-
 ```bash
 # Clone this repository
-git clone https://github.com/lane711/sonicjs-ai.git
-cd sonicjs-ai
+git clone https://github.com/lane711/sonicjs.git
+cd sonicjs
 
 # Install dependencies
 npm install
@@ -154,134 +162,123 @@ npm test
 
 #### Setting Up a Fresh Database
 
-When working in a new worktree or wanting to reset your local database, run from the project root:
-
 ```bash
-# Create a fresh D1 database for your branch
+# Create a fresh D1 database for your branch (run from project root)
 npm run db:reset
 ```
 
-This will:
-- Create a new D1 database named `sonicjs-worktree-<branch-name>`
-- Apply all migrations
-- Update `wrangler.toml` with the new database ID
+This creates a new D1 database named `sonicjs-worktree-<branch-name>`, applies all migrations, and updates `wrangler.toml`.
 
 #### Working with Database Migrations
 
-When developing the core package, migrations are located in `packages/core/migrations/`. Your test app will reference these migrations through the npm workspace symlink.
+Migrations live in `packages/core/migrations/`. Test apps reference them via npm workspace symlink.
 
 **From your test app directory** (e.g., `my-sonicjs-app/`):
 
 ```bash
-# Check migration status (local D1 database)
+# Check migration status
 wrangler d1 migrations list DB --local
 
-# Apply pending migrations to local database
+# Apply pending migrations
 wrangler d1 migrations apply DB --local
 
-# Apply migrations to production database
+# Apply to production
 wrangler d1 migrations apply DB --remote
 ```
 
-**Important Notes:**
-- The test app's `wrangler.toml` points to: `migrations_dir = "./node_modules/@sonicjs-cms/core/migrations"`
-- Since the core package is symlinked via npm workspaces, changes to migrations are immediately available
-- After creating new migrations in `packages/core/migrations/`, rebuild the core package: `npm run build:core`
-- Always apply migrations to your test database before running the dev server or tests
-
 **Creating New Migrations:**
 
-SonicJS uses a **build-time migration bundler** because Cloudflare Workers cannot access the filesystem at runtime. All migration SQL must be bundled into the application code.
+SonicJS bundles migrations at build time (Workers can't access the filesystem at runtime).
 
-1. Create a new migration file in `packages/core/migrations/` following the naming pattern: `NNN_description.sql` (e.g., `027_add_user_preferences.sql`)
-2. Write your migration SQL (use `CREATE TABLE IF NOT EXISTS` and `INSERT OR IGNORE` for idempotency)
-3. Regenerate the migrations bundle: `cd packages/core && npm run generate:migrations`
-4. Rebuild the core package: `npm run build:core` (or just `npm run build` from packages/core - the bundle generation runs automatically as a prebuild step)
-5. Apply to your test database: `cd my-sonicjs-app && wrangler d1 migrations apply DB --local`
+1. Create `packages/core/migrations/NNN_description.sql` (use `CREATE TABLE IF NOT EXISTS` and `INSERT OR IGNORE` for idempotency)
+2. Regenerate bundle: `cd packages/core && npm run generate:migrations`
+3. Rebuild: `npm run build:core`
+4. Apply locally: `cd my-sonicjs-app && wrangler d1 migrations apply DB --local`
 
-**Important**: After modifying any `.sql` files in `migrations/`, you **must** rebuild the package. The SQL files are not used at runtime - only the generated `migrations-bundle.ts` file is included in the build.
-
-### Common Commands (For Apps)
+### Common Commands
 
 ```bash
-# Start development server
-npm run dev
-
-# Deploy to Cloudflare
-npm run deploy
-
-# Database operations
-npm run db:migrate     # Apply migrations
-npm run db:studio      # Open database studio
-
-# Run tests
-npm test
+npm run dev          # Start dev server
+npm run deploy       # Deploy to Cloudflare
+npm run db:migrate   # Apply migrations
+npm run db:studio    # Open database studio
+npm test             # Run tests
 ```
 
 ## 📁 Project Structure
 
-This is a **package development monorepo** for building and maintaining the SonicJS CMS npm package.
-
 ```
-sonicjs-ai/
+sonicjs/
 ├── packages/
-│   ├── core/              # 📦 Main CMS package (published as @sonicjs-cms/core)
+│   ├── core/              # 📦 Main CMS package (@sonicjs-cms/core)
 │   │   ├── src/
-│   │   │   ├── routes/    # All route handlers (admin, API, auth)
+│   │   │   ├── routes/    # Route handlers (admin, API, auth)
 │   │   │   ├── templates/ # HTML templates & components
 │   │   │   ├── middleware/# Authentication & middleware
 │   │   │   ├── utils/     # Utility functions
 │   │   │   └── db/        # Database schemas & migrations
-│   │   └── package.json   # @sonicjs-cms/core
+│   │   └── package.json
 │   ├── templates/         # Template system package
 │   └── scripts/           # Build scripts & generators
 │
 ├── my-sonicjs-app/        # 🧪 Test application (gitignored)
-│   └── ...                # Created with: npx create-sonicjs@latest
-│                          # Used for testing the published package
+│                          # Created with: npx create-sonicjs@latest
 │
 ├── www/                   # 🌐 Marketing website
-├── tests/e2e/             # End-to-end test suites
-└── drizzle/               # Database migrations
+└── tests/e2e/             # End-to-end test suites
 ```
 
-### Important Notes
-
-⚠️ **This is NOT an application repository** - it's for developing the `@sonicjs-cms/core` npm package.
-
-- **`packages/core/`** - The main package published to npm
-- **`my-sonicjs-app/`** - Test installation for validating the published package (can be deleted/recreated)
-- **No root `src/`** - Application code lives in `packages/core/` or test apps like `my-sonicjs-app/`
+⚠️ **This is NOT an application repository** — it's for developing the `@sonicjs-cms/core` npm package.
 
 ## 🔧 Content Management
 
 ### Creating Collections
-SonicJS uses a dynamic field system. Create collections through the admin interface or define them in the database:
 
-```sql
--- Example: Blog Posts collection with custom fields
-INSERT INTO collections (id, name, display_name, description, schema) VALUES (
-  'blog-posts', 'blog_posts', 'Blog Posts', 'Article content collection',
-  '{"type":"object","properties":{"title":{"type":"string","required":true}}}'
-);
+Collections are TypeScript config objects registered at app startup — no database table required.
 
--- Add dynamic fields
-INSERT INTO content_fields (collection_id, field_name, field_type, field_label, field_options) VALUES
-  ('blog-posts', 'title', 'text', 'Title', '{"maxLength": 200, "required": true}'),
-  ('blog-posts', 'content', 'richtext', 'Content', '{"toolbar": "full", "height": 400}'),
-  ('blog-posts', 'excerpt', 'text', 'Excerpt', '{"maxLength": 500, "rows": 3}'),
-  ('blog-posts', 'featured_image', 'media', 'Featured Image', '{"accept": "image/*"}'),
-  ('blog-posts', 'publish_date', 'date', 'Publish Date', '{"defaultToday": true}'),
-  ('blog-posts', 'is_featured', 'boolean', 'Featured Post', '{"default": false}');
+```typescript
+// src/collections/blog-posts.collection.ts
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export default {
+  name: 'blog_post',
+  displayName: 'Blog Post',
+  slug: 'blog-posts',
+  description: 'Article content collection',
+
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', title: 'Title', required: true, maxLength: 200 },
+      content: { type: 'lexical', title: 'Content', required: true },
+      publishedAt: { type: 'datetime', title: 'Published Date' },
+    },
+    required: ['title', 'content'],
+  },
+
+  managed: true,
+  isActive: true,
+} satisfies CollectionConfig
+```
+
+```typescript
+// src/index.ts — register before createSonicJSApp
+import { registerCollections, createSonicJSApp } from '@sonicjs-cms/core'
+import blogPostsCollection from './collections/blog-posts.collection'
+
+registerCollections([blogPostsCollection])
+export default createSonicJSApp({ plugins: { register: [] } })
 ```
 
 ### Field Types
-- **text**: Single-line text with validation
-- **richtext**: WYSIWYG editor with TinyMCE
+- **string**: Single-line text with validation
+- **lexical**: Rich text editor
 - **number**: Numeric input with min/max constraints
 - **boolean**: Checkbox with custom labels
-- **date**: Date picker with format options
+- **datetime**: Date/time picker
 - **select**: Dropdown with single/multi-select
+- **slug**: URL slug with auto-generation
+- **user**: User reference picker
 - **media**: File picker with preview
 
 ## 🌐 API Endpoints
@@ -289,43 +286,71 @@ INSERT INTO content_fields (collection_id, field_name, field_type, field_label, 
 ### Content Management
 - `GET /admin/content/new?collection=id` - Create new content form
 - `GET /admin/content/:id/edit` - Edit content form
-- `POST /admin/content/` - Create content with validation
+- `POST /admin/content/` - Create content
 - `PUT /admin/content/:id` - Update content with versioning
 - `DELETE /admin/content/:id` - Delete content
 
 ### Advanced Features
-- `POST /admin/content/preview` - Preview content before publishing
-- `POST /admin/content/duplicate` - Duplicate existing content
-- `GET /admin/content/:id/versions` - Get version history
-- `POST /admin/content/:id/restore/:version` - Restore specific version
-- `GET /admin/content/:id/version/:version/preview` - Preview historical version
+- `POST /admin/content/preview` - Preview before publishing
+- `POST /admin/content/duplicate` - Duplicate content
+- `GET /admin/content/:id/versions` - Version history
+- `POST /admin/content/:id/restore/:version` - Restore version
 
 ### Public API
 - `GET /api/content` - Get published content (paginated)
 - `GET /api/collections/:collection/content` - Get content by collection
 - `GET /api/collections` - List all collections
 
+### GraphQL API
+
+Opt-in plugin — add `graphqlPlugin()` to `plugins.register`:
+
+```typescript
+import { graphqlPlugin, createSonicJSApp } from '@sonicjs-cms/core'
+
+export default createSonicJSApp({
+  plugins: { register: [graphqlPlugin()] },
+})
+```
+
+- `GET /graphql` — GraphiQL playground (interactive browser IDE)
+- `POST /graphql` — Execute queries and mutations (Bearer API key auth)
+
+```graphql
+# Query published documents
+query {
+  documents(typeId: "blog_posts", status: "published", limit: 10) {
+    items { id title slug status publishedAt data }
+    cursor
+  }
+}
+
+# Create a document (requires API key)
+mutation {
+  createDocument(typeId: "blog_posts", title: "Hello", data: {}) {
+    id rootId isCurrentDraft
+  }
+}
+```
+
+Supports: `documents`, `document(id)` queries · `createDocument`, `updateDocument`, `publishDocument`, `unpublishDocument`, `deleteDocument` mutations · `JSON` scalar · keyset pagination.
+
 ## 🚀 Deployment
 
-### Deploying Your SonicJS Application
-
-After creating your app with `npx create-sonicjs@latest`:
-
 ```bash
-# 1. Configure your Cloudflare project
-# Update wrangler.toml with your project settings
+# 1. Update wrangler.toml with your project settings
 
 # 2. Create production database
 wrangler d1 create my-app-db
 
-# 3. Apply database migrations
+# 3. Apply migrations
 npm run db:migrate:prod
 
-# 4. Deploy to Cloudflare Workers
+# 4. Deploy
 npm run deploy
 ```
 
-Your app will be live at: `https://your-app.workers.dev`
+Your app will be live at `https://your-app.workers.dev`.
 
 ### Environment Configuration
 
@@ -348,73 +373,83 @@ bucket_name = "my-app-media"
 ## 🧪 Testing
 
 ```bash
-# Run unit tests
-npm test
+npm test                # Unit tests
+npm run test:watch      # Watch mode
+npm run test:e2e        # E2E tests
+npm run test:e2e:ui     # E2E with UI
+```
 
-# Run tests in watch mode
-npm run test:watch
+## 🔌 Plugin Development
 
-# Run E2E tests
-npm run test:e2e
+```typescript
+// src/plugins/my-plugin/index.ts
+import type { Plugin, PluginContext } from '@sonicjs-cms/core'
 
-# Run E2E tests with UI
-npm run test:e2e:ui
+export default {
+  name: 'my-plugin',
+  version: '1.0.0',
+  description: 'My custom plugin',
+
+  async activate(context: PluginContext) {
+    // Runs when the plugin is activated
+  },
+
+  async install(context: PluginContext) {
+    // Runs once on install — migrations, seed data, etc.
+  },
+} satisfies Plugin
 ```
 
 ## 📚 Documentation
 
-- [Project Plan](docs/project-plan.md) - Development roadmap and stages
-- [AI Instructions](docs/ai-instructions.md) - Comprehensive development guidelines
-- [Development Guidelines](docs/CLAUDE.md) - Development workflow and principles
-
-## 🔌 Plugin Development
-
-Create plugins for extending SonicJS functionality:
-
-```typescript
-// src/plugins/my-plugin/index.ts
-import { Plugin } from '@sonicjs-cms/core'
-
-export default {
-  name: 'my-plugin',
-  hooks: {
-    'content:beforeCreate': async (content) => {
-      // Plugin logic here
-      return content
-    }
-  }
-} as Plugin
-```
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [contributing guidelines](https://sonicjs.com/contributing) for more details.
+- [sonicjs.com](https://sonicjs.com) - Full documentation
+- [AI Agents](https://sonicjs.com/ai-agents) - 12 specialized Claude Code agents
+- [Self-Hosting](https://sonicjs.com/self-hosting) - Docker, VPS, production hardening
+- [Contributing](https://sonicjs.com/contributing) - Contribution guidelines
 
 ## ❤️ Sponsor
 
-SonicJS is 100% open source and free forever. If you find it useful, please consider sponsoring:
+SonicJS is 100% open source and free forever. If you find it useful, consider sponsoring:
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on_GitHub-%E2%9D%A4-pink?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/lane711)
 [![Support on Open Collective](https://img.shields.io/badge/Open_Collective-Support-7FADF2?style=for-the-badge&logo=opencollective)](https://opencollective.com/sonicjs)
 
-**100% of sponsorship funds go to marketing** - spreading the word about SonicJS to help grow our community. The more developers who know about us, the stronger we become!
+100% of sponsorship funds go to marketing — spreading the word about SonicJS to grow the community.
 
 > SonicJS is a member of [Open Source Collective](https://opencollective.com/sonicjs), a 501(c)(3) nonprofit. Donations are tax-deductible for US contributors.
 
 ### Thank You to Our Sponsors
 
 <a href="https://github.com/mmcintosh"><img src="https://github.com/mmcintosh.png" width="60" alt="@mmcintosh" /></a>
+<a href="https://github.com/nickgraynews"><img src="https://github.com/nickgraynews.png" width="60" alt="@nickgraynews" /></a>
 
 ## 📞 Support
 
-- [GitHub Issues](https://github.com/lane711/sonicjs-ai/issues)
-- [Documentation](docs/)
-- [Community Discussions](https://github.com/lane711/sonicjs-ai/discussions)
+### Community (free)
+
+- [GitHub Issues](https://github.com/lane711/sonicjs/issues)
+- [Community Discussions](https://github.com/lane711/sonicjs/discussions)
+- [Discord](https://discord.gg/8bMy6bv3sZ)
+
+### Commercial Support (for teams that need an SLA)
+
+Every feature stays 100% MIT and free — **commercial support buys a guaranteed response time and a named contact, not features.** If your company requires a support contract before adopting an open-source dependency, this is for you.
+
+| | Community | Priority Support | Enterprise |
+|---|---|---|---|
+| All features (MIT, forever) | ✅ | ✅ | ✅ |
+| GitHub Issues / Discord | ✅ | ✅ | ✅ |
+| Guaranteed response time | — | Next business day | Same business day |
+| Private support channel | — | Email | Email + Slack |
+| Named support contact | — | — | ✅ |
+| Security-issue priority triage | — | ✅ | ✅ |
+| Upgrade & architecture guidance | — | ✅ | ✅ |
+| License indemnification | — | — | ✅ |
+| Price | Free | $499/mo | From $2,500/mo |
+
+📄 Full terms, SLA, and procurement details: **[docs/commercial-support.md](docs/commercial-support.md)**
+📝 Request support: **[sonicjs.com/commercial-support](https://sonicjs.com/commercial-support)**
 
 ---
 
-Built with ❤️ for the Cloudflare ecosystem
+Built with ❤️ for the Cloudflare ecosystem · [sonicjs.com](https://sonicjs.com)

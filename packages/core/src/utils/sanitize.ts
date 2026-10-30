@@ -77,3 +77,14 @@ export function sanitizeObject<T extends Record<string, any>>(
 
   return sanitized
 }
+
+/**
+ * Returns an HTML-escaped URL safe for use in href/src attributes.
+ * Rejects javascript: and data: schemes by returning '#'.
+ */
+export function safeUrl(url: string): string {
+  if (typeof url !== 'string') return '#'
+  const trimmed = url.trim()
+  if (/^(https?:\/\/|\/)/i.test(trimmed)) return escapeHtml(trimmed)
+  return '#'
+}

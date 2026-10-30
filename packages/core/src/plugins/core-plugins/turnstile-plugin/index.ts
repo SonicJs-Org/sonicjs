@@ -1,47 +1,40 @@
-import { PluginBuilder } from '../../sdk/plugin-builder'
-import { TurnstileService } from './services/turnstile'
-import { verifyTurnstile } from './middleware/verify'
-import manifest from './manifest.json'
-
 /**
- * Cloudflare Turnstile Plugin
- * 
- * Provides CAPTCHA-free bot protection using Cloudflare Turnstile.
- * Can be used with any form by adding the verifyTurnstile middleware.
- * 
- * Settings are managed through the generic admin plugin interface.
- * No custom routes needed - the admin system automatically handles settings.
- * 
+ * Cloudflare Turnstile Plugin — Payload-shaped port.
+ *
+ * CAPTCHA-free bot protection. Settings managed via the generic admin
+ * plugin interface (configSchema below); no custom routes needed.
+ *
  * @example
  * ```typescript
  * import { verifyTurnstile } from '@sonicjs-cms/core/plugins'
- * 
+ *
  * app.post('/api/contact', verifyTurnstile, async (c) => {
  *   // Process form after Turnstile verification
  * })
  * ```
  */
 
-// Build the plugin - no custom routes, generic admin handles settings
-export const turnstilePlugin = new PluginBuilder({
-  name: manifest.name,
+import { definePlugin } from '../../sdk/define-plugin'
+import { TurnstileService } from './services/turnstile'
+import { verifyTurnstile } from './middleware/verify'
+import manifest from './manifest.json'
+
+export const turnstilePlugin = definePlugin({
+  id: manifest.id,
   version: manifest.version,
+  name: manifest.name,
   description: manifest.description,
+  sonicjsVersionRange: '^3.0.0',
   author: { name: manifest.author },
 })
-  .metadata({
-    description: manifest.description,
-    author: { name: manifest.author },
-  })
-  .addService('turnstile', TurnstileService)
-  .addSingleMiddleware('verifyTurnstile', verifyTurnstile, {
-    description: 'Verify Cloudflare Turnstile token',
-    global: false,
-  })
-  .build()
 
-// Export service and middleware for easy import
-export { TurnstileService } from './services/turnstile'
+// Re-exports
+export { TurnstileService }
 export { verifyTurnstile, createTurnstileMiddleware } from './middleware/verify'
-export { renderTurnstileWidget, renderInlineTurnstile, getTurnstileScript, renderExplicitTurnstile } from './components/widget'
+export {
+  renderTurnstileWidget,
+  renderInlineTurnstile,
+  getTurnstileScript,
+  renderExplicitTurnstile,
+} from './components/widget'
 export type { TurnstileSettings, TurnstileVerificationResponse } from './services/turnstile'

@@ -21,6 +21,8 @@ Complete guide for deploying SonicJS to production on Cloudflare's global edge p
 
 ## Overview {{ id: 'overview' }}
 
+This guide covers **Cloudflare deployment** — the recommended path for global distribution. If you need to run SonicJS on your own server or in Docker without a Cloudflare account, see the [Self-Hosting guide](/self-hosting).
+
 SonicJS runs on Cloudflare's global edge network, providing:
 
 - **Cloudflare Workers** - Serverless runtime at 300+ edge locations
@@ -152,7 +154,7 @@ Apply all database migrations to production:
 
 ```bash {{ title: 'Using npm script' }}
 # Apply migrations to production
-npm run db:migrate:prod
+npm run db:migrate
 ```
 
 ```bash {{ title: 'Using Wrangler' }}
@@ -177,15 +179,18 @@ wrangler d1 execute sonicjs-ai --env production \
   --command="SELECT name FROM sqlite_master WHERE type='table';"
 
 # Expected tables:
-# - users
-# - collections
-# - content
-# - content_versions
-# - media
-# - api_tokens
-# - plugins
-# - plugin_routes
-# - plugin_hooks
+# - auth_user
+# - auth_session
+# - auth_account
+# - auth_verification
+# - document_types
+# - documents
+# - document_references
+# - document_facets
+# - document_permissions
+# - rbac_role
+# - rbac_verb
+# - rbac_user_roles
 ```
 
 ### Seed Initial Data
@@ -195,20 +200,14 @@ Create an admin user and initial collections:
 <CodeGroup title="Seed Data">
 
 ```bash {{ title: 'Create Admin User' }}
-wrangler d1 execute sonicjs-ai --env production --command="
-INSERT INTO users (id, email, username, first_name, last_name, role, is_active, created_at, updated_at)
-VALUES (
-  'admin-' || lower(hex(randomblob(16))),
-  'admin@yourdomain.com',
-  'admin',
-  'Admin',
-  'User',
-  'admin',
-  1,
-  strftime('%s', 'now') * 1000,
-  strftime('%s', 'now') * 1000
-);
-"
+# Admin user is created automatically at bootstrap.
+# Set these secrets before first deploy:
+echo "admin@yourdomain.com" | wrangler secret put ADMIN_EMAIL --env production
+echo "your-secure-password" | wrangler secret put ADMIN_PASSWORD --env production
+
+# If using the seed script, demo credentials are:
+# Email:    admin@sonicjs.com
+# Password: sonicjs!
 ```
 
 ```bash {{ title: 'From SQL File' }}
@@ -218,6 +217,10 @@ wrangler d1 execute sonicjs-ai --env production \
 ```
 
 </CodeGroup>
+
+### First-Boot Seeding
+
+On the first request to a fresh database, SonicJS seeds document types, RBAC roles, and core plugins automatically — no separate seed command needed beyond the admin credentials above. Seeding runs in two phases: document-type producers complete before RBAC/plugin consumers run, so a consumer insert can't race its producer and hit a `FOREIGN KEY constraint failed` error. A successful bootstrap is marked in KV; a partial failure is **not** marked, so the next request retries after a 30-second backoff instead of latching a broken state for 24 hours.
 
 ---
 
@@ -969,6 +972,7 @@ wrangler routes list
 
 ## Next Steps
 
+- [Self-Hosting Guide](/self-hosting) - Run SonicJS on your own server with Docker or Node.js
 - [Testing Guide](/testing) - Test your deployment
 - [Database Documentation](/database) - Advanced database features
 - [API Reference](/api) - API endpoints reference

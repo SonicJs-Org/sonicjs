@@ -5,12 +5,21 @@
  * Issue #461: https://github.com/SonicJs-Org/sonicjs/issues/461
  */
 
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin, waitForHTMX } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import { ensurePluginActive, loginAsAdmin, waitForHTMX, isFeatureAvailable } from './utils/test-helpers';
 
-test.describe('Cache Plugin Dashboard', () => {
+test.describe('Cache Plugin Dashboard @plugins', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/cache')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
+    // The sidebar entry only exists while `core-cache` is active, and it is not one of the
+    // plugins bootstrapped on a greenfield install.
+    await ensurePluginActive(page, 'core-cache');
   });
 
   test('should navigate to cache dashboard from admin menu', async ({ page }) => {
@@ -60,13 +69,11 @@ test.describe('Cache Plugin Dashboard', () => {
     await page.goto('/admin/cache');
     await waitForHTMX(page);
 
-    // Look for clear cache functionality
-    // The button might have different text depending on the UI
+    // The dashboard renders "Clear All" unconditionally (admin-cache.template.ts), so this is a
+    // hard requirement. `toBeGreaterThanOrEqual(0)` was true of every possible count, including
+    // the one where the page failed to render any buttons at all.
     const clearButton = page.locator('button').filter({ hasText: /clear/i }).first();
-
-    // Should have at least one clear button
-    const buttonCount = await clearButton.count();
-    expect(buttonCount).toBeGreaterThanOrEqual(0); // Button may or may not exist based on UI
+    await expect(clearButton).toBeVisible();
   });
 
   test('should have refresh functionality', async ({ page }) => {
@@ -74,20 +81,21 @@ test.describe('Cache Plugin Dashboard', () => {
     await waitForHTMX(page);
 
     // Look for refresh button
+    // Also rendered unconditionally; the old `if (count > 0)` turned a missing Refresh button
+    // into a pass for the test whose whole subject is the Refresh button.
     const refreshButton = page.locator('button').filter({ hasText: /refresh/i }).first();
+    await expect(refreshButton).toBeVisible();
 
-    if (await refreshButton.count() > 0) {
-      // Click refresh
-      await refreshButton.click();
-      await waitForHTMX(page);
+    await refreshButton.click();
+    await waitForHTMX(page);
 
-      // Page should still be on cache dashboard
-      await expect(page).toHaveURL(/\/admin\/cache/);
-    }
+    // Page should still be on cache dashboard
+    await expect(page).toHaveURL(/\/admin\/cache/);
+    await expect(refreshButton).toBeVisible();
   });
 });
 
-test.describe('Cache API Endpoints', () => {
+test.describe('Cache API Endpoints @plugins @api', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
@@ -261,7 +269,7 @@ test.describe('Cache API Endpoints', () => {
   });
 });
 
-test.describe('Cache Management Workflow', () => {
+test.describe('Cache Management Workflow @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
@@ -330,9 +338,12 @@ test.describe('Cache Management Workflow', () => {
   });
 });
 
-test.describe('Cache Dashboard Navigation', () => {
+test.describe('Cache Dashboard Navigation @plugins', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
+    // Both tests below assert on the sidebar link, which `reconcileMenuFromPlugins` hides
+    // unless `core-cache` is installed and active.
+    await ensurePluginActive(page, 'core-cache');
   });
 
   test('should have Cache link in admin navigation', async ({ page }) => {
@@ -359,7 +370,7 @@ test.describe('Cache Dashboard Navigation', () => {
   });
 });
 
-test.describe('Cache API Error Handling', () => {
+test.describe('Cache API Error Handling @plugins @api', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

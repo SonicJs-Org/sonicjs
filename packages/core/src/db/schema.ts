@@ -1,47 +1,221 @@
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
 
-// Users table for authentication and user management
-export const users = sqliteTable('users', {
+// Users table for authentication and user management (v3: table name is auth_user)
+export const authUser = sqliteTable('auth_user', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
-  username: text('username').notNull().unique(),
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   passwordHash: text('password_hash'), // Hashed password, nullable for OAuth users
+  name: text('name'), // Better Auth display name (required by Better Auth for registration)
+  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false), // Better Auth
   role: text('role').notNull().default('viewer'), // 'admin', 'editor', 'author', 'viewer'
+  // Platform super-admin: bypasses the multi-tenant membership gate. Opt-in, default false.
+  isSuperAdmin: integer('is_super_admin', { mode: 'boolean' }).notNull().default(false),
   avatar: text('avatar'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   lastLoginAt: integer('last_login_at'),
-  createdAt: integer('created_at').notNull(),
-  updatedAt: integer('updated_at').notNull(),
+  // Password reset (routes/auth.ts)
+  passwordResetToken: text('password_reset_token'),
+  passwordResetExpires: integer('password_reset_expires'),
+  // Invitation flow (routes/auth.ts accept-invitation)
+  invitationToken: text('invitation_token'),
+  invitedAt: integer('invited_at'),
+  acceptedInvitationAt: integer('accepted_invitation_at'),
+  // Account lockout: reset on success; set on threshold failures
+  failedLoginCount: integer('failed_login_count').notNull().default(0),
+  lockedUntil: integer('locked_until'),
+  // 2FA enrollment flag, contributed to the USER model by BA's twoFactor plugin.
+  // `mode: 'boolean'` is required, not stylistic: the drizzle adapter leaves BA's
+  // `supportsBooleans` at its `true` default, so BA writes a JS `true`/`false` here and
+  // drizzle must be the thing that converts it to 1/0. Matches emailVerified/isSuperAdmin.
+  twoFactorEnabled: integer('two_factor_enabled', { mode: 'boolean' }).notNull().default(false),
+  // Set by an admin reset (migration 0007). Independent of twoFactorEnabled: `required && !enabled`
+  // is the state a reset leaves behind, and it forces the user to /admin/two-factor until they
+  // enrol again. Plain integer rather than `mode: 'boolean'` — Better Auth never writes this
+  // column, so nothing needs the boolean round-trip and the SQL reads/writes 0/1 directly.
+  twoFactorRequired: integer('two_factor_required').notNull().default(0),
+  // timestamp_ms so Better Auth's Date values round-trip; matches SonicJS's
+  // existing Date.now() (ms) convention for these columns.
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-// Content collections - dynamic schema definitions
-export const collections = sqliteTable('collections', {
+// Backward-compat alias — all existing code using `users` continues to work.
+export const users = authUser;
+
+// ── Better Auth tables ───────────────────────────────────────────────────────
+// Cookie-based sessions, credential/OAuth accounts, and verification tokens.
+
+export const authSession = sqliteTable('auth_session', {
   id: text('id').primaryKey(),
-  name: text('name').notNull().unique(),
-  displayName: text('display_name').notNull(),
-  description: text('description'),
-  schema: text('schema', { mode: 'json' }).notNull(), // JSON schema definition
-  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  managed: integer('managed', { mode: 'boolean' }).notNull().default(false), // Config-managed collections cannot be edited in UI
-  sourceType: text('source_type').default('user'), // 'user' (normal), 'form' (form-derived)
-  sourceId: text('source_id'), // stores the form ID for form-derived collections
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUser.id, { onDelete: 'cascade' }),
+  token: text('token').notNull().unique(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  activeOrganizationId: text('active_organization_id'),
 });
 
-// Content items - actual content data
+export const authAccount = sqliteTable('auth_account', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUser.id, { onDelete: 'cascade' }),
+  accountId: text('account_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp_ms' }),
+  refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp_ms' }),
+  scope: text('scope'),
+  idToken: text('id_token'),
+  password: text('password'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const authVerification = sqliteTable('auth_verification', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
+ * Better Auth `twoFactor` plugin storage — TOTP secret, single-use backup codes, and the
+ * per-account second-factor lockout counters.
+ *
+ * Property keys are deliberately the BA field names (`userId`, `backupCodes`,
+ * `failedVerificationCount`, `lockedUntil`). The drizzle adapter maps a BA field to a
+ * drizzle **property key**, not to a column name, so matching them here means the plugin
+ * needs no `schema.twoFactor.fields` map at all — and adding one would double-map.
+ *
+ * Registered in the BA d1 schema map under the key `auth_two_factor`, which must equal the
+ * `twoFactorTable` modelName (see auth/config.ts).
+ */
+export const authTwoFactor = sqliteTable('auth_two_factor', {
+  id: text('id').primaryKey(),
+  // Encrypted with the Better Auth secret; BA never returns it from an endpoint.
+  secret: text('secret').notNull(),
+  backupCodes: text('backup_codes').notNull(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUser.id, { onDelete: 'cascade' }),
+  // BA defaults this true. It is false only between POST /two-factor/enable and the first
+  // successful /two-factor/verify-totp — the window where enrolment has started but has not
+  // been proven against a live code.
+  verified: integer('verified', { mode: 'boolean' }).notNull().default(true),
+  // See migration 0006: NOT NULL DEFAULT 0 keeps BA's `count = count + 1` bump from
+  // evaluating to NULL, which would make the lockout silently unreachable.
+  failedVerificationCount: integer('failed_verification_count').notNull().default(0),
+  // timestamp_ms, matching auth_session.expires_at. BA hands the drizzle adapter a real
+  // `Date` (supportsDates defaults to true), so the mode is what round-trips it.
+  lockedUntil: integer('locked_until', { mode: 'timestamp_ms' }),
+  // `$defaultFn` is load-bearing, not tidiness. Better Auth adds createdAt/updatedAt to its four
+  // CORE models only — `getAuthTables()` spreads PLUGIN tables verbatim
+  // (@better-auth/core/dist/db/get-tables.mjs) — and the twoFactor schema declares neither. So
+  // `POST /two-factor/enable` creates a row with no timestamps, drizzle emits explicit NULLs for
+  // absent notNull columns, and the INSERT dies on `NOT NULL constraint failed:
+  // auth_two_factor.created_at`. Enrolment would 500 for every user, and the page would report
+  // it as a wrong password. Defaulting here (rather than in SQL) also repairs already-migrated
+  // databases, because an ALTER cannot retro-add a default.
+  // Covered by __tests__/services/two-factor-adapter-create.test.ts.
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
+});
+
+// BA internal resolution aliases
+export const session = authSession;
+export const account = authAccount;
+export const verification = authVerification;
+
+// ── Better Auth tenant (organization plugin) tables ──────────────────────────
+// Better Auth's organization plugin never writes `updatedAt` on these tables, so the NOT NULL
+// column needs a drizzle-side default or every insert fails (Better Auth 1.7.3+ refuses to start).
+// `$onUpdateFn` keeps it moving on updates, which Better Auth doesn't do either.
+export const authTenant = sqliteTable('auth_tenant', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  logo: text('logo'),
+  metadata: text('metadata'),
+  status: text('status').notNull().default('active'),
+  domain: text('domain'),
+  notes: text('notes').notNull().default(''),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
+})
+
+export const authTenantMember = sqliteTable('auth_tenant_member', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => authTenant.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => authUser.id, { onDelete: 'cascade' }),
+  role: text('role').notNull().default('member'),
+  email: text('email'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
+})
+
+export const authTenantInvitation = sqliteTable('auth_tenant_invitation', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => authTenant.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  role: text('role').notNull().default('member'),
+  status: text('status').notNull().default('pending'),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  inviterId: text('inviter_id').references(() => authUser.id, { onDelete: 'set null' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
+})
+
+export const authTenantTeam = sqliteTable('auth_tenant_team', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  tenantId: text('tenant_id').notNull().references(() => authTenant.id, { onDelete: 'cascade' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
+})
+
+// Collections are code-only — registered via `registerCollections()`. The
+// `collections` table was dropped in PR 4 of the drop-db-collections plan
+// (docs/ai/plans/drop-db-collections-plan.md). The in-memory CollectionRegistry
+// is now the source of truth for collection metadata.
+
+// Content items - actual content data (legacy; being decommissioned alongside
+// the rest of the pre-document-model schema). `collection_id` is retained as
+// a plain text column — no FK to the removed `collections` table.
 export const content = sqliteTable('content', {
   id: text('id').primaryKey(),
-  collectionId: text('collection_id').notNull().references(() => collections.id),
+  collectionId: text('collection_id').notNull(),
   slug: text('slug').notNull(),
   title: text('title').notNull(),
   data: text('data', { mode: 'json' }).notNull(), // JSON content data
   status: text('status').notNull().default('draft'), // 'draft', 'published', 'archived'
   publishedAt: integer('published_at', { mode: 'timestamp' }),
-  authorId: text('author_id').notNull().references(() => users.id),
+  authorId: text('author_id').notNull().references(() => authUser.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
@@ -52,7 +226,7 @@ export const contentVersions = sqliteTable('content_versions', {
   contentId: text('content_id').notNull().references(() => content.id),
   version: integer('version').notNull(),
   data: text('data', { mode: 'json' }).notNull(),
-  authorId: text('author_id').notNull().references(() => users.id),
+  authorId: text('author_id').notNull().references(() => authUser.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
 
@@ -72,7 +246,7 @@ export const media = sqliteTable('media', {
   alt: text('alt'),
   caption: text('caption'),
   tags: text('tags', { mode: 'json' }), // JSON array of tags
-  uploadedBy: text('uploaded_by').notNull().references(() => users.id),
+  uploadedBy: text('uploaded_by').notNull().references(() => authUser.id),
   uploadedAt: integer('uploaded_at').notNull(),
   updatedAt: integer('updated_at'),
   publishedAt: integer('published_at'),
@@ -82,11 +256,11 @@ export const media = sqliteTable('media', {
 });
 
 // API tokens for programmatic access
-export const apiTokens = sqliteTable('api_tokens', {
+export const apiTokens = sqliteTable('auth_api_tokens', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   token: text('token').notNull().unique(),
-  userId: text('user_id').notNull().references(() => users.id),
+  userId: text('user_id').notNull().references(() => authUser.id),
   permissions: text('permissions', { mode: 'json' }).notNull(), // Array of permissions
   expiresAt: integer('expires_at', { mode: 'timestamp' }),
   lastUsedAt: integer('last_used_at', { mode: 'timestamp' }),
@@ -101,7 +275,7 @@ export const workflowHistory = sqliteTable('workflow_history', {
   action: text('action').notNull(),
   fromStatus: text('from_status').notNull(),
   toStatus: text('to_status').notNull(),
-  userId: text('user_id').notNull().references(() => users.id),
+  userId: text('user_id').notNull().references(() => authUser.id),
   comment: text('comment'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
@@ -173,21 +347,17 @@ export const pluginActivityLog = sqliteTable('plugin_activity_log', {
 });
 
 // Zod schemas for validation
-export const insertUserSchema = createInsertSchema(users, {
+export const insertUserSchema = createInsertSchema(authUser, {
   email: (schema: any) => schema.email(),
   firstName: (schema: any) => schema.min(1),
   lastName: (schema: any) => schema.min(1),
-  username: (schema: any) => schema.min(3),
 });
 
-export const selectUserSchema = createSelectSchema(users);
+export const selectUserSchema = createSelectSchema(authUser);
 
-export const insertCollectionSchema = createInsertSchema(collections, {
-  name: (schema: any) => schema.min(1).regex(/^[a-z0-9_]+$/, 'Collection name must be lowercase with underscores'),
-  displayName: (schema: any) => schema.min(1),
-});
-
-export const selectCollectionSchema = createSelectSchema(collections);
+// Collection Zod schemas removed with the `collections` table — see
+// drop-db-collections plan PR 4. Use the CollectionConfig type from
+// `types/collection-config.ts` for code-defined collections.
 
 export const insertContentSchema = createInsertSchema(content, {
   slug: (schema: any) => schema.min(1).regex(/^[a-zA-Z0-9_-]+$/, 'Slug must contain only letters, numbers, underscores, and hyphens'),
@@ -263,7 +433,7 @@ export const systemLogs = sqliteTable('system_logs', {
   category: text('category').notNull(), // 'auth', 'api', 'workflow', 'plugin', 'media', 'system', etc.
   message: text('message').notNull(),
   data: text('data', { mode: 'json' }), // Additional structured data
-  userId: text('user_id').references(() => users.id),
+  userId: text('user_id').references(() => authUser.id),
   sessionId: text('session_id'),
   requestId: text('request_id'),
   ipAddress: text('ip_address'),
@@ -331,10 +501,13 @@ export const insertEmailLogSchema = createInsertSchema(emailLog);
 export const selectEmailLogSchema = createSelectSchema(emailLog);
 
 // Type exports
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
-export type Collection = typeof collections.$inferSelect;
-export type NewCollection = typeof collections.$inferInsert;
+export type AuthUser = typeof authUser.$inferSelect;
+export type User = typeof authUser.$inferSelect;
+export type NewUser = typeof authUser.$inferInsert;
+// Collection type aliases removed with the `collections` table — see
+// drop-db-collections plan PR 4. Use CollectionConfig from
+// `types/collection-config.ts` or CollectionRecord from
+// `services/collection-registry.ts`.
 export type Content = typeof content.$inferSelect;
 export type NewContent = typeof content.$inferInsert;
 export type Media = typeof media.$inferSelect;
@@ -420,8 +593,8 @@ export const forms = sqliteTable('forms', {
   viewCount: integer('view_count').notNull().default(0),
   
   // Ownership
-  createdBy: text('created_by').references(() => users.id),
-  updatedBy: text('updated_by').references(() => users.id),
+  createdBy: text('created_by').references(() => authUser.id),
+  updatedBy: text('updated_by').references(() => authUser.id),
   
   // Timestamps
   createdAt: integer('created_at').notNull(),
@@ -441,7 +614,7 @@ export const formSubmissions = sqliteTable('form_submissions', {
   submissionNumber: integer('submission_number'),
   
   // User information
-  userId: text('user_id').references(() => users.id),
+  userId: text('user_id').references(() => authUser.id),
   userEmail: text('user_email'),
   
   // Tracking
@@ -453,7 +626,7 @@ export const formSubmissions = sqliteTable('form_submissions', {
   utmCampaign: text('utm_campaign'),
   
   // Review/Processing
-  reviewedBy: text('reviewed_by').references(() => users.id),
+  reviewedBy: text('reviewed_by').references(() => authUser.id),
   reviewedAt: integer('reviewed_at'),
   reviewNotes: text('review_notes'),
   

@@ -97,6 +97,34 @@ export type { ServiceSingleton } from './singletons/service-singleton'
 export { definePlugin, isDefinedPlugin } from './sdk/define-plugin'
 export type { DefinePluginInput, DefinedPlugin, DefinedPluginContext, DeclarativeHooks } from './sdk/define-plugin'
 
+// Single-chokepoint registration
+export { registerPlugins, RegisterPluginsError } from './sdk/register-plugins'
+export type {
+  RegisterablePlugin,
+  RegisterPluginsHostContext,
+  RegisterPluginsErrorReason,
+  PluginsRegistry,
+  RegistryEntry,
+} from './sdk/register-plugins'
+
+// Schema-driven settings
+export {
+  parseConfigSchema,
+  renderSchemaFields,
+  parseFormDataToSettings,
+  applySchemaDefaults,
+} from './sdk/config-schema'
+export type {
+  ConfigSchema,
+  ConfigSchemaField,
+  StringField,
+  NumberField,
+  BooleanField,
+  SelectField,
+  ParsedField,
+  SettingsFor,
+} from './sdk/config-schema'
+
 // Cron surface
 export {
   collectCrons,

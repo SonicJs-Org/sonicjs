@@ -24,22 +24,41 @@ export interface AuthSettings {
  * @returns true if registration is enabled, false if disabled
  */
 export async function isRegistrationEnabled(db: D1Database): Promise<boolean> {
+  // Plugin settings live on the plugin's document (type_id='plugin', slug=pluginId) since the
+  // document-model migration — the legacy `plugins` table no longer exists on greenfield. The
+  // /admin/plugins/core-auth/settings write goes through PluginService.updatePluginSettings (doc model),
+  // so the read must come from the same place or "disable registration" silently no-ops.
+  try {
+    const row = await db
+      .prepare(
+        "SELECT data FROM documents WHERE slug = 'core-auth' AND type_id = 'plugin' AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL",
+      )
+      .first() as { data: string } | null
+    if (row?.data) {
+      const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+      const enabled = data?.settings?.registration?.enabled
+      return enabled !== false && enabled !== 0
+    }
+  } catch {
+    // fall through to the legacy table for installs that still have it
+  }
+
+  // Legacy fallback: the dropped `plugins` table (guarded — absent on greenfield).
   try {
     const plugin = await db.prepare('SELECT settings FROM plugins WHERE id = ?')
       .bind('core-auth')
       .first() as { settings: string } | null
-
     if (plugin?.settings) {
-      // Parse settings and check registration.enabled
-      // SQLite stores booleans as 0/1, so check for both false and 0
+      // SQLite stores booleans as 0/1, so check for both false and 0.
       const settings = JSON.parse(plugin.settings)
       const enabled = settings?.registration?.enabled
       return enabled !== false && enabled !== 0
     }
-    return true // Default to enabled if no settings
   } catch {
-    return true // Default to enabled on error
+    // no legacy table either
   }
+
+  return true // Default to enabled when no setting is found
 }
 
 /**
@@ -50,7 +69,7 @@ export async function isRegistrationEnabled(db: D1Database): Promise<boolean> {
  */
 export async function isFirstUserRegistration(db: D1Database): Promise<boolean> {
   try {
-    const result = await db.prepare('SELECT COUNT(*) as count FROM users').first() as { count: number } | null
+    const result = await db.prepare('SELECT COUNT(*) as count FROM auth_user').first() as { count: number } | null
     return result?.count === 0
   } catch {
     return false // Default to not first user on error
@@ -70,7 +89,7 @@ export async function checkAdminUserExists(db: D1Database): Promise<boolean> {
   }
 
   try {
-    const result = await db.prepare('SELECT id FROM users WHERE role = ?')
+    const result = await db.prepare('SELECT id FROM auth_user WHERE role = ?')
       .bind('admin')
       .first()
     adminExistsCache = !!result
@@ -100,10 +119,36 @@ export function resetAdminExistsCache(): void {
  * Auth Validation Service
  * Provides dynamic validation schemas for registration based on database settings
  */
+/**
+ * Email schema. Zod's `.email()` already rejects the common malformed shapes
+ * (spaces, double-quoted local parts, consecutive dots, leading dots, commas),
+ * but it *accepts* domain labels that begin or end with a hyphen (e.g.
+ * `user@example-.com`), which are invalid per RFC 1035. The refine closes that
+ * gap so registration validation matches stricter CMS auth suites.
+ */
+export const emailSchema = z
+  .string()
+  .email('Valid email is required')
+  .refine(
+    (value) => {
+      const at = value.lastIndexOf('@')
+      if (at < 0) return false
+      const domain = value.slice(at + 1)
+      // No domain label may start or end with a hyphen.
+      return domain.split('.').every((label) => label.length > 0 && !label.startsWith('-') && !label.endsWith('-'))
+    },
+    { message: 'Valid email is required' }
+  )
+
+/** Better Auth (1.7+) refuses longer passwords at sign-in, so nothing may store one. */
+export const MAX_PASSWORD_LENGTH = 128
+
 const baseRegistrationSchema = z.object({
-  email: z.string().email('Valid email is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  username: z.string().min(3, 'Username must be at least 3 characters').optional(),
+  email: emailSchema,
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(MAX_PASSWORD_LENGTH, `Password must be at most ${MAX_PASSWORD_LENGTH} characters`),
   firstName: z.string().min(1, 'First name is required').optional(),
   lastName: z.string().min(1, 'Last name is required').optional()
 })
@@ -127,9 +172,6 @@ export const authValidationService = {
    */
   generateDefaultValue(field: string, data: any): string {
     switch (field) {
-      case 'username':
-        // Generate username from email (part before @)
-        return data.email ? data.email.split('@')[0] : `user${Date.now()}`
       case 'firstName':
         return 'User'
       case 'lastName':

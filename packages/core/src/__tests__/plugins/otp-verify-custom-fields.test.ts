@@ -39,7 +39,6 @@ import { createOTPLoginPlugin } from '../../plugins/core-plugins/otp-login-plugi
 const baseUserRow = {
   id: 'user-123',
   email: 'test@example.com',
-  username: 'testuser',
   first_name: 'Test',
   last_name: 'User',
   role: 'viewer',
@@ -94,7 +93,7 @@ describe('POST /auth/otp/verify custom field surfacing', () => {
     expect(body.user).toMatchObject({
       id: 'user-123',
       email: 'test@example.com',
-      username: 'testuser',
+
       first_name: 'Test',
       last_name: 'User',
       role: 'viewer',
@@ -124,7 +123,7 @@ describe('POST /auth/otp/verify custom field surfacing', () => {
     expect(body.user).toMatchObject({
       id: 'user-123',
       email: 'test@example.com',
-      username: 'testuser',
+
       first_name: 'Test',
       last_name: 'User',
       role: 'viewer',

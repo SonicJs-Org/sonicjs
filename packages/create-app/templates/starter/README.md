@@ -29,17 +29,27 @@ A modern headless CMS built with [SonicJS](https://sonicjs.com) on Cloudflare's 
    npx wrangler r2 bucket create my-sonicjs-media
    ```
 
-4. **Run migrations:**
+4. **Create your KV namespace:**
+   ```bash
+   npx wrangler kv namespace create CACHE_KV
+   ```
+
+   Copy the `id` from the output into the `CACHE_KV` binding in `wrangler.toml`.
+   This binding is **required for good TTFB** — without it every cold Worker
+   isolate re-runs the full database bootstrap (~10s+ first byte); with it, only
+   the first isolate per deploy pays that cost.
+
+5. **Run migrations:**
    ```bash
    npm run db:migrate:local
    ```
 
-5. **Start the development server:**
+6. **Start the development server:**
    ```bash
    npm run dev
    ```
 
-6. **Open your browser:**
+7. **Open your browser:**
    Navigate to `http://localhost:8787/admin` to access the admin interface.
 
    Use the admin credentials you provided during project setup.

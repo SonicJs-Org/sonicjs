@@ -13,6 +13,7 @@ export default {
   description: 'Simple test collection for development and testing',
   icon: '🧪',
   color: '#8B5CF6',
+  internal: true,
 
   schema: {
     type: 'object',

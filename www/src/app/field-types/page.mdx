@@ -16,6 +16,10 @@ export const sections = [
 
 Complete reference for all available field types in SonicJS collection schemas. {{ className: 'lead' }}
 
+<div className="p-4 mb-6 rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20">
+  <strong>v3 Storage:</strong> All field values are stored in the <code>documents.data</code> JSON column. Queryable scalar fields are exposed as <code>q_*</code> JSON virtual generated columns on the <code>documents</code> table. There are no per-collection SQL columns or typed DB schemas.
+</div>
+
 ---
 
 ## Overview
@@ -471,7 +475,7 @@ Falls back to textarea if no rich text editor plugin is active.
 
 ### quill
 
-Quill editor (requires Quill Editor Plugin).
+Quill editor (requires Quill Editor Plugin; optional — Lexical is the default in v3).
 
 <CodeGroup title="Quill Field">
 
@@ -506,7 +510,7 @@ Quill editor (requires Quill Editor Plugin).
 
 ### mdxeditor / markdown
 
-Markdown editor (requires EasyMDE Plugin).
+Markdown editor (requires EasyMDE Plugin; optional — Lexical is the default in v3).
 
 <CodeGroup title="Markdown Field">
 
@@ -526,7 +530,7 @@ Markdown editor (requires EasyMDE Plugin).
 
 ### tinymce
 
-TinyMCE editor (requires TinyMCE Plugin).
+TinyMCE editor (requires TinyMCE Plugin; optional — Lexical is the default in v3).
 
 <CodeGroup title="TinyMCE Field">
 
@@ -816,9 +820,9 @@ Raw JSON data field.
 <CodeGroup title="Full Collection Example">
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import type { CollectionConfig } from '@sonicjs-cms/core'
 
-export default defineCollection({
+const blogPostsCollection: CollectionConfig = {
   name: 'blog_posts',
   displayName: 'Blog Posts',
   description: 'Blog articles and news',
@@ -919,7 +923,7 @@ export default defineCollection({
       }
     }
   }
-})
+}
 ```
 
 </CodeGroup>

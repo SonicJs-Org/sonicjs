@@ -8,9 +8,9 @@ import { visit } from 'unist-util-visit'
 function rehypeParseCodeBlocks() {
   return (tree) => {
     visit(tree, 'element', (node, _nodeIndex, parentNode) => {
-      if (node.tagName === 'code') {
-        parentNode.properties.language = node.properties.className
-          ? node.properties?.className[0]?.replace(/^language-/, '')
+      if (node.tagName === 'code' && parentNode?.properties != null) {
+        parentNode.properties.language = node.properties?.className
+          ? node.properties.className[0]?.replace(/^language-/, '')
           : 'txt'
       }
     })
@@ -54,7 +54,10 @@ function rehypeSlugify() {
   return (tree) => {
     let slugify = slugifyWithCounter()
     visit(tree, 'element', (node) => {
-      if (node.tagName === 'h2' && !node.properties.id) {
+      if (
+        (node.tagName === 'h2' || node.tagName === 'h3') &&
+        !node.properties.id
+      ) {
         node.properties.id = slugify(toString(node))
       }
     })

@@ -43,7 +43,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Examples and guides
     { url: '/examples', priority: 0.7, changeFrequency: 'weekly' as const },
 
+    // Comparison / evaluation - high priority (search-intent landing page)
+    { url: '/compare', priority: 0.8, changeFrequency: 'monthly' as const },
+
     // Community and support
+    { url: '/support', priority: 0.7, changeFrequency: 'monthly' as const },
+    { url: '/contact', priority: 0.6, changeFrequency: 'monthly' as const },
+    { url: '/commercial-support', priority: 0.6, changeFrequency: 'monthly' as const },
     { url: '/faq', priority: 0.6, changeFrequency: 'weekly' as const },
     { url: '/community', priority: 0.6, changeFrequency: 'monthly' as const },
     { url: '/contributing', priority: 0.5, changeFrequency: 'monthly' as const },

@@ -79,6 +79,9 @@ type Variables = {
   appVersion?: string
 }
 
+const isTableMissing = (err: any) =>
+  String(err?.message ?? err?.cause?.message ?? '').includes('no such table: forms')
+
 export const adminFormsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Apply authentication middleware
@@ -134,6 +137,14 @@ adminFormsRoutes.get('/', async (c) => {
 
     return c.html(renderFormsListPage(pageData))
   } catch (error: any) {
+    if (isTableMissing(error)) {
+      const user = c.get('user')
+      return c.html(renderFormsListPage({
+        forms: [],
+        user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+        version: c.get('appVersion'),
+      }))
+    }
     console.error('Error listing forms:', error)
     return c.html('<p>Error loading forms</p>', 500)
   }
@@ -271,6 +282,7 @@ adminFormsRoutes.post('/', async (c) => {
     // Redirect to builder
     return c.redirect(`/admin/forms/${formId}/builder`)
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ error: 'Forms storage not configured — run database migrations' }, 503)
     console.error('Error creating form:', error)
     return c.json({ error: 'Failed to create form' }, 500)
   }
@@ -319,6 +331,7 @@ adminFormsRoutes.get('/:id/builder', async (c) => {
 
     return c.html(renderFormBuilderPage(pageData as FormBuilderPageData))
   } catch (error: any) {
+    if (isTableMissing(error)) return c.html('<p>Forms storage not configured — run database migrations</p>', 503)
     console.error('Error showing form builder:', error)
     return c.html('<p>Error loading form builder</p>', 500)
   }
@@ -359,6 +372,7 @@ adminFormsRoutes.put('/:id', async (c) => {
 
     return c.json({ success: true, message: 'Form saved successfully' })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ error: 'Forms storage not configured — run database migrations' }, 503)
     console.error('Error updating form:', error)
     return c.json({ error: 'Failed to save form' }, 500)
   }
@@ -392,6 +406,7 @@ adminFormsRoutes.delete('/:id', async (c) => {
 
     return c.json({ success: true, message: 'Form deleted successfully' })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ error: 'Forms storage not configured — run database migrations' }, 503)
     console.error('Error deleting form:', error)
     return c.json({ error: 'Failed to delete form' }, 500)
   }
@@ -464,6 +479,7 @@ adminFormsRoutes.get('/:id/submissions', async (c) => {
     
     return c.html(html)
   } catch (error: any) {
+    if (isTableMissing(error)) return c.html('<p>Forms storage not configured — run database migrations</p>', 503)
     console.error('Error loading submissions:', error)
     return c.html('<p>Error loading submissions</p>', 500)
   }

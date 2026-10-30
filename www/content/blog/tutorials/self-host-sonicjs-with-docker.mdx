@@ -1,0 +1,396 @@
+---
+title: "Self-Hosting SonicJS with Docker: A Complete Guide"
+description: "Run SonicJS on your own server, VPS, or private cloud using Docker. No Cloudflare account required — just Docker, a volume, and two environment variables."
+keywords:
+  - "self-host sonicjs"
+  - "sonicjs docker"
+  - "sonicjs vps deployment"
+  - "sonicjs node.js self-host"
+  - "headless cms self-hosted"
+  - "docker cms deployment"
+category: "tutorials"
+tags:
+  - "deployment"
+  - "docker"
+  - "self-hosting"
+  - "node.js"
+  - "tutorial"
+publishedAt: "2026-07-01"
+author:
+  name: "SonicJS Team"
+  twitter: "sonicjs"
+  github: "lane711/sonicjs"
+featured: false
+featuredImage:
+  url: "/images/blog/self-host-sonicjs-with-docker/hero.png"
+  alt: "Isometric illustration of a server rack with a Docker whale logo serving SonicJS content to browsers"
+  width: 1792
+  height: 1024
+openGraph:
+  type: "article"
+  title: "Self-Hosting SonicJS with Docker: A Complete Guide"
+  description: "Run SonicJS on your own infrastructure — Docker Compose, SQLite persistence, first-boot seed, and production hardening in one guide."
+---
+
+# Self-Hosting SonicJS with Docker: A Complete Guide
+
+<TLDRBox>
+**TL;DR** — SonicJS ships a production-ready Docker image. Three commands get you running:
+
+```bash
+docker build -t sonicjs .
+docker run -d -p 3000:3000 -v $(pwd)/data:/app/data \
+  -e JWT_SECRET=$(openssl rand -base64 32) \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  sonicjs
+docker exec sonicjs npm run reset
+```
+
+Default admin: `admin@sonicjs.com` / `sonicjs!` — **change it after first login**.
+
+**Key facts:**
+- Single SQLite file in a Docker volume — no external database required
+- `npm run reset` seeds admin + RBAC on first boot; safe to run again (idempotent)
+- Supports Node.js 20+, Bun, and Docker
+- Full self-host — zero dependency on Cloudflare
+</TLDRBox>
+
+SonicJS was built for Cloudflare's global edge, but sometimes the right deployment is a VPS you control. Maybe you're on a private network, you need data sovereignty, or you simply prefer owning the full stack. SonicJS supports all of that through its **self-host mode** — the same headless CMS, running on any Node.js server or Docker container.
+
+This guide walks through running SonicJS on your own infrastructure from first container to production-hardened deployment.
+
+## How Self-Hosting Works
+
+The Cloudflare deployment binds to platform APIs: D1 for the database, R2 for media, KV for caching. The self-host mode replaces each of those with portable equivalents:
+
+| Cloudflare | Self-Host |
+|---|---|
+| D1 (SQLite at the edge) | `better-sqlite3` (local SQLite file) |
+| R2 (object storage) | Local filesystem (`./data/media/`) |
+| KV (key-value cache) | In-memory LRU cache |
+| Workers runtime | Node.js `@hono/node-server` |
+
+The SQLite file lives in a Docker volume (`/app/data/sonicjs.db`), so it persists across container restarts. The application code is identical — SonicJS detects the runtime and switches the adapters automatically.
+
+## Prerequisites
+
+- **Docker 20+** (or Node.js 20+ if running without Docker)
+- The SonicJS source repo — `git clone https://github.com/lane711/sonicjs.git`
+- `openssl` (for generating secrets — `brew install openssl` on macOS, available by default on Linux)
+
+## Option A: Docker (Recommended)
+
+### Step 1: Build the Image
+
+From the repo root:
+
+```bash
+docker build -t sonicjs .
+```
+
+The multi-stage Dockerfile builds the TypeScript and packages only the runtime artifacts into a minimal Alpine image. Build time is typically 60–90 seconds on first run (npm install + esbuild compile); subsequent builds are fast thanks to layer caching.
+
+### Step 2: Run the Container
+
+Create a `data/` directory for the SQLite volume, then start the container:
+
+```bash
+mkdir -p data
+
+docker run -d \
+  --name sonicjs \
+  -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e JWT_SECRET=$(openssl rand -base64 32) \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  sonicjs
+```
+
+The container is healthy when logs show `SonicJS self-host listening on :3000`.
+
+```bash
+docker logs sonicjs
+# Server listening on http://0.0.0.0:3000
+```
+
+### Step 3: Seed the First Admin
+
+The database is auto-migrated at startup, but the admin account doesn't exist yet. Run the seed script inside the container:
+
+```bash
+docker exec sonicjs npm run reset
+```
+
+Output:
+
+```
+[seed] Admin user created:
+  Email:    admin@sonicjs.com
+  Password: sonicjs!
+  ⚠ Change this password after first login!
+```
+
+The `reset` command is idempotent — run it as many times as you like. If an admin already exists, it exits silently.
+
+### Step 4: Verify
+
+```bash
+# Health endpoint
+curl http://localhost:3000/health
+# → {"status":"ok"}
+
+# Open the admin UI
+open http://localhost:3000/admin
+```
+
+Sign in with `admin@sonicjs.com` / `sonicjs!` and change the password immediately.
+
+---
+
+## Option B: Docker Compose
+
+For a reproducible, version-controlled setup, use Docker Compose:
+
+```yaml
+# docker-compose.yml
+version: "3.9"
+
+services:
+  sonicjs:
+    build: .
+    container_name: sonicjs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - sonicjs_data:/app/data
+    environment:
+      JWT_SECRET: "${JWT_SECRET}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+      SONICJS_ADMIN_EMAIL: "${SONICJS_ADMIN_EMAIL:-admin@sonicjs.com}"
+      SONICJS_ADMIN_PASSWORD: "${SONICJS_ADMIN_PASSWORD:-sonicjs!}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  sonicjs_data:
+```
+
+Create a `.env` file (never commit this):
+
+```bash
+JWT_SECRET=$(openssl rand -base64 32)
+BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+SONICJS_ADMIN_EMAIL=admin@yourdomain.com
+SONICJS_ADMIN_PASSWORD=a-strong-password-here
+```
+
+Start and seed:
+
+```bash
+docker compose up -d
+docker compose exec sonicjs npm run reset
+```
+
+---
+
+## Option C: Node.js Directly
+
+If you prefer running without Docker — bare metal, a VM, or a PaaS like Railway or Render:
+
+```bash
+# Install dependencies
+npm install
+
+# Build the core package
+npm run build:core
+
+# Start the self-host server
+cd my-sonicjs-app && npm run self-host
+```
+
+Then seed:
+
+```bash
+cd my-sonicjs-app && npm run reset
+```
+
+The `self-host` script starts `@hono/node-server` on port 3000. Set `PORT` to override.
+
+For Bun:
+
+```bash
+cd my-sonicjs-app && npm run self-host:bun
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `JWT_SECRET` | Yes | — | Signs session JWTs. Generate with `openssl rand -base64 32`. |
+| `BETTER_AUTH_SECRET` | Yes | — | Better Auth internal signing key. Same generation. |
+| `PORT` | No | `3000` | HTTP port to listen on. |
+| `SONICJS_DB_PATH` | No | `./data/sonicjs.db` | Path to the SQLite database file. |
+| `SONICJS_ADMIN_EMAIL` | No | `admin@sonicjs.com` | Admin email used by `npm run reset`. |
+| `SONICJS_ADMIN_PASSWORD` | No | `sonicjs!` | Admin password used by `npm run reset`. |
+
+**Never use the default `JWT_SECRET` or `BETTER_AUTH_SECRET` in production.** These protect every session token in your system.
+
+---
+
+## Database Persistence
+
+The SQLite database lives at `SONICJS_DB_PATH` (default `./data/sonicjs.db`). In Docker, always mount `/app/data` as a named volume or bind mount:
+
+```bash
+# Named volume (recommended — managed by Docker)
+-v sonicjs_data:/app/data
+
+# Bind mount (easier to inspect/backup)
+-v $(pwd)/data:/app/data
+```
+
+Without a volume, the database is lost when the container stops.
+
+### Backups
+
+Backing up SQLite is as simple as copying the file:
+
+```bash
+# From host (bind mount)
+cp data/sonicjs.db "backups/sonicjs-$(date +%Y%m%d-%H%M%S).db"
+
+# From inside the container
+docker exec sonicjs sqlite3 /app/data/sonicjs.db ".backup '/app/data/backup.db'"
+docker cp sonicjs:/app/data/backup.db ./backups/
+```
+
+SQLite's WAL mode means live backups are consistent — no need to stop the server.
+
+---
+
+## Production Hardening
+
+### Reverse Proxy with HTTPS
+
+Never expose port 3000 directly. Put SonicJS behind nginx or Caddy:
+
+**Caddy** (automatic HTTPS via Let's Encrypt — the simplest option):
+
+```
+# Caddyfile
+cms.yourdomain.com {
+    reverse_proxy sonicjs:3000
+}
+```
+
+**nginx:**
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name cms.yourdomain.com;
+
+    ssl_certificate     /etc/ssl/certs/sonicjs.crt;
+    ssl_certificate_key /etc/ssl/private/sonicjs.key;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Security Checklist
+
+- [ ] `JWT_SECRET` and `BETTER_AUTH_SECRET` are random 256-bit values — not defaults
+- [ ] Admin password changed from `sonicjs!`
+- [ ] HTTPS enforced — container not exposed directly on port 80/443
+- [ ] SQLite volume is on a persistent disk with regular backups
+- [ ] Container running as non-root (the Dockerfile already does this via `USER node`)
+- [ ] `SONICJS_ADMIN_PASSWORD` env var is in `.env`, not in `docker-compose.yml` committed to git
+
+### Container Hardening
+
+The production Dockerfile already:
+- Uses a multi-stage build (no build tools in the final image)
+- Runs as `node` user (non-root)
+- Produces a minimal Alpine image (~120 MB)
+
+---
+
+## Updating SonicJS
+
+```bash
+git pull origin main
+docker build -t sonicjs .
+docker stop sonicjs && docker rm sonicjs
+
+docker run -d \
+  --name sonicjs \
+  -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e JWT_SECRET="$JWT_SECRET" \
+  -e BETTER_AUTH_SECRET="$BETTER_AUTH_SECRET" \
+  sonicjs
+```
+
+New migrations run automatically at startup. No manual migration step needed.
+
+With Docker Compose:
+
+```bash
+git pull origin main
+docker compose build
+docker compose up -d
+```
+
+---
+
+## Troubleshooting
+
+**`[seed] Database not found`** — The container hasn't started yet, or the volume isn't mounted. Wait for `Server listening on :3000` in the logs, then re-run `docker exec sonicjs npm run reset`.
+
+**`/admin` returns 403 after seeding** — The RBAC grants weren't applied. This usually means `npm run reset` ran before the DB was migrated. Stop the container, delete `data/sonicjs.db`, restart, and re-run `npm run reset`.
+
+**Port 3000 already in use** — Change the host port: `-p 8080:3000`.
+
+**SQLite `SQLITE_BUSY` errors under load** — SQLite handles concurrent writes with WAL mode and is fine for most self-hosted workloads. If you're seeing lock contention under heavy write load, consider running multiple read replicas via Litestream or switching to the Cloudflare deployment for horizontal scale.
+
+**Media uploads not persisting** — Ensure the volume includes the `media/` subdirectory: `-v $(pwd)/data:/app/data`. Uploads land in `/app/data/media/`.
+
+---
+
+## When to Use Self-Hosting vs. Cloudflare
+
+| | Self-Hosting | Cloudflare |
+|---|---|---|
+| **Data sovereignty** | Full control | Data on Cloudflare's network |
+| **Global latency** | Depends on host location | 300+ edge locations, sub-50 ms globally |
+| **Scale** | Limited by single server | Effectively unlimited |
+| **Cost at scale** | Predictable VPS cost | Pay-per-request |
+| **Setup complexity** | Docker + reverse proxy | Wrangler config |
+| **Cold starts** | None (persistent process) | None (Workers are always warm) |
+| **Backups** | Manual (SQLite file copy) | D1 automated backups |
+
+For most teams with data residency requirements, a compliance mandate, or a private intranet deployment, self-hosting is the right call. For public-facing, globally distributed content at scale, the [Cloudflare deployment](/deployment) is the better fit.
+
+---
+
+## Next Steps
+
+- **[Self-Hosting reference docs](/self-hosting)** — full configuration reference, all env vars, adapter internals
+- **[Production Deployment on Cloudflare](/deployment)** — if you want global edge distribution instead
+- **[Configuration guide](/configuration)** — all env vars and plugin options
+- **[Security overview](/security)** — CORS, CSRF, rate limiting, and password hashing
+
+Need help? Join the [SonicJS Discord](https://discord.gg/sonicjs) or open an issue on [GitHub](https://github.com/lane711/sonicjs).

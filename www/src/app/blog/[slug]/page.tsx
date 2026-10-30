@@ -8,6 +8,7 @@ import { ShareButtons } from '../components/ShareButtons'
 import { RelatedPosts } from '../components/RelatedPosts'
 import { BlogPostSchema, BreadcrumbSchema } from '../components/StructuredData'
 import { TLDRBox } from '../components/TLDRBox'
+import { Callout } from '@/components/Callout'
 
 // Force static generation - required for Cloudflare Workers deployment
 export const dynamic = 'force-static'
@@ -82,6 +83,7 @@ export default async function BlogPostPage({ params }: PageProps) {
     source: post.content,
     components: {
       TLDRBox,
+      Callout,
     },
     options: {
       mdxOptions: {

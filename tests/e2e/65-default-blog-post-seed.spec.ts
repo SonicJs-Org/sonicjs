@@ -1,0 +1,39 @@
+import { test, expect } from './fixtures'
+
+test.describe('default content seed @content', () => {
+  test.beforeEach(async ({ request }) => {
+    // Ensure welcome post exists and is published before each test (may have been deleted by test 42 bulk-delete).
+    await request.post('/test-seed-defaults')
+  })
+
+  test('exposes the code-defined blog_post collection without legacy defaults', async ({ request }) => {
+    const response = await request.get('/api/collections')
+    expect(response.ok()).toBeTruthy()
+
+    const body = await response.json()
+    const collections = body.data ?? []
+    const names = collections.map((collection: any) => collection.name)
+    // Core collections expected on a fresh install
+    expect(names).toContain('blog_post')
+    expect(names).toContain('e2e_test')
+    // Legacy collections from old DB schema must not appear
+    expect(names).not.toContain('pages')
+    expect(names).not.toContain('news')
+    expect(names).not.toContain('contact_messages')
+  })
+
+  test('seeds one published welcome blog post', async ({ request }) => {
+    const response = await request.get('/api/documents?type=blog_post&limit=100')
+    expect(response.ok()).toBeTruthy()
+
+    const body = await response.json()
+    const posts = body.data ?? []
+    const welcomePosts = posts.filter((post: any) => post.slug === 'welcome-to-sonicjs')
+    expect(welcomePosts).toHaveLength(1)
+    expect(welcomePosts[0]).toMatchObject({
+      typeId: 'blog_post',
+      title: 'Welcome to SonicJS',
+      slug: 'welcome-to-sonicjs',
+    })
+  })
+})

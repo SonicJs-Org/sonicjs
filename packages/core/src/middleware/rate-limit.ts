@@ -12,6 +12,35 @@ interface RateLimitEntry {
 }
 
 /**
+ * The address this request is bucketed under.
+ *
+ * `cf-connecting-ip` is written by Cloudflare's edge and overwrites anything the client sent, so
+ * it is authoritative and used whenever present. `x-forwarded-for` is not: it is a comma-separated
+ * trail where each proxy *appends* the peer it accepted from, and the client controls everything
+ * to the left of the first hop your own infrastructure added. Taking the header verbatim therefore
+ * handed any caller on a non-Cloudflare deployment an unlimited bypass — prepend a fresh value per
+ * request and every attempt lands in its own bucket, and even benign traffic split
+ * `"1.2.3.4, 5.6.7.8"` from `"1.2.3.4"` into two counters for the same client.
+ *
+ * So take the RIGHTMOST hop: the one appended by the proxy nearest this worker, the only entry a
+ * remote caller cannot forge. Behind several proxies that over-aggregates (everyone sharing the
+ * last hop shares a bucket), which for a brute-force limiter is the safe direction to be wrong in.
+ */
+export function rateLimitClientKey(c: Context): string {
+  const cf = c.req.header('cf-connecting-ip')?.trim()
+  if (cf) return cf
+
+  const forwarded = c.req.header('x-forwarded-for')
+  if (forwarded) {
+    const hops = forwarded.split(',').map((h) => h.trim()).filter(Boolean)
+    const nearest = hops[hops.length - 1]
+    if (nearest) return nearest
+  }
+
+  return 'unknown'
+}
+
+/**
  * KV-based sliding window rate limiter middleware.
  * Gracefully skips if CACHE_KV binding is not available.
  */
@@ -25,7 +54,7 @@ export function rateLimit(options: RateLimitOptions) {
       return await next()
     }
 
-    const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown'
+    const ip = rateLimitClientKey(c)
     const key = `ratelimit:${keyPrefix}:${ip}`
 
     try {

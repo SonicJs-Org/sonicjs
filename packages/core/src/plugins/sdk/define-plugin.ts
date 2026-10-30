@@ -43,6 +43,61 @@ import type { HookEventName } from '../hooks/catalog'
 import type { PluginBootContext, WirableHook } from '../wire'
 import type { CronContext, CronDeclaration, CronTickEvent } from '../cron'
 import type { MountableRoute } from '../mount'
+import { getCoreVersion } from '../../utils/version'
+import type { ConfigSchema } from './config-schema'
+import type { PluginMenuEntry } from '../../services/plugin-menu-singleton'
+
+// ── Minimal semver helpers (no external dep — Workers are bundle-size constrained) ─
+
+/** True if `v` is a valid semver string (X.Y.Z with optional pre-release). */
+function isSemver(v: string): boolean {
+  return /^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/.test(v.trim())
+}
+
+/**
+ * Very lightweight semver range satisfier. Handles the most common range forms:
+ * exact (`1.2.3`), caret (`^1.2.3` = compatible major), tilde (`~1.2.3` = compatible
+ * minor), comparators (`>=1.0.0`, `>1`, `<2.0.0`), and space-separated AND chains.
+ * Not a full semver implementation — use the `semver` npm package if you need
+ * full range syntax in a non-Workers environment.
+ */
+function semverSatisfies(version: string, range: string): boolean {
+  try {
+    const [major, minor, patch] = version.trim().split('-')[0]!.split('.').map(Number)
+    const v = major! * 1_000_000 + (minor ?? 0) * 1_000 + (patch ?? 0)
+
+    const toInt = (s: string) => {
+      const [a, b, c] = s.split('.').map(Number)
+      return a! * 1_000_000 + (b ?? 0) * 1_000 + (c ?? 0)
+    }
+
+    // AND chain: all clauses must pass.
+    return range
+      .trim()
+      .split(/\s+(?=[><=^~])|\s+(?=\d)/)
+      .filter(Boolean)
+      .every((clause) => {
+        const c = clause.trim()
+        if (c.startsWith('^')) {
+          const base = toInt(c.slice(1))
+          const nextMajor = Math.floor(base / 1_000_000 + 1) * 1_000_000
+          return v >= base && v < nextMajor
+        }
+        if (c.startsWith('~')) {
+          const base = toInt(c.slice(1))
+          const nextMinor = Math.floor(base / 1_000 + 1) * 1_000
+          return v >= base && v < nextMinor
+        }
+        if (c.startsWith('>=')) return v >= toInt(c.slice(2))
+        if (c.startsWith('<=')) return v <= toInt(c.slice(2))
+        if (c.startsWith('>')) return v > toInt(c.slice(1))
+        if (c.startsWith('<')) return v < toInt(c.slice(1))
+        return v === toInt(c) // exact
+      })
+  } catch {
+    return true // fail open — don't block a plugin on a parse error
+  }
+}
 
 /**
  * Declarative typed hook subscriptions: a map of canonical event name → handler,
@@ -79,10 +134,20 @@ export interface DefinedPluginContext<Caps extends readonly Capability[] = reado
 export interface DefinePluginInput<Caps extends readonly Capability[] = readonly []> {
   /** Unique, stable plugin id (kebab-case). Becomes the plugin `name`. */
   id: string
-  /** Human-readable display name. Defaults to `id`. */
+  /** Human-readable display name, surfaced as `displayName`. Defaults to `id`. */
   name?: string
-  /** Semantic version. */
+  /**
+   * Semantic version of this plugin (e.g. `'1.2.3'`). Must be a valid semver
+   * string — invalid values emit a console.warn at definition time.
+   */
   version: string
+  /**
+   * A semver range expressing which SonicJS core versions this plugin supports
+   * (e.g. `'^3.0.0'` or `'>=3.1.0 <4.0.0'`). Checked against the running
+   * core version at registration; a mismatch logs a compatibility warning but
+   * does not block activation (plugins remain resilient by default).
+   */
+  sonicjsVersionRange?: string
   description?: string
   author?: { name: string; email?: string; url?: string }
   /** Other plugin ids this one needs (load-order / activation). */
@@ -127,6 +192,32 @@ export interface DefinePluginInput<Caps extends readonly Capability[] = readonly
   uninstall?: (context: unknown) => void | Promise<void>
   activate?: (context: unknown) => void | Promise<void>
   deactivate?: (context: unknown) => void | Promise<void>
+
+  // ── Declarative admin surface ──
+  /**
+   * Declarative admin-sidebar entries collected by registerPlugins. The catalyst
+   * sidebar renders them automatically; no per-plugin `addMenuItem(...)` call
+   * required.
+   */
+  menu?: PluginMenuEntry[]
+  /**
+   * Schema-driven settings. Declaring this auto-renders the admin form at
+   * `/admin/settings/plugins/:id`, parses FormData back into typed values, and
+   * persists them via the plugin-service. Authors no longer hand-roll settings
+   * routes/templates.
+   */
+  configSchema?: ConfigSchema
+  /**
+   * Custom settings-tab renderer for the plugin detail page (`/admin/plugins/:id`).
+   * `loadData` is called server-side with the D1 database before the page renders;
+   * its result is forwarded to `render` as `data`. Plugins that need DB access
+   * (e.g. fetching their own document records) declare `loadData`; static content
+   * can omit it and read only from `plugin` / `settings`.
+   */
+  settingsTabContent?: {
+    loadData?: (db: any) => Promise<any>
+    render: (props: { plugin: any; settings: any; data?: any }) => string
+  }
 }
 
 /**
@@ -136,8 +227,17 @@ export interface DefinePluginInput<Caps extends readonly Capability[] = readonly
  */
 export interface DefinedPlugin {
   id: string
+  /**
+   * Internal key, always equal to `id`. Hook namespacing, capability errors and
+   * the plugin registries all address a plugin by this, so it is deliberately
+   * *not* the author's `name` — that lands on `displayName`.
+   */
   name: string
+  /** Human-readable label for the admin UI: the author's `name`, else `id`. */
+  displayName: string
   version: string
+  /** The semver range for SonicJS core compatibility declared by the author. */
+  sonicjsVersionRange?: string
   description?: string
   author?: { name: string; email?: string; url?: string }
   dependencies?: string[]
@@ -155,6 +255,15 @@ export interface DefinedPlugin {
   uninstall?: (context: unknown) => void | Promise<void>
   activate?: (context: unknown) => void | Promise<void>
   deactivate?: (context: unknown) => void | Promise<void>
+  /** Declarative admin sidebar entries. registerPlugins collects + sets the menu singleton. */
+  menu?: PluginMenuEntry[]
+  /** Schema-driven settings. Renders the admin settings form for this plugin. */
+  configSchema?: ConfigSchema
+  /** Custom settings-tab renderer. loadData runs server-side; render produces the tab HTML. */
+  settingsTabContent?: {
+    loadData?: (db: any) => Promise<any>
+    render: (props: { plugin: any; settings: any; data?: any }) => string
+  }
   /** Marker so tooling/tests can detect a v3-defined plugin. */
   // eslint-disable-next-line @typescript-eslint/naming-convention -- intentional internal marker
   readonly __sonicV3: true
@@ -196,6 +305,28 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
   if (!input.id) throw new Error('definePlugin: `id` is required')
   if (!input.version) throw new Error(`definePlugin: \`version\` is required (plugin "${input.id}")`)
 
+  // Semver validation: warn if the plugin's own version is not a valid semver string.
+  if (!isSemver(input.version)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[plugins] Plugin "${input.id}" has an invalid version: "${input.version}". ` +
+        `Use a valid semver string (e.g. "1.0.0") to participate in version-range checks.`
+    )
+  }
+
+  // SonicJS core compatibility range check.
+  if (input.sonicjsVersionRange) {
+    const coreVersion = getCoreVersion()
+    if (!semverSatisfies(coreVersion, input.sonicjsVersionRange)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[plugins] Plugin "${input.id}" declares sonicjsVersionRange "${input.sonicjsVersionRange}" ` +
+          `but running core version is "${coreVersion}". ` +
+          `The plugin may not work correctly. Consider updating the plugin or the version range.`
+      )
+    }
+  }
+
   // Normalize declared capabilities to canonical names first (resolves deprecated
   // / cross-fork spellings like `storage:write` → `media:write`), then warn on any
   // that remain unknown. Strict-reject at registration is layered in Phase 5d.
@@ -208,6 +339,8 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
     )
   }
 
+  // Deliberately the id, not `input.name` — see DefinedPlugin.name. The author's
+  // label travels as `displayName`.
   const name = input.id
 
   const onBoot = input.onBoot
@@ -236,7 +369,9 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
   return {
     id: input.id,
     name,
+    displayName: input.name ?? input.id,
     version: input.version,
+    sonicjsVersionRange: input.sonicjsVersionRange,
     description: input.description,
     author: input.author,
     dependencies: input.dependencies,
@@ -251,6 +386,9 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
     uninstall: input.uninstall,
     activate: input.activate,
     deactivate: input.deactivate,
+    menu: input.menu,
+    configSchema: input.configSchema,
+    settingsTabContent: input.settingsTabContent,
     // eslint-disable-next-line @typescript-eslint/naming-convention -- intentional internal marker
     __sonicV3: true,
   }

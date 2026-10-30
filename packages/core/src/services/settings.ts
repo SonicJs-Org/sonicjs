@@ -1,12 +1,3 @@
-export interface Setting {
-  id: string
-  category: string
-  key: string
-  value: string // JSON string
-  created_at: number
-  updated_at: number
-}
-
 export interface GeneralSettings {
   siteName: string
   siteDescription: string
@@ -21,105 +12,90 @@ export interface SecuritySettings {
   jwtRefreshGraceSeconds: number
 }
 
+const TYPE_ID = 'site_settings'
+const TENANT = 'default'
+
 export class SettingsService {
   constructor(private db: D1Database) {}
 
   /**
-   * Get a setting value by category and key
+   * Get settings document for a category (general or security)
    */
-  async getSetting(category: string, key: string): Promise<any | null> {
+  private async getSettingsDocument(category: string): Promise<any | null> {
     try {
-      const result = await this.db
-        .prepare('SELECT value FROM settings WHERE category = ? AND key = ?')
-        .bind(category, key)
-        .first()
+      const row = await this.db.prepare(`
+        SELECT data FROM documents
+        WHERE type_id = ? AND slug = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+      `).bind(TYPE_ID, category, TENANT).first()
 
-      if (!result) {
+      if (!row) {
         return null
       }
 
-      return JSON.parse((result as any).value)
+      return JSON.parse((row as any).data)
     } catch (error) {
-      console.error(`Error getting setting ${category}.${key}:`, error)
+      console.error(`Error getting settings document for ${category}:`, error)
       return null
     }
   }
 
   /**
-   * Get all settings for a category
+   * Save settings document for a category (general or security)
    */
-  async getCategorySettings(category: string): Promise<Record<string, any>> {
+  private async saveSettingsDocument(category: string, data: Record<string, any>): Promise<boolean> {
     try {
-      const { results } = await this.db
-        .prepare('SELECT key, value FROM settings WHERE category = ?')
-        .bind(category)
-        .all()
+      const now = Math.floor(Date.now() / 1000)
+      const jsonData = JSON.stringify(data)
 
-      const settings: Record<string, any> = {}
-      for (const row of results || []) {
-        const r = row as any
-        settings[r.key] = JSON.parse(r.value)
-      }
+      // Ensure document_types row exists (FK constraint on documents.type_id)
+      await this.db.prepare(`
+        INSERT OR IGNORE INTO document_types (id, name, display_name, description, schema, source, is_system, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        TYPE_ID, TYPE_ID, 'Site Settings',
+        'Global site configuration settings',
+        '{}', 'system', 1, 1, now, now
+      ).run()
 
-      return settings
-    } catch (error) {
-      console.error(`Error getting category settings for ${category}:`, error)
-      return {}
-    }
-  }
+      // Check if document already exists
+      const existing = await this.db.prepare(`
+        SELECT id FROM documents
+        WHERE type_id = ? AND slug = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+      `).bind(TYPE_ID, category, TENANT).first() as any
 
-  /**
-   * Set a setting value
-   */
-  async setSetting(category: string, key: string, value: any): Promise<boolean> {
-    try {
-      const now = Date.now()
-      const jsonValue = JSON.stringify(value)
+      if (existing) {
+        // Update existing document
+        await this.db.prepare(`
+          UPDATE documents
+          SET data = ?, updated_at = ?
+          WHERE id = ? AND is_current_draft = 1
+        `).bind(jsonData, now, existing.id).run()
+      } else {
+        // Create new document
+        const docId = crypto.randomUUID()
+        const rootId = docId
+        const title = category === 'general' ? 'General Settings' : 'Security Settings'
 
-      await this.db
-        .prepare(`
-          INSERT INTO settings (id, category, key, value, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-          ON CONFLICT(category, key) DO UPDATE SET
-            value = excluded.value,
-            updated_at = excluded.updated_at
-        `)
-        .bind(crypto.randomUUID(), category, key, jsonValue, now, now)
-        .run()
-
-      return true
-    } catch (error) {
-      console.error(`Error setting ${category}.${key}:`, error)
-      return false
-    }
-  }
-
-  /**
-   * Set multiple settings at once
-   */
-  async setMultipleSettings(category: string, settings: Record<string, any>): Promise<boolean> {
-    try {
-      const now = Date.now()
-
-      // Use a transaction-like approach with batch operations
-      for (const [key, value] of Object.entries(settings)) {
-        const jsonValue = JSON.stringify(value)
-
-        await this.db
-          .prepare(`
-            INSERT INTO settings (id, category, key, value, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(category, key) DO UPDATE SET
-              value = excluded.value,
-              updated_at = excluded.updated_at
-          `)
-          .bind(crypto.randomUUID(), category, key, jsonValue, now, now)
-          .run()
+        await this.db.prepare(`
+          INSERT INTO documents (
+            id, root_id, type_id, version_number, is_current_draft, is_published, status,
+            parent_root_id, slug, title, tenant_id, locale, translation_group_id,
+            data, metadata, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, 1, 1, 1, 'published',
+            '', ?, ?, ?, 'default', '',
+            ?, '{}', ?, ?
+          )
+        `).bind(
+          docId, rootId, TYPE_ID,
+          category, title, TENANT,
+          jsonData, now, now
+        ).run()
       }
 
       return true
     } catch (error) {
-      console.error(`Error setting multiple settings for ${category}:`, error)
+      console.error(`Error saving settings document for ${category}:`, error)
       return false
     }
   }
@@ -128,15 +104,15 @@ export class SettingsService {
    * Get general settings with defaults
    */
   async getGeneralSettings(userEmail?: string): Promise<GeneralSettings> {
-    const settings = await this.getCategorySettings('general')
+    const settings = await this.getSettingsDocument('general')
 
     return {
-      siteName: settings.siteName || 'SonicJS AI',
-      siteDescription: settings.siteDescription || 'A modern headless CMS powered by AI',
-      adminEmail: settings.adminEmail || userEmail || 'admin@example.com',
-      timezone: settings.timezone || 'UTC',
-      language: settings.language || 'en',
-      maintenanceMode: settings.maintenanceMode || false
+      siteName: settings?.siteName || 'SonicJS AI',
+      siteDescription: settings?.siteDescription || 'A modern headless CMS powered by AI',
+      adminEmail: settings?.adminEmail || userEmail || 'admin@example.com',
+      timezone: settings?.timezone || 'UTC',
+      language: settings?.language || 'en',
+      maintenanceMode: settings?.maintenanceMode || false
     }
   }
 
@@ -144,28 +120,21 @@ export class SettingsService {
    * Save general settings
    */
   async saveGeneralSettings(settings: Partial<GeneralSettings>): Promise<boolean> {
-    const settingsToSave: Record<string, any> = {}
-
-    if (settings.siteName !== undefined) settingsToSave.siteName = settings.siteName
-    if (settings.siteDescription !== undefined) settingsToSave.siteDescription = settings.siteDescription
-    if (settings.adminEmail !== undefined) settingsToSave.adminEmail = settings.adminEmail
-    if (settings.timezone !== undefined) settingsToSave.timezone = settings.timezone
-    if (settings.language !== undefined) settingsToSave.language = settings.language
-    if (settings.maintenanceMode !== undefined) settingsToSave.maintenanceMode = settings.maintenanceMode
-
-    return await this.setMultipleSettings('general', settingsToSave)
+    const existing = await this.getSettingsDocument('general')
+    const merged = { ...existing, ...settings }
+    return await this.saveSettingsDocument('general', merged)
   }
 
   /**
    * Get security settings with defaults
    */
   async getSecuritySettings(): Promise<SecuritySettings> {
-    const settings = await this.getCategorySettings('security')
+    const settings = await this.getSettingsDocument('security')
 
     return {
-      jwtExpiresIn: settings.jwtExpiresIn || '30d',
+      jwtExpiresIn: settings?.jwtExpiresIn || '30d',
       jwtRefreshGraceSeconds:
-        typeof settings.jwtRefreshGraceSeconds === 'number'
+        typeof settings?.jwtRefreshGraceSeconds === 'number'
           ? settings.jwtRefreshGraceSeconds
           : 60 * 60 * 24 * 7
     }
@@ -175,12 +144,8 @@ export class SettingsService {
    * Save security settings
    */
   async saveSecuritySettings(settings: Partial<SecuritySettings>): Promise<boolean> {
-    const settingsToSave: Record<string, any> = {}
-
-    if (settings.jwtExpiresIn !== undefined) settingsToSave.jwtExpiresIn = settings.jwtExpiresIn
-    if (settings.jwtRefreshGraceSeconds !== undefined)
-      settingsToSave.jwtRefreshGraceSeconds = settings.jwtRefreshGraceSeconds
-
-    return await this.setMultipleSettings('security', settingsToSave)
+    const existing = await this.getSettingsDocument('security')
+    const merged = { ...existing, ...settings }
+    return await this.saveSettingsDocument('security', merged)
   }
 }

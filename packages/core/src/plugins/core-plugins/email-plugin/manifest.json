@@ -1,53 +1,96 @@
 {
   "id": "email",
   "name": "Email",
-  "version": "1.0.0-beta.1",
-  "description": "Send transactional emails using Resend",
+  "version": "1.0.0",
+  "description": "Send transactional emails via Cloudflare Email Service. Subscribes to auth lifecycle events (welcome, password reset, password changed) and runs a 5-minute reconciliation cron against the CF GraphQL Activity Log.",
   "author": "SonicJS Team",
-  "homepage": "https://sonicjs.com/plugins/email",
-  "repository": "https://github.com/lane711/sonicjs-ai/tree/main/src/plugins/core-plugins/email-plugin",
+  "homepage": "https://github.com/sonicjs/sonicjs-ai",
+  "repository": "https://github.com/sonicjs/sonicjs-ai",
   "license": "MIT",
   "category": "utilities",
   "tags": [
     "email",
-    "resend",
+    "cloudflare-email",
     "transactional",
-    "notifications"
+    "notifications",
+    "templates"
   ],
   "dependencies": [],
-  "settings": {
-    "apiKey": {
+  "capabilities": [
+    "email:send",
+    "hooks.cron:register",
+    "hooks.auth:register"
+  ],
+  "crons": [
+    {
+      "schedule": "*/5 * * * *",
+      "hookFamily": "email-reconciliation"
+    }
+  ],
+  "configSchema": {
+    "provider": {
+      "type": "select",
+      "label": "Email Provider",
+      "required": true,
+      "options": ["resend", "cloudflare"],
+      "description": "Select your email transport. Env var RESEND_API_KEY forces Resend; EMAIL CF binding enables Cloudflare Email Service."
+    },
+    "resendApiKey": {
       "type": "string",
       "label": "Resend API Key",
-      "required": true,
-      "secret": true
+      "sensitive": true,
+      "required": false,
+      "placeholder": "re_...",
+      "description": "Required when provider is Resend. Overridden by RESEND_API_KEY env var.",
+      "dependsOn": { "field": "provider", "value": "resend" }
     },
     "fromEmail": {
       "type": "string",
       "label": "From Email",
-      "required": true
+      "format": "email",
+      "required": true,
+      "placeholder": "noreply@yourdomain.com",
+      "description": "Sender address. Must be verified with your provider."
     },
     "fromName": {
       "type": "string",
       "label": "From Name",
-      "required": true
+      "required": true,
+      "placeholder": "Your App Name"
     },
     "replyTo": {
       "type": "string",
       "label": "Reply-To Email",
-      "required": false
+      "format": "email",
+      "required": false,
+      "placeholder": "support@yourdomain.com"
     },
     "logoUrl": {
       "type": "string",
       "label": "Logo URL",
-      "required": false
+      "format": "url",
+      "required": false,
+      "placeholder": "https://yourdomain.com/logo.png",
+      "description": "Logo to display in email templates"
+    },
+    "cfAccountId": {
+      "type": "string",
+      "label": "CF Account ID",
+      "required": false,
+      "placeholder": "f61c658f...",
+      "description": "Reconciliation cron credential. Overridden by CF_ACCOUNT_ID env var.",
+      "dependsOn": { "field": "provider", "value": "cloudflare" }
+    },
+    "cfEmailApiToken": {
+      "type": "string",
+      "label": "CF Email API Token",
+      "sensitive": true,
+      "required": false,
+      "placeholder": "••••••••",
+      "description": "API token with Email Routing read permission. Overridden by EMAIL_API_TOKEN env var.",
+      "dependsOn": { "field": "provider", "value": "cloudflare" }
     }
   },
-  "hooks": {
-    "onActivate": "activate",
-    "onDeactivate": "deactivate"
-  },
-  "routes": [],
   "permissions": {
     "email:manage": "Manage email settings",
     "email:send": "Send emails",
@@ -56,16 +99,19 @@
   "adminMenu": {
     "label": "Email",
     "icon": "envelope",
-    "path": "/admin/plugins/email/settings",
+    "path": "/admin/plugins/email",
     "order": 80
   },
   "iconEmoji": "📧",
-  "is_core": false,
+  "is_core": true,
   "defaultSettings": {
-    "apiKey": "",
+    "provider": "cloudflare",
+    "resendApiKey": "",
     "fromEmail": "",
     "fromName": "",
     "replyTo": "",
-    "logoUrl": ""
+    "logoUrl": "",
+    "cfAccountId": "",
+    "cfEmailApiToken": ""
   }
 }

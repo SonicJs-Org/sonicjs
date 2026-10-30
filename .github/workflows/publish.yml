@@ -1,0 +1,74 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (npm publish --dry-run)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  publish:
+    name: Build and Publish
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Build SDK
+        run: npm run build --workspace=@sonicjs-cms/sdk
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Publish @sonicjs-cms/core
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish --workspace=@sonicjs-cms/core --access public --dry-run
+          else
+            npm publish --workspace=@sonicjs-cms/core --access public
+          fi
+
+      - name: Publish @sonicjs-cms/sdk
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish --workspace=@sonicjs-cms/sdk --access public --dry-run
+          else
+            npm publish --workspace=@sonicjs-cms/sdk --access public
+          fi
+
+      - name: Publish create-sonicjs
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish --workspace=create-sonicjs --access public --dry-run
+          else
+            npm publish --workspace=create-sonicjs --access public
+          fi
+
+      - name: Tag beta dist-tag
+        if: inputs.dry_run != true
+        run: |
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          npm dist-tag add @sonicjs-cms/core@$VERSION beta || true
+          npm dist-tag add create-sonicjs@$VERSION beta || true

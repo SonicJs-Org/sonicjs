@@ -127,6 +127,8 @@ properties: {
 
 ## Database Columns
 
+> **v3 data model note:** Drizzle ORM is used only for auth tables (`auth_user`, `auth_session`, `auth_account`, `auth_verification`). Content and media live in the Document Model — raw SQL via `DocumentRepository` / `DocumentsService`. Don't use Drizzle query builder for document operations.
+
 Database column names use **snake_case** (SQL convention). Drizzle ORM maps camelCase TypeScript properties to snake_case columns:
 
 ```typescript

@@ -26,19 +26,14 @@ export interface CorePlugin {
  * auto-installed on first boot. Edit this list to control which
  * plugins are bootstrapped.
  */
+// core-auth always bootstrapped. Plugins with defaultActive:true in manifest.json are also
+// auto-installed and activated on greenfield installs.
 const BOOTSTRAP_PLUGIN_IDS = [
   "core-auth",
-  "core-media",
-  "database-tools",
-  "seed-data",
-  "core-cache",
-  "workflow-plugin",
-  "easy-mdx",
-  "ai-search",
-  "oauth-providers",
-  "global-variables",
-  "user-profiles",
-  "stripe",
+  // Collect any registry entries marked defaultActive (e.g. lexical-editor)
+  ...Object.values(PLUGIN_REGISTRY)
+    .filter(e => e.defaultActive === true && e.id !== "core-auth")
+    .map(e => e.id),
 ];
 
 function registryToCorePlugin(entry: PluginRegistryEntry): CorePlugin {
@@ -66,27 +61,36 @@ export class PluginBootstrapService {
 
   /**
    * Core plugins derived from the auto-generated plugin registry.
-   * Only plugins listed in BOOTSTRAP_PLUGIN_IDS are included.
+   * Only plugins listed in BOOTSTRAP_PLUGIN_IDS AND marked is_core=true are auto-installed.
+   * Non-core plugins are available in the registry but not bootstrapped.
    */
   private readonly CORE_PLUGINS: CorePlugin[] = BOOTSTRAP_PLUGIN_IDS
-    .filter((id) => PLUGIN_REGISTRY[id] !== undefined)
+    .filter((id) => PLUGIN_REGISTRY[id] !== undefined && PLUGIN_REGISTRY[id]!.is_core === true)
     .map((id) => registryToCorePlugin(PLUGIN_REGISTRY[id]!));
 
   /**
-   * Bootstrap all core plugins - install them if they don't exist
+   * Bootstrap all core plugins - install them if they don't exist.
+   * A plugin that fails is logged and skipped so the others still install; the ids of
+   * the ones that failed are returned so the caller can tell a partial bootstrap apart.
    */
-  async bootstrapCorePlugins(): Promise<void> {
+  async bootstrapCorePlugins(): Promise<string[]> {
     console.log("[PluginBootstrap] Starting core plugin bootstrap process...");
 
     try {
+      const failed: string[] = [];
       // Check each core plugin
       for (const corePlugin of this.CORE_PLUGINS) {
-        await this.ensurePluginInstalled(corePlugin);
+        if (!(await this.ensurePluginInstalled(corePlugin))) failed.push(corePlugin.id);
       }
 
-      console.log(
-        "[PluginBootstrap] Core plugin bootstrap completed successfully"
-      );
+      if (failed.length) {
+        console.warn(`[PluginBootstrap] Core plugin bootstrap completed with failures: ${failed.join(", ")}`);
+      } else {
+        console.log(
+          "[PluginBootstrap] Core plugin bootstrap completed successfully"
+        );
+      }
+      return failed;
     } catch (error) {
       console.error("[PluginBootstrap] Error during plugin bootstrap:", error);
       throw error;
@@ -94,9 +98,9 @@ export class PluginBootstrapService {
   }
 
   /**
-   * Ensure a specific plugin is installed
+   * Ensure a specific plugin is installed. Returns false if it failed (already logged).
    */
-  private async ensurePluginInstalled(plugin: CorePlugin): Promise<void> {
+  private async ensurePluginInstalled(plugin: CorePlugin): Promise<boolean> {
     try {
       // Check if plugin already exists
       const existingPlugin = await this.pluginService.getPlugin(plugin.id);
@@ -114,15 +118,18 @@ export class PluginBootstrapService {
           await this.updatePlugin(plugin);
         }
 
-        // ALWAYS ensure core-auth is active (critical for system functionality)
-        if (plugin.id === 'core-auth' && existingPlugin.status !== 'active') {
+        // Ensure bootstrapped plugins are active (defaultActive or core-auth).
+        // If a plugin enters the bootstrap list it should be on unless the user
+        // explicitly deactivated it — but we can't distinguish that from
+        // "never activated", so we activate all bootstrapped plugins that are
+        // currently inactive. This is safe: user can deactivate via admin UI.
+        if (existingPlugin.status !== 'active') {
           console.log(
-            `[PluginBootstrap] Core-auth plugin is inactive, activating it now...`
+            `[PluginBootstrap] Activating bootstrapped plugin: ${plugin.display_name}`
           );
           await this.pluginService.activatePlugin(plugin.id);
         }
 
-        // Only auto-activate on first install, respect user's activation state on subsequent boots
       } else {
         // Install the plugin
         console.log(
@@ -139,42 +146,26 @@ export class PluginBootstrapService {
         );
         await this.pluginService.activatePlugin(plugin.id);
       }
+      return true;
     } catch (error) {
       console.error(
         `[PluginBootstrap] Error ensuring plugin ${plugin.display_name}:`,
         error
       );
-      // Don't throw - continue with other plugins
+      return false;
     }
   }
 
   /**
-   * Update an existing plugin
+   * Update an existing plugin's version/description/permissions/settings
    */
   private async updatePlugin(plugin: CorePlugin): Promise<void> {
-    const now = Math.floor(Date.now() / 1000);
-
-    const stmt = this.db.prepare(`
-      UPDATE plugins
-      SET
-        version = ?,
-        description = ?,
-        permissions = ?,
-        settings = ?,
-        last_updated = ?
-      WHERE id = ?
-    `);
-
-    await stmt
-      .bind(
-        plugin.version,
-        plugin.description,
-        JSON.stringify(plugin.permissions),
-        JSON.stringify(plugin.settings || {}),
-        now,
-        plugin.id
-      )
-      .run();
+    await this.pluginService.updatePluginVersion(plugin.id, {
+      version: plugin.version,
+      description: plugin.description,
+      permissions: plugin.permissions,
+      settings: plugin.settings || {},
+    });
   }
 
   /**
@@ -182,23 +173,47 @@ export class PluginBootstrapService {
    */
   async isBootstrapNeeded(): Promise<boolean> {
     try {
-      // Check if any core plugins are missing
-      for (const corePlugin of this.CORE_PLUGINS.filter((p) =>
-        p.name.startsWith("core-")
-      )) {
-        const exists = await this.pluginService.getPlugin(corePlugin.id);
-        if (!exists) {
-          return true;
-        }
-      }
-      return false;
+      // Every bootstrapped plugin counts here, not just the `core-*` ones. The filter that used
+      // to sit on this line made the gate blind to `lexical-editor` and `two-factor-auth`: if
+      // the first boot's install loop was cut short (the request that owns bootstrap can be
+      // cancelled mid-loop), `core-auth` and `core-media` were already in place, the gate
+      // answered "not needed" on every later boot, and those two stayed permanently
+      // uninstalled. A deployment in that state renders every richtext field as a plain
+      // textarea, because the field falls back whenever the lexical plugin is not active.
+      const bootstrapped = this.CORE_PLUGINS
+      if (!bootstrapped.length) return false
+
+      const quote = (id: string) => `'${id.replace(/'/g, "''")}'`
+      const allSlugs = bootstrapped.map((p) => quote(p.id)).join(',')
+      // `core-*` must additionally be *active* — the app does not work without auth or media,
+      // and the admin UI does not offer to turn them off. The other bootstrapped plugins are
+      // only checked for existence, so deactivating one from the admin UI sticks instead of
+      // being undone by the next cold start.
+      const coreSlugs = bootstrapped
+        .filter((p) => p.name.startsWith("core-"))
+        .map((p) => quote(p.id))
+      const coreIn = coreSlugs.length ? coreSlugs.join(',') : "''"
+
+      const res = await this.db
+        .prepare(
+          `SELECT
+             COUNT(DISTINCT slug) AS installed,
+             COUNT(DISTINCT CASE WHEN slug IN (${coreIn}) THEN slug END) AS core_installed,
+             COUNT(DISTINCT CASE WHEN slug IN (${coreIn})
+                                  AND json_extract(data, '$.status') = 'active'
+                                 THEN slug END) AS core_active
+           FROM documents
+           WHERE slug IN (${allSlugs}) AND type_id = 'plugin'
+           AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL`,
+        )
+        .first<{ installed: number; core_installed: number; core_active: number }>()
+      const installed = res?.installed ?? 0
+      const coreInstalled = res?.core_installed ?? 0
+      const coreActive = res?.core_active ?? 0
+      return installed < bootstrapped.length || coreActive < coreInstalled
     } catch (error) {
-      // If there's an error (like table doesn't exist), we need bootstrap
-      console.error(
-        "[PluginBootstrap] Error checking bootstrap status:",
-        error
-      );
-      return true;
+      console.error("[PluginBootstrap] Error checking bootstrap status:", error)
+      return true
     }
   }
 

@@ -5,7 +5,10 @@ import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-type
 import { requireAuth, requireRole } from '../middleware'
 import { renderMediaLibraryPage, MediaLibraryPageData, FolderStats, TypeStats } from '../templates/pages/admin-media-library.template'
 import { renderMediaFileDetails, MediaFileDetailsData } from '../templates/components/media-file-details.template'
-import { MediaFile, renderMediaFileCard } from '../templates/components/media-grid.template'
+import { MediaFile, renderMediaGrid } from '../templates/components/media-grid.template'
+import { MediaDocumentService, mediaDocToFile } from '../services/media-documents'
+import { getRequestTenant } from '../services/document-request-context'
+import { PluginService } from '../services/plugin-service'
 import type { Bindings, Variables } from '../app'
 
 // File validation schema
@@ -45,113 +48,23 @@ adminMediaRoutes.get('/', async (c) => {
     const type = searchParams.get('type') || 'all'
     const view = searchParams.get('view') || 'grid'
     const page = parseInt(searchParams.get('page') || '1')
-    const _cacheBust = searchParams.get('t') // Cache-busting parameter
     const limit = 24
     const offset = (page - 1) * limit
 
-    const db = c.env.DB
+    const mediaSvc = new MediaDocumentService(c.env.DB, getRequestTenant(c))
+    const { files, total, folders: folderAgg, types: typeAgg } = await mediaSvc.list({ folder, type, limit, offset })
+    const mediaFiles: MediaFile[] = files.map(doc => mediaDocToFile(doc))
 
-    // TODO: Cache implementation removed during migration - will be added back when cache plugin is migrated
-
-    // Build query for media files
-    let query = 'SELECT * FROM media'
-    const params: any[] = []
-    const conditions: string[] = ['deleted_at IS NULL']
-    
-    if (folder !== 'all') {
-      conditions.push('folder = ?')
-      params.push(folder)
-    }
-    
-    if (type !== 'all') {
-      switch (type) {
-        case 'images':
-          conditions.push('mime_type LIKE ?')
-          params.push('image/%')
-          break
-        case 'documents':
-          conditions.push('mime_type IN (?, ?, ?)')
-          params.push('application/pdf', 'text/plain', 'application/msword')
-          break
-        case 'videos':
-          conditions.push('mime_type LIKE ?')
-          params.push('video/%')
-          break
-      }
-    }
-    
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`
-    }
-    
-    query += ` ORDER BY uploaded_at DESC LIMIT ${limit} OFFSET ${offset}`
-    
-    const stmt = db.prepare(query)
-    const { results } = await stmt.bind(...params).all()
-    
-    // Get folder statistics
-    const foldersStmt = db.prepare(`
-      SELECT folder, COUNT(*) as count, SUM(size) as totalSize
-      FROM media
-      WHERE deleted_at IS NULL
-      GROUP BY folder
-      ORDER BY folder
-    `)
-    const { results: folders } = await foldersStmt.all()
-    
-    // Get type statistics
-    const typesStmt = db.prepare(`
-      SELECT
-        CASE
-          WHEN mime_type LIKE 'image/%' THEN 'images'
-          WHEN mime_type LIKE 'video/%' THEN 'videos'
-          WHEN mime_type IN ('application/pdf', 'text/plain') THEN 'documents'
-          ELSE 'other'
-        END as type,
-        COUNT(*) as count
-      FROM media
-      WHERE deleted_at IS NULL
-      GROUP BY type
-    `)
-    const { results: types } = await typesStmt.all()
-    
-    // Process media files with local serving URLs
-    const mediaFiles: MediaFile[] = results.map((row: any) => ({
-      id: row.id,
-      filename: row.filename,
-      original_name: row.original_name,
-      mime_type: row.mime_type,
-      size: row.size,
-      public_url: `/files/${row.r2_key}`,
-      thumbnail_url: row.mime_type.startsWith('image/') ? `/files/${row.r2_key}` : undefined,
-      alt: row.alt,
-      caption: row.caption,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      uploaded_at: row.uploaded_at,
-      fileSize: formatFileSize(row.size),
-      uploadedAt: new Date(row.uploaded_at).toLocaleDateString(),
-      isImage: row.mime_type.startsWith('image/'),
-      isVideo: row.mime_type.startsWith('video/'),
-      isDocument: !row.mime_type.startsWith('image/') && !row.mime_type.startsWith('video/')
-    }))
-    
     const pageData: MediaLibraryPageData = {
       files: mediaFiles,
-      folders: folders.map((f: any) => ({
-        folder: f.folder,
-        count: f.count,
-        totalSize: f.totalSize
-      })) as FolderStats[],
-      types: types.map((t: any) => ({
-        type: t.type,
-        count: t.count
-      })) as TypeStats[],
+      folders: folderAgg.map(f => ({ folder: f.folder, count: f.count, totalSize: f.totalSize })) as FolderStats[],
+      types: typeAgg.map(t => ({ type: t.type, count: t.count })) as TypeStats[],
       currentFolder: folder,
       currentType: type,
       currentView: view as 'grid' | 'list',
       currentPage: page,
-      totalFiles: results.length,
-      hasNextPage: results.length === limit,
+      totalFiles: total,
+      hasNextPage: offset + mediaFiles.length < total,
       user: {
         name: user!.email,
         email: user!.email,
@@ -176,38 +89,9 @@ adminMediaRoutes.get('/selector', async (c) => {
     const search = searchParams.get('search') || ''
     const db = c.env.DB
 
-    // Build search query
-    let query = 'SELECT * FROM media WHERE deleted_at IS NULL'
-    const params: any[] = []
-
-    if (search.trim()) {
-      query += ' AND (filename LIKE ? OR original_name LIKE ? OR alt LIKE ?)'
-      const searchTerm = `%${search}%`
-      params.push(searchTerm, searchTerm, searchTerm)
-    }
-
-    query += ' ORDER BY uploaded_at DESC LIMIT 24'
-
-    const stmt = db.prepare(query)
-    const { results } = await stmt.bind(...params).all()
-
-    const mediaFiles = results.map((row: any) => ({
-      id: row.id,
-      filename: row.filename,
-      original_name: row.original_name,
-      mime_type: row.mime_type,
-      size: row.size,
-      public_url: `/files/${row.r2_key}`,
-      thumbnail_url: row.mime_type.startsWith('image/') ? `/files/${row.r2_key}` : undefined,
-      alt: row.alt,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      uploaded_at: row.uploaded_at,
-      fileSize: formatFileSize(row.size),
-      uploadedAt: new Date(row.uploaded_at).toLocaleDateString(),
-      isImage: row.mime_type.startsWith('image/'),
-      isVideo: row.mime_type.startsWith('video/'),
-      isDocument: !row.mime_type.startsWith('image/') && !row.mime_type.startsWith('video/')
-    }))
+    const mediaSvc = new MediaDocumentService(db, getRequestTenant(c))
+    const { files } = await mediaSvc.list({ search: search.trim() || undefined, limit: 24 })
+    const mediaFiles = files.map(doc => mediaDocToFile(doc))
 
     // Render media selector grid
     return c.html(html`
@@ -215,12 +99,14 @@ adminMediaRoutes.get('/selector', async (c) => {
         <input
           type="search"
           id="media-selector-search"
+          name="search"
           placeholder="Search files..."
           class="w-full rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
           hx-get="/admin/media/selector"
           hx-trigger="keyup changed delay:300ms"
           hx-target="#media-selector-grid"
-          hx-include="[name='search']"
+          hx-swap="outerHTML"
+          hx-select="#media-selector-grid"
         >
       </div>
 
@@ -302,63 +188,26 @@ adminMediaRoutes.get('/search', async (c) => {
     const type = searchParams.get('type') || 'all'
     const db = c.env.DB
     
-    // Build search query
-    let query = 'SELECT * FROM media'
-    const params: any[] = []
-    const conditions: string[] = []
-    
-    if (search.trim()) {
-      conditions.push('(filename LIKE ? OR original_name LIKE ? OR alt LIKE ?)')
-      const searchTerm = `%${search}%`
-      params.push(searchTerm, searchTerm, searchTerm)
-    }
-    
-    if (folder !== 'all') {
-      conditions.push('folder = ?')
-      params.push(folder)
-    }
-    
-    if (type !== 'all') {
-      switch (type) {
-        case 'images':
-          conditions.push('mime_type LIKE ?')
-          params.push('image/%')
-          break
-        case 'documents':
-          conditions.push('mime_type IN (?, ?, ?)')
-          params.push('application/pdf', 'text/plain', 'application/msword')
-          break
-        case 'videos':
-          conditions.push('mime_type LIKE ?')
-          params.push('video/%')
-          break
-      }
-    }
-    
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`
-    }
-    
-    query += ` ORDER BY uploaded_at DESC LIMIT 24`
-    
-    const stmt = db.prepare(query)
-    const { results } = await stmt.bind(...params).all()
-    
-    const mediaFiles = results.map((row: any) => ({
-      ...row,
-      public_url: `/files/${row.r2_key}`,
-      thumbnail_url: row.mime_type.startsWith('image/') ? `/files/${row.r2_key}` : undefined,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      uploadedAt: new Date(row.uploaded_at).toLocaleDateString(),
-      fileSize: formatFileSize(row.size),
-      isImage: row.mime_type.startsWith('image/'),
-      isVideo: row.mime_type.startsWith('video/'),
-      isDocument: !row.mime_type.startsWith('image/') && !row.mime_type.startsWith('video/')
-    }))
-    
-    const gridHTML = mediaFiles.map(file => generateMediaItemHTML(file)).join('')
-    
-    return c.html(raw(gridHTML))
+    const mediaSvc = new MediaDocumentService(db, getRequestTenant(c))
+    const { files } = await mediaSvc.list({ folder, type, search: search.trim() || undefined, limit: 24 })
+    const mediaFiles = files.map(doc => mediaDocToFile(doc))
+
+    // Render through the same component the page uses, not a second copy of the card markup.
+    // The local copy this replaced interpolated `original_name`, `alt`, `public_url` and `tags`
+    // straight into HTML with no escaping — a filename is user-controlled, so that was stored
+    // XSS on every search (R8) — rendered no empty state, so a search with no hits left a blank
+    // panel with no feedback, and wired its details button to `showFileDetails()`, which is not
+    // defined anywhere in the page, so it threw on click.
+    return c.html(
+      raw(
+        renderMediaGrid({
+          files: mediaFiles,
+          viewMode: searchParams.get('view') === 'list' ? 'list' : 'grid',
+          selectable: true,
+          emptyMessage: 'No media files match your search.',
+        })
+      )
+    )
   } catch (error) {
     console.error('Error searching media:', error)
     return c.html('<div class="text-red-500">Error searching files</div>')
@@ -369,40 +218,24 @@ adminMediaRoutes.get('/search', async (c) => {
 adminMediaRoutes.get('/:id/details', async (c) => {
   try {
     const id = c.req.param('id')
-    const db = c.env.DB
-    
-    const stmt = db.prepare('SELECT * FROM media WHERE id = ?')
-    const result = await stmt.bind(id).first() as any
-    
-    if (!result) {
+    const mediaSvc = new MediaDocumentService(c.env.DB, getRequestTenant(c))
+    const doc = await mediaSvc.getByRootId(id)
+
+    if (!doc) {
       return c.html('<div class="text-red-500">File not found</div>')
     }
-    
+
+    const d = doc.data as Record<string, any>
+    const base = mediaDocToFile(doc)
     const file: MediaFile & { width?: number; height?: number; folder: string; uploadedAt: string } = {
-      id: result.id,
-      filename: result.filename,
-      original_name: result.original_name,
-      mime_type: result.mime_type,
-      size: result.size,
-      public_url: `/files/${result.r2_key}`,
-      thumbnail_url: result.mime_type.startsWith('image/') ? `/files/${result.r2_key}` : undefined,
-      alt: result.alt,
-      caption: result.caption,
-      tags: result.tags ? JSON.parse(result.tags) : [],
-      uploaded_at: result.uploaded_at,
-      fileSize: formatFileSize(result.size),
-      uploadedAt: new Date(result.uploaded_at).toLocaleString(),
-      isImage: result.mime_type.startsWith('image/'),
-      isVideo: result.mime_type.startsWith('video/'),
-      isDocument: !result.mime_type.startsWith('image/') && !result.mime_type.startsWith('video/'),
-      width: result.width,
-      height: result.height,
-      folder: result.folder
+      ...base,
+      uploadedAt: new Date((doc.createdAt ?? 0) * 1000).toLocaleString(),
+      width: d.width ?? undefined,
+      height: d.height ?? undefined,
+      folder: d.folder ?? 'uploads',
     }
-    
-    const detailsData: MediaFileDetailsData = { file }
-    
-    return c.html(renderMediaFileDetails(detailsData))
+
+    return c.html(renderMediaFileDetails({ file }))
   } catch (error) {
     console.error('Error fetching file details:', error)
     return c.html('<div class="text-red-500">Error loading file details</div>')
@@ -466,10 +299,10 @@ adminMediaRoutes.post('/upload', async (c) => {
           continue
         }
 
-        // Generate unique filename and R2 key
-        const fileId = crypto.randomUUID()
+        // Generate unique filename and R2 key (fileId assigned from doc.rootId after document creation below)
         const fileExtension = file.name.split('.').pop() || ''
-        const filename = `${fileId}.${fileExtension}`
+        const tempId = crypto.randomUUID()
+        const filename = `${tempId}.${fileExtension}`
         const folder = formData.get('folder') as string || 'uploads'
         const r2Key = `${folder}/${filename}`
 
@@ -509,33 +342,27 @@ adminMediaRoutes.post('/upload', async (c) => {
           }
         }
 
-        // Generate URLs - use public serving route
+        // Create media_asset document (primary — rootId becomes the canonical file ID).
+        const doc = await new MediaDocumentService(c.env.DB, getRequestTenant(c)).createFromUpload(
+          { filename, originalName: file.name, mimeType: file.type, size: file.size, width, height, folder, r2Key },
+          user!.userId,
+        )
+        const fileId = doc.rootId
+
+        // R12: also write legacy media row (decommission after read-flip is stable).
         const publicUrl = `/files/${r2Key}`
         const thumbnailUrl = file.type.startsWith('image/') ? publicUrl : null
-
-        // Save to database
-        const stmt = c.env.DB.prepare(`
-          INSERT INTO media (
-            id, filename, original_name, mime_type, size, width, height, 
-            folder, r2_key, public_url, thumbnail_url, uploaded_by, uploaded_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        
-        await stmt.bind(
-          fileId,
-          filename,
-          file.name,
-          file.type,
-          file.size,
-          width,
-          height,
-          folder,
-          r2Key,
-          publicUrl,
-          thumbnailUrl,
-          user!.userId,
-          Math.floor(Date.now() / 1000)
-        ).run()
+        try {
+          await c.env.DB.prepare(`
+            INSERT INTO media (
+              id, filename, original_name, mime_type, size, width, height,
+              folder, r2_key, public_url, thumbnail_url, uploaded_by, uploaded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            fileId, filename, file.name, file.type, file.size, width, height,
+            folder, r2Key, publicUrl, thumbnailUrl, user!.userId, Math.floor(Date.now() / 1000)
+          ).run()
+        } catch { /* legacy table absent on fresh installs — non-fatal */ }
 
         uploadResults.push({
           id: fileId,
@@ -553,40 +380,6 @@ adminMediaRoutes.post('/upload', async (c) => {
       }
     }
 
-    // TODO: Cache invalidation removed during migration
-
-    // Fetch updated media list to include in response
-    let mediaGridHTML = ''
-    if (uploadResults.length > 0) {
-      try {
-        const folderEntry = formData.get('folder')
-        const folder = typeof folderEntry === 'string' ? folderEntry : 'uploads'
-        const query = 'SELECT * FROM media WHERE deleted_at IS NULL ORDER BY uploaded_at DESC LIMIT 24'
-        const stmt = c.env.DB.prepare(query)
-        const { results } = await stmt.all()
-
-        const mediaFiles = results.map((row: any) => ({
-          id: row.id,
-          filename: row.filename,
-          original_name: row.original_name,
-          mime_type: row.mime_type,
-          size: row.size,
-          public_url: `/files/${row.r2_key}`,
-          thumbnail_url: row.mime_type.startsWith('image/') ? `/files/${row.r2_key}` : undefined,
-          tags: row.tags ? JSON.parse(row.tags) : [],
-          uploaded_at: row.uploaded_at,
-          fileSize: formatFileSize(row.size),
-          uploadedAt: new Date(row.uploaded_at).toLocaleDateString(),
-          isImage: row.mime_type.startsWith('image/'),
-          isVideo: row.mime_type.startsWith('video/'),
-          isDocument: !row.mime_type.startsWith('image/') && !row.mime_type.startsWith('video/')
-        }))
-
-        mediaGridHTML = mediaFiles.map(file => renderMediaFileCard(file, 'grid', true)).join('')
-      } catch (error) {
-        console.error('Error fetching updated media list:', error)
-      }
-    }
 
     // Return HTMX response with results
     return c.html(html`
@@ -662,14 +455,14 @@ adminMediaRoutes.get('/file/*', async (c) => {
 adminMediaRoutes.put('/:id', async (c) => {
   try {
     const user = c.get('user')
-    const fileId = c.req.param('id')
+    const rootId = c.req.param('id')
     const formData = await c.req.formData()
-    
-    // Get file record
-    const stmt = c.env.DB.prepare('SELECT * FROM media WHERE id = ? AND deleted_at IS NULL')
-    const fileRecord = await stmt.bind(fileId).first() as any
-    
-    if (!fileRecord) {
+    const tenantId = getRequestTenant(c)
+
+    const mediaSvc = new MediaDocumentService(c.env.DB, tenantId)
+    const doc = await mediaSvc.getByRootId(rootId)
+
+    if (!doc) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
@@ -677,8 +470,7 @@ adminMediaRoutes.put('/:id', async (c) => {
       `)
     }
 
-    // Check permissions (only allow updates by uploader or admin)
-    if (fileRecord.uploaded_by !== user!.userId && user!.role !== 'admin') {
+    if (doc.ownerId !== user!.userId && user!.role !== 'admin') {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -686,27 +478,19 @@ adminMediaRoutes.put('/:id', async (c) => {
       `)
     }
 
-    // Extract form data
     const alt = formData.get('alt') as string || null
     const caption = formData.get('caption') as string || null
     const tagsString = formData.get('tags') as string || ''
-    const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : []
+    const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(t => t) : []
 
-    // Update database
-    const updateStmt = c.env.DB.prepare(`
-      UPDATE media 
-      SET alt = ?, caption = ?, tags = ?, updated_at = ?
-      WHERE id = ?
-    `)
-    await updateStmt.bind(
-      alt,
-      caption,
-      JSON.stringify(tags),
-      Math.floor(Date.now() / 1000),
-      fileId
-    ).run()
+    await mediaSvc.updateMetadata(rootId, { alt, caption, tags }, user!.userId)
 
-    // TODO: Cache invalidation removed during migration
+    // R12: keep legacy media row in sync
+    try {
+      await c.env.DB.prepare('UPDATE media SET alt = ?, caption = ?, tags = ?, updated_at = ? WHERE id = ?')
+        .bind(alt, caption, JSON.stringify(tags), Math.floor(Date.now() / 1000), rootId)
+        .run()
+    } catch { /* legacy table may not have this row */ }
 
     return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -738,9 +522,8 @@ adminMediaRoutes.delete('/cleanup', requireRole('admin'), async (c) => {
     const allMediaStmt = db.prepare('SELECT id, r2_key, filename FROM media WHERE deleted_at IS NULL')
     const { results: allMedia } = await allMediaStmt.all<{ id: string; r2_key: string; filename: string }>()
 
-    // Find media files referenced in content
-    // Content can reference media in various JSON fields like data, hero_image, etc.
-    const contentStmt = db.prepare('SELECT data FROM content')
+    // Find media files referenced in document content.
+    const contentStmt = db.prepare("SELECT data FROM documents WHERE tenant_id = ? AND deleted_at IS NULL").bind(getRequestTenant(c))
     const { results: contentRecords } = await contentStmt.all<{ data: unknown }>()
 
     // Extract all media URLs from content
@@ -837,13 +620,13 @@ adminMediaRoutes.delete('/cleanup', requireRole('admin'), async (c) => {
 adminMediaRoutes.delete('/:id', async (c) => {
   try {
     const user = c.get('user')
-    const fileId = c.req.param('id')
+    const rootId = c.req.param('id')
+    const tenantId = getRequestTenant(c)
 
-    // Get file record
-    const stmt = c.env.DB.prepare('SELECT * FROM media WHERE id = ? AND deleted_at IS NULL')
-    const fileRecord = await stmt.bind(fileId).first() as any
+    const mediaSvc = new MediaDocumentService(c.env.DB, tenantId)
+    const doc = await mediaSvc.getByRootId(rootId)
 
-    if (!fileRecord) {
+    if (!doc) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           File not found
@@ -851,8 +634,7 @@ adminMediaRoutes.delete('/:id', async (c) => {
       `)
     }
 
-    // Check permissions (only allow deletion by uploader or admin)
-    if (fileRecord.uploaded_by !== user!.userId && user!.role !== 'admin') {
+    if (doc.ownerId !== user!.userId && user!.role !== 'admin') {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           Permission denied
@@ -860,21 +642,37 @@ adminMediaRoutes.delete('/:id', async (c) => {
       `)
     }
 
-    // Delete from R2
-    try {
-      await c.env.MEDIA_BUCKET.delete(fileRecord.r2_key)
-    } catch (error) {
-      console.warn('Failed to delete from R2:', error)
-      // Continue with database deletion even if R2 deletion fails
+    // Reference-aware delete: block if any strong inbound refs exist.
+    const impact = await mediaSvc.getDeleteImpact(rootId)
+    if (!impact.canHardDelete) {
+      return c.html(html`
+        <div class="bg-amber-100 border border-amber-400 text-amber-800 px-4 py-3 rounded mb-4">
+          This file is still used by ${impact.strongRefs.length} item(s) and cannot be deleted. Remove those references first, or archive it instead.
+        </div>
+      `)
     }
 
-    // Soft delete in database
-    const deleteStmt = c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?')
-    await deleteStmt.bind(Math.floor(Date.now() / 1000), fileId).run()
+    const r2Key = (doc.data as Record<string, any>).r2Key as string | undefined
 
-    // TODO: Cache invalidation removed during migration
+    // Delete from R2
+    if (r2Key) {
+      try {
+        await c.env.MEDIA_BUCKET.delete(r2Key)
+      } catch (e) {
+        console.warn('Failed to delete from R2:', e)
+      }
+    }
 
-    // Return HTMX response that redirects to media library
+    // Soft-delete document (all version rows for this root).
+    await mediaSvc.softDeleteRoot(rootId)
+
+    // R12: also soft-delete legacy media row (matched by id = rootId).
+    try {
+      await c.env.DB.prepare('UPDATE media SET deleted_at = ? WHERE id = ?')
+        .bind(Math.floor(Date.now() / 1000), rootId)
+        .run()
+    } catch { /* legacy table may not have this row */ }
+
     return c.html(html`
       <script>
         // Close modal if open
@@ -937,88 +735,6 @@ function getPNGDimensions(uint8Array: Uint8Array): { width: number; height: numb
     width: (uint8Array[16]! << 24) | (uint8Array[17]! << 16) | (uint8Array[18]! << 8) | uint8Array[19]!,
     height: (uint8Array[20]! << 24) | (uint8Array[21]! << 16) | (uint8Array[22]! << 8) | uint8Array[23]!
   }
-}
-
-// Helper function to generate media item HTML
-function generateMediaItemHTML(file: any): string {
-  const isImage = file.isImage
-  const isVideo = file.isVideo
-  
-  return `
-    <div 
-      class="media-item bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer" 
-      data-file-id="${file.id}"
-      onclick="toggleFileSelection('${file.id}')"
-    >
-      <div class="aspect-square relative">
-        ${isImage ? `
-          <img 
-            src="${file.public_url}" 
-            alt="${file.alt || file.filename}"
-            class="w-full h-full object-cover"
-            loading="lazy"
-          >
-        ` : isVideo ? `
-          <video 
-            src="${file.public_url}" 
-            class="w-full h-full object-cover"
-            muted
-          ></video>
-        ` : `
-          <div class="w-full h-full flex items-center justify-center bg-gray-100">
-            <div class="text-center">
-              <svg class="file-icon mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-              </svg>
-              <span class="text-xs text-gray-500 mt-1">${file.filename.split('.').pop()?.toUpperCase()}</span>
-            </div>
-          </div>
-        `}
-        
-        <div class="preview-overlay flex items-center justify-center">
-          <div class="flex space-x-2">
-            <button 
-              onclick="event.stopPropagation(); showFileDetails('${file.id}')"
-              class="p-2 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30"
-            >
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-              </svg>
-            </button>
-            <button 
-              onclick="event.stopPropagation(); copyToClipboard('${file.public_url}')"
-              class="p-2 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30"
-            >
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <div class="p-3">
-        <h4 class="text-sm font-medium text-gray-900 truncate" title="${file.original_name}">
-          ${file.original_name}
-        </h4>
-        <div class="flex justify-between items-center mt-1">
-          <span class="text-xs text-gray-500">${file.fileSize}</span>
-          <span class="text-xs text-gray-500">${file.uploadedAt}</span>
-        </div>
-        ${file.tags.length > 0 ? `
-          <div class="flex flex-wrap gap-1 mt-2">
-            ${file.tags.slice(0, 2).map((tag: string) => `
-              <span class="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                ${tag}
-              </span>
-            `).join('')}
-            ${file.tags.length > 2 ? `<span class="text-xs text-gray-400">+${file.tags.length - 2}</span>` : ''}
-          </div>
-        ` : ''}
-      </div>
-    </div>
-  `
 }
 
 // Helper function to format file size

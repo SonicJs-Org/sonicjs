@@ -1,7 +1,10 @@
 import { Hono } from 'hono'
 import { TurnstileService } from '../plugins/core-plugins/turnstile-plugin/services/turnstile'
 import { sanitizeInput } from '../utils/sanitize'
-import { createContentFromSubmission } from '../services/form-collection-sync'
+// Note: form-collection-sync was removed in the drop-db-collections plan (PR 4).
+// Form submissions are still persisted to `form_submissions`; the legacy dual-write
+// to the `content` table is gone — content created by submissions will move to the
+// document model in a follow-up.
 
 /**
  * Recursively sanitize all string values in arbitrary JSON data.
@@ -50,6 +53,9 @@ type Variables = {
   appVersion?: string
 }
 
+const isTableMissing = (err: any) =>
+  String(err?.message ?? err?.cause?.message ?? '').includes('no such table: form')
+
 export const publicFormsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Get Turnstile configuration for a form (for headless frontends)
@@ -91,6 +97,7 @@ publicFormsRoutes.get('/:identifier/turnstile-config', async (c) => {
       appearance: formSettings.appearance || globalSettings.appearance || 'always'
     })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ enabled: false })
     console.error('Error fetching Turnstile config:', error)
     return c.json({ error: 'Failed to fetch config' }, 500)
   }
@@ -125,6 +132,7 @@ publicFormsRoutes.get('/:identifier/schema', async (c) => {
       submitUrl: `/api/forms/${form.id}/submit`
     })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ error: 'Form not found' }, 404)
     console.error('Error fetching form schema:', error)
     return c.json({ error: 'Failed to fetch form schema' }, 500)
   }
@@ -499,6 +507,7 @@ publicFormsRoutes.get('/:name', async (c) => {
 
     return c.html(html)
   } catch (error: any) {
+    if (isTableMissing(error)) return c.html('<h1>Form not found</h1><p>This form does not exist or is not publicly available.</p>', 404)
     console.error('Error rendering form:', error)
     return c.html('<p>Error loading form</p>', 500)
   }
@@ -594,36 +603,19 @@ publicFormsRoutes.post('/:identifier/submit', async (c) => {
       WHERE id = ?
     `).bind(now, form.id).run()
 
-    // Dual-write: create content item for this submission
-    let contentId: string | null = null
-    try {
-      contentId = await createContentFromSubmission(
-        db,
-        sanitizedData as Record<string, any>,
-        { id: form.id as string, name: form.name as string, display_name: form.display_name as string },
-        submissionId,
-        {
-          ipAddress: c.req.header('cf-connecting-ip') || null,
-          userAgent: c.req.header('user-agent') || null,
-          userEmail: (sanitizedData as any)?.email || null,
-          userId: null // anonymous submission
-        }
-      )
-      if (!contentId) {
-        console.warn('[FormSubmit] Content creation returned null for submission:', submissionId)
-      }
-    } catch (contentError) {
-      // Don't fail the submission if content creation fails
-      console.error('[FormSubmit] Error creating content from submission:', contentError)
-    }
-
+    // Submission is persisted to `form_submissions` above. The previous
+    // dual-write to the `content` table (via the form-collection-sync shadow
+    // collection path) was removed when DB-defined collections were dropped
+    // (see docs/ai/plans/drop-db-collections-plan.md). Submission content
+    // will be migrated to the document model in a follow-up.
     return c.json({
       success: true,
       submissionId,
-      contentId,
+      contentId: null,
       message: 'Form submitted successfully'
     })
   } catch (error: any) {
+    if (isTableMissing(error)) return c.json({ error: 'Form not found' }, 404)
     console.error('Error submitting form:', error)
     return c.json({ error: 'Failed to submit form' }, 500)
   }

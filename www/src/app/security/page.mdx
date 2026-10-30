@@ -68,14 +68,16 @@ SonicJS enforces role-based permissions across all routes:
 - Sort order parameters validated against strict whitelist
 - Content preview output HTML-encoded
 - Rich text content sanitized (script tags, event handlers, javascript: URLs stripped)
+- Admin templates escape every user-controlled interpolation with `escapeHtml` — content titles/slugs, media filenames/alt/caption/tags, user avatar alt/src, and settings fields are all wrapped (v3.0.0; extends the v2.8.3 sweep)
+- Redirect targets built from client-supplied form fields (e.g. the delete-confirmation and save-and-close referrer/collection params) are stripped of `\r`/`\n` before being used as a `Location` header, closing a header-injection gap (v3.0.0)
 
 ## Infrastructure Security
 
 ### Security Headers
 Every response includes:
-- `Content-Security-Policy` — restricts resource loading
+- `Content-Security-Policy` — restricts resource loading (not set by default; configure via middleware if needed)
 - `X-Content-Type-Options: nosniff` — prevents MIME sniffing
-- `X-Frame-Options: DENY` — prevents clickjacking
+- `X-Frame-Options: SAMEORIGIN` — prevents clickjacking, allows same-origin iframe embedding
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Strict-Transport-Security` (HSTS) — enforces HTTPS in production
 
@@ -142,6 +144,8 @@ All security audit data is available via authenticated admin API endpoints:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v3.0.0 | Oct 2026 | Better Auth pinned to 1.7.7 (closes GHSA-965c-763c-88jm), credential-row sync across all password paths, remaining admin-template XSS + header-injection sinks closed, bootstrap FK-race hardening |
+| v3.0.0-beta | Jun 2026 | Better Auth session hardening, document-backed RBAC, HTTP-only auth_token cookie |
 | v2.16.1 | Apr 2026 | Admin panel restricted to admin role by default, configurable `adminAccessRoles` |
 | v2.16.0 | Apr 2026 | BruteForceDetector KV resilience, CSRF exempt path expansion, Authorization header bypass for API clients |
 | v2.9.0 | Apr 2026 | RBAC enforcement on all admin routes |

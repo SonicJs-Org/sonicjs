@@ -5,18 +5,11 @@ import { escapeHtml } from '../../utils/sanitize'
 
 export interface UserProfileData {
   displayName?: string
-  bio?: string
-  company?: string
-  jobTitle?: string
-  website?: string
-  location?: string
-  dateOfBirth?: number
 }
 
 export interface UserEditData {
   id: string
   email: string
-  username: string
   firstName: string
   lastName: string
   phone?: string
@@ -25,6 +18,12 @@ export interface UserEditData {
   isActive: boolean
   emailVerified: boolean
   twoFactorEnabled: boolean
+  /**
+   * The user owes an enrolment — set by an admin reset. Independent of `twoFactorEnabled`:
+   * `required && !enabled` is what forces the redirect to /admin/two-factor, and
+   * `required && enabled` means enrolled and not allowed to turn it off.
+   */
+  twoFactorRequired: boolean
   createdAt: number
   lastLoginAt?: number
   profile?: UserProfileData
@@ -35,12 +34,194 @@ export interface UserEditPageData {
   roles: Array<{ value: string; label: string }>
   error?: string
   success?: string
+  /** True only when developer has called defineUserProfile() in the app entry point. */
+  hasProfilePlugin?: boolean
   customProfileFieldsHtml?: string
+  /** When the multi-tenant plugin is active: inline membership matrix data. */
+  tenantMemberships?: {
+    memberships: Array<{ slug: string; name: string; role: string }>
+    availableTenants: Array<{ slug: string; name: string }>
+    memberRoles: string[]
+  }
   user?: {
     name: string
     email: string
     role: string
   }
+}
+
+/**
+ * Break-glass panel for a user whose authenticator is gone.
+ *
+ * The action is only offered when there is something to clear (`enabled`) or something to
+ * release (`required`). Rendering a destructive control on every user row would be noise, and
+ * on an unenrolled account it does nothing worth a button.
+ *
+ * Presented as a distinct amber panel rather than inside the Danger Zone: this is a recovery
+ * action taken to GIVE someone access, and burying it beside "Delete User" is how an admin
+ * ends up not finding it at 2am — which is the entire scenario it exists for.
+ */
+function renderTwoFactorRecoverySection(u: UserEditData): string {
+  const uid = escapeHtml(u.id)
+  const email = escapeHtml(u.email)
+
+  const state = u.twoFactorEnabled
+    ? u.twoFactorRequired
+      ? { label: 'Enrolled — required', tone: 'blue', detail: 'This user has a second factor and may not turn it off.' }
+      : { label: 'Enrolled', tone: 'blue', detail: 'This user has a working second factor.' }
+    : u.twoFactorRequired
+      ? { label: 'Re-enrolment pending', tone: 'amber', detail: 'This user must set up a second factor before they can use the admin portal.' }
+      : { label: 'Not enrolled', tone: 'zinc', detail: 'This user signs in with a password only.' }
+
+  const badgeTone: Record<string, string> = {
+    blue: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 ring-blue-700/10 dark:ring-blue-500/20',
+    amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-amber-700/10 dark:ring-amber-500/20',
+    zinc: 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 ring-zinc-700/10 dark:ring-zinc-500/20',
+  }
+
+  const action = u.twoFactorEnabled || u.twoFactorRequired ? `
+      <div class="mt-5 border-t border-amber-600/20 dark:border-amber-500/20 pt-5">
+        <p class="text-sm text-amber-800 dark:text-amber-300 mb-3">
+          Resetting removes this user's second factor and any active lockout, letting them sign in
+          with their password alone. It does not change their password. Every reset is recorded in
+          the security audit log.
+        </p>
+
+        <label for="tf-confirm-email" class="block text-sm font-medium text-amber-900 dark:text-amber-200">
+          Type <span class="font-mono font-semibold">${email}</span> to confirm
+        </label>
+        <input
+          type="text"
+          id="tf-confirm-email"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="${email}"
+          class="mt-1.5 block w-full rounded-lg border-0 py-2 px-3 text-sm text-zinc-950 dark:text-white bg-white dark:bg-zinc-900 ring-1 ring-inset ring-amber-600/30 dark:ring-amber-500/30 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:ring-2 focus:ring-inset focus:ring-amber-600"
+        />
+
+        <div class="mt-3 flex gap-2 items-start">
+          <input type="checkbox" id="tf-require-reenrol" checked
+            class="mt-1 h-4 w-4 rounded border-amber-300 dark:border-amber-700 text-amber-600 focus:ring-amber-600" />
+          <label for="tf-require-reenrol" class="text-sm text-amber-800 dark:text-amber-300">
+            Require them to set up two-factor again before using the portal
+            <span class="block text-xs text-amber-700/80 dark:text-amber-400/80">Leave this on unless you intend the account to stay password-only.</span>
+          </label>
+        </div>
+
+        <p id="tf-reset-message" class="mt-3 text-sm hidden"></p>
+
+        <button
+          type="button"
+          data-user-id="${uid}"
+          onclick="resetTwoFactor(this.dataset.userId)"
+          id="tf-reset-button"
+          class="mt-4 w-full inline-flex items-center justify-center rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60 transition-colors"
+        >
+          <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+          </svg>
+          Reset two-factor authentication
+        </button>
+      </div>` : ''
+
+  return `
+          <div class="rounded-xl bg-amber-50 dark:bg-amber-500/10 shadow-sm ring-1 ring-amber-600/20 dark:ring-amber-500/20 p-6 mb-6">
+            <h3 class="text-base font-semibold text-amber-900 dark:text-amber-300 mb-2">Two-Factor Recovery</h3>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ring-1 ring-inset ${badgeTone[state.tone]}">${state.label}</span>
+            </div>
+            <p class="text-sm text-amber-700 dark:text-amber-400">${state.detail}</p>
+            ${action}
+          </div>
+`
+}
+
+function renderTenantMembershipsSection(
+  userId: string,
+  tm?: UserEditPageData['tenantMemberships'],
+): string {
+  if (!tm) return ''
+  const uid = escapeHtml(userId)
+  const redirectField = `<input type="hidden" name="_redirect" value="/admin/users/${uid}/edit">`
+  const count = tm.memberships.length
+
+  const rows = count
+    ? tm.memberships.map((m) => {
+        const slug = escapeHtml(m.slug)
+        const roleOpts = tm.memberRoles
+          .map((r) => `<option value="${r}" ${r === m.role ? 'selected' : ''}>${r}</option>`)
+          .join('')
+        return `
+        <tr data-membership-row="${slug}" class="border-b border-zinc-950/5 last:border-0 dark:border-white/5">
+          <td class="px-4 py-3">
+            <div class="font-medium text-zinc-950 dark:text-white">${escapeHtml(m.name)}</div>
+            <div class="font-mono text-xs text-zinc-500 dark:text-zinc-400">${slug}</div>
+          </td>
+          <td class="px-4 py-3">
+            <form method="POST" action="/admin/tenants/users/${uid}/memberships/${slug}/role" class="flex items-center gap-2">
+              ${redirectField}
+              <select name="role" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()"
+                class="rounded-lg border border-zinc-950/10 bg-white px-2 py-1.5 text-sm text-zinc-950 dark:border-white/10 dark:bg-zinc-800 dark:text-white">
+                ${roleOpts}
+              </select>
+            </form>
+          </td>
+          <td class="px-4 py-3 text-right">
+            <form method="POST" action="/admin/tenants/users/${uid}/memberships/${slug}/delete" class="inline"
+              onsubmit="return confirm('Remove this user from ${slug}?')">
+              ${redirectField}
+              <button type="submit" data-remove-membership="${slug}" class="rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-500/10 dark:text-red-400">Remove</button>
+            </form>
+          </td>
+        </tr>`
+      }).join('')
+    : `<tr><td colspan="3" class="px-4 py-6 text-sm text-zinc-500 text-center dark:text-zinc-400">Not a member of any tenant.</td></tr>`
+
+  const addForm = tm.availableTenants.length
+    ? `<div class="mt-4 border-t border-zinc-950/5 pt-4 dark:border-white/5">
+        <form method="POST" action="/admin/tenants/users/${uid}/memberships" class="flex flex-wrap items-end gap-3">
+          ${redirectField}
+          <div class="flex-1 min-w-[12rem]">
+            <label class="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Add to tenant</label>
+            <select name="slug" class="w-full rounded-lg border border-zinc-950/10 bg-white px-2 py-2 text-sm text-zinc-950 dark:border-white/10 dark:bg-zinc-800 dark:text-white">
+              ${tm.availableTenants.map((t) => `<option value="${escapeHtml(t.slug)}">${escapeHtml(t.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">Role</label>
+            <select name="role" class="rounded-lg border border-zinc-950/10 bg-white px-2 py-2 text-sm text-zinc-950 dark:border-white/10 dark:bg-zinc-800 dark:text-white">
+              ${tm.memberRoles.map((r) => `<option value="${r}" ${r === 'viewer' ? 'selected' : ''}>${r}</option>`).join('')}
+            </select>
+          </div>
+          <button type="submit" class="rounded-lg bg-zinc-950 px-3.5 py-2 text-sm font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200">Add</button>
+        </form>
+      </div>`
+    : `<p class="mt-4 text-sm text-zinc-500 dark:text-zinc-400">Member of all tenants.</p>`
+
+  const defaultOpen = count <= 5
+  return `
+    <details class="group mt-6" ${defaultOpen ? 'open' : ''} data-tenant-memberships>
+      <summary class="flex cursor-pointer list-none items-center justify-between rounded-xl bg-white px-6 py-4 shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10 select-none">
+        <div class="flex items-center gap-3">
+          <svg class="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-90 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <h3 class="text-base font-semibold text-zinc-950 dark:text-white">Tenant memberships</h3>
+        </div>
+        <span class="text-sm font-normal text-zinc-500 dark:text-zinc-400">${count} tenant${count !== 1 ? 's' : ''}</span>
+      </summary>
+      <div class="mt-1 rounded-xl bg-white shadow-sm ring-1 ring-zinc-950/5 dark:bg-zinc-900 dark:ring-white/10">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="border-b border-zinc-950/5 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:border-white/5 dark:text-zinc-400">
+              <th class="px-4 py-3">Tenant</th>
+              <th class="px-4 py-3">Role</th>
+              <th class="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div class="px-4 pb-4">${addForm}</div>
+      </div>
+    </details>`
 }
 
 export function renderUserEditPage(data: UserEditPageData): string {
@@ -80,7 +261,7 @@ export function renderUserEditPage(data: UserEditPageData): string {
       </div>
 
       <!-- Alert Messages -->
-      <div id="form-messages">
+      <div id="form-messages" class="mb-6 empty:mb-0">
         ${data.error ? renderAlert({ type: 'error', message: data.error, dismissible: true }) : ''}
         ${data.success ? renderAlert({ type: 'success', message: data.success, dismissible: true }) : ''}
       </div>
@@ -112,17 +293,6 @@ export function renderUserEditPage(data: UserEditPageData): string {
                       type="text"
                       name="last_name"
                       value="${escapeHtml(data.userToEdit.lastName || '')}"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Username</label>
-                    <input
-                      type="text"
-                      name="username"
-                      value="${escapeHtml(data.userToEdit.username || '')}"
-                      required
                       class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
                     />
                   </div>
@@ -168,89 +338,24 @@ export function renderUserEditPage(data: UserEditPageData): string {
                 </div>
               </div>
 
-              <!-- Profile Information -->
+              ${data.hasProfilePlugin ? `
+              <!-- Profile Information (shown when defineUserProfile() is configured) -->
               <div class="mb-8">
                 <h3 class="text-base font-semibold text-zinc-950 dark:text-white mb-4">Profile Information</h3>
-                <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Extended profile data for this user</p>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Display Name</label>
-                    <input
-                      type="text"
-                      name="profile_display_name"
-                      value="${escapeHtml(data.userToEdit.profile?.displayName || '')}"
-                      placeholder="Public display name"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Company</label>
-                    <input
-                      type="text"
-                      name="profile_company"
-                      value="${escapeHtml(data.userToEdit.profile?.company || '')}"
-                      placeholder="Company or organization"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Job Title</label>
-                    <input
-                      type="text"
-                      name="profile_job_title"
-                      value="${escapeHtml(data.userToEdit.profile?.jobTitle || '')}"
-                      placeholder="Job title or role"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Website</label>
-                    <input
-                      type="url"
-                      name="profile_website"
-                      value="${escapeHtml(data.userToEdit.profile?.website || '')}"
-                      placeholder="https://example.com"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Location</label>
-                    <input
-                      type="text"
-                      name="profile_location"
-                      value="${escapeHtml(data.userToEdit.profile?.location || '')}"
-                      placeholder="City, Country"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Date of Birth</label>
-                    <input
-                      type="date"
-                      name="profile_date_of_birth"
-                      value="${data.userToEdit.profile?.dateOfBirth ? new Date(data.userToEdit.profile.dateOfBirth).toISOString().split('T')[0] : ''}"
-                      class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                    />
-                  </div>
-                </div>
-
-                <div class="mt-6">
-                  <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Bio</label>
-                  <textarea
-                    name="profile_bio"
-                    rows="3"
-                    placeholder="Short bio or description"
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-2">Display Name</label>
+                  <input
+                    type="text"
+                    name="profile_display_name"
+                    value="${escapeHtml(data.userToEdit.profile?.displayName || '')}"
+                    placeholder="Public display name"
                     class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white transition-shadow"
-                  >${escapeHtml(data.userToEdit.profile?.bio || '')}</textarea>
+                  />
                 </div>
+                ${data.customProfileFieldsHtml || ''}
               </div>
+              ` : ''}
 
-              ${data.customProfileFieldsHtml || ''}
 
               <!-- Set Password -->
               <div class="mb-8">
@@ -378,6 +483,8 @@ export function renderUserEditPage(data: UserEditPageData): string {
             </dl>
           </div>
 
+          ${renderTwoFactorRecoverySection(data.userToEdit)}
+
           <!-- Danger Zone -->
           <div class="rounded-xl bg-red-50 dark:bg-red-500/10 shadow-sm ring-1 ring-red-600/20 dark:ring-red-500/20 p-6">
             <h3 class="text-base font-semibold text-red-900 dark:text-red-300 mb-2">Danger Zone</h3>
@@ -417,7 +524,65 @@ export function renderUserEditPage(data: UserEditPageData): string {
       </div>
     </div>
 
+    ${renderTenantMembershipsSection(data.userToEdit.id, data.tenantMemberships)}
+
     <script>
+      // Two-factor break-glass. Inline rather than a confirmation dialog because the confirmation
+      // IS the typed email — a second "are you sure?" on top of that trains people to click
+      // through both. The server re-checks the email regardless; this is not the gate.
+      //
+      // The id arrives via the button's data-user-id, never interpolated into this source:
+      // escapeHtml turns ' into &#039;, which the HTML parser decodes back to a bare quote before
+      // the JS parser ever sees it — so an id containing one would break out of the argument.
+      function resetTwoFactor(userId) {
+        const emailInput = document.getElementById('tf-confirm-email');
+        const requireInput = document.getElementById('tf-require-reenrol');
+        const button = document.getElementById('tf-reset-button');
+        const message = document.getElementById('tf-reset-message');
+
+        function show(text, ok) {
+          message.textContent = text;
+          message.className = 'mt-3 text-sm ' + (ok
+            ? 'text-lime-700 dark:text-lime-400'
+            : 'text-red-700 dark:text-red-400');
+        }
+
+        if (!emailInput.value.trim()) {
+          show('Type the user\\'s email address to confirm.', false);
+          return;
+        }
+
+        button.disabled = true;
+        fetch('/admin/two-factor-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            confirmEmail: emailInput.value,
+            requireReenrolment: requireInput.checked
+          })
+        })
+        .then(function (response) { return response.json().then(function (body) { return { response: response, body: body }; }); })
+        .then(function (result) {
+          if (!result.response.ok) {
+            show(result.body.error || 'Reset failed.', false);
+            button.disabled = false;
+            return;
+          }
+          show(result.body.requireReenrolment
+            ? 'Two-factor reset. They must set it up again before using the portal.'
+            : 'Two-factor reset. This account is now password-only.', true);
+          // Reload so the state badge and the rest of the page reflect the change rather than
+          // showing a stale "Enrolled".
+          setTimeout(function () { window.location.href = '/admin/users/' + encodeURIComponent(userId) + '/edit?_t=' + Date.now(); }, 900);
+        })
+        .catch(function (error) {
+          console.error('Error:', error);
+          show('Reset failed — see the console for details.', false);
+          button.disabled = false;
+        });
+      }
+
       let userIdToDelete = null;
 
       function deleteUser(userId) {

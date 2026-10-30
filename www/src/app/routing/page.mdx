@@ -779,12 +779,14 @@ app.use('/api/*', rateLimitMiddleware(100, 60000)) // 100 requests per minute
 </CodeGroup>
 
 <Callout type="tip" title="Middleware Best Practices">
+
 - Keep middleware focused on a single responsibility
 - Minimize database queries in middleware
 - Use context variables to pass data between middleware
 - Handle errors gracefully and provide meaningful error messages
 - Consider performance impact of middleware execution order
 - Test middleware independently before integrating
+
 </Callout>
 
 ---

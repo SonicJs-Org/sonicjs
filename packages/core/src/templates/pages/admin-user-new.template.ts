@@ -14,6 +14,13 @@ export interface UserNewPageData {
   }
 }
 
+/**
+ * Renders the admin new-user creation page.
+ *
+ * Selects the Public role by default when a `role-public` option is present in
+ * the role list; other roles remain selectable. Falls back to the first
+ * available role when Public is absent.
+ */
 export function renderUserNewPage(data: UserNewPageData): string {
   const pageContent = `
     <div>
@@ -128,7 +135,7 @@ export function renderUserNewPage(data: UserNewPageData): string {
                         class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white/5 dark:bg-white/5 py-1.5 pl-3 pr-8 text-base text-zinc-950 dark:text-white outline outline-1 -outline-offset-1 outline-zinc-500/30 dark:outline-zinc-400/30 *:bg-white dark:*:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-zinc-500 dark:focus-visible:outline-zinc-400 sm:text-sm/6"
                       >
                         ${data.roles.map(role => `
-                          <option value="${role.value}">${role.label}</option>
+                          <option value="${role.value}"${role.value === 'role-public' ? ' selected' : ''}>${role.label}</option>
                         `).join('')}
                       </select>
                       <svg viewBox="0 0 16 16" fill="currentColor" data-slot="icon" aria-hidden="true" class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-zinc-600 dark:text-zinc-400 sm:size-4">

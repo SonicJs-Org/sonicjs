@@ -18,6 +18,7 @@ export type TelemetryEvent =
   | 'dev_server_started'
   | 'dev_server_stopped'
   | 'admin_login'
+  | 'demo_login'
   | 'plugin_activated'
   | 'plugin_deactivated'
   | 'collection_created'
@@ -29,6 +30,9 @@ export type TelemetryEvent =
   | 'error_occurred'
   | 'migration_run'
   | 'deployment_triggered'
+
+  // Runtime snapshot (emitted on bootstrap)
+  | 'project_snapshot'
 
 export interface TelemetryProperties {
   // System Information (no PII)

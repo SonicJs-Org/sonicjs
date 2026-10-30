@@ -74,47 +74,52 @@ router.get('/stats', async (c) => {
   try {
     const db = c.env.DB
 
-    // Get collections count
-    let collectionsCount = 0
-    try {
-      const collectionsStmt = db.prepare("SELECT COUNT(*) as count FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user')")
-      const collectionsResult = await collectionsStmt.first()
-      collectionsCount = (collectionsResult as any)?.count || 0
-    } catch (error) {
-      console.error('Error fetching collections count:', error)
+    // The four counts are independent, so they go out together rather than one after another.
+    // This fragment loads on every visit to /admin and four serial D1 round trips is four times
+    // the latency for no reason — and the admin shell's background requests are exactly what was
+    // starving real page loads. Each query keeps its own catch so one missing table (media lives
+    // in a plugin) still yields a card rather than an error panel.
+    const count = async (sql: string, onError?: (error: unknown) => void): Promise<any> => {
+      try {
+        return await db.prepare(sql).first()
+      } catch (error) {
+        onError?.(error)
+        return null
+      }
     }
 
-    // Get content count
-    let contentCount = 0
-    try {
-      const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content c JOIN collections col ON c.collection_id = col.id WHERE (col.source_type IS NULL OR col.source_type = 'user')")
-      const contentResult = await contentStmt.first()
-      contentCount = (contentResult as any)?.count || 0
-    } catch (error) {
-      console.error('Error fetching content count:', error)
-    }
+    const [collectionsResult, contentResult, mediaResult, usersResult] = await Promise.all([
+      // User-facing collections only: exclude auth-owned and internal types.
+      count(
+        `SELECT COUNT(*) as count FROM document_types
+         WHERE is_active = 1
+           AND is_auth = 0
+           AND (json_extract(settings, '$.internal') IS NULL OR json_extract(settings, '$.internal') != 1)`,
+        (error) => console.error('Error fetching collections count:', error)
+      ),
+      count(
+        `SELECT COUNT(*) AS count
+         FROM documents d
+         JOIN document_types dt ON dt.id = d.type_id
+         WHERE d.is_current_draft = 1
+           AND d.deleted_at IS NULL
+           AND dt.is_active = 1
+           AND dt.is_auth = 0
+           AND (json_extract(dt.settings, '$.internal') IS NULL OR json_extract(dt.settings, '$.internal') != 1)`,
+        (error) => console.error('Error fetching content count:', error)
+      ),
+      // media table lives in the media plugin — not yet available on a bare install.
+      count("SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM media WHERE deleted_at IS NULL"),
+      count('SELECT COUNT(*) as count FROM auth_user WHERE is_active = 1', (error) =>
+        console.error('Error fetching users count:', error)
+      ),
+    ])
 
-    // Get media count and total size
-    let mediaCount = 0
-    let mediaSize = 0
-    try {
-      const mediaStmt = db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM media WHERE deleted_at IS NULL')
-      const mediaResult = await mediaStmt.first()
-      mediaCount = (mediaResult as any)?.count || 0
-      mediaSize = (mediaResult as any)?.total_size || 0
-    } catch (error) {
-      console.error('Error fetching media count:', error)
-    }
-
-    // Get users count
-    let usersCount = 0
-    try {
-      const usersStmt = db.prepare('SELECT COUNT(*) as count FROM users WHERE is_active = 1')
-      const usersResult = await usersStmt.first()
-      usersCount = (usersResult as any)?.count || 0
-    } catch (error) {
-      console.error('Error fetching users count:', error)
-    }
+    const collectionsCount = collectionsResult?.count || 0
+    const contentCount = contentResult?.count || 0
+    const mediaCount = mediaResult?.count || 0
+    const mediaSize = mediaResult?.total_size || 0
+    const usersCount = usersResult?.count || 0
 
     const html = renderStatsCards({
       collections: collectionsCount,
@@ -138,24 +143,26 @@ router.get('/storage', async (c) => {
   try {
     const db = c.env.DB
 
-    // Get database size from D1 metadata
-    let databaseSize = 0
-    try {
-      const result = await db.prepare('SELECT 1').run()
-      databaseSize = (result as any)?.meta?.size_after || 0
-    } catch (error) {
-      console.error('Error fetching database size:', error)
-    }
+    // Both reads are independent; issue them together so this fragment costs one round trip's
+    // latency instead of two. It loads on every visit to /admin.
+    const [sizeProbe, mediaResult] = await Promise.all([
+      // Database size comes from D1's per-query metadata, not from a table.
+      db
+        .prepare('SELECT 1')
+        .run()
+        .catch((error: unknown) => {
+          console.error('Error fetching database size:', error)
+          return null
+        }),
+      // media table lives in the media plugin — not yet available on a bare install.
+      db
+        .prepare('SELECT COALESCE(SUM(size), 0) as total_size FROM media WHERE deleted_at IS NULL')
+        .first()
+        .catch(() => null),
+    ])
 
-    // Get media total size
-    let mediaSize = 0
-    try {
-      const mediaStmt = db.prepare('SELECT COALESCE(SUM(size), 0) as total_size FROM media WHERE deleted_at IS NULL')
-      const mediaResult = await mediaStmt.first()
-      mediaSize = (mediaResult as any)?.total_size || 0
-    } catch (error) {
-      console.error('Error fetching media size:', error)
-    }
+    const databaseSize = (sizeProbe as any)?.meta?.size_after || 0
+    const mediaSize = (mediaResult as any)?.total_size || 0
 
     const html = renderStorageUsage(databaseSize, mediaSize)
     return c.html(html)
@@ -169,65 +176,9 @@ router.get('/storage', async (c) => {
  * GET /admin/dashboard/recent-activity - Recent activity HTML fragment (HTMX endpoint)
  */
 router.get('/recent-activity', async (c) => {
-  try {
-    const db = c.env.DB
-    const limit = parseInt(c.req.query('limit') || '5')
-
-    // Get recent activities from activity_logs table
-    const activityStmt = db.prepare(`
-      SELECT
-        a.id,
-        a.action,
-        a.resource_type,
-        a.resource_id,
-        a.details,
-        a.created_at,
-        u.email,
-        u.first_name,
-        u.last_name
-      FROM activity_logs a
-      LEFT JOIN users u ON a.user_id = u.id
-      WHERE a.resource_type IN ('content', 'collections', 'users', 'media')
-      ORDER BY a.created_at DESC
-      LIMIT ?
-    `)
-
-    const { results } = await activityStmt.bind(limit).all()
-
-    const activities: ActivityItem[] = (results || []).map((row: any) => {
-      const userName = row.first_name && row.last_name
-        ? `${row.first_name} ${row.last_name}`
-        : row.email || 'System'
-
-      // Format description based on action and resource type
-      let description = ''
-      if (row.action === 'create') {
-        description = `Created new ${row.resource_type}`
-      } else if (row.action === 'update') {
-        description = `Updated ${row.resource_type}`
-      } else if (row.action === 'delete') {
-        description = `Deleted ${row.resource_type}`
-      } else {
-        description = `${row.action} ${row.resource_type}`
-      }
-
-      return {
-        id: row.id,
-        type: row.resource_type,
-        action: row.action,
-        description,
-        timestamp: new Date(Number(row.created_at)).toISOString(),
-        user: userName
-      }
-    })
-
-    const html = renderRecentActivity(activities)
-    return c.html(html)
-  } catch (error) {
-    console.error('Error fetching recent activity:', error)
-    const html = renderRecentActivity([])
-    return c.html(html)
-  }
+  // activity_logs is not yet available — will be implemented as a plugin
+  const html = renderRecentActivity([])
+  return c.html(html)
 })
 
 /**

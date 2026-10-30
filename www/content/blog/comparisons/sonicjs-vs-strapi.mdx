@@ -37,6 +37,9 @@ featuredImage:
 - Both: MIT licensed, open source
 </TLDRBox>
 
+> 📊 **See the full feature matrix:** [SonicJS vs Payload, Strapi, Directus, Sanity & Contentful](/compare) — a side-by-side inventory of 125+ capabilities across 13 categories, from APIs and auth to i18n and pricing.
+
+
 Choosing the right headless CMS is a critical decision for any project. In this comparison, we'll examine two popular options: SonicJS, an edge-first CMS built for Cloudflare Workers, and Strapi, the established open-source headless CMS.
 
 ## Quick Comparison
@@ -145,7 +148,7 @@ const posts = defineCollection({
 **SonicJS**: Get started in under 5 minutes:
 
 ```bash
-npm create sonicjs-app my-cms
+npx create-sonicjs@latest my-cms
 cd my-cms
 npm run dev
 ```
@@ -233,12 +236,13 @@ Both support relationships between content types. SonicJS handles this at the ed
 SonicJS has a growing plugin system that runs at the edge:
 
 ```typescript
-import { PluginBuilder } from '@sonicjs-cms/core'
+import { definePlugin } from '@sonicjs-cms/core'
 
-const myPlugin = PluginBuilder.create('my-plugin')
-  .addRoute('GET', '/custom', handler)
-  .addHook('content:beforeSave', transform)
-  .build()
+const myPlugin = definePlugin({
+  name: 'my-plugin',
+  register(app) { app.get('/custom', handler) },
+  hooks: { 'content:save': transform },
+})
 ```
 
 The ecosystem is newer but growing rapidly.

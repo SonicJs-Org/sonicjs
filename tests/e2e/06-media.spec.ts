@@ -1,7 +1,111 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin, navigateToAdminSection } from './utils/test-helpers';
+import { test, expect, type Page } from './fixtures';
+import { loginAsAdmin, navigateToAdminSection, submitAndWaitForXhr } from './utils/test-helpers';
 
-test.describe.skip('Media Management', () => {
+/**
+ * Most of this file used to pass without checking anything.
+ *
+ * Seven of the twelve tests wrapped their real assertions in `if (await x.count() > 0)` — on a
+ * media library that starts empty, so the body never ran and the test reported green for having
+ * loaded a page. `should display uploaded media` was the whole body. `should support media
+ * search/filter` typed into the box, slept 500ms and asserted nothing at all. `should handle
+ * empty media library` only asserted when the library happened to be empty, which it never is
+ * once any other spec has uploaded. `should display media list view correctly` put its list-view
+ * check behind two `if`s and a `try/catch` whose comment conceded "list view implementation may
+ * vary".
+ *
+ * They are hermetic now: each one uploads the file it then asserts on, so there is no "if
+ * something is there" left to hide behind.
+ *
+ * `should handle media pagination` is gone. The library pages at 24 items and sorts by
+ * `updated_at DESC`, which `documents` stores in SECONDS — so making a Next link appear means
+ * uploading 25 files, and which of a same-second batch lands on which page is not decidable.
+ * What is decidable without any of that is asserted below in `applies the page offset`.
+ */
+
+// Smallest thing the upload path accepts as an image: a 1x1 baseline JPEG.
+const JPEG_1X1 = Buffer.from([
+  0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+  0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
+  0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+  0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
+  0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
+  0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
+  0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
+  0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x01,
+  0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+  0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xFF, 0xC4,
+  0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00, 0x0C,
+  0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0x80, 0xFF, 0xD9
+]);
+
+/** The sidebar and the empty state both render an "Upload Files" button. */
+const uploadButton = (page: Page) =>
+  page.locator('button').filter({ hasText: 'Upload Files' }).first();
+
+/**
+ * Upload one file and come back to a library page that contains it.
+ *
+ * On success the response ships a script that hides the modal and navigates to
+ * `/admin/media?t=<now>` 1500ms later. Waiting for that navigation rather than issuing our own
+ * `goto` is what keeps the pending timer from redirecting out from under the next step.
+ */
+async function uploadFile(
+  page: Page,
+  opts: { name: string; mimeType?: string; buffer?: Buffer }
+): Promise<string> {
+  await uploadButton(page).click();
+  await page.setInputFiles('#file-input', {
+    name: opts.name,
+    mimeType: opts.mimeType ?? 'image/jpeg',
+    buffer: opts.buffer ?? JPEG_1X1,
+  });
+
+  // The upload is an htmx POST to /admin/media/upload that writes to R2 and inserts a document;
+  // #upload-results stays empty until it answers. Asserting straight after the click spends an
+  // assertion budget on a server round trip — that is how this flaked in CI with the locator
+  // resolving 24x to an empty <div id="upload-results">. Wait for the response first.
+  await submitAndWaitForXhr(page, 'POST', '/admin/media/upload', () =>
+    page.locator('#upload-modal button#upload-btn').click()
+  );
+  await expect(page.locator('#upload-results')).toContainText('Successfully uploaded');
+
+  await page.waitForURL(/\/admin\/media\?t=\d+/);
+  return opts.name;
+}
+
+/** A unique filename, so an assertion can never match another spec's leftovers. */
+function uniqueName(label: string): string {
+  return `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+}
+
+/** The card for one uploaded file, located by the name rendered in its title. */
+const cardFor = (page: Page, filename: string) =>
+  page.locator('#media-grid .media-item').filter({ hasText: filename });
+
+/**
+ * Type into the search box and wait for the htmx swap that search triggers.
+ *
+ * `fill()` does not work here. It sets the value and fires `input` + `change`, but the input is
+ * wired `hx-trigger="keyup changed delay:300ms"` — no keyup, no request, and the assertion that
+ * follows then checks an unswapped grid. Typing real keys is what drives it.
+ *
+ * The response predicate matches the *complete* term so a debounce that happens to fire mid-word
+ * cannot satisfy the wait with a partial query.
+ */
+async function search(page: Page, term: string): Promise<void> {
+  const input = page.locator('#media-search-input');
+  const swapped = page.waitForResponse(
+    (r) => r.url().includes('/admin/media/search') && r.url().includes(`search=${term}`)
+  );
+  await input.click();
+  await input.pressSequentially(term);
+  const res = await swapped;
+  expect(res.ok(), `search returned ${res.status()}`).toBeTruthy();
+}
+
+test.describe('Media Management @smoke @media', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
     await navigateToAdminSection(page, 'media');
@@ -9,212 +113,189 @@ test.describe.skip('Media Management', () => {
 
   test('should display media library', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Media Library');
-    // Use first Upload Files button (the one in the sidebar)
-    await expect(page.locator('button').filter({ hasText: 'Upload Files' }).first()).toBeVisible();
+    await expect(uploadButton(page)).toBeVisible();
   });
 
   test('should open upload modal', async ({ page }) => {
-    // Click the first Upload Files button (the one in the sidebar)
-    await page.locator('button').filter({ hasText: 'Upload Files' }).first().click();
-    
+    await uploadButton(page).click();
+
     await expect(page.locator('#upload-modal')).toBeVisible();
-    // File input is hidden by design, just check it exists
+    // The file input is hidden by design — setInputFiles does not need it visible.
     await expect(page.locator('#file-input')).toBeAttached();
   });
 
   test('should handle file upload', async ({ page }) => {
-    // Click the first Upload Files button (the one in the sidebar)
-    await page.locator('button').filter({ hasText: 'Upload Files' }).first().click();
-    
-    // Create a small test image file
-    const testImageBuffer = Buffer.from([
-      0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-      0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-      0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-      0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-      0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-      0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-      0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-      0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x01,
-      0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
-      0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xFF, 0xC4,
-      0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00, 0x0C,
-      0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0x80, 0xFF, 0xD9
-    ]);
-    
-    await page.setInputFiles('#file-input', {
-      name: 'test-image.jpg',
-      mimeType: 'image/jpeg',
-      buffer: testImageBuffer
-    });
+    const name = await uploadFile(page, { name: uniqueName('upload') });
 
-    await page.locator('#upload-modal button#upload-btn').click();
-    
-    // Should show upload success
-    await expect(page.locator('#upload-results')).toContainText('Successfully uploaded', { timeout: 10000 });
+    // The upload is only done when the library serves the file back.
+    await expect(cardFor(page, name)).toHaveCount(1);
   });
 
   test('should validate file types', async ({ page }) => {
-    // Click the first Upload Files button (the one in the sidebar)
-    await page.locator('button').filter({ hasText: 'Upload Files' }).first().click();
-    
-    // Try to upload an invalid file type
+    await uploadButton(page).click();
     await page.setInputFiles('#file-input', {
       name: 'test.exe',
       mimeType: 'application/octet-stream',
-      buffer: Buffer.from('fake executable')
+      buffer: Buffer.from('fake executable'),
     });
 
-    await page.locator('#upload-modal button#upload-btn').click();
-    
-    // Should show validation error
+    await submitAndWaitForXhr(page, 'POST', '/admin/media/upload', () =>
+      page.locator('#upload-modal button#upload-btn').click()
+    );
+
     await expect(page.locator('#upload-results')).toContainText('Unsupported file type');
+
+    // A rejection must not navigate away. The form carried
+    // `hx-on::after-request="if(event.detail.successful) { … window.location.href = … }"`, and
+    // `successful` is true for any 2xx — which the rejection is, since the handler answers 200
+    // with the error list — so it redirected 1500ms later and took the error message with it.
+    // The only signal here is that timer NOT firing, so the wait is the assertion.
+    await page.waitForTimeout(2_000);
+    await expect(page.locator('#upload-modal')).toBeVisible();
+    await expect(page.locator('#upload-results')).toContainText('Unsupported file type');
+    expect(new URL(page.url()).searchParams.has('t')).toBe(false);
+  });
+
+  test('escapes the filename in search results', async ({ page }) => {
+    // The search endpoint rendered its own copy of the card markup with no escaping at all, so a
+    // filename — which is user-controlled — was injected straight into the grid HTML and into a
+    // `title` attribute. It now goes through the same escaping component as the page (R8).
+    const marker = `xss${Date.now()}`;
+    await uploadFile(page, {
+      name: `${marker}<img src=x onerror="window.__xssFired=true">.jpg`,
+    });
+
+    await search(page, marker);
+
+    const card = page.locator('#media-grid .media-item').first();
+    await expect(card).toHaveCount(1);
+    // Rendered as text, not parsed as markup.
+    await expect(card.locator('img[src="x"]')).toHaveCount(0);
+    await expect(card).toContainText('<img src=x');
+    expect(await page.evaluate(() => (window as any).__xssFired)).toBeUndefined();
   });
 
   test('should display uploaded media', async ({ page }) => {
-    // Check if there are any existing media files
-    const mediaGrid = page.locator('#media-grid');
-    
-    if (await mediaGrid.locator('.media-item').count() > 0) {
-      await expect(mediaGrid.locator('.media-item').first()).toBeVisible();
-    }
+    const name = await uploadFile(page, { name: uniqueName('display') });
+
+    const card = cardFor(page, name);
+    await expect(card).toHaveCount(1);
+    await expect(card).toBeVisible();
+    // Images render a thumbnail rather than the generic file icon.
+    await expect(card.locator('img')).toHaveAttribute('src', /\S/);
+    // `data-file-id` is what every selection and details handler keys off.
+    await expect(card).toHaveAttribute('data-file-id', /\S/);
   });
 
   test('should handle media selection', async ({ page }) => {
-    const mediaItems = page.locator('.media-item');
-    const count = await mediaItems.count();
-    
-    if (count > 0) {
-      // Click the checkbox inside the media item instead of the item itself
-      const checkbox = mediaItems.first().locator('input[type="checkbox"]');
-      if (await checkbox.count() > 0) {
-        await checkbox.click();
-        await expect(checkbox).toBeChecked();
-      }
-    }
+    const name = await uploadFile(page, { name: uniqueName('select') });
+
+    const card = cardFor(page, name);
+    const bulkButton = page.locator('#bulk-actions-btn');
+    await expect(bulkButton).toBeDisabled();
+
+    await card.locator('input[type="checkbox"]').check();
+
+    await expect(card).toHaveClass(/selected/);
+    await expect(bulkButton).toBeEnabled();
+    await expect(bulkButton).toHaveText(/Actions \(1\)/);
+
+    await card.locator('input[type="checkbox"]').uncheck();
+
+    await expect(card).not.toHaveClass(/selected/);
+    await expect(bulkButton).toBeDisabled();
+    await expect(bulkButton).toHaveText(/Bulk Actions/);
   });
 
   test('should show media details', async ({ page }) => {
-    const mediaItems = page.locator('.media-item');
-    const count = await mediaItems.count();
-    
-    if (count > 0) {
-      await mediaItems.first().click();
-      
-      // Should show details panel or modal
-      const details = page.locator('#media-details, .media-details');
-      if (await details.count() > 0) {
-        await expect(details).toBeVisible();
-      }
-    }
+    const name = await uploadFile(page, { name: uniqueName('details') });
+
+    const modal = page.locator('#file-modal');
+    await expect(modal).toBeHidden();
+
+    // The details button is inside a hover overlay, so click it through the card.
+    await cardFor(page, name)
+      .locator('button[hx-get*="/details"]')
+      .click();
+
+    await expect(modal).toBeVisible();
+    await expect(page.locator('#file-modal-content')).toContainText(name);
   });
 
   test('should close upload modal', async ({ page }) => {
-    // Click the first Upload Files button (the one in the sidebar)
-    await page.locator('button').filter({ hasText: 'Upload Files' }).first().click();
+    await uploadButton(page).click();
+    await expect(page.locator('#upload-modal')).toBeVisible();
 
-    // Close modal using the Cancel button within the upload modal
     await page.locator('#upload-modal button').filter({ hasText: 'Cancel' }).click();
 
-    await expect(page.locator('#upload-modal')).not.toBeVisible();
+    await expect(page.locator('#upload-modal')).toBeHidden();
   });
 
   test('should support media search/filter', async ({ page }) => {
-    // Check if search functionality exists
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search"], input[placeholder*="filter"]');
-    
-    if (await searchInput.count() > 0) {
-      await searchInput.fill('test');
-      // Should filter results
-      await page.waitForTimeout(500); // Wait for search to process
-    }
+    const wanted = await uploadFile(page, { name: uniqueName('needle') });
+    const other = await uploadFile(page, { name: uniqueName('haystack') });
+
+    await expect(cardFor(page, wanted)).toHaveCount(1);
+    await expect(cardFor(page, other)).toHaveCount(1);
+
+    await search(page, wanted.replace('.jpg', ''));
+
+    await expect(cardFor(page, wanted)).toHaveCount(1);
+    await expect(cardFor(page, other)).toHaveCount(0);
   });
 
-  test('should handle empty media library', async ({ page }) => {
-    // If no media files exist, should show appropriate message
-    const mediaGrid = page.locator('#media-grid');
-    const mediaItems = page.locator('.media-item');
+  test('renders the empty state when a search matches nothing', async ({ page }) => {
+    // Replaces the old `should handle empty media library`, which only asserted when the library
+    // happened to be empty — never true once any other spec has uploaded. A search with no hits
+    // renders the same empty state through the same component, and does so deterministically.
+    await search(page, `no-such-file-${Date.now()}`);
 
-    if (await mediaItems.count() === 0) {
-      // Use .first() to handle strict mode violation when multiple elements match
-      await expect(page.getByText(/No media files|Upload your first file|No files found/i).first()).toBeVisible();
-    }
+    await expect(page.locator('#media-grid .media-item')).toHaveCount(0);
+    await expect(page.locator('#media-grid')).toContainText('No media files');
+    await expect(page.locator('#media-grid')).toContainText('match your search');
   });
 
   test('should display media list view correctly', async ({ page }) => {
-    // Verify media grid is visible
-    const mediaGrid = page.locator('#media-grid');
-    await expect(mediaGrid).toBeVisible();
+    const name = await uploadFile(page, { name: uniqueName('listview') });
 
-    // Check if media items are rendered
-    const mediaItems = page.locator('.media-item');
-    const itemCount = await mediaItems.count();
+    const card = cardFor(page, name);
+    // Grid view is the default: the wrapper carries .media-grid.
+    await expect(page.locator('#media-grid > div.media-grid')).toHaveCount(1);
+    await expect(card).toHaveCount(1);
 
-    if (itemCount > 0) {
-      // Verify first item has expected elements
-      const firstItem = mediaItems.first();
+    // The selector navigates — `onchange="window.location.href = updateUrlParam('view', ...)"`.
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get('view') === 'list'),
+      page
+        .locator('select')
+        .filter({ has: page.locator('option[value="grid"]') })
+        .selectOption('list'),
+    ]);
 
-      // Should have an image or file icon (check if either exists)
-      const hasImage = await firstItem.locator('img').count() > 0;
-      const hasSvg = await firstItem.locator('svg').count() > 0;
-      expect(hasImage || hasSvg).toBeTruthy();
-
-      // Should be clickable
-      await expect(firstItem).toBeVisible();
-
-      // Test list view toggle if available (using select dropdown)
-      const viewSelector = page.locator('select').filter({ has: page.locator('option[value="grid"]') });
-      if (await viewSelector.count() > 0) {
-        await viewSelector.selectOption('list');
-
-        // Wait for view to update - use timeout to handle potential reload
-        await page.waitForTimeout(1000);
-
-        try {
-          await page.waitForLoadState('networkidle', { timeout: 3000 });
-        } catch {
-          // If networkidle times out, continue anyway
-        }
-
-        // Verify list view is active - check if element exists before verifying visibility
-        try {
-          const listViewContainer = page.locator('#media-grid > div.space-y-4');
-          if (await listViewContainer.count() > 0) {
-            await expect(listViewContainer).toBeVisible();
-          }
-        } catch (error) {
-          // List view container might not exist or page might have reloaded
-          // This is acceptable as list view implementation may vary
-        }
-      }
-    } else {
-      // If no items, that's also valid - should show empty state
-      await expect(page.getByText(/No media files|Upload your first file/i).first()).toBeVisible();
-    }
+    // List view swaps the wrapper class and keeps the same cards.
+    await expect(page.locator('#media-grid > div.space-y-4')).toHaveCount(1);
+    await expect(page.locator('#media-grid > div.media-grid')).toHaveCount(0);
+    await expect(cardFor(page, name)).toHaveCount(1);
   });
 
-  test('should handle media pagination', async ({ page }) => {
-    // Check if pagination controls exist
-    const nextButton = page.locator('button:has-text("Next"), a:has-text("Next"), [aria-label="Next page"]');
-    const prevButton = page.locator('button:has-text("Previous"), a:has-text("Previous"), [aria-label="Previous page"]');
+  test('applies the page offset', async ({ page }) => {
+    // The honest, state-independent half of the pagination contract: page 1 and page 2 are
+    // disjoint. It holds for 1 file (page 2 empty) and for 100 (a real second page), so it needs
+    // neither a 25-file upload nor a guess about which same-second upload sorts where.
+    await uploadFile(page, { name: uniqueName('offset') });
 
-    if (await nextButton.count() > 0) {
-      const isEnabled = await nextButton.isEnabled().catch(() => false);
+    const ids = async () =>
+      page.locator('#media-grid .media-item').evaluateAll((els) =>
+        els.map((el) => (el as HTMLElement).dataset.fileId).filter(Boolean)
+      );
 
-      if (isEnabled) {
-        // Get current media items
-        const initialItems = await page.locator('.media-item').count();
+    await page.goto('/admin/media?page=1');
+    const first = await ids();
+    expect(first.length).toBeGreaterThan(0);
 
-        // Click next page
-        await nextButton.click();
-        await page.waitForTimeout(1000);
+    await page.goto('/admin/media?page=2');
+    const second = await ids();
 
-        // Should still have media items (count may change based on available items)
-        const newItems = await page.locator('.media-item').count();
-        expect(newItems).toBeGreaterThan(0);
-      }
-    }
+    expect(second.filter((id) => first.includes(id))).toEqual([]);
   });
 });

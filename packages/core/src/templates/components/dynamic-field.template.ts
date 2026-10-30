@@ -1,4 +1,5 @@
 import { getDragSortableScript } from './drag-sortable.template'
+import { renderLexicalField } from '../../plugins/core-plugins/lexical-editor'
 
 /**
  * Returns shared readFieldValue function used by both blocks and structured fields.
@@ -183,6 +184,7 @@ export interface FieldRenderOptions {
     quillEnabled?: boolean
     mdxeditorEnabled?: boolean
     tinymceEnabled?: boolean
+    lexicalEnabled?: boolean
   }
   collectionId?: string
   contentId?: string
@@ -228,13 +230,20 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
   let fallbackToTextarea = false
   let fallbackWarning = ''
 
-  if (field.field_type === 'quill' && !pluginStatuses.quillEnabled) {
+  if (field.field_type === 'lexical' && !pluginStatuses.lexicalEnabled) {
+    fallbackToTextarea = true
+    fallbackWarning = '⚠️ Lexical Editor plugin is inactive. Using textarea fallback.'
+  } else if (field.field_type === 'quill' && !pluginStatuses.quillEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ Quill Editor plugin is inactive. Using textarea fallback.'
   } else if (isMarkdownEditorFieldType(field.field_type) && !pluginStatuses.mdxeditorEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ Markdown editor plugin is inactive. Using textarea fallback.'
-  } else if ((field.field_type === 'richtext' || field.field_type === 'tinymce') && !pluginStatuses.tinymceEnabled) {
+  } else if (field.field_type === 'richtext' && !pluginStatuses.lexicalEnabled && !pluginStatuses.tinymceEnabled) {
+    // richtext with no active editor plugin → textarea
+    fallbackToTextarea = true
+    fallbackWarning = '⚠️ No rich text editor plugin is active. Using textarea fallback.'
+  } else if (field.field_type === 'tinymce' && !pluginStatuses.tinymceEnabled) {
     fallbackToTextarea = true
     fallbackWarning = '⚠️ TinyMCE plugin is inactive. Using textarea fallback.'
   }
@@ -372,7 +381,38 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       `
       break
 
+    case 'lexical':
+      fieldHTML = renderLexicalField(fieldId, fieldName, value, {
+        toolbar: opts.toolbar || 'standard',
+        placeholder: opts.placeholder || 'Enter content...',
+        height: opts.height || 300,
+      })
+      break
+
     case 'richtext':
+      // Lexical is the default richtext editor; fall back to TinyMCE if only that is active.
+      if (pluginStatuses.lexicalEnabled) {
+        fieldHTML = renderLexicalField(fieldId, fieldName, value, {
+          toolbar: opts.toolbar || 'standard',
+          placeholder: opts.placeholder || 'Enter content...',
+          height: opts.height || 300,
+        })
+      } else {
+        const editorMetadata = getEditorMetadata(field.field_type)
+        fieldHTML = `
+          <div class="richtext-container" data-height="${opts.height || 300}" data-toolbar="${opts.toolbar || 'full'}" data-editor-family="${editorMetadata?.family || ''}" data-editor-provider="${editorMetadata?.provider || ''}">
+            <textarea
+              id="${fieldId}"
+              name="${fieldName}"
+              class="${baseClasses} ${errorClasses} min-h-[${opts.height || 300}px]"
+              ${required}
+              ${disabled ? 'disabled' : ''}
+            >${escapeHtml(value)}</textarea>
+          </div>
+        `
+      }
+      break
+
     case 'tinymce':
       {
       const editorMetadata = getEditorMetadata(field.field_type)
@@ -442,7 +482,7 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           type="number" 
           id="${fieldId}"
           name="${fieldName}"
-          value="${value}"
+          value="${escapeHtml(String(value ?? ''))}"
           min="${opts.min || ''}"
           max="${opts.max || ''}"
           step="${opts.step || ''}"
@@ -481,13 +521,15 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           type="date"
           id="${fieldId}"
           name="${fieldName}"
-          value="${value}"
+          value="${escapeHtml(String(value ?? ''))}"
           min="${opts.min || ''}"
           max="${opts.max || ''}"
-          class="${baseClasses} ${errorClasses}"
+          class="${baseClasses} ${errorClasses} !w-auto dark:[color-scheme:dark]"
+          placeholder="YYYY-MM-DD"
           ${required}
           ${disabled ? 'disabled' : ''}
         >
+        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Format: YYYY-MM-DD</p>
       `
       break
 
@@ -497,13 +539,14 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
           type="datetime-local"
           id="${fieldId}"
           name="${fieldName}"
-          value="${value}"
+          value="${escapeHtml(String(value ?? ''))}"
           min="${opts.min || ''}"
           max="${opts.max || ''}"
-          class="${baseClasses} ${errorClasses}"
+          class="${baseClasses} ${errorClasses} !w-auto dark:[color-scheme:dark]"
           ${required}
           ${disabled ? 'disabled' : ''}
         >
+        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Format: YYYY-MM-DD HH:MM</p>
       `
       break
 
@@ -593,8 +636,12 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
                 
                 const response = await fetch(url);
                 const data = await response.json();
-                
-                if (data.available) {
+
+                if (!response.ok || data.error) {
+                  // Server error (e.g. collection not found) — don't block the form
+                  statusDiv.innerHTML = '<span class="text-yellow-500 dark:text-yellow-400">⚠ Could not verify</span>';
+                  slugField.setCustomValidity('');
+                } else if (data.available) {
                   statusDiv.innerHTML = '<span class="text-green-500 dark:text-green-400">✓ Available</span>';
                   slugField.setCustomValidity('');
                 } else {
@@ -827,28 +874,31 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       const mediaValues =
         isMultiple && value
           ? Array.isArray(value)
-            ? value
+            ? value.filter((url) => typeof url === 'string' && url !== '')
             : String(value).split(',').filter(Boolean)
           : []
-      const singleValue = !isMultiple ? value : ''
+      const singleValue =
+        !isMultiple && typeof value === 'string' ? value : ''
 
       // Helper to detect if URL is a video
-      const isVideoUrl = (url: string) => {
+      const isVideoUrl = (url: unknown) => {
+        if (typeof url !== 'string') return false
         const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi']
         return videoExtensions.some((ext) => url.toLowerCase().endsWith(ext))
       }
 
       // Helper to render media element
-      const renderMediaPreview = (url: string, alt: string, classes: string) => {
+      const renderMediaPreview = (url: unknown, alt: string, classes: string) => {
+        if (typeof url !== 'string' || url === '') return ''
         if (isVideoUrl(url)) {
-          return `<video src="${url}" class="${classes}" muted></video>`
+          return `<video src="${escapeHtml(url)}" class="${classes}" muted></video>`
         }
-        return `<img src="${url}" alt="${alt}" class="${classes}">`
+        return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" class="${classes}">`
       }
 
       fieldHTML = `
         <div class="media-field-container">
-          <input type="hidden" id="${fieldId}" name="${fieldName}" value="${isMultiple ? mediaValues.join(',') : singleValue}" data-multiple="${isMultiple}">
+          <input type="hidden" id="${fieldId}" name="${fieldName}" value="${escapeHtml(String(isMultiple ? mediaValues.join(',') : singleValue))}" data-multiple="${isMultiple}">
 
           ${
             isMultiple
@@ -857,11 +907,11 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
               ${mediaValues
                 .map(
                   (url: string, idx: number) => `
-                <div class="relative media-preview-item" data-url="${url}">
+                <div class="relative media-preview-item" data-url="${escapeHtml(url)}">
                   ${renderMediaPreview(url, `Media ${idx + 1}`, 'w-full h-24 object-cover rounded-lg border border-white/20')}
                   <button
                     type="button"
-                    onclick="removeMediaFromMultiple('${fieldId}', '${url}')"
+                    onclick="removeMediaFromMultiple('${fieldId}', '${escapeJsAttr(url)}')"
                     data-media-remove="true"
                     class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700"
                     ${disabled ? 'disabled' : ''}
@@ -928,6 +978,177 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
       }
       // Regular structured array field
       return renderStructuredArrayField(field, options, baseClasses, errorClasses)
+
+    case 'user': {
+      const idValue = typeof value === 'string' ? value : (value?.id || value || '')
+      // If value is object with name use it; if just an ID string, show ID now and replace on load
+      const displayValue = typeof value === 'object' && value?.name ? value.name : (typeof value === 'string' ? value : '')
+      fieldHTML = `
+        <div class="user-search-field-container" style="position:relative;">
+          <input
+            type="text"
+            id="${fieldId}-display"
+            name="q"
+            class="${baseClasses} ${errorClasses}"
+            placeholder="${opts.placeholder || 'Search by name...'}"
+            autocomplete="off"
+            value="${escapeHtml(displayValue)}"
+            hx-get="/admin/api/users/search-html?fieldId=${fieldId}"
+            hx-trigger="keyup delay:300ms"
+            hx-target="#${fieldId}-dropdown"
+            hx-swap="innerHTML"
+            hx-include="this"
+            ${disabled ? 'disabled' : ''}
+            ${required}
+          >
+          <!--
+            The required flag belongs on the visible search box, not on the hidden input
+            below:
+            a hidden control that fails validation is not focusable, so Chrome aborts the
+            submit without reporting anything and the Save button looks dead. The submit
+            handler further down copies the display value into the hidden input whenever
+            no user is linked, so validating the visible field is equivalent.
+          -->
+          <input
+            type="hidden"
+            id="${fieldId}"
+            name="${fieldName}"
+            value="${escapeHtml(idValue)}"
+          >
+          <div
+            id="${fieldId}-dropdown"
+            class="user-search-dropdown"
+            style="position:absolute;z-index:50;top:100%;left:0;right:0;background:#27272a;border-radius:0.5rem;box-shadow:0 4px 12px rgba(0,0,0,0.4);max-height:200px;overflow-y:auto;"
+          ></div>
+        </div>
+        <script>
+          if (typeof sonicSelectUser === 'undefined') {
+            window.sonicSelectUser = function(fieldId, userId, userName) {
+              var d = document.getElementById(fieldId + '-display');
+              var h = document.getElementById(fieldId);
+              var dd = document.getElementById(fieldId + '-dropdown');
+              if (d) { d.value = userName; d.dataset.linkedName = userName; }
+              if (h) h.value = userId;
+              if (dd) dd.innerHTML = '';
+            };
+            document.addEventListener('click', function(e) {
+              document.querySelectorAll('.user-search-dropdown').forEach(function(dd) {
+                if (!dd.contains(e.target) && !dd.previousElementSibling?.contains(e.target)) {
+                  dd.innerHTML = '';
+                }
+              });
+            });
+            // Before form submit: if display was changed from linked user name, treat as custom text
+            document.addEventListener('submit', function(e) {
+              document.querySelectorAll('.user-search-field-container').forEach(function(container) {
+                var display = container.querySelector('input[type="text"]');
+                var hidden = container.querySelector('input[type="hidden"]');
+                if (!display || !hidden) return;
+                var linkedName = display.dataset.linkedName;
+                // Custom name: no linked user, or user cleared/changed the display value
+                if (!linkedName || display.value !== linkedName) {
+                  hidden.value = display.value;
+                }
+              });
+            }, true);
+          }
+          // On load: if hidden input has a user ID, fetch display name and mark as linked
+          (function() {
+            var userId = ${JSON.stringify(idValue)};
+            if (!userId) return;
+            fetch('/admin/api/users/' + encodeURIComponent(userId))
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.name) {
+                  var d = document.getElementById(${JSON.stringify(fieldId + '-display')});
+                  if (d) { d.value = data.name; d.dataset.linkedName = data.name; }
+                }
+              })
+              .catch(function() {});
+          })();
+        </script>
+      `
+      break
+    }
+
+    case 'json': {
+      const jsonParsedValue =
+        value !== null && value !== undefined && typeof value !== 'string'
+          ? value
+          : typeof value === 'string' && value !== ''
+            ? (() => { try { return JSON.parse(value) } catch { return value } })()
+            : null
+      const jsonDisplayValue =
+        jsonParsedValue !== null && typeof jsonParsedValue !== 'string'
+          ? JSON.stringify(jsonParsedValue, null, 2)
+          : typeof jsonParsedValue === 'string'
+            ? jsonParsedValue
+            : ''
+      const viewerId = `${fieldId}-viewer`
+      const textareaId = `${fieldId}-textarea`
+      const jsonDataAttr = escapeHtml(JSON.stringify(jsonParsedValue ?? null))
+      const isEmpty = jsonParsedValue === null || jsonDisplayValue === ''
+
+      if (disabled) {
+        fieldHTML = `
+          <div
+            id="${viewerId}"
+            class="json-viewer-host rounded-lg px-3 py-2 text-xs bg-white dark:bg-zinc-800 shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 min-h-[2.5rem] overflow-auto"
+            data-json-viewer
+            data-json="${jsonDataAttr}"
+            data-open="${opts.open ?? 2}"
+          >${isEmpty ? '<span class="text-zinc-400 dark:text-zinc-500 italic">empty</span>' : ''}</div>
+          ${getJsonViewerScript()}
+        `
+      } else {
+        fieldHTML = `
+          <div class="json-field-wrapper space-y-2">
+            <div class="flex items-center justify-end">
+              <button
+                type="button"
+                id="${fieldId}-toggle"
+                class="text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 underline transition-colors"
+                data-json-toggle
+                data-viewer="${viewerId}"
+                data-textarea="${textareaId}"
+                data-hidden-input="${fieldId}"
+              >Edit JSON</button>
+            </div>
+
+            <div
+              id="${viewerId}"
+              class="json-viewer-host rounded-lg px-3 py-2 text-xs bg-white dark:bg-zinc-800 shadow-sm ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 min-h-[2.5rem] overflow-auto"
+              data-json-viewer
+              data-json="${jsonDataAttr}"
+              data-open="${opts.open ?? 2}"
+            >${isEmpty ? '<span class="text-zinc-400 dark:text-zinc-500 italic">empty — click &quot;Edit JSON&quot; to add data</span>' : ''}</div>
+
+            <textarea
+              id="${textareaId}"
+              rows="${opts.rows || 8}"
+              placeholder="${opts.placeholder || '{}'}"
+              class="${baseClasses} ${errorClasses} resize-y font-mono text-xs hidden"
+              aria-label="${escapeHtml(field.field_label)}"
+              data-json-edit-area
+              data-viewer="${viewerId}"
+              data-hidden-input="${fieldId}"
+            >${escapeHtml(jsonDisplayValue)}</textarea>
+
+            <input
+              type="hidden"
+              id="${fieldId}"
+              name="${fieldName}"
+              value="${escapeHtml(jsonDisplayValue)}"
+              ${required}
+            >
+
+            <div id="${fieldId}-json-error" class="text-xs text-pink-500 dark:text-pink-400 hidden"></div>
+          </div>
+          ${getJsonViewerScript()}
+        `
+      }
+      break
+    }
 
     default:
       fieldHTML = `
@@ -1325,7 +1546,17 @@ function renderStructuredItemFields(
   }
 
   const normalizedField = normalizeBlockField(itemConfig, 'Item')
-  const fieldValue = itemValue ?? normalizedField.defaultValue ?? ''
+  // The empty-item template is rendered with itemValue={} (see renderStructuredArrayField).
+  // For non-object item types, treat an empty plain object as "no value" so downstream
+  // renderers (e.g. media) don't receive `{}` and crash on string operations.
+  const isEmptyPlainObject =
+    itemValue !== null &&
+    typeof itemValue === 'object' &&
+    !Array.isArray(itemValue) &&
+    Object.keys(itemValue).length === 0
+  const fieldValue = isEmptyPlainObject
+    ? (normalizedField.defaultValue ?? '')
+    : (itemValue ?? normalizedField.defaultValue ?? '')
   const fieldDefinition: FieldDefinition = {
     id: `array-${field.field_name}-${index}-value`,
     field_name: `array-${field.field_name}-${index}-value`,
@@ -1594,6 +1825,121 @@ function normalizeBlockField(fieldConfig: any, fieldName: string) {
   }
 }
 
+function getJsonViewerScript(): string {
+  return `
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/json-formatter-js@2.5.23/dist/json-formatter.min.css" id="json-formatter-css" onload="this.removeAttribute('onload')" onerror="">
+    <script>
+      (function() {
+        var JS_URL = 'https://cdn.jsdelivr.net/npm/json-formatter-js@2.5.23/dist/json-formatter.umd.min.js';
+
+        function isDark() {
+          return document.documentElement.classList.contains('dark') ||
+                 document.documentElement.dataset.theme === 'dark' ||
+                 window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+
+        function initViewer(el) {
+          var raw = el.dataset.json;
+          var open = parseInt(el.dataset.open || '2', 10);
+          if (!raw || raw === 'null') return;
+          var data;
+          try { data = JSON.parse(raw); } catch(e) { el.textContent = raw; return; }
+          var fmt = new JSONFormatter(data, open, {
+            hoverPreviewEnabled: true,
+            hoverPreviewArrayCount: 5,
+            hoverPreviewFieldCount: 5,
+            theme: isDark() ? 'dark' : '',
+            animateOpen: true,
+            animateClose: true,
+          });
+          el.innerHTML = '';
+          el.appendChild(fmt.render());
+        }
+
+        function initAllViewers() {
+          document.querySelectorAll('[data-json-viewer]').forEach(function(el) { initViewer(el); });
+        }
+
+        function ensureLoaded(cb) {
+          if (window.JSONFormatter) { cb(); return; }
+          if (window.__jsonFormatterCallbacks) { window.__jsonFormatterCallbacks.push(cb); return; }
+          window.__jsonFormatterCallbacks = [cb];
+          var s = document.createElement('script');
+          s.src = JS_URL;
+          s.onload = function() {
+            (window.__jsonFormatterCallbacks || []).forEach(function(fn) { fn(); });
+            window.__jsonFormatterCallbacks = null;
+          };
+          document.head.appendChild(s);
+        }
+
+        if (!window.__sonicJsonViewerInit) {
+          window.__sonicJsonViewerInit = true;
+
+          // Toggle between viewer and edit textarea
+          document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-json-toggle]');
+            if (!btn) return;
+            var viewerId = btn.dataset.viewer;
+            var textareaId = btn.dataset.textarea;
+            var hiddenId = btn.dataset.hiddenInput;
+            var viewer = document.getElementById(viewerId);
+            var textarea = document.getElementById(textareaId);
+            var hidden = document.getElementById(hiddenId);
+            var errorEl = hidden ? document.getElementById(hiddenId + '-json-error') : null;
+            if (!viewer || !textarea) return;
+            var isEditing = !textarea.classList.contains('hidden');
+            if (isEditing) {
+              // Switching back to viewer — validate + refresh
+              var raw = textarea.value.trim();
+              if (raw) {
+                try {
+                  var parsed = JSON.parse(raw);
+                  if (hidden) hidden.value = raw;
+                  viewer.dataset.json = JSON.stringify(parsed);
+                  ensureLoaded(function() { initViewer(viewer); });
+                  if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+                } catch(ex) {
+                  if (errorEl) { errorEl.textContent = 'Invalid JSON: ' + ex.message; errorEl.classList.remove('hidden'); }
+                  return;
+                }
+              } else {
+                if (hidden) hidden.value = '';
+                viewer.innerHTML = '<span class="text-zinc-400 dark:text-zinc-500 italic">empty</span>';
+              }
+              textarea.classList.add('hidden');
+              viewer.classList.remove('hidden');
+              btn.textContent = 'Edit JSON';
+            } else {
+              // Switching to edit — populate textarea from hidden input
+              if (hidden && hidden.value) {
+                try {
+                  textarea.value = JSON.stringify(JSON.parse(hidden.value), null, 2);
+                } catch(e) {
+                  textarea.value = hidden.value;
+                }
+              }
+              viewer.classList.add('hidden');
+              textarea.classList.remove('hidden');
+              btn.textContent = 'Preview';
+            }
+          });
+        }
+
+        function run() {
+          ensureLoaded(initAllViewers);
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', run);
+        } else {
+          run();
+        }
+      })();
+    <\/script>
+  `
+}
+
 function getStructuredFieldScript(): string {
   return `
     ${getReadFieldValueScript()}
@@ -1832,6 +2178,18 @@ function getStructuredFieldScript(): string {
                 updateOrderLabels();
               };
 
+              // updateHiddenInput re-dispatches a bubbling change event from this container's
+              // own hidden input so ancestor containers re-serialize. A nested array's hidden
+              // input lives inside the PARENT's [data-structured-array-list], so the unscoped
+              // target.closest('[data-structured-array-list]') test below also matched this
+              // container's own synthetic event and re-entered updateHiddenInput until the stack
+              // blew ("Maximum call stack size exceeded" on every nested add/remove/edit).
+              const isOwnListMutation = (target) => {
+                if (target === getLiveHiddenInput()) return false;
+                const liveList = getLiveList();
+                return !!liveList && liveList.contains(target);
+              };
+
               const addArrayItem = () => {
                 const liveList = getLiveList();
                 if (!liveList) return;
@@ -1961,7 +2319,7 @@ function getStructuredFieldScript(): string {
               container.addEventListener('input', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
-              if (target.closest('[data-structured-array-list]')) {
+              if (isOwnListMutation(target)) {
                 updateHiddenInput();
               }
               });
@@ -1969,7 +2327,7 @@ function getStructuredFieldScript(): string {
               container.addEventListener('change', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
-              if (target.closest('[data-structured-array-list]')) {
+              if (isOwnListMutation(target)) {
                 updateHiddenInput();
               }
               });
@@ -2309,4 +2667,23 @@ function escapeHtml(text: string): string {
     '"': '&quot;',
     "'": '&#39;'
   }[char] || char))
+}
+
+/**
+ * Escape a string for a single-quoted JS string inside an HTML attribute —
+ * e.g. onclick="f('${escapeJsAttr(x)}')". escapeHtml is insufficient: the browser
+ * HTML-decodes the attribute BEFORE the inline script parses, so &#39; decodes back
+ * to ' and terminates the string. Emits \xHH escapes so no raw '"<>&\ survives.
+ */
+function escapeJsAttr(value: unknown): string {
+  return String(value ?? '').replace(/[\\'"<>&\r\n]/g, (ch) => ({
+    '\\': '\\\\',
+    "'": '\\x27',
+    '"': '\\x22',
+    '<': '\\x3C',
+    '>': '\\x3E',
+    '&': '\\x26',
+    '\r': '\\r',
+    '\n': '\\n'
+  }[ch] || ch))
 }

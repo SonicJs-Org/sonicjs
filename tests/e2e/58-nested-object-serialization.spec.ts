@@ -1,37 +1,38 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { loginAsAdmin } from './utils/test-helpers'
 
 async function resolvePageBlocksCollectionKey(page: import('@playwright/test').Page): Promise<string | null> {
   await page.goto('/admin/content/new')
   await page.waitForLoadState('networkidle', { timeout: 15000 })
 
-  const pageBlocksLink = page
+  const e2eTestLink = page
     .locator('a[href^="/admin/content/new?collection="]')
-    .filter({ hasText: 'Page Blocks' })
+    .filter({ hasText: 'E2E Test' })
     .first()
 
-  if (!(await pageBlocksLink.isVisible({ timeout: 5000 }).catch(() => false))) {
+  if (!(await e2eTestLink.isVisible({ timeout: 5000 }).catch(() => false))) {
     return null
   }
 
-  const href = await pageBlocksLink.getAttribute('href')
+  const href = await e2eTestLink.getAttribute('href')
   const match = href?.match(/[?&]collection=([^&]+)/)
   return match?.[1] || null
 }
 
-test.describe.skip('Nested Object Serialization', () => {
+test.describe('Nested Object Serialization @content', () => {
   test('should persist sibling flat child objects inside a nested parent object', async ({ page }) => {
     await loginAsAdmin(page)
 
     const collectionKey = await resolvePageBlocksCollectionKey(page)
-    test.skip(!collectionKey, 'Page Blocks collection not available')
+    test.skip(!collectionKey, 'E2E Test collection not available')
 
     await page.goto('/admin/content/new?collection=' + encodeURIComponent(collectionKey!))
     await page.waitForLoadState('networkidle')
     await expect(page.locator('form#content-form')).toBeVisible()
 
+    // Slugs are unique per collection, so a fixed one fails on the second local run.
     await page.fill('input[name="title"]', 'Opening Hours Serialization Test')
-    await page.fill('input[name="slug"]', 'opening-hours-serialization-test')
+    await page.fill('input[name="slug"]', `opening-hours-serialization-test-${Date.now()}`)
 
     const openingHoursGroup = page
       .locator('[data-structured-object][data-field-name="openingHoursWeek"]')
@@ -58,7 +59,11 @@ test.describe.skip('Nested Object Serialization', () => {
     expect(beforeSaveOpeningHours.tuesday).toEqual({ closed: false, opens: '10:00', closes: '18:00' })
     expect(beforeSaveOpeningHours.wednesday).toEqual({ closed: false, opens: '11:00', closes: '19:00' })
 
-    await page.click('button[name="action"][value="save_and_publish"]')
+    await page.click('button[name="action"][value="save"]')
+    // A new-document save answers the HTMX request with `HX-Redirect: /admin/content/<id>/edit`,
+    // and htmx sets location *after* that response — networkidle can therefore resolve while the
+    // URL is still /admin/content/new. Wait for the edit URL instead of racing it.
+    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
     await page.waitForLoadState('networkidle', { timeout: 15000 })
 
     const editUrl = page.url().includes('/edit')
@@ -113,7 +118,7 @@ test.describe.skip('Nested Object Serialization', () => {
     expect(serializedOpeningHours.wednesday).toEqual({ closed: false, opens: '11:00', closes: '19:00' })
 
     await page.fill('input[name="title"]', 'Opening Hours Serialization Test Updated')
-    await page.click('button[name="action"][value="save_and_publish"]')
+    await page.click('button[name="action"][value="save"]')
     await page.waitForLoadState('networkidle', { timeout: 15000 })
 
     const secondEditUrl = page.url().includes('/edit')

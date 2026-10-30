@@ -1,4 +1,4 @@
-import { createDb, users } from '@sonicjs-cms/core'
+import { createDb, users, RbacService, bootstrapDocumentTypes } from '@sonicjs-cms/core'
 import { eq } from 'drizzle-orm'
 import { getPlatformProxy } from 'wrangler'
 
@@ -83,25 +83,48 @@ async function seed() {
 
     // Hash password using Web Crypto API (same as SonicJS AuthManager)
     const passwordHash = await hashPassword('sonicjs!')
-    const now = Date.now()
-    const odid = `admin-${now}-${Math.random().toString(36).substr(2, 9)}`
+    const now = new Date()
+    const odid = `admin-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-    // Create admin user
-    await db
-      .insert(users)
-      .values({
-        id: odid,
-        email: 'admin@sonicjs.com',
-        username: 'admin',
-        firstName: 'Admin',
-        lastName: 'User',
-        passwordHash: passwordHash,
-        role: 'admin',
-        isActive: true,
-        createdAt: now,
-        updatedAt: now
-      })
-      .run()
+    // Create admin user directly via SQL (bypass Drizzle schema mismatch)
+    const nowSec = Math.floor(now.getTime() / 1000)
+    await env.DB.prepare(`
+      INSERT INTO auth_user (
+        id, email, first_name, last_name, role, is_active, created_at, updated_at, name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      odid,
+      'admin@sonicjs.com',
+      'Admin',
+      'User',
+      'admin',
+      1,
+      nowSec,
+      nowSec,
+      'Admin User'
+    ).run()
+
+    // Create auth_account record for password credential
+    await env.DB.prepare(`
+      INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(),
+      odid,
+      odid,
+      'credential',
+      passwordHash,
+      nowSec,
+      nowSec
+    ).run()
+
+    // Assign admin RBAC role (required for portal access). RBAC is document-backed
+    // (services/rbac.ts): register the rbac doc types, seed system roles/verbs, then
+    // assign. Idempotent and self-sufficient (works on a fresh DB before app bootstrap).
+    await bootstrapDocumentTypes(env.DB)
+    const rbac = new RbacService(env.DB)
+    await rbac.ensureSystemRbacSeed()
+    await rbac.addUserRoleByName(odid, 'admin')
 
     console.log('✓ Admin user created successfully')
     console.log(`  Email: admin@sonicjs.com`)

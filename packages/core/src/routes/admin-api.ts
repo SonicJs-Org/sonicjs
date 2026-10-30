@@ -10,6 +10,7 @@ import { z } from 'zod'
 // import { zValidator } from '@hono/zod-validator'
 import { requireAuth, requireRole } from '../middleware'
 import type { Bindings, Variables } from '../app'
+import { getCollectionRegistry } from '../services/collection-registry'
 
 export const adminApiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -25,24 +26,31 @@ adminApiRoutes.get('/stats', async (c) => {
   try {
     const db = c.env.DB
 
-    // Get collections count
-    let collectionsCount = 0
-    try {
-      const collectionsStmt = db.prepare("SELECT COUNT(*) as count FROM collections WHERE is_active = 1 AND (source_type IS NULL OR source_type = 'user')")
-      const collectionsResult = await collectionsStmt.first()
-      collectionsCount = (collectionsResult as any)?.count || 0
-    } catch (error) {
-      console.error('Error fetching collections count:', error)
-    }
+    // Get collections count from the in-memory registry (code-defined, non-internal).
+    const userCollections = getCollectionRegistry()
+      .listActive()
+      .filter((r) => !r.internal)
+    const collectionsCount = userCollections.length
 
-    // Get content count
+    // Get content count. In the v3 greenfield schema content is document-backed only.
+    // type_ids come from the same registry list (no JOIN against collections table).
     let contentCount = 0
-    try {
-      const contentStmt = db.prepare("SELECT COUNT(*) as count FROM content c JOIN collections col ON c.collection_id = col.id WHERE c.deleted_at IS NULL AND (col.source_type IS NULL OR col.source_type = 'user')")
-      const contentResult = await contentStmt.first()
-      contentCount = (contentResult as any)?.count || 0
-    } catch (error) {
-      console.error('Error fetching content count:', error)
+    if (userCollections.length > 0) {
+      try {
+        const typeIds = userCollections.map((r) => r.name)
+        const placeholders = typeIds.map(() => '?').join(',')
+        const contentStmt = db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM documents d
+          WHERE d.is_current_draft = 1
+            AND d.deleted_at IS NULL
+            AND d.type_id IN (${placeholders})
+        `).bind(...typeIds)
+        const contentResult = await contentStmt.first()
+        contentCount = (contentResult as any)?.count || 0
+      } catch (error) {
+        console.error('Error fetching content count:', error)
+      }
     }
 
     // Get media count and total size
@@ -60,7 +68,7 @@ adminApiRoutes.get('/stats', async (c) => {
     // Get users count
     let usersCount = 0
     try {
-      const usersStmt = db.prepare('SELECT COUNT(*) as count FROM users WHERE is_active = 1')
+      const usersStmt = db.prepare('SELECT COUNT(*) as count FROM auth_user WHERE is_active = 1')
       const usersResult = await usersStmt.first()
       usersCount = (usersResult as any)?.count || 0
     } catch (error) {
@@ -125,82 +133,12 @@ adminApiRoutes.get('/storage', async (c) => {
  * GET /admin/api/activity
  */
 adminApiRoutes.get('/activity', async (c) => {
-  try {
-    const db = c.env.DB
-    const limit = parseInt(c.req.query('limit') || '10')
-
-    // Get recent activities from activity_logs table
-    const activityStmt = db.prepare(`
-      SELECT
-        a.id,
-        a.action,
-        a.resource_type,
-        a.resource_id,
-        a.details,
-        a.created_at,
-        u.email,
-        u.first_name,
-        u.last_name
-      FROM activity_logs a
-      LEFT JOIN users u ON a.user_id = u.id
-      WHERE a.resource_type IN ('content', 'collections', 'users', 'media')
-      ORDER BY a.created_at DESC
-      LIMIT ?
-    `)
-
-    const { results } = await activityStmt.bind(limit).all()
-
-    const recentActivity = (results || []).map((row: any) => {
-      const userName = row.first_name && row.last_name
-        ? `${row.first_name} ${row.last_name}`
-        : row.email || 'System'
-
-      let details: any = {}
-      try {
-        details = row.details ? JSON.parse(row.details) : {}
-      } catch (e) {
-        console.error('Error parsing activity details:', e)
-      }
-
-      return {
-        id: row.id,
-        type: row.resource_type,
-        action: row.action,
-        resource_id: row.resource_id,
-        details,
-        timestamp: new Date(Number(row.created_at)).toISOString(),
-        user: userName
-      }
-    })
-
-    return c.json({
-      data: recentActivity,
-      count: recentActivity.length,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('Error fetching recent activity:', error)
-    return c.json({ error: 'Failed to fetch recent activity' }, 500)
-  }
-})
-
-/**
- * Collection management schema
- */
-const createCollectionSchema = z.object({
-  name: z.string().min(1).max(255).regex(/^[a-z0-9_]+$/, 'Must contain only lowercase letters, numbers, and underscores'),
-  displayName: z.string().min(1).max(255).optional(),
-  display_name: z.string().min(1).max(255).optional(),
-  description: z.string().optional()
-}).refine(data => data.displayName || data.display_name, {
-  message: 'Either displayName or display_name is required',
-  path: ['displayName']
-})
-
-const updateCollectionSchema = z.object({
-  display_name: z.string().min(1).max(255).optional(),
-  description: z.string().optional(),
-  is_active: z.boolean().optional()
+  // activity_logs is not yet available — will be implemented as a plugin
+  return c.json({
+    data: [],
+    count: 0,
+    timestamp: new Date().toISOString()
+  })
 })
 
 /**
@@ -209,52 +147,32 @@ const updateCollectionSchema = z.object({
  */
 adminApiRoutes.get('/collections', async (c) => {
   try {
-    const db = c.env.DB
     const search = c.req.query('search') || ''
     const includeInactive = c.req.query('includeInactive') === 'true'
 
-    let stmt
-    let results
+    let records = getCollectionRegistry().list().filter((r) => !r.internal)
+    if (!includeInactive) records = records.filter((r) => r.isActive !== false)
 
     if (search) {
-      stmt = db.prepare(`
-        SELECT id, name, display_name, description, created_at, updated_at, is_active, managed
-        FROM collections
-        WHERE ${includeInactive ? '1=1' : 'is_active = 1'}
-        AND (source_type IS NULL OR source_type = 'user')
-        AND (name LIKE ? OR display_name LIKE ? OR description LIKE ?)
-        ORDER BY created_at DESC
-      `)
-      const searchParam = `%${search}%`
-      const queryResults = await stmt.bind(searchParam, searchParam, searchParam).all()
-      results = queryResults.results
-    } else {
-      stmt = db.prepare(`
-        SELECT id, name, display_name, description, created_at, updated_at, is_active, managed
-        FROM collections
-        WHERE (source_type IS NULL OR source_type = 'user')
-        ${includeInactive ? '' : 'AND is_active = 1'}
-        ORDER BY created_at DESC
-      `)
-      const queryResults = await stmt.all()
-      results = queryResults.results
+      const needle = search.toLowerCase()
+      records = records.filter(
+        (r) =>
+          r.name.toLowerCase().includes(needle) ||
+          r.displayName.toLowerCase().includes(needle) ||
+          (r.description ?? '').toLowerCase().includes(needle),
+      )
     }
 
-    // Get field counts
-    const fieldCountStmt = db.prepare('SELECT collection_id, COUNT(*) as count FROM content_fields GROUP BY collection_id')
-    const { results: fieldCountResults } = await fieldCountStmt.all()
-    const fieldCounts = new Map((fieldCountResults || []).map((row: any) => [String(row.collection_id), Number(row.count)]))
-
-    const collections = (results || []).map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      display_name: row.display_name,
-      description: row.description,
-      created_at: Number(row.created_at),
-      updated_at: Number(row.updated_at),
-      is_active: row.is_active === 1,
-      managed: row.managed === 1,
-      field_count: fieldCounts.get(String(row.id)) || 0
+    const collections = records.map((r) => ({
+      id: r.id,
+      name: r.name,
+      display_name: r.displayName,
+      description: r.description ?? null,
+      created_at: 0,
+      updated_at: 0,
+      is_active: r.isActive !== false,
+      managed: r.managed !== false,
+      field_count: Object.keys(r.schema?.properties ?? {}).length,
     }))
 
     return c.json({
@@ -275,46 +193,42 @@ adminApiRoutes.get('/collections', async (c) => {
 adminApiRoutes.get('/collections/:id', async (c) => {
   try {
     const id = c.req.param('id')
-    const db = c.env.DB
-
-    const stmt = db.prepare('SELECT * FROM collections WHERE id = ?')
-    const collection = await stmt.bind(id).first() as any
-
-    if (!collection) {
+    // For code-defined collections, id == name. Try both for back-compat.
+    const registry = getCollectionRegistry()
+    const record = registry.getById(id) ?? registry.getByName(id)
+    if (!record) {
       return c.json({ error: 'Collection not found' }, 404)
     }
 
-    // Get collection fields
-    const fieldsStmt = db.prepare(`
-      SELECT * FROM content_fields
-      WHERE collection_id = ?
-      ORDER BY field_order ASC
-    `)
-    const { results: fieldsResults } = await fieldsStmt.bind(id).all()
-
-    const fields = (fieldsResults || []).map((row: any) => ({
-      id: row.id,
-      field_name: row.field_name,
-      field_type: row.field_type,
-      field_label: row.field_label,
-      field_options: row.field_options ? JSON.parse(row.field_options) : {},
-      field_order: row.field_order,
-      is_required: row.is_required === 1,
-      is_searchable: row.is_searchable === 1,
-      created_at: Number(row.created_at),
-      updated_at: Number(row.updated_at)
-    }))
+    // Derive fields directly from the code-defined schema.
+    const props = record.schema?.properties ?? {}
+    const required = new Set(record.schema?.required ?? [])
+    const fields = Object.entries(props).map(([fieldName, cfg], idx) => {
+      const fieldCfg = cfg as any
+      return {
+        id: `${record.id}:${fieldName}`,
+        field_name: fieldName,
+        field_type: fieldCfg.type,
+        field_label: fieldCfg.title ?? fieldName,
+        field_options: fieldCfg,
+        field_order: idx,
+        is_required: required.has(fieldName),
+        is_searchable: false,
+        created_at: 0,
+        updated_at: 0,
+      }
+    })
 
     return c.json({
-      id: collection.id,
-      name: collection.name,
-      display_name: collection.display_name,
-      description: collection.description,
-      is_active: collection.is_active === 1,
-      managed: collection.managed === 1,
-      schema: collection.schema ? JSON.parse(collection.schema) : null,
-      created_at: Number(collection.created_at),
-      updated_at: Number(collection.updated_at),
+      id: record.id,
+      name: record.name,
+      display_name: record.displayName,
+      description: record.description ?? null,
+      is_active: record.isActive !== false,
+      managed: record.managed !== false,
+      schema: record.schema,
+      created_at: 0,
+      updated_at: 0,
       fields
     })
   } catch (error) {
@@ -344,16 +258,20 @@ adminApiRoutes.get('/references', async (c) => {
       return c.json({ error: 'Collection is required' }, 400)
     }
 
-    const placeholders = collectionParams.map(() => '?').join(', ')
-    const collectionStmt = db.prepare(`
-      SELECT id, name, display_name
-      FROM collections
-      WHERE id IN (${placeholders}) OR name IN (${placeholders})
-    `)
-    const collectionResults = await collectionStmt
-      .bind(...collectionParams, ...collectionParams)
-      .all()
-    const collections = (collectionResults.results || []) as any[]
+    // Resolve each requested id-or-name against the in-memory registry. For
+    // code-defined collections id == name, so both lookup paths succeed.
+    const registry = getCollectionRegistry()
+    const matched = collectionParams
+      .map((param) => registry.getById(param) ?? registry.getByName(param))
+      .filter((r): r is NonNullable<typeof r> => !!r)
+
+    // Dedupe by name.
+    const seen = new Set<string>()
+    const collections = matched.filter((r) => {
+      if (seen.has(r.name)) return false
+      seen.add(r.name)
+      return true
+    })
 
     if (collections.length === 0) {
       return c.json({ error: 'Collection not found' }, 404)
@@ -365,21 +283,26 @@ adminApiRoutes.get('/references', async (c) => {
         {
           id: entry.id,
           name: entry.name,
-          display_name: entry.display_name
+          display_name: entry.displayName,
         }
       ])
     )
     const collectionIds = collections.map((entry) => entry.id)
+    const collectionNames = collections.map((entry) => entry.name)
 
     if (id) {
-      const idPlaceholders = collectionIds.map(() => '?').join(', ')
+      // For code-defined collections, collection.id == type_id; no JOIN needed.
       const itemStmt = db.prepare(`
-        SELECT id, title, slug, collection_id
-        FROM content
-        WHERE id = ? AND collection_id IN (${idPlaceholders})
+        SELECT d.root_id AS id, d.title, d.slug, d.type_id AS collection_id
+        FROM documents d
+        WHERE d.root_id = ?
+          AND d.type_id IN (${collectionNames.map(() => '?').join(', ')})
+          AND d.tenant_id = 'default'
+          AND d.is_current_draft = 1
+          AND d.deleted_at IS NULL
         LIMIT 1
       `)
-      const item = await itemStmt.bind(id, ...collectionIds).first() as any
+      const item = await itemStmt.bind(id, ...collectionNames).first() as any
 
       if (!item) {
         return c.json({ error: 'Reference not found' }, 404)
@@ -395,39 +318,47 @@ adminApiRoutes.get('/references', async (c) => {
       })
     }
 
-    let stmt
     let results
-
-    const listPlaceholders = collectionIds.map(() => '?').join(', ')
-    const statusFilterValues = ['published']
-    const statusClause = ` AND status IN (${statusFilterValues.map(() => '?').join(', ')})`
+    const typePlaceholders = collectionNames.map(() => '?').join(', ')
 
     if (search) {
       const searchParam = `%${search}%`
-      stmt = db.prepare(`
-        SELECT id, title, slug, status, updated_at, collection_id
-        FROM content
-        WHERE collection_id IN (${listPlaceholders})
-        AND (title LIKE ? OR slug LIKE ?)
-        ${statusClause}
-        ORDER BY updated_at DESC
+      const stmt = db.prepare(`
+        SELECT d.root_id AS id, d.title, d.slug,
+               CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
+               d.updated_at * 1000 AS updated_at,
+               d.type_id AS collection_id
+        FROM documents d
+        WHERE d.type_id IN (${typePlaceholders})
+          AND d.tenant_id = 'default'
+          AND d.is_current_draft = 1
+          AND d.deleted_at IS NULL
+          AND d.is_published = 1
+          AND (d.title LIKE ? OR d.slug LIKE ?)
+        ORDER BY d.updated_at DESC
         LIMIT ?
       `)
       const queryResults = await stmt
-        .bind(...collectionIds, searchParam, searchParam, ...statusFilterValues, limit)
+        .bind(...collectionNames, searchParam, searchParam, limit)
         .all()
       results = queryResults.results
     } else {
-      stmt = db.prepare(`
-        SELECT id, title, slug, status, updated_at, collection_id
-        FROM content
-        WHERE collection_id IN (${listPlaceholders})
-        ${statusClause}
-        ORDER BY updated_at DESC
+      const stmt = db.prepare(`
+        SELECT d.root_id AS id, d.title, d.slug,
+               CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
+               d.updated_at * 1000 AS updated_at,
+               d.type_id AS collection_id
+        FROM documents d
+        WHERE d.type_id IN (${typePlaceholders})
+          AND d.tenant_id = 'default'
+          AND d.is_current_draft = 1
+          AND d.deleted_at IS NULL
+          AND d.is_published = 1
+        ORDER BY d.updated_at DESC
         LIMIT ?
       `)
       const queryResults = await stmt
-        .bind(...collectionIds, ...statusFilterValues, limit)
+        .bind(...collectionNames, limit)
         .all()
       results = queryResults.results
     }
@@ -451,230 +382,21 @@ adminApiRoutes.get('/references', async (c) => {
   }
 })
 
-/**
- * Create collection
- * POST /admin/api/collections
- */
-adminApiRoutes.post('/collections', async (c) => {
-    try {
-      // Validate content type
-      const contentType = c.req.header('Content-Type')
-      if (!contentType || !contentType.includes('application/json')) {
-        return c.json({ error: 'Content-Type must be application/json' }, 400)
-      }
+// Collections are code-only — POST/PATCH/DELETE return 405 so callers see a
+// clear "method not allowed" instead of mutating state that no longer exists.
+// See docs/ai/plans/drop-db-collections-plan.md (PR 3).
+const collectionsReadOnly = (c: any) =>
+  c.json(
+    {
+      error: 'Collections are code-defined and cannot be created, updated, or deleted via the admin API.',
+      hint: 'Register collections via `registerCollections()` in your app entry point.',
+    },
+    405,
+  )
 
-      let body
-      try {
-        body = await c.req.json()
-      } catch (e) {
-        return c.json({ error: 'Invalid JSON in request body' }, 400)
-      }
-
-      const validation = createCollectionSchema.safeParse(body)
-      if (!validation.success) {
-        return c.json({ error: 'Validation failed', details: validation.error.issues }, 400)
-      }
-      const validatedData = validation.data
-      const db = c.env.DB
-      const _user = c.get('user')
-
-      // Handle both camelCase and snake_case for display_name
-      const displayName = validatedData.displayName || validatedData.display_name || ''
-
-      // Check if collection already exists
-      const existingStmt = db.prepare('SELECT id FROM collections WHERE name = ?')
-      const existing = await existingStmt.bind(validatedData.name).first()
-
-      if (existing) {
-        return c.json({ error: 'A collection with this name already exists' }, 400)
-      }
-
-      // Create basic schema
-      const basicSchema = {
-        type: "object",
-        properties: {
-          title: {
-            type: "string",
-            title: "Title",
-            required: true
-          },
-          content: {
-            type: "string",
-            title: "Content",
-            format: "richtext"
-          },
-          status: {
-            type: "string",
-            title: "Status",
-            enum: ["draft", "published", "archived"],
-            default: "draft"
-          }
-        },
-        required: ["title"]
-      }
-
-      const collectionId = crypto.randomUUID()
-      const now = Date.now()
-
-      const insertStmt = db.prepare(`
-        INSERT INTO collections (id, name, display_name, description, schema, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-
-      await insertStmt.bind(
-        collectionId,
-        validatedData.name,
-        displayName,
-        validatedData.description || null,
-        JSON.stringify(basicSchema),
-        1, // is_active
-        now,
-        now
-      ).run()
-
-      // Clear cache
-      try {
-        await c.env.CACHE_KV.delete('cache:collections:all')
-        await c.env.CACHE_KV.delete(`cache:collection:${validatedData.name}`)
-      } catch (e) {
-        console.error('Error clearing cache:', e)
-      }
-
-      return c.json({
-        id: collectionId,
-        name: validatedData.name,
-        displayName: displayName,
-        description: validatedData.description,
-        created_at: now
-      }, 201)
-    } catch (error) {
-      console.error('Error creating collection:', error)
-      return c.json({ error: 'Failed to create collection' }, 500)
-    }
-})
-
-/**
- * Update collection
- * PATCH /admin/api/collections/:id
- */
-adminApiRoutes.patch('/collections/:id', async (c) => {
-    try {
-      const id = c.req.param('id')
-      const body = await c.req.json()
-      const validation = updateCollectionSchema.safeParse(body)
-      if (!validation.success) {
-        return c.json({ error: 'Validation failed', details: validation.error.issues }, 400)
-      }
-      const validatedData = validation.data
-      const db = c.env.DB
-
-      // Check if collection exists
-      const checkStmt = db.prepare('SELECT * FROM collections WHERE id = ?')
-      const existing = await checkStmt.bind(id).first() as any
-
-      if (!existing) {
-        return c.json({ error: 'Collection not found' }, 404)
-      }
-
-      // Build update query
-      const updateFields: string[] = []
-      const updateParams: any[] = []
-
-      if (validatedData.display_name !== undefined) {
-        updateFields.push('display_name = ?')
-        updateParams.push(validatedData.display_name)
-      }
-
-      if (validatedData.description !== undefined) {
-        updateFields.push('description = ?')
-        updateParams.push(validatedData.description)
-      }
-
-      if (validatedData.is_active !== undefined) {
-        updateFields.push('is_active = ?')
-        updateParams.push(validatedData.is_active ? 1 : 0)
-      }
-
-      if (updateFields.length === 0) {
-        return c.json({ error: 'No fields to update' }, 400)
-      }
-
-      updateFields.push('updated_at = ?')
-      updateParams.push(Date.now())
-      updateParams.push(id)
-
-      const updateStmt = db.prepare(`
-        UPDATE collections
-        SET ${updateFields.join(', ')}
-        WHERE id = ?
-      `)
-
-      await updateStmt.bind(...updateParams).run()
-
-      // Clear cache
-      try {
-        await c.env.CACHE_KV.delete('cache:collections:all')
-        await c.env.CACHE_KV.delete(`cache:collection:${existing.name}`)
-      } catch (e) {
-        console.error('Error clearing cache:', e)
-      }
-
-      return c.json({ message: 'Collection updated successfully' })
-    } catch (error) {
-      console.error('Error updating collection:', error)
-      return c.json({ error: 'Failed to update collection' }, 500)
-    }
-})
-
-/**
- * Delete collection
- * DELETE /admin/api/collections/:id
- */
-adminApiRoutes.delete('/collections/:id', async (c) => {
-  try {
-    const id = c.req.param('id')
-    const db = c.env.DB
-
-    // Check if collection exists
-    const collectionStmt = db.prepare('SELECT name FROM collections WHERE id = ?')
-    const collection = await collectionStmt.bind(id).first() as any
-
-    if (!collection) {
-      return c.json({ error: 'Collection not found' }, 404)
-    }
-
-    // Check if collection has content
-    const contentStmt = db.prepare('SELECT COUNT(*) as count FROM content WHERE collection_id = ?')
-    const contentResult = await contentStmt.bind(id).first() as any
-
-    if (contentResult && contentResult.count > 0) {
-      return c.json({
-        error: `Cannot delete collection: it contains ${contentResult.count} content item(s). Delete all content first.`
-      }, 400)
-    }
-
-    // Delete collection fields first
-    const deleteFieldsStmt = db.prepare('DELETE FROM content_fields WHERE collection_id = ?')
-    await deleteFieldsStmt.bind(id).run()
-
-    // Delete collection
-    const deleteStmt = db.prepare('DELETE FROM collections WHERE id = ?')
-    await deleteStmt.bind(id).run()
-
-    // Clear cache
-    try {
-      await c.env.CACHE_KV.delete('cache:collections:all')
-      await c.env.CACHE_KV.delete(`cache:collection:${collection.name}`)
-    } catch (e) {
-      console.error('Error clearing cache:', e)
-    }
-
-    return c.json({ message: 'Collection deleted successfully' })
-  } catch (error) {
-    console.error('Error deleting collection:', error)
-    return c.json({ error: 'Failed to delete collection' }, 500)
-  }
-})
+adminApiRoutes.post('/collections', collectionsReadOnly)
+adminApiRoutes.patch('/collections/:id', collectionsReadOnly)
+adminApiRoutes.delete('/collections/:id', collectionsReadOnly)
 
 // Migrations API endpoints
 // Get migration status
@@ -698,12 +420,11 @@ adminApiRoutes.get('/migrations/status', async (c) => {
   }
 })
 
-// Run pending migrations
+// Migration execution is managed by Wrangler/D1, not by the running app.
 adminApiRoutes.post('/migrations/run', async (c) => {
   try {
     const user = c.get('user')
 
-    // Only allow admin users to run migrations
     if (!user || user.role !== 'admin') {
       return c.json({
         success: false,
@@ -711,17 +432,12 @@ adminApiRoutes.post('/migrations/run', async (c) => {
       }, 403)
     }
 
-    const { MigrationService } = await import('../services/migrations')
-    const db = c.env.DB
-    const migrationService = new MigrationService(db)
-    const result = await migrationService.runPendingMigrations()
-
     return c.json({
-      success: result.success,
-      message: result.message,
-      applied: result.applied,
-      errors: result.errors
-    })
+      success: false,
+      message: 'Migrations are managed by Cloudflare D1. Run `wrangler d1 migrations apply DB --local` or `wrangler d1 migrations apply DB --remote`.',
+      applied: [],
+      errors: []
+    }, 409)
   } catch (error) {
     console.error('Error running migrations:', error)
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -751,6 +467,84 @@ adminApiRoutes.get('/migrations/validate', async (c) => {
       success: false,
       error: 'Failed to validate schema'
     }, 500)
+  }
+})
+
+adminApiRoutes.get('/users/search', async (c) => {
+  try {
+    const db = c.env.DB
+    const q = (c.req.query('q') || '').trim()
+    if (!q) {
+      return c.json({ users: [] })
+    }
+    const like = `%${q}%`
+    const stmt = db.prepare(
+      `SELECT id, first_name, last_name, email FROM auth_user
+       WHERE is_active = 1
+         AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)
+       ORDER BY first_name, last_name
+       LIMIT 10`
+    )
+    const { results } = await stmt.bind(like, like, like).all()
+    const users = (results as any[]).map((u) => ({
+      id: u.id,
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
+      email: u.email,
+    }))
+    return c.json({ users })
+  } catch (error) {
+    console.error('Error searching users:', error)
+    return c.json({ users: [] }, 500)
+  }
+})
+
+adminApiRoutes.get('/users/search-html', async (c) => {
+  try {
+    const db = c.env.DB
+    const q = (c.req.query('q') || '').trim()
+    const fieldId = (c.req.query('fieldId') || '').replace(/[^a-zA-Z0-9_-]/g, '')
+    if (!q || !fieldId) {
+      return c.html('')
+    }
+    const like = `%${q}%`
+    const stmt = db.prepare(
+      `SELECT id, first_name, last_name, email FROM auth_user
+       WHERE is_active = 1
+         AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)
+       ORDER BY first_name, last_name
+       LIMIT 10`
+    )
+    const { results } = await stmt.bind(like, like, like).all()
+    if (!results.length) return c.html('')
+    const items = (results as any[]).map((u) => {
+      const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
+      const safeName = name.replace(/'/g, "\\'")
+      const safeEmail = (u.email as string).replace(/'/g, "\\'")
+      return `<button type="button"
+        class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-700 border-b border-white/10 last:border-0 flex justify-between items-center"
+        onclick="sonicSelectUser('${fieldId}','${u.id}','${safeName}')"
+      ><span class="font-medium text-white">${name}</span><span class="text-xs text-zinc-400 ml-2">${u.email}</span></button>`
+    }).join('')
+    return c.html(items)
+  } catch (error) {
+    console.error('Error searching users (html):', error)
+    return c.html('')
+  }
+})
+
+adminApiRoutes.get('/users/:id', async (c) => {
+  try {
+    const db = c.env.DB
+    const id = c.req.param('id')
+    const result = await db.prepare(
+      `SELECT id, first_name, last_name, email FROM auth_user WHERE id = ? AND is_active = 1 LIMIT 1`
+    ).bind(id).first()
+    if (!result) return c.json({ error: 'Not found' }, 404)
+    const u = result as any
+    const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
+    return c.json({ id: u.id, name, email: u.email })
+  } catch (error) {
+    return c.json({ error: 'Failed' }, 500)
   }
 })
 

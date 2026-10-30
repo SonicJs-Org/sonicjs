@@ -1,7 +1,9 @@
 import { getMDXEditorInitScript, getMDXEditorScripts } from '../../plugins/available/easy-mdx'
 import { getTinyMCEInitScript, getTinyMCEScript } from '../../plugins/available/tinymce-plugin'
 import { getQuillCDN, getQuillInitScript } from '../../plugins/core-plugins/quill-editor'
+import { getLexicalImportMap, getLexicalLoaderScript, getLexicalInitScript, getLexicalStyles } from '../../plugins/core-plugins/lexical-editor'
 import { renderAlert } from '../alert.template'
+import { escapeHtml } from '../../utils/sanitize'
 import { FieldDefinition, renderDynamicField, renderFieldGroup } from '../components/dynamic-field.template'
 import { getConfirmationDialogScript, renderConfirmationDialog } from '../confirmation-dialog.template'
 import { AdminLayoutCatalystData, renderAdminLayoutCatalyst } from '../layouts/admin-layout-catalyst.template'
@@ -56,6 +58,13 @@ export interface ContentFormData {
     toolbar?: string
     placeholder?: string
   }
+  lexicalEnabled?: boolean // Flag to indicate if Lexical Editor plugin is active (default richtext editor)
+  lexicalSettings?: {
+    defaultHeight?: number
+    defaultToolbar?: 'full' | 'standard' | 'minimal'
+    placeholder?: string
+  }
+  versioningEnabled?: boolean // Flag to indicate if versioning is enabled for this document type
   referrerParams?: string // URL parameters to preserve filters when returning to list
   user?: {
     name: string
@@ -63,17 +72,19 @@ export interface ContentFormData {
     role: string
   }
   version?: string
+  author_name?: string
 }
 
-export function renderContentFormPage(data: ContentFormData): string {
+export function renderContentFormPage(data: ContentFormData, opts?: { partialOnly?: boolean }): string {
   const isEdit = data.isEdit || !!data.id
   const title = isEdit ? `Edit: ${data.title || 'Content'}` : `New ${data.collection.display_name}`
   const hasValidationErrors = Boolean(data.validationErrors && Object.keys(data.validationErrors).length > 0)
 
-  // Construct back URL with preserved filters
+  // Construct back URL with preserved filters. referrerParams is reflected from
+  // the `?ref=` query param, so escape it before it lands in an href attribute.
   const backUrl = data.referrerParams
-    ? `/admin/content?${data.referrerParams}`
-    : `/admin/content?collection=${data.collection.id}`
+    ? `/admin/content?${escapeHtml(data.referrerParams)}`
+    : '/admin/content'
 
   // Group fields by category
   const coreFields = data.fields.filter(f => ['title', 'slug', 'content'].includes(f.field_name))
@@ -91,7 +102,8 @@ export function renderContentFormPage(data: ContentFormData): string {
   const pluginStatuses = {
     quillEnabled: data.quillEnabled || false,
     mdxeditorEnabled: data.mdxeditorEnabled || false,
-    tinymceEnabled: data.tinymceEnabled || false
+    tinymceEnabled: data.tinymceEnabled || false,
+    lexicalEnabled: data.lexicalEnabled || false,
   }
 
   // Render field groups
@@ -126,7 +138,7 @@ export function renderContentFormPage(data: ContentFormData): string {
     }))
 
   const pageContent = `
-    <div class="space-y-6">
+    <div id="content-form-page" class="space-y-6">
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -177,23 +189,25 @@ export function renderContentFormPage(data: ContentFormData): string {
             ${isEdit ? `hx-put="/admin/content/${data.id}"` : `hx-post="/admin/content"`}
             hx-target="#form-messages"
             hx-encoding="multipart/form-data"
+            method="post"
+            action="${isEdit ? `/admin/content/${data.id}` : '/admin/content'}"
+            enctype="multipart/form-data"
             data-has-validation-errors="${hasValidationErrors ? 'true' : 'false'}"
             class="space-y-6"
+            novalidate
           >
             <input type="hidden" name="collection_id" value="${data.collection.id}">
             ${isEdit ? `<input type="hidden" name="id" value="${data.id}">` : ''}
-            ${data.referrerParams ? `<input type="hidden" name="referrer_params" value="${data.referrerParams}">` : ''}
-            
+            ${data.referrerParams ? `<input type="hidden" name="referrer_params" value="${escapeHtml(data.referrerParams)}">` : ''}
+
             <!-- Core Fields -->
             ${renderFieldGroup('Basic Information', coreFieldsHTML)}
-            
+
             <!-- Content Fields -->
             ${contentFields.length > 0 ? renderFieldGroup('Content Details', contentFieldsHTML) : ''}
-            
+
             <!-- SEO & Meta Fields -->
             ${metaFields.length > 0 ? renderFieldGroup('SEO & Metadata', metaFieldsHTML, true) : ''}
-            
-            <div id="form-messages"></div>
           </form>
         </div>
 
@@ -281,25 +295,25 @@ export function renderContentFormPage(data: ContentFormData): string {
               <dl class="space-y-3 text-sm">
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Created</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.created_at ? new Date(data.created_at).toLocaleDateString() : 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.created_at ? new Date(data.created_at * 1000).toLocaleDateString() : 'Unknown'}</dd>
                 </div>
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Last Modified</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.updated_at ? new Date(data.updated_at).toLocaleDateString() : 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.updated_at ? new Date(data.updated_at * 1000).toLocaleDateString() : 'Unknown'}</dd>
                 </div>
                 <div>
                   <dt class="text-zinc-500 dark:text-zinc-400">Author</dt>
-                  <dd class="mt-1 text-zinc-950 dark:text-white">${data.data?.author || 'Unknown'}</dd>
+                  <dd class="mt-1 text-zinc-950 dark:text-white">${escapeHtml(String(data.data?.author || data.author_name || 'Unknown'))}</dd>
                 </div>
                 ${data.published_at ? `
                   <div>
                     <dt class="text-zinc-500 dark:text-zinc-400">Published</dt>
-                    <dd class="mt-1 text-zinc-950 dark:text-white">${new Date(data.published_at).toLocaleDateString()}</dd>
+                    <dd class="mt-1 text-zinc-950 dark:text-white">${new Date(data.published_at * 1000).toLocaleDateString()}</dd>
                   </div>
                 ` : ''}
               </dl>
 
-              <div class="mt-4 pt-4 border-t border-zinc-950/5 dark:border-white/10">
+              ${data.versioningEnabled ? `<div class="mt-4 pt-4 border-t border-zinc-950/5 dark:border-white/10">
                 <button
                   type="button"
                   onclick="showVersionHistory('${data.id}')"
@@ -310,7 +324,7 @@ export function renderContentFormPage(data: ContentFormData): string {
                   </svg>
                   View Version History
                 </button>
-              </div>
+              </div>` : ''}
             </div>
           ` : ''}
 
@@ -343,16 +357,15 @@ export function renderContentFormPage(data: ContentFormData): string {
               </button>
 
               ${isEdit ? `
-                <button
-                  type="button"
-                  onclick="deleteContent('${data.id}')"
+                <a
+                  href="/admin/content/${data.id}/delete${data.referrerParams ? `?ref=${encodeURIComponent(data.referrerParams)}` : ''}"
                   class="w-full inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-pink-700 dark:text-pink-300 hover:bg-pink-50 dark:hover:bg-pink-900/20 rounded-lg transition-colors"
                 >
                   <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>
                   </svg>
                   Delete Content
-                </button>
+                </a>
               ` : ''}
             </div>
           </div>
@@ -378,21 +391,34 @@ export function renderContentFormPage(data: ContentFormData): string {
               <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
               </svg>
-              ${isEdit ? 'Update' : 'Save'}
+              Save
             </button>
 
-            ${data.user?.role !== 'viewer' ? `
+            <button
+              type="submit"
+              form="content-form"
+              name="action"
+              value="save_and_close"
+              class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm"
+            >
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Save & close
+            </button>
+
+            ${data.user?.role !== 'viewer' && data.versioningEnabled ? `
               <button
                 type="submit"
                 form="content-form"
                 name="action"
                 value="save_and_publish"
-                class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-lime-600 dark:bg-lime-500 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-lime-700 dark:hover:bg-lime-600 transition-colors shadow-sm"
+                class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-lime-600 dark:bg-lime-500 hover:bg-lime-700 dark:hover:bg-lime-600 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors shadow-sm"
               >
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                ${isEdit ? 'Update' : 'Save'} & Publish
+                Publish
               </button>
             ` : ''}
           </div>
@@ -411,17 +437,6 @@ export function renderContentFormPage(data: ContentFormData): string {
     iconColor: 'blue',
     confirmClass: 'bg-blue-500 hover:bg-blue-400',
     onConfirm: 'performDuplicateContent()'
-  })}
-
-    ${renderConfirmationDialog({
-    id: 'delete-content-confirm',
-    title: 'Delete Content',
-    message: 'Are you sure you want to delete this content? This action cannot be undone.',
-    confirmText: 'Delete',
-    cancelText: 'Cancel',
-    iconColor: 'red',
-    confirmClass: 'bg-red-500 hover:bg-red-400',
-    onConfirm: `performDeleteContent('${data.id}')`
   })}
 
     ${renderConfirmationDialog({
@@ -447,6 +462,14 @@ export function renderContentFormPage(data: ContentFormData): string {
     })}
 
     ${getConfirmationDialogScript()}
+
+    ${data.lexicalEnabled ? getLexicalStyles() : '<!-- Lexical plugin not active -->'}
+
+    ${data.lexicalEnabled ? getLexicalImportMap() : ''}
+
+    ${data.lexicalEnabled ? getLexicalLoaderScript() : ''}
+
+    ${data.lexicalEnabled ? getLexicalInitScript({ defaultHeight: data.lexicalSettings?.defaultHeight, defaultToolbar: data.lexicalSettings?.defaultToolbar }) : ''}
 
     ${data.tinymceEnabled ? getTinyMCEScript(data.tinymceSettings?.apiKey) : '<!-- TinyMCE plugin not active -->'}
 
@@ -1398,23 +1421,6 @@ export function renderContentFormPage(data: ContentFormData): string {
         });
       }
 
-      function deleteContent(contentId) {
-        showConfirmDialog('delete-content-confirm');
-      }
-
-      function performDeleteContent(contentId) {
-        fetch(\`/admin/content/\${contentId}\`, {
-          method: 'DELETE'
-        })
-        .then(response => {
-          if (response.ok) {
-            window.location.href = '/admin/content';
-          } else {
-            alert('Error deleting content');
-          }
-        });
-      }
-
       // Repeater/blocks delete confirmation
       let pendingRepeaterDelete = null;
       function requestRepeaterDelete(callback, type = 'item') {
@@ -1452,7 +1458,7 @@ export function renderContentFormPage(data: ContentFormData): string {
         document.body.appendChild(modal);
 
         // Load version history
-        fetch(\`/admin/content/\${contentId}/versions\`)
+        fetch(\`/admin/versioning/\${contentId}\`)
         .then(response => response.text())
         .then(html => {
           const container = document.getElementById('version-history-content');
@@ -1471,34 +1477,21 @@ export function renderContentFormPage(data: ContentFormData): string {
         });
       }
 
-      // Auto-save functionality
-      let autoSaveTimeout;
-      function scheduleAutoSave() {
-        clearTimeout(autoSaveTimeout);
-        autoSaveTimeout = setTimeout(() => {
-          const form = document.getElementById('content-form');
-          const formData = new FormData(form);
-          formData.append('action', 'autosave');
-          
-          fetch(form.action, {
-            method: 'POST',
-            body: formData
-          })
-          .then(response => {
-            if (response.ok) {
-              console.log('Auto-saved');
-            }
-          })
-          .catch(error => console.error('Auto-save failed:', error));
-        }, 30000); // Auto-save every 30 seconds
-      }
-
-      // Bind auto-save to form changes
-      document.addEventListener('DOMContentLoaded', function() {
-        const form = document.getElementById('content-form');
-        form.addEventListener('input', scheduleAutoSave);
-        form.addEventListener('change', scheduleAutoSave);
-      });
+      // There was an "auto-save" here. It never saved anything, and it could not have: the
+      // request went to form.action, and HTMLFormElement is [LegacyOverrideBuiltIns], so a
+      // control named "action" -- this form has two, the save_draft and save_and_publish buttons
+      // -- shadows the built-in action property. form.action was the RadioNodeList of those
+      // buttons, not the URL, so every attempt went to /admin/content/[object RadioNodeList]
+      // relative to the current page. One of those turned up in a CI trace, which is how this
+      // was found.
+      //
+      // Repairing the URL would have been worse than leaving it broken: nothing server-side
+      // handles action=autosave (grep says the string exists only here), so the request would
+      // have fallen through to the ordinary create/update path and written a new document every
+      // thirty seconds of typing. The timer was also re-armed on every keystroke and outlived
+      // the page that set it, firing into whatever had navigated there since.
+      //
+      // Removed rather than fixed. Reinstating it means a real server-side endpoint first.
 
       ${data.tinymceEnabled ? getTinyMCEInitScript({
     skin: data.tinymceSettings?.skin,
@@ -1513,6 +1506,10 @@ export function renderContentFormPage(data: ContentFormData): string {
   }) : ''}
     </script>
   `
+
+  if (opts?.partialOnly) {
+    return pageContent
+  }
 
   const layoutData: AdminLayoutCatalystData = {
     title: title,

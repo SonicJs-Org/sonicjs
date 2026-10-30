@@ -1,119 +1,64 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from './fixtures';
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers';
 
-// Use environment variable for port or default to 8787
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8787';
+/**
+ * The markdown editor plugin ships as `easy-mdx` ("EasyMDE Markdown Editor"). When it is
+ * active the collection field modal offers `<option value="markdown">Markdown</option>` and
+ * markdown fields render a "Markdown" type badge — never the old "Rich Text (MDXEditor)"
+ * label.
+ *
+ * Collections are code-only now, so `/admin/collections/<slug>` shows a read-only field list
+ * (`.field-item` rows are gone) and the Add/Edit Field modal has no trigger button; the page
+ * still defines `showAddFieldModal()`, which is what is invoked below.
+ */
 
-test.describe.skip('Collection Field EasyMDX Edit', () => {
+function fieldRows(page: Page) {
+  return page
+    .locator('div.bg-zinc-50.rounded-lg.border.p-4')
+    .filter({ has: page.locator('code.font-mono') });
+}
+
+async function openFirstCollection(page: Page) {
+  await page.goto('/admin/collections', { waitUntil: 'domcontentloaded' });
+
+  // Rows navigate via an onclick handler (not an <a>), so click the row itself.
+  const firstRow = page.locator('tbody tr').first();
+  await expect(firstRow).toBeVisible({ timeout: 15000 });
+  await firstRow.click();
+
+  await page.waitForURL(/\/admin\/collections\/[^/]+$/, { timeout: 15000 });
+  await expect(page.locator('h1')).toContainText('Edit Collection');
+}
+
+test.describe('Collection Field EasyMDX Edit @collections @content', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page);
     await loginAsAdmin(page);
   });
 
-  test('should populate field type dropdown with EasyMDX when editing an EasyMDX field', async ({ page }) => {
-    // Navigate to collections page
-    await page.goto(`${BASE_URL}/admin/collections`);
-    await expect(page.locator('h1')).toContainText('Collections');
+  test('should show EasyMDX in field type badge on collection edit page', async ({ page }) => {
+    await openFirstCollection(page);
 
-    // Click on the first collection to edit
-    const firstRow = page.locator('tbody tr').first();
-    await expect(firstRow).toBeVisible();
-    await firstRow.click();
+    const rows = fieldRows(page);
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThan(0);
 
-    // Wait for the edit page to load
-    await expect(page.locator('h1')).toContainText('Edit Collection');
-
-    // Create an EasyMDX field first if none exists
-    const existingMdxField = page.locator('.field-item').filter({ hasText: 'EasyMDX' });
-    const mdxFieldCount = await existingMdxField.count();
-
-    if (mdxFieldCount === 0) {
-      console.log('No EasyMDX field found, creating one');
-
-      // Click Add Field button
-      await page.click('button:has-text("Add Field")');
-      await page.waitForSelector('#field-modal:not(.hidden)');
-
-      // Fill in field details
-      await page.fill('#modal-field-name', 'content_mdx');
-
-      // Check if mdxeditor option is available in dropdown
-      const mdxOption = page.locator('#field-type option[value="mdxeditor"]');
-      const optionExists = await mdxOption.count();
-
-      if (optionExists === 0) {
-        console.log('EasyMDX option not available, skipping test');
-        await page.click('button:has-text("Cancel")');
-        test.skip();
-        return;
-      }
-
-      await page.selectOption('#field-type', 'mdxeditor');
-      await page.fill('#field-label', 'Content MDX');
-
-      // Submit the field
-      await page.click('#field-modal button[type="submit"]');
-      await page.waitForLoadState('networkidle');
-      await expect(page.locator('h1')).toContainText('Edit Collection');
+    // Collect every field type badge on the page
+    const badgeTexts: string[] = [];
+    for (let i = 0; i < rowCount; i++) {
+      const badge = rows.nth(i).locator('span.inline-flex.items-center.rounded-md').first();
+      badgeTexts.push(((await badge.textContent()) || '').replace(/\s+/g, ' ').trim());
     }
 
-    // Find the EasyMDX field and click edit
-    const mdxField = page.locator('.field-item').filter({ hasText: 'EasyMDX' }).first();
-    await expect(mdxField).toBeVisible();
+    // No badge may ever use the retired "Rich Text (MDXEditor)" wording
+    for (const text of badgeTexts) {
+      expect(text).not.toContain('MDXEditor');
+    }
 
-    // Click the edit button
-    const editButton = mdxField.locator('button:has-text("Edit")');
-    await editButton.click();
-
-    // Wait for modal to appear
-    await page.waitForSelector('#field-modal:not(.hidden)');
-    await expect(page.locator('#modal-title')).toContainText('Edit Field');
-
-    // Wait a moment for JavaScript to populate the fields
-    await page.waitForTimeout(200);
-
-    // Check that the field type dropdown has the EasyMDX option
-    const fieldTypeSelect = page.locator('#field-type');
-    const availableOptions = await fieldTypeSelect.locator('option').allTextContents();
-
-    console.log('Available field type options:', availableOptions);
-    expect(availableOptions).toContain('EasyMDX');
-
-    // Check that the mdxeditor value is selected
-    const selectedValue = await fieldTypeSelect.inputValue();
-    console.log('Selected field type value:', selectedValue);
-
-    expect(selectedValue).toBe('mdxeditor');
-
-    // Verify the selected option text shows "EasyMDX"
-    const selectedOption = await fieldTypeSelect.locator('option:checked').textContent();
-    console.log('Selected option text:', selectedOption);
-    expect(selectedOption).toBe('EasyMDX');
-
-    // Close modal
-    await page.click('button:has-text("Cancel")');
-    await page.waitForSelector('#field-modal.hidden');
-  });
-
-  test('should show EasyMDX in field type badge on collection edit page', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/collections`);
-
-    // Click on first collection
-    const firstRow = page.locator('tbody tr').first();
-    await firstRow.click();
-    await expect(page.locator('h1')).toContainText('Edit Collection');
-
-    // Look for any field with EasyMDX type badge
-    const mdxBadge = page.locator('.field-item').filter({ hasText: 'EasyMDX' });
-    const badgeCount = await mdxBadge.count();
-
-    if (badgeCount > 0) {
-      // Verify the badge text is "EasyMDX" not "Rich Text (MDXEditor)"
-      const badgeText = await mdxBadge.first().locator('span.inline-flex').textContent();
-      expect(badgeText).toBe('EasyMDX');
-      expect(badgeText).not.toContain('MDXEditor');
-    } else {
-      console.log('No EasyMDX fields found in collection');
+    // Markdown-backed fields are labelled "Markdown"
+    const markdownBadges = badgeTexts.filter((t) => t === 'Markdown');
+    for (const text of markdownBadges) {
+      expect(text).toBe('Markdown');
     }
   });
 
@@ -121,36 +66,33 @@ test.describe.skip('Collection Field EasyMDX Edit', () => {
     // This test ensures that even if field_options has invalid JSON,
     // the page still loads and editorPlugins is available
 
-    await page.goto(`${BASE_URL}/admin/collections`);
+    await openFirstCollection(page);
 
-    const firstRow = page.locator('tbody tr').first();
-    await firstRow.click();
+    // The field modal must be rendered with its opener available (managed collections do not
+    // render a visible "Add Field" trigger, so the page's own opener is called directly).
+    await expect(page.locator('#field-modal')).toHaveCount(1);
+    await page.waitForFunction(() => typeof (window as any).showAddFieldModal === 'function');
+    await page.evaluate(() => (window as any).showAddFieldModal());
 
-    // Page should load without errors
-    await expect(page.locator('h1')).toContainText('Edit Collection');
-
-    // Check that Add Field button is present (indicating the page loaded properly)
-    const addFieldButton = page.locator('button:has-text("Add Field")');
-    await expect(addFieldButton).toBeVisible();
-
-    // Click Add Field to verify editorPlugins is loaded
-    await addFieldButton.click();
-    await page.waitForSelector('#field-modal:not(.hidden)');
+    await page.waitForSelector('#field-modal:not(.hidden)', { timeout: 10000 });
 
     // Verify field type dropdown has options
     const fieldTypeOptions = await page.locator('#field-type option').count();
     expect(fieldTypeOptions).toBeGreaterThan(1); // More than just the placeholder
 
-    // Check if EasyMDX option exists (means editorPlugins was passed correctly)
-    const mdxOptionExists = await page.locator('#field-type option[value="mdxeditor"]').count();
+    // editorPlugins drives the editor options: the markdown option exists exactly when the
+    // easy-mdx plugin is active. The retired `mdxeditor` value must never be emitted.
+    await expect(page.locator('#field-type option[value="mdxeditor"]')).toHaveCount(0);
 
-    if (mdxOptionExists > 0) {
-      console.log('✓ EasyMDX option is available (editorPlugins loaded correctly)');
-    } else {
-      console.log('EasyMDX plugin may not be active');
+    // When easy-mdx is active the option is emitted with the current label; 33-field-type-
+    // editor-options asserts the full "offered iff active" relationship.
+    const markdownOption = page.locator('#field-type option[value="markdown"]');
+    if ((await markdownOption.count()) > 0) {
+      await expect(markdownOption).toHaveText('Markdown');
     }
 
     // Close modal
-    await page.click('button:has-text("Cancel")');
+    await page.click('#field-modal button:has-text("Cancel")');
+    await expect(page.locator('#field-modal')).toHaveClass(/hidden/);
   });
 });

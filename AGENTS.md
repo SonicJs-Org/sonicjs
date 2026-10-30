@@ -2,6 +2,49 @@
 
 These instructions mirror the workflow Claude Code already follows in Conductor so every coding agent behaves consistently.
 
+## Token-Efficient Tooling (use FIRST, before grep/Read sprees)
+
+This repo is indexed by **codegraph** (684 files, 5693 nodes). Use it as the default code-lookup tool. Hook also rewrites shell commands via **rtk** for 60-90% bash savings. Default response mode is **caveman** for terse output.
+
+### Decision tree — code exploration
+
+| Intent | Tool | Why |
+|--------|------|-----|
+| "How does X work / where does X live / trace flow X→Y" | `mcp__codegraph__codegraph_explore` | ONE call returns verbatim source grouped by file. Replaces many Read/Grep. |
+| "Just the location of symbol named X" | `mcp__codegraph__codegraph_search` | Cheapest — name + path only. |
+| "What calls this / what does this call / blast radius" | `codegraph_callers` / `codegraph_callees` / `codegraph_impact` | Edges already indexed; grep can't follow dynamic dispatch. |
+| Pinpoint known file edit | `Read` + `Edit` | Codegraph not needed for known path. |
+| Truly open-ended cross-cutting search | `Agent` w/ `Explore` or `cavecrew-investigator` | Compressed output, protects main context. |
+
+**Rule:** Before any 3+ Grep/Read combo for "where is X", call `codegraph_explore` first. Treat codegraph as a pre-built index — don't re-run searches it already answers.
+
+### rtk (Rust Token Killer)
+
+- Bash commands auto-rewritten by hook — transparent, 0 overhead. No action needed.
+- `rtk gain` to audit savings; `rtk discover` to find missed opportunities.
+- Don't bypass rtk with raw shell unless debugging.
+
+### caveman mode
+
+- Active by default (full). Drops articles/filler. Code blocks, commits, security warnings stay normal.
+- Toggle: `/caveman lite|full|ultra`, off via "stop caveman".
+
+### Delegation — cavecrew subagents
+
+Use when scope is bounded AND output would bloat main context:
+- `cavecrew-investigator` — read-only locator ("where is X / what calls Y / map this dir"). ~60% smaller tool result vs vanilla Explore.
+- `cavecrew-builder` — surgical 1-2 file edit (typo, single-fn rewrite, mechanical rename). Refuses 3+ files.
+- `cavecrew-reviewer` — diff/PR review, one line per finding.
+
+Skip cavecrew for: known-path edits, multi-file features, anything codegraph answers in one call.
+
+### Anti-patterns (token waste)
+
+- ❌ Running `grep -r` across the repo when `codegraph_search` would answer.
+- ❌ Reading 5+ files to understand a flow — `codegraph_explore` returns the relevant slice.
+- ❌ Spawning a subagent just to read one known file.
+- ❌ Verbose narration. Caveman mode handles that — keep updates to one sentence.
+
 ## Project Structure & Stack
 - Monorepo managed with npm workspaces. Core Hono + Workers code, routes, middleware, templates, plugins, utils, and DB lives in `packages/core/src`.
 - Shared templates/components: `packages/templates/`. CLI scaffolder: `packages/create-app/`. Helper scripts: `packages/scripts/`.
@@ -25,6 +68,11 @@ These instructions mirror the workflow Claude Code already follows in Conductor 
 - Unit tests: `npm test` or `npm run test:watch`
 - Playwright E2E: `npm run e2e`, smoke subset via `npm run e2e:smoke`, headed/UI via `npm run e2e:ui`
 - Sample-app DB reset: `npm run db:reset` (or `npm run setup:db` inside `my-sonicjs-app`)
+
+### Local secrets (`my-sonicjs-app/.dev.vars`)
+- `wrangler dev` reads `my-sonicjs-app/.dev.vars` for local secrets. Auth refuses to initialize without `BETTER_AUTH_SECRET` (>=16 chars); requests to `/auth/*` then return 500 with "BETTER_AUTH_SECRET is missing or too short".
+- `npm run workspace` (and `npm run db:reset` → `setup-worktree-db.sh`) auto-create `.dev.vars` with a fresh `openssl rand -hex 32` secret. Re-runs are idempotent — won't overwrite.
+- Manual fix if file is missing: `cd my-sonicjs-app && cp .dev.vars.example .dev.vars` then set `BETTER_AUTH_SECRET="$(openssl rand -hex 32)"`. `.dev.vars` is gitignored — never commit it. For prod/preview use `wrangler secret put BETTER_AUTH_SECRET`.
 
 ## Coding Style & Patterns
 - TypeScript-first ES modules. Keep exported/public signatures fully typed; lean on Zod validation where applicable.

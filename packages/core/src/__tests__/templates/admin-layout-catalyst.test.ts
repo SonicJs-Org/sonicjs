@@ -200,10 +200,19 @@ describe('renderAdminLayoutCatalyst', () => {
     expect(html).toContain('alpinejs');
   });
 
-  it('should include Chart.js script', () => {
+  it('should NOT ship Chart.js to pages that do not chart', () => {
+    // It used to be unconditional, which cost every admin page a 200KB download and parse for a
+    // global nothing on the page touched. Only the dashboards chart, and they ask for it below.
     const html = renderAdminLayoutCatalyst(baseData);
 
-    expect(html).toContain('chart.js');
+    expect(html).not.toContain('chart.js');
+  });
+
+  it('should include Chart.js when a page asks for it', () => {
+    const chartJs = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    const html = renderAdminLayoutCatalyst({ ...baseData, scripts: [chartJs] });
+
+    expect(html).toContain(`<script src="${chartJs}"></script>`);
   });
 
   it('should render with version', () => {
@@ -275,23 +284,23 @@ describe('renderAdminLayoutCatalyst', () => {
     });
 
     it('should render default menu items', () => {
-      const html = renderAdminLayoutCatalyst(baseData);
+      // Users and Plugins require admin role — pass an admin user
+      const html = renderAdminLayoutCatalyst({
+        ...baseData,
+        user: { name: 'Admin', email: 'admin@test.com', role: 'admin' },
+      });
 
-      expect(html).toContain('Dashboard');
-      expect(html).toContain('Collections');
-      expect(html).toContain('Forms');
       expect(html).toContain('Content');
-      expect(html).toContain('Media');
+      expect(html).toContain('Collections');
       expect(html).toContain('Users');
       expect(html).toContain('Plugins');
-      expect(html).toContain('Cache');
       expect(html).toContain('Settings');
     });
 
     it('should highlight active path', () => {
       const html = renderAdminLayoutCatalyst({
         ...baseData,
-        currentPath: '/admin/collections',
+        currentPath: '/admin/content',
       });
 
       expect(html).toContain('data-current="true"');
@@ -321,8 +330,10 @@ describe('renderAdminLayoutCatalyst', () => {
 
   describe('Dynamic Menu Items', () => {
     it('should render dynamic menu items', () => {
+      // Dynamic items appear inside the Plugins submenu, which requires admin role
       const html = renderAdminLayoutCatalyst({
         ...baseData,
+        user: { name: 'Admin', email: 'admin@test.com', role: 'admin' },
         dynamicMenuItems: [
           {
             label: 'Custom Page',
@@ -343,7 +354,7 @@ describe('renderAdminLayoutCatalyst', () => {
         dynamicMenuItems: [],
       });
 
-      expect(html).toContain('Dashboard');
+      expect(html).toContain('Content');
     });
   });
 

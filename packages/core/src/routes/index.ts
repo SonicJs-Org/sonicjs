@@ -5,6 +5,10 @@
  * Each route is refactored to remove monolith-specific dependencies.
  */
 
+// Document model routes
+export { apiDocumentsRoutes } from './api-documents'
+export { adminDocumentsRoutes } from './admin-documents'
+
 // API routes
 export { default as apiRoutes } from './api'
 export { default as apiContentCrudRoutes } from './api-content-crud'
@@ -24,15 +28,10 @@ export { userRoutes as adminUsersRoutes } from './admin-users'
 export { adminMediaRoutes } from './admin-media'
 export { adminPluginRoutes } from './admin-plugins'
 export { adminLogsRoutes } from './admin-logs'
-export { adminDesignRoutes } from './admin-design'
 export { adminCheckboxRoutes } from './admin-checkboxes'
-export { default as adminTestimonialsRoutes } from './admin-testimonials'
-export { default as adminCodeExamplesRoutes } from './admin-code-examples'
 export { adminDashboardRoutes } from './admin-dashboard'
 export { adminCollectionsRoutes } from './admin-collections'
 export { adminSettingsRoutes } from './admin-settings'
-export { adminFormsRoutes } from './admin-forms'
-export { default as publicFormsRoutes } from './public-forms'
 export { adminApiReferenceRoutes } from './admin-api-reference'
 
 export const ROUTES_INFO = {
@@ -50,15 +49,10 @@ export const ROUTES_INFO = {
     'adminMediaRoutes',
     'adminPluginRoutes',
     'adminLogsRoutes',
-    'adminDesignRoutes',
     'adminCheckboxRoutes',
-    'adminTestimonialsRoutes',
-    'adminCodeExamplesRoutes',
     'adminDashboardRoutes',
     'adminCollectionsRoutes',
     'adminSettingsRoutes',
-    'adminFormsRoutes',
-    'publicFormsRoutes',
     'adminApiReferenceRoutes'
   ],
   status: 'Core package routes ready',

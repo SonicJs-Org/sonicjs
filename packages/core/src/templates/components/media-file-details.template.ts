@@ -1,3 +1,4 @@
+import { escapeHtml, safeUrl } from '../../utils/sanitize'
 import { MediaFile } from './media-grid.template'
 
 export interface MediaFileDetailsData {
@@ -27,9 +28,9 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
       <div class="space-y-4">
         <div class="rounded-xl bg-zinc-50 dark:bg-zinc-800 p-4">
           ${file.isImage ? `
-            <img src="${file.public_url}" alt="${file.alt || file.filename}" class="w-full h-auto rounded-lg">
+            <img src="${safeUrl(file.public_url)}" alt="${escapeHtml(file.alt || file.filename)}" class="w-full h-auto rounded-lg">
           ` : file.isVideo ? `
-            <video src="${file.public_url}" controls class="w-full h-auto rounded-lg"></video>
+            <video src="${safeUrl(file.public_url)}" controls class="w-full h-auto rounded-lg"></video>
           ` : `
             <div class="flex items-center justify-center h-32">
               <svg class="w-12 h-12 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -41,13 +42,13 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
 
         <div class="text-center space-x-2">
           <button
-            onclick="copyToClipboard('${file.public_url}')"
+            onclick="copyToClipboard(${escapeHtml(JSON.stringify(file.public_url))})"
             class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
           >
-            Copy URL
+            Copy Relative URL
           </button>
           <a
-            href="${file.public_url}"
+            href="${safeUrl(file.public_url)}"
             target="_blank"
             class="inline-flex items-center rounded-lg bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
           >
@@ -60,7 +61,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1">Filename</label>
-          <p class="text-sm text-zinc-500 dark:text-zinc-400">${file.original_name}</p>
+          <p class="text-sm text-zinc-500 dark:text-zinc-400">${escapeHtml(file.original_name)}</p>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
@@ -89,7 +90,18 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
 
         <div>
           <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1">Folder</label>
-          <p class="text-sm text-zinc-500 dark:text-zinc-400">${file.folder}</p>
+          <p class="text-sm text-zinc-500 dark:text-zinc-400">${escapeHtml(file.folder || '')}</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-zinc-950 dark:text-white mb-1">URL</label>
+          <a
+            href="${safeUrl(file.public_url)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-sm text-blue-600 dark:text-blue-400 hover:underline break-all"
+            onclick="event.stopPropagation()"
+          >${escapeHtml(file.public_url)}</a>
         </div>
 
         <div>
@@ -104,7 +116,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
             <input
               type="text"
               name="alt"
-              value="${file.alt || ''}"
+              value="${escapeHtml(file.alt || '')}"
               class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors"
               placeholder="Describe this image..."
             >
@@ -117,7 +129,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
               rows="3"
               class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors"
               placeholder="Optional caption..."
-            >${file.caption || ''}</textarea>
+            >${escapeHtml(file.caption || '')}</textarea>
           </div>
 
           <div>
@@ -125,7 +137,7 @@ export function renderMediaFileDetails(data: MediaFileDetailsData): string {
             <input
               type="text"
               name="tags"
-              value="${file.tags.join(', ')}"
+              value="${escapeHtml(file.tags.join(', '))}"
               class="w-full rounded-lg bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-950 dark:text-white placeholder-zinc-500 dark:placeholder-zinc-400 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 focus:outline-none transition-colors"
               placeholder="tag1, tag2, tag3"
             >

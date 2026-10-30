@@ -15,6 +15,7 @@ import {
 } from '../templates/pages/admin-api-reference.template'
 import { getCoreVersion } from '../utils/version'
 import { buildRouteList, getAppInstance } from '../services/route-metadata'
+import { getCollectionRegistry } from '../services/collection-registry'
 
 const VERSION = getCoreVersion()
 
@@ -48,7 +49,35 @@ router.get('/', async (c) => {
 
   try {
     const app = getAppInstance()
-    const endpoints = buildRouteList(app)
+    const baseEndpoints = buildRouteList(app)
+
+    // Inject per-collection routes from the in-memory registry.
+    // These replace the generic /:collection wildcards that inspectRoutes returns.
+    const collectionRoutes: typeof baseEndpoints = []
+    const collections = getCollectionRegistry().listActive().filter(r => !r.internal)
+    const methodOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 }
+    for (const col of collections) {
+      const displayName = col.displayName || col.name
+      collectionRoutes.push(
+        { method: 'GET',    path: `/api/${col.slug || col.name}`,     description: `List ${displayName} items`,     authentication: false, category: 'Collections', documented: true },
+        { method: 'GET',    path: `/api/${col.slug || col.name}/:id`, description: `Get a ${displayName} by ID`,    authentication: false, category: 'Collections', documented: true },
+        { method: 'POST',   path: `/api/${col.slug || col.name}`,     description: `Create a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
+        { method: 'PUT',    path: `/api/${col.slug || col.name}/:id`, description: `Update a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
+        { method: 'DELETE', path: `/api/${col.slug || col.name}/:id`, description: `Delete a ${displayName}`,       authentication: true,  category: 'Collections', documented: true },
+      )
+    }
+
+    // Remove any auto-discovered wildcard /:collection entries (too generic) and merge in specific ones
+    const wildcardPaths = new Set(['/api/:collection', '/api/:collection/:id'])
+    const filteredBase = baseEndpoints.filter(e => !wildcardPaths.has(e.path))
+    const endpoints = [...filteredBase, ...collectionRoutes].sort((a, b) => {
+      const catCmp = a.category.localeCompare(b.category)
+      if (catCmp !== 0) return catCmp
+      const mOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 }
+      const methCmp = (mOrder[a.method] ?? 5) - (mOrder[b.method] ?? 5)
+      if (methCmp !== 0) return methCmp
+      return a.path.localeCompare(b.path)
+    })
 
     const pageData: APIReferencePageData = {
       endpoints,

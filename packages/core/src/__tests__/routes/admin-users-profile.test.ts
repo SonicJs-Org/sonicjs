@@ -77,24 +77,32 @@ vi.mock('../../plugins/core-plugins/user-profiles', () => ({
   saveCustomData: vi.fn(),
   extractCustomFieldsFromForm: vi.fn().mockReturnValue({}),
   sanitizeCustomData: vi.fn().mockReturnValue({}),
-  validateCustomData: vi.fn().mockReturnValue({ valid: true, errors: {} })
+  validateCustomData: vi.fn().mockReturnValue({ valid: true, errors: {} }),
+  // Profile storage is document-backed; the route reads/writes via these.
+  readProfileData: vi.fn().mockResolvedValue({ custom: {} }),
+  writeProfileData: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { userRoutes } from '../../routes/admin-users'
 
 // Create call-order based D1 mock
-// Each db.prepare() call returns a distinct mock chain based on call index
+// Each db.prepare() call returns a distinct mock chain based on call index.
+// The prepared statement supports both the `.bind(...).first()/.run()/.all()`
+// chain and the un-bound `.first()/.run()/.all()` shorthand (the edit handler's
+// multi-tenant probe calls `.first()` directly without `.bind()`).
 const createOrderedMockDb = (results: Array<{ first?: any; run?: any; all?: any }>) => {
   let callIndex = 0
   return {
     prepare: vi.fn().mockImplementation(() => {
       const result = results[callIndex++] || {}
+      const terminals = {
+        first: vi.fn().mockResolvedValue(result.first ?? null),
+        run: vi.fn().mockResolvedValue(result.run ?? { success: true }),
+        all: vi.fn().mockResolvedValue(result.all ?? { results: [] })
+      }
       return {
-        bind: vi.fn().mockReturnValue({
-          first: vi.fn().mockResolvedValue(result.first ?? null),
-          run: vi.fn().mockResolvedValue(result.run ?? { success: true }),
-          all: vi.fn().mockResolvedValue(result.all ?? { results: [] })
-        })
+        bind: vi.fn().mockReturnValue(terminals),
+        ...terminals
       }
     })
   }
@@ -104,7 +112,6 @@ const createOrderedMockDb = (results: Array<{ first?: any; run?: any; all?: any 
 const mockUserRecord = {
   id: 'user-123',
   email: 'test@example.com',
-  username: 'testuser',
   first_name: 'Test',
   last_name: 'User',
   phone: null,
@@ -117,15 +124,16 @@ const mockUserRecord = {
   last_login_at: null
 }
 
-// Standard mock profile record
-const mockProfileRecord = {
-  display_name: 'Test Display',
+// Standard mock profile document data (shape returned by readProfileData)
+const mockProfileData = {
+  displayName: 'Test Display',
   bio: 'A test bio',
   company: 'Test Corp',
-  job_title: 'Engineer',
+  jobTitle: 'Engineer',
   website: 'https://example.com',
   location: 'San Francisco',
-  date_of_birth: 631152000000
+  dateOfBirth: 631152000000,
+  custom: {} as Record<string, any>,
 }
 
 describe('Admin Users - Profile on Edit Page', () => {
@@ -144,9 +152,12 @@ describe('Admin Users - Profile on Edit Page', () => {
 
   describe('GET /admin/users/:id/edit', () => {
     it('should render edit page with profile data when profile exists', async () => {
+      const { readProfileData } = await import('../../plugins/core-plugins/user-profiles')
+      vi.mocked(readProfileData).mockResolvedValue({ ...mockProfileData })
+
       mockDb = createOrderedMockDb([
-        { first: mockUserRecord },    // call 0: SELECT FROM users
-        { first: mockProfileRecord }  // call 1: SELECT FROM user_profiles
+        { first: mockUserRecord },    // call 0: SELECT FROM auth_user (profile comes from readProfileData)
+        { first: null },              // call 1: multi-tenant plugin probe — inactive
       ])
 
       app = createApp(mockDb)
@@ -162,23 +173,22 @@ describe('Admin Users - Profile on Edit Page', () => {
       const body = await res.text()
       const data = JSON.parse(body)
 
-      // Verify profile data is mapped to camelCase interface
+      // The edit page maps only displayName onto the UserProfileData interface;
+      // the rest of the document data is not surfaced on this page.
       expect(data.userToEdit.profile).toBeDefined()
       expect(data.userToEdit.profile.displayName).toBe('Test Display')
-      expect(data.userToEdit.profile.bio).toBe('A test bio')
-      expect(data.userToEdit.profile.company).toBe('Test Corp')
-      expect(data.userToEdit.profile.jobTitle).toBe('Engineer')
-      expect(data.userToEdit.profile.website).toBe('https://example.com')
-      expect(data.userToEdit.profile.location).toBe('San Francisco')
 
-      // Verify db.prepare was called twice (user + profile)
-      expect(mockDb.prepare).toHaveBeenCalledTimes(2)
+      // Profile read is delegated to the document store, not a raw SQL query.
+      expect(readProfileData).toHaveBeenCalledWith(mockDb, 'user-123')
     })
 
     it('should render edit page with undefined profile when no profile exists', async () => {
+      const { readProfileData } = await import('../../plugins/core-plugins/user-profiles')
+      vi.mocked(readProfileData).mockResolvedValue({ custom: {} })
+
       mockDb = createOrderedMockDb([
-        { first: mockUserRecord },  // call 0: SELECT FROM users
-        { first: null }             // call 1: SELECT FROM user_profiles — no profile
+        { first: mockUserRecord },  // call 0: SELECT FROM auth_user
+        { first: null },            // call 1: multi-tenant plugin probe — inactive
       ])
 
       app = createApp(mockDb)
@@ -242,6 +252,58 @@ describe('Admin Users - Profile on Edit Page', () => {
       expect(data.type).toBe('error')
       expect(data.message).toContain('Failed to load user')
     })
+
+    it('self-heals a missing two_factor_required column instead of 500ing the page', async () => {
+      // The 0007 ALTER is applied by two callers that are both skippable — bootstrap is behind a
+      // 24h KV marker, and the plugin's onBoot does not run under `plugins.disableAll`. SQLite
+      // rejects the WHOLE statement over one unknown column, so naming it turns a missed migration
+      // into a dead user-edit page.
+      let columnExists = false
+      const statements: string[] = []
+      mockDb = {
+        prepare: vi.fn().mockImplementation((sql: string) => {
+          statements.push(sql)
+          const isUserSelect = sql.includes('FROM auth_user') && sql.includes('WHERE id = ?')
+          const terminals = {
+            first: vi.fn().mockImplementation(async () => {
+              if (isUserSelect && sql.includes('two_factor_required') && !columnExists) {
+                throw new Error('D1_ERROR: no such column: two_factor_required')
+              }
+              if (isUserSelect) return { ...mockUserRecord, two_factor_required: 0 }
+              // sqlite_master probe inside ensureTwoFactorRequiredColumn.
+              if (sql.includes('sqlite_master')) return { name: 'auth_user' }
+              return null
+            }),
+            run: vi.fn().mockImplementation(async () => {
+              if (sql.startsWith('ALTER TABLE auth_user')) columnExists = true
+              return { success: true }
+            }),
+            all: vi.fn().mockImplementation(async () =>
+              // table_xinfo without the column — that is what makes the ALTER fire.
+              sql.startsWith('PRAGMA table_xinfo')
+                ? { results: [{ name: 'id' }, { name: 'email' }] }
+                : { results: [] },
+            ),
+          }
+          return { bind: vi.fn().mockReturnValue(terminals), ...terminals }
+        }),
+      }
+
+      app = createApp(mockDb)
+
+      const res = await app.request('/admin/users/user-123/edit', {}, {
+        DB: mockDb,
+        KV: {},
+        CACHE_KV: {}
+      })
+
+      expect(res.status).toBe(200)
+      expect(columnExists).toBe(true)
+      expect(statements.some((s) => s.startsWith('ALTER TABLE auth_user'))).toBe(true)
+
+      const data = JSON.parse(await res.text())
+      expect(data.userToEdit.id).toBe('user-123')
+    })
   })
 
   describe('PUT /admin/users/:id', () => {
@@ -256,26 +318,23 @@ describe('Admin Users - Profile on Edit Page', () => {
     const baseUserFields = {
       first_name: 'Test',
       last_name: 'User',
-      username: 'testuser',
       email: 'test@example.com',
       role: 'viewer',
       is_active: '1'
     }
 
-    it('should update existing profile when profile record exists', async () => {
+    it('should write the profile document when profile fields are submitted', async () => {
+      const { writeProfileData } = await import('../../plugins/core-plugins/user-profiles')
       mockDb = createOrderedMockDb([
-        { first: null },                                // call 0: SELECT id FROM users WHERE (username=? OR email=?) — uniqueness check, no conflict
+        { first: null },                                // call 0: uniqueness check, no conflict
         { run: { success: true } },                     // call 1: UPDATE users SET ...
-        { first: { id: 'profile-existing' } },          // call 2: SELECT id FROM user_profiles WHERE user_id=?
-        { run: { success: true } }                      // call 3: UPDATE user_profiles SET ...
       ])
 
       app = createApp(mockDb)
 
       const body = createFormBody({
         ...baseUserFields,
-        profile_display_name: 'Updated Name',
-        profile_company: 'New Corp'
+        profile_display_name: 'Updated Name'
       })
 
       const res = await app.request('/admin/users/user-123', {
@@ -294,50 +353,21 @@ describe('Admin Users - Profile on Edit Page', () => {
       const data = JSON.parse(responseBody)
       expect(data.type).toBe('success')
 
-      // Verify all 4 prepare calls were made (uniqueness + update + profile check + profile update)
-      expect(mockDb.prepare.mock.calls.length).toBeGreaterThanOrEqual(4)
+      // Profile persisted via the document store. The edit form only feeds the
+      // typed `displayName` field into the patch (other profile columns were
+      // dropped from the UserProfileData interface).
+      expect(writeProfileData).toHaveBeenCalledTimes(1)
+      const [, userIdArg, patch] = vi.mocked(writeProfileData).mock.calls[0] as any[]
+      expect(userIdArg).toBe('user-123')
+      expect(patch.displayName).toBe('Updated Name')
     })
 
-    it('should create new profile when no profile record exists', async () => {
+    it('should skip the profile write when no profile fields are submitted', async () => {
+      const { writeProfileData } = await import('../../plugins/core-plugins/user-profiles')
       mockDb = createOrderedMockDb([
-        { first: null },                // call 0: SELECT id FROM users — uniqueness check, no conflict
-        { run: { success: true } },     // call 1: UPDATE users SET ...
-        { first: null },                // call 2: SELECT id FROM user_profiles — not found
-        { run: { success: true } }      // call 3: INSERT INTO user_profiles
-      ])
-
-      app = createApp(mockDb)
-
-      const body = createFormBody({
-        ...baseUserFields,
-        profile_display_name: 'New Profile',
-        profile_bio: 'A new bio'
-      })
-
-      const res = await app.request('/admin/users/user-123', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
-      }, {
-        DB: mockDb,
-        KV: {},
-        CACHE_KV: {}
-      })
-
-      expect(res.status).toBe(200)
-
-      const responseBody = await res.text()
-      const data = JSON.parse(responseBody)
-      expect(data.type).toBe('success')
-
-      // Verify all 4 prepare calls were made (uniqueness + update + profile check + profile insert)
-      expect(mockDb.prepare.mock.calls.length).toBeGreaterThanOrEqual(4)
-    })
-
-    it('should skip profile queries when no profile fields are submitted', async () => {
-      mockDb = createOrderedMockDb([
-        { first: null },                // call 0: SELECT id FROM users — uniqueness check, no conflict
-        { run: { success: true } }      // call 1: UPDATE users SET ...
+        { all: { results: [] } },       // call 0: RbacService.getRoles() — no custom roles
+        { first: null },                // call 1: uniqueness check, no conflict
+        { run: { success: true } }      // call 2: UPDATE users SET ...
       ])
 
       app = createApp(mockDb)
@@ -361,16 +391,15 @@ describe('Admin Users - Profile on Edit Page', () => {
       const data = JSON.parse(responseBody)
       expect(data.type).toBe('success')
 
-      // With no profile fields, hasProfileData is falsy (all null via || null).
-      // The profile block (SELECT/INSERT/UPDATE on user_profiles) should be skipped entirely.
-      // Only 2 prepare calls: uniqueness check + user update.
-      // logActivity is mocked so it won't add more.
-      expect(mockDb.prepare.mock.calls.length).toBe(2)
+      // No profile fields + no custom config → profile write skipped entirely.
+      expect(writeProfileData).not.toHaveBeenCalled()
+      // Only 3 prepare calls: getRoles (role validation) + uniqueness check + user update.
+      expect(mockDb.prepare.mock.calls.length).toBe(3)
     })
 
-    it('should save custom profile data even when no standard profile fields are set (issue #768)', async () => {
+    it('should write custom profile data even when no standard profile fields are set (issue #768)', async () => {
       // Mock getUserProfileConfig to return a config with custom fields
-      const { getUserProfileConfig, extractCustomFieldsFromForm, sanitizeCustomData, getCustomData } = await import('../../plugins/core-plugins/user-profiles')
+      const { getUserProfileConfig, extractCustomFieldsFromForm, sanitizeCustomData, writeProfileData } = await import('../../plugins/core-plugins/user-profiles')
       vi.mocked(getUserProfileConfig).mockReturnValue({
         fields: [
           { name: 'plan', label: 'Plan', type: 'radio', options: ['free', 'monthly', 'annual', 'lifetime'], default: 'free', required: true }
@@ -378,13 +407,10 @@ describe('Admin Users - Profile on Edit Page', () => {
       } as any)
       vi.mocked(extractCustomFieldsFromForm).mockReturnValue({ plan: 'monthly' })
       vi.mocked(sanitizeCustomData).mockReturnValue({ plan: 'monthly' })
-      vi.mocked(getCustomData).mockResolvedValue({ plan: 'free' })
 
       mockDb = createOrderedMockDb([
         { first: null },                // call 0: uniqueness check — no conflict
         { run: { success: true } },     // call 1: UPDATE users SET ...
-        { first: { id: 'prof-1' } },    // call 2: SELECT id FROM user_profiles — profile exists
-        { run: { success: true } }      // call 3: UPDATE user_profiles SET ... (with custom data)
       ])
 
       app = createApp(mockDb)
@@ -409,44 +435,24 @@ describe('Admin Users - Profile on Edit Page', () => {
       const data = JSON.parse(await res.text())
       expect(data.type).toBe('success')
 
-      // Should have 4 prepare calls: uniqueness check + user update + profile check + profile update
-      // This verifies the profile block is NOT skipped when custom data is present
-      expect(mockDb.prepare.mock.calls.length).toBe(4)
+      // Profile write is NOT skipped when only custom data is present; the custom
+      // namespace is passed through to the document store.
+      expect(writeProfileData).toHaveBeenCalledTimes(1)
+      const [, , patch] = vi.mocked(writeProfileData).mock.calls[0] as any[]
+      expect(patch.custom).toEqual({ plan: 'monthly' })
 
       // Reset mocks
       vi.mocked(getUserProfileConfig).mockReturnValue(undefined as any)
     })
 
-    it('should return error on profile database failure', async () => {
-      mockDb = createOrderedMockDb([
-        { first: null },                // call 0: SELECT id FROM users — uniqueness check, no conflict
-        { run: { success: true } },     // call 1: UPDATE users SET ...
-        {}                              // call 2: SELECT id FROM user_profiles — will be overridden below
-      ])
+    it('should return error on profile write failure', async () => {
+      const { writeProfileData } = await import('../../plugins/core-plugins/user-profiles')
+      vi.mocked(writeProfileData).mockRejectedValueOnce(new Error('document write failed'))
 
-      // Override call 2 to throw an error on .first()
-      let callCount = 0
-      mockDb.prepare = vi.fn().mockImplementation(() => {
-        callCount++
-        if (callCount === 3) {
-          // 3rd prepare call: profile existence check — throw error
-          return {
-            bind: vi.fn().mockReturnValue({
-              first: vi.fn().mockRejectedValue(new Error('D1 profile table error')),
-              run: vi.fn().mockRejectedValue(new Error('D1 profile table error')),
-              all: vi.fn().mockResolvedValue({ results: [] })
-            })
-          }
-        }
-        // Calls 1-2: uniqueness check (return null) and user update (success)
-        return {
-          bind: vi.fn().mockReturnValue({
-            first: vi.fn().mockResolvedValue(null),
-            run: vi.fn().mockResolvedValue({ success: true }),
-            all: vi.fn().mockResolvedValue({ results: [] })
-          })
-        }
-      })
+      mockDb = createOrderedMockDb([
+        { first: null },                // call 0: uniqueness check, no conflict
+        { run: { success: true } },     // call 1: UPDATE users SET ...
+      ])
 
       app = createApp(mockDb)
 

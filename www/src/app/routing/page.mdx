@@ -123,7 +123,7 @@ Response
 
 ## Authentication Middleware
 
-The authentication system uses JWT tokens stored in HTTP-only cookies.
+The authentication system uses JWT tokens stored in HTTP-only cookies. The admin UI additionally uses Better Auth session-based auth alongside JWT — both populate `c.get('user')` with `{ userId, email, role }`.
 
 ### Authentication Manager
 
@@ -346,9 +346,11 @@ Handles system initialization on worker startup.
 
 The bootstrap middleware runs once per Cloudflare Worker instance to:
 1. Run pending database migrations
-2. Sync collection configurations
-3. Bootstrap core plugins
-4. Install demo plugins (development only)
+2. Ensure document generated columns (`q_*`) are up to date
+3. Register collections (code-only, no DB sync)
+4. Auto-register collection document types
+5. Bootstrap core document types
+6. Run plugin `onBoot` hooks
 
 <CodeGroup title="Bootstrap Middleware">
 
@@ -397,17 +399,20 @@ export function bootstrapMiddleware() {
       const migrationService = new MigrationService(c.env.DB)
       await migrationService.runPendingMigrations()
 
-      // 2. Sync collection configurations
-      await syncCollections(c.env.DB)
+      // 2. Ensure document generated columns (q_* self-heal)
+      await migrationService.ensureDocumentGeneratedColumns()
 
-      // 3. Bootstrap core plugins
-      const bootstrapService = new PluginBootstrapService(c.env.DB)
-      const needsBootstrap = await bootstrapService.isBootstrapNeeded()
+      // 3. Register collections (code-only, no DB sync)
+      loadCollectionConfigs()
 
-      if (needsBootstrap) {
-        await bootstrapService.bootstrapCorePlugins()
-        await bootstrapService.installDemoPlugins()
-      }
+      // 4. Auto-register collection document types
+      await autoRegisterCollectionDocumentTypes(c.env.DB)
+
+      // 5. Bootstrap core document types
+      await bootstrapDocumentTypes(c.env.DB)
+
+      // 6. Run plugin onBoot hooks
+      await runPluginOnBoot(c.env)
 
       bootstrapComplete = true
       console.log('[Bootstrap] System initialization completed')
@@ -647,13 +652,8 @@ GET  /admin/                        # Admin dashboard
 GET  /admin/api/stats               # Dashboard statistics (HTMX)
 GET  /admin/api/system-status       # System status (HTMX)
 
-// Collections
+// Collections (read-only — defined in code via registerCollections())
 GET  /admin/collections             # List collections
-GET  /admin/collections/new         # New collection form
-POST /admin/collections             # Create collection
-GET  /admin/collections/:id         # Edit collection
-PUT  /admin/collections/:id         # Update collection
-DELETE /admin/collections/:id       # Delete collection
 
 // Content
 GET  /admin/content/                # List content

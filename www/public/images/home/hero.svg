@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1792" height="1024" viewBox="0 0 1792 1024">
+  <rect width="1792" height="1024" fill="#1E293B"/>
+  <!-- Globe outline -->
+  <circle cx="896" cy="512" r="300" fill="none" stroke="#3B82F6" stroke-width="1.5" opacity="0.3"/>
+  <circle cx="896" cy="512" r="300" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.2" stroke-dasharray="8 4"/>
+  <!-- Latitude lines -->
+  <ellipse cx="896" cy="512" rx="300" ry="120" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.2"/>
+  <ellipse cx="896" cy="512" rx="300" ry="220" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.15"/>
+  <!-- Meridian lines -->
+  <ellipse cx="896" cy="512" rx="120" ry="300" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.2"/>
+  <ellipse cx="896" cy="512" rx="220" ry="300" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.15"/>
+  <!-- Central database cylinder -->
+  <ellipse cx="896" cy="470" rx="60" ry="20" fill="#3B82F6" opacity="0.8"/>
+  <rect x="836" y="470" width="120" height="80" fill="#2563EB" opacity="0.7"/>
+  <ellipse cx="896" cy="550" rx="60" ry="20" fill="#1D4ED8" opacity="0.8"/>
+  <!-- Glow effect -->
+  <ellipse cx="896" cy="510" rx="80" ry="80" fill="#3B82F6" opacity="0.08"/>
+  <!-- Edge nodes -->
+  <circle cx="400" cy="300" r="12" fill="#3B82F6" opacity="0.9"/>
+  <circle cx="400" cy="300" r="20" fill="#3B82F6" opacity="0.2"/>
+  <circle cx="1400" cy="250" r="12" fill="#3B82F6" opacity="0.9"/>
+  <circle cx="1400" cy="250" r="20" fill="#3B82F6" opacity="0.2"/>
+  <circle cx="300" cy="700" r="12" fill="#3B82F6" opacity="0.9"/>
+  <circle cx="300" cy="700" r="20" fill="#3B82F6" opacity="0.2"/>
+  <circle cx="1500" cy="720" r="12" fill="#3B82F6" opacity="0.9"/>
+  <circle cx="1500" cy="720" r="20" fill="#3B82F6" opacity="0.2"/>
+  <circle cx="700" cy="150" r="12" fill="#3B82F6" opacity="0.9"/>
+  <circle cx="700" cy="150" r="20" fill="#3B82F6" opacity="0.2"/>
+  <circle cx="1100" cy="880" r="12" fill="#3B82F6" opacity="0.9"/>
+  <circle cx="1100" cy="880" r="20" fill="#3B82F6" opacity="0.2"/>
+  <!-- Connection lines -->
+  <line x1="896" y1="510" x2="400" y2="300" stroke="#3B82F6" stroke-width="1.5" opacity="0.5" stroke-dasharray="6 4"/>
+  <line x1="896" y1="510" x2="1400" y2="250" stroke="#3B82F6" stroke-width="1.5" opacity="0.5" stroke-dasharray="6 4"/>
+  <line x1="896" y1="510" x2="300" y2="700" stroke="#3B82F6" stroke-width="1.5" opacity="0.5" stroke-dasharray="6 4"/>
+  <line x1="896" y1="510" x2="1500" y2="720" stroke="#3B82F6" stroke-width="1.5" opacity="0.5" stroke-dasharray="6 4"/>
+  <line x1="896" y1="510" x2="700" y2="150" stroke="#3B82F6" stroke-width="1.5" opacity="0.5" stroke-dasharray="6 4"/>
+  <line x1="896" y1="510" x2="1100" y2="880" stroke="#3B82F6" stroke-width="1.5" opacity="0.5" stroke-dasharray="6 4"/>
+  <!-- Data packets -->
+  <circle cx="648" cy="405" r="5" fill="#60A5FA" opacity="0.9"/>
+  <circle cx="1148" cy="380" r="5" fill="#60A5FA" opacity="0.9"/>
+  <circle cx="598" cy="605" r="5" fill="#60A5FA" opacity="0.9"/>
+</svg>

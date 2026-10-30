@@ -33,7 +33,7 @@ async function fixEmailCases() {
     console.log('📂 Connected to local database')
     
     // Get all users with potentially mixed-case emails
-    const users = await db.execute('SELECT id, email FROM users')
+    const users = await db.execute('SELECT id, email FROM auth_user')
     
     if (!users.rows || users.rows.length === 0) {
       console.log('ℹ️  No users found in database')
@@ -52,7 +52,7 @@ async function fixEmailCases() {
       if (currentEmail !== normalizedEmail) {
         try {
           await db.execute(
-            'UPDATE users SET email = ?, updated_at = ? WHERE id = ?',
+            'UPDATE auth_user SET email = ?, updated_at = ? WHERE id = ?',
             [normalizedEmail, Date.now(), user.id || '']
           )
           

@@ -9,13 +9,34 @@ import { renderLoginPage, LoginPageData } from '../templates/pages/auth-login.te
 import { renderRegisterPage, RegisterPageData } from '../templates/pages/auth-register.template'
 import { getCacheService, CACHE_CONFIGS } from '../services'
 import { getEmailService, hasEmailService } from '../services/email/email-service-singleton'
-import { authValidationService, isRegistrationEnabled, isFirstUserRegistration } from '../services/auth-validation'
+import { authValidationService, isRegistrationEnabled, isFirstUserRegistration, MAX_PASSWORD_LENGTH } from '../services/auth-validation'
 import type { RegistrationData } from '../services/auth-validation'
 import type { Bindings, Variables } from '../app'
+import type { KVNamespace } from '@cloudflare/workers-types'
 import { getUserProfileConfig, getRegistrationFields, getProfileFieldDefaults, sanitizeCustomData, saveCustomData, getCustomData } from '../plugins/core-plugins/user-profiles'
 import { dispatchHookEvent } from '../plugins/hooks/dispatch-event'
+import { RbacService } from '../services/rbac'
+import { syncCredentialPassword } from '../auth/credential-account'
+import { bootstrapDocumentTypes } from '../services/document-types-seed'
+import { isDemoModeActive } from '../services/demo-mode'
 
 const JWT_SECRET_FALLBACK = 'your-super-secret-jwt-key-change-in-production'
+
+const DEMO_EMAIL = 'admin@sonicjs.com'
+const STATS_EVENTS_ENDPOINT = 'https://stats.sonicjs.com/v1/events'
+
+async function trackDemoLogin(kv: KVNamespace | undefined): Promise<void> {
+  try {
+    const installationId = (await kv?.get('_sonicjs_installation_id')) ?? 'demo-unknown'
+    await fetch(STATS_EVENTS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: { installation_id: installationId, event_type: 'demo_login', properties: {}, timestamp: new Date().toISOString() }
+      }),
+    })
+  } catch { /* silent — telemetry never blocks auth */ }
+}
 
 /** Minimal, dependency-free HTML body for the password-reset email. */
 function renderPasswordResetEmail(resetLink: string, firstName?: string): string {
@@ -67,24 +88,17 @@ const authRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 authRoutes.get('/login', async (c) => {
   const error = c.req.query('error')
   const message = c.req.query('message')
-  
+  const redirect = c.req.query('redirect')
+
   const pageData: LoginPageData = {
     error: error || undefined,
     message: message || undefined,
-    version: c.get('appVersion')
+    version: c.get('appVersion'),
+    redirect: redirect && redirect.startsWith('/') ? redirect : undefined,
   }
   
-  // Check if demo login plugin is active
-  const db = c.env.DB
-  let demoLoginActive = false
-  try {
-    const plugin = await db.prepare('SELECT * FROM plugins WHERE id = ? AND status = ?')
-      .bind('demo-login-prefill', 'active')
-      .first()
-    demoLoginActive = !!plugin
-  } catch (error) {
-    // Ignore database errors - plugin system might not be initialized
-  }
+  // Check if demo login plugin is active (set by demoLoginPlugin.onBoot at bootstrap)
+  const demoLoginActive = isDemoModeActive()
   
   return c.html(renderLoginPage(pageData, demoLoginActive))
 })
@@ -161,44 +175,39 @@ authRoutes.post('/register',
       // Extract fields with defaults for optional ones
       const email = validatedData.email
       const password = validatedData.password
-      const username = validatedData.username || authValidationService.generateDefaultValue('username', validatedData)
       const firstName = validatedData.firstName || authValidationService.generateDefaultValue('firstName', validatedData)
       const lastName = validatedData.lastName || authValidationService.generateDefaultValue('lastName', validatedData)
 
       // Normalize email to lowercase
       const normalizedEmail = email.toLowerCase()
-      
+
       // Check if user already exists
-      const existingUser = await db.prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-        .bind(normalizedEmail, username)
+      const existingUser = await db.prepare('SELECT id FROM auth_user WHERE email = ?')
+        .bind(normalizedEmail)
         .first()
-      
+
       if (existingUser) {
-        return c.json({ error: 'User with this email or username already exists' }, 400)
+        return c.json({ error: 'User with this email already exists' }, 400)
       }
-      
+
       // Hash password
       const passwordHash = await AuthManager.hashPassword(password)
-      
+
       // Create user
       const userId = crypto.randomUUID()
       const now = new Date()
-      
-      await db.prepare(`
-        INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        userId,
-        normalizedEmail,
-        username,
-        firstName,
-        lastName,
-        passwordHash,
-        'viewer', // Default role
-        1, // is_active
-        now.getTime(),
-        now.getTime()
-      ).run()
+      const nowSec = Math.floor(now.getTime() / 1000)
+
+      await db.batch([
+        db.prepare(`
+          INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(userId, normalizedEmail, firstName, lastName, passwordHash, 'viewer', 1, now.getTime(), now.getTime()),
+        // Better Auth sign-in/email requires an auth_account credential row — create it alongside auth_user
+        db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+          VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+          .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+      ])
       
       // Save custom profile fields if configured
       const profileConfig = getUserProfileConfig()
@@ -243,7 +252,6 @@ authRoutes.post('/register',
         user: {
           id: userId,
           email: normalizedEmail,
-          username,
           firstName,
           lastName,
           role: 'viewer'
@@ -264,7 +272,7 @@ authRoutes.post('/register',
   }
 )
 
-// Login user
+// Login user — delegates to Better Auth sign-in/email, returns JSON with session cookie.
 authRoutes.post('/login',
   rateLimit({ max: 30, windowMs: 60 * 1000, keyPrefix: 'login' }),
   async (c) => {
@@ -275,83 +283,96 @@ authRoutes.post('/login',
         return c.json({ error: 'Validation failed', details: validation.error.issues }, 400)
       }
       const { email, password } = validation.data
-      const db = c.env.DB
-      
-      // Normalize email to lowercase
       const normalizedEmail = email.toLowerCase()
-      
-      // Find user with caching
-      const cache = getCacheService(CACHE_CONFIGS.user!)
-      let user = await cache.get<any>(cache.generateKey('user', `email:${normalizedEmail}`))
 
-      if (!user) {
-        user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-          .bind(normalizedEmail)
-          .first() as any
+      const { createAuth } = await import('../auth/config')
+      const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
 
-        if (user) {
-          // Cache the user for faster subsequent lookups
-          await cache.set(cache.generateKey('user', `email:${normalizedEmail}`), user)
-          await cache.set(cache.generateKey('user', user.id), user)
-        }
-      }
+      const baReq = new Request(new URL('/auth/sign-in/email', c.req.url).href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin },
+        body: JSON.stringify({ email: normalizedEmail, password }),
+      })
+      const baRes = await auth.handler(baReq)
 
-      if (!user) {
-        return c.json({ error: 'Invalid email or password' }, 401)
-      }
-      
-      // Verify password
-      const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-      if (!isValidPassword) {
+      if (!baRes.ok) {
         return c.json({ error: 'Invalid email or password' }, 401)
       }
 
-      // Transparent password hash migration: re-hash legacy SHA-256 to PBKDF2
-      if (AuthManager.isLegacyHash(user.password_hash)) {
-        try {
-          const newHash = await AuthManager.hashPassword(password)
-          await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-            .bind(newHash, Date.now(), user.id)
-            .run()
-        } catch (rehashError) {
-          console.error('Password rehash failed (non-fatal):', rehashError)
+      // Forward BA session cookie(s) to client.
+      // Use c.header() so headers survive into the c.json() response (c.res.headers mutations are discarded).
+      // Prefer getSetCookie() — headers.get('set-cookie') joins multiple cookies with ',' which corrupts them.
+      if ((baRes.headers as any).getSetCookie) {
+        for (const sc of (baRes.headers as any).getSetCookie()) {
+          c.header('Set-Cookie', sc, { append: true })
+        }
+      } else {
+        const rawSetCookie = baRes.headers.get('set-cookie')
+        if (rawSetCookie) {
+          c.header('Set-Cookie', rawSetCookie, { append: true })
         }
       }
 
-      // Generate JWT token
+      await setCsrfCookie(c)
+
+      const baBody = await baRes.json() as any
+
+      // Second factor pending. Better Auth answers a 2FA challenge with HTTP **200** and a body
+      // of `{twoFactorRedirect:true}` — no `user`, no `token`, and it deletes the session it had
+      // just created. So `baRes.ok` above is TRUE and this is NOT a credential failure.
+      //
+      // This must be handled before the JWT mint below. `baBody.user` is absent here, so
+      // `generateToken(undefined, undefined, 'viewer', …)` would sign a token for a
+      // non-existent principal, set it as `auth_token`, and hand it back as `token` — and
+      // app.ts's Bearer-JWT fallback would then populate `c.get('user')` with
+      // `{userId: undefined}`, which `requireAuth()` accepts because the object is truthy.
+      //
+      // 200, not 401: the credentials were correct, and a 401 would teach API clients to
+      // re-prompt for the password. BA's signed challenge cookie has already been forwarded onto
+      // this response by the Set-Cookie loop above, which is what /auth/two-factor/verify-totp
+      // needs in order to resolve the challenge.
+      if (baBody?.twoFactorRedirect === true) {
+        return c.json({
+          twoFactorRequired: true,
+          // BA only ever reports 'totp'/'otp' here — never 'backup_code'. A client must offer
+          // backup-code entry unconditionally rather than keying off this list.
+          twoFactorMethods: baBody.twoFactorMethods ?? [],
+          redirectTo: '/auth/two-factor',
+        })
+      }
+
+      const user = baBody.user ?? {}
+
+      // Mint a JWT so API callers can use Bearer token auth (same as /register)
       const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-      const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl)
+      const token = await AuthManager.generateToken(
+        user.id,
+        user.email,
+        user.role ?? 'viewer',
+        c.env.JWT_SECRET,
+        tokenTtl
+      )
 
-      // Set HTTP-only cookie
       setCookie(c, 'auth_token', token, {
         httpOnly: true,
         secure: true,
         sameSite: 'Strict',
-        maxAge: tokenTtl
+        maxAge: tokenTtl,
       })
 
-      // Set CSRF cookie for browser sessions
-      await setCsrfCookie(c)
-
-      // Update last login
-      await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-        .bind(new Date().getTime(), user.id)
-        .run()
-
-      // Invalidate user cache on login
-      await cache.delete(cache.generateKey('user', user.id))
-      await cache.delete(cache.generateKey('user', `email:${normalizedEmail}`))
+      if (normalizedEmail === DEMO_EMAIL) {
+        c.executionCtx?.waitUntil(trackDemoLogin(c.env.CACHE_KV))
+      }
 
       return c.json({
         user: {
           id: user.id,
           email: user.email,
-          username: user.username,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          role: user.role
+          firstName: user.name?.split(' ')[0] ?? '',
+          lastName: user.name?.split(' ').slice(1).join(' ') ?? '',
+          role: user.role ?? 'viewer',
         },
-        token
+        token,
       })
     } catch (error) {
       console.error('Login error:', error)
@@ -360,29 +381,41 @@ authRoutes.post('/login',
 })
 
 // Logout user (both GET and POST for convenience)
-authRoutes.post('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
-  clearCsrfCookie(c)
+authRoutes.post('/logout', async (c) => {
+  // Delegate to BA to invalidate the session server-side, then clear cookies.
+  try {
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
+    const baReq = new Request(new URL('/auth/sign-out', c.req.url).href, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin, 'Cookie': c.req.header('Cookie') || '' },
+      body: JSON.stringify({}),
+    })
+    await auth.handler(baReq)
+  } catch { /* non-fatal — clear cookie regardless */ }
 
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
+  clearCsrfCookie(c)
   return c.json({ message: 'Logged out successfully' })
 })
 
-authRoutes.get('/logout', (c) => {
-  // Clear the auth cookie
-  setCookie(c, 'auth_token', '', {
-    httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
-    sameSite: 'Strict',
-    maxAge: 0 // Expire immediately
-  })
-  clearCsrfCookie(c)
+authRoutes.get('/logout', async (c) => {
+  // Delegate to BA to invalidate the session server-side, then clear cookies.
+  try {
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
+    const baReq = new Request(new URL('/auth/sign-out', c.req.url).href, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin, 'Cookie': c.req.header('Cookie') || '' },
+      body: JSON.stringify({}),
+    })
+    await auth.handler(baReq)
+  } catch { /* non-fatal */ }
 
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+  setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
+  clearCsrfCookie(c)
   return c.redirect('/auth/login?message=You have been logged out successfully')
 })
 
@@ -397,7 +430,7 @@ authRoutes.get('/me', requireAuth(), async (c) => {
     }
     
     const db = c.env.DB
-    const userData = await db.prepare('SELECT id, email, username, first_name, last_name, role, created_at FROM users WHERE id = ?')
+    const userData = await db.prepare('SELECT id, email, first_name, last_name, role, created_at FROM auth_user WHERE id = ?')
       .bind(user.userId)
       .first() as Record<string, any> | null
 
@@ -444,7 +477,7 @@ authRoutes.post('/refresh',
     }
 
     // Re-validate the user is still active, and pick up any role changes.
-    const row = await db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?')
+    const row = await db.prepare('SELECT id, email, role, is_active FROM auth_user WHERE id = ?')
       .bind(payload.userId)
       .first() as any
 
@@ -505,7 +538,6 @@ authRoutes.post('/register/form',
     const requestData = {
       email: formData.get('email') as string,
       password: formData.get('password') as string,
-      username: formData.get('username') as string,
       firstName: formData.get('firstName') as string,
       lastName: formData.get('lastName') as string,
     }
@@ -529,65 +561,103 @@ authRoutes.post('/register/form',
       const validatedData: RegistrationData = validation.data
 
     // Extract fields with defaults for optional ones
-    // const email = validatedData.email
     const password = validatedData.password
-    const username = validatedData.username || authValidationService.generateDefaultValue('username', validatedData)
     const firstName = validatedData.firstName || authValidationService.generateDefaultValue('firstName', validatedData)
     const lastName = validatedData.lastName || authValidationService.generateDefaultValue('lastName', validatedData)
-    
+
     // Check if user already exists
-    const existingUser = await db.prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-      .bind(normalizedEmail, username)
+    const existingUser = await db.prepare('SELECT id FROM auth_user WHERE email = ?')
+      .bind(normalizedEmail)
       .first()
-    
+
     if (existingUser) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          User with this email or username already exists
+          User with this email already exists
         </div>
       `)
     }
-    
+
     // Hash password
     const passwordHash = await AuthManager.hashPassword(password)
 
     // Determine role: first user gets admin, others get viewer
     const role = isFirstUser ? 'admin' : 'viewer'
 
+    const rbacService = new RbacService(db)
+
+    // First user needs system RBAC roles to exist before assignment. Seed them
+    // here (same as /auth/seed-admin) — a failed first boot must not leave an
+    // admin without roles.
+    if (isFirstUser) {
+      await bootstrapDocumentTypes(db)
+      await rbacService.ensureSystemRbacSeed()
+    }
+
     // Create user
     const userId = crypto.randomUUID()
     const now = new Date()
+    const nowSec = Math.floor(now.getTime() / 1000)
 
-    await db.prepare(`
-      INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      userId,
-      normalizedEmail,
-      username,
-      firstName,
-      lastName,
-      passwordHash,
-      role,
-      1, // is_active
-      now.getTime(),
-      now.getTime()
-    ).run()
+    await db.batch([
+      db.prepare(`
+        INSERT INTO auth_user (id, email, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        userId,
+        normalizedEmail,
+        firstName,
+        lastName,
+        passwordHash,
+        role,
+        1, // is_active
+        now.getTime(),
+        now.getTime()
+      ),
+      // Better Auth sign-in/email requires an auth_account credential row
+      db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+        VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+        .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+    ])
 
-    // Save custom profile fields if configured
+    // Assign RBAC role before anything optional — for the first user this makes
+    // them the admin. If it fails, remove the account: an admin without the role
+    // gets 403 everywhere.
+    try {
+      await rbacService.addUserRoleByName(userId, role)
+      if (isFirstUser) {
+        const assigned = await rbacService.getRolesForUser(userId)
+        if (!assigned.some((r) => r.name === 'admin')) {
+          throw new Error('Admin role could not be assigned to the first user')
+        }
+      }
+    } catch (error) {
+      await db.batch([
+        db.prepare('DELETE FROM auth_account WHERE user_id = ?').bind(userId),
+        db.prepare('DELETE FROM auth_user WHERE id = ?').bind(userId),
+      ])
+      throw error
+    }
+
+    // Save custom profile fields if configured. Account is complete and can
+    // sign in by now, so a failure here is logged instead of blocking.
     const profileConfig = getUserProfileConfig()
     if (profileConfig) {
       const regFields = getRegistrationFields()
       if (regFields.length > 0) {
-        const customData: Record<string, any> = { ...getProfileFieldDefaults() }
-        for (const field of regFields) {
-          const raw = formData.get(field.name)?.toString()
-          if (raw !== undefined && raw !== null) {
-            customData[field.name] = raw
+        try {
+          const customData: Record<string, any> = { ...getProfileFieldDefaults() }
+          for (const field of regFields) {
+            const raw = formData.get(field.name)?.toString()
+            if (raw !== undefined && raw !== null) {
+              customData[field.name] = raw
+            }
           }
+          const sanitized = sanitizeCustomData(customData, profileConfig)
+          await saveCustomData(db, userId, sanitized)
+        } catch (profileError) {
+          console.error('Failed to save custom profile fields:', profileError)
         }
-        const sanitized = sanitizeCustomData(customData, profileConfig)
-        await saveCustomData(db, userId, sanitized)
       }
     }
 
@@ -615,7 +685,7 @@ authRoutes.post('/register/form',
     await setCsrfCookie(c)
 
     // Redirect based on role
-    const redirectUrl = role === 'admin' ? '/admin/dashboard' : '/admin/dashboard'
+    const redirectUrl = '/admin/content'
 
     return c.html(html`
       <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
@@ -643,15 +713,10 @@ authRoutes.post('/login/form',
   async (c) => {
   try {
     const formData = await c.req.formData()
-    const email = formData.get('email') as string
+    const email = (formData.get('email') as string || '').toLowerCase()
     const password = formData.get('password') as string
 
-    // Normalize email to lowercase
-    const normalizedEmail = email.toLowerCase()
-
-    // Validate the data
-    const validation = loginSchema.safeParse({ email: normalizedEmail, password })
-
+    const validation = loginSchema.safeParse({ email, password })
     if (!validation.success) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -660,24 +725,18 @@ authRoutes.post('/login/form',
       `)
     }
 
-    const db = c.env.DB
-    
-    // Find user
-    const user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-      .bind(normalizedEmail)
-      .first() as any
-    
-    if (!user) {
-      return c.html(html`
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          Invalid email or password
-        </div>
-      `)
-    }
-    
-    // Verify password
-    const isValidPassword = await AuthManager.verifyPassword(password, user.password_hash)
-    if (!isValidPassword) {
+    // Delegate to Better Auth — call sign-in/email, get session token, set BA cookie.
+    const { createAuth } = await import('../auth/config')
+    const auth = createAuth(c.env, undefined, new URL(c.req.url).origin)
+
+    const baReq = new Request(new URL('/auth/sign-in/email', c.req.url).href, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': new URL(c.req.url).origin },
+      body: JSON.stringify({ email, password }),
+    })
+    const baRes = await auth.handler(baReq)
+
+    if (!baRes.ok) {
       return c.html(html`
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           Invalid email or password
@@ -685,37 +744,63 @@ authRoutes.post('/login/form',
       `)
     }
 
-    // Transparent password hash migration: re-hash legacy SHA-256 to PBKDF2
-    if (AuthManager.isLegacyHash(user.password_hash)) {
-      try {
-        const newHash = await AuthManager.hashPassword(password)
-        await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-          .bind(newHash, Date.now(), user.id)
-          .run()
-      } catch (rehashError) {
-        console.error('Password rehash failed (non-fatal):', rehashError)
+    // Forward BA's Set-Cookie header(s) to the browser.
+    // BA sets better-auth.session_token as token.signature (signed). Using the
+    // raw JSON .token field would break session lookup — must use the full cookie value.
+    // Use c.header() (not c.res.headers.append) — Hono's c.html() creates a new Response
+    // from c's internal header store; mutations to c.res.headers are discarded.
+    // Prefer getSetCookie() — headers.get('set-cookie') joins multiple cookies with ',' which corrupts them.
+    if ((baRes.headers as any).getSetCookie) {
+      for (const sc of (baRes.headers as any).getSetCookie()) {
+        c.header('Set-Cookie', sc, { append: true })
+      }
+    } else {
+      const rawSetCookie = baRes.headers.get('set-cookie')
+      if (rawSetCookie) {
+        c.header('Set-Cookie', rawSetCookie, { append: true })
       }
     }
 
-    // Generate JWT token
-    const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
-    const token = await AuthManager.generateToken(user.id, user.email, user.role, c.env.JWT_SECRET, tokenTtl)
-
-    // Set HTTP-only cookie
-    setCookie(c, 'auth_token', token, {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      sameSite: 'Strict',
-      maxAge: tokenTtl
-    })
-
-    // Set CSRF cookie for browser sessions
     await setCsrfCookie(c)
 
-    // Update last login
-    await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
-      .bind(new Date().getTime(), user.id)
-      .run()
+    // Second factor pending — see the sibling branch in POST /auth/login for the full note.
+    // The password was CORRECT and `baRes.ok` is true, so without this branch the handler
+    // reports "Login successful! Redirecting…" and sends the browser to /admin/content with no
+    // session, which bounces straight back to the login page. BA's signed challenge cookie is
+    // already on this response; send the browser to the challenge page instead.
+    const baChallengeBody = (await baRes
+      .clone()
+      .json()
+      .catch(() => null)) as { twoFactorRedirect?: boolean } | null
+    if (baChallengeBody?.twoFactorRedirect === true) {
+      const isHtmxChallenge = c.req.header('HX-Request') === 'true'
+      if (isHtmxChallenge) {
+        c.header('HX-Redirect', '/auth/two-factor')
+      }
+      return c.html(html`
+        <div id="form-response">
+          <p class="text-sm text-zinc-600 dark:text-zinc-300">Password accepted. Redirecting for two-step verification…</p>
+          <script>
+            window.location.href = '/auth/two-factor';
+          </script>
+        </div>
+      `)
+    }
+
+    if (email === DEMO_EMAIL) {
+      c.executionCtx?.waitUntil(trackDemoLogin(c.env.CACHE_KV))
+    }
+
+    const rawRedirect = c.req.query('redirect')
+    const redirectUrl = rawRedirect && rawRedirect.startsWith('/') ? rawRedirect : '/admin/content'
+
+    // For HTMX requests: HX-Redirect triggers an immediate client-side navigation.
+    // For native form submissions (HTMX not loaded): the <script> setTimeout handles it.
+    const isHtmx = c.req.header('HX-Request') === 'true'
+    if (isHtmx) {
+      c.header('HX-Redirect', redirectUrl)
+      return c.html(html`<div id="form-response"><p class="text-sm text-green-600">Login successful! Redirecting...</p></div>`)
+    }
 
     return c.html(html`
       <div id="form-response">
@@ -725,13 +810,11 @@ authRoutes.post('/login/form',
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             <div class="flex-1">
-              <p class="text-sm font-medium text-green-700 dark:text-lime-300">Login successful! Redirecting to admin dashboard...</p>
+              <p class="text-sm font-medium text-green-700 dark:text-lime-300">Login successful! Redirecting...</p>
             </div>
           </div>
           <script>
-            setTimeout(() => {
-              window.location.href = '/admin/dashboard';
-            }, 2000);
+            setTimeout(() => { window.location.href = '${redirectUrl}'; }, 500);
           </script>
         </div>
       </div>
@@ -746,91 +829,107 @@ authRoutes.post('/login/form',
   }
 })
 
-// Test seeding endpoint (only for development/testing)
+// Environments where the known-credential admin seed is permitted.
+const SEED_ADMIN_ALLOWED_ENVIRONMENTS = new Set(['development', 'test', 'e2e', 'preview', 'local'])
+
+// SECURITY: upserts a fixed-credential admin (admin@sonicjs.com / sonicjs!).
+// Needs ENABLE_SEED_ADMIN="true" AND a non-production ENVIRONMENT.
 authRoutes.post('/seed-admin',
   rateLimit({ max: 10, windowMs: 60 * 1000, keyPrefix: 'seed-admin' }),
   async (c) => {
+  const environment = (c.env?.ENVIRONMENT ?? '').toString().toLowerCase()
+  const enabled = (c.env as { ENABLE_SEED_ADMIN?: unknown } | undefined)?.ENABLE_SEED_ADMIN
+  if (!SEED_ADMIN_ALLOWED_ENVIRONMENTS.has(environment)) {
+    return c.json({ error: 'Seed endpoint not available in this environment' }, 403)
+  }
+  if (String(enabled).toLowerCase() !== 'true') {
+    return c.json({ error: 'Seed endpoint is disabled. Set ENABLE_SEED_ADMIN = "true" to use it in development.' }, 403)
+  }
   try {
     const db = c.env.DB
-    
-    // First ensure the users table exists
-    await db.prepare(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        email TEXT NOT NULL UNIQUE,
-        username TEXT NOT NULL UNIQUE,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        password_hash TEXT,
-        role TEXT NOT NULL DEFAULT 'viewer',
-        avatar TEXT,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        last_login_at INTEGER,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
-    `).run()
-    
-    // Check if admin user already exists
-    const existingAdmin = await db.prepare('SELECT id FROM users WHERE email = ? OR username = ?')
-      .bind('admin@sonicjs.com', 'admin')
-      .first()
+    // Ensure document_types FK targets exist before RBAC seed — D1 enforces the FK
+    // and bootstrap's Promise.all can race. Also covers KV fast-path deployments that
+    // skip ensureSystemRbacSeed entirely.
+    await bootstrapDocumentTypes(db)
+    const rbac = new RbacService(db)
+    await rbac.ensureSystemRbacSeed()
+    const results: Array<{ email: string; status: string }> = []
 
-    if (existingAdmin) {
-      // Update the password to ensure it's correct for testing
-      const passwordHash = await AuthManager.hashPassword('sonicjs!')
-      await db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-        .bind(passwordHash, Date.now(), existingAdmin.id)
-        .run()
-
-      return c.json({
-        message: 'Admin user already exists (password updated)',
-        user: {
-          id: existingAdmin.id,
-          email: 'admin@sonicjs.com',
-          username: 'admin',
-          role: 'admin'
+    const upsertSeedUser = async (opts: {
+      id: string
+      email: string
+      name: string
+      firstName: string
+      lastName: string
+      role: string
+      rbacRole: string
+      password: string
+    }) => {
+      const passwordHash = await AuthManager.hashPassword(opts.password)
+      const nowMs = Date.now()
+      const nowSec = Math.floor(nowMs / 1000)
+      const existing = await db.prepare('SELECT id FROM auth_user WHERE email = ?').bind(opts.email).first()
+      if (existing) {
+        await db.prepare('UPDATE auth_user SET updated_at = ? WHERE id = ?').bind(nowMs, existing.id).run()
+        const existingCred = await db.prepare(
+          `SELECT id FROM auth_account WHERE user_id = ? AND provider_id = 'credential'`
+        ).bind(existing.id).first()
+        if (existingCred) {
+          await db.prepare(`UPDATE auth_account SET password = ?, updated_at = ? WHERE id = ?`)
+            .bind(passwordHash, nowSec, existingCred.id).run()
+        } else {
+          await db.prepare(`INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+            VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+            .bind(`cred-${existing.id}`, existing.id, existing.id, passwordHash, nowSec, nowSec).run()
         }
-      })
+        await rbac.addUserRoleByName(String(existing.id), opts.rbacRole)
+        return 'updated'
+      }
+      await db.batch([
+        db.prepare(`INSERT INTO auth_user (id, name, email, email_verified, first_name, last_name, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, 1, ?, ?, ?, 1, ?, ?)`)
+          .bind(opts.id, opts.name, opts.email, opts.firstName, opts.lastName, opts.role, nowMs, nowMs),
+        db.prepare(`INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+          VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+          .bind(`cred-${opts.id}`, opts.id, opts.id, passwordHash, nowSec, nowSec),
+      ])
+      await rbac.addUserRoleByName(opts.id, opts.rbacRole)
+      return 'created'
     }
 
-    // Hash password
-    const passwordHash = await AuthManager.hashPassword('sonicjs!')
-    
-    // Create admin user
-    const userId = 'admin-user-id'
-    const now = Date.now()
-    const adminEmail = 'admin@sonicjs.com'.toLowerCase()
-    
-    await db.prepare(`
-      INSERT INTO users (id, email, username, first_name, last_name, password_hash, role, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      userId,
-      adminEmail,
-      'admin',
-      'Admin',
-      'User',
-      passwordHash,
-      'admin',
-      1, // is_active
-      now,
-      now
-    ).run()
-    
-    return c.json({ 
-      message: 'Admin user created successfully',
-      user: {
-        id: userId,
-        email: adminEmail,
-        username: 'admin',
-        role: 'admin'
-      },
-      passwordHash: passwordHash // For debugging
+    results.push({
+      email: 'admin@sonicjs.com',
+      status: await upsertSeedUser({
+        id: 'admin-user-id',
+        email: 'admin@sonicjs.com',
+        name: 'Admin User',
+        firstName: 'Admin',
+        lastName: 'User',
+        role: 'admin',
+        rbacRole: 'admin',
+        password: 'sonicjs!',
+      }),
     })
+
+    // Temporary editor user for testing
+    results.push({
+      email: 'e@e.com',
+      status: await upsertSeedUser({
+        id: 'editor-user-eddie',
+        email: 'e@e.com',
+        name: 'Eddie McEditor',
+        firstName: 'Eddie',
+        lastName: 'McEditor',
+        role: 'editor',
+        rbacRole: 'editor',
+        password: '123123123',
+      }),
+    })
+
+    return c.json({ message: 'Seed complete', users: results })
   } catch (error) {
     console.error('Seed admin error:', error)
-    return c.json({ error: 'Failed to create admin user', details: error instanceof Error ? error.message : String(error) }, 500)
+    return c.json({ error: 'Failed to seed users', details: error instanceof Error ? error.message : String(error) }, 500)
   }
 })
 
@@ -858,7 +957,7 @@ authRoutes.get('/accept-invitation', async (c) => {
     // Check if invitation token is valid
     const userStmt = db.prepare(`
       SELECT id, email, first_name, last_name, role, invited_at
-      FROM users 
+      FROM auth_user 
       WHERE invitation_token = ? AND is_active = 0
     `)
     const invitedUser = await userStmt.bind(token).first() as any
@@ -929,17 +1028,6 @@ authRoutes.get('/accept-invitation', async (c) => {
 
             <form method="POST" action="/auth/accept-invitation" class="mt-8 space-y-6">
               <input type="hidden" name="token" value="${token}" />
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
-                <input 
-                  type="text" 
-                  name="username" 
-                  required
-                  class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 transition-all"
-                  placeholder="Enter your username"
-                >
-              </div>
 
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
@@ -999,11 +1087,10 @@ authRoutes.post('/accept-invitation', async (c) => {
   try {
     const formData = await c.req.formData()
     const token = formData.get('token')?.toString()
-    const username = formData.get('username')?.toString()?.trim()
     const password = formData.get('password')?.toString()
     const confirmPassword = formData.get('confirm_password')?.toString()
 
-    if (!token || !username || !password || !confirmPassword) {
+    if (!token || !password || !confirmPassword) {
       return c.json({ error: 'All fields are required' }, 400)
     }
 
@@ -1015,12 +1102,16 @@ authRoutes.post('/accept-invitation', async (c) => {
       return c.json({ error: 'Password must be at least 8 characters long' }, 400)
     }
 
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return c.json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long` }, 400)
+    }
+
     const db = c.env.DB
 
     // Check if invitation token is valid
     const userStmt = db.prepare(`
       SELECT id, email, first_name, last_name, role, invited_at
-      FROM users 
+      FROM auth_user 
       WHERE invitation_token = ? AND is_active = 0
     `)
     const invitedUser = await userStmt.bind(token).first() as any
@@ -1032,44 +1123,33 @@ authRoutes.post('/accept-invitation', async (c) => {
     // Check if invitation is expired (7 days)
     const invitationAge = Date.now() - invitedUser.invited_at
     const maxAge = 7 * 24 * 60 * 60 * 1000 // 7 days
-    
+
     if (invitationAge > maxAge) {
       return c.json({ error: 'Invitation has expired' }, 400)
-    }
-
-    // Check if username is available
-    const existingUsernameStmt = db.prepare(`
-      SELECT id FROM users WHERE username = ? AND id != ?
-    `)
-    const existingUsername = await existingUsernameStmt.bind(username, invitedUser.id).first()
-
-    if (existingUsername) {
-      return c.json({ error: 'Username is already taken' }, 400)
     }
 
     // Hash password
     const passwordHash = await AuthManager.hashPassword(password)
 
-    // Activate user account
-    const updateStmt = db.prepare(`
-      UPDATE users SET 
-        username = ?,
-        password_hash = ?,
-        is_active = 1,
-        email_verified = 1,
-        invitation_token = NULL,
-        accepted_invitation_at = ?,
-        updated_at = ?
-      WHERE id = ?
-    `)
-
-    await updateStmt.bind(
-      username,
-      passwordHash,
-      Date.now(),
-      Date.now(),
-      invitedUser.id
-    ).run()
+    // Activate user account (and sync credential row Better Auth signs in with)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET
+          password_hash = ?,
+          is_active = 1,
+          email_verified = 1,
+          invitation_token = NULL,
+          accepted_invitation_at = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).bind(
+        passwordHash,
+        Date.now(),
+        Date.now(),
+        invitedUser.id
+      ),
+      ...syncCredentialPassword(db, invitedUser.id as string, passwordHash),
+    ])
 
     // Generate JWT token for auto-login
     const tokenTtl = await getJwtExpirySecondsFromDb(c.env.DB, c.env)
@@ -1090,7 +1170,7 @@ authRoutes.post('/accept-invitation', async (c) => {
     // Activity logging is deferred until utils/log-activity is implemented
 
     // Redirect to admin dashboard
-    return c.redirect('/admin/dashboard?welcome=true')
+    return c.redirect('/admin/content')
 
   } catch (error) {
     console.error('Accept invitation error:', error)
@@ -1120,7 +1200,7 @@ authRoutes.post('/request-password-reset',
 
     // Check if user exists and is active
     const userStmt = db.prepare(`
-      SELECT id, email, first_name, last_name FROM users 
+      SELECT id, email, first_name, last_name FROM auth_user 
       WHERE email = ? AND is_active = 1
     `)
     const user = await userStmt.bind(email).first() as any
@@ -1139,7 +1219,7 @@ authRoutes.post('/request-password-reset',
 
     // Update user with reset token
     const updateStmt = db.prepare(`
-      UPDATE users SET 
+      UPDATE auth_user SET 
         password_reset_token = ?,
         password_reset_expires = ?,
         updated_at = ?
@@ -1218,7 +1298,7 @@ authRoutes.get('/reset-password', async (c) => {
     // Check if reset token is valid and not expired
     const userStmt = db.prepare(`
       SELECT id, email, first_name, last_name, password_reset_expires
-      FROM users 
+      FROM auth_user 
       WHERE password_reset_token = ? AND is_active = 1
     `)
     const user = await userStmt.bind(token).first() as any
@@ -1365,12 +1445,16 @@ authRoutes.post('/reset-password', async (c) => {
       return c.json({ error: 'Password must be at least 8 characters long' }, 400)
     }
 
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return c.json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long` }, 400)
+    }
+
     const db = c.env.DB
 
     // Check if reset token is valid and not expired
     const userStmt = db.prepare(`
       SELECT id, email, password_hash, password_reset_expires
-      FROM users
+      FROM auth_user
       WHERE password_reset_token = ? AND is_active = 1
     `)
     const user = await userStmt.bind(token).first() as any
@@ -1390,7 +1474,7 @@ authRoutes.post('/reset-password', async (c) => {
     // Store old password in history (skip if table doesn't exist)
     try {
       const historyStmt = db.prepare(`
-        INSERT INTO password_history (id, user_id, password_hash, created_at)
+        INSERT INTO auth_password_history (id, user_id, password_hash, created_at)
         VALUES (?, ?, ?, ?)
       `)
       await historyStmt.bind(
@@ -1404,21 +1488,22 @@ authRoutes.post('/reset-password', async (c) => {
       console.warn('Could not store password history:', historyError)
     }
 
-    // Update user password and clear reset token
-    const updateStmt = db.prepare(`
-      UPDATE users SET
-        password_hash = ?,
-        password_reset_token = NULL,
-        password_reset_expires = NULL,
-        updated_at = ?
-      WHERE id = ?
-    `)
-
-    await updateStmt.bind(
-      newPasswordHash,
-      Date.now(),
-      user.id
-    ).run()
+    // Update user password and clear reset token (and sync credential row)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET
+          password_hash = ?,
+          password_reset_token = NULL,
+          password_reset_expires = NULL,
+          updated_at = ?
+        WHERE id = ?
+      `).bind(
+        newPasswordHash,
+        Date.now(),
+        user.id
+      ),
+      ...syncCredentialPassword(db, user.id as string, newPasswordHash),
+    ])
 
     // Fire auth:password-reset:completed for audit/notification plugins.
     dispatchHookEvent(

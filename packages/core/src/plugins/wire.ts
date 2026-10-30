@@ -38,6 +38,12 @@ export interface WirablePlugin {
   /** IDs of plugins that must be wired before this one. */
   dependencies?: string[]
   /**
+   * When true, the plugin is inserted as 'active' on first install.
+   * Subsequent boots leave the admin-managed status untouched (the ON CONFLICT
+   * clause does not update `status`), so admins can still deactivate it.
+   */
+  defaultActive?: boolean
+  /**
    * Capabilities declared by the plugin. When present (even as an empty array),
    * the wire phase enforces that each declarative hook subscription is covered by
    * a matching capability in {@link HOOK_CAPABILITY_MAP}. Absent on old-style
@@ -156,7 +162,117 @@ export async function wireRegisteredPlugins(
     }
   }
 
+  // Phase C (best-effort): reflect wired plugin list into the `plugins` DB table
+  // so the admin view stays in sync with what's actually running. Errors are
+  // non-fatal — DB unavailable during cron-first boot should not break wiring.
+  if (context.env?.DB) {
+    const db = context.env.DB as D1DatabaseLike
+    reflectWiredPlugins(valid, db).catch((err) => {
+      console.warn('[plugins] DB reflection failed (non-fatal):', err)
+    })
+    // Phase D (best-effort): deactivate user plugins that were removed from config.
+    // Any non-core active plugin document not in the current wired list is stale.
+    pruneStaleUserPlugins(valid, db).catch((err) => {
+      console.warn('[plugins] Stale plugin pruning failed (non-fatal):', err)
+    })
+  }
+
   return result
+}
+
+/** Minimal D1 interface needed for reflection (avoids a hard @cloudflare/workers-types dep). */
+interface D1DatabaseLike {
+  prepare(sql: string): {
+    bind(...args: unknown[]): {
+      run(): Promise<unknown>
+      all(): Promise<{ results: Array<Record<string, unknown>> }>
+    }
+    all(): Promise<{ results: Array<Record<string, unknown>> }>
+  }
+  batch(stmts: unknown[]): Promise<unknown>
+}
+
+/**
+ * Best-effort: deactivate non-core plugin documents whose plugin is no longer
+ * present in config.plugins.register. Runs after reflectWiredPlugins so the
+ * wired set is the authoritative "what's configured" list.
+ *
+ * Only touches documents where json_extract(data, '$.isCore') is falsy — core
+ * plugins bootstrapped by PluginBootstrapService are never pruned.
+ */
+async function pruneStaleUserPlugins(wired: WirablePlugin[], db: D1DatabaseLike): Promise<void> {
+  const wiredIds = new Set(wired.map(p => (p as any).id ?? p.name).filter(Boolean))
+  if (wiredIds.size === 0) return
+
+  const now = Math.floor(Date.now() / 1000)
+
+  // Find active non-core plugin documents whose slug is not in the wired set.
+  const rows = await db
+    .prepare(
+      `SELECT slug FROM documents
+       WHERE type_id = 'plugin' AND tenant_id = 'default'
+         AND is_current_draft = 1 AND deleted_at IS NULL
+         AND q_plugin_status = 'active'
+         AND (json_extract(data, '$.isCore') = 0 OR json_extract(data, '$.isCore') IS NULL)`
+    )
+    .all()
+
+  for (const row of rows.results ?? []) {
+    const slug = row.slug as string
+    if (!slug || wiredIds.has(slug)) continue
+    // Set status to inactive in the data JSON and update the generated column.
+    try {
+      await db
+        .prepare(
+          `UPDATE documents
+           SET data = json_set(data, '$.status', 'inactive'),
+               updated_at = ?
+           WHERE slug = ? AND type_id = 'plugin' AND tenant_id = 'default'
+             AND is_current_draft = 1 AND deleted_at IS NULL`
+        )
+        .bind(now, slug)
+        .run()
+      console.log(`[plugins] Deactivated stale plugin "${slug}" (removed from config)`)
+    } catch {
+      // Non-fatal per-row — continue with others
+    }
+  }
+}
+
+/**
+ * Best-effort: register each wired plugin in the `plugins` table so the admin
+ * can see and manage it. New plugins start as 'inactive' — an admin must
+ * explicitly activate them via the Plugins admin page. Existing rows keep
+ * their current status so admin deactivation survives reboots.
+ * Non-fatal on any error.
+ */
+async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike): Promise<void> {
+  const now = Date.now()
+  for (const plugin of plugins) {
+    const id = (plugin as any).id ?? plugin.name
+    if (!id) continue
+    const displayName = (plugin as any).name ?? id
+    const version = (plugin as any).version ?? '0.0.0'
+    const description = (plugin as any).description ?? ''
+    const initialStatus = (plugin as any).defaultActive ? 'active' : 'inactive'
+    try {
+      await db
+        .prepare(
+          `INSERT INTO plugins (id, name, display_name, description, version, author, category,
+              status, is_core, installed_at, last_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             version = excluded.version,
+             display_name = excluded.display_name,
+             last_updated = excluded.last_updated`
+        )
+        .bind(id, id, displayName, description, version, 'core', 'core', initialStatus, now, now)
+        .run()
+    } catch {
+      // Individual plugin upsert failure is silently skipped — one bad row
+      // must not abort the rest of the reflection pass.
+    }
+  }
 }
 
 /**

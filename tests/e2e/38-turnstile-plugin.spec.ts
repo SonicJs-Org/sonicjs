@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Turnstile Plugin', () => {
+test.describe('Turnstile Plugin @plugins', () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin using the test helper
     await loginAsAdmin(page)
@@ -112,55 +112,4 @@ test.describe('Turnstile Plugin', () => {
     await expect(page).toHaveURL(/\/admin\/plugins\/turnstile/)
   })
 
-  // NOTE: The following tests require the Contact Form plugin from feature/contact-plugin-v1
-  // They are skipped here since this branch only contains the Turnstile plugin
-  // These tests should be enabled once both features are merged to main
-  
-  test.skip('should allow enabling Turnstile on contact form', async ({ page }) => {
-    // First ensure Turnstile plugin is configured
-    await page.goto('/admin/plugins')
-    await page.click('text=Cloudflare Turnstile')
-    await page.fill('input[name="setting_siteKey"]', '1x00000000000000000000AA')
-    await page.fill('input[name="setting_secretKey"]', '1x0000000000000000000000000000000AA')
-    await page.click('button:has-text("Save Settings")')
-    
-    // Go to contact form settings
-    await page.goto('/admin/plugins')
-    await page.click('text=Contact Form')
-    
-    // Enable Turnstile
-    const turnstileToggle = page.locator('input[name="useTurnstile"]')
-    if (!(await turnstileToggle.isChecked())) {
-      await turnstileToggle.click()
-    }
-    
-    // Save contact form settings
-    await page.click('button:has-text("Save Settings")')
-    
-    // Verify settings were saved
-    await expect(page.locator('text=Settings Saved')).toBeVisible({ timeout: 5000 })
-  })
-
-  test.skip('should show Turnstile widget on contact form when enabled', async ({ page }) => {
-    // Note: This test requires real Turnstile keys to fully work
-    // With dummy keys, the widget may not render properly
-    
-    await page.goto('/contact')
-    
-    // Check if the page loads
-    await expect(page).toHaveURL('/contact')
-    
-    // Check if form exists
-    const form = page.locator('form#cf')
-    await expect(form).toBeVisible()
-    
-    // If Turnstile is enabled, the widget container should exist
-    // (even if it doesn't fully render without valid keys)
-    const turnstileContainer = page.locator('.cf-turnstile')
-    const containerCount = await turnstileContainer.count()
-    
-    // Container may or may not be present depending on settings
-    // This is more of a smoke test
-    console.log(`Turnstile containers found: ${containerCount}`)
-  })
 })

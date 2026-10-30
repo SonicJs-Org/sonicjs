@@ -71,18 +71,24 @@ SonicJS is written in 100% TypeScript with strict type checking. This is crucial
 
 ```typescript
 // SonicJS collection definition - AI tools love this structure
-export const postsCollection = defineCollection({
+import type { CollectionConfig } from '@sonicjs-cms/core'
+
+export const postsCollection: CollectionConfig = {
   name: 'posts',
   slug: 'posts',
-  fields: {
-    title: { type: 'string', required: true },
-    content: { type: 'richtext', required: true },
-    status: {
-      type: 'select',
-      options: ['draft', 'published']
+  schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'lexical' },
+      status: {
+        type: 'string',
+        enum: ['draft', 'published'],
+      },
     },
+    required: ['title', 'content'],
   },
-})
+}
 ```
 
 ### 2. Modular, AI-Friendly Structure

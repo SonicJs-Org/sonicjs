@@ -372,6 +372,16 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
   return html`
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script>
+      // HTMX 1.x does not swap 4xx/5xx responses by default.
+      // Allow 400/422 so server-rendered validation errors reach #form-messages.
+      document.body.addEventListener('htmx:beforeSwap', function(event) {
+        var status = event.detail.xhr.status;
+        if (status === 400 || status === 422) {
+          event.detail.shouldSwap = true;
+          event.detail.isError = false;
+        }
+      });
+
       // Handle HTMX form submission
       document.body.addEventListener('htmx:afterRequest', function(event) {
         // Only redirect on successful responses (2xx status codes)
@@ -385,12 +395,9 @@ function getFormScripts(): HtmlEscapedString | Promise<HtmlEscapedString> {
         }
       });
 
-      // Handle form validation errors (4xx, 5xx responses)
-      // HTMX will automatically swap the error HTML into #form-messages
-      // No additional handling needed - the error stays visible
+      // Handle form validation errors (5xx — 4xx are now swapped via beforeSwap)
       document.body.addEventListener('htmx:responseError', function(event) {
-        // Only show generic error if no error HTML was returned
-        const messagesDiv = document.getElementById('form-messages');
+        var messagesDiv = document.getElementById('form-messages');
         if (messagesDiv && !messagesDiv.innerHTML.trim()) {
           messagesDiv.innerHTML = '<div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 p-4 mb-4"><p class="text-sm">Failed to save redirect. Please check your input and try again.</p></div>';
         }

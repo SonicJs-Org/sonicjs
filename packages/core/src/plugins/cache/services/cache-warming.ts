@@ -6,6 +6,7 @@
 
 import { getCacheService } from './cache.js'
 import { CACHE_CONFIGS } from './cache-config.js'
+import { getCollectionRegistry, collectionRecordToRow } from '../../../services/collection-registry'
 
 /**
  * Warm cache with common queries
@@ -57,10 +58,11 @@ async function warmCollections(db: D1Database): Promise<number> {
   let count = 0
 
   try {
-    const stmt = db.prepare('SELECT * FROM collections WHERE is_active = 1')
-    const { results } = await stmt.all()
+    const results = getCollectionRegistry()
+      .listActive()
+      .map(collectionRecordToRow)
 
-    for (const collection of results as any[]) {
+    for (const collection of results) {
       const key = collectionCache.generateKey('item', collection.id)
       await collectionCache.set(key, collection)
       count++
@@ -88,11 +90,15 @@ async function warmRecentContent(db: D1Database, limit: number = 50): Promise<nu
   let count = 0
 
   try {
-    const stmt = db.prepare(`SELECT * FROM content ORDER BY created_at DESC LIMIT ${limit}`)
+    // Content is document-backed now — warm recent current-draft documents (decommission of `content`).
+    // Exclude media_asset (warmed separately by warmRecentMedia). Tenant-scoped per R3.
+    const stmt = db
+      .prepare(`SELECT * FROM documents WHERE tenant_id = ? AND type_id != 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
+      .bind('default')
     const { results } = await stmt.all()
 
     for (const content of results as any[]) {
-      const key = contentCache.generateKey('item', content.id)
+      const key = contentCache.generateKey('item', content.root_id ?? content.id)
       await contentCache.set(key, content)
       count++
     }
@@ -119,11 +125,14 @@ async function warmRecentMedia(db: D1Database, limit: number = 50): Promise<numb
   let count = 0
 
   try {
-    const stmt = db.prepare(`SELECT * FROM media WHERE deleted_at IS NULL ORDER BY uploaded_at DESC LIMIT ${limit}`)
+    // Media is document-backed (type_id = 'media_asset'). Tenant-scoped per R3.
+    const stmt = db
+      .prepare(`SELECT * FROM documents WHERE tenant_id = ? AND type_id = 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
+      .bind('default')
     const { results } = await stmt.all()
 
     for (const media of results as any[]) {
-      const key = mediaCache.generateKey('item', media.id)
+      const key = mediaCache.generateKey('item', (media as any).root_id ?? media.id)
       await mediaCache.set(key, media)
       count++
     }

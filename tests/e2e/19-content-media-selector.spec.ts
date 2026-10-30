@@ -1,8 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe.skip('Content Media Selector', () => {
-  const testCollectionId = 'blog-posts-collection'; // Use existing collection
+test.describe('Content Media Selector @content @media', () => {
+  const testCollectionId = 'e2e_test'; // Code-defined collection carrying media fields
   let uploadedFileId: string;
   let uploadedFileName: string;
 
@@ -34,7 +34,7 @@ test.describe.skip('Content Media Selector', () => {
     formData.append('files', blob, uploadedFileName);
     formData.append('folder', 'uploads');
 
-    const uploadResponse = await context.request.post('http://localhost:8787/api/media/upload-multiple', {
+    const uploadResponse = await context.request.post('/api/media/upload-multiple', {
       multipart: formData
     });
 
@@ -49,7 +49,7 @@ test.describe.skip('Content Media Selector', () => {
   test.afterEach(async ({ context }) => {
     // Clean up: delete uploaded file
     if (uploadedFileId) {
-      await context.request.post('http://localhost:8787/api/media/bulk-delete', {
+      await context.request.post('/api/media/bulk-delete', {
         data: { fileIds: [uploadedFileId] }
       }).catch(() => {});
     }
@@ -58,10 +58,10 @@ test.describe.skip('Content Media Selector', () => {
   test('should open media selector modal when Select Media button is clicked', async ({ page }) => {
     // Navigate to new content page for our test collection
     await page.goto(`/admin/content/new?collection=${testCollectionId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Find and click the "Select Media" button
-    const selectMediaButton = page.locator('button:has-text("Select Media")');
+    const selectMediaButton = page.locator('button:has-text("Select Media")').first();
     await expect(selectMediaButton).toBeVisible({ timeout: 10000 });
     await selectMediaButton.click();
 
@@ -70,16 +70,16 @@ test.describe.skip('Content Media Selector', () => {
     await expect(modal).toBeVisible({ timeout: 5000 });
 
     // Verify modal has title "Select Media"
-    await expect(page.locator('h3:has-text("Select Media")')).toBeVisible();
+    await expect(page.locator('h3:has-text("Select Media")').first()).toBeVisible();
   });
 
   test('should display media files in the selector modal', async ({ page }) => {
     // Navigate to new content page
     await page.goto(`/admin/content/new?collection=${testCollectionId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Open media selector
-    await page.locator('button:has-text("Select Media")').click();
+    await page.locator('button:has-text("Select Media")').first().click();
 
     // Wait for modal to load media
     await page.waitForTimeout(1000);
@@ -95,10 +95,10 @@ test.describe.skip('Content Media Selector', () => {
   test('should allow searching for media files', async ({ page }) => {
     // Navigate to new content page
     await page.goto(`/admin/content/new?collection=${testCollectionId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Open media selector
-    await page.locator('button:has-text("Select Media")').click();
+    await page.locator('button:has-text("Select Media")').first().click();
 
     // Find search input
     const searchInput = page.locator('#media-selector-search').or(
@@ -121,10 +121,10 @@ test.describe.skip('Content Media Selector', () => {
   test('should select media file and populate the form field', async ({ page }) => {
     // Navigate to new content page
     await page.goto(`/admin/content/new?collection=${testCollectionId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Open media selector
-    await page.locator('button:has-text("Select Media")').click();
+    await page.locator('button:has-text("Select Media")').first().click();
     await page.waitForTimeout(2000);
 
     // Select the first available file (just click the first Select button)
@@ -144,25 +144,29 @@ test.describe.skip('Content Media Selector', () => {
     const modal = page.locator('#media-selector-modal');
     await expect(modal).toBeHidden({ timeout: 5000 });
 
-    // Verify the hidden input field is populated with a URL
-    const hiddenInput = page.locator('input#featured_image');
-    await expect(hiddenInput).toBeVisible({ timeout: 1000 });
+    // Verify the backing input is populated with a URL. It is type="hidden", so assert it is
+    // attached rather than visible.
+    const hiddenInput = page.locator('input#field-featuredImage');
+    await expect(hiddenInput).toBeAttached({ timeout: 1000 });
     const hiddenInputValue = await hiddenInput.inputValue();
     expect(hiddenInputValue).toBeTruthy();
-    expect(hiddenInputValue).toContain('http'); // Should be a URL
+    // Media URLs are served relative (/files/<folder>/<name>); absolute URLs are also valid
+    // when an R2 public bucket is configured.
+    expect(hiddenInputValue).toMatch(/^(https?:\/\/\S+|\/[^\s?]+)\.(jpe?g|png|gif|webp|svg|avif)$/i);
 
-    // Verify image preview is displayed
-    const preview = page.locator('.media-preview img');
+    // Verify image preview is displayed. The collection has several media fields, so scope the
+    // preview to the one we populated.
+    const preview = page.locator('#field-featuredImage-preview img');
     await expect(preview).toBeVisible({ timeout: 5000 });
   });
 
   test('should close media selector when Cancel button is clicked', async ({ page }) => {
     // Navigate to new content page
     await page.goto(`/admin/content/new?collection=${testCollectionId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Open media selector
-    await page.locator('button:has-text("Select Media")').click();
+    await page.locator('button:has-text("Select Media")').first().click();
 
     // Wait for modal
     const modal = page.locator('#media-selector-modal');
@@ -179,10 +183,10 @@ test.describe.skip('Content Media Selector', () => {
   test('should clear selected media when Remove button is clicked', async ({ page }) => {
     // Navigate to new content page
     await page.goto(`/admin/content/new?collection=${testCollectionId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Open media selector and select a file
-    await page.locator('button:has-text("Select Media")').click();
+    await page.locator('button:has-text("Select Media")').first().click();
     await page.waitForTimeout(2000);
 
     const selectButton = page.locator('#media-selector-grid button:has-text("Select")').first();
@@ -200,17 +204,18 @@ test.describe.skip('Content Media Selector', () => {
     // Wait for modal to close and verify selection
     await page.waitForTimeout(1000);
 
-    // Verify file is selected (preview is visible)
-    const preview = page.locator('.media-preview img');
+    // Verify file is selected (preview is visible). Scope to the field we populated — the
+    // collection renders several media fields.
+    const preview = page.locator('#field-featuredImage-preview img');
     await expect(preview).toBeVisible({ timeout: 5000 });
 
-    // Click Remove button
-    const removeButton = page.locator('button:has-text("Remove")');
+    // Click Remove button — it is injected on selection with data-media-remove="true"
+    const removeButton = page.locator('button[data-media-remove="true"]').first();
     await expect(removeButton).toBeVisible({ timeout: 5000 });
     await removeButton.click();
 
-    // Verify hidden input is cleared
-    const hiddenInput = page.locator('input#featured_image');
+    // Verify the backing input is cleared
+    const hiddenInput = page.locator('input#field-featuredImage');
     const hiddenInputValue = await hiddenInput.inputValue();
     expect(hiddenInputValue).toBe('');
 

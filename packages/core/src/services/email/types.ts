@@ -60,8 +60,9 @@ export interface SendResult {
  * send — e.g. a Resend provider with no API key reports `false`.
  */
 /**
- * A row from `email_log` as seen by the reconciliation method.
- * Contains the fields a provider needs to check delivery status.
+ * An email_log entry as seen by the reconciliation method.
+ * Derived from the documents row data JSON for type_id='email_log'.
+ * `id` is the document root_id used to identify the row.
  */
 export interface EmailLogRow {
   id: string

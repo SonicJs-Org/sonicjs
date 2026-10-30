@@ -205,7 +205,7 @@ The **OTP (One-Time Password) Login Plugin** provides email-based authentication
    - **Logo Width (px)**: rendered logo size, 20–600 (default: 150)
    - **Logo Border Thickness (px)**: 0–20; `0` disables the border (default: 0)
    - **Logo Border Color**: hex / rgb / named color, with picker swatch (default: `#ffffff`); the logo gets a matching `border-radius` when both thickness and color are set
-   - **Login URL**: when set, a styled **Sign in to {site name}** button is rendered under the OTP code in the email
+   - **Login URL**: when set, a styled **Sign in to \{site name\}** button is rendered under the OTP code in the email
    - **Login Button Text**: override the default button label
 
 The settings page renders a live preview of the email so you can verify branding before sending.
@@ -254,43 +254,59 @@ CREATE TABLE otp_codes (
 );
 ```
 
-### Magic Link Authentication Plugin
+### Magic Link Authentication
 
-The **Magic Link Plugin** enables passwordless login via email links.
+Magic link auth is built into SonicJS via **Better Auth's native `magicLink` plugin**. No separate plugin activation is needed.
+
+**Prerequisites:**
+
+1. `BETTER_AUTH_SECRET` set as a Wrangler secret (required for all Better Auth features)
+2. Email plugin configured with a valid Resend API key (Admin → Plugins → Email Plugin)
+
+Once both are in place, magic link is live — no admin panel toggle required.
 
 **Features:**
-- One-click email authentication
-- No password required
-- Secure token-based links
-- Optional user registration
-
-**Installation:**
-
-1. Navigate to **Admin** → **Plugins**
-2. Find **Magic Link Auth** plugin
-3. Click **Activate**
-4. Configure email settings (requires Email Plugin)
+- Always active when email is configured
+- One-time token stored in `auth_verification` (managed by Better Auth)
+- Creates a full Better Auth session (`better-auth.session_token` cookie)
+- 15-minute link expiry
+- No user enumeration — same `{ status: true }` response for any valid email
 
 **API Usage:**
 
 <CodeGroup title="Magic Link Flow">
 
 ```bash {{title:'Request Magic Link'}}
-# Step 1: Request magic link
-curl -X POST http://localhost:8787/auth/magic-link/request \
+# Step 1: Send magic link to email
+curl -X POST http://localhost:8787/auth/sign-in/magic-link \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com"
-  }'
+  -d '{ "email": "user@example.com" }'
 
-# Response: { "message": "Magic link sent to email" }
+# Response: { "status": true }
 ```
 
 ```bash {{title:'Verify Magic Link'}}
-# Step 2: User clicks link in email
-# GET /auth/magic-link/verify?token=abc123...
+# Step 2: User clicks link in email — Better Auth handles this automatically
+# GET /auth/magic-link/verify?token=<token>&callbackURL=/admin/dashboard
 
-# Automatically redirects to admin with auth cookie set
+# On success: redirects to callbackURL with better-auth.session_token cookie set
+# On failure: redirects with ?error= param
+```
+
+```typescript {{title:'Better Auth Client'}}
+import { createAuthClient } from 'better-auth/client'
+import { magicLinkClient } from 'better-auth/client/plugins'
+
+const client = createAuthClient({
+  baseURL: 'https://your-app.workers.dev',
+  plugins: [magicLinkClient()]
+})
+
+// Request magic link
+await client.signIn.magicLink({
+  email: 'user@example.com',
+  callbackURL: '/admin/dashboard'
+})
 ```
 
 </CodeGroup>
@@ -740,6 +756,14 @@ SonicJS implements a **signed double-submit cookie pattern** for CSRF protection
 
 **Exempt paths:** Login, registration, public form submissions, and API-key-only requests are exempt from CSRF validation.
 
+### Better Auth Version
+
+SonicJS pins **Better Auth to exactly `1.7.7`** (with `better-auth-cloudflare` `0.4.1`). Versions `>=1.4.0-beta.18 <1.7.7` carry a critical session-forgery advisory ([GHSA-965c-763c-88jm](https://github.com/advisories/GHSA-965c-763c-88jm)) with no 1.6.x backport, so upgrading past it — rather than pinning an older patched line — was the only fix. Verification tokens (magic link, email verification) are consumed from D1 via a single atomic `DELETE ... RETURNING`; rate-limit counters stay in memory; the Cloudflare KV secondary storage adapter is typed against Better Auth's full interface.
+
+### Credential Row Sync
+
+Better Auth authenticates against the `auth_account` table's `password` column (provider `credential`) — not the legacy `auth_user.password_hash` column. Every password-write path (registration, invitation acceptance, password reset, admin create-user, admin edit-user) updates **both** columns atomically, so a password set through any of those paths works for sign-in immediately. (Prior to v3.0.0, some paths only wrote the legacy column, which could lock a user out until their next login re-synced it.)
+
 ### Security Headers
 
 All responses include security headers:
@@ -751,6 +775,40 @@ All responses include security headers:
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` (production) |
+
+---
+
+## Two-Factor Authentication (TOTP)
+
+SonicJS supports **time-based one-time passwords (TOTP)** as a second factor via the `two-factor-auth` plugin.
+
+### Setup
+
+Enable the plugin in your app entry point:
+
+```ts
+import { twoFactorAuthPlugin } from '@sonicjs-cms/core'
+
+const plugins = [
+  twoFactorAuthPlugin(),
+  // ...other plugins
+]
+```
+
+### User Flow
+
+1. **Enroll** — user scans a QR code from `/admin/settings/security` into an authenticator app (Google Authenticator, Authy, 1Password, etc.)
+2. **Verify enrollment** — enter the 6-digit TOTP code to confirm the device is registered
+3. **Login with 2FA** — after password auth succeeds, user is prompted for a TOTP code or one of their backup codes
+
+### Backup Codes
+
+On enrollment, 10 single-use **backup codes** are generated and shown once. Users can regenerate them at any time from Security Settings. Each code is hashed before storage and is consumed on use.
+
+### Admin UI
+
+- **Security Settings** (`/admin/settings/security`) — enroll/unenroll, view recovery codes, regenerate backup codes
+- Enforced lockout after 5 consecutive failed TOTP attempts (5-minute cooldown)
 
 ---
 

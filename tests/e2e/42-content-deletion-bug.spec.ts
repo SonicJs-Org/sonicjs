@@ -1,38 +1,69 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin, waitForHTMX } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
+import { loginAsAdmin, saveNewContent, waitForHTMX } from './utils/test-helpers';
 
 /**
  * Test for GitHub Issue #522: Content Deletion UI Bug
  *
- * Bug: Deleting content through Admin > Contents causes a JavaScript error:
- * "Failed to execute 'insertBefore' on 'Node': Identifier 'currentBulkAction' has already been declared"
+ * Bug: deleting content through Admin > Contents threw
+ * "Identifier 'currentBulkAction' has already been declared" — htmx re-executes the script tags it
+ * swaps in, and a `let` at the top level of the content list redeclared in the same scope. It is
+ * `var` now (admin-content-list.template.ts), which tolerates redeclaration.
  *
- * This error occurs because HTMX re-executes script tags when swapping content,
- * and the `let currentBulkAction` variable gets redeclared in the same scope.
+ * Every test in this file used to be unable to fail. Each one opened the unfiltered content list,
+ * took whatever row happened to be first, and guarded every step with `test.skip(true, '…')` —
+ * ten of them, one per thing that might not be there. "Could not create test content" is a product
+ * failure; reporting it as a skip is how a red suite stays green. The row they deleted also
+ * belonged to whichever spec had most recently written one, so a run could delete another test's
+ * fixture out from under it.
+ *
+ * Each test now creates the records it deletes, addresses them by id, and waits on the request the
+ * click produces rather than on a fixed timeout.
  */
-test.describe('Content Deletion UI Bug (Issue #522)', () => {
-  // Track JavaScript errors during tests
+
+/** Only this spec's own records — `e2e_test` needs title and slug and nothing else. */
+const LIST_URL = '/admin/content?collection=e2e_test&status=all';
+
+type Record = { id: string; title: string };
+
+async function createRecord(page: Page): Promise<Record> {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const title = `Delete target ${stamp}`;
+
+  await page.goto('/admin/content/new?collection=e2e_test');
+  await page.fill('input[name="title"]', title);
+  await page.fill('input[name="slug"]', `delete-target-${stamp}`);
+
+  // `saveNewContent` reads the POST's HX-Redirect, so a validation error is reported as a failed
+  // create rather than as a navigation that never happened.
+  const editPath = await saveNewContent(page, () =>
+    page.locator('button[type="submit"]').filter({ hasText: /Save|Create/ }).first().click()
+  );
+
+  return { id: editPath.split('/')[3], title };
+}
+
+/** The list row for a record, matched on the title this spec generated. */
+function rowFor(page: Page, record: Record) {
+  return page.locator('tbody tr').filter({ hasText: record.title });
+}
+
+test.describe('Content Deletion UI Bug (Issue #522) @content', () => {
   let jsErrors: string[] = [];
 
   test.beforeEach(async ({ page }) => {
-    // Reset error tracking for each test
     jsErrors = [];
 
-    // Listen for console errors - this is key to detecting the bug
     page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        const text = msg.text();
-        // Filter out known non-bug related errors
-        if (!text.includes('Failed to load resource') && !text.includes('TinyMCE')) {
-          console.log('Console Error:', text);
-          jsErrors.push(text);
-        }
+      if (msg.type() !== 'error') return;
+      const text = msg.text();
+      // CDN assets and the editor are not what this spec is watching for.
+      if (!text.includes('Failed to load resource') && !text.includes('TinyMCE')) {
+        jsErrors.push(text);
       }
     });
 
-    // Listen for page errors (uncaught exceptions)
     page.on('pageerror', (error) => {
-      console.log('Page Error:', error.message);
       jsErrors.push(error.message);
     });
 
@@ -40,332 +71,142 @@ test.describe('Content Deletion UI Bug (Issue #522)', () => {
   });
 
   /**
-   * Helper to create test content via admin form submission
+   * Delete one row via the confirmation-page flow and wait for the redirect to settle.
+   *
+   * The per-row action is a link to `/admin/content/:id/delete`, not an `hx-delete` button
+   * anymore — there's no native confirm dialog to accept. Confirming on that page re-navigates
+   * back to the list, which re-executes the list's script tags same as the old htmx swap did.
    */
-  async function createTestContentViaForm(page: typeof test.prototype.page) {
-    const timestamp = Date.now();
-    const testTitle = `Test Page for Delete ${timestamp}`;
-    const testSlug = `test-page-delete-${timestamp}`;
+  async function deleteRow(page: Page, record: Record) {
+    const deleteLink = rowFor(page, record).locator('a[title="Delete"]');
+    await expect(deleteLink).toBeVisible();
+    await deleteLink.click();
 
-    try {
-      // Navigate to new content form
-      await page.goto('/admin/content/new');
-      await page.waitForLoadState('networkidle');
+    await page.waitForURL(`**/admin/content/${record.id}/delete**`);
+    const confirmButton = page.locator('button:has-text("Delete Content")');
+    await expect(confirmButton).toBeVisible();
+    await confirmButton.click();
 
-      // Wait for collection selection page and click "Pages" collection
-      const pagesLink = page.locator('a[href*="collection=pages-collection"]');
-      if (await pagesLink.count() > 0) {
-        await pagesLink.click();
-        await page.waitForLoadState('networkidle');
-        await page.waitForTimeout(1000);
+    await page.waitForURL('**/admin/content**');
+    await waitForHTMX(page);
+  }
 
-        // Fill in the form - Pages collection has: title, content, slug, meta_description, featured_image
-        const titleField = page.locator('input[name="title"]');
-        if (await titleField.count() > 0) {
-          await titleField.fill(testTitle);
-        } else {
-          console.log('Title field not found');
-          return false;
-        }
-
-        // Fill slug if exists
-        const slugField = page.locator('input[name="slug"]');
-        if (await slugField.count() > 0) {
-          await slugField.fill(testSlug);
-        }
-
-        // Fill content if it's a textarea (not rich text)
-        const contentField = page.locator('textarea[name="content"]');
-        if (await contentField.count() > 0) {
-          await contentField.fill('Test content for deletion testing');
-        }
-
-        // Submit the form using the "Save" button specifically
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
-        await page.waitForTimeout(2000);
-
-        console.log('Created test content via form');
-        return true;
-      } else {
-        // Try "News" collection as fallback
-        const newsLink = page.locator('a[href*="collection=news-collection"]');
-        if (await newsLink.count() > 0) {
-          await newsLink.click();
-          await page.waitForLoadState('networkidle');
-          await page.waitForTimeout(1000);
-
-          const titleField = page.locator('input[name="title"]');
-          if (await titleField.count() > 0) {
-            await titleField.fill(testTitle);
-            await page.getByRole('button', { name: 'Save', exact: true }).click();
-            await page.waitForTimeout(2000);
-            console.log('Created test content via News form');
-            return true;
-          }
-        }
-        console.log('No suitable collection found');
-        return false;
-      }
-    } catch (error) {
-      console.log('Error creating content:', error);
-      return false;
-    }
+  function assertNoRedeclarationError() {
+    const offenders = jsErrors.filter(
+      (error) =>
+        error.includes('currentBulkAction') ||
+        error.includes('has already been declared') ||
+        error.includes('Identifier') ||
+        error.includes('SyntaxError')
+    );
+    expect(offenders, `JavaScript errors during deletion: ${jsErrors.join(' | ')}`).toEqual([]);
   }
 
   test('should delete content without JavaScript errors', async ({ page }) => {
-    // Step 1: Create test content via form
-    const created = await createTestContentViaForm(page);
-    if (!created) {
-      test.skip(true, 'Could not create test content');
-      return;
-    }
+    const record = await createRecord(page);
 
-    // Step 2: Navigate to content list
-    await page.goto('/admin/content?model=all&status=all');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await page.goto(LIST_URL);
+    await expect(rowFor(page, record)).toHaveCount(1);
 
-    // Step 3: Verify content exists
-    const contentRows = page.locator('tbody tr');
-    const contentCount = await contentRows.count();
-    console.log(`Found ${contentCount} content items`);
-
-    if (contentCount === 0) {
-      test.skip(true, 'No content available to test deletion');
-      return;
-    }
-
-    // Step 4: Clear any pre-existing JS errors before delete action
+    // Creating the record navigated through the editor, which loads its own scripts. Only errors
+    // raised by the delete itself are this spec's business.
     jsErrors = [];
 
-    // Step 5: Find the delete button on the first content item
-    const firstRow = contentRows.first();
-    const deleteButton = firstRow.locator('button[title="Delete"]');
-    const deleteButtonCount = await deleteButton.count();
-    console.log(`Delete button count: ${deleteButtonCount}`);
+    await deleteRow(page, record);
 
-    if (deleteButtonCount === 0) {
-      // List all buttons in the row for debugging
-      const allButtons = firstRow.locator('button');
-      const buttonCount = await allButtons.count();
-      console.log(`Total buttons in row: ${buttonCount}`);
-      for (let i = 0; i < buttonCount; i++) {
-        const title = await allButtons.nth(i).getAttribute('title');
-        console.log(`Button ${i}: title="${title}"`);
-      }
-      test.skip(true, 'Delete button not found in content row');
-      return;
-    }
+    assertNoRedeclarationError();
 
-    // Step 6: Set up dialog handler for hx-confirm confirmation
-    page.once('dialog', async (dialog) => {
-      console.log('Dialog appeared:', dialog.message());
-      await dialog.accept();
-    });
-
-    // Step 7: Click the delete button
-    console.log('Clicking delete button...');
-    await deleteButton.click();
-
-    // Step 8: Wait for HTMX to process the delete and refresh
-    await waitForHTMX(page);
-    await page.waitForTimeout(3000); // Extra time for HTMX swap to complete
-
-    // Step 9: THE KEY ASSERTION - Check for the specific JavaScript error
-    console.log('Collected JS errors:', jsErrors);
-
-    const hasRedeclarationError = jsErrors.some(
-      (error) =>
-        error.includes('currentBulkAction') ||
-        error.includes('has already been declared') ||
-        error.includes('Identifier') ||
-        error.includes('SyntaxError')
-    );
-
-    // This assertion will FAIL if the bug exists (proving the test catches the bug)
-    // and will PASS once the bug is fixed
-    expect(
-      hasRedeclarationError,
-      `JavaScript error detected during content deletion: ${jsErrors.join(', ')}`
-    ).toBe(false);
-
-    // Step 10: Verify the UI is still functional after delete
+    // The row is gone from the collection it was created in, not merely from whatever the
+    // post-delete stub happened to render.
+    await page.goto(LIST_URL);
+    await expect(rowFor(page, record)).toHaveCount(0);
     await expect(page.locator('h1').first()).toContainText('Content');
-
-    // The page should either show remaining content or an empty state
-    const table = page.locator('table');
-    const emptyState = page.locator('text=No content found');
-    const hasTable = (await table.count()) > 0;
-    const hasEmptyState = (await emptyState.count()) > 0;
-    expect(hasTable || hasEmptyState).toBeTruthy();
   });
 
   test('should handle bulk delete without JavaScript errors', async ({ page }) => {
-    // Step 1: Create test content via form
-    const created = await createTestContentViaForm(page);
-    if (!created) {
-      test.skip(true, 'Could not create test content');
-      return;
-    }
+    // Two records, so the dialog takes the plural branch of updateDialogContent and the request
+    // carries more than one id.
+    const first = await createRecord(page);
+    const second = await createRecord(page);
 
-    // Step 2: Navigate to content list
-    await page.goto('/admin/content?model=all&status=all');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await page.goto(LIST_URL);
+    await expect(rowFor(page, first)).toHaveCount(1);
+    await expect(rowFor(page, second)).toHaveCount(1);
 
-    // Step 3: Check we have content to work with
-    const contentCount = await page.locator('tbody tr').count();
-    console.log(`Found ${contentCount} content items for bulk delete`);
-
-    if (contentCount < 1) {
-      test.skip(true, 'Not enough content for bulk delete test');
-      return;
-    }
-
-    // Step 4: Clear any pre-existing JS errors
     jsErrors = [];
 
-    // Step 5: Select items using checkboxes
-    const rowCheckboxes = page.locator('.row-checkbox');
-    const checkboxCount = await rowCheckboxes.count();
-    console.log(`Found ${checkboxCount} row checkboxes`);
-
-    if (checkboxCount > 0) {
-      // Click first checkbox to select one item
-      await rowCheckboxes.first().click();
-      await page.waitForTimeout(500);
-    } else {
-      test.skip(true, 'No checkboxes available for bulk selection');
-      return;
+    // Address the checkboxes by the row id they carry as `value`. The old test clicked
+    // `.row-checkbox` `.first()`, which selected whichever row sorted first — someone else's.
+    for (const record of [first, second]) {
+      await page.locator(`.row-checkbox[value="${record.id}"]`).check();
     }
 
-    // Step 6: Click bulk actions dropdown
+    // Selecting rows is what enables the control; that it became enabled is an assertion, not a
+    // precondition to skip on.
     const bulkActionsBtn = page.locator('#bulk-actions-btn');
-    const isEnabled = await bulkActionsBtn.isEnabled();
-    console.log(`Bulk actions button enabled: ${isEnabled}`);
-
-    if (!isEnabled) {
-      test.skip(true, 'Bulk actions button is not enabled after selecting checkbox');
-      return;
-    }
-
+    await expect(bulkActionsBtn).toBeEnabled();
     await bulkActionsBtn.click();
-    await page.waitForTimeout(500);
 
-    // Step 7: Click Delete Selected option in dropdown
-    const deleteOption = page.locator('#bulk-actions-menu button').filter({ hasText: 'Delete Selected' });
-    const deleteOptionCount = await deleteOption.count();
-    console.log(`Delete Selected option count: ${deleteOptionCount}`);
-
-    if (deleteOptionCount === 0) {
-      test.skip(true, 'Delete Selected option not found');
-      return;
-    }
-
+    const deleteOption = page
+      .locator('#bulk-actions-menu button')
+      .filter({ hasText: 'Delete Selected' });
+    await expect(deleteOption).toBeVisible();
     await deleteOption.click();
-    await page.waitForTimeout(500);
 
-    // Step 8: Handle confirmation dialog
     const confirmDialog = page.locator('#bulk-action-confirm');
-    if (await confirmDialog.count() > 0) {
-      // Click the confirm button in the dialog
-      const confirmBtn = confirmDialog.locator('button.confirm-button');
-      if (await confirmBtn.count() > 0) {
-        console.log('Clicking confirm button in bulk action dialog...');
-        await confirmBtn.click();
-      }
-    }
+    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toContainText('delete 2 selected items');
 
-    // Wait for bulk action to complete
-    await waitForHTMX(page);
-    await page.waitForTimeout(3000);
+    // `executeBulkAction` POSTs JSON and calls `location.reload()` on success, so there are two
+    // things to wait for and the reload is the one that re-runs the swapped-in scripts.
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.request().method() === 'POST' &&
+          new URL(r.url()).pathname === '/admin/content/bulk-action'
+      ),
+      confirmDialog.locator('button.confirm-button').click(),
+    ]);
+    expect(response.ok(), `bulk delete failed: HTTP ${response.status()}`).toBeTruthy();
 
-    // Step 9: THE KEY ASSERTION - Check for JavaScript errors
-    console.log('Collected JS errors after bulk delete:', jsErrors);
+    // Both rows go away across the reload; the locator retries through the navigation.
+    await expect(rowFor(page, first)).toHaveCount(0, { timeout: 15000 });
+    await expect(rowFor(page, second)).toHaveCount(0);
 
-    const hasRedeclarationError = jsErrors.some(
-      (error) =>
-        error.includes('currentBulkAction') ||
-        error.includes('has already been declared') ||
-        error.includes('Identifier') ||
-        error.includes('SyntaxError')
-    );
-
-    expect(
-      hasRedeclarationError,
-      `JavaScript error detected during bulk delete: ${jsErrors.join(', ')}`
-    ).toBe(false);
-
-    // Step 10: Verify the UI is still functional
+    assertNoRedeclarationError();
     await expect(page.locator('h1').first()).toContainText('Content');
   });
 
   test('should maintain table functionality after delete', async ({ page }) => {
-    // Step 1: Create test content via form
-    const created = await createTestContentViaForm(page);
-    if (!created) {
-      test.skip(true, 'Could not create test content');
-      return;
-    }
+    // Two records: one to delete, one that must still be listed and filterable afterwards. The old
+    // version deleted inside `if (count > 0)` and then filtered an empty table, so it could pass
+    // having neither deleted nor filtered anything.
+    const doomed = await createRecord(page);
+    const survivor = await createRecord(page);
 
-    // Step 2: Navigate to content list
-    await page.goto('/admin/content?model=all&status=all');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await page.goto(LIST_URL);
+    await deleteRow(page, doomed);
 
-    // Step 3: Check if there's content
-    const hasContent = await page.locator('tbody tr').count() > 0;
-
-    if (!hasContent) {
-      test.skip(true, 'No content available to test');
-      return;
-    }
-
-    // Step 4: Clear JS errors
     jsErrors = [];
 
-    // Step 5: Perform delete
-    const deleteButton = page.locator('tbody tr').first().locator('button[title="Delete"]');
-    if (await deleteButton.count() > 0) {
-      page.once('dialog', async (dialog) => {
-        await dialog.accept();
-      });
-      await deleteButton.click();
-      await waitForHTMX(page);
-      await page.waitForTimeout(3000);
-    }
+    await page.goto(LIST_URL);
+    await expect(rowFor(page, survivor)).toHaveCount(1);
 
-    // Step 6: Verify table interactions still work after delete
-    // Try filtering
+    // Filtering still works after the swap replaced the list markup. `updateContentFilters` sets
+    // `window.location.href` — a full navigation that keeps the existing params and adds
+    // `status=draft` — so there is no htmx request here to wait on.
     const statusSelect = page.locator('select[name="status"]').first();
-    if (await statusSelect.count() > 0) {
-      await statusSelect.selectOption('all');
-      await waitForHTMX(page);
-    }
+    await expect(statusSelect).toBeVisible();
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get('status') === 'draft'),
+      statusSelect.selectOption('draft'),
+    ]);
+    // Records created through the form carry no `status` field, and the handler defaults to
+    // 'draft', so the survivor is still listed under this filter.
+    await expect(rowFor(page, survivor)).toHaveCount(1);
+    await expect(rowFor(page, doomed)).toHaveCount(0);
 
-    // Try sorting (if available)
-    const sortButton = page.locator('.sort-btn').first();
-    if (await sortButton.count() > 0) {
-      await sortButton.click();
-      await page.waitForTimeout(500);
-    }
-
-    // Step 7: Check for any accumulated JavaScript errors
-    console.log('Collected JS errors after interactions:', jsErrors);
-
-    const hasJsErrors = jsErrors.some(
-      (error) =>
-        error.includes('currentBulkAction') ||
-        error.includes('has already been declared') ||
-        error.includes('SyntaxError')
-    );
-
-    expect(
-      hasJsErrors,
-      `JavaScript errors after delete and subsequent interactions: ${jsErrors.join(', ')}`
-    ).toBe(false);
-
-    // Step 8: Verify the page is still functional
+    assertNoRedeclarationError();
     await expect(page.locator('h1').first()).toContainText('Content');
   });
 });

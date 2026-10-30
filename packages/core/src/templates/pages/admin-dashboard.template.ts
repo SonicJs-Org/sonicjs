@@ -54,26 +54,6 @@ export function renderDashboardPage(data: DashboardPageData): string {
         <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">Dashboard</h1>
         <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">Welcome to your SonicJS AI admin dashboard</p>
       </div>
-      <div class="mt-4 sm:mt-0 flex items-center gap-x-3">
-        <a href="https://sonicjs.com" target="_blank" class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-lime-600 dark:bg-lime-700 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-lime-700 dark:hover:bg-lime-600 transition-colors shadow-sm">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/>
-          </svg>
-          Developer Docs
-        </a>
-        <a href="/admin/api-reference" class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
-          </svg>
-          API Docs
-        </a>
-        <a href="/api" target="_blank" class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
-          </svg>
-          OpenAPI
-        </a>
-      </div>
     </div>
 
     <!-- Stats Cards -->
@@ -134,6 +114,9 @@ export function renderDashboardPage(data: DashboardPageData): string {
     currentPath: "/admin",
     user: data.user,
     version: data.version,
+    // The only page in core that charts anything, so it brings its own Chart.js rather than
+    // making every other admin page pay for the global.
+    scripts: ["https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"],
     content: pageContent,
   };
 
@@ -149,20 +132,6 @@ export function renderDashboardPageWithDynamicMenu(
       <div>
         <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">Dashboard</h1>
         <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">Welcome to your SonicJS AI admin dashboard</p>
-      </div>
-      <div class="mt-4 sm:mt-0 flex items-center gap-x-3">
-        <a href="/admin/api-reference" class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
-          </svg>
-          API Docs
-        </a>
-        <a href="/api" target="_blank" class="inline-flex items-center justify-center gap-x-1.5 rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
-          </svg>
-          OpenAPI
-        </a>
       </div>
     </div>
 
@@ -221,6 +190,8 @@ export function renderDashboardPageWithDynamicMenu(
     user: data.user,
     version: data.version,
     enableExperimentalFeatures: data.enableExperimentalFeatures,
+    // See the note on the sibling renderer above.
+    scripts: ["https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"],
     content: pageContent,
     dynamicMenuItems,
   };
@@ -332,10 +303,16 @@ function renderAnalyticsChart(): string {
         <canvas id="requestsChart" class="w-full" style="height: 300px;"></canvas>
       </div>
 
-      <!-- Hidden div to trigger HTMX polling -->
+      <!-- Hidden div to trigger HTMX polling.
+           hx-sync drops a tick whose predecessor is still in flight. Without it the trigger fires
+           on the wall clock regardless of whether the database answered, so any response slower
+           than the 1s interval starts a queue that only grows: measured against a preview
+           deployment, a browser left on admin pages accumulated dozens of overlapping metrics,
+           stats and storage requests, and new page loads then waited behind them. -->
       <div
         hx-get="/admin/dashboard/api/metrics"
         hx-trigger="every 1s"
+        hx-sync="this:drop"
         hx-swap="none"
         style="display: none;"
       ></div>
@@ -698,6 +675,7 @@ function renderSystemStatus(): string {
         class="p-6"
         hx-get="/admin/dashboard/system-status"
         hx-trigger="load, every 30s"
+        hx-sync="this:drop"
         hx-swap="innerHTML"
       >
         <!-- Loading skeleton with gradient -->

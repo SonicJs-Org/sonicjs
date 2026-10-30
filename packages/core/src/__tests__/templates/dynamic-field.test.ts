@@ -306,3 +306,161 @@ describe('renderDynamicField - Media', () => {
     expect(html).toContain('hidden'); // Preview grid should be hidden
   });
 });
+
+/**
+ * Array-of-media regression test
+ *
+ * Bug: A collection field configured as `type: 'array'` with `items: { type: 'media' }`
+ * crashed the new-content form with `TypeError: url.toLowerCase is not a function`.
+ *
+ * Root cause: renderStructuredArrayField renders an empty-item template with itemValue={}.
+ * For non-object item types, renderStructuredItemFields passed that `{}` straight through
+ * to the media renderer, which then called `({}).toLowerCase()` inside isVideoUrl.
+ */
+describe('renderDynamicField - array of media items', () => {
+  it('should render an empty array of media items without throwing', () => {
+    const field: FieldDefinition = {
+      id: 'images-field',
+      field_name: 'images',
+      field_type: 'array',
+      field_label: 'Images',
+      field_options: {
+        items: {
+          type: 'media',
+          title: 'Image',
+          accept: 'image/*',
+          maxSize: '10MB',
+        },
+      },
+      field_order: 1,
+      is_required: false,
+      is_searchable: false,
+    };
+
+    // Previously threw "TypeError: url.toLowerCase is not a function" while rendering
+    // the empty-item <template> server-side.
+    const html = renderDynamicField(field, { value: [] });
+
+    expect(html).toContain('data-structured-array');
+    expect(html).toContain('data-field-name="images"');
+    expect(html).toContain('data-structured-array-template');
+  });
+
+  it('should render an array of media items with existing string values', () => {
+    const field: FieldDefinition = {
+      id: 'images-field',
+      field_name: 'images',
+      field_type: 'array',
+      field_label: 'Images',
+      field_options: {
+        items: { type: 'media', title: 'Image' },
+      },
+      field_order: 1,
+      is_required: false,
+      is_searchable: false,
+    };
+
+    const html = renderDynamicField(field, {
+      value: ['https://example.com/a.jpg', 'https://example.com/b.png'],
+    });
+
+    expect(html).toContain('data-structured-array');
+    expect(html).toContain('https://example.com/a.jpg');
+    expect(html).toContain('https://example.com/b.png');
+  });
+});
+
+describe('renderDynamicField - media field defensive handling', () => {
+  const baseField: FieldDefinition = {
+    id: 'media-field',
+    field_name: 'photo',
+    field_type: 'media',
+    field_label: 'Photo',
+    field_options: {},
+    field_order: 1,
+    is_required: false,
+    is_searchable: false,
+  };
+
+  it('should not throw when value is an empty object (single mode)', () => {
+    expect(() =>
+      renderDynamicField(baseField, { value: {} as unknown as string }),
+    ).not.toThrow();
+  });
+
+  it('should not throw when value is an empty object (multiple mode)', () => {
+    const multipleField = { ...baseField, field_options: { multiple: true } };
+    expect(() =>
+      renderDynamicField(multipleField, { value: {} as unknown as string }),
+    ).not.toThrow();
+  });
+
+  it('should ignore non-string entries in a multiple-mode array', () => {
+    const multipleField = { ...baseField, field_options: { multiple: true } };
+    const html = renderDynamicField(multipleField, {
+      value: ['https://example.com/a.jpg', {} as unknown as string, ''],
+    });
+
+    expect(html).toContain('https://example.com/a.jpg');
+    // Empty/object values shouldn't produce stray <img>/<video> tags
+    expect(html).not.toContain('<img src=""');
+    expect(html).not.toContain('<img src="[object');
+  });
+});
+
+describe('renderDynamicField - stored XSS escaping (Issue #1026)', () => {
+  const xssPayload = '"><script>alert(1)</script>';
+  const baseField = (type: string): FieldDefinition => ({
+    id: `test-${type}`,
+    field_name: 'qty',
+    field_type: type,
+    field_label: 'Qty',
+    field_options: {},
+    field_order: 1,
+    is_required: false,
+    is_searchable: false,
+  });
+
+  it('number: escapes stored XSS payload in value attr', () => {
+    const html = renderDynamicField(baseField('number'), { value: xssPayload });
+    expect(html).not.toContain(xssPayload);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('date: escapes stored XSS payload in value attr', () => {
+    const html = renderDynamicField(baseField('date'), { value: xssPayload });
+    expect(html).not.toContain(xssPayload);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('datetime: escapes stored XSS payload in value attr', () => {
+    const html = renderDynamicField(baseField('datetime'), { value: xssPayload });
+    expect(html).not.toContain(xssPayload);
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('number: valid numeric value preserved', () => {
+    const html = renderDynamicField(baseField('number'), { value: 42 });
+    expect(html).toContain('value="42"');
+  });
+
+  it('date: valid date string preserved', () => {
+    const html = renderDynamicField(baseField('date'), { value: '2024-01-15' });
+    expect(html).toContain('value="2024-01-15"');
+  });
+
+  it('datetime: valid datetime string preserved', () => {
+    const html = renderDynamicField(baseField('datetime'), { value: '2024-01-15T10:30' });
+    expect(html).toContain('value="2024-01-15T10:30"');
+  });
+
+  it('number: null/undefined value renders empty string', () => {
+    const htmlNull = renderDynamicField(baseField('number'), { value: null });
+    const htmlUndef = renderDynamicField(baseField('number'), { value: undefined });
+    expect(htmlNull).toContain('value=""');
+    expect(htmlUndef).toContain('value=""');
+  });
+});

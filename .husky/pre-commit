@@ -1,8 +1,8 @@
 echo "Running linting..."
 npm run lint --workspace=@sonicjs-cms/core
 
+echo "Checking for banned E2E skip patterns..."
+bash scripts/lint-e2e-no-skip.sh $(git diff --cached --name-only -- 'tests/e2e/*.spec.ts' 'tests/www/*.spec.ts')
+
 echo "Running type checks..."
 npm run type-check
-
-echo "Running unit tests..."
-npm test

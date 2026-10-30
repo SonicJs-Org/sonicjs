@@ -1,150 +1,156 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { test, expect, type Locator } from './fixtures';
+import { loginAsAdmin, gotoMediaLibrary, submitAndWaitForXhr } from './utils/test-helpers';
 
-test.describe.skip('Media Thumbnail Loading', () => {
+/**
+ * A real, decodable 1x1 PNG.
+ *
+ * This spec previously used a hand-written JPEG byte array. The server accepts it, but the
+ * entropy-coded scan is truncated, so Chromium decodes it to naturalWidth 0 — every thumbnail
+ * assertion failed on a broken fixture rather than on a broken product.
+ */
+const ONE_PX_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+/**
+ * Decoded width of an <img>; 0 means the browser could not render it (broken thumbnail).
+ *
+ * Scrolls first: grid thumbnails are `loading="lazy"`, so one below the fold has not been
+ * requested yet and would read as a broken image rather than an undisplayed one.
+ */
+async function decodedWidth(image: Locator): Promise<number> {
+  await image.scrollIntoViewIfNeeded();
+  return image.evaluate((img: HTMLImageElement) => {
+    return new Promise<number>((resolve) => {
+      if (img.complete) {
+        resolve(img.naturalWidth);
+      } else {
+        img.onload = () => resolve(img.naturalWidth);
+        img.onerror = () => resolve(0);
+        // A broken image reports through `onerror` within the round trip, so this cap is only
+        // reached when the fetch is still queued. Thumbnails come from the worker (~0.8s idle,
+        // far worse with four Playwright workers on one preview isolate), and 5s here failed as
+        // "broken thumbnail" when the image was merely late.
+        setTimeout(() => resolve(0), 20000);
+      }
+    });
+  });
+}
+
+test.describe('Media Thumbnail Loading @media', () => {
+  // Files uploaded by the test, removed afterwards so the library does not grow run over run.
+  let uploadedIds: string[] = [];
+
+  test.beforeEach(async ({ page }) => {
+    uploadedIds = [];
+    await loginAsAdmin(page, false);
+  });
+
+  test.afterEach(async ({ context }) => {
+    if (uploadedIds.length > 0) {
+      await context.request
+        .post('/api/media/bulk-delete', { data: { fileIds: uploadedIds } })
+        .catch(() => {});
+    }
+  });
+
   test('uploaded image should display thumbnail without broken image', async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.goto('/admin/media');
-    await page.waitForLoadState('networkidle');
+    await gotoMediaLibrary(page);
 
     // Open upload modal
     await page.locator('button').filter({ hasText: 'Upload Files' }).first().click();
     await expect(page.locator('#upload-modal')).toBeVisible();
 
-    // Create test image buffer - a valid 1x1 red JPEG
-    const testImageBuffer = Buffer.from([
-      0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-      0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-      0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-      0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-      0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-      0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-      0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-      0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x01,
-      0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
-      0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xFF, 0xC4,
-      0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00, 0x0C,
-      0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00, 0x80, 0xFF, 0xD9
-    ]);
-
-    const uniqueFilename = `thumbnail-test-${Date.now()}.jpg`;
+    const uniqueFilename = `thumbnail-test-${Date.now()}.png`;
 
     // Upload file
     await page.setInputFiles('#file-input', {
       name: uniqueFilename,
-      mimeType: 'image/jpeg',
-      buffer: testImageBuffer
+      mimeType: 'image/png',
+      buffer: ONE_PX_PNG
     });
 
     // Submit upload
-    await page.locator('#upload-modal button[type="submit"]').click();
+    // The upload is an htmx POST to /admin/media/upload that writes to R2 and inserts a
+    // document; #upload-results stays empty until it answers. Asserting straight after the click
+    // spends an assertion budget on a server round trip — that is how this flaked in CI with the
+    // locator resolving 24x to an empty <div id="upload-results">. Wait for the response first.
+    await submitAndWaitForXhr(page, 'POST', '/admin/media/upload', () =>
+      page.locator('#upload-modal button[type="submit"]').click()
+    );
 
     // Wait for success message
     await expect(page.locator('#upload-results')).toContainText('Successfully uploaded', { timeout: 10000 });
 
     // Wait for page to redirect with cache-busting parameter
-    await page.waitForURL(/\/admin\/media\?t=/, { timeout: 5000 });
-
-    // Page should be fully loaded after refresh
-    await page.waitForLoadState('networkidle', { timeout: 10000 });
+    await page.waitForURL(/\/admin\/media\?t=/, { timeout: 20000, waitUntil: 'domcontentloaded' });
 
     // Find the media item we just uploaded
     const mediaGrid = page.locator('#media-grid');
     await expect(mediaGrid).toContainText(uniqueFilename, { timeout: 10000 });
 
-    // Find all images in the media grid
-    const images = mediaGrid.locator('img');
-    const imageCount = await images.count();
+    // Scope to our own upload rather than trusting grid ordering
+    const uploadedItem = mediaGrid.locator('.media-item').filter({ hasText: uniqueFilename }).first();
+    const fileId = await uploadedItem.getAttribute('data-file-id');
+    expect(fileId).toBeTruthy();
+    uploadedIds.push(fileId!);
 
-    expect(imageCount).toBeGreaterThan(0);
+    const image = uploadedItem.locator('img').first();
+    await expect(image).toBeVisible();
 
-    // Check the first image (our newly uploaded one should be first since sorted by date DESC)
-    const firstImage = images.first();
-    await expect(firstImage).toBeVisible();
-
-    // Get the image src
-    const imageSrc = await firstImage.getAttribute('src');
+    const imageSrc = await image.getAttribute('src');
     console.log('Image src:', imageSrc);
 
     expect(imageSrc).toBeTruthy();
     expect(imageSrc).toContain('/files/');
 
-    // Verify the image actually loads (not broken)
-    // We'll check naturalWidth which is 0 for broken images
-    const naturalWidth = await firstImage.evaluate((img: HTMLImageElement) => {
-      return new Promise((resolve) => {
-        if (img.complete) {
-          resolve(img.naturalWidth);
-        } else {
-          img.onload = () => resolve(img.naturalWidth);
-          img.onerror = () => resolve(0);
-          // Timeout after 5 seconds
-          setTimeout(() => resolve(0), 5000);
-        }
-      });
-    });
-
+    const naturalWidth = await decodedWidth(image);
     console.log('Image naturalWidth:', naturalWidth);
 
-    // Also verify we can fetch the image URL directly - do this FIRST for better debugging
-    console.log('Fetching image URL directly:', imageSrc);
+    // Fetch the image URL directly first — a non-200 here pins the failure on serving, not decoding
     const response = await page.request.get(imageSrc!);
-    console.log('Response status:', response.status());
-    console.log('Response headers:', JSON.stringify(response.headers(), null, 2));
-
     if (response.status() !== 200) {
-      const body = await response.text();
-      console.log('Response body:', body);
+      console.log('Response body:', await response.text());
     }
-
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('image');
 
-    // If the fetch works, then check naturalWidth
+    // Serving works, so a zero width means the browser could not render the thumbnail
     expect(naturalWidth).toBeGreaterThan(0);
   });
 
-  test('should display all uploaded images without broken thumbnails', async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.goto('/admin/media');
-    await page.waitForLoadState('networkidle');
+  test('should display all uploaded images without broken thumbnails', async ({ page, context }) => {
+    // Seed our own images. Checking whatever happens to be in the library makes this test a
+    // referendum on other specs' fixtures, so upload a known set and assert on exactly those.
+    const stamp = Date.now();
+    for (let i = 0; i < 3; i++) {
+      const form = new FormData();
+      form.append('files', new Blob([ONE_PX_PNG], { type: 'image/png' }), `grid-check-${stamp}-${i}.png`);
+      form.append('folder', 'uploads');
 
-    // Check all existing images in the grid
-    const mediaGrid = page.locator('#media-grid');
-    const images = mediaGrid.locator('img');
-    const imageCount = await images.count();
-
-    if (imageCount === 0) {
-      console.log('No images in media library - skipping test');
-      return;
+      const upload = await context.request.post('/api/media/upload-multiple', { multipart: form });
+      expect(upload.ok()).toBeTruthy();
+      const result = await upload.json();
+      expect(result.uploaded).toHaveLength(1);
+      uploadedIds.push(result.uploaded[0].id);
     }
 
-    console.log(`Found ${imageCount} images to check`);
+    await gotoMediaLibrary(page);
+    await page.waitForLoadState('domcontentloaded');
 
-    // Check each image
-    for (let i = 0; i < Math.min(imageCount, 5); i++) {
-      const image = images.nth(i);
-      await expect(image).toBeVisible();
+    const mediaGrid = page.locator('#media-grid');
+    await expect(mediaGrid.locator('.media-item').first()).toBeVisible({ timeout: 10000 });
+
+    for (const fileId of uploadedIds) {
+      const image = mediaGrid.locator(`[data-file-id="${fileId}"] img`).first();
+      await expect(image).toBeVisible({ timeout: 10000 });
 
       const src = await image.getAttribute('src');
-      console.log(`Image ${i} src:`, src);
+      expect(src).toContain('/files/');
 
-      // Check naturalWidth
-      const naturalWidth = await image.evaluate((img: HTMLImageElement) => {
-        return new Promise<number>((resolve) => {
-          if (img.complete) {
-            resolve(img.naturalWidth);
-          } else {
-            img.onload = () => resolve(img.naturalWidth);
-            img.onerror = () => resolve(0);
-            setTimeout(() => resolve(0), 5000);
-          }
-        });
-      });
-
-      console.log(`Image ${i} naturalWidth:`, naturalWidth);
+      const naturalWidth = await decodedWidth(image);
+      console.log(`Image ${fileId} (${src}) naturalWidth:`, naturalWidth);
       expect(naturalWidth).toBeGreaterThan(0);
     }
   });

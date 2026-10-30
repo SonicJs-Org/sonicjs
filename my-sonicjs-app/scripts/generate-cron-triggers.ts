@@ -26,7 +26,18 @@ const allPlugins: Array<{ name?: string; crons?: Array<{ schedule: string }> }> 
 
 const schedules = [...new Set(allPlugins.flatMap((p) => p.crons ?? []).map((c) => c.schedule))].sort()
 
-const wranglerPath = resolve(__dirname, '..', 'wrangler.toml')
+// Support wrangler.toml, wrangler.jsonc, or wrangler.json
+import { existsSync } from 'fs'
+const candidates = ['wrangler.toml', 'wrangler.jsonc', 'wrangler.json']
+const wranglerPath = candidates.map(f => resolve(__dirname, '..', f)).find(p => existsSync(p))
+if (!wranglerPath) {
+  console.error('[cron-triggers] No wrangler config found (wrangler.toml / wrangler.jsonc / wrangler.json)')
+  process.exit(1)
+}
+if (!wranglerPath.endsWith('.toml')) {
+  console.error('[cron-triggers] wrangler.jsonc/json detected — cron trigger codegen only supports wrangler.toml. Skipping.')
+  process.exit(0)
+}
 const current = readFileSync(wranglerPath, 'utf8')
 
 const isCheck = process.argv.includes('--check')

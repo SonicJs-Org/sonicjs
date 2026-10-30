@@ -14,6 +14,10 @@ export const sections = [
 
 Content workflow management with approval chains, scheduled publishing, state transitions, and comprehensive audit trails. {{ className: 'lead' }}
 
+<div className="p-4 mb-6 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
+  <strong>⚠️ Experimental / Inactive in v3</strong> — Workflow routes are currently disabled. Draft/publish lifecycle is handled natively by the Document Model (<code>is_current_draft</code> / <code>is_published</code> flags). This page documents the plugin architecture for reference.
+</div>
+
 ---
 
 ## Overview
@@ -579,17 +583,21 @@ When content is created, the plugin automatically initializes its workflow statu
 
 <CodeGroup title="Auto-initialization">
 
-```typescript
-// This happens automatically via the content:create hook
-builder.addHook('content:create', async (data, context) => {
-  if (context?.db) {
-    const workflowEngine = new WorkflowEngine(context.db)
-    await workflowEngine.initializeContentWorkflow(
-      data.id,
-      data.collectionId
-    )
+```javascript
+const workflowPlugin = definePlugin({
+  name: 'workflow',
+  onBoot(ctx) {
+    ctx.hooks.on('content:create', async (data, context) => {
+      if (context?.db) {
+        const workflowEngine = new WorkflowEngine(context.db)
+        await workflowEngine.initializeContentWorkflow(
+          data.id,
+          data.collectionId
+        )
+      }
+      return data
+    })
   }
-  return data
 })
 ```
 

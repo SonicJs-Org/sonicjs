@@ -2,9 +2,10 @@
  * API System Routes Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import { apiSystemRoutes } from './api-system'
+import { getCollectionRegistry, resetCollectionRegistry } from '../services/collection-registry'
 
 // Mock environment bindings
 function createMockEnv(overrides: Partial<{
@@ -215,10 +216,20 @@ describe('API System Routes', () => {
   })
 
   describe('GET /api/system/stats', () => {
+    afterEach(() => {
+      resetCollectionRegistry()
+    })
+
     it('should return system statistics', async () => {
+      // Stats counts content from `documents` filtered by the registry's active,
+      // non-internal collection type_ids — register one so the content query runs.
+      getCollectionRegistry().register([
+        { name: 'posts', displayName: 'Posts', schema: {} } as any,
+      ])
       const env = createMockEnv({
         DB: {
           prepare: vi.fn().mockReturnValue({
+            bind: vi.fn().mockReturnThis(),
             first: vi.fn()
               .mockResolvedValueOnce({ total_content: 100 })
               .mockResolvedValueOnce({ total_files: 50, total_size: 1024 * 1024 * 10 })

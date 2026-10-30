@@ -1,0 +1,55 @@
+{
+  "id": "multi-tenant",
+  "name": "Multi-Tenant",
+  "version": "1.0.0",
+  "description": "Multi-tenancy for the document model: tenant registry, per-request tenant resolution (header, admin switcher cookie, or domain), and tenant-scoped content isolation. Off by default.",
+  "author": "SonicJS Team",
+  "homepage": "https://sonicjs.com/plugins/multi-tenant",
+  "license": "MIT",
+  "category": "utilities",
+  "tags": [
+    "multi-tenant",
+    "tenancy",
+    "isolation",
+    "saas"
+  ],
+  "dependencies": [],
+  "settings": {
+    "headerName": {
+      "type": "string",
+      "label": "Tenant Header",
+      "description": "Request header API clients use to select a tenant (validated against active tenants)",
+      "default": "X-Tenant-Id"
+    },
+    "subdomainResolution": {
+      "type": "boolean",
+      "label": "Subdomain Resolution",
+      "description": "Resolve tenants from subdomains of the root domain (acme.example.com -> tenant 'acme')",
+      "default": false
+    },
+    "rootDomain": {
+      "type": "string",
+      "label": "Root Domain",
+      "description": "Root domain for subdomain resolution, e.g. example.com (required when subdomain resolution is on)",
+      "default": ""
+    }
+  },
+  "permissions": {
+    "tenants.manage": "Manage tenants and switch the active tenant",
+    "tenants.view": "View tenants"
+  },
+  "routes": [],
+  "adminMenu": {
+    "label": "Tenants",
+    "icon": "building-office",
+    "path": "/admin/tenants",
+    "order": 80
+  },
+  "iconEmoji": "🏢",
+  "is_core": false,
+  "defaultSettings": {
+    "headerName": "X-Tenant-Id",
+    "subdomainResolution": false,
+    "rootDomain": ""
+  }
+}

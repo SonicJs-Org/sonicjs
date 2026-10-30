@@ -1,0 +1,38 @@
+{
+  "id": "forms",
+  "name": "Forms",
+  "version": "1.0.0",
+  "description": "Form builder with Form.io integration, Turnstile CAPTCHA support, and submission management",
+  "author": "SonicJS Team",
+  "homepage": "https://sonicjs.com/plugins/forms",
+  "repository": "https://github.com/lane711/sonicjs-ai/tree/main/src/plugins/core-plugins/forms-plugin",
+  "license": "MIT",
+  "category": "content",
+  "tags": [
+    "forms",
+    "form-builder",
+    "submissions",
+    "formio",
+    "captcha"
+  ],
+  "dependencies": [],
+  "settings": {},
+  "hooks": {
+    "onActivate": "activate",
+    "onDeactivate": "deactivate"
+  },
+  "routes": [],
+  "permissions": {
+    "forms:manage": "Manage forms and submissions",
+    "forms:view": "View forms"
+  },
+  "iconEmoji": "📋",
+  "is_core": true,
+  "adminMenu": {
+    "label": "Forms",
+    "icon": "document-text",
+    "path": "/admin/forms",
+    "order": 30
+  },
+  "defaultSettings": {}
+}

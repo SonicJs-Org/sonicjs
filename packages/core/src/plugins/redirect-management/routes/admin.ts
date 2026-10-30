@@ -271,7 +271,7 @@ export function createRedirectAdminRoutes(): Hono {
       const userId = c.get('user')?.id
       let actualUserId = userId
       if (!actualUserId) {
-        const adminUser = await db.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').bind('admin').first()
+        const adminUser = await db.prepare('SELECT id FROM auth_user WHERE role = ? LIMIT 1').bind('admin').first()
         actualUserId = adminUser?.id as string || 'system'
       }
 
@@ -394,7 +394,7 @@ export function createRedirectAdminRoutes(): Hono {
       let userId = c.get('user')?.id
       if (!userId) {
         // Fallback: get first admin user from database
-        const adminUser = await db.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').bind('admin').first()
+        const adminUser = await db.prepare('SELECT id FROM auth_user WHERE role = ? LIMIT 1').bind('admin').first()
         userId = adminUser?.id as string || 'system'
       }
 

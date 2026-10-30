@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { loginAsAdmin } from './utils/test-helpers';
 
-test.describe.skip('Settings - General Tab', () => {
+test.describe('Settings - General Tab @auth', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
@@ -56,7 +56,7 @@ test.describe.skip('Settings - General Tab', () => {
     );
 
     // Click save button
-    await page.locator('button:has-text("Save All Changes")').click();
+    await page.locator('button:has-text("Save Changes")').click();
 
     // Wait for the save to complete
     const response = await responsePromise;
@@ -85,26 +85,35 @@ test.describe.skip('Settings - General Tab', () => {
     await page.goto('/admin/settings/general');
     await page.waitForLoadState('networkidle');
 
-    // Find the maintenance mode checkbox
     const maintenanceModeCheckbox = page.locator('input[name="maintenanceMode"]');
     await expect(maintenanceModeCheckbox).toBeVisible();
 
-    // Get current state
     const initialState = await maintenanceModeCheckbox.isChecked();
 
-    // Toggle it
-    await maintenanceModeCheckbox.click();
+    try {
+      // Toggle it
+      await maintenanceModeCheckbox.click();
+      await page.locator('button:has-text("Save Changes")').click();
+      await page.waitForTimeout(1000);
 
-    // Save settings
-    await page.locator('button:has-text("Save All Changes")').click();
-    await page.waitForTimeout(1000);
+      // Reload and verify
+      await page.reload();
+      await page.waitForLoadState('networkidle');
 
-    // Reload and verify
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-
-    const newState = await page.locator('input[name="maintenanceMode"]').isChecked();
-    expect(newState).toBe(!initialState);
+      const newState = await page.locator('input[name="maintenanceMode"]').isChecked();
+      expect(newState).toBe(!initialState);
+    } finally {
+      // Restore the original state even when the assertion above fails — settings are a single
+      // shared row, so a leaked "on" here is inherited by every later run of this spec.
+      await page.reload();
+      await page.waitForLoadState('networkidle');
+      const checkbox = page.locator('input[name="maintenanceMode"]');
+      if ((await checkbox.isChecked()) !== initialState) {
+        await checkbox.click();
+        await page.locator('button:has-text("Save Changes")').click();
+        await page.waitForTimeout(1000);
+      }
+    }
   });
 
   test('should validate required fields', async ({ page }) => {
@@ -115,31 +124,35 @@ test.describe.skip('Settings - General Tab', () => {
     await page.locator('input[name="siteName"]').fill('');
     await page.locator('textarea[name="siteDescription"]').fill('');
 
-    // Try to save
-    await page.locator('button:has-text("Save All Changes")').click();
-    await page.waitForTimeout(1000);
+    // Try to save, and wait for the POST rather than for a fixed second: the notification only
+    // exists between the response landing and its own five-second self-destruct.
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/admin/settings/general') && r.request().method() === 'POST',
+        { timeout: 30000 }
+      ),
+      page.locator('button:has-text("Save Changes")').click(),
+    ]);
 
-    // Should show an error (either validation message or notification)
-    // We expect either an HTML5 validation or an error notification
-    const siteNameField = page.locator('input[name="siteName"]');
-    const isInvalid = await siteNameField.evaluate((el: HTMLInputElement) => !el.validity.valid);
+    expect(response.status(), 'an empty site name was accepted').toBe(400);
+    expect((await response.json()).error).toMatch(/required/i);
 
-    // If HTML5 validation isn't triggered, check for error notification
-    if (!isInvalid) {
-      // Should see error notification or error state
-      const hasErrorNotification = await page.locator('text=/required|error/i').count() > 0;
-      expect(hasErrorNotification).toBeTruthy();
-    }
+    // ...and the rejection has to reach the operator, not just the network tab.
+    await expect(page.locator('#notification-container')).toContainText(/required/i, {
+      timeout: 10000,
+    });
   });
 
   test('should update admin email', async ({ page }) => {
     await page.goto('/admin/settings/general');
     await page.waitForLoadState('networkidle');
 
+    // Capture original to restore after test
+    const originalEmail = await page.locator('input[name="adminEmail"]').inputValue();
     const newAdminEmail = `admin-${Date.now()}@example.com`;
 
     await page.locator('input[name="adminEmail"]').fill(newAdminEmail);
-    await page.locator('button:has-text("Save All Changes")').click();
+    await page.locator('button:has-text("Save Changes")').click();
     await page.waitForTimeout(1000);
 
     // Reload and verify
@@ -148,17 +161,22 @@ test.describe.skip('Settings - General Tab', () => {
 
     const savedEmail = await page.locator('input[name="adminEmail"]').inputValue();
     expect(savedEmail).toBe(newAdminEmail);
+
+    // Restore original email
+    await page.locator('input[name="adminEmail"]').fill(originalEmail);
+    await page.locator('button:has-text("Save Changes")').click();
+    await page.waitForTimeout(1000);
   });
 
   test('should switch between settings tabs', async ({ page }) => {
     await page.goto('/admin/settings/general');
     await page.waitForLoadState('networkidle');
 
-    // Click on appearance tab
-    await page.locator('a[href="/admin/settings/appearance"]').click();
+    // Click on security tab
+    await page.locator('a[href="/admin/settings/security"]').click();
     await page.waitForLoadState('networkidle');
 
-    expect(page.url()).toContain('/admin/settings/appearance');
+    expect(page.url()).toContain('/admin/settings/security');
 
     // Go back to general
     await page.locator('a[href="/admin/settings/general"]').click();
@@ -175,7 +193,7 @@ test.describe.skip('Settings - General Tab', () => {
     const uniqueSiteName = `Test Save Loading ${Date.now()}`;
     await page.locator('input[name="siteName"]').fill(uniqueSiteName);
 
-    const saveButton = page.locator('button:has-text("Save All Changes")');
+    const saveButton = page.locator('button:has-text("Save Changes")');
 
     // Wait for the response
     const responsePromise = page.waitForResponse(response =>
@@ -191,6 +209,6 @@ test.describe.skip('Settings - General Tab', () => {
 
     // Button should return to normal state (not disabled)
     await expect(saveButton).toBeEnabled();
-    await expect(saveButton).toContainText(/Save All Changes/i);
+    await expect(saveButton).toContainText(/Save Changes/i);
   });
 });

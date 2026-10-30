@@ -84,6 +84,18 @@ describe('definePlugin — shape', () => {
     expect(isDefinedPlugin({ name: 'x' })).toBe(false)
   })
 
+  it('keeps the author\u2019s name as displayName while name stays the id', () => {
+    // `name` is the internal key \u2014 hook namespacing and capability errors address a
+    // plugin by it \u2014 so the author's label has to travel separately or it is lost.
+    // It was lost, and /admin/plugins rendered slugs for uninstalled SDK plugins.
+    const named = definePlugin({ id: 'graphql', name: 'GraphQL API', version: '1.0.0' })
+    expect(named.name).toBe('graphql')
+    expect(named.displayName).toBe('GraphQL API')
+
+    const unnamed = definePlugin({ id: 'graphql', version: '1.0.0' })
+    expect(unnamed.displayName).toBe('graphql')
+  })
+
   it('requires id and version', () => {
     // @ts-expect-error missing id
     expect(() => definePlugin({ version: '1.0.0' })).toThrow(/`id` is required/)

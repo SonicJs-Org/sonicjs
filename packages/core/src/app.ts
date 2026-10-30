@@ -5,6 +5,7 @@
  */
 
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import type { Context } from 'hono'
 import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-types'
 import {
@@ -19,12 +20,12 @@ import {
   adminMediaRoutes,
   adminPluginRoutes,
   adminLogsRoutes,
-  adminDashboardRoutes,
   adminCollectionsRoutes,
   adminSettingsRoutes,
-  adminFormsRoutes,
-  publicFormsRoutes,
-  adminApiReferenceRoutes
+  adminApiReferenceRoutes,
+  apiDocumentsRoutes,
+  adminDocumentsRoutes,
+  adminDashboardRoutes
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
@@ -32,22 +33,41 @@ import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
-import { createSeedDataAdminRoutes } from './plugins/core-plugins/seed-data-plugin/admin-routes'
-import { emailPlugin } from './plugins/core-plugins/email-plugin'
+import { emailPluginV3 as emailPlugin } from './plugins/core-plugins/email-plugin'
+import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
 import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
-import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
-import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
+import { aiSearchPlugin, aiSearchApiRoutes } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
-import { securityAuditMiddleware } from './plugins/core-plugins/security-audit-plugin'
+import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
+import {
+  twoFactorAuthPlugin,
+  twoFactorChallengeRoutes,
+  twoFactorRecoveryRoutes,
+  enforceTwoFactorEnrolment,
+  guardRequiredSecondFactorDisable,
+} from './plugins/core-plugins/two-factor-auth'
+import { apiKeysPlugin, apiKeyAuthMiddleware } from './plugins/core-plugins/api-keys-plugin'
 import { stripePlugin } from './plugins/core-plugins/stripe-plugin'
-import { requireAuth, requireRole } from './middleware/auth'
+import { formsPlugin } from './plugins/core-plugins/forms-plugin'
+import { requireAuth, requireRole, requireRbac, AuthManager } from './middleware/auth'
+import { createAuth } from './auth/config'
+import { guardPasswordlessSecondFactor } from './auth/passwordless-second-factor-guard'
+import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
+import { menuMiddleware } from './middleware/menu'
+import { menuPlugin } from './plugins/core-plugins/menu-plugin'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
 import { shortcodesPlugin } from './plugins/core-plugins/shortcodes-plugin'
+import { helloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
+import { multiTenantPlugin } from './plugins/core-plugins/multi-tenant-plugin'
+import { lexicalEditorPlugin } from './plugins/core-plugins/lexical-editor'
+import { versioningPlugin } from './plugins/core-plugins/versioning-plugin'
+import { tenantMiddleware } from './middleware/tenant'
+import { createMagicLinkAuthPlugin } from './plugins/available/magic-link-auth'
 import cachePlugin from './plugins/cache'
 import type { Plugin } from './plugins/types'
 import { registerPluginRoutes } from './plugins/mount'
@@ -59,8 +79,12 @@ import { resolveEmailProvider, type BuiltInProviderName } from './services/email
 import { loadDbEmailSettings, dbSettingsFrom } from './services/email/db-settings'
 import { setEmailService, getEmailService, hasEmailService } from './services/email/email-service-singleton'
 import type { EmailProvider } from './services/email/types'
+import { CloudflareEmailProvider } from './plugins/core-plugins/email-plugin/services/cf-email-provider'
 import { faviconSvg } from './assets/favicon'
 import { setAppInstance } from './services/route-metadata'
+import { setPluginMenu } from './services/plugin-menu-singleton'
+import { PLUGIN_REGISTRY } from './plugins/manifest-registry'
+import { setPluginDefinitions } from './services/plugin-definition-registry'
 
 // ============================================================================
 // Type Definitions
@@ -83,6 +107,12 @@ export interface Bindings {
   JWT_REFRESH_GRACE_SECONDS?: string
   BUCKET_NAME?: string
   GOOGLE_MAPS_API_KEY?: string
+  BETTER_AUTH_SECRET?: string
+  BETTER_AUTH_URL?: string
+  GITHUB_CLIENT_ID?: string
+  GITHUB_CLIENT_SECRET?: string
+  GOOGLE_CLIENT_ID?: string
+  GOOGLE_CLIENT_SECRET?: string
 }
 
 export interface Variables {
@@ -90,14 +120,43 @@ export interface Variables {
     userId: string
     email: string
     role: string
+    isSuperAdmin?: boolean
     exp: number
     iat: number
   }
+  session?: { id: string; userId: string; token: string; expiresAt: number; createdAt: number; updatedAt: number }
+  rbacPerms?: string[]
   requestId?: string
   startTime?: number
   appVersion?: string
   csrfToken?: string
   pluginMenuItems?: Array<{ label: string; path: string; icon: string }>
+  /**
+   * Slugs of the plugins pluginMenuMiddleware found active, shared so the rest of the /admin
+   * chain does not re-query for the same answer. Absent off /admin and on any request that ran
+   * before that middleware — treat absence as unknown and fall back to a direct read.
+   */
+  activePluginSlugs?: Set<string>
+  /**
+   * The plugin hook system attached to the request. Set by bootstrapMiddleware
+   * BEFORE any heavy bootstrap work runs, so anything that emits a hook during
+   * bootstrap (cron cold starts, RBAC seed, document-type registration) sees a
+   * live bus instead of a no-op.
+   */
+  hookSystem?: import('./plugins/hooks/typed-hooks').HookSystemLike
+  /**
+   * How `user` was authenticated, when that distinction matters to policy.
+   *
+   * Only set for machine credentials (`'api-key'`); a session, a JWT cookie and a JWT bearer are
+   * all a person at a browser or a CLI who owns the account, and nothing needs to tell them apart.
+   * Consumed by the forced two-factor enrolment gate, which must not take a running integration
+   * offline for a requirement its holder cannot satisfy in-band.
+   */
+  authMethod?: 'api-key'
+  /** Tenant slug resolved per request by tenantMiddleware ('default' when single-tenant). */
+  tenantId?: string
+  /** The authed user's role IN the resolved tenant (per-tenant RBAC); global role for 'default'. */
+  tenantRole?: string
 }
 
 export interface SonicJSConfig {
@@ -166,9 +225,9 @@ export interface SonicJSConfig {
     afterAuth?: Array<(c: Context, next: () => Promise<void>) => Promise<void>>
   }
 
-  // Admin access control
-  // Roles allowed to access the /admin panel. Defaults to ['admin'].
-  adminAccessRoles?: string[]
+  // Better Auth extension hook. Allows app-level customization of the BA
+  // instance (social providers, 2FA, org, etc.) without forking core config.
+  auth?: { extendBetterAuth?: import('./auth/config').ExtendBetterAuth }
 
   // App metadata
   version?: string
@@ -247,6 +306,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   const magicLinkPlugin = createMagicLinkAuthPlugin()
   const corePluginsBeforeCatchAll = [
     securityAuditPlugin,
+    // Mounts /admin/two-factor (enrolment) only. Must be in the BEFORE-catch-all list so it wins
+    // the route match against the bare `/admin` router registered further down. The login
+    // challenge at /auth/two-factor is deliberately NOT here — core mounts it unconditionally,
+    // because `disableAll` must not strand users Better Auth still challenges.
+    twoFactorAuthPlugin,
+    apiKeysPlugin,
     aiSearchPlugin,
     oauthProvidersPlugin,
     userProfilesPlugin,
@@ -257,8 +322,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     // app.ts, so their routes 404'd in production. Fixes #758.
     globalVariablesPlugin,
     shortcodesPlugin,
+    helloWorldPlugin,
+    multiTenantPlugin,
+    lexicalEditorPlugin,
+    versioningPlugin,
+    menuPlugin,
   ]
-  const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin]
+  const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
   // Lazy, once-guarded plugin wiring (the async half of two-phase boot). The
   // first request subscribes every plugin's hooks and runs their onBoot; later
@@ -301,17 +371,29 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     } else {
       // No config/env provider — fall back to admin-UI email settings if present.
       const dbSettings = await loadDbEmailSettings(env.DB as never)
-      if (dbSettings?.apiKey) {
-        // Route the admin-UI key through resolveEmailProvider (consistent provider
-        // selection + degrade-to-console safety) instead of hardcoding Resend.
-        provider = resolveEmailProvider({
-          providerName: 'resend',
-          env: { ...env, RESEND_API_KEY: dbSettings.apiKey },
-        })
+      // Effective Resend key: new field takes priority, legacy apiKey for compat.
+      const resendKey = (dbSettings?.resendApiKey || dbSettings?.apiKey) || undefined
+      // CF Email binding is an object with .send(); a string var is NOT a binding.
+      const cfBinding = (typeof env.EMAIL === 'object' && env.EMAIL !== null) ? env.EMAIL : undefined
+
+      if (dbSettings?.provider === 'cloudflare' && cfBinding) {
+        provider = new CloudflareEmailProvider(cfBinding as never)
         defaultFrom = defaultFrom || dbSettingsFrom(dbSettings)
         defaultReplyTo = dbSettings.replyTo
+        console.log('[email] provider: cloudflare (DB setting + binding)')
+      } else if (resendKey) {
+        provider = resolveEmailProvider({ providerName: 'resend', env: { ...env, RESEND_API_KEY: resendKey } })
+        defaultFrom = defaultFrom || dbSettingsFrom(dbSettings!)
+        defaultReplyTo = dbSettings!.replyTo
+        console.log('[email] provider: resend (DB resendApiKey)')
+      } else if (cfBinding && dbSettings?.provider !== 'resend') {
+        provider = new CloudflareEmailProvider(cfBinding as never)
+        defaultFrom = defaultFrom || (dbSettings ? dbSettingsFrom(dbSettings) : undefined)
+        defaultReplyTo = dbSettings?.replyTo
+        console.log('[email] provider: cloudflare (binding auto-detect)')
       } else {
-        provider = resolveEmailProvider({ env }) // → console fallback, with its warning
+        provider = resolveEmailProvider({ env })
+        console.log('[email] provider: fallback (console/env). EMAIL binding type:', typeof env.EMAIL, '| DB provider:', dbSettings?.provider ?? 'unset')
       }
     }
 
@@ -329,7 +411,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', metricsMiddleware())
 
   // Bootstrap middleware - runs migrations, syncs collections, and initializes plugins
-  app.use('*', bootstrapMiddleware(config))
+  app.use('*', bootstrapMiddleware(config, [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])]))
 
   // bootIsolate — extracted from the wiring middleware so it can be called from
   // both HTTP requests AND cron-first cold isolates (scheduled() handlers) that
@@ -370,11 +452,118 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     await next()
   })
 
+  // Global CORS middleware — covers /auth/*, /v1/*, and all other routes.
+  // Set CORS_ORIGINS in wrangler.toml (comma-separated) to allow cross-origin requests.
+  // Supports wildcard prefix: "*.example.com" matches any subdomain of example.com.
+  app.use('*', cors({
+    origin: (origin, c) => {
+      // The app's own origin is always allowed. A same-origin request is not subject to CORS in
+      // the first place, so echoing the header back grants nothing — but it does mean the app
+      // keeps working wherever it happens to be served from (a dev port, a preview deployment)
+      // without every host having to be enumerated in CORS_ORIGINS.
+      try {
+        if (origin && origin === new URL(c.req.url).origin) return origin
+      } catch {
+        // Non-absolute request URL — fall through to the allowlist.
+      }
+
+      const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
+      if (!allowed) return null
+      const list = allowed.split(',').map((s: string) => s.trim())
+      const match = list.some((pattern: string) => {
+        if (pattern === origin) return true
+        if (pattern.startsWith('*.')) {
+          const suffix = pattern.slice(1) // e.g. ".pages.dev" from "*.pages.dev"
+          return origin.endsWith(suffix)
+        }
+        return false
+      })
+      return match ? origin : null
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'Cache-Control'],
+    exposeHeaders: ['X-Cache-Status', 'X-Cache-Source', 'X-Cache-TTL', 'X-Response-Time'],
+    credentials: true,
+  }))
+
   // Security middleware
   app.use('*', securityHeadersMiddleware())
 
   // CSRF protection middleware
   app.use('*', csrfProtection())
+
+  // Better Auth session middleware: populate c.set('user') (and 'session') from
+  // the Better Auth session so existing requireAuth/requireRole and every
+  // c.get('user') consumer keep working unchanged.
+  app.use('*', async (c, next) => {
+    try {
+      const reqUrl = new URL(c.req.url)
+      const requestBaseURL = `${reqUrl.protocol}//${reqUrl.host}`
+      const auth = createAuth(c.env, config.auth?.extendBetterAuth, requestBaseURL)
+      const session = await auth.api.getSession({ headers: c.req.raw.headers })
+      if (session?.user) {
+        const u = session.user as { id: string; email: string; role?: string; isSuperAdmin?: boolean }
+        const s = session.session as {
+          id: string; userId: string; token: string
+          expiresAt: number | Date; createdAt: number | Date; updatedAt: number | Date
+        }
+        const ms = (v: number | Date) => (typeof v === 'number' ? v : new Date(v).getTime())
+        c.set('user', {
+          userId: u.id,
+          email: u.email,
+          role: u.role ?? 'viewer',
+          isSuperAdmin: u.isSuperAdmin === true,
+          exp: ms(s.expiresAt),
+          iat: ms(s.createdAt),
+        })
+        c.set('session', {
+          id: s.id,
+          userId: s.userId,
+          token: s.token,
+          expiresAt: ms(s.expiresAt),
+          createdAt: ms(s.createdAt),
+          updatedAt: ms(s.updatedAt),
+        })
+      }
+    } catch {
+      // Not signed in / no valid session — leave c.get('user') undefined.
+    }
+    await next()
+  })
+
+  // API-key auth: if no session resolved a user, accept a programmatic key from
+  // `x-api-key` / `Authorization: Bearer sk_…`. Provided by the api-keys plugin;
+  // gated on that plugin being active. Runs right after the session middleware
+  // so it sits ahead of every route guard, like the security-audit middleware.
+  app.use('*', apiKeyAuthMiddleware())
+
+  // Custom JWT Bearer auth: if BA session + API-key both failed to resolve a user,
+  // fall back to the custom JWT minted by /auth/login (not a BA session token).
+  // Accepts `Authorization: Bearer <jwt>` where the token is NOT an `sk_` API key.
+  app.use('*', async (c, next) => {
+    if (!c.get('user')) {
+      const authHeader = c.req.header('Authorization')
+      if (authHeader?.startsWith('Bearer ') && !authHeader.startsWith('Bearer sk_')) {
+        const token = authHeader.slice(7)
+        try {
+          const secret = (c.env as any)?.JWT_SECRET
+          const payload = await AuthManager.verifyToken(token, secret)
+          if (payload) {
+            c.set('user', {
+              userId: payload.userId,
+              email: payload.email,
+              role: payload.role,
+              exp: payload.exp,
+              iat: payload.iat,
+            })
+          }
+        } catch {
+          // Invalid token — leave user unset.
+        }
+      }
+    }
+    await next()
+  })
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {
@@ -383,30 +572,141 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     }
   }
 
-  // Admin panel access control: require authentication and admin role by default
-  const adminRoles = config.adminAccessRoles || ['admin']
+  // Tenant resolution: sets c.get('tenantId') for every request (API + admin). Short-circuits to
+  // 'default' while the multi-tenant plugin is inactive, so single-tenant behavior is unchanged.
+  // Runs after auth (admin switcher cookie) and before route handlers read the request context.
+  app.use('*', tenantMiddleware())
+
+  // Admin panel access control: require authentication and dynamic RBAC portal
+  // access. Legacy `users.role` no longer decides who can enter /admin/*.
   app.use('/admin/*', requireAuth())
-  app.use('/admin/*', requireRole(adminRoles))
+  app.use('/admin/*', requireRbac('portal', 'access'))
 
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())
+  // Menu plugin sidebar replacement (DB-driven nav items)
+  app.use('/admin/*', menuMiddleware())
+
+  // RBAC-aware admin shell. Computes the signed-in user's effective permission
+  // set once, then (1) redirects the dashboard landing to the first section the
+  // user can actually reach when they lack `dashboard:read`, and (2) strips nav
+  // items the user can't access from the rendered HTML *server-side* (via the
+  // <!--nav:perm--> markers in the layout) so nothing inaccessible reaches the
+  // browser. Routes remain independently gated by requireRbac.
+  const NAV_LANDING: Array<{ path: string; perm: string }> = [
+    { path: '/admin/content', perm: 'content:read' },
+    { path: '/admin/media', perm: 'media:read' },
+    { path: '/admin/collections', perm: 'content:read' },
+    { path: '/admin/forms', perm: 'content:read' },
+    { path: '/admin/users', perm: 'users:manage' },
+    { path: '/admin/plugins', perm: 'plugins:manage' },
+    { path: '/admin/settings', perm: 'settings:manage' },
+    { path: '/admin/rbac', perm: 'rbac:manage' },
+  ]
+  app.use('/admin/*', async (c, next) => {
+    const user = c.get('user') as { userId?: string } | undefined
+    if (!user?.userId) return next()
+
+    let perms: string[] = []
+    try {
+      const { RbacService } = await import('./services/rbac')
+      perms = await new RbacService(c.env.DB, c.env.CACHE_KV).permissionsForUser(user.userId)
+    } catch {
+      return next() // fail open to the route's own requireRbac gate
+    }
+
+    // Cache for requireRbac fast-path — avoids a DB hit per middleware call.
+    c.set('rbacPerms', perms)
+
+    // Dashboard landing: if the user can't view the dashboard, send them to the
+    // first section they do have access to (instead of an empty/forbidden page).
+    const path = new URL(c.req.url).pathname
+    if (
+      (path === '/admin' || path === '/admin/' || path === '/admin/dashboard') &&
+      !perms.includes('dashboard:read')
+    ) {
+      const dest = NAV_LANDING.find((n) => perms.includes(n.perm))
+      if (dest) return c.redirect(dest.path)
+      return c.redirect('/auth/login?error=Your account has no accessible sections')
+    }
+
+    await next()
+
+    // Strip nav items the user lacks, server-side.
+    try {
+      const contentType = c.res.headers.get('content-type') || ''
+      if (!contentType.includes('text/html')) return
+      const body = await c.res.text()
+      const filtered = body.includes('<!--nav:')
+        ? body.replace(
+            /<!--nav:([^>]+?)-->([\s\S]*?)<!--\/nav-->/g,
+            (_m, perm: string, inner: string) => (perms.includes(perm) ? inner : '')
+          )
+        : body
+      const headers = new Headers(c.res.headers)
+      headers.delete('content-length')
+      c.res = new Response(filtered, { status: c.res.status, headers })
+    } catch {
+      /* leave response as-is on any failure */
+    }
+  })
+
+  // Forced two-factor re-enrolment. Runs last of the /admin/* middleware — after requireAuth
+  // (it needs c.get('user')) and after the RBAC shell (a user who owes an enrolment should still
+  // land on a page they have permission for once they finish).
+  //
+  // Wired here rather than in the plugin's register(): Hono composes matched handlers in
+  // registration order, and plugin registration is interleaved with the app.route('/admin/...')
+  // calls below, so middleware added from a plugin would silently not run for any admin route
+  // mounted before it. See recovery.ts.
+  app.use('/admin/*', enforceTwoFactorEnrolment())
+
+  // …and on the JSON API, for the same policy. Without it "you must enrol before using the portal"
+  // means only the HTML portal: the same session cookie drives /api/*, so a user who owes an
+  // enrolment could keep reading and writing content through the API indefinitely. Registered
+  // before every app.route('/api/…') below, because Hono composes matched handlers in registration
+  // order. Unauthenticated public API traffic is untouched — the middleware returns early when
+  // there is no c.get('user') — and API-key callers are exempted inside it.
+  app.use('/api/*', enforceTwoFactorEnrolment())
+
+  // The break-glass reset. Mounted unconditionally and on its own prefix — deactivating the
+  // two-factor plugin does not stop Better Auth from challenging enrolled users, so the recovery
+  // path must outlive the plugin's own surface. See recovery.ts.
+  app.route('/admin/two-factor-reset', twoFactorRecoveryRoutes)
+
+  // Plugin-specific API routes that would otherwise be shadowed by the generic
+  // /api/:collection/:id catch-all must be mounted BEFORE app.route('/api', apiRoutes).
+  app.route('/api/security-audit', securityAuditApiRoutes as any)
+  app.route('/admin/plugins/security-audit', securityAuditAdminRoutes as any)
+  // Same shadowing problem: the AI Search plugin registers /api/search in its own
+  // register(), but that runs with corePluginsBeforeCatchAll — i.e. after the bare
+  // app.route('/api', apiRoutes) below, whose /:collection wildcard swallowed every
+  // /api/search request ('Collection not found' on GET, 'title is required' on POST).
+  app.route('/api/search', aiSearchApiRoutes as any)
 
   // Core routes
   // Routes are being imported incrementally from routes/*
   // Each route is tested and migrated one-by-one
-  app.route('/api', apiRoutes)
+  // Dedicated /api sub-routers MUST be registered before the bare `/api` router,
+  // whose `/:collection` wildcard otherwise shadows them (e.g. GET /api/documents
+  // matched `/:collection`='documents' → 404 "Collection not found").
+  // Plugin API routes that live under /api/* must also go here for the same reason.
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
+  app.route('/api/documents', apiDocumentsRoutes)
+  app.route('/api', apiRoutes)
+  app.route('/admin/documents', adminDocumentsRoutes)
+
+
+  // Forms (admin builder, public rendering, API submission). Same as above —
+  // routes[] was replaced with register(app) in the definePlugin port.
+  registerPluginRoutes(app, [formsPlugin as any], { source: 'core' })
+
   app.route('/admin/api', adminApiRoutes)
-  app.route('/admin/dashboard', adminDashboardRoutes)
   app.route('/admin/collections', adminCollectionsRoutes)
-  app.route('/admin/forms', adminFormsRoutes)
   app.route('/admin/settings', adminSettingsRoutes)
-  app.route('/forms', publicFormsRoutes)
-  app.route('/api/forms', publicFormsRoutes) // API endpoint for form submissions
   app.route('/admin/api-reference', adminApiReferenceRoutes)
   app.route('/admin/database-tools', createDatabaseToolsAdminRoutes())
-  app.route('/admin/seed-data', createSeedDataAdminRoutes())
   app.route('/admin/content', adminContentRoutes)
   app.route('/admin/media', adminMediaRoutes)
   // Security audit middleware - logs auth events (login, register, logout)
@@ -436,10 +736,62 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Public event tracking API — POST /api/events (open), GET /api/events (admin)
   app.route('/api/events', eventsApiRoutes)
 
+  app.route('/admin/dashboard', adminDashboardRoutes)
   app.route('/admin/plugins', adminPluginRoutes)
   app.route('/admin/logs', adminLogsRoutes)
+  app.route('/admin/rbac', adminRbacRoutes)
   app.route('/admin', adminUsersRoutes)
+
+  // The 2FA login challenge, mounted from CORE and deliberately OUTSIDE the `disableAll` guard.
+  //
+  // `twoFactor()` is composed into Better Auth unconditionally (auth/config.ts), so an enrolled
+  // user is challenged on sign-in whether or not plugins are enabled. When the challenge PAGE was
+  // mounted by the plugin, `config.plugins.disableAll` short-circuited `boot()` before
+  // `wirePlugins()` and the redirect to `/auth/two-factor` landed on a 404 — locking every
+  // enrolled user out of an app that still demanded their second factor.
+  //
+  // Only the ENROLMENT surface (`/admin/two-factor`) belongs to the plugin, because turning the
+  // plugin off should stop new enrolments without stranding existing ones. These routes carry no
+  // plugin-active gate for the same reason.
+  app.route('/auth/two-factor', twoFactorChallengeRoutes)
+
   app.route('/auth', authRoutes)
+
+  // Better Auth's organization endpoints stay closed. SonicJS manages tenants through
+  // TenantService (multi-tenant plugin), which owns slug/domain uniqueness and the host routing
+  // in middleware/tenant.ts; the BA plugin is composed only for its schema. On Better Auth 1.6
+  // these endpoints failed on the `tenant_id` field mapping; with that mapping corrected they
+  // would let any signed-in user create a tenant, own it, and set its domain.
+  app.all('/auth/organization/*', (c) => c.json({ error: 'Not Found' }, 404))
+  app.all('/auth/organization', (c) => c.json({ error: 'Not Found' }, 404))
+
+  // Better Auth handler — serves /auth/sign-in/*, /auth/sign-up/*, /auth/sign-out,
+  // /auth/get-session, /auth/callback/* etc. Registered AFTER authRoutes so the
+  // page-render routes (GET /auth/login, /auth/register) take precedence; only
+  // Better Auth's own API paths fall through to this catch-all.
+  app.on(['GET', 'POST'], '/auth/*', async (c) => {
+    // Second-factor enforcement for the passwordless flows. BA's twoFactor plugin challenges
+    // only on /sign-in/email|username|phone-number, so magicLink and emailOTP would otherwise
+    // hand an enrolled account a session with no code. Runs BEFORE auth.handler so nothing is
+    // mailed; reads a body clone so the stream handed to BA is untouched.
+    const refused = await guardPasswordlessSecondFactor(c as unknown as Context<{ Bindings: { DB: D1Database } }>)
+    if (refused) return refused
+
+    // A user whose admin MANDATED a second factor may not turn it off. Also runs before
+    // auth.handler, because BA's /two-factor/disable deletes the enrolment row in its handler —
+    // an after-hook would fire once the account was already unprotected. The /admin/* enforcement
+    // middleware cannot cover this: wrong path, and the page hosting the disable form has to stay
+    // exempt so enrolment is possible at all.
+    const disableRefused = await guardRequiredSecondFactorDisable(
+      c as unknown as Context<{ Bindings: { DB: D1Database }; Variables: { user?: { userId?: string } } }>,
+    )
+    if (disableRefused) return disableRefused
+
+    const reqUrl = new URL(c.req.url)
+    const requestBaseURL = `${reqUrl.protocol}//${reqUrl.host}`
+    const auth = createAuth(c.env, config.auth?.extendBetterAuth, requestBaseURL)
+    return auth.handler(c.req.raw)
+  })
 
   // Test cleanup routes (only for development/test environments)
   app.route('/', testCleanupRoutes)
@@ -449,6 +801,28 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // registered here; position preserved to keep route-match precedence identical.
   if (!config.plugins?.disableAll) {
     registerPluginRoutes(app, corePluginsAfterCatchAll, { source: 'core' })
+  }
+
+  // Wire the menu singleton + definition registry so the catalyst sidebar and
+  // /admin/plugins/:id/configure work for plugins that declared menu[] and
+  // configSchema via definePlugin.  We do this once after ALL routes are mounted
+  // so the singletons reflect the full set of plugins the app will serve.
+  if (!config.plugins?.disableAll) {
+    const allMountedPlugins: any[] = [
+      ...corePluginsBeforeCatchAll,
+      formsPlugin,
+      ...corePluginsAfterCatchAll,
+      ...(config.plugins?.register ?? []),
+    ]
+    // Only user plugins that are NOT in the manifest registry go into the singleton.
+    // Registry plugins (have manifest.json) use the DB active-status check in
+    // pluginMenuMiddleware. A user plugin that ships a manifest (e.g. redirects)
+    // is treated as a registry plugin and excluded from the singleton.
+    const userPlugins = (config.plugins?.register ?? []).filter(
+      (p: any) => !PLUGIN_REGISTRY[p.id]
+    )
+    setPluginMenu(userPlugins.flatMap((p: any) => (p.menu ?? []).map((m: any) => ({ ...m, pluginId: p.id }))))
+    setPluginDefinitions(allMountedPlugins)
   }
 
   // Serve favicon

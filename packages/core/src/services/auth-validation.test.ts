@@ -270,56 +270,39 @@ describe('authValidationService', () => {
       expect(result.success).toBe(false)
     })
 
-    it('should accept optional username', async () => {
-      const { authValidationService } = await import('./auth-validation')
-      const db = createMockDb()
+    // Email-format edge cases — mirrors Payload's `Email - format validation`
+    // suite. Confirms our registration schema rejects malformed addresses.
+    describe('email format edge cases', () => {
+      const accept = ['test@example.com', 'john.doe+tag@sub.example.co.uk', 'a_b@example.io']
+      const reject = [
+        'plainaddress',
+        'two"quotes"@example.com',
+        'has space@example.com',
+        'consecutive..dots@example.com',
+        '.leadingdot@example.com',
+        'comma,addr@example.com',
+        'no-at-sign.example.com',
+        'user@-example.com', // domain label starts with hyphen
+        'user@example-.com', // domain label ends with hyphen
+        'user@example..com', // empty domain label
+      ]
 
-      const schema = await authValidationService.buildRegistrationSchema(db)
+      it.each(accept)('accepts %s', async (email) => {
+        const { authValidationService } = await import('./auth-validation')
+        const schema = await authValidationService.buildRegistrationSchema(createMockDb())
+        expect(schema.safeParse({ email, password: 'password123' }).success).toBe(true)
+      })
 
-      const validData = {
-        email: 'test@example.com',
-        password: 'password123',
-        username: 'testuser'
-      }
-      const result = schema.safeParse(validData)
-      expect(result.success).toBe(true)
+      it.each(reject)('rejects %s', async (email) => {
+        const { authValidationService } = await import('./auth-validation')
+        const schema = await authValidationService.buildRegistrationSchema(createMockDb())
+        expect(schema.safeParse({ email, password: 'password123' }).success).toBe(false)
+      })
     })
 
-    it('should reject short username', async () => {
-      const { authValidationService } = await import('./auth-validation')
-      const db = createMockDb()
-
-      const schema = await authValidationService.buildRegistrationSchema(db)
-
-      const invalidData = {
-        email: 'test@example.com',
-        password: 'password123',
-        username: 'ab' // Too short, min 3
-      }
-      const result = schema.safeParse(invalidData)
-      expect(result.success).toBe(false)
-    })
   })
 
   describe('generateDefaultValue', () => {
-    it('should generate username from email', async () => {
-      const { authValidationService } = await import('./auth-validation')
-
-      const result = authValidationService.generateDefaultValue('username', {
-        email: 'john.doe@example.com'
-      })
-
-      expect(result).toBe('john.doe')
-    })
-
-    it('should generate fallback username when no email', async () => {
-      const { authValidationService } = await import('./auth-validation')
-
-      const result = authValidationService.generateDefaultValue('username', {})
-
-      expect(result).toMatch(/^user\d+$/)
-    })
-
     it('should generate default firstName', async () => {
       const { authValidationService } = await import('./auth-validation')
 

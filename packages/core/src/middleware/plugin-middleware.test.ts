@@ -5,9 +5,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   isPluginActive,
+  invalidatePluginStatusCache,
   requireActivePlugin,
   requireActivePlugins,
-  getActivePlugins
+  getActivePlugins,
 } from './plugin-middleware'
 
 // Mock D1Database
@@ -40,8 +41,10 @@ describe('isPluginActive', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should return true when plugin status is active', async () => {
@@ -51,7 +54,9 @@ describe('isPluginActive', () => {
 
     expect(result).toBe(true)
     expect(mockDb._mocks.prepare).toHaveBeenCalledWith(
-      'SELECT status FROM plugins WHERE id = ?'
+      `SELECT json_extract(data, '$.status') as status FROM documents
+         WHERE slug = ? AND type_id = 'plugin' AND tenant_id = 'default'
+           AND is_current_draft = 1 AND deleted_at IS NULL`
     )
     expect(mockDb._mocks.bind).toHaveBeenCalledWith('my-plugin')
   })
@@ -107,8 +112,10 @@ describe('requireActivePlugin', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should not throw when plugin is active', async () => {
@@ -148,8 +155,10 @@ describe('requireActivePlugins', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should not throw when all plugins are active', async () => {
@@ -210,8 +219,10 @@ describe('getActivePlugins', () => {
   let mockDb: ReturnType<typeof createMockDb>
 
   beforeEach(() => {
+    invalidatePluginStatusCache()
     mockDb = createMockDb()
     vi.clearAllMocks()
+    invalidatePluginStatusCache()
   })
 
   it('should return array of active plugins', async () => {
@@ -225,9 +236,10 @@ describe('getActivePlugins', () => {
 
     expect(result).toEqual(mockPlugins)
     expect(mockDb._mocks.prepare).toHaveBeenCalledWith(
-      'SELECT * FROM plugins WHERE status = ?'
+      `SELECT slug as id, json_extract(data, '$.status') as status, data FROM documents
+         WHERE type_id = 'plugin' AND tenant_id = 'default'
+           AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
     )
-    expect(mockDb._mocks.bind).toHaveBeenCalledWith('active')
   })
 
   it('should return empty array when no active plugins', async () => {

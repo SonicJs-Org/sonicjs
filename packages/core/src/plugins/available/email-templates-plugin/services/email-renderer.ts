@@ -235,7 +235,6 @@ export class EmailTemplateRenderer {
         firstName: 'Jane',
         lastName: 'Smith',
         email: 'jane.smith@example.com',
-        username: 'janesmith',
       },
       // Password reset specific
       resetLink: 'https://example.com/reset/abc123def456',

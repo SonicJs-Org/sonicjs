@@ -35,14 +35,14 @@ openGraph:
 # Creating Custom Collections in SonicJS
 
 <TLDRBox>
-**TL;DR** — Collections are the heart of any SonicJS project: a single TypeScript file describes your content type, and SonicJS turns it into a typed database table, an admin UI, and a full REST API. Define a `CollectionConfig`, register it with `registerCollections([...])`, and let auto-sync handle the rest.
+**TL;DR** — Collections are the heart of any SonicJS project: a single TypeScript file describes your content type, and SonicJS turns it into an admin UI and a full REST API. Content lives in the shared documents table — no per-collection DB table. Define a `CollectionConfig`, register it with `registerCollections([...])`, and let auto-sync handle the rest.
 
 **Key Stats:**
 - 30+ built-in field types — string, richtext, media, reference, blocks, arrays, objects, and more
 - 1 file = 1 schema + 1 admin screen + full CRUD REST API
 - Full TypeScript inference from `CollectionConfig` — autocomplete every field
 - Auto-sync on server start — no migration scripts to babysit
-- Works for both **code-based** and **UI-managed** collections in the same project
+- Code-based collections — defined in TypeScript, version-controlled, the recommended approach for production
 </TLDRBox>
 
 If you've worked with a traditional headless CMS, you know the dance: click through a UI to define a content type, hope the schema export still works in production, write a migration script, deploy, repeat. **SonicJS collections** flip that on its head. Your content model lives in TypeScript, in your repo, version-controlled with the rest of your code — and SonicJS handles the database, the admin UI, and the API automatically.
@@ -60,17 +60,12 @@ A **collection** in SonicJS is a content type — the schema for one kind of thi
 
 When SonicJS boots, it reads your registered collections and:
 
-1. Creates or updates the underlying [database](/database) table
+1. Registers the collection in memory (no per-collection DB table — content lives in the shared `documents` table)
 2. Mounts a full REST [API](/api) at `/api/collections/{name}/content`
-3. Renders an admin screen at `/admin/collections/{name}`
+3. Renders an admin screen at `/admin/content` (filtered to that collection type)
 4. Generates types you can import in your frontend
 
-Two flavors are supported in the same project — see the [collections reference](/collections) for the full breakdown:
-
-- **Code-based collections** — defined in TypeScript, auto-synced on startup, version-controlled. Best for production.
-- **UI-created collections** — built in the admin UI, stored in the database. Best for prototyping.
-
-We're focused on the code-based path here, because that's what you'll use in real apps.
+Collections are code-only — defined in TypeScript, version-controlled with your app. The `/admin/collections` screen is read-only and lists registered collection types; to create or edit content, go to `/admin/content`. See the [collections reference](/collections) for the full breakdown.
 
 ## A Minimal Collection
 
@@ -140,7 +135,7 @@ export default createSonicJSApp({
 
 Restart the dev server and SonicJS will:
 
-- Create the `posts` storage if it doesn't exist
+- Register `posts` as a collection type (content stored in the shared `documents` table)
 - Mount `GET/POST/PUT/DELETE /api/collections/posts/content`
 - Add a "Posts" item to the admin sidebar
 
@@ -150,32 +145,34 @@ That's it for the minimum viable collection.
 
 SonicJS ships **30+ field types**. They fall into seven natural categories. The full list is on the [field types reference](/field-types) — here's the working subset you'll use most often:
 
-| Field type   | Use it for                       | Storage              |
-|--------------|----------------------------------|----------------------|
-| `string`     | Titles, names, short text        | `VARCHAR(255)`       |
-| `textarea`   | Excerpts, descriptions           | `TEXT`               |
-| `slug`       | URL paths (auto-generated, unique-checked) | `VARCHAR(100)` |
-| `email`      | Validated email addresses        | `VARCHAR(255)`       |
-| `url`        | Validated URLs                   | `VARCHAR(500)`       |
-| `richtext`   | WYSIWYG body content             | `TEXT` (HTML)        |
-| `markdown`   | Markdown body content            | `TEXT` (Markdown)    |
-| `number`     | Prices, quantities, ratings      | `DECIMAL(10,2)`      |
-| `boolean`    | Toggles, feature flags           | `BOOLEAN`            |
-| `date`       | Calendar dates (no time)         | `DATE`               |
-| `datetime`   | Timestamped events               | `DATETIME`           |
-| `select`     | Single-choice dropdown           | `VARCHAR(255)`       |
-| `multiselect`| Multi-choice dropdown            | `JSON` (array)       |
-| `radio`      | Single-choice radios             | `VARCHAR(255)`       |
-| `checkbox`   | Boolean checkbox                 | `BOOLEAN`            |
-| `media`      | Images, videos, documents        | `VARCHAR(500)` URL   |
-| `file`       | Generic file uploads             | `VARCHAR(500)` URL   |
-| `color`      | Hex color picker                 | `VARCHAR(7)`         |
-| `reference`  | Link to another collection       | `VARCHAR(255)` ID    |
-| `array`      | Repeatable list of items         | `JSON`               |
-| `object`     | Grouped/nested fields            | `JSON`               |
-| `json`       | Raw JSON blob                    | `JSON`               |
+All field values persist inside `document.data` as JSON — there are no per-collection typed columns. Queryable scalars are exposed as `q_*` virtual generated columns on the shared `documents` table.
 
-Beyond those, the **rich-text editor variants** (`quill`, `tinymce`, `mdxeditor`, `easymde`) drop in when you have the matching editor plugin installed. They store the same `TEXT` content but wire up a different admin editor.
+| Field type   | Use it for                       |
+|--------------|----------------------------------|
+| `string`     | Titles, names, short text        |
+| `textarea`   | Excerpts, descriptions           |
+| `slug`       | URL paths (auto-generated, unique-checked) |
+| `email`      | Validated email addresses        |
+| `url`        | Validated URLs                   |
+| `richtext`   | WYSIWYG body content             |
+| `markdown`   | Markdown body content            |
+| `number`     | Prices, quantities, ratings      |
+| `boolean`    | Toggles, feature flags           |
+| `date`       | Calendar dates (no time)         |
+| `datetime`   | Timestamped events               |
+| `select`     | Single-choice dropdown           |
+| `multiselect`| Multi-choice dropdown            |
+| `radio`      | Single-choice radios             |
+| `checkbox`   | Boolean checkbox                 |
+| `media`      | Images, videos, documents        |
+| `file`       | Generic file uploads             |
+| `color`      | Hex color picker                 |
+| `reference`  | Link to another collection       |
+| `array`      | Repeatable list of items         |
+| `object`     | Grouped/nested fields            |
+| `json`       | Raw JSON blob                    |
+
+Beyond those, the **rich-text editor variants** (`quill`, `tinymce`, `mdxeditor`, `easymde`) drop in when you have the matching editor plugin installed. They all persist the same way — as values inside the `document.data` JSON blob — but wire up a different admin editor.
 
 The most powerful primitive isn't on this table: **blocks**. We'll cover those at the end.
 
@@ -598,7 +595,7 @@ Once your collections are registered, the API is automatic:
 curl https://your-cms.example.com/api/collections/posts/content?limit=10
 
 # Get one post by ID
-curl https://your-cms.example.com/api/content/cm123
+curl https://your-cms.example.com/api/cm123
 
 # Filter and paginate
 curl "https://your-cms.example.com/api/collections/posts/content?status=published&limit=20&offset=0"
@@ -624,7 +621,7 @@ Full request/response shapes for every endpoint are in the [API reference](/api)
 
 ## Next Steps
 
-You now have the full mental model: define a `CollectionConfig`, register it, and let SonicJS produce the database schema, admin UI, and REST API. From here:
+You now have the full mental model: define a `CollectionConfig`, register it, and let SonicJS produce the admin UI and REST API — content lands in the shared `documents` table automatically. From here:
 
 - **[Field types reference](/field-types)** — every field type, every option, every validation rule
 - **[Collections deep dive](/collections)** — UI vs code-based, blocks, repeatable arrays, and migration patterns
@@ -635,7 +632,7 @@ You now have the full mental model: define a `CollectionConfig`, register it, an
 
 ## Key Takeaways
 
-- A SonicJS **collection** is a single TypeScript file that produces a database schema, an admin UI, and a typed REST API.
+- A SonicJS **collection** is a single TypeScript file that produces an admin UI and a typed REST API — content is stored in the shared `documents` table, not a per-collection table.
 - **30+ field types** cover every real-world content shape — text, media, references, arrays, objects, blocks.
 - **References + arrays of references** model one-to-one and many-to-many relationships without writing SQL.
 - **Validation** is declarative: `required`, `minLength`, `pattern`, `enum`, and `min`/`max` are enforced on both client and server.

@@ -19,19 +19,19 @@ const createMockDb = (
   contentData: any[] = [],
   mediaData: any[] = []
 ) => {
+  const rowsFor = (sql: string) => {
+    if (sql.includes('collections')) return collectionsData
+    // Media SQL: `type_id = 'media_asset'`. Content SQL: `type_id != 'media_asset'`.
+    if (sql.includes(`type_id = 'media_asset'`) || sql.includes(' media ')) return mediaData
+    if (sql.includes('documents') || sql.includes('content')) return contentData
+    return []
+  }
   return {
     prepare: vi.fn().mockImplementation((sql: string) => {
-      return {
-        all: vi.fn().mockResolvedValue({
-          results: sql.includes('collections')
-            ? collectionsData
-            : sql.includes('content')
-              ? contentData
-              : sql.includes('media')
-                ? mediaData
-                : []
-        })
-      }
+      const all = vi.fn().mockResolvedValue({ results: rowsFor(sql) })
+      const stmt: any = { all, bind: vi.fn() }
+      stmt.bind.mockReturnValue(stmt)
+      return stmt
     })
   } as unknown as D1Database
 }
@@ -77,8 +77,8 @@ describe('Cache Warming', () => {
       expect(contentDetail).toBeDefined()
       expect(mediaDetail).toBeDefined()
 
-      // Each collection item + list = 3 entries
-      expect(collectionDetail?.count).toBe(3) // 2 items + 1 list
+      // Collections come from the in-memory registry (not DB) — count depends on registry state.
+      expect(collectionDetail?.count).toBeGreaterThanOrEqual(1) // at least the list entry
       // Each content item + list = 3 entries
       expect(contentDetail?.count).toBe(3) // 2 items + 1 list
       // Each media item + list = 2 entries
@@ -108,9 +108,14 @@ describe('Cache Warming', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const db = {
-        prepare: vi.fn().mockImplementation(() => ({
-          all: vi.fn().mockRejectedValue(new Error('Database error'))
-        }))
+        prepare: vi.fn().mockImplementation(() => {
+          const stmt: any = {
+            all: vi.fn().mockRejectedValue(new Error('Database error')),
+            bind: vi.fn()
+          }
+          stmt.bind.mockReturnValue(stmt)
+          return stmt
+        })
       } as unknown as D1Database
 
       const result = await warmCommonCaches(db)
@@ -118,8 +123,7 @@ describe('Cache Warming', () => {
       // Errors are caught per-namespace, so no top-level error is recorded
       // Each warming function catches its own errors
       expect(result.errors).toBe(0)
-      // Each namespace logs its own error
-      expect(consoleSpy).toHaveBeenCalledWith('Error warming collections cache:', expect.any(Error))
+      // Content + media warming touch the DB; collections warming uses the in-memory registry.
       expect(consoleSpy).toHaveBeenCalledWith('Error warming content cache:', expect.any(Error))
       expect(consoleSpy).toHaveBeenCalledWith('Error warming media cache:', expect.any(Error))
 
@@ -134,18 +138,18 @@ describe('Cache Warming', () => {
       const db = {
         prepare: vi.fn().mockImplementation((sql: string) => {
           callCount++
-          if (sql.includes('content')) {
-            return {
-              all: vi.fn().mockRejectedValue(new Error('Content error'))
-            }
-          }
-          return {
-            all: vi.fn().mockResolvedValue({
-              results: sql.includes('collections')
-                ? [{ id: 'col-1', name: 'posts' }]
-                : []
+          const stmt: any = { bind: vi.fn() }
+          if (sql.includes(`type_id = 'media_asset'`) || sql.includes(' media ')) {
+            stmt.all = vi.fn().mockResolvedValue({ results: [] })
+          } else if (sql.includes('documents') || sql.includes('content')) {
+            stmt.all = vi.fn().mockRejectedValue(new Error('Content error'))
+          } else {
+            stmt.all = vi.fn().mockResolvedValue({
+              results: sql.includes('collections') ? [{ id: 'col-1', name: 'posts' }] : []
             })
           }
+          stmt.bind.mockReturnValue(stmt)
+          return stmt
         })
       } as unknown as D1Database
 
@@ -239,16 +243,21 @@ describe('Cache Warming', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const db = {
-        prepare: vi.fn().mockImplementation(() => ({
-          all: vi.fn().mockRejectedValue(new Error('Database error'))
-        }))
+        prepare: vi.fn().mockImplementation(() => {
+          const stmt: any = {
+            all: vi.fn().mockRejectedValue(new Error('Database error')),
+            bind: vi.fn()
+          }
+          stmt.bind.mockReturnValue(stmt)
+          return stmt
+        })
       } as unknown as D1Database
 
       await preloadCache(db)
 
       expect(logSpy).toHaveBeenCalledWith('🔥 Preloading cache...')
-      // Each namespace catches its own error
-      expect(errorSpy).toHaveBeenCalledWith('Error warming collections cache:', expect.any(Error))
+      // Content + media warming touch the DB; collections warming uses the in-memory registry.
+      expect(errorSpy).toHaveBeenCalledWith('Error warming content cache:', expect.any(Error))
 
       logSpy.mockRestore()
       errorSpy.mockRestore()
@@ -345,9 +354,14 @@ describe('Cache Warming', () => {
       vi.useFakeTimers()
 
       const db = {
-        prepare: vi.fn().mockImplementation(() => ({
-          all: vi.fn().mockRejectedValue(new Error('Periodic error'))
-        }))
+        prepare: vi.fn().mockImplementation(() => {
+          const stmt: any = {
+            all: vi.fn().mockRejectedValue(new Error('Periodic error')),
+            bind: vi.fn()
+          }
+          stmt.bind.mockReturnValue(stmt)
+          return stmt
+        })
       } as unknown as D1Database
 
       const timer = schedulePeriodicWarming(db, 1000)
@@ -357,7 +371,7 @@ describe('Cache Warming', () => {
 
       // Errors are caught per-namespace within warmCommonCaches
       expect(errorSpy).toHaveBeenCalledWith(
-        'Error warming collections cache:',
+        'Error warming content cache:',
         expect.any(Error)
       )
 

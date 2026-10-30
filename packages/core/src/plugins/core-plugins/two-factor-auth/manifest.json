@@ -1,0 +1,34 @@
+{
+  "id": "two-factor-auth",
+  "name": "Two-Factor Authentication",
+  "version": "1.0.0",
+  "description": "Time-based one-time passwords (TOTP) with single-use backup codes and per-account second-factor lockout.",
+  "author": "SonicJS Team",
+  "category": "security",
+  "tags": [
+    "2fa",
+    "totp",
+    "mfa",
+    "authentication",
+    "security"
+  ],
+  "dependencies": [],
+  "permissions": {
+    "two-factor:manage": "Change two-factor policy settings"
+  },
+  "adminMenu": {
+    "label": "Two-Factor Auth",
+    "icon": "lock-closed",
+    "path": "/admin/two-factor",
+    "order": 86
+  },
+  "iconEmoji": "🔐",
+  "is_core": true,
+  "defaultActive": true,
+  "defaultSettings": {
+    "issuer": "SonicJS",
+    "maxFailedAttempts": 5,
+    "lockoutDurationSeconds": 900,
+    "backupCodeCount": 10
+  }
+}

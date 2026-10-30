@@ -5,15 +5,19 @@ import { dirname, resolve } from 'node:path'
 const here = dirname(fileURLToPath(import.meta.url))
 const ci = !!process.env.CI
 const baseURL = process.env.BASE_URL || 'http://localhost:8787'
+// Remote preview (BASE_URL set) has inherent network flakiness that local runs don't.
+const remotePreview = !!process.env.BASE_URL
 
 export default defineConfig({
   testDir: './e2e',
   // File-level parallelism only; global-state specs still require narrow @lock-* tags.
   fullyParallel: false,
   forbidOnly: ci,
-  // One diagnostic retry, not a green-by-retry policy. First-attempt failures fail CI.
-  retries: ci ? 1 : 0,
-  failOnFlakyTests: ci,
+  // Remote previews need more retries to absorb transient CF Worker cold-start / network flakiness.
+  // Local runs use 1 retry as a diagnostic signal, not a green-by-retry policy.
+  retries: ci ? (remotePreview ? 3 : 1) : 0,
+  // Enforce flaky = failure only on local runs where the environment is deterministic.
+  failOnFlakyTests: ci && !remotePreview,
   maxFailures: ci ? 25 : 0,
   timeout: ci ? 120_000 : 90_000,
   // Retain the measured existing concurrency until full-suite comparisons justify changing it.

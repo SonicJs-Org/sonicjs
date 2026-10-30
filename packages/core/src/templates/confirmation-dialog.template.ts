@@ -54,17 +54,14 @@ export function renderConfirmationDialog(options: ConfirmationDialogOptions): st
             <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
               <button
                 type="button"
-                onclick="${onConfirm}; document.getElementById('${id}').close()"
-                command="close"
-                commandfor="${id}"
+                onclick="${onConfirm}; closeConfirmDialog('${id}')"
                 class="confirm-button inline-flex w-full justify-center rounded-md ${confirmClass} px-3 py-2 text-sm font-semibold text-white sm:ml-3 sm:w-auto"
               >
                 ${confirmText}
               </button>
               <button
                 type="button"
-                command="close"
-                commandfor="${id}"
+                onclick="closeConfirmDialog('${id}')"
                 class="mt-3 inline-flex w-full justify-center rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-white ring-1 ring-inset ring-white/5 hover:bg-white/20 sm:mt-0 sm:w-auto"
               >
                 ${cancelText}
@@ -85,11 +82,40 @@ export function getConfirmationDialogScript(): string {
   return `
     <script src="https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1" type="module"></script>
     <script>
-      function showConfirmDialog(dialogId) {
-        const dialog = document.getElementById(dialogId);
-        if (dialog) {
-          dialog.showModal();
-        }
+      // This classic inline script executes during parse, before the deferred
+      // @tailwindplus/elements module — so it captures the real, unpatched close().
+      //
+      // el-dialog v1 patches HTMLDialogElement.prototype.close and routes it through a CSS
+      // transition state machine. If a close has to reverse an enter transition that is still
+      // running, that machine skips its completion callback and never clears its in-flight
+      // guard: the native close is never performed and every later close() is dropped too,
+      // leaving the modal permanently open and blocking the page. Confirming a dialog within
+      // its ~300ms enter transition hits this reliably.
+      if (!window.closeConfirmDialog) {
+        window.__sonicjsNativeDialogClose = HTMLDialogElement.prototype.close;
+
+        window.showConfirmDialog = function showConfirmDialog(dialogId) {
+          var dialog = document.getElementById(dialogId);
+          if (dialog) {
+            dialog.showModal();
+          }
+        };
+
+        window.closeConfirmDialog = function closeConfirmDialog(dialogId) {
+          var dialog = document.getElementById(dialogId);
+          if (!dialog) return;
+          dialog.close();
+          // Let el-dialog run its leave transition when it is healthy; if the dialog is still
+          // open two frames later the state machine has wedged, so force it shut.
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (!dialog.open) return;
+              var host = dialog.closest('el-dialog');
+              if (host) host.removeAttribute('open');
+              window.__sonicjsNativeDialogClose.call(dialog);
+            });
+          });
+        };
       }
     </script>
   `

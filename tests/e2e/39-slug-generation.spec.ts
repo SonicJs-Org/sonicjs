@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures'
-import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
+import { loginAsAdmin, ensureAdminUserExists, saveNewContent } from './utils/test-helpers'
+import { uniqueTestId } from './utils/test-runtime'
 
 // Tests below that actually save content need a name no earlier run has already used: a
 // repeated slug is rejected by the duplicate check and the form never submits. The `Test `
@@ -11,7 +12,7 @@ import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
 // "⏳ Checking availability..." -- the request in flight, not a product defect.
 const SLUG_CHECK_TIMEOUT = 20_000
 
-const RUN = Date.now()
+const RUN = uniqueTestId()
 
 /**
  * No `waitForLoadState('networkidle')` in this file.
@@ -144,60 +145,30 @@ test.describe('Slug Generation @content', () => {
     await expect(slugField).toHaveValue('brand-new-title-2024')
   })
 
-  test('should detect duplicate slugs within same collection', async ({ page }) => {
-    // First, create content with a specific slug
-    await page.goto('/admin/content/new?collection=blog_post')
-    await page.waitForSelector('input[name="title"]', { timeout: 10000 })
-    
-    await page.fill('input[name="title"]', 'Test Duplicate Page')
-    await page.waitForTimeout(1000)
-
-    const slugField = page.locator('input[name="slug"]')
-    await expect(slugField).toHaveValue('test-duplicate-page')
-
-    // Fill required fields before saving
-    // Fill the user-picker author field. Setting the hidden input alone is not enough:
-    // the field's submit handler overwrites the hidden value from the visible search box
-    // unless the display value matches dataset.linkedName. Set all three so it sticks.
-    await page.evaluate(() => {
-      const container = document.querySelector('.user-search-field-container')
-      if (container) {
-        const display = container.querySelector('input[type="text"]') as HTMLInputElement | null
-        const hidden = container.querySelector('input[type="hidden"]') as HTMLInputElement | null
-        if (display) { display.value = 'Test Author'; display.dataset.linkedName = 'Test Author' }
-        if (hidden) { hidden.value = 'Test Author' }
-      } else {
-        const el = document.querySelector('input[name="author"]') as HTMLInputElement | null
-        if (el) { el.value = 'Test Author'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
-      }
+  test('should detect duplicate slugs within same collection', async ({ page, resourceId }) => {
+    // Creating content is prerequisite here; the behavior under test is the duplicate check.
+    const slug = `test-duplicate-${resourceId}`
+    const created = await page.request.post('/api/content', {
+      data: { collectionId: 'blog_post', title: `Test Duplicate ${resourceId}`, slug,
+        data: { author: 'Test Author', content: 'Test content' } },
     })
-    await page.evaluate(() => {
-      const el = document.querySelector('input[name="content"], textarea[name="content"]') as HTMLInputElement | HTMLTextAreaElement
-      if (el) el.value = 'Test content'
-    })
-
-    // Save the content
-    await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
-
-    // Now try to create another with same slug
-    await page.goto('/admin/content/new?collection=blog_post')
-    await page.waitForSelector('input[name="title"]', { timeout: 10000 })
-    
-    await page.fill('input[name="title"]', 'Different Title')
-    await page.waitForTimeout(500)
-    
-    // Manually set duplicate slug
-    await page.fill('input[name="slug"]', 'test-duplicate-page')
-    await page.waitForTimeout(1500) // Wait for debounced check
-    
-    // Should show as unavailable
-    const statusDiv = page.locator('#field-slug-status')
-    await expect(statusDiv).toContainText('already in use', { timeout: SLUG_CHECK_TIMEOUT })
-    
-    // Form should have validation error
-    const isInvalid = await slugField.evaluate((el: HTMLInputElement) => !el.validity.valid)
-    expect(isInvalid).toBe(true)
+    expect(created.ok(), `Duplicate-slug prerequisite failed: HTTP ${created.status()}`).toBeTruthy()
+    const body = await created.json()
+    const id = body.data?.id || body.id
+    expect(id).toBeTruthy()
+    try {
+      await page.goto('/admin/content/new?collection=blog_post')
+      await page.locator('input[name="title"]').fill('Different Title')
+      const slugField = page.locator('input[name="slug"]')
+      await slugField.fill(slug)
+      await expect(page.locator('#field-slug-status')).toContainText('already in use', {
+        timeout: SLUG_CHECK_TIMEOUT,
+      })
+      await expect.poll(() => slugField.evaluate((el: HTMLInputElement) => !el.validity.valid)).toBe(true)
+    } finally {
+      const deleted = await page.request.delete(`/api/content/${id}`)
+      expect(deleted.ok(), `Duplicate-slug cleanup failed: HTTP ${deleted.status()}`).toBeTruthy()
+    }
   })
 
   test('should not auto-change slug when editing existing content', async ({ page }) => {
@@ -232,8 +203,7 @@ test.describe('Slug Generation @content', () => {
       if (el) el.value = 'Test content'
     })
 
-    await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
+    await saveNewContent(page, () => page.click('button[name="action"][value="save_and_publish"]'))
 
     // Publishing navigated to this record's freshly server-rendered edit form, so the slug below
     // is the stored one. The list round trip this replaces hunted for the row by title on a
@@ -283,8 +253,7 @@ test.describe('Slug Generation @content', () => {
       if (el) el.value = 'Test content'
     })
 
-    await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
+    await saveNewContent(page, () => page.click('button[name="action"][value="save_and_publish"]'))
 
     // Publishing already landed on this record's edit form, which is where the rest of the test
     // runs. The round trip this replaces went back out to /admin/content and hunted for the row
@@ -365,8 +334,7 @@ test.describe('Slug Generation @content', () => {
       if (el) el.value = 'Test content'
     })
 
-    await page.click('button[name="action"][value="save_and_publish"]')
-    await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 15000 })
+    await saveNewContent(page, () => page.click('button[name="action"][value="save_and_publish"]'))
 
     // Try to create duplicate
     await page.goto('/admin/content/new?collection=blog_post')

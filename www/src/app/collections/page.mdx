@@ -615,17 +615,21 @@ Collections automatically get REST API endpoints:
 ## Best Practices
 
 <Callout type="tip" title="Collection Design Tips">
-  - Use descriptive field names that reflect your content model
-  - Set appropriate validation rules to maintain data quality
-  - Use references for relationships between collections
-  - Enable search on fields that users will query frequently
-  - Set reasonable defaults for optional fields
+
+- Use descriptive field names that reflect your content model
+- Set appropriate validation rules to maintain data quality
+- Use references for relationships between collections
+- Enable search on fields that users will query frequently
+- Set reasonable defaults for optional fields
+
 </Callout>
 
 <Callout type="warning" title="Performance Considerations">
-  - Limit the number of fields in `listFields` to improve list performance
-  - Use appropriate field types (e.g., `select` instead of `string` for fixed options)
-  - Index frequently queried fields in your database
+
+- Limit the number of fields in `listFields` to improve list performance
+- Use appropriate field types (e.g., `select` instead of `string` for fixed options)
+- Index frequently queried fields in your database
+
 </Callout>
 
 ---

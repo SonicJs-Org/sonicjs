@@ -841,11 +841,13 @@ wrangler d1 execute DB --command="SELECT * FROM documents WHERE is_published = 1
 </CodeGroup>
 
 <Callout type="tip" title="Database Best Practices">
+
 - Always use transactions for multi-step operations
 - Validate input with Zod schemas before inserting
 - Use prepared statements for repeated queries
 - Implement soft deletes for recovery capability
 - Log important operations for audit trails
+
 </Callout>
 
 ---

@@ -265,7 +265,8 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
            is_core      INTEGER NOT NULL DEFAULT 0,
            installed_at INTEGER,
            last_updated INTEGER,
-           settings     TEXT
+           settings     TEXT,
+           updated_at   INTEGER
          )`
       )
       .bind()
@@ -280,6 +281,13 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
   // name: settings" if it already exists — that error is expected and silently caught.
   try {
     await db.prepare('ALTER TABLE plugins ADD COLUMN settings TEXT').bind().run()
+  } catch { /* column already exists — expected */ }
+
+  // Best-effort: add the `updated_at` column used by POST /admin/email/settings
+  // (`UPDATE plugins SET settings = ?, updated_at = ?`).  Missing on tables created
+  // before this column was added; duplicate-column error is expected and caught.
+  try {
+    await db.prepare('ALTER TABLE plugins ADD COLUMN updated_at INTEGER').bind().run()
   } catch { /* column already exists — expected */ }
 
   const now = Date.now()

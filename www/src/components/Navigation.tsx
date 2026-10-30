@@ -286,6 +286,7 @@ export const navigation: Array<NavGroup> = [
     title: 'Deployment',
     links: [
       { title: 'Production Deployment', href: '/deployment' },
+      { title: 'Self-Hosting', href: '/self-hosting' },
       { title: 'Testing', href: '/testing' },
     ],
   },
@@ -299,11 +300,13 @@ export const navigation: Array<NavGroup> = [
     title: 'Resources',
     links: [
       { title: 'Blog', href: '/blog' },
+      { title: 'Compare', href: '/compare' },
       { title: 'Roadmap', href: '/roadmap' },
       { title: 'Examples', href: '/examples' },
       { title: 'FAQ', href: '/faq' },
       { title: 'Changelog', href: '/changelog' },
       { title: 'Community', href: '/community' },
+      { title: 'Commercial Support', href: '/commercial-support' },
       { title: 'Sponsor', href: '/sponsor' },
       { title: 'Contributing', href: '/contributing' },
       { title: 'AI Agents', href: '/ai-agents' },

@@ -63,14 +63,13 @@ Edge computing flips the traditional model on its head. Instead of running your 
 ```typescript
 // With SonicJS on Cloudflare Workers, your CMS runs at the edge
 import { Hono } from 'hono'
-import { createSonicJS } from '@sonicjs-cms/core'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
 
-const app = new Hono()
-const cms = createSonicJS({
-  database: env.DB,      // D1 runs at the edge
-  storage: env.STORAGE,  // R2 for global file access
-  cache: env.CACHE,      // KV for instant reads
-})
+registerCollections([
+  // register your content collections here
+])
+
+const app = createSonicJSApp({ collections: { autoSync: true } })
 
 export default app
 ```
@@ -112,7 +111,7 @@ SonicJS provides a clean REST API for all content operations. Your frontend can 
 
 ```bash
 # Fetch content from anywhere
-curl https://your-site.workers.dev/api/content/posts \
+curl https://your-site.workers.dev/api/posts \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -140,7 +139,7 @@ Ready to move your content to the edge? SonicJS makes it straightforward:
 
 ```bash
 # Create a new SonicJS project
-npm create sonicjs-app my-cms
+npx create-sonicjs@latest my-cms
 
 # Deploy to Cloudflare Workers
 cd my-cms

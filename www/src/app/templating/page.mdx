@@ -73,9 +73,9 @@ SonicJS features a modern, server-side rendering template system built with Type
 ```
 src/templates/
 ├── layouts/                              # Page layouts
-│   ├── admin-layout-v2.template.ts      # Main admin layout
+│   ├── admin-layout-v2.template.ts      # Main admin layout (legacy; new admin pages use the catalyst layout)
 │   ├── admin-layout-catalyst.template.ts # Catalyst-based admin UI
-│   └── docs-layout.template.ts          # Documentation layout
+│   └── docs-layout.template.ts          # Documentation layout (this file does not exist in v3)
 ├── pages/                                # Full page templates
 │   ├── admin-dashboard.template.ts      # Dashboard with stats & charts
 │   ├── admin-content-list.template.ts   # Content listing with filters
@@ -131,7 +131,7 @@ export function renderMyTemplate(data: MyTemplateData): string {
 ### Three-Tier Template Hierarchy
 
 ```
-Layout (admin-layout-v2.template.ts)
+Layout (admin-layout-v2.template.ts) [legacy; new admin pages use the catalyst layout]
   └── Page (admin-dashboard.template.ts)
        └── Components (table.template.ts, alert.template.ts, etc.)
 ```

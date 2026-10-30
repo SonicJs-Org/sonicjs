@@ -213,7 +213,7 @@ export class SubscriptionService {
 
     // Get paginated results
     const results = await this.db.prepare(
-      `SELECT s.*, u.email as user_email FROM subscriptions s LEFT JOIN users u ON s.user_id = u.id ${whereClause} ORDER BY ${sortBy} ${sortOrder} LIMIT ? OFFSET ?`
+      `SELECT s.*, u.email as user_email FROM subscriptions s LEFT JOIN auth_user u ON s.user_id = u.id ${whereClause} ORDER BY ${sortBy} ${sortOrder} LIMIT ? OFFSET ?`
     ).bind(...values, limit, offset).all()
 
     return {

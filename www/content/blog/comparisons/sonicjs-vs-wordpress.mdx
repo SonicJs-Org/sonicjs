@@ -46,6 +46,9 @@ openGraph:
 - WordPress core uses PHP + MySQL/MariaDB; SonicJS uses TypeScript + Cloudflare D1
 </TLDRBox>
 
+> 📊 **See the full feature matrix:** [SonicJS vs Payload, Strapi, Directus, Sanity & Contentful](/compare) — a side-by-side inventory of 125+ capabilities across 13 categories, from APIs and auth to i18n and pricing.
+
+
 WordPress and SonicJS sit at opposite ends of the CMS spectrum. WordPress is the mature, ecosystem-rich, "anyone can run a site" platform that has been refined over more than two decades. SonicJS is a modern, edge-first, code-first headless CMS designed for developers who want full control of their stack and sub-50ms responses worldwide.
 
 This post is not a takedown — WordPress is a serious, capable platform, and pretending otherwise would be silly. But the two tools are optimized for very different jobs. Below, we'll compare them honestly across architecture, performance, hosting cost, scalability, content modeling, security, and developer ergonomics, and give you a clear "when to choose which" at the end.
@@ -175,7 +178,7 @@ This is one place WordPress's ecosystem cuts both ways.
 | Core security | Solid, well-audited | Solid, smaller surface area |
 | Plugin/theme vulnerabilities | The #1 attack vector — 90%+ of WP exploits trace back to plugins/themes | No PHP plugin runtime; plugins run typed, sandboxed code |
 | Auto-updates | Yes (core), plugins optional | Deploy-driven (`wrangler deploy`) |
-| Admin brute-force | Common attack target | JWT + KV-cached verification, [rate-limited auth](/authentication) |
+| Admin brute-force | Common attack target | Session-based auth (Better Auth) with rate limiting and account lockout |
 | DDoS / WAF | Add-on (Cloudflare, Sucuri, Wordfence) | Cloudflare WAF + bot management built-in |
 | Default password hashing | phpass (legacy bcrypt-style) | PBKDF2 100k iterations, SHA-256 |
 | File uploads | PHP file system, often misconfigured | R2 bucket, signed URLs |
@@ -302,7 +305,7 @@ app.get('/api/latest-posts', async (c) => {
 export default app
 ```
 
-You also get the auto-generated `GET /api/content/posts` endpoint for free without writing any code. See the [API reference](/api).
+You also get the auto-generated `GET /api/posts` endpoint for free without writing any code. See the [API reference](/api).
 
 ### TypeScript & types
 
@@ -383,7 +386,7 @@ If you're considering a move from WordPress to SonicJS:
 3. **Re-host media.** Move uploads to R2 (or keep them on the original origin and let the URLs follow).
 4. **Rebuild the frontend.** Most teams take this opportunity to move from a WP theme to Next.js / Astro.
 5. **Set up redirects** so old `/category/foo/` URLs land on the new equivalents.
-6. **Cut over auth and forms.** WordPress's wp_users + wp_usermeta map to SonicJS's typed users + JWT auth model.
+6. **Cut over auth and forms.** WordPress's wp_users + wp_usermeta map to SonicJS's users + session-based Better Auth model (JWT API tokens also available).
 
 Plan for a phased migration if your site is large — many teams run WordPress and SonicJS side-by-side for a few weeks during cutover.
 

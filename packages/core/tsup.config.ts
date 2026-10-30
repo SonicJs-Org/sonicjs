@@ -11,6 +11,7 @@ export default defineConfig({
     plugins: 'src/plugins/index.ts',
     utils: 'src/utils/index.ts',
     types: 'src/types/index.ts',
+    adapters: 'src/adapters/index.ts',
   },
 
   // Output formats
@@ -40,6 +41,13 @@ export default defineConfig({
     'hono',
     'drizzle-orm',
     'zod',
+    // Better Auth + cloudflare shim — bundled by wrangler at deploy time, not here
+    'better-auth',
+    'better-auth-cloudflare',
+    '@better-auth/kysely-adapter',
+    'kysely',
+    // Optional self-host dep — present on Node/Bun, absent on Workers
+    'better-sqlite3',
   ],
 
   // Configure esbuild to drop unused imports
@@ -69,6 +77,9 @@ export default defineConfig({
 
   // TypeScript options
   tsconfig: './tsconfig.json',
+
+  // Suppress chunk output during watch
+  silent: true,
 
   // Build hooks
   onSuccess: async () => {

@@ -221,7 +221,7 @@ export class AutomationEngine {
 
       if (conditions.user_role && context.userId) {
         const user = await this.db.prepare(`
-          SELECT role FROM users WHERE id = ?
+          SELECT role FROM auth_user WHERE id = ?
         `).bind(context.userId).first()
         
         if (user && user.role !== conditions.user_role) {
@@ -263,7 +263,7 @@ export class AutomationEngine {
           
           if (rule.action_config.role) {
             const { results } = await this.db.prepare(`
-              SELECT id FROM users WHERE role = ? AND is_active = 1
+              SELECT id FROM auth_user WHERE role = ? AND is_active = 1
             `).bind(rule.action_config.role).all()
             targetUsers.push(...results.map(u => u.id))
           }
@@ -430,9 +430,9 @@ export class AutomationEngine {
     const { results } = await this.db.prepare(`
       SELECT 
         cv.*,
-        u.username as user_name
+        u.email as user_name
       FROM content_versions cv
-      LEFT JOIN users u ON cv.user_id = u.id
+      LEFT JOIN auth_user u ON cv.user_id = u.id
       WHERE cv.content_id = ?
       ORDER BY cv.version_number DESC
     `).bind(contentId).all()

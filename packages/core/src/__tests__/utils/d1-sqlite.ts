@@ -1,0 +1,150 @@
+import Database from 'better-sqlite3'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import type { D1Database } from '@cloudflare/workers-types'
+import type { QueryableField } from '../../schemas/document'
+import { ensureScalarSchema, resetScalarSchemaCache } from '../../services/document-scalar-schema'
+
+// Real-SQLite test harness. Wraps better-sqlite3 in the subset of the D1Database
+// interface the document services use (prepare/bind/run/all/first + batch) and applies
+// the consolidated greenfield migrations so tests exercise the actual schema: generated columns, partial unique
+// indexes, and db.batch atomicity — none of which the pure-mock suite can verify.
+//
+// Foreign keys are left OFF to mirror D1 (whose FK enforcement is not guaranteed); the
+// services delete derived rows explicitly rather than relying on cascade.
+
+const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../../migrations')
+const DOC_MIGRATIONS = [
+  '0001_core.sql',
+  '0002_documents.sql',
+  '0003_session_org.sql',
+  '0006_two_factor_lockout.sql',
+  '0007_two_factor_required.sql',
+]
+
+// better-sqlite3 only accepts numbers/strings/bigints/buffers/null. Coerce the values the
+// services bind (undefined, booleans) the same way D1's binder tolerates them.
+function normalize(v: unknown): number | string | bigint | Buffer | null {
+  if (v === undefined || v === null) return null
+  if (typeof v === 'boolean') return v ? 1 : 0
+  return v as number | string | bigint | Buffer
+}
+
+class TestStatement {
+  constructor(
+    private sqlite: Database.Database,
+    private sql: string,
+    private binds: unknown[] = [],
+  ) {}
+
+  bind(...args: unknown[]): TestStatement {
+    return new TestStatement(this.sqlite, this.sql, args.map(normalize))
+  }
+
+  async run() {
+    const info = this.sqlite.prepare(this.sql).run(...(this.binds as never[]))
+    return {
+      success: true,
+      meta: { changes: info.changes, last_row_id: Number(info.lastInsertRowid), rows_written: info.changes },
+    }
+  }
+
+  async all<T = unknown>(): Promise<{ results: T[]; success: true; meta: Record<string, unknown> }> {
+    const results = this.sqlite.prepare(this.sql).all(...(this.binds as never[])) as T[]
+    return { results, success: true, meta: {} }
+  }
+
+  async first<T = unknown>(colName?: string): Promise<T | null> {
+    const row = this.sqlite.prepare(this.sql).get(...(this.binds as never[])) as
+      | Record<string, unknown>
+      | undefined
+    if (row == null) return null
+    return (colName ? (row[colName] as T) : (row as unknown as T))
+  }
+
+  /**
+   * D1's `Statement.raw()` — rows as positional arrays rather than objects.
+   *
+   * Required to drive Better Auth in these tests, not a completeness nicety. `getDefaultAuthOptions`
+   * builds `drizzle(env.DB)` from `drizzle-orm/d1`, and that driver reaches for `.raw()` on any
+   * statement with a RETURNING clause (`d1/session.cjs` → `this.stmt.bind(...).raw()`), which is
+   * every write BA performs through the adapter. Without it, driving BA against this harness fails
+   * with `this.stmt.bind(...).raw is not a function` — the reason an earlier version of this suite
+   * could only assert on GENERATED SQL and never on what BA actually wrote.
+   */
+  async raw<T = unknown[]>(options?: { columnNames?: boolean }): Promise<T[]> {
+    // better-sqlite3's .raw() flips the statement into array mode and returns the statement.
+    const stmt = this.sqlite.prepare(this.sql).raw()
+    const rows = stmt.all(...(this.binds as never[])) as unknown[][]
+    if (options?.columnNames) {
+      // `.columns()` throws on statements that return no data; D1 would give [] there too.
+      try {
+        return [stmt.columns().map((c) => c.name), ...rows] as T[]
+      } catch {
+        return rows as T[]
+      }
+    }
+    return rows as T[]
+  }
+
+  // Used by batch() to execute a write statement inside the shared transaction.
+  execInBatch(): void {
+    this.sqlite.prepare(this.sql).run(...(this.binds as never[]))
+  }
+}
+
+export interface TestD1 {
+  prepare(sql: string): TestStatement
+  batch(statements: TestStatement[]): Promise<Array<{ success: boolean; results: unknown[] }>>
+  /**
+   * Add the VIRTUAL generated columns + indexes for a type's scalar queryable fields,
+   * mirroring what DocumentTypeRegistry.register() / ensureDocumentGeneratedColumns()
+   * do at runtime. Migrations only ship the base `documents` schema, so a test that
+   * filters/selects `q_*` columns must call this for its type first.
+   */
+  applyScalarSchema(typeId: string, fields: QueryableField[]): Promise<string[]>
+  /** Direct better-sqlite3 handle for test assertions (synchronous). */
+  raw: Database.Database
+  close(): void
+}
+
+export function createTestD1(): TestD1 {
+  // Each call gets a fresh in-memory DB, so the module-level column/index caches
+  // from document-scalar-schema.ts must be reset — otherwise the second test's
+  // applyScalarSchema() sees a stale "already exists" hit and skips the ALTER TABLE.
+  resetScalarSchemaCache()
+  const sqlite = new Database(':memory:')
+  // better-sqlite3 enables foreign_keys by default; D1 does NOT reliably enforce them, and the
+  // services intentionally delete derived rows explicitly instead of relying on cascade. Turn them
+  // OFF so the harness mirrors D1 behavior rather than testing a stricter contract than production.
+  sqlite.pragma('foreign_keys = OFF')
+  for (const m of DOC_MIGRATIONS) {
+    sqlite.exec(readFileSync(join(MIGRATIONS_DIR, m), 'utf8'))
+  }
+
+  return {
+    prepare(sql: string) {
+      return new TestStatement(sqlite, sql)
+    },
+    applyScalarSchema(typeId: string, fields: QueryableField[]) {
+      return ensureScalarSchema(this as unknown as D1Database, typeId, fields)
+    },
+    async batch(statements: TestStatement[]) {
+      // D1 batches are atomic + sequential under a single writer. Mirror with a transaction.
+      const tx = sqlite.transaction((stmts: TestStatement[]) => {
+        for (const s of stmts) s.execInBatch()
+      })
+      tx(statements)
+      return statements.map(() => ({ success: true, results: [] }))
+    },
+    raw: sqlite,
+    close() {
+      sqlite.close()
+      // Each in-memory DB is a fresh SQLite instance; reset the module-level column/index
+      // caches so the next createTestD1() probes its own schema rather than seeing stale
+      // columns from a previous test's DB.
+      resetScalarSchemaCache()
+    },
+  }
+}

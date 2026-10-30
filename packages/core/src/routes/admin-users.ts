@@ -8,7 +8,12 @@ import { renderUserEditPage, type UserEditPageData, type UserEditData, type User
 import { renderUserNewPage, type UserNewPageData } from '../templates/pages/admin-user-new.template'
 import { renderUsersListPage, type UsersListPageData, type User } from '../templates/pages/admin-users-list.template'
 import type { Bindings, Variables } from '../app'
-import { getUserProfileConfig, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData } from '../plugins/core-plugins/user-profiles'
+import { getUserProfileConfig, getRegistrationFields, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData, readProfileData, writeProfileData } from '../plugins/core-plugins/user-profiles'
+import { TenantService, VALID_MEMBER_ROLES } from '../plugins/core-plugins/multi-tenant-plugin/services/tenant-service'
+import { RbacService } from '../services/rbac'
+import { syncCredentialPassword } from '../auth/credential-account'
+import { MAX_PASSWORD_LENGTH } from '../services/auth-validation'
+import { ensureTwoFactorRequiredColumn } from '../services/migrations'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -24,7 +29,7 @@ userRoutes.use('/cancel-invitation/*', requireRole(['admin']))
 userRoutes.use('/activity-logs', requireRole(['admin']))
 userRoutes.use('/activity-logs/*', requireRole(['admin']))
 
-// Redirect /admin to /admin/dashboard
+// Redirect /admin to /admin/content
 userRoutes.get('/', (c) => {
   return c.redirect('/admin/dashboard')
 })
@@ -57,13 +62,10 @@ const LANGUAGES = [
   { value: 'zh', label: 'Chinese' }
 ]
 
-// Role options for user form
-const ROLES = [
-  { value: 'admin', label: 'Administrator' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'author', label: 'Author' },
-  { value: 'viewer', label: 'Viewer' }
-]
+async function fetchRoleOptions(db: any): Promise<Array<{ value: string; label: string }>> {
+  const roles = await new RbacService(db).getRoles()
+  return roles.map((r) => ({ value: r.id, label: r.display_name }))
+}
 
 /**
  * GET /admin/profile - Show user profile page
@@ -75,10 +77,10 @@ userRoutes.get('/profile', async (c) => {
   try {
     // Get user profile data
     const userStmt = db.prepare(`
-      SELECT id, email, username, first_name, last_name, phone, bio, avatar_url,
+      SELECT id, email, first_name, last_name, phone, bio, avatar,
              timezone, language, theme, email_notifications, two_factor_enabled,
              role, created_at, last_login_at
-      FROM users 
+      FROM auth_user
       WHERE id = ? AND is_active = 1
     `)
     
@@ -92,12 +94,11 @@ userRoutes.get('/profile', async (c) => {
     const profile: UserProfile = {
       id: userProfile.id,
       email: userProfile.email,
-      username: userProfile.username || '',
       first_name: userProfile.first_name || '',
       last_name: userProfile.last_name || '',
       phone: userProfile.phone,
       bio: userProfile.bio,
-      avatar_url: userProfile.avatar_url,
+      avatar_url: userProfile.avatar,
       timezone: userProfile.timezone || 'UTC',
       language: userProfile.language || 'en',
       theme: userProfile.theme || 'dark',
@@ -119,7 +120,7 @@ userRoutes.get('/profile', async (c) => {
       languages: LANGUAGES,
       customProfileFieldsHtml,
       user: {
-        name: `${profile.first_name} ${profile.last_name}`.trim() || profile.username || user!.email,
+        name: `${profile.first_name} ${profile.last_name}`.trim() || user!.email,
         email: user!.email,
         role: user!.role
       }
@@ -158,7 +159,6 @@ userRoutes.put('/profile', async (c) => {
     // Sanitize all user inputs to prevent XSS attacks
     const firstName = sanitizeInput(formData.get('first_name')?.toString())
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
-    const username = sanitizeInput(formData.get('username')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     const bio = sanitizeInput(formData.get('bio')?.toString()) || null
@@ -167,10 +167,10 @@ userRoutes.put('/profile', async (c) => {
     const emailNotifications = formData.get('email_notifications') === '1'
 
     // Validate required fields
-    if (!firstName || !lastName || !username || !email) {
+    if (!firstName || !lastName || !email) {
       return c.html(renderAlert({
         type: 'error',
-        message: 'First name, last name, username, and email are required.',
+        message: 'First name, last name, and email are required.',
         dismissible: true
       }))
     }
@@ -185,32 +185,32 @@ userRoutes.put('/profile', async (c) => {
       }))
     }
 
-    // Check if username/email are taken by another user
+    // Check if email is taken by another user
     const checkStmt = db.prepare(`
-      SELECT id FROM users 
-      WHERE (username = ? OR email = ?) AND id != ? AND is_active = 1
+      SELECT id FROM auth_user
+      WHERE email = ? AND id != ? AND is_active = 1
     `)
-    const existingUser = await checkStmt.bind(username, email, user!.userId).first()
+    const existingUser = await checkStmt.bind(email, user!.userId).first()
 
     if (existingUser) {
-      return c.html(renderAlert({ 
-        type: 'error', 
-        message: 'Username or email is already taken by another user!.',
-        dismissible: true 
+      return c.html(renderAlert({
+        type: 'error',
+        message: 'Email is already taken by another user.',
+        dismissible: true
       }))
     }
 
     // Update user profile
     const updateStmt = db.prepare(`
-      UPDATE users SET 
-        first_name = ?, last_name = ?, username = ?, email = ?,
+      UPDATE auth_user SET
+        first_name = ?, last_name = ?, email = ?,
         phone = ?, bio = ?, timezone = ?, language = ?,
         email_notifications = ?, updated_at = ?
       WHERE id = ?
     `)
 
     await updateStmt.bind(
-      firstName, lastName, username, email,
+      firstName, lastName, email,
       phone, bio, timezone, language,
       emailNotifications ? 1 : 0, Date.now(),
       user!.userId
@@ -232,7 +232,7 @@ userRoutes.put('/profile', async (c) => {
     // Log the activity
     await logActivity(
       db, user!.userId, 'profile.update', 'users', user!.userId,
-      { fields: ['first_name', 'last_name', 'username', 'email', 'phone', 'bio', 'timezone', 'language', 'email_notifications'] },
+      { fields: ['first_name', 'last_name', 'email', 'phone', 'bio', 'timezone', 'language', 'email_notifications'] },
       c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
       c.req.header('user-agent')
     )
@@ -298,7 +298,7 @@ userRoutes.post('/profile/avatar', async (c) => {
 
     // Update user avatar URL in database
     const updateStmt = db.prepare(`
-      UPDATE users SET avatar_url = ?, updated_at = ?
+      UPDATE auth_user SET avatar = ?, updated_at = ?
       WHERE id = ?
     `)
 
@@ -306,7 +306,7 @@ userRoutes.post('/profile/avatar', async (c) => {
 
     // Get updated user data to render the avatar
     const userStmt = db.prepare(`
-      SELECT first_name, last_name FROM users WHERE id = ?
+      SELECT first_name, last_name FROM auth_user WHERE id = ?
     `)
     const userData = await userStmt.bind(user!.userId).first() as any
 
@@ -385,10 +385,17 @@ userRoutes.post('/profile/password', async (c) => {
         dismissible: true 
       }))
     }
+    if (newPassword.length > MAX_PASSWORD_LENGTH) {
+      return c.html(renderAlert({
+        type: 'error',
+        message: `New password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+        dismissible: true
+      }))
+    }
 
     // Get current user data
     const userStmt = db.prepare(`
-      SELECT password_hash FROM users WHERE id = ? AND is_active = 1
+      SELECT password_hash FROM auth_user WHERE id = ? AND is_active = 1
     `)
     const userData = await userStmt.bind(user!.userId).first() as any
 
@@ -415,7 +422,7 @@ userRoutes.post('/profile/password', async (c) => {
 
     // Store old password in history
     const historyStmt = db.prepare(`
-      INSERT INTO password_history (id, user_id, password_hash, created_at)
+      INSERT INTO auth_password_history (id, user_id, password_hash, created_at)
       VALUES (?, ?, ?, ?)
     `)
     await historyStmt.bind(
@@ -425,12 +432,14 @@ userRoutes.post('/profile/password', async (c) => {
       Date.now()
     ).run()
 
-    // Update user password
-    const updateStmt = db.prepare(`
-      UPDATE users SET password_hash = ?, updated_at = ?
-      WHERE id = ?
-    `)
-    await updateStmt.bind(newPasswordHash, Date.now(), user!.userId).run()
+    // Update user password (and the credential row Better Auth signs in with)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET password_hash = ?, updated_at = ?
+        WHERE id = ?
+      `).bind(newPasswordHash, Date.now(), user!.userId),
+      ...syncCredentialPassword(db, user!.userId, newPasswordHash),
+    ])
 
     // Log the activity
     await logActivity(
@@ -489,9 +498,9 @@ userRoutes.get('/users', async (c) => {
     }
 
     if (search) {
-      whereClause += ' AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR u.username LIKE ?)'
+      whereClause += ' AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)'
       const searchParam = `%${search}%`
-      params.push(searchParam, searchParam, searchParam, searchParam)
+      params.push(searchParam, searchParam, searchParam)
     }
 
     if (roleFilter) {
@@ -501,10 +510,10 @@ userRoutes.get('/users', async (c) => {
 
     // Get users
     const usersStmt = db.prepare(`
-      SELECT u.id, u.email, u.username, u.first_name, u.last_name,
-             u.role, u.avatar_url, u.created_at, u.last_login_at, u.updated_at,
+      SELECT u.id, u.email, u.first_name, u.last_name,
+             u.role, u.avatar, u.created_at, u.last_login_at, u.updated_at,
              u.email_verified, u.two_factor_enabled, u.is_active
-      FROM users u
+      FROM auth_user u
       ${whereClause}
       ORDER BY u.created_at DESC
       LIMIT ? OFFSET ?
@@ -514,7 +523,7 @@ userRoutes.get('/users', async (c) => {
 
     // Get total count
     const countStmt = db.prepare(`
-      SELECT COUNT(*) as total FROM users u ${whereClause}
+      SELECT COUNT(*) as total FROM auth_user u ${whereClause}
     `)
     const countResult = await countStmt.bind(...params).first() as any
     const totalUsers = countResult?.total || 0
@@ -548,11 +557,10 @@ userRoutes.get('/users', async (c) => {
     const users: User[] = (usersData || []).map((u: any) => ({
       id: u.id,
       email: u.email,
-      username: u.username || '',
       firstName: u.first_name || '',
       lastName: u.last_name || '',
       role: u.role,
-      avatar: u.avatar_url,
+      avatar: u.avatar,
       isActive: Boolean(u.is_active),
       lastLoginAt: u.last_login_at,
       createdAt: u.created_at,
@@ -585,7 +593,8 @@ userRoutes.get('/users', async (c) => {
         name: user!.email.split('@')[0] || user!.email,
         email: user!.email,
         role: user!.role
-      }
+      },
+      version: c.get('appVersion')
     }
 
     return c.html(renderUsersListPage(pageData))
@@ -615,8 +624,27 @@ userRoutes.get('/users/new', async (c) => {
   const user = c.get('user')
 
   try {
+    const db = c.env.DB
+    const profileConfig = getUserProfileConfig()
+    const upRow = profileConfig
+      ? await db.prepare(
+          `SELECT 1 FROM documents WHERE type_id = 'plugin' AND slug = 'user-profiles'
+             AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+        ).first().catch(() => null)
+      : null
+    const regFieldNames = profileConfig?.registrationFields ?? []
+    const regFields = profileConfig && upRow
+      ? (regFieldNames.length > 0 ? profileConfig.fields.filter(f => regFieldNames.includes(f.name)) : profileConfig.fields)
+      : []
+    const registrationFieldsHtml = regFields.length > 0
+      ? renderCustomProfileSection({ fields: regFields }, {})
+      : undefined
+
+    const roles = await fetchRoleOptions(db)
+
     const pageData: UserNewPageData = {
-      roles: ROLES,
+      roles,
+      registrationFieldsHtml,
       user: {
         name: user!.email.split('@')[0] || user!.email,
         email: user!.email,
@@ -649,23 +677,40 @@ userRoutes.post('/users/new', async (c) => {
     // Sanitize all user inputs to prevent XSS attacks
     const firstName = sanitizeInput(formData.get('first_name')?.toString())
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
-    const username = sanitizeInput(formData.get('username')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     const bio = sanitizeInput(formData.get('bio')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || 'viewer'
-    const validRoles = ['admin', 'editor', 'author', 'viewer']
-    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
+    const roleInput = formData.get('role')?.toString() || ''
+    const validRoles = (await new RbacService(db).getRoles()).map((r) => r.id)
+    const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'admin')
     const password = formData.get('password')?.toString() || ''
     const confirmPassword = formData.get('confirm_password')?.toString() || ''
     const isActive = formData.get('is_active') === '1'
     const emailVerified = formData.get('email_verified') === '1'
 
+    // Validate + extract registration profile fields (if profile plugin is configured)
+    const profileConfig = getUserProfileConfig()
+    const regFieldNames = profileConfig?.registrationFields ?? []
+    const regFields = profileConfig
+      ? (regFieldNames.length > 0 ? profileConfig.fields.filter(f => regFieldNames.includes(f.name)) : profileConfig.fields)
+      : []
+    let sanitizedRegistrationCustom: Record<string, any> | null = null
+    if (regFields.length > 0) {
+      const rawCustom = extractCustomFieldsFromForm(formData, { fields: regFields })
+      const sanitized = sanitizeCustomData(rawCustom, profileConfig!)
+      const validation = validateCustomData(sanitized, profileConfig!)
+      if (!validation.valid) {
+        const errorMessages = Object.values(validation.errors).join(', ')
+        return c.html(renderAlert({ type: 'error', message: errorMessages, dismissible: true }), 400)
+      }
+      sanitizedRegistrationCustom = sanitized
+    }
+
     // Validate required fields
-    if (!firstName || !lastName || !username || !email || !password) {
+    if (!firstName || !lastName || !email || !password) {
       return c.html(renderAlert({
         type: 'error',
-        message: 'First name, last name, username, email, and password are required.',
+        message: 'First name, last name, email, and password are required.',
         dismissible: true
       }))
     }
@@ -688,6 +733,13 @@ userRoutes.post('/users/new', async (c) => {
         dismissible: true
       }))
     }
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return c.html(renderAlert({
+        type: 'error',
+        message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+        dismissible: true
+      }))
+    }
 
     if (password !== confirmPassword) {
       return c.html(renderAlert({
@@ -697,17 +749,17 @@ userRoutes.post('/users/new', async (c) => {
       }))
     }
 
-    // Check if username/email are already taken
+    // Check if email is already taken
     const checkStmt = db.prepare(`
-      SELECT id FROM users
-      WHERE username = ? OR email = ?
+      SELECT id FROM auth_user
+      WHERE email = ?
     `)
-    const existingUser = await checkStmt.bind(username, email).first()
+    const existingUser = await checkStmt.bind(email).first()
 
     if (existingUser) {
       return c.html(renderAlert({
         type: 'error',
-        message: 'Username or email is already taken.',
+        message: 'Email is already taken.',
         dismissible: true
       }))
     }
@@ -715,25 +767,36 @@ userRoutes.post('/users/new', async (c) => {
     // Hash password
     const passwordHash = await AuthManager.hashPassword(password)
 
-    // Create user
+    // Create user (with auth_account credential row for Better Auth sign-in)
     const userId = crypto.randomUUID()
-    const createStmt = db.prepare(`
-      INSERT INTO users (
-        id, email, username, first_name, last_name, phone, bio,
-        password_hash, role, is_active, email_verified, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
+    const nowMs = Date.now()
+    const nowSec = Math.floor(nowMs / 1000)
 
-    await createStmt.bind(
-      userId, email, username, firstName, lastName, phone, bio,
-      passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
-      Date.now(), Date.now()
-    ).run()
+    await db.batch([
+      db.prepare(`
+        INSERT INTO auth_user (
+          id, email, first_name, last_name, phone, bio,
+          password_hash, role, is_active, email_verified, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        userId, email, firstName, lastName, phone, bio,
+        passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
+        nowMs, nowMs
+      ),
+      db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+        VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+        .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+    ])
+
+    // Save registration profile fields if profile plugin is configured
+    if (sanitizedRegistrationCustom !== null && Object.keys(sanitizedRegistrationCustom).length > 0) {
+      await writeProfileData(db, userId, { custom: sanitizedRegistrationCustom }, user!.userId)
+    }
 
     // Log the activity
     await logActivity(
       db, user!.userId, 'user!.create', 'users', userId,
-      { email, username, role },
+      { email, role },
       c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
       c.req.header('user-agent')
     )
@@ -769,9 +832,9 @@ userRoutes.get('/users/:id', async (c) => {
   try {
     // Get user data (including inactive users for admin access)
     const userStmt = db.prepare(`
-      SELECT id, email, username, first_name, last_name, phone, bio, avatar_url,
+      SELECT id, email, first_name, last_name, phone, bio, avatar,
              role, is_active, email_verified, two_factor_enabled, created_at, last_login_at
-      FROM users
+      FROM auth_user
       WHERE id = ?
     `)
 
@@ -793,12 +856,11 @@ userRoutes.get('/users/:id', async (c) => {
       user: {
         id: userRecord.id,
         email: userRecord.email,
-        username: userRecord.username,
         first_name: userRecord.first_name,
         last_name: userRecord.last_name,
         phone: userRecord.phone,
         bio: userRecord.bio,
-        avatar_url: userRecord.avatar_url,
+        avatar_url: userRecord.avatar,
         role: userRecord.role,
         is_active: userRecord.is_active,
         email_verified: userRecord.email_verified,
@@ -824,14 +886,30 @@ userRoutes.get('/users/:id/edit', async (c) => {
 
   try {
     // Get user data (removed bio - now in profile)
-    const userStmt = db.prepare(`
-      SELECT id, email, username, first_name, last_name, phone, avatar_url,
-             role, is_active, email_verified, two_factor_enabled, created_at, last_login_at
-      FROM users
+    // two_factor_required (migration 0007) drives the Two-Factor Recovery panel.
+    // ensureTwoFactorRequiredColumn() adds it from the bootstrap path and from the two-factor
+    // plugin's onBoot, but neither is guaranteed to have run on this isolate: bootstrap is behind
+    // a 24h KV marker, and plugin onBoot does not run under `config.plugins.disableAll`. SQLite
+    // rejects the WHOLE statement for one unknown column, so naming it unconditionally turns a
+    // missing ALTER into a 500 on the user edit page. Self-heal, then retry.
+    const selectUserToEdit = (withRequired: boolean) => db.prepare(`
+      SELECT id, email, first_name, last_name, phone, avatar,
+             role, is_active, email_verified, two_factor_enabled${withRequired ? ', two_factor_required' : ''},
+             created_at, last_login_at
+      FROM auth_user
       WHERE id = ?
-    `)
+    `).bind(userId).first() as Promise<any>
 
-    const userToEdit = await userStmt.bind(userId).first() as any
+    let userToEdit: any
+    try {
+      userToEdit = await selectUserToEdit(true)
+    } catch (e) {
+      console.warn('[admin-users] two_factor_required unavailable; attempting self-heal', e)
+      await ensureTwoFactorRequiredColumn(db)
+      // Still missing (the ALTER itself failed) → render without it. The recovery panel degrades
+      // to "not required", which is the pre-0007 behaviour, rather than losing the whole page.
+      userToEdit = await selectUserToEdit(true).catch(() => selectUserToEdit(false))
+    }
 
     if (!userToEdit) {
       return c.html(renderAlert({
@@ -841,30 +919,18 @@ userRoutes.get('/users/:id/edit', async (c) => {
       }), 404)
     }
 
-    // Get user profile data
-    const profileStmt = db.prepare(`
-      SELECT display_name, bio, company, job_title, website, location, date_of_birth, data
-      FROM user_profiles
-      WHERE user_id = ?
-    `)
-    const profileData = await profileStmt.bind(userId).first() as any
+    // Get user profile data (backed by the user_profile document)
+    const profileData = await readProfileData(db, userId)
+    const hasProfile = profileData.displayName != null ||
+      Object.keys(profileData.custom).length > 0
 
     // Convert profile to UserProfileData interface
-    const profile: UserProfileData | undefined = profileData ? {
-      displayName: profileData.display_name,
-      bio: profileData.bio,
-      company: profileData.company,
-      jobTitle: profileData.job_title,
-      website: profileData.website,
-      location: profileData.location,
-      dateOfBirth: profileData.date_of_birth
+    const profile: UserProfileData | undefined = hasProfile ? {
+      displayName: profileData.displayName ?? undefined,
     } : undefined
 
-    // Parse custom profile data
-    let customData: Record<string, any> = {}
-    if (profileData?.data) {
-      try { customData = JSON.parse(profileData.data) } catch {}
-    }
+    // Custom profile data lives under data.custom
+    const customData: Record<string, any> = profileData.custom
     const profileConfig = getUserProfileConfig()
     const customProfileFieldsHtml = renderCustomProfileSection(profileConfig, customData)
 
@@ -872,24 +938,62 @@ userRoutes.get('/users/:id/edit', async (c) => {
     const editData: UserEditData = {
       id: userToEdit.id,
       email: userToEdit.email,
-      username: userToEdit.username || '',
       firstName: userToEdit.first_name || '',
       lastName: userToEdit.last_name || '',
       phone: userToEdit.phone,
-      avatarUrl: userToEdit.avatar_url,
+      avatarUrl: userToEdit.avatar,
       role: userToEdit.role,
       isActive: Boolean(userToEdit.is_active),
       emailVerified: Boolean(userToEdit.email_verified),
       twoFactorEnabled: Boolean(userToEdit.two_factor_enabled),
+      twoFactorRequired: Boolean(userToEdit.two_factor_required),
       createdAt: userToEdit.created_at,
       lastLoginAt: userToEdit.last_login_at,
       profile
     }
 
+    // User-profiles plugin active in DB?
+    const upRow = await db.prepare(
+      `SELECT 1 FROM documents WHERE type_id = 'plugin' AND slug = 'user-profiles'
+         AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+    ).first().catch(() => null)
+
+    // Multi-tenant plugin active? Fetch memberships inline for the matrix section.
+    const mtRow = await db.prepare(
+      `SELECT 1 FROM documents WHERE type_id = 'plugin' AND slug = 'multi-tenant'
+         AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+    ).first().catch(() => null)
+
+    let tenantMemberships: UserEditPageData['tenantMemberships']
+    if (mtRow) {
+      const svc = new TenantService(db)
+      const [memberships, allTenants] = await Promise.all([
+        svc.listUserMemberships(userId),
+        svc.listTenants(),
+      ])
+      const memberSlugs = new Set(memberships.map((m) => m.slug))
+      tenantMemberships = {
+        memberships,
+        availableTenants: allTenants
+          .filter((t) => t.status === 'active' && !memberSlugs.has(t.slug))
+          .map((t) => ({ slug: t.slug, name: t.name })),
+        memberRoles: [...VALID_MEMBER_ROLES],
+      }
+    }
+
+    const queryMessage = c.req.query('message')
+    const queryType = c.req.query('type') === 'error' ? 'error' : 'success'
+
+    const roles = await fetchRoleOptions(db)
+
     const pageData: UserEditPageData = {
       userToEdit: editData,
-      roles: ROLES,
+      roles,
+      hasProfilePlugin: profileConfig !== null && upRow !== null,
       customProfileFieldsHtml,
+      tenantMemberships,
+      ...(queryMessage && queryType === 'error' ? { error: queryMessage } : {}),
+      ...(queryMessage && queryType === 'success' ? { success: queryMessage } : {}),
       user: {
         name: user!.email.split('@')[0] || user!.email,
         email: user!.email,
@@ -923,12 +1027,11 @@ userRoutes.put('/users/:id', async (c) => {
     // Sanitize all user inputs to prevent XSS attacks
     const firstName = sanitizeInput(formData.get('first_name')?.toString())
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
-    const username = sanitizeInput(formData.get('username')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || 'viewer'
-    const validRoles = ['admin', 'editor', 'author', 'viewer']
-    const role = validRoles.includes(roleInput) ? roleInput : 'viewer'
+    const roleInput = formData.get('role')?.toString() || ''
+    const validRoles = (await new RbacService(db).getRoles()).map((r) => r.id)
+    const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'admin')
     const isActive = formData.get('is_active') === '1'
     const emailVerified = formData.get('email_verified') === '1'
 
@@ -938,17 +1041,9 @@ userRoutes.put('/users/:id', async (c) => {
 
     // Extract profile fields
     const profileDisplayName = sanitizeInput(formData.get('profile_display_name')?.toString()) || null
-    const profileBio = sanitizeInput(formData.get('profile_bio')?.toString()) || null
-    const profileCompany = sanitizeInput(formData.get('profile_company')?.toString()) || null
-    const profileJobTitle = sanitizeInput(formData.get('profile_job_title')?.toString()) || null
-    const profileWebsite = formData.get('profile_website')?.toString()?.trim() || null
-    const profileLocation = sanitizeInput(formData.get('profile_location')?.toString()) || null
-    const profileDateOfBirthStr = formData.get('profile_date_of_birth')?.toString()?.trim() || null
-    const profileDateOfBirth = profileDateOfBirthStr ? new Date(profileDateOfBirthStr).getTime() : null
-
-    // Extract custom profile fields
+    // Extract custom profile fields (merged into the profile document below)
     const profileConfig = getUserProfileConfig()
-    let customDataJson: string | null = null
+    let sanitizedCustom: Record<string, any> | null = null
     if (profileConfig) {
       const rawCustom = extractCustomFieldsFromForm(formData, profileConfig)
       const sanitized = sanitizeCustomData(rawCustom, profileConfig)
@@ -957,17 +1052,14 @@ userRoutes.put('/users/:id', async (c) => {
         const errorMessages = Object.values(validation.errors).join(', ')
         return c.html(renderAlert({ type: 'error', message: errorMessages, dismissible: true }), 400)
       }
-      // Merge with existing custom data
-      const existingCustom = await getCustomData(db, userId)
-      const merged = { ...existingCustom, ...sanitized }
-      customDataJson = JSON.stringify(merged)
+      sanitizedCustom = sanitized
     }
 
     // Validate required fields
-    if (!username || !email) {
+    if (!email) {
       return c.html(renderAlert({
         type: 'error',
-        message: 'Username and email are required.',
+        message: 'Email is required.',
         dismissible: true
       }))
     }
@@ -991,6 +1083,13 @@ userRoutes.put('/users/:id', async (c) => {
           dismissible: true
         }))
       }
+      if (newPassword.length > MAX_PASSWORD_LENGTH) {
+        return c.html(renderAlert({
+          type: 'error',
+          message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+          dismissible: true
+        }))
+      }
       if (newPassword !== confirmPassword) {
         return c.html(renderAlert({
           type: 'error',
@@ -1000,103 +1099,62 @@ userRoutes.put('/users/:id', async (c) => {
       }
     }
 
-    // Validate website URL if provided
-    if (profileWebsite) {
-      try {
-        new URL(profileWebsite)
-      } catch {
-        return c.html(renderAlert({
-          type: 'error',
-          message: 'Please enter a valid website URL.',
-          dismissible: true
-        }))
-      }
-    }
-
-    // Check if username/email are taken by another user
+    // Check if email is taken by another user
     const checkStmt = db.prepare(`
-      SELECT id FROM users
-      WHERE (username = ? OR email = ?) AND id != ?
+      SELECT id FROM auth_user
+      WHERE email = ? AND id != ?
     `)
-    const existingUser = await checkStmt.bind(username, email, userId).first()
+    const existingUser = await checkStmt.bind(email, userId).first()
 
     if (existingUser) {
       return c.html(renderAlert({
         type: 'error',
-        message: 'Username or email is already taken by another user.',
+        message: 'Email is already taken by another user.',
         dismissible: true
       }))
     }
 
     // Update user (removed bio - now in profile)
     const updateStmt = db.prepare(`
-      UPDATE users SET
-        first_name = ?, last_name = ?, username = ?, email = ?,
+      UPDATE auth_user SET
+        first_name = ?, last_name = ?, email = ?,
         phone = ?, role = ?, is_active = ?, email_verified = ?,
         updated_at = ?
       WHERE id = ?
     `)
 
     await updateStmt.bind(
-      firstName, lastName, username, email,
+      firstName, lastName, email,
       phone, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
       Date.now(), userId
     ).run()
 
-    // Update password if provided
+    // Update password if provided (and the credential row Better Auth signs in with)
     if (newPassword) {
       const passwordHash = await AuthManager.hashPassword(newPassword)
-      const updatePasswordStmt = db.prepare(`
-        UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
-      `)
-      await updatePasswordStmt.bind(passwordHash, Date.now(), userId).run()
+      await db.batch([
+        db.prepare(`
+          UPDATE auth_user SET password_hash = ?, updated_at = ? WHERE id = ?
+        `).bind(passwordHash, Date.now(), userId),
+        ...syncCredentialPassword(db, userId, passwordHash),
+      ])
     }
 
     // Check if any profile field has data
-    const hasProfileData = profileDisplayName || profileBio || profileCompany ||
-      profileJobTitle || profileWebsite || profileLocation || profileDateOfBirth
+    const hasProfileData = profileDisplayName
 
-    if (hasProfileData || customDataJson !== null) {
-      const now = Date.now()
-
-      // Check if profile exists
-      const profileCheckStmt = db.prepare(`SELECT id FROM user_profiles WHERE user_id = ?`)
-      const existingProfile = await profileCheckStmt.bind(userId).first() as any
-
-      if (existingProfile) {
-        // Update existing profile
-        const updateProfileStmt = db.prepare(`
-          UPDATE user_profiles SET
-            display_name = ?, bio = ?, company = ?, job_title = ?,
-            website = ?, location = ?, date_of_birth = ?, updated_at = ?
-            ${customDataJson !== null ? ', data = ?' : ''}
-          WHERE user_id = ?
-        `)
-        const updateBindings = [
-          profileDisplayName, profileBio, profileCompany, profileJobTitle,
-          profileWebsite, profileLocation, profileDateOfBirth, now,
-          ...(customDataJson !== null ? [customDataJson] : []),
-          userId
-        ]
-        await updateProfileStmt.bind(...updateBindings).run()
-      } else {
-        // Create new profile
-        const profileId = `profile_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-        const insertProfileStmt = db.prepare(`
-          INSERT INTO user_profiles (id, user_id, display_name, bio, company, job_title, website, location, date_of_birth, data, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        await insertProfileStmt.bind(
-          profileId, userId, profileDisplayName, profileBio, profileCompany, profileJobTitle,
-          profileWebsite, profileLocation, profileDateOfBirth, customDataJson || '{}', now, now
-        ).run()
-      }
+    if (hasProfileData || sanitizedCustom !== null) {
+      // Persist to the user_profile document (typed fields + custom namespace).
+      await writeProfileData(db, userId, {
+        displayName: profileDisplayName,
+        ...(sanitizedCustom !== null ? { custom: sanitizedCustom } : {}),
+      }, user!.userId)
     }
 
     // Log the activity
     await logActivity(
       db, user!.userId, 'user.update', 'users', userId,
-      { fields: ['first_name', 'last_name', 'username', 'email', 'phone', 'role', 'is_active', 'email_verified', 'profile', ...(newPassword ? ['password'] : [])] },
+      { fields: ['first_name', 'last_name', 'email', 'phone', 'role', 'is_active', 'email_verified', 'profile', ...(newPassword ? ['password'] : [])] },
       c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
       c.req.header('user-agent')
     )
@@ -1104,7 +1162,8 @@ userRoutes.put('/users/:id', async (c) => {
     return c.html(renderAlert({
       type: 'success',
       message: 'User updated successfully!',
-      dismissible: true
+      dismissible: true,
+      className: 'mb-4'
     }))
 
   } catch (error) {
@@ -1136,7 +1195,7 @@ userRoutes.post('/users/:id/toggle', async (c) => {
 
     // Check if user exists
     const userStmt = db.prepare(`
-      SELECT id, email FROM users WHERE id = ?
+      SELECT id, email FROM auth_user WHERE id = ?
     `)
     const userToToggle = await userStmt.bind(userId).first() as any
 
@@ -1146,7 +1205,7 @@ userRoutes.post('/users/:id/toggle', async (c) => {
 
     // Toggle user status
     const toggleStmt = db.prepare(`
-      UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?
+      UPDATE auth_user SET is_active = ?, updated_at = ? WHERE id = ?
     `)
     await toggleStmt.bind(active ? 1 : 0, Date.now(), userId).run()
 
@@ -1189,7 +1248,7 @@ userRoutes.delete('/users/:id', async (c) => {
 
     // Check if user exists
     const userStmt = db.prepare(`
-      SELECT id, email FROM users WHERE id = ?
+      SELECT id, email FROM auth_user WHERE id = ?
     `)
     const userToDelete = await userStmt.bind(userId).first() as any
 
@@ -1200,7 +1259,7 @@ userRoutes.delete('/users/:id', async (c) => {
     if (hardDelete) {
       // Hard delete - permanently remove from database
       const deleteStmt = db.prepare(`
-        DELETE FROM users WHERE id = ?
+        DELETE FROM auth_user WHERE id = ?
       `)
       await deleteStmt.bind(userId).run()
 
@@ -1219,7 +1278,7 @@ userRoutes.delete('/users/:id', async (c) => {
     } else {
       // Soft delete - deactivate by setting is_active = 0
       const deleteStmt = db.prepare(`
-        UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?
+        UPDATE auth_user SET is_active = 0, updated_at = ? WHERE id = ?
       `)
       await deleteStmt.bind(Date.now(), userId).run()
 
@@ -1272,7 +1331,7 @@ userRoutes.post('/invite-user', async (c) => {
 
     // Check if user already exists
     const existingUserStmt = db.prepare(`
-      SELECT id FROM users WHERE email = ?
+      SELECT id FROM auth_user WHERE email = ?
     `)
     const existingUser = await existingUserStmt.bind(email).first()
 
@@ -1287,7 +1346,7 @@ userRoutes.post('/invite-user', async (c) => {
     // Create user record with invitation
     const userId = crypto.randomUUID()
     const createUserStmt = db.prepare(`
-      INSERT INTO users (
+      INSERT INTO auth_user (
         id, email, first_name, last_name, role, 
         invitation_token, invited_by, invited_at,
         is_active, email_verified, created_at, updated_at
@@ -1343,7 +1402,7 @@ userRoutes.post('/resend-invitation/:id', async (c) => {
     // Check if user exists and is invited but not active
     const userStmt = db.prepare(`
       SELECT id, email, first_name, last_name, role, invitation_token
-      FROM users 
+      FROM auth_user 
       WHERE id = ? AND is_active = 0 AND invitation_token IS NOT NULL
     `)
     const invitedUser = await userStmt.bind(userId).first() as any
@@ -1357,7 +1416,7 @@ userRoutes.post('/resend-invitation/:id', async (c) => {
 
     // Update invitation token and date
     const updateStmt = db.prepare(`
-      UPDATE users SET 
+      UPDATE auth_user SET 
         invitation_token = ?, 
         invited_at = ?, 
         updated_at = ?
@@ -1405,7 +1464,7 @@ userRoutes.delete('/cancel-invitation/:id', async (c) => {
   try {
     // Check if user exists and is invited but not active
     const userStmt = db.prepare(`
-      SELECT id, email FROM users 
+      SELECT id, email FROM auth_user 
       WHERE id = ? AND is_active = 0 AND invitation_token IS NOT NULL
     `)
     const invitedUser = await userStmt.bind(userId).first() as any
@@ -1415,7 +1474,7 @@ userRoutes.delete('/cancel-invitation/:id', async (c) => {
     }
 
     // Delete the user record (since they haven't activated yet)
-    const deleteStmt = db.prepare(`DELETE FROM users WHERE id = ?`)
+    const deleteStmt = db.prepare(`DELETE FROM auth_user WHERE id = ?`)
     await deleteStmt.bind(userId).run()
 
     // Log the activity
@@ -1441,240 +1500,44 @@ userRoutes.delete('/cancel-invitation/:id', async (c) => {
  * GET /admin/activity-logs - View activity logs
  */
 userRoutes.get('/activity-logs', async (c) => {
-  const db = c.env.DB
+  // activity_logs is not yet available — will be implemented as a plugin
   const user = c.get('user')
-
-  try {
-    // Get pagination and filter parameters
-    const page = parseInt(c.req.query('page') || '1')
-    const limit = parseInt(c.req.query('limit') || '50')
-    const offset = (page - 1) * limit
-
-    const filters = {
-      action: c.req.query('action') || '',
-      resource_type: c.req.query('resource_type') || '',
-      date_from: c.req.query('date_from') || '',
-      date_to: c.req.query('date_to') || '',
-      user_id: c.req.query('user_id') || ''
-    }
-
-    // Build where clause
-    let whereConditions: string[] = []
-    let params: any[] = []
-
-    if (filters.action) {
-      whereConditions.push('al.action = ?')
-      params.push(filters.action)
-    }
-
-    if (filters.resource_type) {
-      whereConditions.push('al.resource_type = ?')
-      params.push(filters.resource_type)
-    }
-
-    if (filters.user_id) {
-      whereConditions.push('al.user_id = ?')
-      params.push(filters.user_id)
-    }
-
-    if (filters.date_from) {
-      const fromTimestamp = new Date(filters.date_from).getTime()
-      whereConditions.push('al.created_at >= ?')
-      params.push(fromTimestamp)
-    }
-
-    if (filters.date_to) {
-      const toTimestamp = new Date(filters.date_to + ' 23:59:59').getTime()
-      whereConditions.push('al.created_at <= ?')
-      params.push(toTimestamp)
-    }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
-
-    // Get activity logs with user information
-    const logsStmt = db.prepare(`
-      SELECT 
-        al.id, al.user_id, al.action, al.resource_type, al.resource_id,
-        al.details, al.ip_address, al.user_agent, al.created_at,
-        u.email as user_email,
-        COALESCE(u.first_name || ' ' || u.last_name, u.username, u.email) as user_name
-      FROM activity_logs al
-      LEFT JOIN users u ON al.user_id = u.id
-      ${whereClause}
-      ORDER BY al.created_at DESC
-      LIMIT ? OFFSET ?
-    `)
-
-    const { results: logs } = await logsStmt.bind(...params, limit, offset).all()
-
-    // Get total count for pagination
-    const countStmt = db.prepare(`
-      SELECT COUNT(*) as total 
-      FROM activity_logs al
-      LEFT JOIN users u ON al.user_id = u.id
-      ${whereClause}
-    `)
-    const countResult = await countStmt.bind(...params).first() as any
-    const totalLogs = countResult?.total || 0
-
-    // Parse details JSON for each log
-    const formattedLogs: ActivityLog[] = (logs || []).map((log: any) => ({
-      ...log,
-      details: log.details ? JSON.parse(log.details) : null
-    }))
-
-    // Log the activity
-    await logActivity(
-      db, user!.userId, 'activity.logs_viewed', undefined, undefined,
-      { filters, page, limit },
-      c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
-      c.req.header('user-agent')
-    )
-
-    const pageData: ActivityLogsPageData = {
-      logs: formattedLogs,
-      pagination: {
-        page,
-        limit,
-        total: totalLogs,
-        pages: Math.ceil(totalLogs / limit)
-      },
-      filters,
-      user: {
-        name: user!.email.split('@')[0] || user!.email, // Use email username as fallback
-        email: user!.email,
-        role: user!.role
-      }
-    }
-
-    return c.html(renderActivityLogsPage(pageData))
-
-  } catch (error) {
-    console.error('Activity logs error:', error)
-    
-    const pageData: ActivityLogsPageData = {
-      logs: [],
-      pagination: { page: 1, limit: 50, total: 0, pages: 0 },
-      filters: {},
-      user: {
-        name: user!.email,
-        email: user!.email,
-        role: user!.role
-      }
-    }
-
-    return c.html(renderActivityLogsPage(pageData))
+  const page = parseInt(c.req.query('page') || '1')
+  const limit = parseInt(c.req.query('limit') || '50')
+  const filters = {
+    action: c.req.query('action') || '',
+    resource_type: c.req.query('resource_type') || '',
+    date_from: c.req.query('date_from') || '',
+    date_to: c.req.query('date_to') || '',
+    user_id: c.req.query('user_id') || ''
   }
+  const pageData: ActivityLogsPageData = {
+    logs: [],
+    pagination: { page, limit, total: 0, pages: 0 },
+    filters,
+    user: {
+      name: user!.email.split('@')[0] || user!.email,
+      email: user!.email,
+      role: user!.role
+    }
+  }
+  return c.html(renderActivityLogsPage(pageData))
 })
 
 /**
  * GET /admin/activity-logs/export - Export activity logs to CSV
  */
 userRoutes.get('/activity-logs/export', async (c) => {
-  const db = c.env.DB
-  const user = c.get('user')
-
-  try {
-    // Get filter parameters (same as list view)
-    const filters = {
-      action: c.req.query('action') || '',
-      resource_type: c.req.query('resource_type') || '',
-      date_from: c.req.query('date_from') || '',
-      date_to: c.req.query('date_to') || '',
-      user_id: c.req.query('user_id') || ''
+  // activity_logs is not yet available — will be implemented as a plugin
+  const csvHeaders = ['Timestamp', 'User', 'Email', 'Action', 'Resource Type', 'Resource ID', 'IP Address', 'Details']
+  const csvContent = csvHeaders.join(',')
+  const filename = `activity-logs-${new Date().toISOString().split('T')[0]}.csv`
+  return new Response(csvContent, {
+    headers: {
+      'Content-Type': 'text/csv',
+      'Content-Disposition': `attachment; filename="${filename}"`
     }
-
-    // Build where clause
-    let whereConditions: string[] = []
-    let params: any[] = []
-
-    if (filters.action) {
-      whereConditions.push('al.action = ?')
-      params.push(filters.action)
-    }
-
-    if (filters.resource_type) {
-      whereConditions.push('al.resource_type = ?')
-      params.push(filters.resource_type)
-    }
-
-    if (filters.user_id) {
-      whereConditions.push('al.user_id = ?')
-      params.push(filters.user_id)
-    }
-
-    if (filters.date_from) {
-      const fromTimestamp = new Date(filters.date_from).getTime()
-      whereConditions.push('al.created_at >= ?')
-      params.push(fromTimestamp)
-    }
-
-    if (filters.date_to) {
-      const toTimestamp = new Date(filters.date_to + ' 23:59:59').getTime()
-      whereConditions.push('al.created_at <= ?')
-      params.push(toTimestamp)
-    }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
-
-    // Get all matching activity logs (limit to 10,000 for performance)
-    const logsStmt = db.prepare(`
-      SELECT 
-        al.id, al.user_id, al.action, al.resource_type, al.resource_id,
-        al.details, al.ip_address, al.user_agent, al.created_at,
-        u.email as user_email,
-        COALESCE(u.first_name || ' ' || u.last_name, u.username, u.email) as user_name
-      FROM activity_logs al
-      LEFT JOIN users u ON al.user_id = u.id
-      ${whereClause}
-      ORDER BY al.created_at DESC
-      LIMIT 10000
-    `)
-
-    const { results: logs } = await logsStmt.bind(...params).all()
-
-    // Generate CSV content
-    const csvHeaders = ['Timestamp', 'User', 'Email', 'Action', 'Resource Type', 'Resource ID', 'IP Address', 'Details']
-    const csvRows = [csvHeaders.join(',')]
-
-    for (const log of (logs || [])) {
-      const row = [
-        `"${new Date((log as any).created_at).toISOString()}"`,
-        `"${(log as any).user_name || 'Unknown'}"`,
-        `"${(log as any).user_email || 'N/A'}"`,
-        `"${(log as any).action}"`,
-        `"${(log as any).resource_type || 'N/A'}"`,
-        `"${(log as any).resource_id || 'N/A'}"`,
-        `"${(log as any).ip_address || 'N/A'}"`,
-        `"${(log as any).details ? JSON.stringify(JSON.parse((log as any).details)) : 'N/A'}"`
-      ]
-      csvRows.push(row.join(','))
-    }
-
-    const csvContent = csvRows.join('\n')
-
-    // Log the export activity
-    await logActivity(
-      db, user!.userId, 'activity.logs_exported', undefined, undefined,
-      { filters, count: logs?.length || 0 },
-      c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
-      c.req.header('user-agent')
-    )
-
-    // Return CSV file
-    const filename = `activity-logs-${new Date().toISOString().split('T')[0]}.csv`
-    
-    return new Response(csvContent, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="${filename}"`
-      }
-    })
-
-  } catch (error) {
-    console.error('Activity logs export error:', error)
-    return c.json({ error: 'Failed to export activity logs' }, 500)
-  }
+  })
 })
 
 export { userRoutes }

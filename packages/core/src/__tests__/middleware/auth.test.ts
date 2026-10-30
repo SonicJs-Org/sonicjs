@@ -3,6 +3,43 @@ import { AuthManager, requireAuth, requireRole, optionalAuth, getJwtExpirySecond
 import { Context, Next } from 'hono'
 import { sign } from 'hono/jwt'
 
+/**
+ * Build a minimal map-backed fake Hono Context.
+ *
+ * In v3 (Better Auth), a GLOBAL session middleware (src/app.ts) populates
+ * `c.get('user')` from the session cookie before route guards run. The
+ * `requireAuth` / `requireRole` guards no longer extract or verify tokens
+ * themselves — they only read the user the session middleware already set.
+ * So tests drive these guards by pre-seeding `vars.user`, not by mocking
+ * token verification.
+ *
+ * @param opts.user      pre-seeded `c.get('user')` value (what the session
+ *                       middleware would have set); omit/undefined = unauthenticated.
+ * @param opts.acceptHtml when true, `Accept: text/html` (browser → redirect path).
+ */
+const buildGuardContext = (opts: { user?: any; acceptHtml?: boolean } = {}) => {
+  const vars = new Map<string, any>()
+  if (opts.user !== undefined) vars.set('user', opts.user)
+  const json = vi.fn((body: any, status?: number) => ({ body, status }))
+  const redirect = vi.fn((url: string) => ({ redirect: url }))
+  return {
+    get: (key: string) => vars.get(key),
+    set: vi.fn((key: string, value: any) => vars.set(key, value)),
+    req: {
+      header: (name: string) =>
+        name === 'Accept' ? (opts.acceptHtml ? 'text/html' : 'application/json') : undefined,
+      raw: { headers: new Headers() },
+    },
+    json,
+    redirect,
+    env: {},
+  } as unknown as Context & {
+    json: ReturnType<typeof vi.fn>
+    redirect: ReturnType<typeof vi.fn>
+    set: ReturnType<typeof vi.fn>
+  }
+}
+
 describe('AuthManager', () => {
   describe('generateToken', () => {
     it('should generate a valid JWT token', async () => {
@@ -307,99 +344,51 @@ describe('AuthManager', () => {
 })
 
 describe('requireAuth middleware', () => {
-  let mockContext: any
+  // In v3, requireAuth only enforces presence of the user that the global
+  // Better Auth session middleware already set on c.get('user'). It no longer
+  // extracts or verifies tokens itself.
   let mockNext: Next
 
   beforeEach(() => {
     mockNext = vi.fn()
-    mockContext = {
-      req: {
-        header: vi.fn(),
-        raw: {
-          headers: new Headers()
-        }
-      },
-      set: vi.fn(),
-      json: vi.fn().mockReturnValue({ error: 'Authentication required' }),
-      redirect: vi.fn().mockReturnValue({ redirect: true }),
-      env: {},
-    }
   })
 
-  it('should reject request without token', async () => {
-    mockContext.req.header.mockReturnValue(undefined)
+  it('should reject API request when no authenticated user (401 JSON)', async () => {
+    const c = buildGuardContext({ acceptHtml: false })
 
     const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
+    await middleware(c, mockNext)
 
-    // When no token is found, the middleware returns authentication required
-    expect(mockContext.json).toHaveBeenCalledWith(
+    expect((c as any).json).toHaveBeenCalledWith(
       { error: 'Authentication required' },
       401
     )
     expect(mockNext).not.toHaveBeenCalled()
   })
 
-  it('should redirect browser requests without token', async () => {
-    mockContext.req.header.mockImplementation((name: string) => {
-      if (name === 'Accept') return 'text/html'
-      return undefined
-    })
+  it('should redirect browser requests when no authenticated user', async () => {
+    const c = buildGuardContext({ acceptHtml: true })
 
     const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
+    await middleware(c, mockNext)
 
-    expect(mockContext.redirect).toHaveBeenCalled()
-    expect(mockNext).not.toHaveBeenCalled()
-  })
-
-  it('should reject request with invalid token', async () => {
-    mockContext.req.header.mockImplementation((name: string) => {
-      if (name === 'Authorization') return 'Bearer invalid-token'
-      return undefined
-    })
-
-    const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    expect(mockContext.json).toHaveBeenCalledWith(
-      { error: 'Invalid or expired token' },
-      401
+    expect((c as any).redirect).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/login?error=')
     )
     expect(mockNext).not.toHaveBeenCalled()
   })
 
-  it('should accept request with valid token', async () => {
-    const token = await AuthManager.generateToken('user-123', 'test@example.com', 'admin')
-
-    mockContext.req.header.mockImplementation((name: string) => {
-      if (name === 'Authorization') return `Bearer ${token}`
-      return undefined
+  it('should accept request when the session middleware has set a user', async () => {
+    const c = buildGuardContext({
+      user: { userId: 'user-123', email: 'test@example.com', role: 'admin' },
     })
 
     const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
+    await middleware(c, mockNext)
 
-    expect(mockContext.set).toHaveBeenCalledWith('user', expect.objectContaining({
-      userId: 'user-123',
-      email: 'test@example.com',
-      role: 'admin'
-    }))
     expect(mockNext).toHaveBeenCalled()
-  })
-
-  it('should extract token from cookie if not in header', async () => {
-    const token = await AuthManager.generateToken('user-123', 'test@example.com', 'admin')
-
-    // Mock getCookie by setting up the header function
-    mockContext.req.header.mockImplementation((name: string) => {
-      if (name === 'Authorization') return undefined
-      if (name === 'cookie') return `auth_token=${token}`
-      return undefined
-    })
-
-    // Note: This test may need adjustment based on actual cookie handling in Hono
-    // The middleware uses getCookie which may work differently than header access
+    expect((c as any).json).not.toHaveBeenCalled()
+    expect((c as any).redirect).not.toHaveBeenCalled()
   })
 })
 
@@ -497,81 +486,38 @@ describe('requireRole middleware', () => {
 })
 
 describe('optionalAuth middleware', () => {
-  let mockContext: any
+  // In v3, optionalAuth is a no-op pass-through kept only for API
+  // compatibility. The global Better Auth session middleware (src/app.ts) is
+  // what populates c.get('user') when a session exists; optionalAuth itself
+  // neither extracts/verifies tokens nor sets a user.
   let mockNext: Next
 
   beforeEach(() => {
     mockNext = vi.fn()
-    mockContext = {
-      req: {
-        header: vi.fn(),
-        raw: {
-          headers: new Headers()
-        }
-      },
-      set: vi.fn(),
-    }
   })
 
-  it('should continue without user when no token provided', async () => {
-    mockContext.req.header.mockReturnValue(undefined)
+  it('should call next() and never set a user (pass-through)', async () => {
+    const c = buildGuardContext()
 
     const middleware = optionalAuth()
-    await middleware(mockContext as Context, mockNext)
+    await middleware(c, mockNext)
 
     expect(mockNext).toHaveBeenCalled()
-    expect(mockContext.set).not.toHaveBeenCalled()
+    expect((c as any).set).not.toHaveBeenCalled()
   })
 
-  it('should set user when valid token provided', async () => {
+  it('should not set a user even when an Authorization header is present', async () => {
     const token = await AuthManager.generateToken('user-123', 'test@example.com', 'user')
-
-    mockContext.req.header.mockImplementation((name: string) => {
-      if (name === 'Authorization') return `Bearer ${token}`
-      return undefined
-    })
-
-    const middleware = optionalAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    expect(mockContext.set).toHaveBeenCalledWith('user', expect.objectContaining({
-      userId: 'user-123',
-      email: 'test@example.com',
-      role: 'user'
-    }))
-    expect(mockNext).toHaveBeenCalled()
-  })
-
-  it('should continue without user when invalid token provided', async () => {
-    mockContext.req.header.mockImplementation((name: string) => {
-      if (name === 'Authorization') return 'Bearer invalid-token'
-      return undefined
-    })
+    const c = buildGuardContext()
+    // Override header to carry a bearer token; optionalAuth must ignore it.
+    ;(c.req as any).header = (name: string) =>
+      name === 'Authorization' ? `Bearer ${token}` : undefined
 
     const middleware = optionalAuth()
-    await middleware(mockContext as Context, mockNext)
+    await middleware(c, mockNext)
 
     expect(mockNext).toHaveBeenCalled()
-    // User should not be set for invalid tokens
-    expect(mockContext.set).not.toHaveBeenCalled()
-  })
-
-  it('should handle errors gracefully and continue', async () => {
-    // Mock the header function to throw an error
-    mockContext.req.header.mockImplementation(() => {
-      throw new Error('Test error')
-    })
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const middleware = optionalAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    // Should continue despite the error
-    expect(mockNext).toHaveBeenCalled()
-    expect(consoleSpy).toHaveBeenCalledWith('Optional auth error:', expect.any(Error))
-
-    consoleSpy.mockRestore()
+    expect((c as any).set).not.toHaveBeenCalled()
   })
 })
 
@@ -604,186 +550,6 @@ describe('AuthManager.setAuthCookie', () => {
   it('should accept custom cookie options', () => {
     // Verify the method signature accepts options
     expect(AuthManager.setAuthCookie.length).toBeGreaterThanOrEqual(2)
-  })
-})
-
-describe('requireAuth middleware - KV Cache', () => {
-  let mockContext: any
-  let mockNext: Next
-
-  beforeEach(() => {
-    mockNext = vi.fn()
-  })
-
-  it('should use cached token verification from KV when available', async () => {
-    const cachedPayload = {
-      userId: 'cached-user',
-      email: 'cached@example.com',
-      role: 'admin',
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000)
-    }
-
-    const mockKv = {
-      get: vi.fn().mockResolvedValue(cachedPayload),
-      put: vi.fn()
-    }
-
-    mockContext = {
-      req: {
-        header: vi.fn().mockImplementation((name: string) => {
-          if (name === 'Authorization') return 'Bearer some-valid-token-prefix'
-          return undefined
-        }),
-        raw: { headers: new Headers() }
-      },
-      set: vi.fn(),
-      json: vi.fn(),
-      redirect: vi.fn(),
-      env: { KV: mockKv }
-    }
-
-    const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    // Should have checked the cache
-    expect(mockKv.get).toHaveBeenCalled()
-    // Should have set the cached user
-    expect(mockContext.set).toHaveBeenCalledWith('user', cachedPayload)
-    expect(mockNext).toHaveBeenCalled()
-  })
-
-  it('should cache verified token in KV', async () => {
-    const token = await AuthManager.generateToken('user-123', 'test@example.com', 'admin')
-
-    const mockKv = {
-      get: vi.fn().mockResolvedValue(null), // Cache miss
-      put: vi.fn().mockResolvedValue(undefined)
-    }
-
-    mockContext = {
-      req: {
-        header: vi.fn().mockImplementation((name: string) => {
-          if (name === 'Authorization') return `Bearer ${token}`
-          return undefined
-        }),
-        raw: { headers: new Headers() }
-      },
-      set: vi.fn(),
-      json: vi.fn(),
-      redirect: vi.fn(),
-      env: { KV: mockKv }
-    }
-
-    const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    // Should have tried to get from cache
-    expect(mockKv.get).toHaveBeenCalled()
-    // Should have stored in cache after verification
-    expect(mockKv.put).toHaveBeenCalled()
-    expect(mockNext).toHaveBeenCalled()
-  })
-})
-
-describe('requireAuth middleware - Error Handling', () => {
-  let mockContext: any
-  let mockNext: Next
-
-  beforeEach(() => {
-    mockNext = vi.fn()
-  })
-
-  it('should redirect browser on auth error', async () => {
-    mockContext = {
-      req: {
-        header: vi.fn().mockImplementation((name: string) => {
-          if (name === 'Authorization') {
-            throw new Error('Simulated error')
-          }
-          if (name === 'Accept') return 'text/html'
-          return undefined
-        }),
-        raw: { headers: new Headers() }
-      },
-      set: vi.fn(),
-      json: vi.fn(),
-      redirect: vi.fn().mockReturnValue({ redirect: true }),
-      env: {}
-    }
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    expect(mockContext.redirect).toHaveBeenCalledWith(
-      expect.stringContaining('/auth/login?error=')
-    )
-    expect(mockNext).not.toHaveBeenCalled()
-
-    consoleSpy.mockRestore()
-  })
-
-  it('should return JSON error on API auth error', async () => {
-    mockContext = {
-      req: {
-        header: vi.fn().mockImplementation((name: string) => {
-          if (name === 'Authorization') {
-            throw new Error('Simulated error')
-          }
-          if (name === 'Accept') return 'application/json'
-          return undefined
-        }),
-        raw: { headers: new Headers() }
-      },
-      set: vi.fn(),
-      json: vi.fn().mockReturnValue({ error: 'Authentication failed' }),
-      redirect: vi.fn(),
-      env: {}
-    }
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    expect(mockContext.json).toHaveBeenCalledWith(
-      { error: 'Authentication failed' },
-      401
-    )
-    expect(mockNext).not.toHaveBeenCalled()
-
-    consoleSpy.mockRestore()
-  })
-
-  it('should redirect browser when invalid token and HTML accept', async () => {
-    mockContext = {
-      req: {
-        header: vi.fn().mockImplementation((name: string) => {
-          if (name === 'Authorization') return 'Bearer invalid-token'
-          if (name === 'Accept') return 'text/html'
-          return undefined
-        }),
-        raw: { headers: new Headers() }
-      },
-      set: vi.fn(),
-      json: vi.fn(),
-      redirect: vi.fn().mockReturnValue({ redirect: true }),
-      env: {}
-    }
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const middleware = requireAuth()
-    await middleware(mockContext as Context, mockNext)
-
-    expect(mockContext.redirect).toHaveBeenCalledWith(
-      expect.stringContaining('/auth/login?error=')
-    )
-    expect(mockNext).not.toHaveBeenCalled()
-
-    consoleSpy.mockRestore()
   })
 })
 

@@ -1,45 +1,28 @@
-import { PluginBuilder } from '../../sdk/plugin-builder'
-import { Plugin } from '@sonicjs-cms/core'
-// import { createDatabaseToolsAdminRoutes } from './admin-routes'
+/**
+ * Database Tools Plugin — Payload-shaped port.
+ */
+
+import { definePlugin } from '../../sdk/define-plugin'
 import { DatabaseToolsService } from './services/database-service'
 
-export function createDatabaseToolsPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'database-tools',
-    version: '1.0.0-beta.1',
-    description: 'Database management tools including truncate, backup, and validation'
-  })
+export const databaseToolsPlugin = definePlugin({
+  id: 'database-tools',
+  version: '1.0.0',
+  name: 'Database Tools',
+  description: 'Database management tools including truncate, backup, and validation.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'SonicJS', email: 'admin@sonicjs.com' },
 
-  builder.metadata({
-    author: { name: 'SonicJS', email: 'admin@sonicjs.com' },
-    license: 'MIT',
-    compatibility: '^1.0.0',
-    dependencies: []
-  })
+  // Admin route mounted by app.ts at /admin/database-tools — no register fn needed
+  // here since the page lives at the existing createDatabaseToolsAdminRoutes() call.
 
-  // Add admin page
-  builder.addAdminPage('/database-tools', 'Database Tools', 'DatabaseTools', {
-    description: 'Manage database operations and maintenance',
-    icon: 'database',
-    permissions: ['admin']
-  })
+  menu: [
+    { label: 'Database Tools', path: '/admin/database-tools', icon: 'cog', order: 60, permissions: ['admin'] },
+  ],
+})
 
-  // Add menu item to admin sidebar
-  builder.addMenuItem('Database Tools', '/admin/database-tools', {
-    icon: 'database',
-    order: 60,
-    permissions: ['admin']
-  })
-
-  // Add service
-  builder.addService('databaseTools', {
-    implementation: DatabaseToolsService,
-    description: 'Database management and maintenance service',
-    singleton: true
-  })
-
-  return builder.build() as Plugin
+export function createDatabaseToolsPlugin() {
+  return databaseToolsPlugin
 }
 
-export const databaseToolsPlugin = createDatabaseToolsPlugin()
 export { DatabaseToolsService } from './services/database-service'

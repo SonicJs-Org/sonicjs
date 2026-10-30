@@ -11,7 +11,7 @@ export async function normalizeExistingEmails(db: D1Database): Promise<void> {
     console.log('Starting email normalization...')
     
     // Get all users with potentially non-lowercase emails
-    const users = await db.prepare('SELECT id, email FROM users WHERE email != LOWER(email)').all()
+    const users = await db.prepare('SELECT id, email FROM auth_user WHERE email != LOWER(email)').all()
     
     if (!users.results || users.results.length === 0) {
       console.log('No emails to normalize - all emails are already lowercase')
@@ -25,7 +25,7 @@ export async function normalizeExistingEmails(db: D1Database): Promise<void> {
       const normalizedEmail = (user.email as string).toLowerCase()
       
       try {
-        await db.prepare('UPDATE users SET email = ?, updated_at = ? WHERE id = ?')
+        await db.prepare('UPDATE auth_user SET email = ?, updated_at = ? WHERE id = ?')
           .bind(normalizedEmail, Date.now(), user.id)
           .run()
         

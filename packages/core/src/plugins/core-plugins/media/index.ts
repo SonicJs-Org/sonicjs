@@ -5,28 +5,9 @@
  */
 
 import { Hono } from 'hono'
-// import { z } from 'zod'
-import { PluginBuilder, PluginHelpers } from '../../sdk/plugin-builder'
-import { Plugin, HOOKS } from '@sonicjs-cms/core'
+import { definePlugin } from '../../sdk/define-plugin'
 
-export function createMediaPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'core-media',
-    version: '1.0.0-beta.1',
-    description: 'Core media management and processing plugin'
-  })
-
-  // Add media metadata
-  builder.metadata({
-    author: {
-      name: 'SonicJS Team',
-      email: 'team@sonicjs.com'
-    },
-    license: 'MIT',
-    compatibility: '^0.1.0',
-    dependencies: ['core-auth'] // Requires auth for upload permissions
-  })
-
+function buildMediaApi(): Hono {
   // Create media API routes
   const mediaAPI = new Hono()
 
@@ -165,239 +146,56 @@ export function createMediaPlugin(): Plugin {
     }
   })
 
-  builder.addRoute('/api/media', mediaAPI, {
-    description: 'Media management API endpoints',
-    requiresAuth: true,
-    priority: 2
-  })
-
-  // Add media processing middleware
-  builder.addSingleMiddleware('media-validator', async (c: any, next: any) => {
-    const path = c.req.path
-    if (path.startsWith('/api/media/upload')) {
-      // Validate file uploads
-      const contentType = c.req.header('content-type')
-      const allowedTypes = ['image/', 'video/', 'application/pdf']
-      
-      if (contentType && !allowedTypes.some(type => contentType.startsWith(type))) {
-        return c.json({ error: 'Unsupported file type' }, 400)
-      }
-    }
-    await next()
-  }, {
-    description: 'Validate media file uploads',
-    routes: ['/api/media/*'],
-    priority: 5
-  })
-
-  // Add media service
-  builder.addService('mediaService', {
-    uploadFile: async (file: File, _options?: any) => {
-      // File upload implementation
-      return {
-        id: `media-${Date.now()}`,
-        url: `/media/${file.name}`,
-        size: file.size,
-        type: file.type
-      }
-    },
-    
-    deleteFile: async (fileId: string) => {
-      // File deletion implementation
-      console.info(`Deleting media file: ${fileId}`)
-      return true
-    },
-    
-    processImage: async (fileId: string, operations: any[]) => {
-      // Image processing implementation
-      console.info(`Processing image ${fileId} with operations:`, operations)
-      return { jobId: `job-${fileId}-${Date.now()}` }
-    },
-    
-    getMetadata: async (_id: string) => {
-      // Extract file metadata
-      return {
-        width: 1920,
-        height: 1080,
-        format: 'JPEG',
-        size: 1024000
-      }
-    }
-  }, {
-    description: 'Core media processing service',
-    singleton: true
-  })
-
-  // Add media model for database storage
-  const mediaSchema = PluginHelpers.createSchema([
-    { name: 'filename', type: 'string', optional: false },
-    { name: 'originalName', type: 'string', optional: false },
-    { name: 'mimeType', type: 'string', optional: false },
-    { name: 'size', type: 'number', optional: false },
-    { name: 'url', type: 'string', optional: false },
-    { name: 'thumbnailUrl', type: 'string', optional: true },
-    { name: 'metadata', type: 'object', optional: true },
-    { name: 'uploadedBy', type: 'number', optional: true },
-    { name: 'tags', type: 'array', optional: true }
-  ])
-
-  const mediaMigration = PluginHelpers.createMigration('media_files', [
-    { name: 'id', type: 'INTEGER', primaryKey: true },
-    { name: 'filename', type: 'TEXT', nullable: false },
-    { name: 'original_name', type: 'TEXT', nullable: false },
-    { name: 'mime_type', type: 'TEXT', nullable: false },
-    { name: 'size', type: 'INTEGER', nullable: false },
-    { name: 'url', type: 'TEXT', nullable: false },
-    { name: 'thumbnail_url', type: 'TEXT', nullable: true },
-    { name: 'metadata', type: 'TEXT', nullable: true },
-    { name: 'uploaded_by', type: 'INTEGER', nullable: true },
-    { name: 'tags', type: 'TEXT', nullable: true }
-  ])
-
-  builder.addModel('MediaFile', {
-    tableName: 'media_files',
-    schema: mediaSchema,
-    migrations: [mediaMigration],
-    relationships: [
-      {
-        type: 'oneToMany',
-        target: 'User',
-        foreignKey: 'uploaded_by'
-      }
-    ]
-  })
-
-  // Add media hooks
-  builder.addHook('media:upload', async (data: any, _context: any) => {
-    console.info(`Media upload event: ${data.filename}`)
-    
-    // Auto-generate thumbnails for images
-    if (data.mimeType?.startsWith('image/')) {
-      // Trigger thumbnail generation
-      data.generateThumbnail = true
-    }
-    
-    return data
-  }, {
-    priority: 10,
-    description: 'Handle media upload events'
-  })
-
-  builder.addHook('media:delete', async (data: any, _context: any) => {
-    console.info(`Media delete event: ${data.id}`)
-    
-    // Clean up related files (thumbnails, processed versions)
-    data.cleanupFiles = true
-    
-    return data
-  }, {
-    priority: 10,
-    description: 'Handle media deletion events'
-  })
-
-  builder.addHook(HOOKS.CONTENT_SAVE, async (data: any, _context: any) => {
-    // Extract media references from content
-    const content = data.content || ''
-    const mediaReferences = content.match(/\/media\/[a-zA-Z0-9-]+/g) || []
-    
-    if (mediaReferences.length > 0) {
-      data.mediaReferences = mediaReferences
-      console.debug(`Content references ${mediaReferences.length} media files`)
-    }
-    
-    return data
-  }, {
-    priority: 8,
-    description: 'Track media usage in content'
-  })
-
-  // Add admin pages
-  builder.addAdminPage(
-    '/media',
-    'Media Library',
-    'MediaLibraryView',
-    {
-      description: 'Browse and manage media files',
-      permissions: ['admin', 'media:manage'],
-      icon: 'photo'
-    }
-  )
-
-  builder.addAdminPage(
-    '/media/upload',
-    'Upload Media',
-    'MediaUploadView',
-    {
-      description: 'Upload new media files',
-      permissions: ['admin', 'media:upload'],
-      icon: 'upload'
-    }
-  )
-
-  builder.addAdminPage(
-    '/media/settings',
-    'Media Settings',
-    'MediaSettingsView',
-    {
-      description: 'Configure media processing and storage',
-      permissions: ['admin', 'media:configure'],
-      icon: 'cog'
-    }
-  )
-
-  // Add menu items
-  builder.addMenuItem('Media', '/admin/media', {
-    icon: 'photo',
-    order: 30,
-    permissions: ['admin', 'media:manage']
-  })
-
-  builder.addMenuItem('Library', '/admin/media', {
-    icon: 'photo',
-    parent: 'Media',
-    order: 1,
-    permissions: ['admin', 'media:manage']
-  })
-
-  builder.addMenuItem('Upload', '/admin/media/upload', {
-    icon: 'upload',
-    parent: 'Media',
-    order: 2,
-    permissions: ['admin', 'media:upload']
-  })
-
-  builder.addMenuItem('Settings', '/admin/media/settings', {
-    icon: 'cog',
-    parent: 'Media',
-    order: 3,
-    permissions: ['admin', 'media:configure']
-  })
-
-  // Add lifecycle hooks
-  builder.lifecycle({
-    install: async () => {
-      console.info('Installing media plugin...')
-      // Create media storage directories and configurations
-    },
-
-    activate: async () => {
-      console.info('Activating media plugin...')
-      // Initialize media processing services
-    },
-
-    deactivate: async () => {
-      console.info('Deactivating media plugin...')
-      // Clean up media processing resources
-    },
-
-    configure: async (config) => {
-      console.info('Configuring media plugin...', config)
-      // Update media processing settings
-    }
-  })
-
-  return builder.build() as Plugin
+  return mediaAPI
 }
 
-// Export the plugin instance
-export const mediaPlugin = createMediaPlugin()
+export const mediaPlugin = definePlugin({
+  id: 'core-media',
+  version: '1.0.0',
+  name: 'Media',
+  description: 'Core media management and processing plugin.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
+  dependencies: ['core-auth'],
+  capabilities: ['hooks.content:subscribe'],
+
+  register(app) {
+    app.route('/api/media', buildMediaApi())
+  },
+
+  menu: [
+    { label: 'Media', path: '/admin/media', icon: 'photo', order: 30, permissions: ['admin', 'media:manage'] },
+  ],
+
+  async onBoot(ctx) {
+    // Legacy non-typed media hooks — subscribe via the raw bus.
+    const hooks = (ctx.raw as any)?.hooks
+    if (!hooks?.register) return
+    hooks.register('media:upload', async (data: any) => {
+      console.info(`Media upload event: ${data.filename}`)
+      if (data.mimeType?.startsWith('image/')) data.generateThumbnail = true
+      return data
+    }, 10)
+    hooks.register('media:delete', async (data: any) => {
+      console.info(`Media delete event: ${data.id}`)
+      data.cleanupFiles = true
+      return data
+    }, 10)
+    hooks.register('content:save', async (data: any) => {
+      const content = data.content || ''
+      const mediaReferences = content.match(/\/media\/[a-zA-Z0-9-]+/g) || []
+      if (mediaReferences.length > 0) {
+        data.mediaReferences = mediaReferences
+      }
+      return data
+    }, 8)
+  },
+
+  install: async () => console.info('Installing media plugin...'),
+  activate: async () => console.info('Activating media plugin...'),
+  deactivate: async () => console.info('Deactivating media plugin...'),
+})
+
+export function createMediaPlugin() {
+  return mediaPlugin
+}

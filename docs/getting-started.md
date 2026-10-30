@@ -140,6 +140,8 @@ compatibility_date = "2024-06-01"
 
 [vars]
 ENVIRONMENT = "development"
+# Add every frontend origin that needs cross-origin API/auth access (comma-separated)
+CORS_ORIGINS = "http://localhost:8787,http://localhost:4321"
 
 [[d1_databases]]
 binding = "DB"
@@ -742,6 +744,34 @@ If you're contributing to SonicJS and working in the monorepo, these additional 
 ## Troubleshooting
 
 ### Common Issues
+
+#### CORS Errors from a Frontend Framework (Astro, Next.js, etc.)
+
+**Symptom:** Browser console shows `Cross-Origin Request Blocked` or `Access-Control-Allow-Origin` missing when calling `/auth/login` or any API endpoint from a different port.
+
+**Solution:**
+
+Add your frontend origin to `CORS_ORIGINS` in `wrangler.toml` and restart the dev server:
+
+```toml
+[vars]
+CORS_ORIGINS = "http://localhost:8787,http://localhost:4321"
+```
+
+Then ensure your `fetch` calls include `credentials: 'include'`:
+
+```typescript
+const res = await fetch('http://localhost:8787/auth/login', {
+  method: 'POST',
+  credentials: 'include',          // required for session cookies
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password }),
+})
+```
+
+For production, add your deployed frontend URL to `CORS_ORIGINS` in the `[env.production]` section.
+
+---
 
 #### Database Connection Errors
 

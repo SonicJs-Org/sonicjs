@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { loginAsAdmin, logout } from './utils/test-helpers';
 
 /**
@@ -7,7 +7,7 @@ import { loginAsAdmin, logout } from './utils/test-helpers';
  * Tests the enforcement of the "registration.enabled" setting in the auth plugin.
  * When disabled, new user registration should be blocked (except for first user bootstrap).
  */
-test.describe('Disable User Registration', () => {
+test.describe('Disable User Registration @auth @lock-auth-registration', () => {
   // Test data for registration attempts
   const testUser = {
     email: `test.disable.reg.${Date.now()}@example.com`,
@@ -42,8 +42,8 @@ test.describe('Disable User Registration', () => {
 
     await logout(page);
 
-    // Small delay to ensure setting is persisted
-    await page.waitForTimeout(300);
+    // Allow setting to propagate (CF Worker may take a moment)
+    await page.waitForTimeout(1000);
 
     return status === 200;
   }
@@ -119,13 +119,15 @@ test.describe('Disable User Registration', () => {
       // Disable registration via API
       const settingUpdated = await setRegistrationEnabled(page, false);
 
-      // Only run the test if we successfully updated the setting
+      // Restore the setting before asserting, so a failure here does not leave
+      // registration disabled for every test that runs after this one.
       if (!settingUpdated) {
-        console.log('Could not update registration setting via API - skipping test');
-        // Re-enable registration for safety
         await setRegistrationEnabled(page, true);
-        return;
       }
+      // This used to `return` instead. A core-auth settings POST that stopped working --
+      // the exact failure the ai-search plugin was shipping -- made every test in this
+      // file pass without ever disabling registration.
+      expect(settingUpdated, 'could not disable registration via the core-auth settings API').toBe(true);
 
       try {
         const uniqueUser = {
@@ -153,11 +155,15 @@ test.describe('Disable User Registration', () => {
       // Disable registration via API
       const settingUpdated = await setRegistrationEnabled(page, false);
 
+      // Restore the setting before asserting, so a failure here does not leave
+      // registration disabled for every test that runs after this one.
       if (!settingUpdated) {
-        console.log('Could not update registration setting via API - skipping test');
         await setRegistrationEnabled(page, true);
-        return;
       }
+      // This used to `return` instead. A core-auth settings POST that stopped working --
+      // the exact failure the ai-search plugin was shipping -- made every test in this
+      // file pass without ever disabling registration.
+      expect(settingUpdated, 'could not disable registration via the core-auth settings API').toBe(true);
 
       try {
         await page.goto('/auth/register');
@@ -204,11 +210,15 @@ test.describe('Disable User Registration', () => {
       // Disable registration via API
       const settingUpdated = await setRegistrationEnabled(page, false);
 
+      // Restore the setting before asserting, so a failure here does not leave
+      // registration disabled for every test that runs after this one.
       if (!settingUpdated) {
-        console.log('Could not update registration setting via API - skipping test');
         await setRegistrationEnabled(page, true);
-        return;
       }
+      // This used to `return` instead. A core-auth settings POST that stopped working --
+      // the exact failure the ai-search plugin was shipping -- made every test in this
+      // file pass without ever disabling registration.
+      expect(settingUpdated, 'could not disable registration via the core-auth settings API').toBe(true);
 
       try {
         // Try to register

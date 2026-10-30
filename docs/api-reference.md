@@ -1,6 +1,6 @@
 # API Reference
 
-SonicJS AI provides a comprehensive REST API for managing content, collections, media, and authentication programmatically. The API is built on Cloudflare Workers and features a three-tiered caching system for optimal performance.
+SonicJS provides a REST API for managing content, collections, media, and authentication. The API runs on Cloudflare Workers with a three-tiered caching system.
 
 ## Base URL
 
@@ -15,161 +15,85 @@ http://localhost:8787/api
 
 ## Authentication
 
-Most API endpoints require authentication. SonicJS AI uses JWT (JSON Web Tokens) for authentication with HTTP-only cookies for web clients and Bearer tokens for API clients.
+SonicJS uses [Better Auth](https://www.better-auth.com/) for session management. Sessions are stored as HTTP-only cookies — no Bearer tokens needed for browser clients.
 
-### Getting an Access Token
+### Sign In
 
-**Endpoint:** `POST /auth/login`
+**Endpoint:** `POST /auth/sign-in/email`
 
 ```bash
-curl -X POST "http://localhost:8787/auth/login" \
+curl -X POST "http://localhost:8787/auth/sign-in/email" \
   -H "Content-Type: application/json" \
+  -c cookies.txt \
   -d '{
     "email": "admin@sonicjs.com",
     "password": "sonicjs!"
   }'
 ```
 
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "your-password"
-}
-```
+The response sets a `better-auth.session_token` HTTP-only cookie. Use `-b cookies.txt` on subsequent requests.
 
-**Response (200 OK):**
-```json
-{
-  "user": {
-    "id": "admin-user-id",
-    "email": "admin@sonicjs.com",
-    "username": "admin",
-    "firstName": "Admin",
-    "lastName": "User",
-    "role": "admin"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJhZG1pbi11c2VyLWlkIiwiZW1haWwiOiJhZG1pbkBzb25pY2pzLmNvbSIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTczMDk0MDAwMCwiaWF0IjoxNzMwODUzNjAwfQ.xyz"
-}
-```
+### Sign Up
 
-**Error Response (401 Unauthorized):**
-```json
-{
-  "error": "Invalid email or password"
-}
-```
-
-### Using the Token
-
-Include the token in the Authorization header for all authenticated requests:
-
-```http
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-For browser-based applications, the token is automatically stored as an HTTP-only cookie named `auth_token`.
-
-### Token Refresh
-
-**Endpoint:** `POST /auth/refresh`
-
-Requires existing valid authentication.
+**Endpoint:** `POST /auth/sign-up/email`
 
 ```bash
-curl -X POST "http://localhost:8787/auth/refresh" \
-  -H "Authorization: Bearer {token}"
-```
-
-**Response (200 OK):**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-### User Registration
-
-**Endpoint:** `POST /auth/register`
-
-```bash
-curl -X POST "http://localhost:8787/auth/register" \
+curl -X POST "http://localhost:8787/auth/sign-up/email" \
   -H "Content-Type: application/json" \
+  -c cookies.txt \
   -d '{
     "email": "newuser@example.com",
     "password": "securepassword123",
-    "username": "newuser",
-    "firstName": "John",
-    "lastName": "Doe"
+    "name": "John Doe"
   }'
 ```
 
-**Request Body:**
-```json
-{
-  "email": "newuser@example.com",
-  "password": "securepassword123",
-  "username": "newuser",
-  "firstName": "John",
-  "lastName": "Doe"
-}
-```
-
-**Response (201 Created):**
-```json
-{
-  "user": {
-    "id": "uuid-generated-id",
-    "email": "newuser@example.com",
-    "username": "newuser",
-    "firstName": "John",
-    "lastName": "Doe",
-    "role": "viewer"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+The first registered user automatically receives the `admin` role.
 
 ### Get Current User
 
 **Endpoint:** `GET /auth/me`
 
-Requires authentication.
+Requires authentication (session cookie).
 
 ```bash
-curl -X GET "http://localhost:8787/auth/me" \
-  -H "Authorization: Bearer {token}"
+curl -X GET "http://localhost:8787/auth/me" -b cookies.txt
 ```
 
-**Response (200 OK):**
-```json
-{
-  "user": {
-    "id": "admin-user-id",
-    "email": "admin@sonicjs.com",
-    "username": "admin",
-    "first_name": "Admin",
-    "last_name": "User",
-    "role": "admin",
-    "created_at": 1730000000
-  }
-}
-```
+### Sign Out
 
-### Logout
-
-**Endpoint:** `POST /auth/logout` or `GET /auth/logout`
+**Endpoint:** `POST /auth/sign-out` or `GET /auth/logout`
 
 ```bash
-curl -X POST "http://localhost:8787/auth/logout"
+curl -X POST "http://localhost:8787/auth/sign-out" -b cookies.txt
 ```
 
-**Response (200 OK):**
-```json
-{
-  "message": "Logged out successfully"
-}
+### Frontend Usage
+
+```typescript
+// Sign in (browser — cookie is set automatically)
+const res = await fetch('http://localhost:8787/auth/sign-in/email', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password }),
+})
+
+// Authenticated requests (cookie sent automatically)
+const content = await fetch('http://localhost:8787/api/content', {
+  credentials: 'include',
+})
 ```
+
+`credentials: 'include'` is required so the browser sends the session cookie. See [Authentication docs](authentication.md) for CORS configuration.
+
+### Content Access Control
+
+Content visibility is controlled by **base grants** on each collection's document type. Collections default to **deny** for public access — only authenticated users with appropriate roles (admin, editor) can access content unless the collection explicitly opts in via its `access` property.
+
+Anonymous requests that reach a collection without `public: ['read']` in its base grants will receive an empty result set (the documents are filtered out by the ACL layer).
+
+See [Authentication > Content Access Control](authentication.md#content-access-control) for details.
 
 ## API Endpoints
 
@@ -330,15 +254,13 @@ X-Response-Time: 8ms
 
 Retrieve all content items with pagination.
 
-**Authentication:** None required
-
-Anonymous, viewer, and author requests return published content only. Admin and editor requests may filter by other statuses.
+**Authentication:** Optional (session cookie). Anonymous requests see only published content from collections with public read access. Authenticated admin/editor requests see drafts too.
 
 **Cache Headers:** Cached for 5 minutes (API cache tier)
 
 **Query Parameters:**
 - `limit` (optional): Maximum number of items to return (default: 50, max: 100)
-- `status` (optional): Content status filter for admin/editor requests. Anonymous, viewer, and author requests are limited to published results.
+- `status` (optional): Content status filter for admin/editor requests. Anonymous requests are limited to published results.
 
 ```bash
 curl -X GET "http://localhost:8787/api/content?limit=10"
@@ -398,9 +320,7 @@ X-Response-Time: 3ms
 
 Retrieve content for a specific collection.
 
-**Authentication:** None required
-
-Anonymous, viewer, and author requests return published content only. Admin and editor requests may filter by other statuses.
+**Authentication:** Optional (session cookie). Anonymous requests see only published content from collections with public read access. Authenticated admin/editor requests see drafts too.
 
 **Cache Headers:** Cached for 5 minutes (API cache tier)
 
@@ -409,7 +329,7 @@ Anonymous, viewer, and author requests return published content only. Admin and 
 
 **Query Parameters:**
 - `limit` (optional): Maximum number of items to return (default: 50, max: 100)
-- `status` (optional): Content status filter for admin/editor requests. Anonymous, viewer, and author requests are limited to published results.
+- `status` (optional): Content status filter for admin/editor requests. Anonymous requests are limited to published results.
 
 ```bash
 curl -X GET "http://localhost:8787/api/collections/blog-posts/content?limit=25"
@@ -464,13 +384,13 @@ curl -X GET "http://localhost:8787/api/collections/blog-posts/content?limit=25"
 
 ## Media Management
 
-All media endpoints require authentication.
+All media endpoints require authentication (session cookie).
 
 ### Upload Single File
 
 **Endpoint:** `POST /api/media/upload`
 
-**Authentication:** Required (Bearer token or auth cookie)
+**Authentication:** Required (session cookie)
 
 **Content-Type:** `multipart/form-data`
 
@@ -941,16 +861,13 @@ console.log(`Retrieved ${meta.count} collections`)
 console.log('Cache status:', meta.cache.hit ? 'HIT' : 'MISS')
 ```
 
-**Authenticated Request:**
+**Authenticated Request (browser):**
 ```typescript
-const token = 'your-jwt-token'
-
+// Session cookie is sent automatically with credentials: 'include'
 const response = await fetch('http://localhost:8787/api/media/upload', {
   method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`
-  },
-  body: formData
+  credentials: 'include',
+  body: formData,
 })
 
 const result = await response.json()
@@ -959,27 +876,22 @@ if (result.success) {
 }
 ```
 
-**Login and Get Content:**
+**Sign In and Get Content:**
 ```typescript
-// Login
-const loginResponse = await fetch('http://localhost:8787/auth/login', {
+// Sign in (sets session cookie)
+await fetch('http://localhost:8787/auth/sign-in/email', {
   method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     email: 'admin@sonicjs.com',
-    password: 'sonicjs!'
-  })
+    password: 'sonicjs!',
+  }),
 })
 
-const { token } = await loginResponse.json()
-
-// Get content
+// Get content (session cookie sent automatically)
 const contentResponse = await fetch('http://localhost:8787/api/content?limit=25', {
-  headers: {
-    'Authorization': `Bearer ${token}`
-  }
+  credentials: 'include',
 })
 
 const { data } = await contentResponse.json()
@@ -1012,23 +924,21 @@ for collection in data['data']:
 ```python
 import requests
 
-# Login first
-login_response = requests.post(
-    'http://localhost:8787/auth/login',
+session = requests.Session()
+
+# Sign in (session cookie stored automatically)
+session.post(
+    'http://localhost:8787/auth/sign-in/email',
     json={
         'email': 'admin@sonicjs.com',
         'password': 'sonicjs!'
     }
 )
-token = login_response.json()['token']
 
-# Upload file
+# Upload file (cookie sent automatically via session)
 files = {'file': open('image.jpg', 'rb')}
-headers = {'Authorization': f'Bearer {token}'}
-
-response = requests.post(
+response = session.post(
     'http://localhost:8787/api/media/upload',
-    headers=headers,
     files=files,
     data={'folder': 'uploads'}
 )
@@ -1036,26 +946,21 @@ response = requests.post(
 result = response.json()
 if result['success']:
     print(f"File uploaded: {result['file']['publicUrl']}")
-    print(f"File ID: {result['file']['id']}")
 ```
 
 **Paginated Content Fetch:**
 ```python
 import requests
 
-def get_all_content(base_url, token=None, limit=50):
+def get_all_content(base_url, session=None, limit=50):
     all_items = []
     offset = 0
-
-    headers = {}
-    if token:
-        headers['Authorization'] = f'Bearer {token}'
+    getter = session or requests
 
     while True:
-        response = requests.get(
+        response = getter.get(
             f'{base_url}/api/content',
             params={'limit': limit, 'offset': offset},
-            headers=headers
         )
         data = response.json()
 
@@ -1069,6 +974,7 @@ def get_all_content(base_url, token=None, limit=50):
 
     return all_items
 
+# Public content (no auth needed if collection has public read access)
 content = get_all_content('http://localhost:8787')
 print(f"Total content items: {len(content)}")
 ```
@@ -1081,10 +987,11 @@ curl -X GET "http://localhost:8787/api/collections" \
   -H "Content-Type: application/json"
 ```
 
-**Login:**
+**Sign In (save session cookie):**
 ```bash
-curl -X POST "http://localhost:8787/auth/login" \
+curl -X POST "http://localhost:8787/auth/sign-in/email" \
   -H "Content-Type: application/json" \
+  -c cookies.txt \
   -d '{
     "email": "admin@sonicjs.com",
     "password": "sonicjs!"
@@ -1093,19 +1000,15 @@ curl -X POST "http://localhost:8787/auth/login" \
 
 **Get Content with Authentication:**
 ```bash
-TOKEN="your-jwt-token"
-
 curl -X GET "http://localhost:8787/api/content?limit=25" \
-  -H "Authorization: Bearer $TOKEN" \
+  -b cookies.txt \
   -H "Content-Type: application/json"
 ```
 
 **Upload File:**
 ```bash
-TOKEN="your-jwt-token"
-
 curl -X POST "http://localhost:8787/api/media/upload" \
-  -H "Authorization: Bearer $TOKEN" \
+  -b cookies.txt \
   -F "file=@/path/to/image.jpg" \
   -F "folder=blog-images"
 ```
@@ -1118,18 +1021,14 @@ curl -X GET "http://localhost:8787/api/collections/blog-posts/content?limit=10" 
 
 **Delete Media File:**
 ```bash
-TOKEN="your-jwt-token"
-
 curl -X DELETE "http://localhost:8787/api/media/V1StGXR8_Z5jdHi6B" \
-  -H "Authorization: Bearer $TOKEN"
+  -b cookies.txt
 ```
 
 **Bulk Delete Media:**
 ```bash
-TOKEN="your-jwt-token"
-
 curl -X POST "http://localhost:8787/api/media/bulk-delete" \
-  -H "Authorization: Bearer $TOKEN" \
+  -b cookies.txt \
   -H "Content-Type: application/json" \
   -d '{
     "fileIds": ["file-id-1", "file-id-2", "file-id-3"]
@@ -1167,10 +1066,10 @@ curl -X GET "http://localhost:8787/api/content?limit=10" -i
 
 ### Authentication
 
-1. **Store tokens securely**: Never expose tokens in client-side code or version control
-2. **Use HTTPS in production**: Always use secure connections for token transmission
-3. **Refresh tokens regularly**: Implement token refresh before expiration
-4. **Handle 401 errors**: Redirect to login or refresh token when authentication fails
+1. **Use `credentials: 'include'`**: Required for browsers to send session cookies cross-origin
+2. **Configure CORS_ORIGINS**: List all frontend origins in `wrangler.toml`
+3. **Use HTTPS in production**: Session cookies require secure connections
+4. **Handle 401 errors**: Redirect to login when the session expires
 
 ### Caching
 
@@ -1201,13 +1100,9 @@ curl -X GET "http://localhost:8787/api/content?limit=10" -i
 - **Community Discussions**: [https://github.com/lane711/sonicjs-ai/discussions](https://github.com/lane711/sonicjs-ai/discussions)
 - **Report Issues**: [https://github.com/lane711/sonicjs-ai/issues](https://github.com/lane711/sonicjs-ai/issues)
 
-## Version History
+## Related Documentation
 
-### v0.1.0 (Current)
-- Initial API implementation
-- JWT authentication
-- Collections and content endpoints
-- Media upload and management
-- Three-tiered caching system
-- OpenAPI 3.0 specification
-- Cache headers and metadata
+- [Authentication & Authorization](authentication.md) — Sessions, RBAC, content ACL
+- [Collections Configuration](collections-config.md) — Schema and access config
+- [API Filtering](api-filtering.md) — Query parameter reference
+- [Content Management](content-management.md) — Draft/publish workflow

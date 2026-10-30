@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
+import type { Page } from '@playwright/test'
 import { loginAsAdmin } from './utils/test-helpers'
 
 /**
@@ -12,80 +13,43 @@ import { loginAsAdmin } from './utils/test-helpers'
  * Fix: Rename `options` to `selectOptions` in the select case.
  *
  * Related: GitHub Issue #555, PR #556
+ *
+ * Both tests used to reach the form by loading `/admin/content/new`, waiting for `networkidle`,
+ * hunting for an `a[href*="collection=e2e_test"]` in the collection picker, falling back to
+ * `/admin/collections` to "trigger a sync", and giving up into `test.skip(true, 'E2E Test
+ * collection not available')` at five separate points. `e2e_test` is a code-registered collection
+ * — `registerCollections()` at bootstrap, no DB sync to wait for — so the form has a direct URL
+ * and the picker is not part of what this spec tests. Every one of those skips was a way for a
+ * slow or failed page load to report itself as "feature absent".
  */
-test.describe('Dynamic Field TDZ Bug Fix', () => {
-  /**
-   * Helper to find and navigate to Page Blocks collection
-   * Returns true if collection was found and navigated to, false otherwise
-   */
-  async function navigateToPageBlocksCollection(page: any): Promise<boolean> {
-    // Navigate to the new content page to see available collections
-    await page.goto('/admin/content/new')
-    await page.waitForLoadState('networkidle')
 
-    // Look for Page Blocks collection which has object and array fields
-    // The collection might be named "page_blocks" or listed as "Page Blocks"
-    const pageBlocksLink = page.locator('a[href*="collection=page_blocks"]')
-    const hasPageBlocks = await pageBlocksLink.count() > 0
+const NEW_E2E_TEST_FORM = '/admin/content/new?collection=e2e_test'
 
-    if (!hasPageBlocks) {
-      // Collection not found in content new page
-      // Try triggering collection sync by visiting collections page
-      await page.goto('/admin/collections')
-      await page.waitForLoadState('networkidle')
+/**
+ * Open the E2E Test collection's new-content form.
+ *
+ * The TDZ bug surfaces as a server-rendered error page, not as a missing element, so check for it
+ * by name first — otherwise the failure is a 15s timeout on `form#content-form` that says nothing
+ * about the cause.
+ */
+async function openE2eTestForm(page: Page) {
+  await page.goto(NEW_E2E_TEST_FORM)
 
-      // Check if page_blocks appears in the collections list
-      const hasPageBlocksInList = await page.locator('text=page_blocks').count() > 0
-      if (!hasPageBlocksInList) {
-        return false
-      }
-
-      // Navigate back to content/new
-      await page.goto('/admin/content/new')
-      await page.waitForLoadState('networkidle')
-
-      // Try again
-      const pageBlocksLinkRetry = page.locator('a[href*="collection=page_blocks"]')
-      if (await pageBlocksLinkRetry.count() === 0) {
-        return false
-      }
-
-      await pageBlocksLinkRetry.click()
-    } else {
-      await pageBlocksLink.click()
-    }
-
-    await page.waitForLoadState('networkidle')
-    return true
+  const body = await page.content()
+  if (body.includes('Cannot access') && body.includes('before initialization')) {
+    throw new Error(`TDZ bug detected: "Cannot access 'options' before initialization"`)
   }
 
-  test('should render content form with object fields without TDZ crash', async ({ page }) => {
+  await expect(page.locator('form#content-form')).toBeVisible({ timeout: 15000 })
+}
+
+test.describe('Dynamic Field TDZ Bug Fix @content', () => {
+  test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
+  })
 
-    // Navigate to Page Blocks collection
-    const found = await navigateToPageBlocksCollection(page)
-
-    if (!found) {
-      // If Page Blocks collection doesn't exist, skip the test
-      test.skip(true, 'Page Blocks collection not available - code-based collection required')
-      return
-    }
-
-    // The bug would cause a crash here: "ReferenceError: Cannot access 'options' before initialization"
-    // If we can see the form, the bug is fixed
-
-    // Check if collection was found or if there's an error
-    const collectionNotFound = page.locator('text=Collection not found')
-    if (await collectionNotFound.isVisible({ timeout: 2000 }).catch(() => false)) {
-      test.skip(true, 'Page Blocks collection not synced to database')
-      return
-    }
-
-    // Wait for the form to render - if there's a TDZ error, the page will show an error
-    const form = page.locator('form#content-form')
-
-    // Verify the form is visible (not crashed)
-    await expect(form).toBeVisible({ timeout: 10000 })
+  test('should render content form with object fields without TDZ crash', async ({ page }) => {
+    await openE2eTestForm(page)
 
     // Verify the SEO object field rendered (this would crash with the TDZ bug)
     const seoField = page.locator('[data-structured-object][data-field-name="seo"]')
@@ -95,8 +59,8 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
     const blocksField = page.locator('.blocks-field[data-field-name="body"]')
     await expect(blocksField).toBeVisible()
 
-    // Verify we can interact with the object field subfields
-    const seoTitleInput = seoField.locator('input').first()
+    // Verify we can interact with the object field subfields (skip hidden storage input)
+    const seoTitleInput = seoField.locator('input:not([type="hidden"])').first()
     await expect(seoTitleInput).toBeVisible()
 
     // Verify the add block button is visible (array field rendered correctly)
@@ -109,47 +73,14 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
 
     // Verify hidden inputs for structured fields exist (they store JSON data)
     const seoHiddenInput = seoField.locator('input[type="hidden"][name="seo"]')
-    await expect(seoHiddenInput).toBeVisible()
+    await expect(seoHiddenInput).toHaveCount(1)
 
     const blocksHiddenInput = blocksField.locator('input[type="hidden"][name="body"]')
-    await expect(blocksHiddenInput).toBeVisible()
+    await expect(blocksHiddenInput).toHaveCount(1)
   })
 
   test('should allow adding blocks to array field without errors', async ({ page }) => {
-    await loginAsAdmin(page)
-
-    // Navigate to Page Blocks collection
-    const found = await navigateToPageBlocksCollection(page)
-
-    if (!found) {
-      test.skip(true, 'Page Blocks collection not available')
-      return
-    }
-
-    // Check for collection not found error
-    const collectionNotFound = page.locator('text=Collection not found')
-    if (await collectionNotFound.isVisible({ timeout: 2000 }).catch(() => false)) {
-      test.skip(true, 'Page Blocks collection not synced to database')
-      return
-    }
-
-    // Check if page loaded correctly (no TDZ crash)
-    const form = page.locator('form#content-form')
-    const isFormVisible = await form.isVisible({ timeout: 5000 }).catch(() => false)
-
-    if (!isFormVisible) {
-      // Check for error message that would indicate TDZ bug
-      const pageContent = await page.content()
-      const hasTdzError = pageContent.includes('Cannot access') && pageContent.includes('before initialization')
-
-      if (hasTdzError) {
-        throw new Error('TDZ bug detected: "Cannot access \'options\' before initialization"')
-      }
-
-      // If form not visible but no TDZ error, collection might not exist
-      test.skip(true, 'Page Blocks collection form not available')
-      return
-    }
+    await openE2eTestForm(page)
 
     // Fill required fields
     await page.fill('input[name="title"]', 'Block Test Page')
@@ -157,6 +88,7 @@ test.describe('Dynamic Field TDZ Bug Fix', () => {
 
     // Get the blocks field
     const blocksField = page.locator('.blocks-field[data-field-name="body"]')
+    await expect(blocksField).toBeVisible()
 
     // Select a block type and add it
     await blocksField.locator('[data-role="block-type-select"]').selectOption('text')

@@ -3,6 +3,7 @@
 import fs from 'fs-extra'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { randomBytes } from 'crypto'
 import prompts from 'prompts'
 import kleur from 'kleur'
 import ora from 'ora'
@@ -50,7 +51,9 @@ const flags = {
   databaseName: args.find(arg => arg.startsWith('--database='))?.split('=')[1],
   bucketName: args.find(arg => arg.startsWith('--bucket='))?.split('=')[1],
   skipExample: args.includes('--skip-example'),
-  includeExample: args.includes('--include-example')
+  includeExample: args.includes('--include-example'),
+  adminEmail: args.find(arg => arg.startsWith('--admin-email='))?.split('=')[1],
+  adminPassword: args.find(arg => arg.startsWith('--admin-password='))?.split('=')[1],
 }
 
 async function main() {
@@ -122,8 +125,21 @@ async function main() {
   }
 }
 
+// Better Auth refuses passwords longer than 128 characters at sign-in.
+function validateAdminPassword(value) {
+  if (!value) return 'Admin password is required'
+  if (value.length < 8) return 'Password must be at least 8 characters'
+  if (value.length > 128) return 'Password must be at most 128 characters'
+  return true
+}
+
 async function getProjectDetails(initialName) {
   const questions = []
+
+  if (flags.adminPassword) {
+    const invalid = validateAdminPassword(flags.adminPassword)
+    if (invalid !== true) throw new Error(`--admin-password: ${invalid}`)
+  }
 
   // Project name
   if (!initialName) {
@@ -171,47 +187,34 @@ async function getProjectDetails(initialName) {
     })
   }
 
-  // Seed admin user
-  questions.push({
-    type: 'confirm',
-    name: 'seedAdmin',
-    message: 'Create admin user?',
-    initial: true
-  })
-
-  // Admin email (only if seeding)
-  questions.push({
-    type: (prev, values) => values.seedAdmin ? 'text' : null,
-    name: 'adminEmail',
-    message: 'Admin email:',
-    validate: (value) => {
-      if (!value) return 'Admin email is required'
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(value)) return 'Please enter a valid email address'
-      return true
-    }
-  })
-
-  // Admin password (only if seeding)
-  questions.push({
-    type: (prev, values) => values.seedAdmin ? 'password' : null,
-    name: 'adminPassword',
-    message: 'Admin password:',
-    validate: (value) => {
-      if (!value) return 'Admin password is required'
-      if (value.length < 8) return 'Password must be at least 8 characters'
-      return true
-    }
-  })
-
-  // Include example collection (only ask if neither flag is set)
-  if (!flags.skipExample && !flags.includeExample) {
+  // Seed admin user (skip prompt if credentials provided via flags)
+  if (!flags.adminEmail || !flags.adminPassword) {
     questions.push({
       type: 'confirm',
-      name: 'includeExample',
-      message: 'Include example blog collection?',
+      name: 'seedAdmin',
+      message: 'Create admin user?',
       initial: true
+    })
+
+    // Admin email (only if seeding)
+    questions.push({
+      type: (prev, values) => values.seedAdmin ? 'text' : null,
+      name: 'adminEmail',
+      message: 'Admin email:',
+      validate: (value) => {
+        if (!value) return 'Admin email is required'
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(value)) return 'Please enter a valid email address'
+        return true
+      }
+    })
+
+    // Admin password (only if seeding)
+    questions.push({
+      type: (prev, values) => values.seedAdmin ? 'password' : null,
+      name: 'adminPassword',
+      message: 'Admin password:',
+      validate: validateAdminPassword
     })
   }
 
@@ -246,10 +249,10 @@ async function getProjectDetails(initialName) {
     template: flags.template || 'starter', // Always default to starter template
     databaseName: flags.databaseName || answers.databaseName || `${initialName || answers.projectName}-db`,
     bucketName: flags.bucketName || answers.bucketName || `${initialName || answers.projectName}-media`,
-    seedAdmin: answers.seedAdmin !== undefined ? answers.seedAdmin : true,
-    adminEmail: answers.adminEmail,
-    adminPassword: answers.adminPassword,
-    includeExample: flags.skipExample ? false : (flags.includeExample ? true : (answers.includeExample !== undefined ? answers.includeExample : true)),
+    seedAdmin: (flags.adminEmail && flags.adminPassword) ? true : (answers.seedAdmin !== undefined ? answers.seedAdmin : true),
+    adminEmail: flags.adminEmail || answers.adminEmail,
+    adminPassword: flags.adminPassword || answers.adminPassword,
+    includeExample: true,
     createResources: flags.skipCloudflare ? false : answers.createResources,
     runMigrations: true, // Always run migrations automatically
     initGit: flags.skipGit ? false : answers.initGit,
@@ -294,12 +297,14 @@ async function createProject(answers, flags) {
 
     // 2. Create Cloudflare resources
     let databaseId = 'YOUR_DATABASE_ID'
+    let kvId
     let resourcesCreated = false
     if (createResources) {
       spinner.start('Creating Cloudflare resources...')
       try {
         const result = await createCloudflareResources(databaseName, bucketName, targetDir)
         databaseId = result.databaseId || 'YOUR_DATABASE_ID'
+        kvId = result.kvId
         resourcesCreated = result.success
         if (resourcesCreated) {
           spinner.succeed('Created Cloudflare resources')
@@ -318,7 +323,7 @@ async function createProject(answers, flags) {
 
     // 3. Update wrangler.toml with database ID
     spinner.start('Updating configuration...')
-    await updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName })
+    await updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName, kvId })
     spinner.succeed('Updated configuration')
 
     // 4. Install dependencies
@@ -415,7 +420,7 @@ async function copyTemplate(templateName, targetDir, options) {
 
   // Add @sonicjs-cms/core dependency
   packageJson.dependencies = {
-    '@sonicjs-cms/core': '^2.18.1',
+    '@sonicjs-cms/core': '^3.0.0',
     ...packageJson.dependencies
   }
 
@@ -454,100 +459,88 @@ async function copyTemplate(templateName, targetDir, options) {
       password: options.adminPassword
     })
   }
+
+  // Generate .dev.vars with a random BETTER_AUTH_SECRET for local dev
+  const devVarsPath = path.join(targetDir, '.dev.vars')
+  if (!fs.existsSync(devVarsPath)) {
+    const secret = randomBytes(32).toString('hex')
+    await fs.writeFile(devVarsPath, `BETTER_AUTH_SECRET="${secret}"\n`)
+  }
 }
 
 async function createAdminSeedScript(targetDir, { email, password }) {
-  const seedScriptContent = `import { createDb, users } from '@sonicjs-cms/core'
-import { eq } from 'drizzle-orm'
-import * as crypto from 'crypto'
+  const seedScriptContent = `import { bootstrapDocumentTypes, RbacService } from '@sonicjs-cms/core'
 import { getPlatformProxy } from 'wrangler'
 
 /**
  * Seed script to create initial admin user
- *
- * Run this script after migrations:
- * npm run db:migrate:local
- * npm run seed
  *
  * Admin credentials:
  * Email: ${email}
  * Password: [as entered during setup]
  */
 
+async function hashPassword(password) {
+  const iterations = 100000
+  const salt = new Uint8Array(16)
+  crypto.getRandomValues(salt)
+  const encoder = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const hashBuffer = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, keyMaterial, 256)
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
+  const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+  return \`pbkdf2:\${iterations}:\${saltHex}:\${hashHex}\`
+}
+
 async function seed() {
-  // Get D1 database from Cloudflare environment using wrangler's getPlatformProxy
   const { env, dispose } = await getPlatformProxy()
 
   if (!env?.DB) {
-    console.error('❌ Error: DB binding not found')
-    console.error('')
-    console.error('Make sure you have:')
-    console.error('1. Created your D1 database: wrangler d1 create <database-name>')
-    console.error('2. Updated wrangler.toml with the database_id')
-    console.error('3. Run migrations: npm run db:migrate:local')
-    console.error('')
+    console.error('❌ Error: DB binding not found. Run migrations first: npm run db:migrate:local')
     process.exit(1)
   }
 
-  const db = createDb(env.DB)
-
   try {
     // Check if admin user already exists
-    const existingUser = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, '${email}'))
-      .get()
-
-    if (existingUser) {
+    const existing = await env.DB.prepare('SELECT id FROM auth_user WHERE email = ?').bind('${email}').first()
+    if (existing) {
       console.log('✓ Admin user already exists')
-      console.log(\`  Email: ${email}\`)
-      console.log(\`  Role: \${existingUser.role}\`)
+      await dispose()
       return
     }
 
-    // Hash password using SHA-256 (same as SonicJS auth system)
-    const data = '${password}' + 'salt-change-in-production'
-    const passwordHash = crypto.createHash('sha256').update(data).digest('hex')
-    const now = Date.now()
-    const odid = \`admin-\${now}-\${Math.random().toString(36).substr(2, 9)}\`
+    const passwordHash = await hashPassword('${password}')
+    const nowMs = Date.now()
+    const odid = \`admin-\${nowMs}-\${Math.random().toString(36).substr(2, 9)}\`
 
-    // Create admin user
-    await db
-      .insert(users)
-      .values({
-        id: odid,
-        email: '${email}',
-        username: '${email.split('@')[0]}',
-        firstName: 'Admin',
-        lastName: 'User',
-        passwordHash: passwordHash,
-        role: 'admin',
-        isActive: true,
-        createdAt: now,
-        updatedAt: now
-      })
-      .run()
+    await env.DB.batch([
+      env.DB.prepare(
+        'INSERT INTO auth_user (id, email, first_name, last_name, role, is_active, created_at, updated_at, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(odid, '${email}', 'Admin', 'User', 'admin', 1, nowMs, nowMs, 'Admin User'),
+      env.DB.prepare(
+        'INSERT INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(crypto.randomUUID(), odid, odid, 'credential', passwordHash, nowMs, nowMs),
+    ])
+
+    await bootstrapDocumentTypes(env.DB)
+    const rbac = new RbacService(env.DB)
+    await rbac.ensureSystemRbacSeed()
+    await rbac.addUserRoleByName(odid, 'admin')
 
     console.log('✓ Admin user created successfully')
     console.log(\`  Email: ${email}\`)
     console.log(\`  Role: admin\`)
-    console.log('')
-    console.log('You can now login at: http://localhost:8787/auth/login')
   } catch (error) {
     console.error('❌ Error creating admin user:', error)
     await dispose()
     process.exit(1)
   }
 
-  // Clean up the platform proxy
   await dispose()
 }
 
-// Run seed
 seed()
   .then(() => {
-    console.log('')
     console.log('✓ Seeding complete')
     process.exit(0)
   })
@@ -607,20 +600,30 @@ Or they should be automatically available after installation.
 }
 
 async function createCloudflareResources(databaseName, bucketName, targetDir) {
-  // Check if wrangler is installed
+  // Resolve wrangler binary — prefer global, fall back to npx
+  let wranglerCmd = 'wrangler'
+  let wranglerArgs = []
   try {
     await execa('wrangler', ['--version'], { cwd: targetDir })
   } catch {
-    throw new Error('wrangler is not installed. Install with: npm install -g wrangler')
+    try {
+      await execa('npx', ['--yes', 'wrangler', '--version'], { cwd: targetDir })
+      wranglerCmd = 'npx'
+      wranglerArgs = ['wrangler']
+    } catch {
+      throw new Error('wrangler is not installed. Install with: npm install -g wrangler')
+    }
   }
 
   let databaseId
+  let kvId
   let dbCreated = false
   let bucketCreated = false
+  let kvCreated = false
 
   // Create D1 database
   try {
-    const { stdout, stderr } = await execa('wrangler', ['d1', 'create', databaseName], {
+    const { stdout, stderr } = await execa(wranglerCmd, [...wranglerArgs, 'd1', 'create', databaseName], {
       cwd: targetDir
     })
 
@@ -648,7 +651,7 @@ async function createCloudflareResources(databaseName, bucketName, targetDir) {
 
   // Create R2 bucket
   try {
-    await execa('wrangler', ['r2', 'bucket', 'create', bucketName], {
+    await execa(wranglerCmd, [...wranglerArgs, 'r2', 'bucket', 'create', bucketName], {
       cwd: targetDir
     })
     bucketCreated = true
@@ -664,13 +667,44 @@ async function createCloudflareResources(databaseName, bucketName, targetDir) {
     console.log(kleur.dim(`  wrangler r2 bucket create ${bucketName}`))
   }
 
+  // Create KV namespace (powers the cache plugin + bootstrap fast-path).
+  // Without a bound CACHE_KV, every cold isolate re-runs the full D1 bootstrap
+  // and TTFB balloons to ~10s+ — so this is not optional for a healthy deploy.
+  try {
+    const { stdout } = await execa(wranglerCmd, [...wranglerArgs, 'kv', 'namespace', 'create', 'CACHE_KV'], {
+      cwd: targetDir
+    })
+
+    // Parse namespace id from output (wrangler prints `id = "..."`)
+    const match = stdout.match(/id\s*=\s*["']([^"']+)["']/)
+    if (match) {
+      kvId = match[1]
+      kvCreated = true
+    } else {
+      console.log('')
+      console.log(kleur.yellow('⚠ Warning: Could not parse KV namespace id from wrangler output'))
+      console.log(kleur.dim('  You may need to manually update wrangler.toml'))
+    }
+  } catch (error) {
+    console.log('')
+    console.log(kleur.yellow('⚠ KV namespace creation failed:'))
+    console.log(kleur.dim(`  ${error.message}`))
+    if (error.stderr) {
+      console.log(kleur.dim(`  ${error.stderr}`))
+    }
+    console.log('')
+    console.log(kleur.dim('  Create manually with:'))
+    console.log(kleur.dim('  wrangler kv namespace create CACHE_KV'))
+  }
+
   return {
     databaseId,
-    success: dbCreated && bucketCreated
+    kvId,
+    success: dbCreated && bucketCreated && kvCreated
   }
 }
 
-async function updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName }) {
+async function updateWranglerConfig(targetDir, { databaseName, databaseId, bucketName, kvId }) {
   const wranglerPath = path.join(targetDir, 'wrangler.toml')
   let content = await fs.readFile(wranglerPath, 'utf-8')
 
@@ -682,6 +716,12 @@ async function updateWranglerConfig(targetDir, { databaseName, databaseId, bucke
 
   // Update bucket_name
   content = content.replace(/bucket_name\s*=\s*"[^"]*"/, `bucket_name = "${bucketName}"`)
+
+  // Update CACHE_KV namespace id (only when we actually created one; otherwise
+  // leave the YOUR_KV_NAMESPACE_ID placeholder so the user fills it in manually)
+  if (kvId) {
+    content = content.replace(/id\s*=\s*"YOUR_KV_NAMESPACE_ID"/, `id = "${kvId}"`)
+  }
 
   await fs.writeFile(wranglerPath, content)
 }
@@ -774,49 +814,25 @@ function printSuccessMessage(answers) {
   console.log()
   console.log(kleur.bold().green('🎉 Success!'))
   console.log()
-  console.log(kleur.bold('Next steps:'))
+  console.log(kleur.bold('Get started:'))
   console.log()
   console.log(kleur.cyan(`  cd ${projectName}`))
 
   if (skipInstall) {
     console.log(kleur.cyan('  npm install'))
     console.log()
-    console.log(kleur.yellow('⚠ Important: After npm install, copy migrations:'))
+    console.log(kleur.yellow('⚠ After npm install, copy migrations:'))
     console.log(kleur.dim('  cp -r node_modules/@sonicjs-cms/core/migrations ./'))
   }
 
-  // Show resource creation steps if they weren't created or failed
-  if (!createResources || !resourcesCreated) {
-    console.log()
-    console.log(kleur.bold('Create Cloudflare resources:'))
-    if (!databaseIdSet) {
-      console.log(kleur.cyan(`  wrangler d1 create ${answers.databaseName}`))
-      console.log(kleur.dim('  # Copy database_id to wrangler.toml'))
-    }
-    console.log(kleur.cyan(`  wrangler r2 bucket create ${answers.bucketName}`))
+  if (!migrationsRan) {
+    console.log(kleur.cyan('  npm run db:migrate:local'))
   }
 
-  // Only show migration/seed steps if they weren't completed (shouldn't normally happen)
-  const needsMigrations = !migrationsRan
-  const needsSeeding = seedAdmin && !adminSeeded
-
-  if (needsMigrations || needsSeeding) {
-    console.log()
-    console.log(kleur.bold('Complete setup:'))
-    if (needsMigrations) {
-      console.log(kleur.cyan('  npm run db:migrate:local'))
-    }
-    if (needsSeeding) {
-      console.log(kleur.cyan('  npm run seed'))
-    }
+  if (seedAdmin && !adminSeeded) {
+    console.log(kleur.cyan('  npm run seed'))
   }
 
-  console.log()
-  if (migrationsRan && (!seedAdmin || adminSeeded)) {
-    console.log(kleur.bold().green('✓ Database is ready! Start development:'))
-  } else {
-    console.log(kleur.bold('Start development:'))
-  }
   console.log(kleur.cyan('  npm run dev'))
 
   if (seedAdmin && answers.adminEmail) {
@@ -826,14 +842,23 @@ function printSuccessMessage(answers) {
     console.log(kleur.dim(`  Password: [as entered]`))
   }
 
-  if (migrationsRan && (!seedAdmin || adminSeeded)) {
-    console.log()
-    console.log(kleur.green('✓ Everything is set up! Just run npm run dev and login.'))
-  }
-
   console.log()
   console.log(kleur.bold('Visit:'))
   console.log(kleur.cyan('  http://localhost:8787/admin'))
+
+  console.log()
+  console.log(kleur.bold('Deploy to Cloudflare (when ready):'))
+  console.log(kleur.cyan('  npm run deploy'))
+
+  if (createResources && !resourcesCreated) {
+    console.log()
+    console.log(kleur.yellow('⚠ Some Cloudflare resources were not created automatically.'))
+    console.log(kleur.dim('  Before deploying, fill in the placeholder ids in wrangler.toml:'))
+    console.log(kleur.dim('  - database_id       → wrangler d1 create <db-name>'))
+    console.log(kleur.dim('  - CACHE_KV id       → wrangler kv namespace create CACHE_KV'))
+    console.log(kleur.dim('  The CACHE_KV binding is required for good TTFB — without it every'))
+    console.log(kleur.dim('  cold isolate re-runs the full bootstrap (~10s+ first byte).'))
+  }
 
   console.log()
   console.log(kleur.dim('Need help? Visit https://sonicjs.com'))

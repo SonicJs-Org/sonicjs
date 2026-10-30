@@ -124,10 +124,10 @@ export function createWorkflowAdminRoutes() {
     
     // Get content details
     const content = await c.env.DB.prepare(`
-      SELECT c.*, col.name as collection_name, u.username as author_name
+      SELECT c.*, col.name as collection_name, u.email as author_name
       FROM content c
       JOIN collections col ON c.collection_id = col.id
-      JOIN users u ON c.author_id = u.id
+      JOIN auth_user u ON c.author_id = u.id
       WHERE c.id = ?
     `).bind(contentId).first()
 

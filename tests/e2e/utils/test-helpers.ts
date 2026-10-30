@@ -1,4 +1,171 @@
-import { Page, expect } from '@playwright/test';
+import { APIRequestContext, BrowserContext, Page, expect, test } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Better Auth enforces CSRF by rejecting a missing/null/untrusted Origin (MISSING_OR_NULL_ORIGIN).
+// Playwright's page.request from about:blank sends a null Origin, so every auth API call below must
+// send the server origin explicitly. Matches the baseURL resolution in tests/playwright.config.ts.
+export const TEST_ORIGIN = process.env.BASE_URL || 'http://localhost:8787';
+
+// True when running against a non-localhost deployment (e.g. CI preview).
+// Tenant tests use `wrangler d1 execute --local` which only affects local SQLite,
+// not the remote worker's D1 — skip those tests in remote deployments.
+export const IS_REMOTE_DEPLOYMENT = !TEST_ORIGIN.includes('localhost') && !TEST_ORIGIN.includes('127.0.0.1');
+
+const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../my-sonicjs-app');
+
+/**
+ * Run one SQL statement against the dev server's *local* D1 (the same .wrangler state the
+ * running worker uses). Used by the tenant specs to seed and clean rows the admin UI has no
+ * route for.
+ *
+ * Retries on SQLITE_BUSY: this opens the very SQLite file `wrangler dev` holds open, so a write
+ * that lands while the worker is mid-transaction is refused outright rather than queued. It
+ * surfaced as `Command failed: npx wrangler d1 execute … NOSENTRY database is locked:
+ * SQLITE_BUSY` in whichever tenant test happened to be unlucky, naming nothing about tenancy.
+ *
+ * Shared rather than copy-pasted: six specs had their own one-line version of this, so the
+ * retry had to be added six times or it protected only the file it was written in.
+ */
+export function d1Exec(sql: string) {
+  const ATTEMPTS = 5;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      execFileSync('npx', ['wrangler', 'd1', 'execute', 'DB', '--local',
+        ...(process.env.E2E_PERSIST_DIR ? ['--persist-to', process.env.E2E_PERSIST_DIR] : []),
+        '--command', sql], {
+        cwd: APP_DIR,
+        stdio: 'pipe',
+      });
+      return;
+    } catch (error) {
+      const output = `${(error as { stderr?: Buffer }).stderr ?? ''}${(error as Error).message ?? ''}`;
+      if (attempt === ATTEMPTS || !/SQLITE_BUSY|database is locked/i.test(output)) throw error;
+      // Synchronous on purpose: the callers are sync beforeAll/afterAll hooks.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400 * attempt);
+    }
+  }
+}
+
+/**
+ * Predicate for `page.waitForURL` after a form POST that redirects back with a `?message=`
+ * flash.
+ *
+ * Matching on the message, not just the path, is the whole point: several of these handlers
+ * redirect to the very URL the form was submitted from (`/admin/tenants/new` -> `/admin/tenants`
+ * matches `/\/admin\/tenants/` before the click even dispatches), so a path-only pattern is
+ * already true and `waitForURL` resolves instantly, leaving the assertions below to run against
+ * the pre-submit page. A predicate rather than a regex over the href because the handlers are
+ * inconsistent about percent-encoding the message, and `searchParams` decodes either form.
+ */
+export const flashedTo =
+  (pathname: string | RegExp, expected: string | RegExp) =>
+  (url: URL): boolean => {
+    const pathOk =
+      typeof pathname === 'string' ? url.pathname === pathname : pathname.test(url.pathname)
+    if (!pathOk) return false
+    const message = url.searchParams.get('message') ?? ''
+    return typeof expected === 'string' ? message.includes(expected) : expected.test(message)
+  }
+
+/**
+ * Click something that submits a native form, and wait for the document the server redirects to.
+ *
+ * `page.waitForLoadState('networkidle')` straight after the click is not that wait: it reports
+ * on the page you are still on, so it can resolve before the navigation has even committed and
+ * leave the assertions below reading the pre-submit DOM. For a "did this persist?" test that DOM
+ * still holds the value the test itself typed, so it passes whether or not anything was written.
+ */
+export async function submitAndWaitForDocument(
+  page: Page,
+  pathname: string | RegExp,
+  click: () => Promise<void>
+): Promise<void> {
+  const matches = (p: string) => (typeof pathname === 'string' ? p === pathname : pathname.test(p))
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().resourceType() === 'document' &&
+        r.request().method() === 'GET' &&
+        matches(new URL(r.url()).pathname)
+    ),
+    click(),
+  ])
+  expect(response.ok(), `Document ${response.url()} failed: ${response.status()}`).toBeTruthy()
+  const error = await response.finished()
+  if (error) throw error
+  await page.waitForLoadState('domcontentloaded')
+}
+
+/**
+ * Save a form htmx submits with a verb an HTML form cannot send (PUT/DELETE), and wait for the
+ * response instead of for `networkidle`.
+ *
+ * `waitForLoadState('networkidle')` can resolve before htmx has even issued the XHR — the page
+ * is quiet at that instant precisely because the request has not started. The next `page.goto`
+ * then cancels the in-flight save, the write silently never lands, and the failure surfaces
+ * several steps later as an unrelated-looking assertion.
+ */
+export async function submitAndWaitForXhr(
+  page: Page,
+  method: string,
+  urlPart: string,
+  click: () => Promise<void>
+): Promise<void> {
+  // Match pathname exactly: /one must not accept /one-other or a query containing /one.
+  const endpoint = new URL(urlPart, page.url())
+  const [res] = await Promise.all([
+    page.waitForResponse((r) => {
+      const actual = new URL(r.url())
+      return r.request().method() === method.toUpperCase() &&
+        actual.origin === endpoint.origin && actual.pathname === endpoint.pathname &&
+        (!endpoint.search || actual.search === endpoint.search)
+    }),
+    click(),
+  ])
+  expect(res.ok(), `${method} ${urlPart} failed: ${res.status()}`).toBeTruthy()
+  const error = await res.finished()
+  if (error) throw error
+  // HTTP completion is not DOM readiness. Callers must assert the resulting swap/redirect
+  // before navigating away; never substitute networkidle or replay the click here.
+}
+
+/**
+ * Save the open `/admin/content/new` form and return the created record's edit path.
+ *
+ * The create answers the htmx POST with `HX-Redirect: /admin/content/<rootId>/edit`, and that
+ * header is its only success signal: both failure paths in the handler answer the same POST with
+ * HTML — the error banner at 200 and "Collection is not document-backed" at 400 — so neither
+ * `res.ok()` nor the eventual URL distinguishes a failed create from a slow one.
+ *
+ * `page.waitForURL(/\/edit/)` on its own spends the whole budget blind. It cannot tell "the save
+ * is still in flight" from "the save came back with a validation error and htmx is never going to
+ * navigate", and it reports both as a navigation timeout pointing at fixtures.ts. Three specs
+ * flaked or failed that way in CI run 39582792718. Read the header first, then wait for the
+ * navigation htmx is about to make.
+ */
+export async function saveNewContent(page: Page, click: () => Promise<void>): Promise<string> {
+  const [res] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/admin/content'
+    ),
+    click(),
+  ])
+
+  const redirect = res.headers()['hx-redirect']
+  const editPath = redirect ? new URL(redirect, page.url()).pathname : ''
+  if (!/^\/admin\/content\/[^/]+\/edit$/.test(editPath)) {
+    throw new Error(
+      `Content create did not redirect to an edit form (HTTP ${res.status()}, HX-Redirect ` +
+        `${redirect || 'absent'}): ${(await res.text()).slice(0, 300)}`
+    )
+  }
+
+  // htmx sets location *after* the response, so the URL is still /admin/content/new at this point.
+  await page.waitForURL((url) => url.pathname === editPath, { timeout: 15000 })
+  return editPath
+}
 
 // Default admin credentials for testing
 export const ADMIN_CREDENTIALS = {
@@ -50,13 +217,86 @@ export async function getCsrfTokenFromPage(page: Page): Promise<string> {
 
 /**
  * Ensure admin user exists (for testing)
+ *
+ * `/auth/seed-admin` is rate limited to 10 requests per minute and this runs from the beforeEach
+ * of ~36 specs, so seeding on every test spent the window and the endpoint answered 429 to
+ * whoever asked next — including `114-seed-admin-env-gate`, which asserts on the seeder's own
+ * response. That was first fixed with a 30s TTL, which is still ~40 windows per worker over an
+ * E2E phase: ~160 requests across four workers.
+ *
+ * None of them do anything. The seed is idempotent, the preview D1 is created fresh for the run,
+ * and nothing in the suite mutates `admin@sonicjs.com` — `115-admin-set-password` creates its own
+ * user, and the 2FA specs leave state the seeder does not touch either (hence the explicit
+ * two-factor error in `signInAsAdmin`). So a re-seed restores nothing that was lost.
+ *
+ * It is not free, either. `upsertSeedUser` calls `AuthManager.hashPassword` *before* it checks
+ * whether the user exists, and runs twice per request (admin + editor), so every one of those
+ * requests is two scrypt hashes plus `bootstrapDocumentTypes` and `ensureSystemRbacSeed`. Hashing
+ * serializes in the isolate — the same cost that put 120s hangs in `loginAsAdmin`'s beforeEach
+ * and is why sign-in is now cached per worker.
+ *
+ * So: latch on success, once per worker.
+ *
+ * On *success* specifically — `request.post()` resolves for a 429 and a 500 just as it does for a
+ * 200, because Playwright only rejects on a transport error. Latching in `.then()` therefore
+ * latched failures too: the first worker to be told "rate limited, another worker is seeding" or
+ * to hit a cold-isolate 500 would mark itself seeded and never ask again, and if every worker's
+ * first attempt landed that way nobody would seed at all while all four believed somebody had.
+ * `res.ok()` is the only thing that means the handler ran.
+ *
+ * Global setup seeds once and marks E2E_ADMIN_SEEDED for the workers. Direct callers without
+ * that setup seed once per process, failing immediately on HTTP or transport errors.
+ * Mutations are not automatically replayed after ambiguous failures.
  */
-export async function ensureAdminUserExists(page: Page) {
-  try {
-    await page.request.post('/auth/seed-admin');
-  } catch (error) {
-    // Admin might already exist, ignore errors
+let seeded = process.env.E2E_ADMIN_SEEDED === '1';
+let seedInFlight: Promise<void> | null = null;
+
+type SeedClient = {
+  post: (url: string, options?: any) => Promise<{ ok: () => boolean; status: () => number }>;
+};
+
+async function seedAdminOnce(client: SeedClient) {
+  if (seeded) return;
+  if (!seedInFlight) {
+    seedInFlight = (async () => {
+      const res = await client.post('/auth/seed-admin');
+      if (!res.ok()) throw new Error(`Admin seed failed: HTTP ${res.status()}`);
+      seeded = true;
+    })().finally(() => { seedInFlight = null; });
   }
+  await seedInFlight;
+}
+
+export async function ensureAdminUserExists(page: Page) {
+  await seedAdminOnce(page.request);
+}
+
+/**
+ * POST /auth/seed-admin until a request actually reaches the handler.
+ *
+ * The route is rate-limited to 10 requests per minute per IP
+ * (`rateLimit({ max: 10, windowMs: 60_000, keyPrefix: 'seed-admin' })` in routes/auth.ts), so in
+ * a full-suite run the window can already be spent by the time a test that asserts on the
+ * seeder's own response gets a turn. A 429 is the limiter answering, not the seeder, and
+ * asserting on whichever request happened to land first tests the wrong thing.
+ *
+ * Polled rather than slept out via `Retry-After`: the window is fixed, so its slots free up in a
+ * burst the instant it rolls.
+ *
+ * Callers need `test.setTimeout(150_000)` — the default 60s test timeout is shorter than the
+ * limiter's own 60s window, so a test that starts on an exhausted window cannot outlast it.
+ */
+export async function seedAdminPastRateLimit(
+  request: import('@playwright/test').APIRequestContext
+): Promise<import('@playwright/test').APIResponse> {
+  const deadline = Date.now() + 90_000;
+  let res = await request.post('/auth/seed-admin');
+  while (res.status() === 429 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    res = await request.post('/auth/seed-admin');
+  }
+  if (res.ok()) seeded = true;
+  return res;
 }
 
 /**
@@ -74,8 +314,8 @@ export async function ensureWorkflowTablesExist(page: Page) {
       }
     });
 
-    // Only log non-404/401 errors (404/401 means endpoint doesn't exist or auth failed, which is expected in some cases)
-    if (response.status() !== 404 && response.status() !== 401) {
+    // 409 means migrations are intentionally managed by Wrangler/D1.
+    if (response.status() !== 404 && response.status() !== 401 && response.status() !== 409) {
       console.log('Migration response status:', response.status());
     }
   } catch (error) {
@@ -132,6 +372,55 @@ export async function ensureWorkflowPluginActive(page: Page) {
     console.log('Could not ensure workflow plugin is active:', error);
   }
   */
+}
+
+/**
+ * Install + activate a plugin so its admin menu entry is rendered.
+ *
+ * Only `core-auth`, `core-media` and `lexical-editor` are bootstrapped on a greenfield install
+ * (`PluginBootstrapService.BOOTSTRAP_PLUGIN_IDS`), and `reconcileMenuFromPlugins` hides the
+ * `menu_item` row of every plugin that is not active. So a spec that asserts on a plugin's
+ * sidebar link has to put the plugin in that state itself rather than inheriting it from a
+ * long-lived dev database.
+ *
+ * Caller must already be logged in as admin — `page.request` shares the page's cookie jar.
+ */
+export async function ensurePluginActive(page: Page, pluginId: string): Promise<boolean> {
+  return setPluginStatus(page, pluginId, 'active')
+}
+
+/**
+ * Install a plugin, then leave it in the requested status.
+ *
+ * Counterpart of {@link ensurePluginActive} — `'inactive'` is what a spec needs when it
+ * asserts on the "Inactive" status filter, whose checkbox renders `disabled` while the
+ * count for that status is zero.
+ */
+export async function setPluginStatus(
+  page: Page,
+  pluginId: string,
+  status: 'active' | 'inactive'
+): Promise<boolean> {
+  try {
+    // Install first. This 200s on a fresh install and on a re-install; a non-ok response
+    // only means the plugin isn't in the registry, in which case the status call below
+    // fails too and the helper reports false.
+    await page.request.post('/admin/plugins/install', {
+      data: { name: pluginId, id: pluginId },
+      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+    })
+
+    // Always run the status call even when the row already existed — it is also what
+    // refreshes the plugin's `menu_item` visibility via reconcileMenuFromPlugins().
+    const action = status === 'active' ? 'activate' : 'deactivate'
+    const res = await page.request.post(
+      `/admin/plugins/${encodeURIComponent(pluginId)}/${action}`,
+      { headers: { Origin: TEST_ORIGIN } }
+    )
+    return res.ok()
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -316,97 +605,309 @@ export async function createTestContent(page: Page, contentData?: {
 /**
  * Ensure test collection exists
  */
-export async function ensureTestCollectionExists(page: Page) {
+export async function ensureTestCollectionExists(_page: Page) {
+  // Collections are code-only now (no DB table, no creation UI — see drop-db-collections plan).
+  // The seeded `blog_post` collection always exists, so there is nothing to create. This is a no-op;
+  // the old version drove /admin/collections/new (which is now instructional), hanging for ~60s
+  // and timing out every caller (createTestContent → 05/11/12/42 cascades).
+  return;
+}
+
+/**
+ * Fill and submit the /auth/login form, waiting out a rate-limit rejection instead of failing on it.
+ *
+ * `/auth/login/form` is capped at 30 requests per minute per IP and the whole suite is one IP —
+ * on a workers.dev preview `cf-connecting-ip` is the single CI runner, and on a local dev server
+ * there is no IP header at all so every worker shares the `unknown` bucket. Four workers running
+ * specs that each sign a throwaway user in blow that bucket in a burst. The 429 comes back to an
+ * htmx post, which does not swap non-2xx responses, so the page simply does not move and the test
+ * reports a bare `waitForURL` timeout with nothing on screen to explain it.
+ *
+ * The limit itself is correct — brute-force protection should not be weakened to suit a test
+ * suite — so this waits for the window to roll and submits again. The wait is not the test's own
+ * work, so its budget is extended by however long it queued.
+ */
+/**
+ * Hand back time spent queueing behind someone else's rate-limit window.
+ *
+ * Waiting for a bucket to drain is not the test's own work, so it should not come out of the
+ * test's budget. No-op when there is no running test: `test.info()` throws inside a `beforeAll`
+ * hook, which is one of the places the callers below run from.
+ */
+function extendCurrentTimeout(ms: number) {
   try {
-    // First check if collection already exists
-    await page.goto('/admin/collections');
-    
-    const collectionExists = await page.locator('td').filter({ hasText: TEST_DATA.collection.name }).first().isVisible({ timeout: 2000 });
-    
-    if (!collectionExists) {
-      await createTestCollection(page);
-    }
-  } catch (error) {
-    // Try to create collection anyway
-    try {
-      await createTestCollection(page);
-    } catch (createError) {
-      console.log('Failed to create test collection:', createError);
-    }
+    const info = test.info();
+    info.setTimeout(info.timeout + ms);
+  } catch {
+    // beforeAll/afterAll — the hook's budget is the test timeout and cannot be extended here.
   }
 }
 
 /**
- * Login as admin user
+ * POST /auth/login and return the bearer token, waiting out a rate-limit rejection.
+ *
+ * `/auth/login` is capped at 30 requests per minute per IP and the whole suite is one IP: on a
+ * workers.dev preview `cf-connecting-ip` is the single CI runner, and against a local dev server
+ * there is no IP header at all so every worker shares the `unknown` bucket. 02b-authentication-api
+ * deliberately empties that bucket to prove the limiter works.
+ *
+ * The `@lock-auth-login` tag keeps those tests from overlapping, but it is a *test-scoped* fixture
+ * and a `beforeAll` hook runs before any test's fixtures are set up — so hooks are not covered by
+ * it. That is exactly where 16-user-management's admin login came back 429, leaving `authToken`
+ * undefined and every test in the file failing on a DELETE that was never authorised.
+ *
+ * The limit itself is correct — brute-force protection should not be weakened to suit a test
+ * suite — so wait for the window to roll and ask again.
  */
-export async function loginAsAdmin(page: Page) {
-  // Ensure admin user exists first
+export async function requestLoginToken(
+  request: APIRequestContext,
+  credentials: { email: string; password: string } = ADMIN_CREDENTIALS
+): Promise<string> {
+  const MAX_ATTEMPTS = 3;
+  /** The window is 60s wide, so no legitimate Retry-After exceeds it. */
+  const MAX_BACKOFF_MS = 65_000;
+
+  let res = await request.post('/auth/login', { data: credentials });
+  for (let attempt = 1; res.status() === 429 && attempt < MAX_ATTEMPTS; attempt++) {
+    const retryAfter = Number(res.headers()['retry-after'] ?? '60');
+    const backoff = Math.min(Number.isFinite(retryAfter) ? retryAfter * 1000 : 60_000, MAX_BACKOFF_MS);
+    extendCurrentTimeout(backoff + 10_000);
+    await new Promise((resolve) => setTimeout(resolve, backoff + 500));
+    res = await request.post('/auth/login', { data: credentials });
+  }
+
+  expect(res.status(), `/auth/login failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+  expect(typeof body.token, '/auth/login returned 200 without a token').toBe('string');
+  return body.token as string;
+}
+
+export async function submitLoginForm(
+  page: Page,
+  email: string,
+  password: string,
+  expectUrl: RegExp = /\/admin/,
+  timeout = 20000
+) {
+  const MAX_ATTEMPTS = 3
+  /** The window is 60s wide, so no legitimate Retry-After exceeds it. */
+  const MAX_BACKOFF_MS = 65_000
+
+  for (let attempt = 1; ; attempt++) {
+    await page.fill('input[name="email"]', email)
+    await page.fill('input[name="password"]', password)
+
+    const posted = page.waitForResponse(
+      (r) => r.url().includes('/auth/login/form') && r.request().method() === 'POST',
+      { timeout }
+    )
+    await page.click('button[type="submit"]')
+    const res = await posted
+
+    if (res.status() !== 429 || attempt === MAX_ATTEMPTS) break
+
+    const retryAfter = Number(res.headers()['retry-after'] ?? '60')
+    const backoff = Math.min(Number.isFinite(retryAfter) ? retryAfter * 1000 : 60_000, MAX_BACKOFF_MS)
+    extendCurrentTimeout(backoff + 10_000)
+    await page.waitForTimeout(backoff + 500)
+    await page.reload({ waitUntil: 'domcontentloaded' })
+  }
+
+  await page.waitForURL(expectUrl, { timeout, waitUntil: 'domcontentloaded' })
+}
+
+/**
+ * Login as admin user.
+ *
+ * `landOn` picks the page the browser is left on. The default `/admin` is the dashboard, which
+ * fans out into four htmx fragments and is the single most expensive page in the app to render
+ * cold. A spec whose first act is to navigate somewhere else pays that for nothing — and four
+ * parallel workers all cold-starting the dashboard at once is what pushed the media specs past
+ * their 90s budget. Pass the page the spec actually wants, or `false` to stay put (the session
+ * cookie is already in the context either way, since sign-in goes through `page.request`).
+ */
+/**
+ * The admin session this worker process has already paid for.
+ *
+ * Measured against the app: `POST /auth/sign-in/email` is 42ms on its own, but eight concurrent
+ * sign-ins each take 315ms and all finish together at ~8x40ms — the password verification
+ * serializes in the isolate rather than overlapping. Every test in the suite signed in from
+ * scratch, so a CI run was ~530 serialized hashes from four workers against one preview isolate,
+ * and that is what the 120s hangs were: `beforeEach` queued behind other workers' scrypt. The
+ * hangs showed up on `apiRequestContext.post` as often as on `page.goto`, with no browser in the
+ * loop, which is what ruled out the renderer and pointed here.
+ *
+ * `GET /auth/get-session` with an existing cookie is 4ms and does no hashing, so it does not
+ * serialize. Sign in once per worker; re-validate with that instead.
+ */
+type SessionCookies = Awaited<ReturnType<BrowserContext['cookies']>>
+let cachedSessionCookies: SessionCookies | null = null
+
+/** The email the cookie jar currently authenticates as, lowercased, or null if nobody. */
+async function signedInAs(page: Page): Promise<string | null> {
+  const res = await page.request.get('/auth/get-session', { headers: { Origin: TEST_ORIGIN } })
+  if (res.status() === 401) return null
+  if (!res.ok()) throw new Error(`Admin session check failed: HTTP ${res.status()}`)
+  const body = await res.json() as { user?: { email?: string } } | null
+  return body?.user?.email?.toLowerCase() ?? null
+}
+
+/**
+ * Install the cached session into this test's context and prove it is live *and the admin's*.
+ *
+ * Validated with a request, not with "did a navigation land on /auth/login": `loginAsAdmin(page,
+ * false)` callers never navigate, so a revoked session would otherwise go unnoticed until some
+ * later step failed for an unrelated-looking reason. Specs that sign out, reset a password or
+ * enrol a second factor on the shared admin all revoke the session — this is the path that
+ * notices and falls back to a real sign-in.
+ *
+ * Checking the identity, not just that `user` is present, is the whole point. `loginAsAdmin` is
+ * not only called from a `beforeEach` with a fresh context: specs sign in as somebody else first
+ * and then call it to get back to being admin. `108-two-factor-api-enforcement` does exactly
+ * that — `createEnrolledUser` signs in as a throwaway user and enrols them, then `resetAsAdmin`
+ * calls `loginAsAdmin`. That user's `better-auth.session_token` is still in the jar, it is live,
+ * and it has a `user`, so a presence-only check reports success and the real sign-in is skipped.
+ * The page then stays authenticated as the wrong person, `/admin` redirects away from itself,
+ * and `loginAsAdmin`'s `waitForURL(/\/admin/)` times out at 20s on both attempts. That was three
+ * hard failures in CI run 39587538658, plus the RBAC and auth specs that do the same thing.
+ *
+ * When the jar holds a foreign session, clear it and retry with only the cached cookies before
+ * giving up — the admin session is usually still perfectly good, just shadowed. Cookies are
+ * cleared only on that path, so the ordinary `beforeEach` case still touches nothing.
+ */
+async function reuseCachedSession(page: Page): Promise<boolean> {
+  if (!cachedSessionCookies) return false
+
+  const adminEmail = ADMIN_CREDENTIALS.email.toLowerCase()
+
+  await page.context().addCookies(cachedSessionCookies)
+  if ((await signedInAs(page)) === adminEmail) return true
+
+  // Either nobody is signed in, or somebody else's cookie won. Drop everything and re-seat only
+  // the cached admin cookies — `addCookies` does not reliably displace a same-named cookie that
+  // another sign-in set with a different path or domain.
+  await page.context().clearCookies()
+  await page.context().addCookies(cachedSessionCookies)
+  if ((await signedInAs(page)) === adminEmail) return true
+
+  // The cached session itself is dead (signed out, password changed, second factor enrolled).
+  cachedSessionCookies = null
+  await page.context().clearCookies()
+  return false
+}
+
+export async function loginAsAdmin(page: Page, landOn: string | false = '/admin') {
+  if (!(await reuseCachedSession(page))) {
+    await signInAsAdmin(page);
+  }
+
+  // Navigate to admin (session cookie is now in context).
+  //
+  // `domcontentloaded`, not the default `load`: this runs in almost every spec's beforeEach, and
+  // /admin is the heaviest page in the app (metrics + recent activity + migrations status all
+  // polling). Waiting for it to go quiet can eat most of the 60s test budget before the test
+  // body starts. Nothing here needs subresources — the caller's own assertions auto-wait.
+  if (landOn !== false) {
+    await page.goto(landOn, { waitUntil: 'domcontentloaded' });
+    await page.waitForURL(/\/admin/, { timeout: 20000, waitUntil: 'domcontentloaded' });
+  }
+
+  // No `ensureWorkflowTablesExist` / `ensureWorkflowPluginActive` here. The first POSTs
+  // /admin/api/migrations/run, which on D1 always answers 409 ("Migrations are managed by
+  // Cloudflare D1") — a guaranteed-useless round trip in the beforeEach of nearly every spec. The
+  // second has been a bare `return` since the workflow plugin stopped shipping. The three specs
+  // that actually care (15-plugins, 28-plugin-filters-search, 39-ai-search-plugin) call
+  // ensureWorkflowTablesExist themselves.
+}
+
+/** The real sign-in: seed, hash a password, keep the cookies it issued. */
+async function signInAsAdmin(page: Page) {
+  // Ensure admin exists (also creates auth_account for Better Auth)
   await ensureAdminUserExists(page);
-  
-  await page.goto('/auth/login');
-  await page.fill('[name="email"]', ADMIN_CREDENTIALS.email);
-  await page.fill('[name="password"]', ADMIN_CREDENTIALS.password);
-  await page.click('button[type="submit"]');
-  
-  // Wait for HTMX response and success message with longer timeout for CI
-  // CI environments can be slow, especially with Workers cold starts
-  try {
-    await expect(page.locator('#form-response .bg-green-100')).toBeVisible({ timeout: 10000 });
-  } catch (error) {
-    // If success message doesn't appear, check if we're already redirected to admin
-    const currentUrl = page.url();
-    if (currentUrl.includes('/admin')) {
-      console.log('Login succeeded (already on admin page despite missing success message)');
-    } else {
-      // Try one more time - sometimes Workers need a moment
-      console.log('Retrying login form submission...');
-      await page.click('button[type="submit"]');
-      await expect(page.locator('#form-response .bg-green-100')).toBeVisible({ timeout: 10000 });
+
+  // One attempt: sign-in creates a session, so a timeout must not be blindly replayed.
+  const res = await page.request.post('/auth/sign-in/email', {
+    data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+    headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+  });
+
+  if (!res.ok()) {
+    throw new Error(`BA sign-in failed: ${res.status()} ${await res.text()}`);
+  }
+
+  // A pending second factor is HTTP **200** with `{twoFactorRedirect:true}` and NO session, so
+  // `res.ok()` above does not catch it. Without this check the failure surfaces as a 20-second
+  // waitForURL timeout in whatever spec happens to run next — which is what a 2FA spec that died
+  // before its cleanup would leave behind on the shared admin account.
+  const body = (await res.json().catch(() => null)) as { twoFactorRedirect?: boolean } | null;
+  if (body?.twoFactorRedirect === true) {
+    throw new Error(
+      'BA sign-in returned a two-factor challenge for the shared admin account: no session was ' +
+        'issued. A 2FA spec probably failed before disabling it — clear auth_two_factor for ' +
+        `${ADMIN_CREDENTIALS.email} and reset auth_user.two_factor_enabled to 0.`
+    );
+  }
+
+  // Keep only what the sign-in issued. `context.cookies()` also holds `csrf_token`, which the
+  // app rotates per request and `getCsrfTokenFromPage` reads straight back out of the jar —
+  // replaying a stale one into 700 later contexts is a risk the session token does not carry.
+  // Confirm the jar actually authenticates as the admin before caching it for the rest of the
+  // worker. A spec that signed in as somebody else first can leave their own `better-auth.*`
+  // cookie behind on a different path, and caching that would poison every later test in the
+  // process — the same failure as reusing a foreign session, but persistent instead of per-test.
+  //
+  // Self-healing rather than fatal: on a worker's first call `reuseCachedSession` returns before
+  // it clears anything, so a foreign cookie can still be present here. Clearing and signing in
+  // again on a clean jar settles it.
+  if ((await signedInAs(page)) !== ADMIN_CREDENTIALS.email.toLowerCase()) {
+    await page.context().clearCookies();
+    const retry = await page.request.post('/auth/sign-in/email', {
+      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+      timeout: 45_000,
+    });
+    if (!retry.ok()) {
+      throw new Error(`BA sign-in failed on a cleared jar: ${retry.status()} ${await retry.text()}`);
+    }
+    if ((await signedInAs(page)) !== ADMIN_CREDENTIALS.email.toLowerCase()) {
+      cachedSessionCookies = null;
+      throw new Error(
+        'Signed in as the admin but /auth/get-session reports somebody else, on a jar that was ' +
+          'just cleared. The shared admin account is in an unexpected state.'
+      );
     }
   }
 
-  // Wait for JavaScript redirect to admin dashboard (up to 20 seconds for CI)
-  // The app redirects /admin to /admin/dashboard, so we accept any /admin/* URL
-  try {
-    await page.waitForURL(/\/admin/, { timeout: 20000 });
-    await page.waitForLoadState('networkidle', { timeout: 15000 });
-  } catch (error) {
-    // If redirect doesn't happen automatically, try navigating manually
-    console.log('Auto-redirect failed, navigating manually to /admin');
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle', { timeout: 15000 });
-  }
+  // Match the name anywhere, not as a prefix. Better Auth adds the `__Secure-` cookie prefix when
+  // it is serving over HTTPS, so the session cookie is `better-auth.session_token` against a local
+  // wrangler but `__Secure-better-auth.session_token` against the CI preview deployment. A
+  // `startsWith` filter therefore captured the real cookies locally and an EMPTY array in CI — the
+  // cache silently did nothing in the only environment it was written for, and cost two extra
+  // /auth/get-session round trips per test on top of the sign-in it failed to avoid.
+  const all = await page.context().cookies();
+  const session = all.filter((c) => c.name.includes('better-auth.'));
 
-  // Simply verify we're on an admin page - accept /admin or /admin/*
-  // The app redirects /admin -> /admin/dashboard
-  await expect(page).toHaveURL(/\/admin/);
+  // An empty list is not a cache. Leaving it null makes the next call sign in directly rather than
+  // walk `reuseCachedSession`'s clear-and-recheck path to discover the same thing again.
+  cachedSessionCookies = session.length > 0 ? session : null;
+}
 
-  // Ensure workflow tables exist for workflow tests (after login)
-  await ensureWorkflowTablesExist(page);
-
-  // Ensure workflow plugin is active for workflow-related tests
-  await ensureWorkflowPluginActive(page);
-
-  // Navigate back to admin dashboard after plugin setup
-  await page.goto('/admin');
-  await page.waitForLoadState('networkidle', { timeout: 15000 });
-
-  // Auto-attach CSRF token to all state-changing page.request calls
-  const csrfToken = await getCsrfTokenFromPage(page);
-  if (csrfToken) {
-    const addCsrf = (opts?: any) => ({
-      ...opts,
-      headers: { ...(opts?.headers || {}), 'X-CSRF-Token': csrfToken }
-    });
-    const origPost = page.request.post.bind(page.request);
-    const origPut = page.request.put.bind(page.request);
-    const origDelete = page.request.delete.bind(page.request);
-    const origPatch = page.request.patch.bind(page.request);
-    (page.request as any).post = (url: string, opts?: any) => origPost(url, addCsrf(opts));
-    (page.request as any).put = (url: string, opts?: any) => origPut(url, addCsrf(opts));
-    (page.request as any).delete = (url: string, opts?: any) => origDelete(url, addCsrf(opts));
-    (page.request as any).patch = (url: string, opts?: any) => origPatch(url, addCsrf(opts));
-  }
+/**
+ * Open the media library and wait for its grid.
+ *
+ * Use this instead of `page.goto('/admin/media')`. `goto` defaults to `waitUntil: 'load'`, which
+ * holds until every thumbnail in the grid has answered. Thumbnails are served by the worker out
+ * of R2 and workers.dev previews get no edge cache, so each is a ~0.8s round trip: a default
+ * `goto` here measured 12.6s against a preview where the HTML alone took 2.2s. Three media specs
+ * were blowing their 90s budget on that wait alone once four workers competed for the isolate.
+ *
+ * `#media-grid` is server-rendered in the page body — it holds either the grid or the empty
+ * state — so it is present the moment the document parses. Nothing is being raced here; the wait
+ * is a guard that we landed on the library and not a redirect to the login page.
+ */
+export async function gotoMediaLibrary(page: Page, url = '/admin/media') {
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.locator('#media-grid').waitFor({ state: 'attached', timeout: 20000 });
 }
 
 /**
@@ -415,8 +916,8 @@ export async function loginAsAdmin(page: Page) {
 export async function navigateToAdminSection(page: Page, section: 'collections' | 'content' | 'media' | 'users' | 'forms' | 'plugins') {
   // Navigate directly instead of clicking navigation links
   // This is more reliable as admin navigation may vary
-  await page.goto(`/admin/${section}`);
-  await page.waitForLoadState('networkidle');
+  await page.goto(`/admin/${section}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForURL(/\/admin/, { timeout: 20000, waitUntil: 'domcontentloaded' });
 }
 
 /**
@@ -517,23 +1018,35 @@ export async function uploadTestFile(page: Page, fileName: string = 'test-image.
     buffer: testImageBuffer
   });
   
-  await page.click('button[type="submit"]');
-  
-  // Wait for upload completion
+  // Same as the spec-level upload sites: #upload-results is rendered from the POST response,
+  // so the default assertion budget would be standing in for an R2 write. Await the response.
+  await submitAndWaitForXhr(page, 'POST', '/admin/media/upload', () =>
+    page.click('button[type="submit"]')
+  );
+
   await expect(page.locator('#upload-results')).toContainText('successful');
 }
 
 /**
- * Wait for HTMX request to complete
+ * Wait for any in-flight HTMX request to finish.
+ *
+ * htmx puts the `htmx-request` class on the element issuing the request (and on any
+ * `hx-indicator`) for exactly the lifetime of that request, so that class is the signal. The
+ * version this replaces waited on `networkidle` for 5s and then, on timeout, slept another
+ * second — and admin pages poll metrics, recent activity and migration status, so they do not go
+ * idle and every one of the 19 call sites paid the full 6s whether or not anything was pending.
+ *
+ * Returns within a frame when nothing is in flight, which is the common case: a request that has
+ * not been issued yet marks nothing, and every caller follows this with an auto-waiting
+ * assertion (`toHaveURL`, `toBeVisible`, `toContainText`) that does the real waiting. Kept
+ * best-effort — the timeout is swallowed, as it was before, because the caller's assertion is
+ * what should report a swap that never happened, and a click that navigates tears down the
+ * execution context under `waitForFunction`.
  */
 export async function waitForHTMX(page: Page) {
-  try {
-    // Wait for any ongoing network requests to complete
-    await page.waitForLoadState('networkidle', { timeout: 5000 });
-  } catch {
-    // If network idle times out, just wait a bit for HTMX
-    await page.waitForTimeout(1000);
-  }
+  await page
+    .waitForFunction(() => !document.querySelector('.htmx-request'), null, { timeout: 5000 })
+    .catch(() => {});
 }
 
 /**
@@ -541,11 +1054,14 @@ export async function waitForHTMX(page: Page) {
  */
 export async function isAuthenticated(page: Page): Promise<boolean> {
   try {
-    const cookies = await page.context().cookies();
-    const authCookie = cookies.find(c => c.name === 'auth_token');
-    return !!authCookie;
+    // Check server-side session rather than local cookies — more reliable across
+    // cookie attribute differences (HttpOnly, Secure, SameSite) in CI vs local.
+    const res = await page.request.get('/auth/get-session')
+    if (!res.ok()) return false
+    const body = await res.json().catch(() => null)
+    return !!(body?.user)
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -553,7 +1069,9 @@ export async function isAuthenticated(page: Page): Promise<boolean> {
  * Logout current user
  */
 export async function logout(page: Page) {
-  await page.goto('/auth/logout');
+  // Better Auth sign-out via API — must send JSON body {}
+  await page.request.post('/auth/sign-out', { data: {}, headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN } });
+  await page.goto('/auth/login');
   await page.waitForURL(/\/auth\/login/);
   // Wait a moment for cookies to be cleared
   await page.waitForTimeout(500);
@@ -600,12 +1118,45 @@ export async function clearTestData(page: Page) {
 
 /**
  * Clean up test users (but preserve admin)
+ *
+ * `testCleanupRoutes` is mounted at the ROOT in app.ts, so the path is `/test-cleanup/users` —
+ * this previously posted to `/admin/api/test-cleanup/users`, which has never existed, so the
+ * request 404'd and the swallowed-error `catch` made it look like a successful sweep.
  */
 export async function cleanupTestUsers(page: Page) {
   try {
-    await page.request.post('/admin/api/test-cleanup/users');
+    const res = await page.request.post('/test-cleanup/users');
+    if (!res.ok()) console.log(`User cleanup returned ${res.status()}`);
   } catch (error) {
     console.log('User cleanup failed:', error);
+  }
+}
+
+/**
+ * Returns a beforeAll/beforeEach pair that skips all tests in the suite when a route is 404.
+ * Usage at top of plugin spec:
+ *
+ *   let featureAvailable = false
+ *   test.beforeAll(async ({ request }) => { featureAvailable = await isFeatureAvailable(request, '/admin/cache') })
+ *   test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin not installed in this deployment') })
+ */
+export async function isFeatureAvailable(request: import('@playwright/test').APIRequestContext, route: string): Promise<boolean> {
+  try {
+    const baseURL = process.env.BASE_URL || 'http://localhost:8787'
+    // Authenticate so that auth-protected admin routes return 200/404 rather than 302→login.
+    // Without auth, all /admin/* routes redirect to /auth/login (not 404), making it impossible
+    // to distinguish "plugin not installed" from "plugin installed but needs auth".
+    await seedAdminOnce(request)
+    await request.post('/auth/sign-in/email', {
+      data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+      headers: { 'Content-Type': 'application/json', Origin: baseURL },
+    }).catch(() => {})
+    const res = await request.get(route)
+    // Only 2xx means the feature exists and is accessible. 401/403 mean auth failed
+    // (sign-in silently errored) — treat as unavailable, not as "feature present".
+    return res.ok()
+  } catch {
+    return false
   }
 }
 
@@ -618,4 +1169,198 @@ export async function checkAPIHealth(page: Page) {
   const health = await response.json();
   expect(health.status).toBe('running');
   return health;
-} 
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Rich text fields
+ *
+ * `renderDynamicField` decides SERVER-SIDE which editor backs a rich text field, and the
+ * markup it emits is different in every case — there is no single selector that works:
+ *
+ *   lexical  (the default on a fresh install, when the lexical-editor plugin is active)
+ *            `.lexical-editor-wrapper` → contenteditable surface + `<input type="hidden">`
+ *   tinymce  `.richtext-container[data-editor-provider="tinymce"]` wrapping a `<textarea>`
+ *   easymde  `.richtext-container[data-editor-provider="easymde"]` wrapping a `<textarea>`
+ *   quill    `.quill-editor-container` → contenteditable div + hidden input
+ *   textarea no editor plugin active at all → amber-bannered plain `<textarea>`
+ *
+ * Specs used to assume a binary ("the editor under test, or else a plain textarea"), which
+ * is wrong the moment a *different* editor owns the field: on a fresh install Lexical does,
+ * so `textarea[name="content"]` does not exist at all. Route rich text through these helpers
+ * instead of hard-coding a selector.
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+export type RichTextBacking = 'lexical' | 'tinymce' | 'easymde' | 'quill' | 'textarea' | 'missing';
+
+/** Which editor the server actually rendered for `fieldName` on the current page. */
+export async function richTextBacking(page: Page, fieldName: string): Promise<RichTextBacking> {
+  if (await page.locator(`.lexical-editor-wrapper:has(input[name="${fieldName}"])`).count() > 0) return 'lexical';
+  if (await page.locator(`.richtext-container[data-editor-provider="tinymce"]:has(textarea[name="${fieldName}"])`).count() > 0) return 'tinymce';
+  if (await page.locator(`.richtext-container[data-editor-provider="easymde"]:has(textarea[name="${fieldName}"])`).count() > 0) return 'easymde';
+  if (await page.locator(`.quill-editor-container:has(input[name="${fieldName}"]), .quill-editor-container:has(textarea[name="${fieldName}"])`).count() > 0) return 'quill';
+  if (await page.locator(`textarea[name="${fieldName}"]`).count() > 0) return 'textarea';
+  return 'missing';
+}
+
+/**
+ * The element a user actually types into for `fieldName`, whichever editor backs it.
+ * For the textarea backings this is the form control itself; for Lexical/Quill it is the
+ * contenteditable surface, and the form control is a sibling hidden input.
+ */
+export function richTextSurface(page: Page, fieldName: string, backing: RichTextBacking) {
+  switch (backing) {
+    case 'lexical':
+      return page.locator(`.lexical-editor-wrapper:has(input[name="${fieldName}"]) .lexical-content-editable`).first();
+    case 'quill':
+      return page.locator('.quill-editor-container .ql-editor, .quill-editor-container .quill-editor').first();
+    case 'easymde':
+      // EasyMDE hides the textarea behind CodeMirror once it hydrates; before that the
+      // textarea is still the surface.
+      return page.locator(`.CodeMirror, textarea[name="${fieldName}"]`).first();
+    default:
+      return page.locator(`textarea[name="${fieldName}"]`).first();
+  }
+}
+
+/**
+ * Put `value` into a rich text field through whichever editor rendered.
+ *
+ * Lexical only mirrors into its hidden input from an editor update listener, so typing is the
+ * only way to get a value that survives submit — unless the CDN bundle never loaded, in which
+ * case nothing will overwrite a value written straight to the hidden input.
+ * Returns the backing that was used so callers can assert against the right surface.
+ */
+export async function fillRichTextField(page: Page, fieldName: string, value: string): Promise<RichTextBacking> {
+  const backing = await richTextBacking(page, fieldName);
+
+  if (backing === 'lexical') {
+    const wrapper = page.locator(`.lexical-editor-wrapper:has(input[name="${fieldName}"])`).first();
+    const initialized = await wrapper
+      .evaluate((el) => el.getAttribute('data-lexical-initialized') === 'true')
+      .catch(() => false);
+
+    if (!initialized) {
+      await page
+        .waitForFunction(
+          (name) => {
+            const w = document.querySelector(`.lexical-editor-wrapper:has(input[name="${name}"])`);
+            return !!w && w.getAttribute('data-lexical-initialized') === 'true';
+          },
+          fieldName,
+          { timeout: 15000 }
+        )
+        .catch(() => {});
+    }
+
+    const ready = await wrapper
+      .evaluate((el) => el.getAttribute('data-lexical-initialized') === 'true')
+      .catch(() => false);
+
+    if (ready) {
+      const surface = richTextSurface(page, fieldName, backing);
+      await surface.click();
+      await page.keyboard.type(value);
+      // The update listener is what writes the hidden input; wait for it rather than racing it.
+      await expect(page.locator(`.lexical-editor-wrapper input[name="${fieldName}"]`)).not.toHaveValue('');
+    } else {
+      // Lexical never booted (CDN blocked): nothing will clobber a direct write.
+      await page.locator(`.lexical-editor-wrapper input[name="${fieldName}"]`).evaluate((el, v) => {
+        (el as HTMLInputElement).value = v;
+      }, value);
+    }
+    return backing;
+  }
+
+  if (backing === 'quill') {
+    const surface = richTextSurface(page, fieldName, backing);
+    await surface.click();
+    await page.keyboard.type(value);
+    return backing;
+  }
+
+  if (backing === 'easymde') {
+    const codeMirror = page.locator('.CodeMirror').first();
+    if (await codeMirror.count() > 0) {
+      await codeMirror.click();
+      await page.keyboard.type(value);
+      return backing;
+    }
+    await page.locator(`textarea[name="${fieldName}"]`).fill(value);
+    return backing;
+  }
+
+  if (backing === 'textarea' || backing === 'tinymce') {
+    await page.locator(`textarea[name="${fieldName}"]`).fill(value);
+    return backing;
+  }
+
+  throw new Error(`No rich text field named "${fieldName}" rendered on ${page.url()}`);
+}
+
+/**
+ * The value that would be submitted for `fieldName` — read off the form control, not the
+ * editing surface, so it is the same string the server will receive.
+ */
+export async function richTextFieldValue(page: Page, fieldName: string): Promise<string> {
+  return page.evaluate((name) => {
+    const el = document.querySelector(
+      `textarea[name="${name}"], input[name="${name}"]`
+    ) as HTMLInputElement | HTMLTextAreaElement | null;
+    return el?.value ?? '';
+  }, fieldName);
+}
+
+/**
+ * Assert the field is present and usable whichever editor backs it. Used by the per-editor
+ * specs in the branch where the editor under test is NOT the one that rendered: the point is
+ * that the field still works, not which editor won.
+ */
+export async function expectRichTextFieldUsable(page: Page, fieldName: string) {
+  const backing = await richTextBacking(page, fieldName);
+  expect(backing, `no rich text field named "${fieldName}" rendered`).not.toBe('missing');
+
+  const surface = richTextSurface(page, fieldName, backing);
+  await expect(surface).toBeVisible();
+
+  if (backing === 'textarea' || backing === 'tinymce') {
+    await expect(surface).toBeEditable();
+  } else {
+    // Contenteditable surfaces are not "editable" in the form-control sense Playwright checks.
+    await expect(surface).toHaveAttribute('contenteditable', 'true');
+  }
+
+  // Whatever the surface, the form must still carry a control the save posts.
+  await expect(page.locator(`textarea[name="${fieldName}"], input[name="${fieldName}"]`)).toHaveCount(1);
+  return backing;
+}
+
+/**
+ * Names of the rich text fields on the current page whose real form control is a *hidden*
+ * input — Lexical and Quill both edit a contenteditable surface and mirror into one.
+ *
+ * These are invisible to the usual "fill every visible [required] control" sweep, so a form
+ * that looks complete still fails server-side validation. Callers that need a submittable
+ * form (rather than a specific editor's behaviour) use this to find what they missed.
+ */
+export async function hiddenEditorFieldNames(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    Array.from(
+      document.querySelectorAll(
+        '.lexical-editor-wrapper input[type="hidden"][name], .quill-editor-container input[type="hidden"][name]'
+      )
+    )
+      .map((el) => (el as HTMLInputElement).name)
+      .filter(Boolean)
+  );
+}
+
+/** Fill every empty hidden-input-backed rich text field on the page. Returns the names filled. */
+export async function fillHiddenEditorFields(page: Page, value: string): Promise<string[]> {
+  const filled: string[] = [];
+  for (const name of await hiddenEditorFieldNames(page)) {
+    if (await richTextFieldValue(page, name)) continue;
+    await fillRichTextField(page, name, value);
+    filled.push(name);
+  }
+  return filled;
+}

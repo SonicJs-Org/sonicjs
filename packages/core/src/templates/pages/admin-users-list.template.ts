@@ -3,11 +3,11 @@ import { renderPagination, PaginationData } from '../pagination.template'
 import { renderAlert } from '../alert.template'
 import { renderTable, TableColumn, TableData } from '../table.template'
 import { renderConfirmationDialog, getConfirmationDialogScript } from '../components/confirmation-dialog.template'
+import { escapeHtml } from '../../utils/sanitize'
 
 export interface User {
   id: string
   email: string
-  username: string
   firstName: string
   lastName: string
   role: string
@@ -49,7 +49,7 @@ export function renderUsersListPage(data: UsersListPageData): string {
       render: (value: string | null, row: User) => {
         const initials = `${row.firstName.charAt(0)}${row.lastName.charAt(0)}`.toUpperCase()
         if (value) {
-          return `<img src="${value}" alt="${row.firstName} ${row.lastName}" class="w-8 h-8 rounded-full">`
+          return `<img src="${escapeHtml(value)}" alt="${escapeHtml(row.firstName)} ${escapeHtml(row.lastName)}" class="w-8 h-8 rounded-full">`
         }
         return `
           <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-500 dark:from-cyan-300 dark:to-blue-400 rounded-full flex items-center justify-center">
@@ -75,15 +75,16 @@ export function renderUsersListPage(data: UsersListPageData): string {
         const truncatedFirstName = row.firstName.length > 25 ? row.firstName.substring(0, 25) + '...' : row.firstName
         const truncatedLastName = row.lastName.length > 25 ? row.lastName.substring(0, 25) + '...' : row.lastName
         const fullName = escapeHtml(`${truncatedFirstName} ${truncatedLastName}`)
-        const truncatedUsername = row.username.length > 100 ? row.username.substring(0, 100) + '...' : row.username
-        const username = escapeHtml(truncatedUsername)
         const statusBadge = row.isActive ?
           '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-300 ring-1 ring-inset ring-lime-700/10 dark:ring-lime-400/20 ml-2">Active</span>' :
           '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-700/10 dark:ring-red-500/20 ml-2">Inactive</span>'
+        // The name is a real link, not just a row the mouse can click: `rowClickable` below
+        // wires an onclick on the <tr>, which no keyboard or screen-reader user can reach.
         return `
           <div>
-            <div class="text-sm font-medium text-zinc-950 dark:text-white">${fullName}${statusBadge}</div>
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">@${username}</div>
+            <div class="text-sm font-medium text-zinc-950 dark:text-white">
+              <a href="/admin/users/${escapeHtml(row.id)}/edit" class="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">${fullName}</a>${statusBadge}
+            </div>
           </div>
         `
       }
@@ -194,6 +195,14 @@ export function renderUsersListPage(data: UsersListPageData): string {
             Export
           </button>
         </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="border-b border-zinc-950/10 dark:border-white/10 mb-6">
+        <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+          <a href="/admin/users" aria-current="page" class="whitespace-nowrap border-b-2 border-cyan-500 px-1 py-3 text-sm font-medium text-cyan-600 dark:text-cyan-400">Users</a>
+          <a href="/admin/rbac" class="whitespace-nowrap border-b-2 border-transparent px-1 py-3 text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 hover:text-zinc-700 dark:hover:text-zinc-200">Roles &amp; Permissions</a>
+        </nav>
       </div>
 
       <!-- Alert Messages -->

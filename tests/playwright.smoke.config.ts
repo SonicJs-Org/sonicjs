@@ -24,7 +24,9 @@ export default defineConfig({
   // Use line reporter for cleaner output
   reporter: [
     ['list'],
-    ['html', { outputFolder: 'playwright-report-smoke' }]
+    ['html', { outputFolder: 'playwright-report-smoke', open: 'never' }],
+    ['json', { outputFile: 'test-results/smoke-results.json' }],
+    ['junit', { outputFile: 'test-results/smoke-junit.xml' }],
   ],
 
   use: {

@@ -1,8 +1,25 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin, getCsrfTokenFromPage } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import { loginAsAdmin, getCsrfTokenFromPage, isFeatureAvailable } from './utils/test-helpers';
 
-test.describe.skip('Database Tools', () => {
+let featureAvailable = false;
+
+/**
+ * The settings page's buttons call `/admin/settings/api/database-tools/<op>`; the same handlers
+ * are also mounted at `/admin/database-tools/api/<op>`, which is what the direct-request tests
+ * further down use. Match either so a wait follows whichever path the UI is wired to.
+ */
+const dbToolsApiCall = (op: string) => (response: { url(): string; status(): number }) =>
+  new RegExp(`/(?:settings/api/database-tools|database-tools/api)/${op}$`).test(
+    new URL(response.url()).pathname,
+  ) && response.status() === 200;
+
+test.describe('Database Tools @database', () => {
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/settings');
+  });
+
   test.beforeEach(async ({ page }) => {
+    if (!featureAvailable) { test.skip(); return; }
     await loginAsAdmin(page);
   });
 
@@ -78,9 +95,7 @@ test.describe.skip('Database Tools', () => {
     await page.waitForTimeout(1000);
 
     // Now listen for the NEXT API call (triggered by button click)
-    const responsePromise = page.waitForResponse(response =>
-      response.url().includes('/admin/database-tools/api/stats') && response.status() === 200
-    );
+    const responsePromise = page.waitForResponse(dbToolsApiCall('stats'));
 
     // Click refresh button
     await page.click('button:has-text("Refresh Stats")');
@@ -106,9 +121,7 @@ test.describe.skip('Database Tools', () => {
     await page.waitForTimeout(1000);
 
     // Listen for validation API call
-    const responsePromise = page.waitForResponse(response =>
-      response.url().includes('/admin/database-tools/api/validate') && response.status() === 200
-    );
+    const responsePromise = page.waitForResponse(dbToolsApiCall('validate'));
 
     // Click validate database button
     await page.click('button:has-text("Validate Database")');
@@ -134,9 +147,7 @@ test.describe.skip('Database Tools', () => {
     await page.waitForTimeout(1000);
 
     // Listen for backup API call
-    const responsePromise = page.waitForResponse(response =>
-      response.url().includes('/admin/database-tools/api/backup') && response.status() === 200
-    );
+    const responsePromise = page.waitForResponse(dbToolsApiCall('backup'));
 
     // Click create backup button
     await page.click('button:has-text("Create Backup")');
@@ -215,9 +226,10 @@ test.describe.skip('Database Tools', () => {
     expect(totalTables).not.toBeNull();
     expect(totalRows).not.toBeNull();
     
-    // Values should be valid numbers or formatted numbers
-    expect(parseInt(totalTables?.replace(/,/g, '') || '0')).toBeGreaterThanOrEqual(0);
-    expect(parseInt(totalRows?.replace(/,/g, '') || '0')).toBeGreaterThanOrEqual(0);
+    // A count is never negative, so the old `toBeGreaterThanOrEqual(0)` pair passed even when the
+    // stats API returned nothing and the template's placeholder '0' was still on screen.
+    expect(parseInt(totalTables?.replace(/,/g, '') || '0'), 'no tables counted').toBeGreaterThan(0);
+    expect(parseInt(totalRows?.replace(/,/g, '') || '0'), 'no rows counted').toBeGreaterThan(0);
   });
 
   test('should have proper accessibility features', async ({ page }) => {
@@ -249,7 +261,7 @@ test.describe.skip('Database Tools', () => {
     await page.click('[data-tab="database-tools"]');
     
     // Mock a failed API response for stats
-    await page.route('**/admin/database-tools/api/stats', route => {
+    await page.route('**/api/database-tools/stats', route => {
       route.fulfill({
         status: 500,
         contentType: 'application/json',
@@ -282,8 +294,10 @@ test.describe.skip('Database Tools', () => {
     const tableLinks = page.locator('#tables-list a[href^="/admin/database-tools/tables/"]');
     const tableCount = await tableLinks.count();
 
-    // If there are tables, click on the first one
-    if (tableCount > 0) {
+    // The schema always has tables, so this is a floor, not a condition: the whole body below
+    // used to be skipped -- silently -- whenever the list failed to render.
+    expect(tableCount, 'no tables listed on the database-tools page').toBeGreaterThan(0);
+    {
       const firstTableLink = tableLinks.first();
       const tableName = await firstTableLink.textContent();
 
@@ -311,7 +325,7 @@ test.describe.skip('Database Tools', () => {
   });
 });
 
-test.describe('Database Tools API Endpoints', () => {
+test.describe('Database Tools API Endpoints @database', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
@@ -360,22 +374,15 @@ test.describe('Database Tools API Endpoints', () => {
     }
   });
 
-  test('should require admin role for truncate endpoint', async ({ page }) => {
+  test('should reject truncate without correct confirmation text', async ({ page }) => {
     const csrfToken = await getCsrfTokenFromPage(page);
     const response = await page.request.post('/admin/database-tools/api/truncate', {
       headers: { ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
-      data: { confirmText: 'TRUNCATE ALL DATA' }
+      data: { confirmText: 'WRONG TEXT' }
     });
-    
-    // Should either succeed (if user is admin) or return 403
-    expect([200, 400, 403]).toContain(response.status());
-    
-    const data = await response.json();
-    
-    if (response.status() === 403) {
-      expect(data).toHaveProperty('success', false);
-      expect(data.error).toContain('Unauthorized');
-    }
+
+    // Wrong confirmation text should return 400, not actually truncate
+    expect([400, 403]).toContain(response.status());
   });
 
   test('should handle malformed API requests gracefully', async ({ page }) => {

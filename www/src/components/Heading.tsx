@@ -91,7 +91,7 @@ export function Heading<Level extends 2 | 3>({
   })
 
   useEffect(() => {
-    if (level === 2) {
+    if (level === 2 || level === 3) {
       registerHeading({
         id: props.id,
         ref,

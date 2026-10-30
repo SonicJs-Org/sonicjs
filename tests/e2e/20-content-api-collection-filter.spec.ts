@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
-test.describe('Content API Collection Filtering', () => {
+test.describe('Content API Collection Filtering @content @api', () => {
   test('should filter content by collection parameter', async ({ request }) => {
     // First, get all collections to find actual collection names
     const collectionsResponse = await request.get('/api/collections');
@@ -9,10 +9,9 @@ test.describe('Content API Collection Filtering', () => {
     const collectionsData = await collectionsResponse.json();
     console.log(`Found ${collectionsData.data.length} collections`);
 
-    if (collectionsData.data.length === 0) {
-      console.log('No collections found, skipping test');
-      return;
-    }
+    // Collections are code-registered at bootstrap, so this list is never empty on a
+    // working server. Returning early here let a broken /api/collections pass the test.
+    expect(collectionsData.data.length, 'no collections returned by /api/collections').toBeGreaterThan(0);
 
     // Get the first collection name
     const firstCollection = collectionsData.data[0];
@@ -67,10 +66,9 @@ test.describe('Content API Collection Filtering', () => {
     const collectionsResponse = await request.get('/api/collections');
     const collectionsData = await collectionsResponse.json();
 
-    if (collectionsData.data.length === 0) {
-      console.log('No collections found, skipping test');
-      return;
-    }
+    // Collections are code-registered at bootstrap, so this list is never empty on a
+    // working server. Returning early here let a broken /api/collections pass the test.
+    expect(collectionsData.data.length, 'no collections returned by /api/collections').toBeGreaterThan(0);
 
     const collectionName = collectionsData.data[0].name;
     const collectionId = collectionsData.data[0].id;
@@ -113,10 +111,9 @@ test.describe('Content API Collection Filtering', () => {
     const collectionsResponse = await request.get('/api/collections');
     const collectionsData = await collectionsResponse.json();
 
-    if (collectionsData.data.length === 0) {
-      console.log('No collections found, skipping test');
-      return;
-    }
+    // Collections are code-registered at bootstrap, so this list is never empty on a
+    // working server. Returning early here let a broken /api/collections pass the test.
+    expect(collectionsData.data.length, 'no collections returned by /api/collections').toBeGreaterThan(0);
 
     // Find a collection that has content with a title we can filter on
     let collectionName: string | null = null;
@@ -133,13 +130,14 @@ test.describe('Content API Collection Filtering', () => {
       }
     }
 
-    if (!collectionName || !probeTitle) {
-      console.log('No content with a usable title found, skipping bracket-syntax test');
-      return;
-    }
+    // Global setup seeds a published, titled post, so the probe above always finds one.
+    // Skipping out here meant a /api/collections/:name/content that returned nothing at
+    // all -- for every collection -- passed this test instead of failing it.
+    expect(collectionName, 'no collection exposed content with a usable title').not.toBeNull();
+    expect(probeTitle, 'no collection exposed content with a usable title').not.toBeNull();
 
     // Take a substring of the title that's unlikely to match every row
-    const needle = probeTitle.slice(0, Math.min(4, probeTitle.length));
+    const needle = probeTitle!.slice(0, Math.min(4, probeTitle.length));
     const url = `/api/collections/${collectionName}/content?limit=100&filter[title][contains]=${encodeURIComponent(needle)}`;
 
     const response = await request.get(url);
@@ -163,10 +161,9 @@ test.describe('Content API Collection Filtering', () => {
     const collectionsResponse = await request.get('/api/collections');
     const collectionsData = await collectionsResponse.json();
 
-    if (collectionsData.data.length === 0) {
-      console.log('No collections found, skipping test');
-      return;
-    }
+    // Collections are code-registered at bootstrap, so this list is never empty on a
+    // working server. Returning early here let a broken /api/collections pass the test.
+    expect(collectionsData.data.length, 'no collections returned by /api/collections').toBeGreaterThan(0);
 
     const collectionName = collectionsData.data[0].name;
 

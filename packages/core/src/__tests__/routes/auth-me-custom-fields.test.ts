@@ -56,7 +56,6 @@ import authRoutes from '../../routes/auth'
 const baseUserRow = {
   id: 'user-123',
   email: 'test@example.com',
-  username: 'testuser',
   first_name: 'Test',
   last_name: 'User',
   role: 'viewer',

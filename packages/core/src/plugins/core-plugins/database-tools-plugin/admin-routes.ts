@@ -173,10 +173,11 @@ export function createDatabaseToolsAdminRoutes() {
       const offset = parseInt(c.req.query('offset') || '0')
       const sortColumn = c.req.query('sort')
       const sortDirection = (c.req.query('dir') || 'asc') as 'asc' | 'desc'
+      const search = c.req.query('search')
 
       const db = c.env.DB
       const service = new DatabaseToolsService(db)
-      const tableData = await service.getTableData(tableName, limit, offset, sortColumn, sortDirection)
+      const tableData = await service.getTableData(tableName, limit, offset, sortColumn, sortDirection, search)
 
       return c.json({
         success: true,
@@ -205,12 +206,13 @@ export function createDatabaseToolsAdminRoutes() {
       const pageSize = parseInt(c.req.query('pageSize') || '20')
       const sortColumn = c.req.query('sort')
       const sortDirection = (c.req.query('dir') || 'asc') as 'asc' | 'desc'
+      const search = c.req.query('search')
 
       const offset = (page - 1) * pageSize
 
       const db = c.env.DB
       const service = new DatabaseToolsService(db)
-      const tableData = await service.getTableData(tableName, pageSize, offset, sortColumn, sortDirection)
+      const tableData = await service.getTableData(tableName, pageSize, offset, sortColumn, sortDirection, search)
 
       const pageData: DatabaseTablePageData = {
         user: {
@@ -225,7 +227,8 @@ export function createDatabaseToolsAdminRoutes() {
         currentPage: page,
         pageSize: pageSize,
         sortColumn: sortColumn,
-        sortDirection: sortDirection
+        sortDirection: sortDirection,
+        search: search
       }
 
       return c.html(renderDatabaseTablePage(pageData))

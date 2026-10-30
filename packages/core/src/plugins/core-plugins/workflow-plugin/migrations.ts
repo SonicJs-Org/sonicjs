@@ -55,14 +55,13 @@ CREATE TABLE IF NOT EXISTS workflow_transitions (
 -- Content Workflow Status Table
 CREATE TABLE IF NOT EXISTS content_workflow_status (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  content_id TEXT NOT NULL,
+  content_id TEXT NOT NULL, -- holds a document root_id (decoupled from the legacy content table)
   workflow_id TEXT NOT NULL,
   current_state_id TEXT NOT NULL,
   assigned_to TEXT,
   due_date DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
   FOREIGN KEY (workflow_id) REFERENCES workflows(id),
   FOREIGN KEY (current_state_id) REFERENCES workflow_states(id),
   FOREIGN KEY (assigned_to) REFERENCES users(id),
@@ -72,7 +71,7 @@ CREATE TABLE IF NOT EXISTS content_workflow_status (
 -- Workflow History Table
 CREATE TABLE IF NOT EXISTS workflow_history (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  content_id TEXT NOT NULL,
+  content_id TEXT NOT NULL, -- holds a document root_id (decoupled from the legacy content table)
   workflow_id TEXT NOT NULL,
   from_state_id TEXT,
   to_state_id TEXT NOT NULL,
@@ -80,7 +79,6 @@ CREATE TABLE IF NOT EXISTS workflow_history (
   comment TEXT,
   metadata TEXT, -- JSON
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
   FOREIGN KEY (workflow_id) REFERENCES workflows(id),
   FOREIGN KEY (from_state_id) REFERENCES workflow_states(id),
   FOREIGN KEY (to_state_id) REFERENCES workflow_states(id),
@@ -90,7 +88,7 @@ CREATE TABLE IF NOT EXISTS workflow_history (
 -- Scheduled Content Table
 CREATE TABLE IF NOT EXISTS scheduled_content (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  content_id TEXT NOT NULL,
+  content_id TEXT NOT NULL, -- holds a document root_id (decoupled from the legacy content table)
   action TEXT NOT NULL, -- 'publish', 'unpublish', 'archive'
   scheduled_at DATETIME NOT NULL,
   timezone TEXT DEFAULT 'UTC',
@@ -99,7 +97,6 @@ CREATE TABLE IF NOT EXISTS scheduled_content (
   executed_at DATETIME,
   error_message TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
@@ -109,7 +106,8 @@ CREATE INDEX IF NOT EXISTS idx_content_workflow_status_workflow_id ON content_wo
 CREATE INDEX IF NOT EXISTS idx_workflow_history_content_id ON workflow_history(content_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_content_scheduled_at ON scheduled_content(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_content_status ON scheduled_content(status);
-CREATE INDEX IF NOT EXISTS idx_content_workflow_state ON content(workflow_state_id);
+-- (Removed idx_content_workflow_state ON content(workflow_state_id): the content table is being
+--  decommissioned and the canonical draft/published state is documents.is_published/is_current_draft.)
 
 -- Insert default workflow for collections (if collections exist)
 INSERT OR IGNORE INTO workflows (id, name, description, collection_id, is_active, require_approval, approval_levels) 

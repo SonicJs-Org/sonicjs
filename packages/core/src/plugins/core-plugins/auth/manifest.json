@@ -63,12 +63,6 @@
         "label": "Password",
         "type": "password"
       },
-      "username": {
-        "required": true,
-        "minLength": 3,
-        "label": "Username",
-        "type": "text"
-      },
       "firstName": {
         "required": true,
         "minLength": 1,
@@ -84,7 +78,6 @@
     },
     "validation": {
       "emailFormat": true,
-      "allowDuplicateUsernames": false,
       "passwordRequirements": {
         "requireUppercase": false,
         "requireLowercase": false,

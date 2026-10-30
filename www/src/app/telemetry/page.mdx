@@ -27,7 +27,7 @@ SonicJS collects **anonymous, non-identifiable telemetry data** to help us under
 
 ## What Data is Collected
 
-SonicJS telemetry collects the following anonymous data during installation and usage:
+SonicJS telemetry collects the following anonymous data during install-time only (sent once during initial setup):
 
 ### Installation Events
 
@@ -46,6 +46,8 @@ SonicJS telemetry collects the following anonymous data during installation and 
 - Project hash (one-way hash of project path, no path information is sent)
 
 ### Example Data Payload
+
+Events are sent to: `https://stats.sonicjs.com/v1/events`
 
 ```json
 {
@@ -83,7 +85,7 @@ You can disable telemetry at any time using one of the following methods:
 
 ### Environment Variable (Recommended)
 
-Set the `SONICJS_TELEMETRY` environment variable to `false`:
+Set `DO_NOT_TRACK=1` in your environment to disable telemetry. You can also set the `SONICJS_TELEMETRY` environment variable to `false`:
 
 <CodeGroup title="Disable Telemetry">
 

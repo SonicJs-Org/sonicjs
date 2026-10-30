@@ -110,18 +110,13 @@ export function extractCustomFieldsFromForm(
   return result
 }
 
-export async function getCustomData(db: any, userId: string): Promise<Record<string, any>> {
-  const row = await db
-    .prepare('SELECT data FROM user_profiles WHERE user_id = ?')
-    .bind(userId)
-    .first() as any
+// Custom profile fields are stored under `data.custom` of the user's
+// `user_profile` document (see user-profile-document.ts). These thin wrappers
+// preserve the original custom-only contract for existing callers.
+import { readProfileData, writeProfileData } from './user-profile-document'
 
-  if (!row?.data) return {}
-  try {
-    return JSON.parse(row.data)
-  } catch {
-    return {}
-  }
+export async function getCustomData(db: any, userId: string): Promise<Record<string, any>> {
+  return (await readProfileData(db, userId)).custom
 }
 
 export async function saveCustomData(
@@ -129,29 +124,5 @@ export async function saveCustomData(
   userId: string,
   newData: Record<string, any>
 ): Promise<void> {
-  const existing = await getCustomData(db, userId)
-  const merged = { ...existing, ...newData }
-  const json = JSON.stringify(merged)
-
-  // Check if profile row exists
-  const row = await db
-    .prepare('SELECT id FROM user_profiles WHERE user_id = ?')
-    .bind(userId)
-    .first() as any
-
-  if (row) {
-    await db
-      .prepare('UPDATE user_profiles SET data = ?, updated_at = ? WHERE user_id = ?')
-      .bind(json, Date.now(), userId)
-      .run()
-  } else {
-    const profileId = `profile_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-    const now = Date.now()
-    await db
-      .prepare(
-        'INSERT INTO user_profiles (id, user_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-      )
-      .bind(profileId, userId, json, now, now)
-      .run()
-  }
+  await writeProfileData(db, userId, { custom: newData })
 }

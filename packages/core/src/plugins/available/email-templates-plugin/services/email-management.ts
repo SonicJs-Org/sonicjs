@@ -356,7 +356,6 @@ export class DatabaseEmailManagementService implements EmailManagementService {
       { name: 'user.firstName', displayName: 'User First Name', dataType: 'string', description: 'First name of the recipient' },
       { name: 'user.lastName', displayName: 'User Last Name', dataType: 'string', description: 'Last name of the recipient' },
       { name: 'user.email', displayName: 'User Email', dataType: 'string', description: 'Email address of the recipient' },
-      { name: 'user.username', displayName: 'Username', dataType: 'string', description: 'Username of the recipient' },
       { name: 'site.name', displayName: 'Site Name', dataType: 'string', description: 'Name of the website' },
       { name: 'site.url', displayName: 'Site URL', dataType: 'string', description: 'URL of the website' },
       { name: 'site.logo', displayName: 'Site Logo', dataType: 'string', description: 'Logo URL of the website' },

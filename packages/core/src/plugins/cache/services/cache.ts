@@ -303,7 +303,8 @@ export class CacheService {
     if (config.kvEnabled && this.kvNamespace) {
       try {
         await this.kvNamespace.put(key, JSON.stringify(value), {
-          expirationTtl: config.ttl
+          // Cloudflare KV requires minimum 60s TTL in production; clamp silently.
+          expirationTtl: Math.max(config.ttl, 60)
         })
       } catch (error) {
         console.error('KV cache write error:', error)

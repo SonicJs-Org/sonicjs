@@ -1,166 +1,125 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from './fixtures';
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers';
 
-// Use environment variable for port or default to 8787
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8787';
+/**
+ * Collection field type badges.
+ *
+ * Collections are code-only now, so `/admin/collections/<slug>` renders a read-only
+ * "Collection Fields" list. Each field card shows the field label, a colour-coded field
+ * type badge, an optional "Required" badge and the raw field name in a <code> tag — the old
+ * `.field-item` editor rows are gone.
+ */
 
-test.describe.skip('Collection Field Type Badges', () => {
+/** One read-only field card in the "Collection Fields" section. */
+function fieldRows(page: Page) {
+  return page
+    .locator('div.bg-zinc-50.rounded-lg.border.p-4')
+    .filter({ has: page.locator('code.font-mono') });
+}
+
+async function openCollectionWithFields(page: Page, preferred: RegExp) {
+  await page.goto('/admin/collections', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('h1')).toContainText('Collections');
+
+  const rows = page.locator('tbody tr');
+  await expect(rows.first()).toBeVisible({ timeout: 15000 });
+
+  // Rows navigate via an onclick handler (not an <a>), so click the row itself.
+  const target = rows.filter({ hasText: preferred }).first();
+  await (await target.count() > 0 ? target : rows.first()).click();
+
+  await page.waitForURL(/\/admin\/collections\/[^/]+$/, { timeout: 15000 });
+  await expect(page.locator('h1')).toContainText('Edit Collection');
+}
+
+test.describe('Collection Field Type Badges @collections', () => {
   test.beforeEach(async ({ page }) => {
     await ensureAdminUserExists(page);
     await loginAsAdmin(page);
   });
 
   test('should display color-coded field type badges', async ({ page }) => {
-    // Navigate to collections page
-    await page.goto(`${BASE_URL}/admin/collections`);
-    await expect(page.locator('h1')).toContainText('Collections');
+    // e2e_test is the collection that exercises the widest set of field types
+    await openCollectionWithFields(page, /e2e_test/);
 
-    // Find and click on a collection that has fields (look for "page" or "blog post")
-    const rows = page.locator('tbody tr');
+    const rows = fieldRows(page);
     const rowCount = await rows.count();
+    expect(rowCount, 'collection renders at least one field').toBeGreaterThan(0);
 
-    let foundCollection = false;
+    const typeBadges: { field: string; text: string; classes: string }[] = [];
+
     for (let i = 0; i < rowCount; i++) {
       const row = rows.nth(i);
-      const rowText = await row.textContent();
+      const fieldName = ((await row.locator('code.font-mono').first().textContent()) || '').trim();
 
-      // Look for collections that typically have fields
-      if (rowText?.toLowerCase().includes('page') ||
-          rowText?.toLowerCase().includes('blog') ||
-          rowText?.toLowerCase().includes('post')) {
-        await row.click();
-        foundCollection = true;
-        break;
-      }
+      // The first badge in a row is the field type badge; "Required" always follows it.
+      const badge = row.locator('span.inline-flex.items-center.rounded-md').first();
+      await expect(badge).toBeVisible();
+
+      const badgeText = ((await badge.textContent()) || '').replace(/\s+/g, ' ').trim();
+      const badgeClasses = (await badge.getAttribute('class')) || '';
+
+      expect(badgeText, `type badge for "${fieldName}" is not empty`).not.toBe('');
+      expect(badgeText).not.toBe('Required');
+
+      // Colour coding + badge styling
+      expect(badgeClasses, `badge colour for "${fieldName}"`).toMatch(/bg-[a-z]+-\d+\//);
+      expect(badgeClasses).toContain('px-2');
+      expect(badgeClasses).toContain('py-1');
+      expect(badgeClasses).toContain('text-xs');
+      expect(badgeClasses).toContain('ring-1');
+
+      typeBadges.push({ field: fieldName, text: badgeText, classes: badgeClasses });
     }
 
-    // If we didn't find a specific collection, just click the first one
-    if (!foundCollection) {
-      await rows.first().click();
-    }
+    // Field types the badge map humanises must render the readable label, never the raw
+    // internal type name.
+    const byField = new Map(typeBadges.map((b) => [b.field, b.text]));
+    expect(byField.get('slug')).toBe('URL Slug');
+    expect(byField.get('count')).toBe('Number');
+    expect(byField.get('isActive')).toBe('Boolean');
+    expect(byField.get('publishDate')).toBe('Date');
+    expect(byField.get('featuredImage')).toBe('Media');
+    expect(byField.get('category')).toBe('Select');
 
-    // Wait for the edit page to load
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1')).toContainText('Edit Collection');
-
-    // Wait a bit for the page to fully render
-    await page.waitForTimeout(1000);
-
-    // Check if there are existing fields - try multiple selectors
-    let fieldItems = page.locator('.field-item');
-    let fieldCount = await fieldItems.count();
-
-    console.log(`Found ${fieldCount} field items with .field-item selector`);
-
-    // If no fields found with .field-item, try looking for the field list container
-    if (fieldCount === 0) {
-      // Look for any elements that might contain field information
-      const fieldLabels = page.locator('span.text-sm\\/6.font-medium');
-      fieldCount = await fieldLabels.count();
-      console.log(`Found ${fieldCount} field labels`);
-    }
-
-    if (fieldCount > 0) {
-      // Look for ANY badge with the inline-flex class on the page
-      const badges = page.locator('span.inline-flex.items-center.rounded-md');
-      const badgeCount = await badges.count();
-
-      console.log(`Found ${badgeCount} total badges on page`);
-
-      // Filter badges to only field type badges (exclude Required, Draft, Searchable, and version badges)
-      let fieldTypeBadge = null;
-      for (let i = 0; i < badgeCount; i++) {
-        const badge = badges.nth(i);
-        const badgeText = ((await badge.textContent()) || '').replace(/\s+/g, ' ').trim();
-
-        // Skip "Required", "Draft", "Searchable" badges and version number badges (e.g., "2.0.10")
-        if (badgeText.includes('Required') ||
-            badgeText.includes('Draft') ||
-            badgeText.includes('Searchable') ||
-            /^\d+\.\d+/.test(badgeText)) {  // Skip version numbers like "2.0.10"
-          console.log(`Skipping badge: "${badgeText}"`);
-          continue;
-        }
-
-        // This should be a field type badge
-        console.log(`Found field type badge: "${badgeText}"`);
-        fieldTypeBadge = badge;
-        break;
-      }
-
-      if (fieldTypeBadge) {
-        // Check if badge exists
-        await expect(fieldTypeBadge).toBeVisible({ timeout: 5000 });
-
-        // Get the badge text
-        const badgeText = await fieldTypeBadge.textContent();
-        console.log(`Field type badge text: ${badgeText}`);
-
-        // Badge should not be empty
-        expect(badgeText).toBeTruthy();
-        expect(badgeText?.trim()).not.toBe('');
-
-        // Badge should have color classes (check for bg- class which indicates styling)
-        const badgeClasses = await fieldTypeBadge.getAttribute('class');
-        console.log(`Badge classes: ${badgeClasses}`);
-
-        // Should have background color class
-        expect(badgeClasses).toMatch(/bg-(blue|purple|green|amber|cyan|indigo|rose|zinc)-\d+/);
-
-        // Should have proper badge styling
-        expect(badgeClasses).toContain('px-2');
-        expect(badgeClasses).toContain('py-1');
-        expect(badgeClasses).toContain('text-xs');
-        expect(badgeClasses).toContain('ring-1');
-
-        // Badge text should be a readable label, not raw field type
-        // Should NOT be values like "text", "richtext", "string", etc.
-        const readableLabels = ['Text', 'Rich Text', 'Number', 'Boolean', 'Date', 'Select', 'Media'];
-        const isReadable = readableLabels.some(label => badgeText?.includes(label));
-        expect(isReadable).toBeTruthy();
-
-        console.log('✅ Field type badge is displaying correctly with proper styling and readable label');
-      } else {
-        throw new Error('No field type badges found on page, only Required/Draft badges');
-      }
-    } else {
-      throw new Error('No fields found in any collection - cannot test badges');
-    }
+    // Distinct types must not all collapse onto one colour
+    const colours = new Set(
+      typeBadges.map((b) => (b.classes.match(/bg-([a-z]+)-\d+\//) || [])[1]).filter(Boolean)
+    );
+    expect(colours.size, 'badges are colour-coded by type').toBeGreaterThan(1);
   });
 
   test('should not display escaped HTML in badges', async ({ page }) => {
-    // Navigate to collections page
-    await page.goto(`${BASE_URL}/admin/collections`);
+    await openCollectionWithFields(page, /e2e_test/);
 
-    // Click on the first collection
-    const firstRow = page.locator('tbody tr').first();
-    await firstRow.click();
-
-    // Wait for page load
-    await page.waitForLoadState('networkidle');
-
-    // Check for escaped HTML in the page content
+    // Badge markup must be rendered, not escaped into the page as text
     const pageContent = await page.content();
-
-    // Should NOT contain escaped HTML like &lt;span or \"
     expect(pageContent).not.toContain('&lt;span');
-    expect(pageContent).not.toContain('items-center=\\\"');
-    expect(pageContent).not.toContain('rounded-md=\\\"');
+    expect(pageContent).not.toContain('items-center=\\"');
+    expect(pageContent).not.toContain('rounded-md=\\"');
 
-    // Check data attributes don't contain typeBadgeHTML
-    const fieldItems = page.locator('.field-item');
-    if (await fieldItems.count() > 0) {
-      const firstField = fieldItems.first();
-      const dataFieldData = await firstField.getAttribute('data-field-data');
+    const rows = fieldRows(page);
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThan(0);
 
-      if (dataFieldData) {
-        // Data attribute should not contain badge HTML
-        expect(dataFieldData).not.toContain('typeBadgeHTML');
-        expect(dataFieldData).not.toContain('<span');
-        expect(dataFieldData).not.toContain('inline-flex');
+    for (let i = 0; i < rowCount; i++) {
+      const badgeText = ((await rows.nth(i).locator('span.inline-flex').first().textContent()) || '');
+      // Badge labels are plain text — no markup leaking through either direction
+      expect(badgeText).not.toContain('<span');
+      expect(badgeText).not.toContain('&lt;');
+      expect(badgeText).not.toContain('inline-flex');
+    }
 
-        console.log('✅ Data attribute is clean without badge HTML');
-      }
+    // The serialised field payload used by the edit modal must carry data only, no badge HTML
+    const fieldData = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-field-data]')).map((el) =>
+        el.getAttribute('data-field-data') || ''
+      )
+    );
+    for (const data of fieldData) {
+      expect(data).not.toContain('typeBadgeHTML');
+      expect(data).not.toContain('<span');
+      expect(data).not.toContain('inline-flex');
     }
   });
 });

@@ -140,28 +140,21 @@ const myHandler: HookHandler = async (data, context) => {
 <CodeGroup title="Plugin Hooks">
 
 ```typescript
-import { PluginBuilder, HOOKS } from '@sonicjs-cms/core'
+import { definePlugin, HOOKS } from '@sonicjs-cms/core'
 
-const myPlugin = new PluginBuilder({
+const myPlugin = definePlugin({
   name: 'my-plugin',
-  version: '1.0.0'
-})
-  // Using builder API
-  .addHook(HOOKS.CONTENT_SAVE, async (data) => {
-    data.lastModified = Date.now()
-    return data
-  }, { priority: 5 })
+  version: '1.0.0',
+  onBoot(ctx) {
+    // Register hooks here
+    ctx.hooks.register(HOOKS.CONTENT_SAVE, async (data) => {
+      data.lastModified = Date.now()
+      return data
+    }, 5)
 
-  // Or in lifecycle
-  .lifecycle({
-    activate: async (context) => {
-      context.hooks.register(HOOKS.AUTH_LOGIN, loginHandler)
-    },
-    deactivate: async (context) => {
-      // Hooks are auto-cleaned up for plugins
-    }
-  })
-  .build()
+    ctx.hooks.register(HOOKS.AUTH_LOGIN, loginHandler)
+  }
+})
 ```
 
 </CodeGroup>
@@ -887,17 +880,19 @@ Use namespaced names: `plugin-name:event-name`
 
 ```typescript
 // In your plugin
-const myPlugin = new PluginBuilder({ name: 'my-plugin', version: '1.0.0' })
-  .lifecycle({
-    activate: async (context) => {
-      // Register handler for your custom hook
-      context.hooks.register('my-plugin:item-processed', async (data) => {
-        console.log('Item processed:', data.itemId)
-        return data
-      })
-    }
-  })
-  .build()
+import { definePlugin } from '@sonicjs-cms/core'
+
+const myPlugin = definePlugin({
+  name: 'my-plugin',
+  version: '1.0.0',
+  onBoot(ctx) {
+    // Register handler for your custom hook
+    ctx.hooks.register('my-plugin:item-processed', async (data) => {
+      console.log('Item processed:', data.itemId)
+      return data
+    })
+  }
+})
 
 // In your service/route
 async function processItem(itemId: number, hooks: HookSystem) {

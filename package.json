@@ -1,6 +1,6 @@
 {
   "name": "sonicjs",
-  "version": "2.18.1",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -11,6 +11,7 @@
   "scripts": {
     "predev": "test -d node_modules/@sonicjs-cms || npm install",
     "dev": "npm run dev --workspace=my-sonicjs-app",
+    "dev:demo": "bash scripts/dev-demo.sh",
     "dev:www": "npm run dev --workspace=www",
     "build": "npm run build:core && npm run build --workspace=my-sonicjs-app",
     "build:www": "npm run build --workspace=www",
@@ -18,6 +19,9 @@
     "build:core": "npm run plugins:generate && npm run build --workspace=@sonicjs-cms/core",
     "deploy": "npm run deploy --workspace=my-sonicjs-app",
     "deploy:www": "npm run deploy --workspace=www",
+    "deploy:stats": "npm run deploy:production --workspace=sonicjs-stats",
+    "dev:react-demo": "cd demos/employee-directory && npm run dev",
+    "deploy:demo": "cd demos/employee-directory && npm run build && npx wrangler pages deploy dist --project-name sonicjs-sdk-demo --branch main",
     "test": "npm run test --workspace=@sonicjs-cms/core",
     "test:cov": "npm run test:cov --workspace=@sonicjs-cms/core",
     "test:watch": "npm run test:watch --workspace=@sonicjs-cms/core",
@@ -25,9 +29,12 @@
     "e2e:ui": "playwright test --config=tests/playwright.config.ts --ui",
     "e2e:smoke": "playwright test --config=tests/playwright.smoke.config.ts",
     "e2e:smoke:ui": "playwright test --config=tests/playwright.smoke.config.ts --ui",
+    "e2e:www": "playwright test --config=tests/playwright.www.config.ts",
+    "killall": "pkill -9 -f 'workerd|wrangler' 2>/dev/null; echo 'Killed wrangler/workerd processes'",
     "prepare": "husky",
     "type-check": "npm run type-check --workspace=@sonicjs-cms/core",
     "lint": "npm run type-check",
+    "version:beta": "npm version prerelease --preid=beta --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",
     "version:patch": "npm version patch --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",
     "version:minor": "npm version minor --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",
     "version:major": "npm version major --workspace=@sonicjs-cms/core --no-git-tag-version && node scripts/sync-versions.js",
@@ -46,7 +53,7 @@
     "social:post": "node scripts/social/post-both.js",
     "social:promote-blog": "node scripts/social/promote-blog.js",
     "db:reset": "npm run setup:db --workspace=my-sonicjs-app",
-    "workspace": "npm install && npm run db:reset",
+    "reset": "npm install && npm run db:reset",
     "kill": "pkill workerd && npm run dev --workspace=my-sonicjs-app"
   },
   "dependencies": {
@@ -54,30 +61,33 @@
     "@hono/zod-openapi": "^0.19.8",
     "@hono/zod-validator": "^0.7.0",
     "@libsql/client": "^0.15.9",
-    "@sonicjs-cms/core": "^2.0.1",
+    "@sonicjs-cms/core": "^3.0.0-beta.0",
     "clsx": "^2.1.1",
     "drizzle-kit": "^0.31.2",
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "highlight.js": "^11.11.1",
-    "hono": "^4.12.18",
+    "hono": "^4.13.13",
     "marked": "^16.4.1",
     "motion": "^12.23.22",
     "semver": "^7.7.3",
     "zod": "^4.1.12"
   },
+  "optionalDependencies": {
+    "better-sqlite3": "12.11.1"
+  },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251014.0",
+    "@cloudflare/workers-types": "^5.20260724.1",
     "@playwright/test": "^1.53.1",
     "@types/node": "^24.9.2",
     "@types/semver": "^7.7.0",
-    "@vitest/coverage-v8": "^4.0.5",
+    "@vitest/coverage-v8": "^4.1.9",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.3",
     "playwright": "^1.53.1",
     "tsx": "^4.20.3",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.5",
+    "vitest": "^4.1.9",
     "wrangler": "^4.65.0"
   },
   "lint-staged": {

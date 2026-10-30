@@ -582,8 +582,53 @@ describe('renderDynamicField - Quill Editor Fields', () => {
     });
 
     expect(html).toContain('<textarea');
-    expect(html).toContain('TinyMCE plugin is inactive');
+    expect(html).toContain('No rich text editor plugin is active');
     expect(html).not.toContain('data-editor-provider="tinymce"');
+  });
+
+  it('should render the lexical editor when the plugin is active', () => {
+    const field = createTestField({
+      field_type: 'lexical',
+    });
+    const html = renderDynamicField(field, {
+      value: '<p>Content</p>',
+      pluginStatuses: { lexicalEnabled: true },
+    });
+
+    expect(html).toContain('lexical-editor-wrapper');
+    expect(html).toContain('data-field-id="field-test_field"');
+    expect(html).toContain('id="field-test_field-editor"');
+    expect(html).toContain('lexical-toolbar');
+    // The hidden input is what the form submits — the contenteditable surface is not a form control.
+    expect(html).toContain('name="test_field"');
+    expect(html).toContain('<p>Content</p>');
+    expect(html).not.toContain('<textarea');
+  });
+
+  it('should fallback to textarea when lexical plugin is disabled', () => {
+    const field = createTestField({
+      field_type: 'lexical',
+    });
+    const html = renderDynamicField(field, {
+      pluginStatuses: { lexicalEnabled: false },
+    });
+
+    expect(html).toContain('<textarea');
+    expect(html).toContain('Lexical Editor plugin is inactive');
+    expect(html).not.toContain('lexical-editor-wrapper');
+  });
+
+  it('should route canonical richtext to lexical when lexical is the active editor', () => {
+    const field = createTestField({
+      field_type: 'richtext',
+    });
+    const html = renderDynamicField(field, {
+      pluginStatuses: { lexicalEnabled: true },
+    });
+
+    expect(html).toContain('lexical-editor-wrapper');
+    expect(html).not.toContain('data-editor-provider="tinymce"');
+    expect(html).not.toContain('<textarea');
   });
 });
 

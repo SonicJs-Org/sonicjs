@@ -14,8 +14,7 @@
 
 import { Hono } from 'hono'
 import { setCookie, getCookie } from 'hono/cookie'
-import { PluginBuilder } from '../../sdk/plugin-builder'
-import type { Plugin } from '../../types'
+import { definePlugin } from '../../sdk/define-plugin'
 import {
   OAuthService,
   BUILT_IN_PROVIDERS,
@@ -24,26 +23,12 @@ import {
 } from './oauth-service'
 import { AuthManager } from '../../../middleware'
 import { getJwtExpirySecondsFromDb } from '../../../middleware/auth'
+import { hasVerifiedSecondFactor } from '../../../auth/second-factor-guard'
 
 const STATE_COOKIE_NAME = 'oauth_state'
 const STATE_COOKIE_MAX_AGE = 600 // 10 minutes
 
-export function createOAuthProvidersPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'oauth-providers',
-    version: '1.0.0-beta.1',
-    description: 'OAuth2/OIDC social login with GitHub, Google, and more'
-  })
-
-  builder.metadata({
-    author: {
-      name: 'SonicJS Team',
-      email: 'team@sonicjs.com'
-    },
-    license: 'MIT',
-    compatibility: '^2.0.0'
-  })
-
+function buildOauthApi(): Hono {
   // ==================== Helper Functions ====================
 
   function getCallbackUrl(c: any, provider: string): string {
@@ -211,11 +196,29 @@ export function createOAuthProvidersPlugin(): Plugin {
 
         // Fetch user to generate JWT
         const user = await db.prepare(
-          'SELECT id, email, role, is_active FROM users WHERE id = ?'
+          'SELECT id, email, role, is_active FROM auth_user WHERE id = ?'
         ).bind(existingOAuth.user_id).first() as any
 
         if (!user || !user.is_active) {
           return c.redirect('/auth/login?error=Account is deactivated')
+        }
+
+        // Second-factor gate. This branch mints a session without Better Auth, so BA's
+        // second-factor challenge never runs. Having linked the provider yourself does not
+        // substitute for the factor: the provider may enforce no MFA at all, so anyone holding
+        // the provider credential would skip a factor the account owner deliberately enrolled in
+        // — which is exactly the guarantee the enrolment page promises ("on every sign-in").
+        //
+        // This cannot strand anyone: BA requires password verification to reach
+        // /auth/two-factor/enable, so an enrolled account always has a usable password login.
+        //
+        // This route is mounted ahead of the /auth/* catch-all in app.ts, so
+        // guardPasswordlessSecondFactor never sees it; the check has to be here.
+        if (await hasVerifiedSecondFactor((c.env as any).DB, user.id)) {
+          return c.redirect(
+            '/auth/login?error=' +
+            encodeURIComponent('This account uses two-factor authentication. Sign in with your password, then enter your authenticator code.')
+          )
         }
 
         const tokenTtl = await getJwtExpirySecondsFromDb((c.env as any).DB, c.env as any)
@@ -234,6 +237,22 @@ export function createOAuthProvidersPlugin(): Plugin {
       if (existingUser) {
         if (!existingUser.is_active) {
           return c.redirect('/auth/login?error=Account is deactivated')
+        }
+
+        // Second-factor gate. This branch auto-links a provider identity to a pre-existing LOCAL
+        // account matched only by email address, then mints a session without Better Auth — so
+        // BA's second-factor challenge never runs, and an attacker who controls any provider
+        // account bearing the victim's email address would bypass a second factor the victim
+        // deliberately enrolled in. Even weaker than the already-linked branch above (where the
+        // owner at least chose the provider), since nothing here was ever confirmed by them.
+        //
+        // This route is mounted ahead of the /auth/* catch-all in app.ts, so
+        // guardPasswordlessSecondFactor never sees it; the check has to be here.
+        if (await hasVerifiedSecondFactor((c.env as any).DB, existingUser.id)) {
+          return c.redirect(
+            '/auth/login?error=' +
+            encodeURIComponent('This account uses two-factor authentication. Sign in with your password, then enter your authenticator code.')
+          )
         }
 
         // Link OAuth to existing account
@@ -394,31 +413,29 @@ export function createOAuthProvidersPlugin(): Plugin {
     }
   })
 
-  // Register routes
-  builder.addRoute('/auth/oauth', oauthAPI, {
-    description: 'OAuth2 social login endpoints',
-    requiresAuth: false,
-    priority: 100
-  })
-
-  // Add menu item for admin settings
-  builder.addMenuItem('OAuth Providers', '/admin/plugins/oauth-providers', {
-    icon: 'shield',
-    order: 86,
-    permissions: ['oauth:manage']
-  })
-
-  // Lifecycle hooks
-  builder.lifecycle({
-    activate: async () => {
-      console.info('✅ OAuth Providers plugin activated')
-    },
-    deactivate: async () => {
-      console.info('❌ OAuth Providers plugin deactivated')
-    }
-  })
-
-  return builder.build() as Plugin
+  return oauthAPI
 }
 
-export const oauthProvidersPlugin = createOAuthProvidersPlugin()
+export const oauthProvidersPlugin = definePlugin({
+  id: 'oauth-providers',
+  version: '1.0.0',
+  name: 'OAuth Providers',
+  description: 'OAuth2/OIDC social login with GitHub, Google, and more.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
+
+  register(app) {
+    app.route('/auth/oauth', buildOauthApi())
+  },
+
+  menu: [
+    { label: 'OAuth Providers', path: '/admin/plugins/oauth-providers', icon: 'lock', order: 86, permissions: ['oauth:manage'] },
+  ],
+
+  activate: async () => console.info('✅ OAuth Providers plugin activated'),
+  deactivate: async () => console.info('❌ OAuth Providers plugin deactivated'),
+})
+
+export function createOAuthProvidersPlugin() {
+  return oauthProvidersPlugin
+}

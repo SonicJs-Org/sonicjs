@@ -11,14 +11,22 @@ import type { SonicJSConfig } from '@sonicjs-cms/core'
 // Import collections
 import installsCollection from './collections/installs.collection'
 import eventsCollection from './collections/events.collection'
+import playwrightRunsCollection from './collections/playwright-runs.collection'
+import playwrightTestsCollection from './collections/playwright-tests.collection'
 
 // Import plugins
 import { statsDashboardPlugin } from './plugins/stats-dashboard'
+import { playwrightDashboardPlugin } from './plugins/playwright-dashboard'
+
+// Import routes
+import { playwrightIngest } from './routes/playwright-ingest'
 
 // Register collections
 registerCollections([
   installsCollection,
   eventsCollection,
+  playwrightRunsCollection,
+  playwrightTestsCollection,
 ])
 
 // Application configuration
@@ -29,7 +37,7 @@ const config: SonicJSConfig = {
   plugins: {
     autoLoad: false,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DefinedPlugin is structurally compatible; type mismatch is dist/src version skew
-    register: [statsDashboardPlugin as any],
+    register: [statsDashboardPlugin as any, playwrightDashboardPlugin as any],
   }
 }
 
@@ -76,6 +84,8 @@ app.post('/v1/events', async (c) => {
     return c.json({ success: true }, 201)
   }
 })
+
+app.route('/v1/playwright-runs', playwrightIngest)
 
 // Stats-specific health check — /health taken by core, /v1/* taken by API routes
 app.get('/stats-health', async (c) => {

@@ -159,9 +159,12 @@ jobs:
         timeout-minutes: 3
         run: |
           set -euo pipefail
-          # Only a bounded safe GET is retried. Auth/schema/seed failures are not retried.
+          # Retry on any error including HTTP 4xx: a freshly-deployed Workers preview can
+          # return 404 from the Cloudflare edge for a brief propagation window before the
+          # workers.dev route is fully live on all edge nodes.
           curl --fail --silent --show-error --location --connect-timeout 5 --max-time 15 \
-            --retry 8 --retry-delay 2 --retry-connrefused "$BASE_URL/auth/login" -o /dev/null
+            --retry 8 --retry-delay 2 --retry-connrefused --retry-all-errors \
+            "$BASE_URL/auth/login" -o /dev/null
           # Verify the deployed build matches our checkout
           IDENTITY=$(curl --fail --silent --show-error \
             -H "X-E2E-Run-Key: $E2E_RUN_KEY" \

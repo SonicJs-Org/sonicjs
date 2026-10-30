@@ -11,6 +11,8 @@ import type { SonicJSConfig } from '@sonicjs-cms/core'
 // Import collections
 import installsCollection from './collections/installs.collection'
 import eventsCollection from './collections/events.collection'
+import playwrightRunsCollection from './collections/playwright-runs.collection'
+import playwrightTestsCollection from './collections/playwright-tests.collection'
 
 // Import plugins
 import { statsDashboardPlugin } from './plugins/stats-dashboard'
@@ -19,6 +21,8 @@ import { statsDashboardPlugin } from './plugins/stats-dashboard'
 registerCollections([
   installsCollection,
   eventsCollection,
+  playwrightRunsCollection,
+  playwrightTestsCollection,
 ])
 
 // Application configuration

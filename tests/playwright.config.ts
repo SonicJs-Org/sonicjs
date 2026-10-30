@@ -142,7 +142,10 @@ export default defineConfig({
    * each trip was costing a test a ~60s backoff. */
   workers: process.env.CI ? 2 : 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [
+    ['html'],
+    ['json', { outputFile: 'test-results/results.json' }],
+  ],
   /* Global setup and teardown */
   globalSetup: resolve(__dirname, './e2e/global-setup.ts'),
   globalTeardown: resolve(__dirname, './e2e/global-teardown.ts'),

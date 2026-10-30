@@ -231,6 +231,13 @@ jobs:
           CI: true
           BASE_URL: ${{ steps.deploy.outputs.preview_url }}
 
+      - name: Upload Playwright results to stats
+        if: always() && github.actor != 'dependabot[bot]'
+        env:
+          PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
+          PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+        run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
+
       - name: Upload test results
         if: always() && github.actor != 'dependabot[bot]'
         uses: actions/upload-artifact@v4

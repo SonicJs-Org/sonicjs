@@ -29,6 +29,7 @@
  */
 
 import type { Hono } from 'hono'
+import { topoSort } from './topo-sort'
 
 /**
  * Minimal structural contract this module needs to mount a plugin.
@@ -47,7 +48,11 @@ export interface MountableRoute {
 }
 
 export interface MountablePlugin {
+  /** Stable unique id (used by topo-sort). Falls back to `name`. */
+  id?: string
   name?: string
+  /** IDs of plugins that must be mounted before this one. */
+  dependencies?: string[]
   routes?: MountableRoute[]
   /** Synchronous imperative route registration. A Promise return is rejected. */
   register?: (app: any) => unknown
@@ -159,6 +164,16 @@ export interface RegisterPluginRoutesOptions {
    * to true in non-production.
    */
   warnOnDuplicatePath?: boolean
+  /**
+   * When true, sort plugins by their `dependencies` field before mounting
+   * (dependency-first order). Defaults to true.
+   */
+  sortByDependencies?: boolean
+  /**
+   * Forwarded to `topoSort` — unknown dependency id throws when true, warns
+   * when false (default).
+   */
+  strict?: boolean
 }
 
 /**
@@ -186,7 +201,16 @@ export function registerPluginRoutes(
     options.warnOnDuplicatePath ?? (typeof process === 'undefined' || process.env?.NODE_ENV !== 'production')
   const seenPaths = new Map<string, string>() // path -> first plugin that claimed it
 
-  for (const plugin of plugins) {
+  // Sort by dependencies (default on). Only plugins with `dependencies` declared
+  // have their position changed; plugins without `dependencies` keep their order.
+  const sortByDependencies = options.sortByDependencies ?? true
+  const sorted = sortByDependencies
+    ? topoSort(plugins.filter((p): p is MountablePlugin => !!p && typeof p === 'object'), {
+        strict: options.strict,
+      })
+    : plugins.filter((p): p is MountablePlugin => !!p && typeof p === 'object')
+
+  for (const plugin of sorted) {
     if (!plugin) continue
     const before = result.mounted.length
     mountPlugin(app, plugin, result)

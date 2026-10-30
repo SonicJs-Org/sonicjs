@@ -1,39 +1,23 @@
-import { Plugin } from '../../../types/plugin'
-import { PluginBuilder } from '../../sdk/plugin-builder'
+import { definePlugin } from '../../sdk/define-plugin'
 
 /**
  * EasyMDE Markdown Editor Plugin
  *
- * Provides markdown editing capabilities for richtext fields.
- * When active, this plugin injects the EasyMDE editor into all richtext field types.
- * When inactive, richtext fields fall back to plain textareas.
+ * Markdown editing for richtext fields. When active, injects EasyMDE into all
+ * richtext field types; when inactive, fields fall back to plain textareas.
  */
 
-const builder = PluginBuilder.create({
-  name: 'easy-mdx',
+const easyMdxPlugin = definePlugin({
+  id: 'easy-mdx',
   version: '1.0.0',
-  description: 'Lightweight markdown editor with live preview'
-})
+  name: 'EasyMDE Markdown Editor',
+  description: 'Lightweight markdown editor with live preview.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
 
-builder.metadata({
-  author: {
-    name: 'SonicJS Team',
-    email: 'team@sonicjs.com'
-  },
-  license: 'MIT',
-  compatibility: '^2.0.0'
+  activate: async () => console.info('✅ EasyMDE editor plugin activated'),
+  deactivate: async () => console.info('❌ EasyMDE editor plugin deactivated'),
 })
-
-builder.lifecycle({
-  activate: async () => {
-    console.info('✅ EasyMDE editor plugin activated')
-  },
-  deactivate: async () => {
-    console.info('❌ EasyMDE editor plugin deactivated')
-  }
-})
-
-const easyMdxPlugin = builder.build() as Plugin
 
 export default easyMdxPlugin
 

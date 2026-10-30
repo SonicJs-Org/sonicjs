@@ -1,9 +1,13 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { loginAsAdmin, ensureAdminUserExists } from './utils/test-helpers'
 
-test.describe('Hero CTA Style Persistence', () => {
+test.describe('Hero CTA Style Persistence @content', () => {
   test('should keep CTA styles after unrelated second save', async ({ page }) => {
-    test.setTimeout(60000)
+    // Seven full page loads (login, /admin/content/new, the collection pick, two saves and
+    // their redirects, the final reload) plus the cleanup round trip. The 60s this replaces was
+    // *below* the suite default, so the test had opted itself out of the CI budget it needed:
+    // against a cold preview one admin page load has been measured at ~10s p90.
+    test.setTimeout(180000)
     let contentId: string | null = null
     const title = `Hero CTA Persist ${Date.now()}`
     const updatedTitle = `${title} updated`
@@ -16,9 +20,9 @@ test.describe('Hero CTA Style Persistence', () => {
       await loginAsAdmin(page)
 
       await page.goto('/admin/content/new')
-      const pageBlocksLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'Page Blocks' })
-      await expect(pageBlocksLink).toBeVisible()
-      await pageBlocksLink.click()
+      const e2eTestLink = page.locator('a[href^="/admin/content/new?collection="]').filter({ hasText: 'E2E Test' })
+      await expect(e2eTestLink).toBeVisible()
+      await e2eTestLink.click()
 
       await page.waitForLoadState('networkidle')
       await expect(page.locator('form#content-form')).toBeVisible()
@@ -61,16 +65,16 @@ test.describe('Hero CTA Style Persistence', () => {
       await ctaSecondary.locator('input[name$="__label"]').fill('Secondary CTA')
       await ctaSecondary.locator('select[name$="__style"]').selectOption('secondary')
 
-      await page.click('button[name="action"][value="save_and_publish"]')
-      await page.waitForTimeout(2000)
-
-      await page.goto('/admin/content?collection=page_blocks')
-      const contentLink = page.locator(`a:has-text("${title}")`).first()
-      await expect(contentLink).toBeVisible()
-      const href = await contentLink.getAttribute('href')
-      const match = href?.match(/\/admin\/content\/([^/]+)\/edit/)
-      contentId = match?.[1] || null
-      await contentLink.click()
+      // A new-document save answers the HTMX request with `HX-Redirect:
+      // /admin/content/<id>/edit`, and htmx only sets location once that response lands. The
+      // fixed 2s raced it: on a cold preview the POST had not returned, so the `goto` below
+      // cancelled the save in flight. Waiting for the redirect also hands us the id and a fresh
+      // server render of the edit page — which is all the trip through the content list was
+      // for — and drops a title match that leftover rows from earlier runs could satisfy.
+      await page.click('button[name="action"][value="save"]')
+      await page.waitForURL(/\/admin\/content\/[^/]+\/edit/, { timeout: 30000 })
+      contentId = page.url().match(/\/admin\/content\/([^/]+)\/edit/)?.[1] || null
+      await expect(page.locator('form#content-form')).toBeVisible()
 
       const reloadedBlocksField = page.locator('[data-field-name="body"]')
       const reloadedFirstBlock = reloadedBlocksField.locator('.blocks-item').first()
@@ -98,15 +102,27 @@ test.describe('Hero CTA Style Persistence', () => {
       await expect(reloadedPrimaryStyle).toHaveValue('secondary')
       await expect(reloadedSecondaryStyle).toHaveValue('secondary')
 
+      // Unlike the create above, an edit-page `save` does not navigate: the document-model
+      // update path answers the PUT with an inline `#form-messages` banner and stays put
+      // (admin-content.ts, "save / save_and_publish: stay on page"). So wait on the PUT itself.
+      // That is what the fixed 2s stood in for, and it is the thing that matters here — once the
+      // response is in, the write is committed and the reload below cannot cancel it. Keying on
+      // banner text instead would be fragile in a different way: the create redirect already put
+      // a success message on this page.
       await page.fill('input[name="title"]', updatedTitle)
-      await page.click('button[name="action"][value="save_and_publish"]')
-      await page.waitForTimeout(2000)
+      const secondSaveResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'PUT' &&
+          /^\/admin\/content\/[^/]+$/.test(new URL(response.url()).pathname),
+        { timeout: 30000 }
+      )
+      await page.click('button[name="action"][value="save"]')
+      expect((await secondSaveResponse).ok()).toBeTruthy()
 
       if (contentId) {
         await page.goto(`/admin/content/${contentId}/edit`)
       } else {
-        await page.goto('/admin/content?collection=page_blocks')
-        await page.locator(`a:has-text("${updatedTitle}")`).first().click()
+        await page.reload()
       }
 
       const secondBlocksField = page.locator('[data-field-name="body"]')
@@ -141,7 +157,7 @@ test.describe('Hero CTA Style Persistence', () => {
         }
 
         if (!contentId) {
-          await page.goto('/admin/content?collection=page_blocks')
+          await page.goto('/admin/content?collection=e2e_test')
           const updatedLink = page.locator(`a:has-text("${updatedTitle}")`).first()
           if (await updatedLink.count()) {
             contentId = tryExtractContentIdFromHref(await updatedLink.getAttribute('href'))

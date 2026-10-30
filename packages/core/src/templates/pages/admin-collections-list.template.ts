@@ -10,11 +10,15 @@ export interface Collection {
   formattedDate: string
   field_count?: number
   managed?: boolean
+  source_type?: string | null
+  internal?: boolean
+  versioning?: boolean
 }
 
 export interface CollectionsListPageData {
   collections: Collection[]
   search?: string
+  showInternal?: boolean
   user?: {
     name: string
     email: string
@@ -24,6 +28,7 @@ export interface CollectionsListPageData {
 }
 
 export function renderCollectionsListPage(data: CollectionsListPageData): string {
+  const showInternal = data.showInternal ?? false
   const tableData: any = {
     tableId: 'collections-table',
     rowClickable: true,
@@ -45,6 +50,11 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
                       <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
                     </svg>
                     Config
+                  </span>
+                ` : ''}
+                ${collection.internal ? `
+                  <span class="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-700/50 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 ring-1 ring-inset ring-zinc-300/50 dark:ring-zinc-600/50" title="Internal system collection">
+                    Internal
                   </span>
                 ` : ''}
             </div>
@@ -80,51 +90,33 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
         }
       },
       {
-        key: 'managed',
-        label: 'Source',
+        key: 'versioning',
+        label: 'Versioning',
         sortable: true,
         sortType: 'string',
         render: (_value: any, collection: any) => {
-          if (collection.managed) {
-            return `
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                </svg>
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">Code</span>
-              </div>
-            `
-          } else {
-            return `
-              <div class="flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z"/>
-                  <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z"/>
-                  <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z"/>
-                </svg>
-                <span class="text-sm text-zinc-700 dark:text-zinc-300">Database</span>
-              </div>
-            `
+          if (collection.versioning) {
+            return `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20">On</span>`
           }
+          return `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20">Off</span>`
         }
       },
       {
-        key: 'formattedDate',
-        label: 'Created',
-        sortable: true,
-        sortType: 'date'
-      },
-      {
         key: 'actions',
-        label: 'Content',
+        label: 'Actions',
         sortable: false,
         render: (_value: any, collection: any) => {
           if (!collection || !collection.id) return '<span class="text-zinc-500 dark:text-zinc-400">-</span>'
           return `
             <div class="flex items-center space-x-2">
-              <a href="/admin/content?model=${collection.name}" class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors">
+              <a href="/admin/content?model=${collection.name}" class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors" title="View content">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+              </a>
+              <a href="/api/${collection.name}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg bg-cyan-600 dark:bg-cyan-500 text-white hover:bg-cyan-700 dark:hover:bg-cyan-600 transition-colors" title="Open API endpoint">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                 </svg>
               </a>
             </div>
@@ -228,10 +220,30 @@ export function renderCollectionsListPage(data: CollectionsListPageData): string
                       clearButton.classList.add('hidden');
                     }
                   }
+
+                  function toggleInternalCollections(checked) {
+                    const params = new URLSearchParams(window.location.search);
+                    if (checked) {
+                      params.set('showInternal', '1');
+                    } else {
+                      params.delete('showInternal');
+                    }
+                    window.location.href = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                  }
                 </script>
               </div>
               <div class="flex items-center gap-x-3">
                 <span class="text-sm/6 font-medium text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-full bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm">${data.collections.length} ${data.collections.length === 1 ? 'collection' : 'collections'}</span>
+                <label class="inline-flex items-center gap-x-2 px-3 py-1.5 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-950 dark:text-white text-sm font-medium rounded-full ring-1 ring-inset ring-zinc-200/50 dark:ring-zinc-700/50 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-all duration-200" title="Show internal system collections">
+                  <input
+                    type="checkbox"
+                    id="show-internal"
+                    ${showInternal ? 'checked' : ''}
+                    onchange="toggleInternalCollections(this.checked)"
+                    class="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                  >
+                  <span>Show internal</span>
+                </label>
                 <button
                   class="inline-flex items-center gap-x-1.5 px-3 py-1.5 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm text-zinc-950 dark:text-white text-sm font-medium rounded-full ring-1 ring-inset ring-cyan-200/50 dark:ring-cyan-700/50 hover:bg-gradient-to-r hover:from-cyan-50 hover:to-blue-50 dark:hover:from-cyan-900/30 dark:hover:to-blue-900/30 hover:ring-cyan-300 dark:hover:ring-cyan-600 transition-all duration-200"
                   onclick="location.reload()"

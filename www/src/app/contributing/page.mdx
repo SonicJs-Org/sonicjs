@@ -193,10 +193,10 @@ Run these from the repository root:
 
 | Command | Description |
 |---------|-------------|
-| `npm run db:generate` | Generate migration files from schema changes |
+| `npm run db:generate` | Generate migration files from schema changes (legacy auth tables only; document schema is in raw migrations) |
 | `npm run db:migrate` | Apply migrations to local D1 database |
-| `npm run db:migrate:prod` | Apply migrations to production database |
-| `npm run db:studio` | Open Drizzle Studio (database GUI) |
+| `npm run db:migrate` | Apply migrations to production database |
+| `npm run db:studio` | Open Drizzle Studio (database GUI) (legacy auth tables only) |
 
 ### Testing Scripts
 
@@ -212,8 +212,8 @@ Run these from the repository root:
 
 | Command | Description |
 |---------|-------------|
-| `npm run plugins:generate` | Regenerate plugin registry from manifests |
-| `npm run plugins:watch` | Watch plugin manifests and auto-regenerate |
+| `npm run plugins:generate` | Regenerate plugin registry from manifests (v2 only — v3 plugins use definePlugin() + registerPlugins(), no manifest files) |
+| `npm run plugins:watch` | Watch plugin manifests and auto-regenerate (v2 only — v3 plugins use definePlugin() + registerPlugins(), no manifest files) |
 
 ---
 

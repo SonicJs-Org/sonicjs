@@ -1,220 +1,80 @@
 /**
- * Core Auth Plugin
- * 
- * Provides authentication and authorization extensions
+ * Core Auth Plugin — Payload-shaped port.
+ *
+ * Stub-grade authentication API + auth-event hooks. The real auth flow lives
+ * in Better Auth (see app.ts /auth/* catch-all). The historical addService /
+ * addSingleMiddleware / addAdminPage declarations on this plugin were never
+ * wired by the runtime; they are dropped in this port.
  */
 
 import { Hono } from 'hono'
-import { PluginBuilder } from '../../sdk/plugin-builder'
-import { Plugin, HOOKS } from '@sonicjs-cms/core'
+import { definePlugin } from '../../sdk/define-plugin'
 
-export function createAuthPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'core-auth',
-    version: '1.0.0-beta.1',
-    description: 'Core authentication and authorization plugin'
-  })
+const authAPI = new Hono()
 
-  // Add auth metadata
-  builder.metadata({
-    author: {
-      name: 'SonicJS Team',
-      email: 'team@sonicjs.com'
-    },
-    license: 'MIT',
-    compatibility: '^0.1.0'
-  })
+authAPI.post('/login', async (c) => {
+  const { email } = await c.req.json()
+  return c.json({ message: 'Login endpoint', data: { email } })
+})
 
-  // Create auth API routes
-  const authAPI = new Hono()
+authAPI.post('/logout', async (c) => {
+  return c.json({ message: 'Logout successful' })
+})
 
-  // POST /auth/login - User login
-  authAPI.post('/login', async (c) => {
-    const { email } = await c.req.json()
-    
-    // Login logic would integrate with existing auth service
-    return c.json({ 
-      message: 'Login endpoint',
-      data: { email }
-    })
-  })
+authAPI.get('/me', async (c) => {
+  return c.json({ message: 'Current user info', user: { id: 1, email: 'user@example.com' } })
+})
 
-  // POST /auth/logout - User logout
-  authAPI.post('/logout', async (c) => {
-    return c.json({ message: 'Logout successful' })
-  })
+authAPI.post('/refresh', async (c) => {
+  return c.json({ message: 'Token refreshed' })
+})
 
-  // GET /auth/me - Current user info
-  authAPI.get('/me', async (c) => {
-    return c.json({ 
-      message: 'Current user info',
-      user: { id: 1, email: 'user@example.com' }
-    })
-  })
+export const authPlugin = definePlugin({
+  id: 'core-auth',
+  version: '1.0.0',
+  name: 'Authentication',
+  description: 'Core authentication and authorization plugin.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
 
-  // POST /auth/refresh - Refresh token
-  authAPI.post('/refresh', async (c) => {
-    return c.json({ message: 'Token refreshed' })
-  })
+  register(app) {
+    app.route('/api/auth', authAPI)
+  },
 
-  builder.addRoute('/api/auth', authAPI, {
-    description: 'Authentication API endpoints',
-    priority: 1
-  })
-
-  // Add auth middleware
-  builder.addSingleMiddleware('auth-session', async (c: any, next: any) => {
-    // Session management middleware
-    const sessionId = c.req.header('x-session-id')
-    if (sessionId) {
-      c.set('sessionId', sessionId)
-    }
-    await next()
-  }, {
-    description: 'Session management middleware',
-    global: true,
-    priority: 5
-  })
-
-  builder.addSingleMiddleware('auth-rate-limit', async (c: any, next: any) => {
-    // Rate limiting for auth endpoints
-    const path = c.req.path
-    if (path.startsWith('/api/auth/')) {
-      // Rate limiting logic would go here
-      const clientIP = c.req.header('CF-Connecting-IP') || 'unknown'
-      console.debug(`Auth rate limit check for IP: ${clientIP}`)
-    }
-    await next()
-  }, {
-    description: 'Rate limiting for authentication endpoints',
-    routes: ['/api/auth/*'],
-    priority: 3
-  })
-
-  // Add auth service
-  builder.addService('authService', {
-    validateToken: (_token: string) => {
-      // Token validation logic
-      return { valid: true, userId: 1 }
-    },
-    
-    generateToken: (userId: number) => {
-      // Token generation logic
-      return `token-${userId}-${Date.now()}`
-    },
-    
-    hashPassword: (password: string) => {
-      // Password hashing logic
-      return `hashed-${password}`
-    },
-    
-    verifyPassword: (password: string, hash: string) => {
-      // Password verification logic
-      return hash === `hashed-${password}`
-    }
-  }, {
-    description: 'Core authentication service',
-    singleton: true
-  })
-
-  // Add auth hooks
-  builder.addHook('auth:login', async (data: any) => {
-    console.info(`User login attempt: ${data.email}`)
-    return data
-  }, {
-    priority: 10,
-    description: 'Handle user login events'
-  })
-
-  builder.addHook('auth:logout', async (data: any) => {
-    console.info(`User logout: ${data.userId}`)
-    return data
-  }, {
-    priority: 10,
-    description: 'Handle user logout events'
-  })
-
-  builder.addHook(HOOKS.REQUEST_START, async (data: any) => {
-    // Track authentication status on each request
-    const authHeader = data.request?.headers?.authorization
-    if (authHeader) {
-      data.authenticated = true
-    }
-    return data
-  }, {
-    priority: 5,
-    description: 'Track authentication status on requests'
-  })
-
-  // Add admin pages
-  builder.addAdminPage(
-    '/auth/sessions',
-    'Active Sessions',
-    'AuthSessionsView',
+  menu: [
     {
-      description: 'View and manage active user sessions',
+      label: 'Authentication',
+      path: '/admin/auth',
+      icon: 'lock',
+      order: 20,
       permissions: ['admin', 'auth:manage'],
-      icon: 'users'
-    }
-  )
-
-  builder.addAdminPage(
-    '/auth/tokens',
-    'API Tokens',
-    'AuthTokensView',
-    {
-      description: 'Manage API tokens and access keys',
-      permissions: ['admin', 'auth:manage'],
-      icon: 'key'
-    }
-  )
-
-  // Add menu items
-  builder.addMenuItem('Authentication', '/admin/auth', {
-    icon: 'shield',
-    order: 20,
-    permissions: ['admin', 'auth:manage']
-  })
-
-  builder.addMenuItem('Sessions', '/admin/auth/sessions', {
-    icon: 'users',
-    parent: 'Authentication',
-    order: 1,
-    permissions: ['admin', 'auth:manage']
-  })
-
-  builder.addMenuItem('API Tokens', '/admin/auth/tokens', {
-    icon: 'key',
-    parent: 'Authentication',
-    order: 2,
-    permissions: ['admin', 'auth:manage']
-  })
-
-  // Add lifecycle hooks
-  builder.lifecycle({
-    install: async () => {
-      console.info('Installing auth plugin...')
-      // Create auth-related database tables or configurations
     },
+  ],
 
-    activate: async () => {
-      console.info('Activating auth plugin...')
-      // Initialize auth services and middleware
-    },
+  async onBoot(ctx) {
+    // Legacy non-typed auth-event hooks — subscribe via the raw bus.
+    const hooks = (ctx.raw as any)?.hooks
+    if (!hooks?.register) return
+    hooks.register('auth:login', async (data: any) => {
+      console.info(`User login attempt: ${data.email}`)
+      return data
+    }, 10)
+    hooks.register('auth:logout', async (data: any) => {
+      console.info(`User logout: ${data.userId}`)
+      return data
+    }, 10)
+    hooks.register('request:start', async (data: any) => {
+      const authHeader = data.request?.headers?.authorization
+      if (authHeader) data.authenticated = true
+      return data
+    }, 5)
+  },
 
-    deactivate: async () => {
-      console.info('Deactivating auth plugin...')
-      // Clean up auth resources
-    },
+  install: async () => console.info('Installing auth plugin...'),
+  activate: async () => console.info('Activating auth plugin...'),
+  deactivate: async () => console.info('Deactivating auth plugin...'),
+})
 
-    configure: async (config) => {
-      console.info('Configuring auth plugin...', config)
-      // Apply configuration changes
-    }
-  })
-
-  return builder.build() as Plugin as Plugin
+export function createAuthPlugin() {
+  return authPlugin
 }
-
-// Export the plugin instance
-export const authPlugin = createAuthPlugin()

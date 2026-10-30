@@ -49,7 +49,7 @@ Track our development progress and see what's coming next for SonicJS. Features 
 - ~~Field selection (include/exclude patterns)~~
 
 ### Authentication
-- ~~JWT-based authentication middleware~~
+- ~~Better Auth (session + JWT API tokens) + document-backed RBAC~~
 - ~~Session management with HTTP-only cookies~~
 - ~~Secure password hashing with bcrypt~~
 - ~~API token management for programmatic access~~
@@ -70,7 +70,7 @@ Track our development progress and see what's coming next for SonicJS. Features 
 ### Dynamic Content Types
 - ~~Schema-driven collections with JSON schemas~~
 - ~~Text fields (single/multi-line with validation)~~
-- ~~Rich Text fields (TinyMCE/EasyMDE integration)~~
+- ~~Rich Text fields (Lexical default; TinyMCE/Quill/MDX optional)~~
 - ~~Number fields (integer/decimal with ranges)~~
 - ~~Boolean fields (toggles/checkboxes)~~
 - ~~Date/DateTime fields (with timezone support)~~
@@ -141,7 +141,7 @@ Track our development progress and see what's coming next for SonicJS. Features 
 - ~~Hook system (pre/post actions, filters)~~
 - ~~Plugin configuration management~~
 
-### Included Plugins (13 Total)
+### Included Plugins (28 Total)
 
 **Core Plugins:**
 - ~~Cache System - Three-tiered caching with KV storage~~
@@ -167,7 +167,7 @@ Track our development progress and see what's coming next for SonicJS. Features 
 - ~~Design System - Theme and component management~~
 
 ### Plugin SDK
-- ~~TypeScript Plugin Builder API~~
+- ~~Plugin SDK: definePlugin() + registerPlugins()~~
 - ~~Plugin manifest structure~~
 - ~~Custom route registration~~
 - ~~Admin menu integration~~
@@ -250,7 +250,7 @@ Track our development progress and see what's coming next for SonicJS. Features 
 - WebSocket real-time collaboration (0%)
 - Advanced search with Cloudflare Search (0%)
 - Internationalization (i18n) support (0%)
-- Multi-tenancy implementation (20%)
+- ~~First-class multi-tenant support (tenant switcher, role-based membership, email invitations)~~
 
 ---
 
@@ -273,7 +273,7 @@ Track our development progress and see what's coming next for SonicJS. Features 
 
 ### Features
 - ~~Dashboard with analytics overview~~
-- ~~Rich text editor (TinyMCE/EasyMDE/Quill)~~
+- ~~Rich text editor (Lexical default; TinyMCE/Quill/MDX optional)~~
 - ~~Auto-save (every 30 seconds)~~
 - ~~Preview mode~~
 - ~~Fullscreen editing~~
@@ -343,7 +343,6 @@ Track our development progress and see what's coming next for SonicJS. Features 
 - Plugin marketplace with ratings
 - AI integration for content generation
 - Auto-tagging with AI
-- Two-factor authentication (2FA)
 - Magic link authentication
 
 ### Mid-Term

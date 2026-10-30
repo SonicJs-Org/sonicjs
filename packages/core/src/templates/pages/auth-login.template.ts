@@ -4,6 +4,7 @@ export interface LoginPageData {
   error?: string
   message?: string
   version?: string
+  redirect?: string
 }
 
 export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = false): string {
@@ -71,7 +72,9 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
             <!-- Form -->
             <form
               id="login-form"
-              hx-post="/auth/login/form"
+              action="/auth/login/form${data.redirect ? `?redirect=${encodeURIComponent(data.redirect)}` : ''}"
+              method="post"
+              hx-post="/auth/login/form${data.redirect ? `?redirect=${encodeURIComponent(data.redirect)}` : ''}"
               hx-target="#form-response"
               hx-swap="innerHTML"
               class="space-y-6"

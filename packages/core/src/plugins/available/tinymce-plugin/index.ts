@@ -1,39 +1,23 @@
-import { Plugin } from '../../../types/plugin'
-import { PluginBuilder } from '../../sdk/plugin-builder'
+import { definePlugin } from '../../sdk/define-plugin'
 
 /**
  * TinyMCE Rich Text Editor Plugin
  *
- * Provides WYSIWYG editing capabilities for richtext fields.
- * When active, this plugin injects the TinyMCE editor into all richtext field types.
- * When inactive, richtext fields fall back to plain textareas.
+ * WYSIWYG editing for richtext fields. When active, injects TinyMCE into all
+ * richtext field types; when inactive, fields fall back to plain textareas.
  */
 
-const builder = PluginBuilder.create({
-  name: 'tinymce-plugin',
+const tinymcePlugin = definePlugin({
+  id: 'tinymce-plugin',
   version: '1.0.0',
-  description: 'Powerful WYSIWYG rich text editor for content creation'
-})
+  name: 'TinyMCE',
+  description: 'Powerful WYSIWYG rich text editor for content creation.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
 
-builder.metadata({
-  author: {
-    name: 'SonicJS Team',
-    email: 'team@sonicjs.com'
-  },
-  license: 'MIT',
-  compatibility: '^2.0.0'
+  activate: async () => console.info('✅ TinyMCE plugin activated'),
+  deactivate: async () => console.info('❌ TinyMCE plugin deactivated'),
 })
-
-builder.lifecycle({
-  activate: async () => {
-    console.info('✅ TinyMCE plugin activated')
-  },
-  deactivate: async () => {
-    console.info('❌ TinyMCE plugin deactivated')
-  }
-})
-
-const tinymcePlugin = builder.build() as Plugin
 
 export default tinymcePlugin
 

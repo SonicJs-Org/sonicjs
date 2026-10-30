@@ -106,6 +106,11 @@ export const CATEGORY_INFO: Record<string, CategoryInfo> = {
     title: 'Files',
     description: 'File serving from R2 storage',
     icon: '&#x1f4c1;'
+  },
+  'Collections': {
+    title: 'Collections',
+    description: 'Per-collection REST endpoints (auto-generated from registered collections)',
+    icon: '&#x1f4da;'
   }
 }
 
@@ -158,7 +163,7 @@ const ROUTE_METADATA: Record<string, RouteMeta> = {
   'DELETE /admin/api/collections/:id/fields/:fieldId': { description: 'Remove a field from a collection', category: 'Admin', authentication: true },
   'POST /admin/api/collections/:id/fields/reorder': { description: 'Reorder fields in a collection', category: 'Admin', authentication: true },
   'GET /admin/api/migrations/status': { description: 'Get database migration status', category: 'Admin', authentication: true },
-  'POST /admin/api/migrations/run': { description: 'Run pending database migrations', category: 'Admin', authentication: true },
+  'POST /admin/api/migrations/run': { description: 'Explain how to run D1 migrations with Wrangler', category: 'Admin', authentication: true },
   'GET /admin/api/content': { description: 'List content items with filtering and pagination', category: 'Admin', authentication: true },
   'GET /admin/api/content/:id': { description: 'Get a content item for admin editing', category: 'Admin', authentication: true },
   'POST /admin/api/content': { description: 'Create content via admin API', category: 'Admin', authentication: true },
@@ -253,6 +258,13 @@ const ROUTE_METADATA: Record<string, RouteMeta> = {
   'GET /api/system/info': { description: 'Get system information and version', category: 'System', authentication: false },
   'GET /api/system/schema': { description: 'Get database schema information', category: 'System', authentication: false },
 
+  // Collection shorthand routes
+  'GET /api/:collection': { description: 'List items from a collection (shorthand route)', category: 'Collections', authentication: false },
+  'GET /api/:collection/:id': { description: 'Get a single item by ID from a collection', category: 'Collections', authentication: false },
+  'POST /api/:collection': { description: 'Create an item in a collection', category: 'Collections', authentication: true },
+  'PUT /api/:collection/:id': { description: 'Update an item in a collection', category: 'Collections', authentication: true },
+  'DELETE /api/:collection/:id': { description: 'Delete an item from a collection', category: 'Collections', authentication: true },
+
   // File serving
   'GET /files/*': { description: 'Serve files from R2 storage (public access)', category: 'Files', authentication: false },
 
@@ -335,6 +347,7 @@ function inferCategory(path: string): string {
   if (path.startsWith('/forms/')) return 'Forms'
   if (path.startsWith('/files/')) return 'Files'
   if (path === '/health' || path.startsWith('/api')) return 'System'
+  if (path.match(/^\/api\/[^/]+(\/:id)?$/) && !path.startsWith('/api/content') && !path.startsWith('/api/collections') && !path.startsWith('/api/media') && !path.startsWith('/api/search') && !path.startsWith('/api/system') && !path.startsWith('/api/health') && !path.startsWith('/api/documents') && !path.startsWith('/api/forms')) return 'Collections'
   return 'Other'
 }
 

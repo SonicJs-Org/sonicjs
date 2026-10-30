@@ -1,0 +1,31 @@
+{
+  "id": "mcp",
+  "name": "MCP Server",
+  "version": "1.0.0",
+  "description": "Exposes SonicJS content as Model Context Protocol tools for AI agents (Claude Code, Cursor, VS Code)",
+  "author": "SonicJS Team",
+  "homepage": "https://sonicjs.com/plugins/mcp",
+  "repository": "https://github.com/lane711/sonicjs-ai/tree/main/packages/core/src/plugins/core-plugins/mcp-plugin",
+  "license": "MIT",
+  "category": "integration",
+  "tags": [
+    "mcp",
+    "ai",
+    "agents",
+    "api",
+    "integration"
+  ],
+  "dependencies": [
+    "api-keys"
+  ],
+  "settings": {},
+  "hooks": {},
+  "routes": [],
+  "permissions": {},
+  "iconEmoji": "🔌",
+  "is_core": true,
+  "optIn": true,
+  "defaultSettings": {
+    "listLimit": 50
+  }
+}

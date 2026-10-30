@@ -1,67 +1,7 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin, navigateToAdminSection, createTestCollection, deleteTestCollection, TEST_DATA } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import { loginAsAdmin, navigateToAdminSection, createTestCollection, deleteTestCollection, TEST_DATA, submitAndWaitForXhr } from './utils/test-helpers';
 
-test.describe.skip('Full Integration Workflows', () => {
-  test('should complete full collection and content workflow', async ({ page }) => {
-    await loginAsAdmin(page);
-    
-    // 1. Create a new collection with unique name
-    await navigateToAdminSection(page, 'collections');
-    await page.click('a[href="/admin/collections/new"]');
-    
-    const uniqueCollectionName = `test_collection_${Date.now()}`;
-    await page.fill('[name="name"]', uniqueCollectionName);
-    await page.fill('[name="displayName"]', `Test Collection ${Date.now()}`);
-    await page.fill('[name="description"]', TEST_DATA.collection.description);
-    
-    await page.click('button[type="submit"]');
-    
-    // Wait for form response
-    await page.waitForTimeout(2000);
-    
-    // Check if we're still on the form page or if there's an error
-    const currentUrl = page.url();
-    const hasSuccessMessage = await page.locator('.bg-green-100').isVisible();
-    const hasErrorMessage = await page.locator('.bg-red-100').isVisible();
-    
-    if (hasErrorMessage) {
-      // There was an error, read the error message
-      const errorText = await page.locator('.bg-red-100').textContent();
-      throw new Error(`Collection creation failed: ${errorText}`);
-    }
-    
-    if (hasSuccessMessage || currentUrl.includes('/admin/collections/new')) {
-      // Either success message appeared or we're still on form page, wait for redirect
-      await page.waitForURL('/admin/collections', { timeout: 25000 });
-    } else if (!currentUrl.includes('/admin/collections')) {
-      // We're somewhere unexpected, navigate manually
-      await page.goto('/admin/collections');
-      await page.waitForLoadState('networkidle');
-    }
-    
-    // 2. Navigate to content creation
-    await navigateToAdminSection(page, 'content');
-    await page.click('a[href="/admin/content/new"]');
-    
-    // 3. Should show collection selection page
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText('Create New Content');
-    
-    // Click on the collection we just created
-    const collectionLink = page.locator(`a[href*="/admin/content/new?collection="]`).filter({ hasText: TEST_DATA.collection.displayName }).first();
-    await collectionLink.click();
-    
-    // 4. Should now be on the actual content creation form
-    await expect(page.locator('form')).toBeVisible();
-    
-    // 5. Clean up - delete the test collection
-    try {
-      await deleteTestCollection(page, TEST_DATA.collection.name);
-    } catch (error) {
-      // Silently ignore cleanup errors
-    }
-  });
-
+test.describe('Full Integration Workflows @smoke', () => {
   test('should handle media upload and usage workflow', async ({ page }) => {
     await loginAsAdmin(page);
     
@@ -92,7 +32,13 @@ test.describe.skip('Full Integration Workflows', () => {
       buffer: testImageBuffer
     });
 
-    await page.locator('#upload-btn').click();
+    // The upload is an htmx POST to /admin/media/upload that writes to R2 and inserts a
+    // document; #upload-results stays empty until it answers. Asserting straight after the click
+    // spends an assertion budget on a server round trip — that is how this flaked in CI with the
+    // locator resolving 24x to an empty <div id="upload-results">. Wait for the response first.
+    await submitAndWaitForXhr(page, 'POST', '/admin/media/upload', () =>
+      page.locator('#upload-btn').click()
+    );
     
     // Wait for upload to complete with longer timeout
     await expect(page.locator('#upload-results')).toContainText('Successfully uploaded', { timeout: 15000 });
@@ -130,53 +76,6 @@ test.describe.skip('Full Integration Workflows', () => {
 
     // Verify logout success message is shown
     await expect(page.locator('text=logged out successfully')).toBeVisible();
-  });
-
-  test('should handle error scenarios gracefully', async ({ page }) => {
-    await loginAsAdmin(page);
-
-    // Test 1: Invalid collection creation
-    await navigateToAdminSection(page, 'collections');
-    await page.click('a[href="/admin/collections/new"]');
-
-    // Try to submit empty form - HTML5 validation should prevent submission
-    // Check that required field has validation attribute
-    const nameField = page.locator('[name="name"]');
-    await expect(nameField).toHaveAttribute('required');
-
-    // Fill with invalid pattern (uppercase letters not allowed)
-    await page.fill('[name="name"]', 'INVALID-NAME');
-    await page.fill('[name="displayName"]', 'Test Collection');
-
-    // Submit form - should fail validation or show error
-    await page.click('button[type="submit"]');
-
-    // Wait a moment for any response
-    await page.waitForTimeout(1000);
-
-    // Either we stay on the form page due to validation, or we get an error message
-    const currentUrl = page.url();
-    const isStillOnForm = currentUrl.includes('/admin/collections/new');
-    const hasError = await page.locator('.bg-red-100:not(a), .error').isVisible().catch(() => false);
-
-    // One of these should be true
-    expect(isStillOnForm || hasError).toBe(true);
-    
-    // Test 2: Invalid file upload
-    await navigateToAdminSection(page, 'media');
-    await page.locator('button').filter({ hasText: 'Upload Files' }).first().click();
-
-    // Try to upload invalid file
-    await page.setInputFiles('#file-input', {
-      name: 'test.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('not an image')
-    });
-
-    await page.locator('#upload-btn').click();
-
-    // Should show error
-    await expect(page.locator('#upload-results')).toContainText(/error|failed|not allowed/i);
   });
 
   test('should maintain data consistency across operations', async ({ page }) => {
@@ -221,63 +120,5 @@ test.describe.skip('Full Integration Workflows', () => {
     } catch (error) {
       // Silently ignore cleanup errors
     }
-  });
-
-  test('should handle concurrent user actions', async ({ browser }) => {
-    // Create two browser contexts to simulate concurrent users
-    const context1 = await browser.newContext();
-    const context2 = await browser.newContext();
-    
-    const page1 = await context1.newPage();
-    const page2 = await context2.newPage();
-    
-    // Both users login
-    await loginAsAdmin(page1);
-    await loginAsAdmin(page2);
-    
-    // User 1 creates a collection
-    await navigateToAdminSection(page1, 'collections');
-    await page1.click('a[href="/admin/collections/new"]');
-    await page1.fill('[name="name"]', 'concurrent_test_1');
-    await page1.fill('[name="displayName"]', 'Concurrent Test 1');
-    await page1.click('button[type="submit"]');
-    
-    // User 2 should see the new collection when they refresh
-    await navigateToAdminSection(page2, 'collections');
-    await page2.reload();
-    
-    await expect(page2.locator('tr').filter({ hasText: 'concurrent_test_1' })).toBeVisible();
-    
-    // Clean up
-    await deleteTestCollection(page1, 'concurrent_test_1');
-    
-    await context1.close();
-    await context2.close();
-  });
-
-  test('should handle performance under load', async ({ page }) => {
-    await loginAsAdmin(page);
-    
-    // Measure page load times
-    const startTime = Date.now();
-    
-    await navigateToAdminSection(page, 'content');
-    
-    const loadTime = Date.now() - startTime;
-    
-    // Page should load within reasonable time (5 seconds)
-    expect(loadTime).toBeLessThan(5000);
-    
-    // Test rapid navigation
-    const navigationStart = Date.now();
-    
-    await navigateToAdminSection(page, 'collections');
-    await navigateToAdminSection(page, 'media');
-    await navigateToAdminSection(page, 'content');
-    
-    const navigationTime = Date.now() - navigationStart;
-    
-    // Rapid navigation should complete within reasonable time
-    expect(navigationTime).toBeLessThan(3000);
   });
 }); 

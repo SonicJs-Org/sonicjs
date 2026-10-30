@@ -21,7 +21,83 @@
 // ============================================================================
 
 export { createSonicJSApp, setupCoreMiddleware, setupCoreRoutes } from './app'
-export type { SonicJSConfig, SonicJSApp, Bindings, Variables } from './app'
+export type { SonicJSConfig, SonicJSApp, Bindings, Variables, BootIsolateFn } from './app'
+
+// Plugin cron surface + trigger codegen
+export {
+  createScheduledHandler,
+  dispatchCronTick,
+  collectCrons,
+  collectCronSchedules,
+} from './plugins/cron'
+export type { CronDeclaration, CronTickEvent, CronContext, CronablePlugin, CronDispatchResult } from './plugins/cron'
+export { parseCronTriggers, updateWranglerTriggers, generateTriggersComment } from './plugins/generate-triggers'
+
+// Hook system singleton (needed by Worker entries)
+export { getHookSystem, hasHookSystem, setHookSystem, resetHookSystem, getTypedHooks } from './plugins/hooks/hook-system-singleton'
+
+// Plugin topo-sort
+export { topoSort, PluginDependencyCycleError } from './plugins/topo-sort'
+export type { SortablePlugin, TopoSortOptions } from './plugins/topo-sort'
+
+// Single-chokepoint plugin registration
+export { registerPlugins, RegisterPluginsError } from './plugins/sdk/register-plugins'
+export type {
+  RegisterablePlugin,
+  RegisterPluginsHostContext,
+  RegisterPluginsErrorReason,
+  PluginsRegistry,
+  RegistryEntry,
+} from './plugins/sdk/register-plugins'
+
+// Schema-driven plugin settings
+export {
+  parseConfigSchema,
+  renderSchemaFields,
+  parseFormDataToSettings,
+  applySchemaDefaults,
+} from './plugins/sdk/config-schema'
+export type {
+  ConfigSchema,
+  ConfigSchemaField,
+  StringField,
+  NumberField,
+  BooleanField,
+  SelectField,
+  ParsedField,
+  SettingsFor,
+} from './plugins/sdk/config-schema'
+
+// Declarative plugin admin-sidebar menu
+export {
+  setPluginMenu,
+  getPluginMenu,
+  resetPluginMenu,
+  resolvePluginMenuItems,
+} from './services/plugin-menu-singleton'
+export type { PluginMenuEntry, ResolvedPluginMenuEntry } from './services/plugin-menu-singleton'
+
+// RBAC (document-backed) + document type bootstrap — used by app seed scripts
+export { RbacService } from './services/rbac'
+export { bootstrapDocumentTypes } from './services/document-types-seed'
+
+// Document repository + service — re-exported for user plugins that read/write documents
+export { DocumentRepository } from './services/document-repository'
+export { DocumentsService } from './services/documents'
+
+// Cloudflare email provider
+export { CloudflareEmailProvider } from './services/email/providers/cloudflare'
+export type { CloudflareEmailProviderOptions, CFSendEmailBinding } from './services/email/providers/cloudflare'
+export type { EmailLogRow } from './services/email/types'
+
+// Core plugins exported for use in Worker entries and custom scheduled handlers
+export { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
+export { redirectPlugin, createRedirectPlugin } from './plugins/redirect-management'
+export { helloWorldPlugin, createHelloWorldPlugin } from './plugins/core-plugins/hello-world-plugin'
+export { demoLoginPlugin } from './plugins/core-plugins/demo-login'
+export { versioningPlugin, createVersioningPlugin } from './plugins/core-plugins/versioning-plugin'
+export { graphqlPlugin } from './plugins/core-plugins/graphql-plugin'
+export type { GraphqlConfigInput, GraphqlConfig } from './plugins/core-plugins/graphql-plugin'
 
 // ============================================================================
 // Placeholders - To be populated in Phase 2
@@ -29,26 +105,14 @@ export type { SonicJSConfig, SonicJSApp, Bindings, Variables } from './app'
 
 // Services - Week 2 (COMPLETED)
 export {
-  // Collection Management
+  // Collection Management — code-only API. DB-backed sync was removed in PR 4
+  // of the drop-db-collections plan; collections live in the in-memory
+  // CollectionRegistry now.
   loadCollectionConfigs,
   loadCollectionConfig,
   getAvailableCollectionNames,
   validateCollectionConfig,
   registerCollections,
-  syncCollections,
-  syncCollection,
-  isCollectionManaged,
-  getManagedCollections,
-  cleanupRemovedCollections,
-  fullCollectionSync,
-  // Form-Collection Sync
-  syncAllFormCollections,
-  syncFormCollection,
-  createContentFromSubmission,
-  deriveCollectionSchemaFromFormio,
-  deriveSubmissionTitle,
-  mapFormStatusToContentStatus,
-  backfillFormSubmissions,
   // Database Migrations
   MigrationService,
   // Logging
@@ -61,6 +125,9 @@ export {
 } from './services'
 
 export type { Migration, MigrationStatus, LogLevel, LogCategory, LogEntry, LogFilter, CorePlugin } from './services'
+
+// Collections - Code-defined managed collections
+export { default as siteSettingsCollection } from './collections/site-settings.collection'
 
 // Middleware - Week 2 (COMPLETED)
 export {
@@ -122,10 +189,7 @@ export {
   adminMediaRoutes,
   adminLogsRoutes,
   adminPluginRoutes,
-  adminDesignRoutes,
   adminCheckboxRoutes,
-  adminTestimonialsRoutes,
-  adminCodeExamplesRoutes,
   adminDashboardRoutes,
   adminCollectionsRoutes,
   adminSettingsRoutes,
@@ -147,6 +211,8 @@ export {
   getConfirmationDialogScript,
   // Filter bar templates
   renderFilterBar,
+  // Admin layout (catalyst)
+  renderAdminLayoutCatalyst,
 } from './templates'
 
 export type {
@@ -160,6 +226,7 @@ export type {
   FilterBarData,
   Filter,
   FilterOption,
+  AdminLayoutCatalystData,
 } from './templates'
 
 // Types - Week 1 (COMPLETED)
@@ -237,7 +304,6 @@ export {
   createDb,
   // Schema exports
   users,
-  collections,
   content,
   contentVersions,
   media,
@@ -253,8 +319,6 @@ export {
   // Zod validation schemas
   insertUserSchema,
   selectUserSchema,
-  insertCollectionSchema,
-  selectCollectionSchema,
   insertContentSchema,
   selectContentSchema,
   insertMediaSchema,
@@ -280,8 +344,6 @@ export {
 export type {
   User,
   NewUser,
-  Collection,
-  NewCollection,
   Content,
   NewContent,
   Media,
@@ -304,8 +366,8 @@ export type {
   NewLogConfig,
 } from './db'
 
-// Plugin SDK (Beta)
-export { PluginBuilder, PluginHelpers } from './plugins/sdk'
+// Plugin SDK (v4 — Payload-shaped)
+export { definePlugin, isDefinedPlugin } from './plugins/sdk'
 
 // OAuth Providers Plugin
 export { oauthProvidersPlugin, createOAuthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
@@ -314,6 +376,10 @@ export { OAuthService, BUILT_IN_PROVIDERS } from './plugins/core-plugins/oauth-p
 // User Profiles Plugin
 export { userProfilesPlugin, createUserProfilesPlugin, defineUserProfile, getUserProfileConfig } from './plugins/core-plugins/user-profiles'
 export type { ProfileFieldDefinition, UserProfileConfig } from './plugins/core-plugins/user-profiles'
+
+// MCP Server Plugin (opt-in)
+export { mcpPlugin, createMcpPlugin } from './plugins/core-plugins/mcp-plugin'
+export type { McpConfigInput, McpConfig } from './plugins/core-plugins/mcp-plugin'
 
 // ============================================================================
 // Version

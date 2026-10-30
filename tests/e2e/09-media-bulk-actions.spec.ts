@@ -1,11 +1,11 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import { loginAsAdmin, gotoMediaLibrary } from './utils/test-helpers';
 
-test.describe.skip('Media Bulk Actions', () => {
+test.describe('Media Bulk Actions @media', () => {
   let uploadedFileIds: string[] = [];
 
   test.beforeEach(async ({ page, context }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, false);
 
     // Upload 2 test files via API instead of UI to ensure they persist
     const testImageBuffer = Buffer.from([
@@ -36,7 +36,7 @@ test.describe.skip('Media Bulk Actions', () => {
     formData.append('folder', 'uploads');
 
     // Use context.request to maintain cookies from browser login
-    const uploadResponse = await context.request.post('http://localhost:8787/api/media/upload-multiple', {
+    const uploadResponse = await context.request.post('/api/media/upload-multiple', {
       multipart: formData
     });
 
@@ -57,16 +57,11 @@ test.describe.skip('Media Bulk Actions', () => {
       throw new Error('Failed to upload files or invalid response format');
     }
 
-    // Now navigate to media page with cache busting
-    await page.goto(`/admin/media?t=${Date.now()}`);
-    await page.waitForLoadState('networkidle');
-
-    // Wait a moment for any post-upload processing
-    await page.waitForTimeout(1000);
-
-    // Reload to ensure we bypass cache
-    await page.reload();
-    await page.waitForLoadState('networkidle');
+    // Now navigate to media page with cache busting. One load, not two: the previous
+    // goto/sleep/reload sequence was guarding against the upload not being visible yet, but the
+    // uploads above are awaited API calls — the row exists before this navigation starts, and the
+    // poll below is what actually proves it. The round trip it removes is the expensive one.
+    await gotoMediaLibrary(page, `/admin/media?t=${Date.now()}`);
 
     // Wait for media grid to load with at least 2 files
     await page.waitForSelector('input[type="checkbox"].media-checkbox', { timeout: 10000 });
@@ -81,7 +76,7 @@ test.describe.skip('Media Bulk Actions', () => {
     // Clean up uploaded test files
     if (uploadedFileIds.length > 0) {
       try {
-        await context.request.post('http://localhost:8787/api/media/bulk-delete', {
+        await context.request.post('/api/media/bulk-delete', {
           data: {
             fileIds: uploadedFileIds
           }
@@ -248,16 +243,18 @@ test.describe.skip('Media Bulk Actions', () => {
   });
 
   test('should successfully delete selected files using bulk delete', async ({ page }) => {
-    // Files are already uploaded in beforeEach
-    const mediaItems = page.locator('input[type="checkbox"].media-checkbox');
+    // Target the two files this spec uploaded, by id, rather than "whatever is first in the
+    // grid". The media library is shared with every other @media spec running in parallel: by
+    // position this test deletes a neighbour's fixtures, and comparing the grid's total count
+    // before and after fails whenever a neighbour uploads in between (seen as `Expected: 16,
+    // Received: 18`).
+    expect(uploadedFileIds, 'beforeEach should have uploaded exactly two files').toHaveLength(2);
 
-    // Get initial count of media items
-    const initialCount = await mediaItems.count();
-    expect(initialCount).toBeGreaterThanOrEqual(2);
-
-    // Select first 2 files
-    await mediaItems.nth(0).check();
-    await mediaItems.nth(1).check();
+    for (const id of uploadedFileIds) {
+      const box = page.locator(`input[type="checkbox"].media-checkbox[value="${id}"]`);
+      await expect(box, `uploaded file ${id} should be on the first page of the grid`).toBeVisible();
+      await box.check();
+    }
 
     // Open bulk actions menu
     const bulkActionsBtn = page.locator('#bulk-actions-btn');
@@ -284,12 +281,14 @@ test.describe.skip('Media Bulk Actions', () => {
     await expect(confirmButton).toBeVisible();
     await confirmButton.click({ force: true });
 
-    // Wait for deletion to complete and grid to refresh
-    await page.waitForTimeout(1000);
-
-    // Verify files were deleted - count should decrease by 2
-    const finalCount = await mediaItems.count();
-    expect(finalCount).toBe(initialCount - 2);
+    // Our two rows go away. What the rest of the library is doing is another spec's business.
+    for (const id of uploadedFileIds) {
+      await expect(
+        page.locator(`[data-file-id="${id}"]`),
+        `media item ${id} should be gone from the grid after bulk delete`
+      ).toHaveCount(0, { timeout: 15000 });
+    }
+    uploadedFileIds = [];
 
     // Verify bulk actions button is disabled (no files selected)
     await expect(bulkActionsBtn).toBeDisabled();

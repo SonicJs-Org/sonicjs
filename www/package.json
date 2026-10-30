@@ -1,15 +1,16 @@
 {
   "name": "www",
-  "version": "2.0.1",
+  "version": "3.0.0-beta.0",
   "description": "Official documentation website for SonicJS headless CMS",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "predev": "node scripts/generate-sections.mjs",
-    "dev": "next dev -p 3010",
+    "predev": "kill -9 $(lsof -ti:3010) 2>/dev/null || true; node scripts/generate-sections.mjs",
+    "dev": "next dev --webpack -p 3010",
     "prebuild": "node scripts/generate-sections.mjs",
     "build": "next build --webpack",
     "start": "next start -p 3010",
@@ -36,7 +37,8 @@
     "@mdx-js/loader": "^3.1.0",
     "@mdx-js/react": "^3.1.0",
     "@next/mdx": "^16",
-    "@opennextjs/cloudflare": "^1.17.1",
+    "@opennextjs/aws": "^4.0.3",
+    "@opennextjs/cloudflare": "^1.20.0",
     "@sindresorhus/slugify": "^2.2.1",
     "@tailwindcss/postcss": "^4.1.11",
     "@tailwindcss/typography": "^0.5.16",
@@ -50,7 +52,7 @@
     "gray-matter": "^4.0.3",
     "mdast-util-to-string": "^4.0.0",
     "mdx-annotations": "^0.1.4",
-    "next": "^16.2.3",
+    "next": "^16.3.0",
     "next-mdx-remote": "^6.0.0",
     "next-themes": "^0.4.6",
     "prettier-plugin-organize-imports": "^4.2.0",
@@ -76,7 +78,7 @@
     "eslint-config-next": "^16",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
-    "sharp": "0.34.3",
+    "sharp": "0.35.5",
     "wrangler": "^4.65.0"
   }
 }

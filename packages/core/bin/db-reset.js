@@ -49,13 +49,16 @@ async function prompt(question) {
   });
 }
 
-function findWranglerToml() {
-  // Look for wrangler.toml in current directory or parent directories
+function findWranglerConfig() {
+  // Prefer wrangler.toml, then wrangler.jsonc, then wrangler.json
+  const candidates = ['wrangler.toml', 'wrangler.jsonc', 'wrangler.json'];
   let dir = process.cwd();
   for (let i = 0; i < 5; i++) {
-    const tomlPath = join(dir, 'wrangler.toml');
-    if (existsSync(tomlPath)) {
-      return { path: tomlPath, dir };
+    for (const filename of candidates) {
+      const configPath = join(dir, filename);
+      if (existsSync(configPath)) {
+        return { path: configPath, dir, format: filename.endsWith('.toml') ? 'toml' : 'json' };
+      }
     }
     dir = dirname(dir);
   }
@@ -66,16 +69,16 @@ async function main() {
   log('\n🔧 SonicJS Database Reset Tool', colors.cyan + colors.bold);
   log('================================\n', colors.cyan);
 
-  // Find wrangler.toml
-  const wranglerInfo = findWranglerToml();
+  // Find wrangler config (toml, jsonc, or json)
+  const wranglerInfo = findWranglerConfig();
   if (!wranglerInfo) {
-    log('Error: Could not find wrangler.toml in current or parent directories', colors.red);
+    log('Error: Could not find wrangler.toml / wrangler.jsonc / wrangler.json in current or parent directories', colors.red);
     log('Please run this command from your SonicJS project directory.', colors.yellow);
     process.exit(1);
   }
 
-  const { path: wranglerPath, dir: projectDir } = wranglerInfo;
-  log(`Found wrangler.toml at: ${wranglerPath}`, colors.green);
+  const { path: wranglerPath, dir: projectDir, format: wranglerFormat } = wranglerInfo;
+  log(`Found wrangler config at: ${wranglerPath}`, colors.green);
 
   // Change to project directory
   process.chdir(projectDir);
@@ -176,22 +179,36 @@ async function main() {
 
   log(`\nDatabase ID: ${dbId}`, colors.green);
 
-  // Update wrangler.toml with the new database ID
-  log('\nUpdating wrangler.toml...', colors.yellow);
+  // Update wrangler config with the new database ID
+  const configBasename = wranglerPath.split('/').pop();
+  log(`\nUpdating ${configBasename}...`, colors.yellow);
   try {
     let wranglerContent = readFileSync(wranglerPath, 'utf-8');
-    wranglerContent = wranglerContent.replace(
-      /database_id\s*=\s*"[^"]*"/,
-      `database_id = "${dbId}"`
-    );
-    wranglerContent = wranglerContent.replace(
-      /database_name\s*=\s*"[^"]*"/,
-      `database_name = "${dbName}"`
-    );
+    if (wranglerFormat === 'toml') {
+      // TOML syntax: database_id = "value"
+      wranglerContent = wranglerContent.replace(
+        /database_id\s*=\s*"[^"]*"/,
+        `database_id = "${dbId}"`
+      );
+      wranglerContent = wranglerContent.replace(
+        /database_name\s*=\s*"[^"]*"/,
+        `database_name = "${dbName}"`
+      );
+    } else {
+      // JSON/JSONC syntax: "database_id": "value"
+      wranglerContent = wranglerContent.replace(
+        /"database_id"\s*:\s*"[^"]*"/,
+        `"database_id": "${dbId}"`
+      );
+      wranglerContent = wranglerContent.replace(
+        /"database_name"\s*:\s*"[^"]*"/,
+        `"database_name": "${dbName}"`
+      );
+    }
     writeFileSync(wranglerPath, wranglerContent);
-    log('Updated wrangler.toml successfully', colors.green);
+    log(`Updated ${configBasename} successfully`, colors.green);
   } catch (error) {
-    log(`Error updating wrangler.toml: ${error.message}`, colors.red);
+    log(`Error updating ${configBasename}: ${error.message}`, colors.red);
     process.exit(1);
   }
 

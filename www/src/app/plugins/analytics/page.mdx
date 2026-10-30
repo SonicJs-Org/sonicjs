@@ -1,414 +1,93 @@
 export const sections = [
   { title: 'Overview', id: 'overview' },
-  { title: 'Features', id: 'features' },
-  { title: 'Setup', id: 'setup' },
-  { title: 'Tracking Page Views', id: 'tracking-page-views' },
   { title: 'Custom Events', id: 'custom-events' },
   { title: 'API Reference', id: 'api-reference' },
-  { title: 'Event Tracking API', id: 'event-tracking-api' },
-  { title: 'Analytics Service', id: 'analytics-service' },
   { title: 'Admin Dashboard', id: 'admin-dashboard' },
-  { title: 'Configuration', id: 'configuration' },
+  { title: 'Hooks Integration', id: 'hooks-integration' },
+  { title: 'Data Storage', id: 'data-storage' },
 ]
 
 # Analytics Plugin
 
-Built-in analytics and insights for SonicJS with page view tracking, user sessions, custom events, real-time monitoring, and detailed reporting. {{ className: 'lead' }}
+Built-in event tracking and request monitoring for SonicJS. Store custom events, query them via API, and view request metrics in the admin dashboard. {{ className: 'lead' }}
 
 ---
 
 ## Overview
 
-The Analytics plugin provides comprehensive visitor and content analytics without requiring external services. Track page views, user behavior, and custom events directly within your SonicJS application.
+The Analytics plugin is included with SonicJS core and enabled by default. It provides two complementary capabilities:
 
 <FeatureGrid
   features={[
     {
       icon: '📊',
-      title: 'Page View Tracking',
-      description: 'Automatic tracking of all page visits with referrer and user agent data',
+      title: 'Custom Event Tracking',
+      description: 'Track named events via HTTP API — single or batch. Stored in the document repository and queryable by event name, category, user, session, or date range.',
     },
     {
-      icon: '👥',
-      title: 'Session Management',
-      description: 'Track user sessions with duration and behavior patterns',
-    },
-    {
-      icon: '⚡',
-      title: 'Real-time Analytics',
-      description: 'Monitor active users and live page activity',
-    },
-    {
-      icon: '📈',
-      title: 'Custom Reports',
-      description: 'Generate detailed reports with custom date ranges',
+      icon: '🖥️',
+      title: 'Request Monitoring Dashboard',
+      description: 'Admin dashboard at /admin/analytics showing last-24h request totals, unique IPs, average response time, error count, top URLs, and recent activity — sourced from system_logs.',
     },
   ]}
   columns={2}
 />
 
----
-
-## Features
-
-### Automatic Tracking
-
-- Page views tracked automatically via middleware
-- Request method, status, and duration captured
-- User agent and referrer recorded
-- IP address tracking (from Cloudflare headers)
-
-### Session Analytics
-
-- Unique session IDs per visitor
-- Session duration tracking
-- User behavior patterns
-- Bounce rate calculation
-
-### Custom Events
-
-- Track any custom event type
-- Associate events with users and sessions
-- Store event metadata as JSON
-- Query events by type or time range
-
-### Reporting
-
-- Traffic reports by date range
-- Top pages by views
-- User engagement metrics
-- Export capabilities
-
----
-
-## Setup
-
-The Analytics plugin is included with SonicJS core and enabled by default.
-
-### Verify Plugin Status
-
-Navigate to **Admin > Plugins** to confirm the Analytics plugin is active.
-
-### Database Tables
-
-The plugin automatically creates these tables:
-
-| Table | Purpose |
-|-------|---------|
-| `analytics_pageviews` | Stores page view records |
-| `analytics_events` | Stores custom event data |
-
----
-
-## Tracking Page Views
-
-Page views are tracked automatically by the analytics middleware. Each request captures:
-
-<CodeGroup title="Page View Data">
-
-```typescript
-interface PageView {
-  path: string           // URL path visited
-  title?: string         // Page title
-  referrer?: string      // HTTP referrer
-  userAgent?: string     // Browser user agent
-  ipAddress?: string     // Visitor IP address
-  sessionId?: string     // Unique session ID
-  userId?: number        // User ID (if authenticated)
-  duration?: number      // Time on page (milliseconds)
-}
-```
-
-</CodeGroup>
-
-### Manual Page View Tracking
-
-Track page views programmatically:
-
-<CodeGroup title="Track Page View">
-
-```typescript
-import { analyticsService } from '@sonicjs-cms/core/plugins'
-
-// Track a page view
-const result = await analyticsService.trackPageView({
-  path: '/products/item-123',
-  title: 'Product Detail - Widget Pro',
-  sessionId: 'session-xyz',
-  userId: 456
-})
-
-console.log('View tracked:', result.viewId)
-```
-
-</CodeGroup>
+**Not currently implemented:** automatic page view recording, session duration / bounce rate calculation, real-time active-user counts, reports UI, data export, and per-plugin configuration options.
 
 ---
 
 ## Custom Events
 
-Track custom events to measure user interactions and conversions.
-
 ### Event Structure
 
-<CodeGroup title="Event Data">
+Events are stored as `analytics_event` documents in the document repository. The fields you can track and filter on:
+
+<CodeGroup title="TrackEventInput">
 
 ```typescript
-interface AnalyticsEvent {
-  eventType: string      // Category: 'auth', 'content', 'conversion', etc.
-  eventName: string      // Specific event: 'user_login', 'purchase', etc.
-  eventData?: object     // Additional metadata
-  path?: string          // Page where event occurred
-  sessionId?: string     // Associated session
-  userId?: number        // Associated user
+interface TrackEventInput {
+  event: string                        // required — event name
+  category?: string                    // default: 'user-activity'
+  properties?: Record<string, unknown> // arbitrary metadata
+  userId?: string
+  sessionId?: string
+  path?: string
+  // ipAddress and userAgent are captured automatically from the request
 }
 ```
 
 </CodeGroup>
 
-### Track Custom Events
+### Queryable Fields
 
-<CodeGroup title="Track Events">
-
-```typescript
-import { analyticsService } from '@sonicjs-cms/core/plugins'
-
-// Track a conversion event
-await analyticsService.trackEvent({
-  eventType: 'conversion',
-  eventName: 'purchase_completed',
-  eventData: {
-    orderId: 'order-12345',
-    amount: 99.99,
-    currency: 'USD',
-    items: 3
-  },
-  sessionId: 'session-xyz',
-  userId: 456
-})
-
-// Track a feature usage event
-await analyticsService.trackEvent({
-  eventType: 'feature',
-  eventName: 'export_clicked',
-  eventData: {
-    format: 'csv',
-    recordCount: 150
-  }
-})
-
-// Track a content event
-await analyticsService.trackEvent({
-  eventType: 'content',
-  eventName: 'article_shared',
-  eventData: {
-    articleId: 'post-789',
-    platform: 'twitter'
-  },
-  path: '/blog/my-article'
-})
-```
-
-</CodeGroup>
-
-### Common Event Types
-
-| Event Type | Use Case |
-|------------|----------|
-| `auth` | Login, logout, registration |
-| `content` | Views, shares, downloads |
-| `conversion` | Purchases, sign-ups, goals |
-| `feature` | Feature usage, button clicks |
-| `error` | Client-side errors, failures |
-| `custom` | Any other events |
+| Field | Indexed column | Notes |
+|-------|---------------|-------|
+| `event` | `q_evt_event` | Exact match |
+| `category` | `q_evt_category` | Exact match |
+| `userId` | `q_evt_user_id` | Exact match |
+| `sessionId` | `q_evt_session_id` | Exact match |
+| `path` | `q_evt_path` | Exact match |
 
 ---
 
 ## API Reference
 
-All analytics endpoints require authentication with `admin` or `analytics:read` role.
-
-### Get Statistics
-
-<Row>
-  <Col>
-    Retrieve analytics overview statistics for a time range.
-
-    **Query Parameters:**
-    - `range` - Time range: `1d`, `7d`, `30d`, `90d` (default: `7d`)
-    - `metric` - Specific metric: `pageviews`, `sessions`, `users`, `all` (default: `all`)
-  </Col>
-  <Col>
-    <CodeGroup title="Request">
-
-    ```bash
-    curl -X GET 'https://your-app.workers.dev/api/analytics/stats?range=7d' \
-      -H 'Authorization: Bearer YOUR_TOKEN'
-    ```
-
-    </CodeGroup>
-
-    <CodeGroup title="Response">
-
-    ```json
-    {
-      "message": "Analytics stats",
-      "data": {
-        "pageviews": 12500,
-        "uniqueVisitors": 3200,
-        "sessions": 4800,
-        "avgSessionDuration": 245,
-        "bounceRate": 0.35,
-        "topPages": [
-          { "path": "/", "views": 3200 },
-          { "path": "/about", "views": 1800 },
-          { "path": "/contact", "views": 950 }
-        ],
-        "timeRange": "7d"
-      }
-    }
-    ```
-
-    </CodeGroup>
-  </Col>
-</Row>
-
 ### Track Event
 
+No authentication required to write events.
+
 <Row>
   <Col>
-    Track a custom analytics event.
+    Track a single event.
 
     **Request Body:**
-    - `eventType` (required) - Event category
-    - `eventName` (required) - Specific event name
-    - `eventData` - Optional metadata object
-    - `path` - Page path
-    - `sessionId` - Session identifier
-    - `userId` - User ID
-  </Col>
-  <Col>
-    <CodeGroup title="Request">
-
-    ```bash
-    curl -X POST 'https://your-app.workers.dev/api/analytics/track' \
-      -H 'Authorization: Bearer YOUR_TOKEN' \
-      -H 'Content-Type: application/json' \
-      -d '{
-        "eventType": "conversion",
-        "eventName": "signup_completed",
-        "eventData": { "plan": "pro" }
-      }'
-    ```
-
-    </CodeGroup>
-
-    <CodeGroup title="Response">
-
-    ```json
-    {
-      "message": "Event tracked successfully",
-      "eventId": "event-1234567890"
-    }
-    ```
-
-    </CodeGroup>
-  </Col>
-</Row>
-
-### Generate Report
-
-<Row>
-  <Col>
-    Generate detailed analytics reports.
-
-    **Query Parameters:**
-    - `type` - Report type: `traffic`, `pages`, `users`, `behavior` (default: `traffic`)
-    - `start` - Start date (ISO format)
-    - `end` - End date (ISO format)
-  </Col>
-  <Col>
-    <CodeGroup title="Request">
-
-    ```bash
-    curl -X GET 'https://your-app.workers.dev/api/analytics/reports?type=traffic&start=2024-01-01&end=2024-01-31' \
-      -H 'Authorization: Bearer YOUR_TOKEN'
-    ```
-
-    </CodeGroup>
-
-    <CodeGroup title="Response">
-
-    ```json
-    {
-      "message": "Analytics report",
-      "data": {
-        "reportType": "traffic",
-        "dateRange": {
-          "start": "2024-01-01",
-          "end": "2024-01-31"
-        },
-        "data": []
-      }
-    }
-    ```
-
-    </CodeGroup>
-  </Col>
-</Row>
-
-### Real-time Data
-
-<Row>
-  <Col>
-    Get real-time analytics showing active users and pages.
-  </Col>
-  <Col>
-    <CodeGroup title="Request">
-
-    ```bash
-    curl -X GET 'https://your-app.workers.dev/api/analytics/realtime' \
-      -H 'Authorization: Bearer YOUR_TOKEN'
-    ```
-
-    </CodeGroup>
-
-    <CodeGroup title="Response">
-
-    ```json
-    {
-      "message": "Real-time analytics",
-      "data": {
-        "activeUsers": 23,
-        "activePages": [
-          { "path": "/", "users": 8 },
-          { "path": "/blog", "users": 5 },
-          { "path": "/products", "users": 4 }
-        ],
-        "recentEvents": []
-      }
-    }
-    ```
-
-    </CodeGroup>
-  </Col>
-</Row>
-
-### Event Tracking API <span className="px-2 py-0.5 text-xs font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded">NEW in v2.16.0</span>
-
-The `/api/events` endpoint provides a public HTTP API for tracking events from client-side code, external services, or any HTTP client. No authentication required for tracking; admin auth required for querying.
-
-<Row>
-  <Col>
-    **Track a single event:**
-
-    **Request Body:**
-    - `event` (required) - Event name
-    - `category` - Event category (default: `general`)
-    - `data` - Additional metadata object
-    - `path` - Page URL path
-    - `session_id` - Session identifier
-    - `user_id` - User identifier
+    - `event` (required) — event name string
+    - `category` — event category (default: `user-activity`)
+    - `properties` — optional metadata object
+    - `path` — page URL path
+    - `sessionId` — session identifier
+    - `userId` — user identifier (overridden by authenticated user if logged in)
   </Col>
   <Col>
     <CodeGroup title="Track Single Event">
@@ -419,7 +98,7 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
       -d '{
         "event": "button_click",
         "category": "ui",
-        "data": { "button": "signup", "variant": "hero" },
+        "properties": { "button": "signup", "variant": "hero" },
         "path": "/pricing"
       }'
     ```
@@ -431,7 +110,7 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
     ```json
     {
       "success": true,
-      "id": "evt_abc123"
+      "eventId": "doc_abc123"
     }
     ```
 
@@ -439,11 +118,11 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
   </Col>
 </Row>
 
+### Track Batch Events
+
 <Row>
   <Col>
-    **Track batch events (up to 100):**
-
-    Send an array of events in a single request for better performance.
+    Send an array of up to 100 events in one request. Each event follows the same shape as a single event. Events are written sequentially — not in a single DB transaction.
   </Col>
   <Col>
     <CodeGroup title="Batch Track">
@@ -454,7 +133,7 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
       -d '[
         { "event": "page_view", "path": "/home" },
         { "event": "page_view", "path": "/about" },
-        { "event": "click", "category": "nav", "data": { "target": "pricing" } }
+        { "event": "click", "category": "nav", "properties": { "target": "pricing" } }
       ]'
     ```
 
@@ -465,6 +144,7 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
     ```json
     {
       "success": true,
+      "eventIds": ["doc_abc", "doc_def", "doc_ghi"],
       "count": 3
     }
     ```
@@ -473,15 +153,21 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
   </Col>
 </Row>
 
+### Query Events
+
+**Admin auth required.**
+
 <Row>
   <Col>
-    **Query events** (admin auth required):
-
     **Query Parameters:**
-    - `event` - Filter by event name
-    - `category` - Filter by category
-    - `limit` - Max results (default: 100)
-    - `offset` - Pagination offset
+    - `event` — filter by event name
+    - `category` — filter by category
+    - `userId` — filter by user ID
+    - `sessionId` — filter by session ID
+    - `startDate` — Unix timestamp (seconds)
+    - `endDate` — Unix timestamp (seconds)
+    - `limit` — max results (default: `50`)
+    - `offset` — pagination offset (default: `0`)
   </Col>
   <Col>
     <CodeGroup title="Query Events">
@@ -492,14 +178,39 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
     ```
 
     </CodeGroup>
+
+    <CodeGroup title="Response">
+
+    ```json
+    {
+      "events": [
+        {
+          "id": "doc_abc123",
+          "createdAt": 1700000000,
+          "event": "button_click",
+          "category": "ui",
+          "path": "/pricing"
+        }
+      ],
+      "total": 142
+    }
+    ```
+
+    </CodeGroup>
   </Col>
 </Row>
 
+### Event Stats
+
+**Admin auth required.**
+
 <Row>
   <Col>
-    **Get event stats** (admin auth required):
+    Returns total event count, unique user count, unique session count, and top 20 events by frequency.
 
-    Returns aggregated counts grouped by event name.
+    **Query Parameters:**
+    - `startDate` — Unix timestamp (seconds)
+    - `endDate` — Unix timestamp (seconds)
   </Col>
   <Col>
     <CodeGroup title="Event Stats">
@@ -510,190 +221,78 @@ The `/api/events` endpoint provides a public HTTP API for tracking events from c
     ```
 
     </CodeGroup>
+
+    <CodeGroup title="Response">
+
+    ```json
+    {
+      "totalEvents": 5420,
+      "uniqueUsers": 312,
+      "uniqueSessions": 891,
+      "topEvents": [
+        { "event": "page_view", "count": 3100 },
+        { "event": "button_click", "count": 980 }
+      ]
+    }
+    ```
+
+    </CodeGroup>
   </Col>
 </Row>
 
 ---
 
-## Analytics Service
-
-Use the analytics service programmatically in your code.
-
-### Access the Service
-
-<CodeGroup title="Service Access">
-
-```typescript
-// In hooks or middleware with context
-const analyticsService = context.services?.analyticsService
-
-// Track page view
-const view = await analyticsService?.trackPageView({
-  path: '/my-page',
-  title: 'My Page'
-})
-
-// Track event
-const event = await analyticsService?.trackEvent({
-  eventType: 'custom',
-  eventName: 'button_clicked'
-})
-
-// Get statistics
-const stats = await analyticsService?.getStats('7d')
-console.log(`${stats.pageviews} views this week`)
-
-// Generate report
-const report = await analyticsService?.generateReport('traffic', {
-  start: '2024-01-01',
-  end: '2024-01-31'
-})
-```
-
-</CodeGroup>
-
-### Service Methods
-
-| Method | Parameters | Returns |
-|--------|------------|---------|
-| `trackPageView(data)` | PageView object | `{ viewId: string }` |
-| `trackEvent(event)` | AnalyticsEvent object | `{ eventId: string }` |
-| `getStats(range)` | `'1d'`, `'7d'`, `'30d'`, `'90d'` | Statistics object |
-| `generateReport(type, options)` | Report type and date range | `{ reportId: string }` |
-
----
-
 ## Admin Dashboard
 
-The plugin provides admin pages for viewing analytics.
+**Path:** `/admin/analytics` — requires `admin` role.
 
-### Dashboard
+Displays last-24-hour metrics sourced from the `system_logs` table:
 
-**Path:** `/admin/analytics`
+| Metric | Source |
+|--------|--------|
+| Total Requests | `COUNT(*)` where `category = 'api'` |
+| Unique Visitors | `COUNT(DISTINCT ip_address)` where `category = 'api'` |
+| Avg Response Time | `AVG(duration)` where `category = 'api'` |
+| Errors | `COUNT(*)` where `level IN ('error', 'fatal')` |
+| Top Pages | Top 10 URLs by request count |
+| Recent Activity | Last 20 API requests |
 
-Overview of key metrics:
-- Total page views
-- Unique visitors
-- Session count
-- Top pages
+**Note:** The dashboard reads from `system_logs`, not the `analytics_event` documents stored by `POST /api/events`. If `system_logs` is empty or doesn't exist yet, all metrics show zero — this is expected on a fresh install.
 
-### Reports
-
-**Path:** `/admin/analytics/reports`
-
-Generate custom reports:
-- Select report type
-- Choose date range
-- Export data
-
-### Real-time
-
-**Path:** `/admin/analytics/realtime`
-
-Live monitoring:
-- Active user count
-- Active pages with visitor counts
-- Recent events feed
-
-### Settings
-
-**Path:** `/admin/analytics/settings`
-
-Configure the plugin:
-- Enable/disable tracking
-- Data retention settings
-- Feature toggles
-
----
-
-## Configuration
-
-### Plugin Settings
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `trackPageViews` | boolean | `true` | Automatically track page views |
-| `trackUserSessions` | boolean | `true` | Track session duration and behavior |
-| `retentionDays` | number | `90` | Days to retain analytics data |
-
-### Permissions
-
-| Permission | Description |
-|------------|-------------|
-| `analytics:view` | View analytics data |
-| `analytics:read` | Read access to analytics API |
-| `analytics:export` | Export analytics reports |
-| `analytics:configure` | Change plugin settings |
+There are no sub-pages for reports, real-time monitoring, or settings. The only admin analytics URL is `/admin/analytics`.
 
 ---
 
 ## Hooks Integration
 
-The plugin integrates with these hooks:
+The plugin registers four hooks at boot:
 
-| Hook | Priority | Purpose |
-|------|----------|---------|
-| `REQUEST_START` | 1 | Initialize session tracking |
-| `REQUEST_END` | 1 | Finalize request metrics |
-| `USER_LOGIN` | 8 | Track login events |
-| `content:view` | 8 | Track content views |
+| Hook | Priority | What it does |
+|------|----------|-------------|
+| `request:start` | 1 | Generates an in-memory session ID (`data.analytics.sessionId`). Not persisted to DB. |
+| `request:end` | 1 | Logs request duration to `console.debug`. No DB write. |
+| `user:login` | 8 | Attempts to call `context.services?.analyticsService?.trackEvent(...)`. Currently a no-op — `analyticsService` is not registered in the service context. |
+| `content:view` | 8 | Same as `user:login` — no-op until `analyticsService` is wired up. |
 
-<CodeGroup title="Hook Example">
-
-```typescript
-// The plugin automatically tracks logins
-// You can also manually track with hooks
-
-hooks.register('content:view', async (data, context) => {
-  const analyticsService = context.services?.analyticsService
-
-  await analyticsService?.trackEvent({
-    eventType: 'content',
-    eventName: 'content_viewed',
-    eventData: {
-      contentId: data.id,
-      contentType: data.type,
-      title: data.title
-    }
-  })
-
-  return data
-})
-```
-
-</CodeGroup>
+To track login or content-view events today, use `POST /api/events` directly from your handler instead of relying on hooks.
 
 ---
 
-## Database Schema
+## Data Storage
 
-### analytics_pageviews
+Events tracked via `POST /api/events` are stored as documents of type `analytics_event` in the unified `documents` table — not in separate `analytics_pageviews` or `analytics_events` tables (those don't exist).
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER | Primary key |
-| `path` | TEXT | Page path visited |
-| `title` | TEXT | Page title |
-| `referrer` | TEXT | HTTP referrer |
-| `user_agent` | TEXT | Browser user agent |
-| `ip_address` | TEXT | Visitor IP |
-| `session_id` | TEXT | Session identifier |
-| `user_id` | INTEGER | User ID if authenticated |
-| `duration` | INTEGER | Time on page (ms) |
-| `created_at` | INTEGER | Timestamp |
+Five generated columns index the queryable fields:
 
-### analytics_events
+| Generated column | Maps to |
+|-----------------|---------|
+| `q_evt_event` | `json_extract(data, '$.event')` |
+| `q_evt_category` | `json_extract(data, '$.category')` |
+| `q_evt_user_id` | `json_extract(data, '$.userId')` |
+| `q_evt_session_id` | `json_extract(data, '$.sessionId')` |
+| `q_evt_path` | `json_extract(data, '$.path')` |
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER | Primary key |
-| `event_type` | TEXT | Event category |
-| `event_name` | TEXT | Event name |
-| `event_data` | TEXT | JSON metadata |
-| `path` | TEXT | Page path |
-| `session_id` | TEXT | Session identifier |
-| `user_id` | INTEGER | User ID |
-| `created_at` | INTEGER | Timestamp |
+Each event is stored as a published document (`is_published = 1`, `maxVersionsPerRoot = 1`) under tenant `default`.
 
 ---
 

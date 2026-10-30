@@ -106,7 +106,7 @@ export function renderCollectionFormPage(data: CollectionFormData): string {
       label: 'Collection Name',
       type: 'text',
       value: data.name || '',
-      placeholder: 'blog_posts',
+      placeholder: 'blog_post',
       required: true,
       readonly: isEdit,
       helpText: isEdit ? 'Collection name cannot be changed' : 'Lowercase letters, numbers, and underscores only',

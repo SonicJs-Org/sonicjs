@@ -15,7 +15,18 @@
  * `src`/`dist` duplicate type identities — all satisfy it without casts.
  */
 
-import type { HookEventName, HookPayload } from './catalog'
+import type { HookEventName, HookPayload, LegacyHookEventName, LegacyHookEventPayloads } from './catalog'
+import { isLegacyHookEvent, resolveHookEventName } from './catalog'
+
+/** A name accepted at subscribe time: a canonical event or a deprecated alias. */
+export type SubscribableEvent = HookEventName | LegacyHookEventName
+
+/** The payload type for a subscribable name — canonical payload, even for aliases. */
+export type PayloadForEvent<E extends SubscribableEvent> = E extends HookEventName
+  ? HookPayload<E>
+  : E extends LegacyHookEventName
+    ? LegacyHookEventPayloads[E]
+    : never
 
 /**
  * Minimal structural contract the typed facade needs from a hook system.
@@ -47,13 +58,21 @@ export type TypedHookHandler<E extends HookEventName> = (
 
 export interface TypedHooks {
   /**
-   * Subscribe to a catalog event. Lower priority runs earlier (matches the
-   * underlying hook system; default 10).
+   * Subscribe to a catalog event. Accepts canonical names and (for one release)
+   * deprecated aliases — an alias resolves to its canonical name and emits a
+   * one-time deprecation warning. Lower priority runs earlier (default 10).
    */
-  on<E extends HookEventName>(event: E, handler: TypedHookHandler<E>, priority?: number): void
+  on<E extends SubscribableEvent>(
+    event: E,
+    handler: (
+      payload: PayloadForEvent<E>,
+      context: TypedHookContext
+    ) => PayloadForEvent<E> | void | Promise<PayloadForEvent<E> | void>,
+    priority?: number
+  ): void
   /**
-   * Dispatch a catalog event through the handler chain. Returns the (possibly
-   * mutated) payload after all handlers run.
+   * Dispatch a catalog event through the handler chain. Canonical names only —
+   * the host owns dispatch sites. Returns the (possibly mutated) payload.
    */
   dispatch<E extends HookEventName>(
     event: E,
@@ -62,18 +81,32 @@ export interface TypedHooks {
   ): Promise<HookPayload<E>>
 }
 
+// One-time deprecation warnings, keyed by the deprecated name (process-wide).
+const warnedLegacyEvents = new Set<string>()
+
 /**
  * Build a typed facade over a hook system.
  *
- * `on()` wraps the typed handler so that returning `void` preserves the current
- * payload in the chain (the underlying `execute()` threads whatever each handler
- * returns, so we coalesce `undefined` back to the incoming data).
+ * `on()` resolves deprecated aliases to canonical names (warning once), then
+ * registers under the canonical name so a legacy subscriber fires when the host
+ * dispatches the canonical event. Returning `void` from a handler preserves the
+ * current payload in the chain (the underlying `execute()` threads whatever each
+ * handler returns, so we coalesce `undefined` back to the incoming data).
  */
 export function createTypedHooks(hookSystem: HookSystemLike): TypedHooks {
   return {
     on(event, handler, priority) {
+      const canonical = resolveHookEventName(event) ?? event
+      if (isLegacyHookEvent(event) && !warnedLegacyEvents.has(event)) {
+        warnedLegacyEvents.add(event)
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[hooks] event "${event}" is deprecated; subscribe to "${canonical}" instead. ` +
+            `The alias will be removed in a future release.`
+        )
+      }
       hookSystem.register(
-        event,
+        canonical,
         async (data: any, context: any) => {
           const result = await handler(data, context ?? {})
           return result === undefined ? data : result

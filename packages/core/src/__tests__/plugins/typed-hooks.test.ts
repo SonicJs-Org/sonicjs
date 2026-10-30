@@ -20,7 +20,7 @@ afterEach(() => {
 describe('hook catalog', () => {
   it('lists every catalog event name and recognizes them', () => {
     expect(HOOK_EVENT_NAMES).toContain('auth:registration:completed')
-    expect(HOOK_EVENT_NAMES).toContain('content:create')
+    expect(HOOK_EVENT_NAMES).toContain('content:after:create')
     expect(isKnownHookEvent('auth:registration:completed')).toBe(true)
     expect(isKnownHookEvent('not:a:real:event')).toBe(false)
   })
@@ -46,41 +46,68 @@ describe('createTypedHooks', () => {
   it('threads a mutated payload through the chain and returns it', async () => {
     const hooks = createTypedHooks(new HookSystemImpl())
 
-    hooks.on('content:create', (payload) => {
+    hooks.on('content:after:create', (payload) => {
       payload.data.added = true
       return payload
     })
 
-    const out = await hooks.dispatch('content:create', { collection: 'posts', data: { title: 'x' } })
+    const out = await hooks.dispatch('content:after:create', { collection: 'posts', data: { title: 'x' } })
     expect(out.data).toEqual({ title: 'x', added: true })
   })
 
   it('preserves the payload when a handler returns void', async () => {
     const hooks = createTypedHooks(new HookSystemImpl())
-    hooks.on('content:update', () => {
+    hooks.on('content:after:update', () => {
       /* returns void — payload should be preserved */
     })
 
     const payload = { collection: 'posts', id: '1', data: { title: 'keep' } }
-    const out = await hooks.dispatch('content:update', payload)
+    const out = await hooks.dispatch('content:after:update', payload)
     expect(out.data).toEqual({ title: 'keep' })
   })
 
   it('runs handlers in priority order (lower first)', async () => {
     const hooks = createTypedHooks(new HookSystemImpl())
     const order: string[] = []
-    hooks.on('content:save', () => void order.push('late'), 100)
-    hooks.on('content:save', () => void order.push('early'), 1)
+    hooks.on('content:after:update', () => void order.push('late'), 100)
+    hooks.on('content:after:update', () => void order.push('early'), 1)
 
-    await hooks.dispatch('content:save', { collection: 'posts', data: {} })
+    await hooks.dispatch('content:after:update', { collection: 'posts', data: {} })
     expect(order).toEqual(['early', 'late'])
   })
 
   it('returns the original payload when no handler is subscribed', async () => {
     const hooks = createTypedHooks(new HookSystemImpl())
     const payload = { collection: 'posts', data: { a: 1 } }
-    const out = await hooks.dispatch('content:delete', payload)
+    const out = await hooks.dispatch('content:after:delete', payload)
     expect(out).toEqual(payload)
+  })
+
+  it('a `content:before:*` handler can mutate the payload before the write', async () => {
+    const hooks = createTypedHooks(new HookSystemImpl())
+    hooks.on('content:before:create', (payload) => {
+      payload.data.slug = 'generated'
+      return payload
+    })
+    const out = await hooks.dispatch('content:before:create', { collection: 'posts', data: {} })
+    expect(out.data.slug).toBe('generated')
+  })
+})
+
+describe('legacy event aliases (deprecation window)', () => {
+  it('a legacy subscription fires on the canonical dispatch, warning once', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const hooks = createTypedHooks(new HookSystemImpl())
+    let fired = 0
+
+    // Legacy name still compiles + subscribes; resolves to content:after:create.
+    hooks.on('content:create', () => {
+      fired++
+    })
+
+    await hooks.dispatch('content:after:create', { collection: 'posts', data: {} })
+    expect(fired).toBe(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"content:create" is deprecated'))
   })
 })
 
@@ -98,9 +125,26 @@ function __typeChecks(): void {
     void payload.user.nope
   })
 
-  hooks.on('content:create', (payload) => {
+  hooks.on('content:after:create', (payload) => {
     const collection: string = payload.collection // ✓ narrowed
     void collection
+    // Canonical actor shape: content events use `user.id` (NOT `userId`).
+    const actorId: string | undefined = payload.user?.id
+    void actorId
+    // @ts-expect-error — `userId` was removed; the canonical actor field is `id`
+    void payload.user?.userId
+  })
+
+  // Legacy alias still compiles and is typed to the canonical payload.
+  hooks.on('content:create', (payload) => {
+    const collection: string = payload.collection
+    void collection
+  })
+
+  // Same actor shape across event families (content `user` and auth `user` agree).
+  hooks.on('auth:registration:completed', (p) => {
+    const id: string = p.user.id
+    void id
   })
 
   // @ts-expect-error — 'not:a:real:event' is not in the catalog

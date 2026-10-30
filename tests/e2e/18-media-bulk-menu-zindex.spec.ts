@@ -1,11 +1,11 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import { loginAsAdmin, gotoMediaLibrary } from './utils/test-helpers';
 
-test.describe.skip('Media Bulk Actions Menu Z-Index', () => {
+test.describe('Media Bulk Actions Menu Z-Index @media', () => {
   let uploadedFileIds: string[] = [];
 
   test.beforeEach(async ({ page, context }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, false);
 
     // Upload 2 test files to ensure we have media items
     const testImageBuffer = Buffer.from([
@@ -34,7 +34,7 @@ test.describe.skip('Media Bulk Actions Menu Z-Index', () => {
     formData.append('files', blob2, `test-zindex-${timestamp}-${randomSuffix}-2.jpg`);
     formData.append('folder', 'uploads');
 
-    const uploadResponse = await context.request.post('http://localhost:8787/api/media/upload-multiple', {
+    const uploadResponse = await context.request.post('/api/media/upload-multiple', {
       multipart: formData
     });
 
@@ -43,18 +43,16 @@ test.describe.skip('Media Bulk Actions Menu Z-Index', () => {
       uploadedFileIds = uploadResult.uploaded.map((file: any) => file.id);
     }
 
-    // Navigate to media page
-    await page.goto('/admin/media');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
-    await page.reload();
-    await page.waitForLoadState('networkidle');
+    // Navigate to media page. One load: the upload above is an awaited API call, so the two
+    // rows already exist server-side and the sleep-then-reload dance was only ever hiding the
+    // absence of a real wait. The tests below assert on the checkboxes, which auto-wait.
+    await gotoMediaLibrary(page);
   });
 
   test.afterEach(async ({ context }) => {
     if (uploadedFileIds.length > 0) {
       try {
-        await context.request.post('http://localhost:8787/api/media/bulk-delete', {
+        await context.request.post('/api/media/bulk-delete', {
           data: { fileIds: uploadedFileIds }
         });
         uploadedFileIds = [];

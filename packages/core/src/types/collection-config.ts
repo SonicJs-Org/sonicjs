@@ -5,6 +5,15 @@
  * Collections can be defined in TypeScript/JSON files and synced to the database.
  */
 
+/** Subset of QueryableField from schemas/document.ts — duplicated here to keep this file dependency-free. */
+export interface CollectionQueryableField {
+  name: string
+  path?: string
+  kind: 'scalar' | 'facet' | 'reference'
+  type?: 'text' | 'number' | 'integer' | 'boolean' | 'date'
+  column?: string
+}
+
 export type FieldType =
   | 'string'
   | 'number'
@@ -14,6 +23,7 @@ export type FieldType =
   | 'email'
   | 'url'
   | 'richtext'
+  | 'lexical'
   | 'markdown'
   | 'mdxeditor'
   | 'easymde'
@@ -35,6 +45,7 @@ export type FieldType =
   | 'tinymce'
   | 'quill'
   | 'easymde'
+  | 'user'
 
 export interface BlockDefinition {
   label?: string
@@ -94,7 +105,7 @@ export interface CollectionSchema {
 export interface CollectionConfig {
   /**
    * Unique machine name for the collection (lowercase, underscores)
-   * e.g., 'blog_posts', 'products', 'team_members'
+   * e.g., 'blog_post', 'products', 'team_members'
    */
   name: string
 
@@ -119,6 +130,12 @@ export interface CollectionConfig {
    * Default: true for config-based collections
    */
   managed?: boolean
+
+  /**
+   * If true, this is an internal system collection hidden by default in the admin UI
+   * Default: false
+   */
+  internal?: boolean
 
   /**
    * If true, the collection is active and available for use
@@ -160,10 +177,121 @@ export interface CollectionConfig {
    * Optional metadata
    */
   metadata?: Record<string, any>
+
+  /**
+   * Optional URL-safe slug for the API base route.
+   * Defaults to the collection name if not set.
+   * e.g., slug: 'blog-posts' → GET /api/blog-posts
+   */
+  slug?: string
+
+  /**
+   * Opt this collection into version history. Default false.
+   * When true: each saveDraft creates a new version row; the versioning-plugin
+   * surfaces history/restore UI on the edit form.
+   * When false: saveDraft updates the single draft row in place (no history).
+   */
+  versioning?: boolean
+
+  /**
+   * Optional per-collection cache config.
+   * Overrides the cache plugin's default TTL for this collection's API responses.
+   * `enabled: false` disables caching for the collection entirely.
+   * `ttl` is in seconds.
+   */
+  cache?: {
+    enabled?: boolean
+    ttl?: number
+  }
+
+  /**
+   * Per-collection access control. Maps principal keys to allowed permissions.
+   *
+   * Without this property the collection defaults to **deny** for public access
+   * (only `admin` and `editor` get grants). To make content publicly readable,
+   * explicitly opt in:
+   *
+   * ```ts
+   * access: {
+   *   public: ['read'],
+   * }
+   * ```
+   *
+   * Keys are principal identifiers matched during ACL resolution:
+   * - `'public'` — unauthenticated visitors
+   * - `'admin'`, `'editor'`, `'viewer'`, or any custom RBAC role name
+   *
+   * Values are arrays of permissions: `'read'`, `'create'`, `'update'`,
+   * `'delete'`, `'publish'`, `'manage'`.
+   *
+   * When provided, these entries are **merged on top of** the built-in defaults
+   * (`admin` and `editor` grants). To revoke a default grant, set the key to
+   * an empty array (e.g. `editor: []`).
+   */
+  access?: Record<string, ('read' | 'create' | 'update' | 'delete' | 'publish' | 'manage')[]>
+
+  /**
+   * Fields to expose as queryable (filterable) virtual columns on the documents table.
+   * Each entry creates a `q_*` generated column via the self-heal migration at bootstrap.
+   * Use for fields you need to filter/sort on via the `where[field]` API DSL.
+   */
+  queryableFields?: CollectionQueryableField[]
 }
 
 export interface CollectionConfigModule {
   default: CollectionConfig
+}
+
+/**
+ * Maps FieldType strings to their TypeScript equivalents.
+ * Use with InferCollectionData to get typed data shapes from a CollectionConfig.
+ */
+export type FieldTypeMap = {
+  string: string
+  number: number
+  boolean: boolean
+  date: string
+  datetime: string
+  email: string
+  url: string
+  richtext: string
+  lexical: string
+  markdown: string
+  mdxeditor: string
+  easymde: string
+  quill: string
+  tinymce: string
+  json: Record<string, unknown>
+  array: unknown[]
+  object: Record<string, unknown>
+  reference: string
+  media: string
+  select: string
+  multiselect: string[]
+  checkbox: boolean
+  radio: string
+  textarea: string
+  slug: string
+  color: string
+  file: string
+  user: string
+}
+
+/** Infer the TypeScript type for a single FieldConfig. */
+export type InferFieldType<F extends FieldConfig> = F['type'] extends keyof FieldTypeMap
+  ? FieldTypeMap[F['type']]
+  : unknown
+
+/**
+ * Infer the TypeScript data shape of a CollectionConfig's schema.
+ *
+ * @example
+ * const postsCollection = { ... } satisfies CollectionConfig
+ * type PostData = InferCollectionData<typeof postsCollection>
+ * // { title: string; slug: string; content: string; status: string; ... }
+ */
+export type InferCollectionData<C extends CollectionConfig> = {
+  [K in keyof C['schema']['properties']]: InferFieldType<C['schema']['properties'][K]>
 }
 
 /**

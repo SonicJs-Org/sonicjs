@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { verifySecurityConfig } from '../../middleware/bootstrap'
+import { verifySecurityConfig, isBetterAuthSessionPath } from '../../middleware/bootstrap'
 
 describe('verifySecurityConfig', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>
@@ -134,5 +134,54 @@ describe('verifySecurityConfig', () => {
 
     // Should still warn
     expect(warnSpy).toHaveBeenCalled()
+  })
+})
+
+// The heavy cold-start bootstrap must not run on Better Auth's stateless session
+// API — on a cold Cloudflare isolate the ~10s D1 bootstrap otherwise shares the
+// request's CPU/time budget with scrypt password verification and returns a bare
+// 500 (observed in CI as intermittent `BA sign-in failed: 500`). These endpoints
+// only touch auth_* migration tables, so skipping bootstrap for them is safe.
+describe('isBetterAuthSessionPath', () => {
+  it('matches the sign-in path that 500s on cold start', () => {
+    expect(isBetterAuthSessionPath('/auth/sign-in/email')).toBe(true)
+  })
+
+  it('matches every stateless Better Auth session endpoint', () => {
+    const skipped = [
+      '/auth/sign-in',
+      '/auth/sign-in/email',
+      '/auth/sign-up/email',
+      '/auth/sign-out',
+      '/auth/get-session',
+      '/auth/callback/github',
+      '/auth/token',
+    ]
+    for (const p of skipped) {
+      expect(isBetterAuthSessionPath(p)).toBe(true)
+    }
+  })
+
+  it('does NOT skip the login page render or the self-seeding endpoints', () => {
+    // /auth/login is an HTML page; /auth/seed-admin seeds its own prerequisites;
+    // neither is a hot cold-start path, and both still get the full bootstrap.
+    const notSkipped = [
+      '/auth/login',
+      '/auth/login/form',
+      '/auth/register',
+      '/auth/seed-admin',
+      '/auth/accept-invitation',
+      '/admin',
+      '/admin/content',
+      '/',
+    ]
+    for (const p of notSkipped) {
+      expect(isBetterAuthSessionPath(p)).toBe(false)
+    }
+  })
+
+  it('does not match a substring collision like /auth/sign-in-history', () => {
+    // Only exact segment or `/auth/<seg>/...` — not arbitrary prefixes.
+    expect(isBetterAuthSessionPath('/auth/sign-in-history')).toBe(false)
   })
 })

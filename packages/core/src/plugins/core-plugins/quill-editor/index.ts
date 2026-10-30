@@ -5,8 +5,7 @@
  * https://quilljs.com/
  */
 
-import { PluginBuilder } from '../../sdk/plugin-builder'
-import type { Plugin } from '@sonicjs-cms/core'
+import { definePlugin } from '../../sdk/define-plugin'
 
 /**
  * Quill Editor Configuration Options
@@ -287,39 +286,18 @@ export function getQuillCDN(version: string = '2.0.2'): string {
   `
 }
 
-/**
- * Create the Quill Editor Plugin
- */
-export function createQuillEditorPlugin(): Plugin {
-  const builder = PluginBuilder.create({
-    name: 'quill-editor',
-    version: '1.0.0',
-    description: 'Quill rich text editor integration for SonicJS'
-  })
+export const quillEditorPlugin = definePlugin({
+  id: 'quill-editor',
+  version: '1.0.0',
+  name: 'Quill Editor',
+  description: 'Quill rich text editor integration for SonicJS.',
+  sonicjsVersionRange: '^3.0.0',
+  author: { name: 'SonicJS Team', email: 'team@sonicjs.com' },
 
-  // Add plugin metadata
-  builder.metadata({
-    author: {
-      name: 'SonicJS Team',
-      email: 'team@sonicjs.com'
-    },
-    license: 'MIT',
-    compatibility: '^2.0.0'
-  })
+  activate: async () => console.info('✅ Quill Editor plugin activated'),
+  deactivate: async () => console.info('❌ Quill Editor plugin deactivated'),
+})
 
-  // Add lifecycle hooks
-  builder.lifecycle({
-    activate: async () => {
-      console.info('✅ Quill Editor plugin activated')
-    },
-
-    deactivate: async () => {
-      console.info('❌ Quill Editor plugin deactivated')
-    }
-  })
-
-  return builder.build() as Plugin
+export function createQuillEditorPlugin() {
+  return quillEditorPlugin
 }
-
-// Export the plugin instance
-export const quillEditorPlugin = createQuillEditorPlugin()

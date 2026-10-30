@@ -1,352 +1,322 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin, navigateToAdminSection, waitForHTMX, ensureTestContentExists } from './utils/test-helpers';
+import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
+import { loginAsAdmin, saveNewContent } from './utils/test-helpers';
 
-test.describe('Content Management', () => {
+/**
+ * Every test in this file used to pass without checking anything.
+ *
+ * Three habits did it:
+ *
+ * 1. `expect(hasTable || hasEmptyState).toBeTruthy()` — the content list renders a table when it
+ *    has rows and an empty-state panel when it does not, so that disjunction is "the handler
+ *    returned a page", which the `h1` assertion above it already proved.
+ * 2. `expect(rowCount).toBeGreaterThanOrEqual(0)` — a count is never negative.
+ * 3. The real assertions sat inside `if (await x.count() > 0)`. The action buttons, the select-all
+ *    checkbox, the workflow dropdown and the pagination summary were all checked only when they
+ *    happened to be present, so an empty list checked none of them. `should filter content by
+ *    status` went further and wrapped its body in `try/catch`, falling back to "verify the page is
+ *    still functional"; `should create new content` ended by logging
+ *    `⚠️ Content was not created - this indicates an issue with the form submission` and passing.
+ *
+ * Each test now creates the record it inspects and scopes the list to it with `?search=`, so the
+ * row count is exact rather than "whatever the other three workers have written so far".
+ *
+ * `should show workflow actions for content` is gone: it looked for a `Actions ▼` button that does
+ * not exist in the template, and document-backed rows carry `availableActions: []` by design (D14 —
+ * the list-level publish/unpublish endpoints are keyed by a legacy version id, not a root id).
+ */
+
+/** `e2e_test` is code-registered and needs only title + slug; every other collection has required fields this spec does not model. */
+const NEW_RECORD_FORM = '/admin/content/new?collection=e2e_test';
+
+type Record = { id: string; title: string; slug: string };
+
+/**
+ * `?model=` and `?collection=` are both accepted by the list handler, and `?search=` filters on
+ * `title LIKE` in both the document-backed branch and the all-view union — which is what makes a
+ * `toHaveCount(1)` assertion safe under `workers: 4`.
+ */
+function searchUrl(term: string, model = 'e2e_test'): string {
+  const params = new URLSearchParams({ status: 'all', search: term });
+  if (model !== 'all') params.set('collection', model);
+  return `/admin/content?${params.toString()}`;
+}
+
+async function createRecord(page: Page, label = 'List item'): Promise<Record> {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const title = `${label} ${stamp}`;
+  const slug = `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${stamp}`;
+
+  await page.goto(NEW_RECORD_FORM);
+  await page.fill('input[name="title"]', title);
+  await page.fill('input[name="slug"]', slug);
+  // The handler reads `status` off the form and falls back to 'draft'. Set it explicitly so the
+  // status badge and the status filter below have one expected value rather than two.
+  await page.selectOption('select[name="status"]', 'draft');
+
+  // `saveNewContent` reads the POST's HX-Redirect before waiting for htmx to navigate, so a
+  // validation failure is reported as a validation failure rather than a navigation timeout.
+  const editPath = await saveNewContent(page, () =>
+    page.locator('button[type="submit"]').filter({ hasText: /Save|Create/ }).first().click()
+  );
+  return { id: editPath.split('/')[3], title, slug };
+}
+
+function rowFor(page: Page, record: Record) {
+  return page.locator('tbody tr').filter({ hasText: record.title });
+}
+
+test.describe('Content Management @smoke @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
-    await ensureTestContentExists(page);
-    await navigateToAdminSection(page, 'content');
   });
 
   test('should display content list', async ({ page }) => {
+    // Create first: with zero rows the table is replaced by an empty-state panel, so asserting the
+    // table exists is only meaningful once this test owns a row.
+    await createRecord(page);
+    await page.goto('/admin/content');
+
     await expect(page.locator('h1').first()).toContainText('Content Management');
-    
-    // Should have filter dropdowns in main filter bar (use .first() to avoid strict mode violation with advanced search modal)
+    // `.first()` — the advanced-search modal carries a second copy of both selects.
     await expect(page.locator('select[name="model"]').first()).toBeVisible();
     await expect(page.locator('select[name="status"]').first()).toBeVisible();
-    
-    // Check if table or empty state is visible
-    const table = page.locator('table');
-    const emptyState = page.locator('text=No content found');
-    
-    const hasTable = await table.count() > 0;
-    const hasEmptyState = await emptyState.count() > 0;
-    
-    // Either table or empty state should be present
-    expect(hasTable || hasEmptyState).toBeTruthy();
+    await expect(page.locator('table')).toBeVisible();
+    await expect(page.locator('tbody tr').first()).toBeVisible();
   });
 
   test('should show existing content', async ({ page }) => {
-    // Check if there's any content displayed
-    const table = page.locator('table');
-    const emptyState = page.locator('text=No content found');
-    
-    if (await table.count() > 0) {
-      // If table exists, check for content rows
-      const contentRows = page.locator('tbody tr');
-      const rowCount = await contentRows.count();
-      expect(rowCount).toBeGreaterThanOrEqual(0);
-    } else {
-      // If no table, should show empty state
-      await expect(emptyState).toBeVisible();
-    }
+    const record = await createRecord(page);
+    await page.goto(searchUrl(record.title));
+
+    // Exactly one row, and it is this test's: the title is stamped, and `search` is applied in SQL.
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(rowFor(page, record)).toContainText(record.slug);
   });
 
   test('should filter content by status', async ({ page }) => {
-    // Filter by published status
-    await page.selectOption('select[name="status"]', 'published');
+    const record = await createRecord(page);
+    await page.goto(searchUrl(record.title));
+    await expect(rowFor(page, record)).toHaveCount(1);
 
-    // Wait for HTMX to update the content
-    await waitForHTMX(page);
+    const statusSelect = page.locator('select[name="status"]').first();
 
-    // Wait for the page to stabilize after HTMX update
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000); // Give extra time for HTMX swap to complete
+    // `updateContentFilters` assigns `window.location.href` — a full navigation, not an htmx swap,
+    // so there is no request to wait for and `waitForHTMX` would return immediately. It preserves
+    // the existing query string, so `collection` and `search` survive the change.
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get('status') === 'published'),
+      statusSelect.selectOption('published'),
+    ]);
 
-    // Check what's displayed after filtering
-    try {
-      const table = page.locator('table');
-      const emptyState = page.locator('text=No content found');
+    // The record was saved as a draft, so the published view must not contain it. With no rows the
+    // list renders its empty-state panel instead of a table.
+    await expect(page.locator('tbody tr')).toHaveCount(0);
+    await expect(page.getByText('No content found')).toBeVisible();
 
-      const hasTable = await table.count() > 0;
-      const hasEmptyState = await emptyState.count() > 0;
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get('status') === 'draft'),
+      statusSelect.selectOption('draft'),
+    ]);
 
-      // Either table with content or empty state should be present
-      expect(hasTable || hasEmptyState).toBeTruthy();
-
-      if (hasTable) {
-        // If table exists, check for published content or empty tbody
-        const publishedRows = page.locator('tr').filter({ hasText: 'published' });
-        const rowCount = await publishedRows.count();
-        // It's OK if there are 0 published items
-        expect(rowCount).toBeGreaterThanOrEqual(0);
-      }
-    } catch (error) {
-      // If we encounter a navigation error, just verify the page is still functional
-      await expect(page.locator('h1').first()).toContainText('Content');
-    }
+    await expect(rowFor(page, record)).toHaveCount(1);
+    // The document-backed branch capitalises the badge label (the all-view union emits the raw
+    // lowercase status instead — that view is checked by `should filter content by collection`).
+    await expect(rowFor(page, record).locator('span').filter({ hasText: /^Draft$/ })).toBeVisible();
   });
 
   test('should filter content by collection', async ({ page }) => {
-    // Simply verify the filter interface exists and is functional
-    const modelSelect = page.locator('select[name="model"]');
-    
-    // Verify the select is visible and interactable
-    await expect(modelSelect).toBeVisible();
-    
-    // Try to get options
-    const optionCount = await modelSelect.locator('option').count();
-    expect(optionCount).toBeGreaterThan(0);
-    
-    // Select the first non-"all" option if available
-    const options = await modelSelect.locator('option').all();
-    if (options.length > 1) {
-      await modelSelect.selectOption({ index: 1 });
-      await waitForHTMX(page);
-    }
-    
-    // Verify page still functions after filter
-    await expect(page.locator('h1').first()).toContainText('Content Management');
+    const record = await createRecord(page);
+
+    // Start on the all-view so the collection filter has something to narrow.
+    await page.goto(searchUrl(record.title, 'all'));
+    await expect(rowFor(page, record)).toHaveCount(1);
+
+    const modelSelect = page.locator('select[name="model"]').first();
+    const e2eOption = modelSelect.locator('option[value="e2e_test"]');
+    const e2eLabel = ((await e2eOption.textContent()) || '').trim();
+    expect(e2eLabel).not.toBe('');
+
+    // The Model column shows the type's display name, not its id.
+    await expect(rowFor(page, record)).toContainText(e2eLabel);
+
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get('model') === 'e2e_test'),
+      modelSelect.selectOption('e2e_test'),
+    ]);
+    await expect(rowFor(page, record)).toHaveCount(1);
+
+    // Narrowing to any other model must drop it.
+    const otherValues = await modelSelect
+      .locator('option')
+      .evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value));
+    const other = otherValues.find((v) => v !== 'all' && v !== 'e2e_test');
+    expect(other, `the models dropdown offered only e2e_test: ${otherValues.join(', ')}`).toBeTruthy();
+
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get('model') === other),
+      modelSelect.selectOption(other!),
+    ]);
+    await expect(rowFor(page, record)).toHaveCount(0);
   });
 
   test('should navigate to new content form', async ({ page }) => {
-    await page.click('a[href="/admin/content/new"]');
-    
-    // Wait for navigation to complete
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
-    
-    // Should show collection selection page
+    // The content list's "New Content" is a per-collection dropdown now (#885); the full-page
+    // collection selector still lives at /admin/content/new.
+    await page.goto('/admin/content/new');
+
     await expect(page.locator('h1')).toContainText('Create New Content');
-    await expect(page.locator('text=Select a collection to create content in:')).toBeVisible();
-    
-    // Should have at least one collection to select
-    const collectionLinks = page.locator('a[href^="/admin/content/new?collection="]');
-    const count = await collectionLinks.count();
-    expect(count).toBeGreaterThan(0);
-    
-    // Click on the first collection
-    await collectionLinks.first().click();
-    
-    // Should now be on the actual content creation form
-    await expect(page.locator('form')).toBeVisible();
+    await expect(page.getByText('Select a collection')).toBeVisible();
+
+    // The selector links by collection id, which for a doc-backed collection is its name — this is
+    // the URL the rest of the suite navigates to directly.
+    await expect(page.locator('a[href="/admin/content/new?collection=e2e_test"]')).toBeVisible();
+
+    await page.locator('a[href^="/admin/content/new?collection="]').first().click();
+    await expect(page.locator('form#content-form')).toBeVisible();
   });
 
   test('should display content actions', async ({ page }) => {
-    // Check if there's a table with content
-    const table = page.locator('table');
+    const record = await createRecord(page);
+    await page.goto(searchUrl(record.title));
 
-    if (await table.count() > 0) {
-      // Find any content row in the table
-      const contentRows = page.locator('tbody tr');
+    const row = rowFor(page, record);
+    await expect(row.locator('button[title="Edit"]')).toBeVisible();
+    await expect(row.locator('button[title="View API"]')).toBeVisible();
+    await expect(row.locator('a[title="Delete"]')).toBeVisible();
 
-      if (await contentRows.count() > 0) {
-        // Check the first content row for action buttons
-        const firstRow = contentRows.first();
-        // Should have Edit button (with title attribute)
-        await expect(firstRow.locator('button[title="Edit"]')).toBeVisible();
-        // Should have Delete button
-        await expect(firstRow.locator('button[title="Delete"]')).toBeVisible();
-      }
-    }
-
-    // Verify page functionality regardless
-    await expect(page.locator('h1').first()).toContainText('Content Management');
+    // Edit must reach this record's form, not whichever row the list happened to render first.
+    await row.locator('button[title="Edit"]').click();
+    await page.waitForURL((url) => url.pathname === `/admin/content/${record.id}/edit`);
+    await expect(page.locator('input[name="title"]')).toHaveValue(record.title);
   });
 
   test('should handle bulk selection', async ({ page }) => {
-    // Check if there's a table with content
-    const table = page.locator('table');
-    
-    if (await table.count() > 0) {
-      // Look for select all checkbox within the table
-      const selectAllCheckbox = page.locator('input[id^="select-all"]');
-      
-      if (await selectAllCheckbox.count() > 0) {
-        await selectAllCheckbox.click();
-        
-        // Look for row checkboxes
-        const rowCheckboxes = page.locator('.row-checkbox');
-        const checkboxCount = await rowCheckboxes.count();
-        
-        if (checkboxCount > 0) {
-          // Verify at least one checkbox exists
-          await expect(rowCheckboxes.first()).toBeVisible();
-        }
-      }
-    }
-    
-    // Verify page functionality regardless
-    await expect(page.locator('h1').first()).toContainText('Content Management');
+    const record = await createRecord(page);
+    await page.goto(searchUrl(record.title));
+
+    const bulkButton = page.locator('#bulk-actions-btn');
+    const selectAll = page.locator('input[id^="select-all-"]');
+    const rowCheckbox = page.locator(`.row-checkbox[value="${record.id}"]`);
+
+    await expect(bulkButton).toBeDisabled();
+    await expect(rowCheckbox).not.toBeChecked();
+
+    // The select-all handler is a delegated `change` listener (htmx swaps the table in), so it ticks
+    // every `.row-checkbox` in the table and re-runs `updateBulkActionsButton`.
+    await selectAll.check();
+    await expect(rowCheckbox).toBeChecked();
+    await expect(bulkButton).toBeEnabled();
+
+    await selectAll.uncheck();
+    await expect(rowCheckbox).not.toBeChecked();
+    await expect(bulkButton).toBeDisabled();
   });
 
-  test('should show workflow actions for content', async ({ page }) => {
-    // Find content with actions dropdown
-    const actionsDropdown = page.locator('button').filter({ hasText: 'Actions ▼' });
-    
-    if (await actionsDropdown.count() > 0) {
-      await actionsDropdown.first().click();
-      
-      // Should show workflow actions
-      const dropdown = page.locator('[id^="dropdown-"]').first();
-      await expect(dropdown).toBeVisible();
-    }
-  });
+  test('should refresh content list', async ({ page }) => {
+    const record = await createRecord(page);
+    await page.goto(searchUrl(record.title));
+    await expect(rowFor(page, record)).toHaveCount(1);
 
-  test('should refresh content list', async ({ page }) => {  
-    const refreshButton = page.locator('button').filter({ hasText: 'Refresh' });
-    
-    if (await refreshButton.count() > 0) {
-      await refreshButton.click();
-      
-      // Page should reload
-      await expect(page.locator('h1').first()).toContainText('Content Management');
-    } else {
-      // If no refresh button, just verify the page is working
-      await expect(page.locator('h1').first()).toContainText('Content Management');
-    }
+    // Refresh is `onclick="location.reload()"` — a navigation, so the filters in the URL and the row
+    // itself both have to survive it.
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().isNavigationRequest() && new URL(r.url()).pathname === '/admin/content'
+      ),
+      page.locator('button').filter({ hasText: 'Refresh' }).click(),
+    ]);
+
+    await expect(rowFor(page, record)).toHaveCount(1);
+    await expect(page.locator('select[name="status"]').first()).toHaveValue('all');
   });
 
   test('should handle pagination', async ({ page }) => {
-    // Just verify the page loads properly (pagination is optional)
-    await expect(page.locator('h1')).toContainText('Content Management');
-    
-    // Check if table or empty state is visible
-    const table = page.locator('table');
-    const emptyState = page.locator('text=No content found');
-    
-    const hasTable = await table.count() > 0;
-    const hasEmptyState = await emptyState.count() > 0;
-    
-    expect(hasTable || hasEmptyState).toBeTruthy();
-    
-    // If pagination exists, it should be functional
-    const paginationText = page.locator('text=Showing');
-    if (await paginationText.count() > 0) {
-      await expect(paginationText).toBeVisible();
-    }
+    // Two records sharing one search term, one per page.
+    const stamp = `Page probe ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const first = await createRecord(page, `${stamp} a`);
+    const second = await createRecord(page, `${stamp} b`);
+    expect(first.id).not.toBe(second.id);
+
+    await page.goto(`${searchUrl(stamp)}&limit=1`);
+
+    const summary = page.locator('p').filter({ hasText: /Showing/ }).first();
+    await expect(summary).toBeVisible();
+    const shown = ((await summary.textContent()) || '').replace(/\s+/g, ' ');
+    expect(shown, `pagination summary read "${shown}"`).toContain('Showing 1 to 1 of 2 results');
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+
+    // Which record lands on page 1 is NOT predictable: the list is `ORDER BY updated_at DESC` and
+    // `documents.updated_at` is stored in SECONDS, so two records written inside the same second
+    // tie and SQLite breaks the tie however it likes. Read page 1 and require page 2 to hold the
+    // other one — that is the property pagination has to guarantee either way.
+    const titles = [first.title, second.title];
+    const page1Row = await page.locator('tbody tr').first().innerText();
+    const firstShown = titles.find((t) => page1Row.includes(t));
+    expect(firstShown, `page 1 row matched neither record: ${page1Row}`).toBeTruthy();
+
+    // The pagination nav is rendered twice — a mobile block that `sm:hidden` hides at Playwright's
+    // default 1280px viewport, and the desktop one. A role locator only sees the a11y tree, so the
+    // display:none copy is excluded and this stays strict-mode safe.
+    const nextLink = page.getByRole('link', { name: 'Next' });
+    const [nav] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.request().isNavigationRequest() && new URL(r.url()).searchParams.get('page') === '2'
+      ),
+      nextLink.click(),
+    ]);
+    expect(nav.ok(), `page 2 returned ${nav.status()}`).toBeTruthy();
+    await page.waitForURL((url) => url.searchParams.get('page') === '2');
+
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    const page2Row = await page.locator('tbody tr').first().innerText();
+    const secondShown = titles.find((t) => t !== firstShown)!;
+    expect(page2Row, `page 2 repeated the page 1 row`).toContain(secondShown);
+
+    const page2Summary = ((await summary.textContent()) || '').replace(/\s+/g, ' ');
+    expect(page2Summary, `page 2 summary read "${page2Summary}"`).toContain(
+      'Showing 2 to 2 of 2 results'
+    );
   });
 
   test('should display content metadata', async ({ page }) => {
-    // Verify the page is functioning
-    await expect(page.locator('h1').first()).toContainText('Content Management');
-    
-    // Check if table or empty state is visible
-    const table = page.locator('table');
-    const emptyState = page.locator('text=No content found');
-    
-    const hasTable = await table.count() > 0;
-    const hasEmptyState = await emptyState.count() > 0;
-    
-    expect(hasTable || hasEmptyState).toBeTruthy();
-    
-    if (hasTable) {
-      // Check if there are any content rows
-      const contentRows = page.locator('tbody tr');
-      const rowCount = await contentRows.count();
-      
-      if (rowCount > 0) {
-        // Verify at least one row has content
-        const firstRow = contentRows.first();
-        await expect(firstRow).toBeVisible();
-      }
-    }
+    const record = await createRecord(page);
+    await page.goto(searchUrl(record.title));
+
+    // The leading `<th>` holds the select-all checkbox and reads as '', so header indexes line up
+    // with the row's `<td>` indexes.
+    const headers = (await page.locator('thead th').allInnerTexts()).map((h) => h.trim());
+    const columnIndex = (label: string): number => {
+      const i = headers.indexOf(label);
+      expect(i, `no "${label}" column in: ${headers.join(' | ')}`).toBeGreaterThan(-1);
+      return i;
+    };
+
+    const cells = rowFor(page, record).locator('td');
+    // `selectable: true` prepends a checkbox cell to both the header and every row.
+    await expect(cells).toHaveCount(headers.length);
+
+    await expect(cells.nth(columnIndex('Title'))).toContainText(record.title);
+    await expect(cells.nth(columnIndex('Model'))).not.toBeEmpty();
+    await expect(cells.nth(columnIndex('Status'))).toHaveText(/^\s*Draft\s*$/);
+    await expect(cells.nth(columnIndex('Author'))).toContainText('@');
+    // Rendered with `toLocaleDateString()` on the server, so match digits rather than a format.
+    await expect(cells.nth(columnIndex('Updated'))).toHaveText(/\d{1,4}[/-]\d{1,2}[/-]\d{1,4}/);
   });
 
-  test('should create new content and redirect to content list', async ({ page }) => {
-    // Get initial content count
-    const initialContentRows = await page.locator('tbody tr').count();
-    
-    // Use the existing createTestContent helper which handles the collection selection
-    const timestamp = Date.now();
-    const title = `Test Blog Post ${timestamp}`;
-    const slug = `test-blog-post-${timestamp}`;
-    const content = `This is test content created at ${new Date().toISOString()}`;
-    
-    // Navigate to create content and handle the whole flow
-    await page.goto('/admin/content/new');
-    
-    // Wait for collection selection page
-    await page.waitForSelector('h1', { timeout: 5000 });
-    
-    // Look for collection cards and click the blog posts collection
-    try {
-      await page.waitForSelector('a[href*="/admin/content/new?collection="]', { timeout: 5000 });
-      // Try to find the blog-posts-collection link specifically
-      const blogPostsLink = page.locator('a[href*="collection=blog-posts-collection"]');
-      if (await blogPostsLink.count() > 0) {
-        await blogPostsLink.click();
-      } else {
-        // Fall back to first available collection
-        const collectionLinks = page.locator('a[href*="/admin/content/new?collection="]');
-        await collectionLinks.first().click();
-      }
-      
-      // Wait for form to load
-      await page.waitForSelector('form', { timeout: 10000 });
-      
-      // Fill in the form fields - ensure we have the collection_id field first
-      const collectionIdField = page.locator('input[name="collection_id"]');
-      if (await collectionIdField.count() > 0) {
-        const collectionIdValue = await collectionIdField.getAttribute('value');
-        console.log('Collection ID:', collectionIdValue);
-      }
-      
-      // Fill title field (required for blog posts)
-      const titleField = page.locator('input[name="title"], input[id="title"]').first();
-      if (await titleField.count() > 0) {
-        await titleField.fill(title);
-        console.log('Filled title field');
-      } else {
-        console.log('Warning: title field not found');
-      }
-      
-      // Fill content field (required for blog posts)
-      const contentField = page.locator('textarea[name="content"], textarea[id="content"], .ql-editor').first();
-      if (await contentField.count() > 0) {
-        await contentField.fill(content);
-        console.log('Filled content field');
-      } else {
-        console.log('Warning: content field not found');
-      }
-      
-      // Fill slug field if it exists (not required for blog posts)
-      const slugField = page.locator('input[name="slug"], input[id="slug"]').first();
-      if (await slugField.count() > 0) {
-        await slugField.fill(slug);
-        console.log('Filled slug field');
-      }
-      
-      // Submit the form
-      await page.click('button[type="submit"]');
-      
-      // Wait and check for redirect or success
-      await page.waitForTimeout(3000);
-      
-      // Check if we got redirected to content list
-      if (page.url().includes('/admin/content') && !page.url().includes('/new')) {
-        // We were redirected successfully
-        console.log('Successfully redirected to content list');
-      } else {
-        // Check for error messages
-        const errorElement = await page.locator('.bg-red-100, .error').first();
-        if (await errorElement.count() > 0) {
-          const errorText = await errorElement.textContent();
-          console.log('Content creation failed:', errorText);
-          // Navigate to content list manually to continue the test
-          await page.goto('/admin/content');
-        }
-      }
-      
-    } catch (error) {
-      console.log('Collection selection failed, navigating to content list to continue test');
-      await page.goto('/admin/content');
-    }
-    
-    // Verify we're on the content list
-    await expect(page.locator('h1').first()).toContainText('Content');
-    
-    // Check if the new content was created (if content creation succeeded)
-    // The content might be there even if redirect failed
-    const newContentRows = await page.locator('tbody tr').count();
-    
-    if (newContentRows > initialContentRows) {
-      // Content was created, verify it's visible
-      await expect(page.locator('td').filter({ hasText: title })).toBeVisible({ timeout: 5000 });
-      console.log('✅ Content creation and redirect test passed');
-    } else {
-      console.log('⚠️ Content was not created - this indicates an issue with the form submission');
-      // We'll still mark the test as partially successful if we can verify the redirect behavior
-    }
-  });
+  test('should create new content and land on its edit form', async ({ page }) => {
+    // Was "…and redirect to content list", which it never did: the create POST answers with an
+    // HX-Redirect to the new record's edit form.
+    const before = await page.goto('/admin/content');
+    expect(before?.ok()).toBeTruthy();
 
-}); 
+    const record = await createRecord(page, 'Created item');
+    expect(page.url()).toContain(`/admin/content/${record.id}/edit`);
+    await expect(page.locator('input[name="title"]')).toHaveValue(record.title);
+
+    await page.goto(searchUrl(record.title));
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(rowFor(page, record)).toContainText(record.slug);
+  });
+});

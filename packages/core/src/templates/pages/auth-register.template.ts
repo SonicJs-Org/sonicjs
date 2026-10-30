@@ -88,21 +88,6 @@ export function renderRegisterPage(data: RegisterPageData): string {
                 </div>
               </div>
 
-              <!-- Username -->
-              <div>
-                <label for="username" class="block text-sm font-medium text-white mb-2">
-                  Username
-                </label>
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  required
-                  class="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white shadow-sm ring-1 ring-inset ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white transition-shadow"
-                  placeholder="Choose a username"
-                >
-              </div>
-
               <!-- Email -->
               <div>
                 <label for="email" class="block text-sm font-medium text-white mb-2">

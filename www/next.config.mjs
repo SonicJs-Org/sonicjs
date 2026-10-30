@@ -27,3 +27,8 @@ const nextConfig = {
 }
 
 export default withSearch(withMDX(nextConfig))
+
+// Expose Cloudflare bindings (EMAIL, vars, secrets) to `next dev` via getCloudflareContext().
+// Without this, bindings are only present in `opennextjs-cloudflare preview`/`deploy`.
+import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare'
+initOpenNextCloudflareForDev()

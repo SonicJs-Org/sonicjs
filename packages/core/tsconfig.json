@@ -11,7 +11,9 @@
     "baseUrl": "./",
     "paths": {
       "@sonicjs-cms/templates": ["../templates/src/index.ts"],
-      "@sonicjs-cms/templates/*": ["../templates/src/*"]
+      "@sonicjs-cms/templates/*": ["../templates/src/*"],
+      "@sonicjs-cms/core": ["./src/index.ts"],
+      "@sonicjs-cms/core/*": ["./src/*"]
     },
     "resolveJsonModule": true,
     "types": ["@cloudflare/workers-types", "node"],
@@ -61,8 +63,10 @@
     "dist",
     "**/*.test.ts",
     "**/*.spec.ts",
+    "src/__tests__/utils/d1-sqlite.ts",
     "src/plugins/available/email-templates-plugin/fix-email-case.ts",
     "src/plugins/available/email-templates-plugin/initialize-email-system.ts",
+    "src/plugins/available/email-templates-plugin/admin-routes.ts",
     "src/plugins/core-plugins/turnstile-plugin/headless-helpers.ts",
     "src/plugins/core-plugins/turnstile-plugin/react-hooks.tsx",
     "src/plugins/core-plugins/turnstile-plugin/formio-component-client.js"

@@ -386,7 +386,7 @@ describe.skip('NotificationService', () => {
           collection_name: 'Articles'
         })
         .mockResolvedValueOnce({
-          username: 'John Doe'
+
         })
 
       await notificationService.notifyContentAssigned(
@@ -406,8 +406,8 @@ describe.skip('NotificationService', () => {
       mockStatement.all
         .mockResolvedValueOnce({
           results: [
-            { user_id: 'user-1', email: 'user1@example.com', username: 'User 1' },
-            { user_id: 'user-2', email: 'user2@example.com', username: 'User 2' }
+            { user_id: 'user-1', email: 'user1@example.com' },
+            { user_id: 'user-2', email: 'user2@example.com' }
           ]
         })
         .mockResolvedValueOnce({

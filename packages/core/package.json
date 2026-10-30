@@ -1,6 +1,6 @@
 {
   "name": "@sonicjs-cms/core",
-  "version": "2.18.1",
+  "version": "3.0.0",
   "description": "Core framework for SonicJS headless CMS - Edge-first, TypeScript-native CMS built for Cloudflare Workers",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -67,10 +67,11 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "test": "vitest --run",
-    "test:cov": "vitest --run --coverage",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build"
   },
   "keywords": [
     "cms",
@@ -96,15 +97,22 @@
   },
   "homepage": "https://sonicjs.com",
   "peerDependencies": {
-    "@cloudflare/workers-types": "^4.0.0",
-    "drizzle-orm": "^0.44.0",
+    "@cloudflare/workers-types": "^4.0.0 || ^5.0.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.0.0",
     "zod": "^3.0.0 || ^4.0.0"
   },
   "dependencies": {
+    "@better-auth/core": "1.7.7",
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@better-auth/telemetry": "1.7.7",
     "@cf-wasm/resvg": "^0.3.3",
-    "csv-parse": "^6.2.1",
+    "better-auth": "1.7.7",
+    "better-auth-cloudflare": "0.4.1",
+    "csv-parse": "^7.0.2",
     "drizzle-zod": "^0.8.3",
+    "graphql": "^16.14.2",
+    "graphql-yoga": "^5.21.2",
     "highlight.js": "^11.11.1",
     "linkedom": "^0.18.12",
     "marked": "^16.4.1",
@@ -113,19 +121,21 @@
     "tiny-lru": "^13.0.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251014.0",
+    "@cloudflare/workers-types": "^5.20260724.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.9.2",
     "@types/qrcode-svg": "^1.1.5",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.50.0",
-    "@vitest/coverage-v8": "^4.0.5",
+    "@vitest/coverage-v8": "^4.1.9",
+    "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",
-    "eslint": "^9.39.2",
+    "eslint": "^10.8.0",
     "glob": "^10.5.0",
-    "hono": "^4.12.18",
+    "hono": "^4.13.13",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.5",
+    "vitest": "^4.1.9",
     "zod": "^4.1.12"
   },
   "engines": {

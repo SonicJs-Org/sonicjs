@@ -1,176 +1,189 @@
-import { test, expect } from '@playwright/test';
-import { loginAsAdmin, navigateToAdminSection } from './utils/test-helpers';
+import { test, expect, Page } from './fixtures';
+import {
+  loginAsAdmin,
+  navigateToAdminSection,
+  expectRichTextFieldUsable,
+  fillRichTextField,
+  richTextFieldValue,
+} from './utils/test-helpers';
 
-test.describe.skip('Rich Text Editor (TinyMCE)', () => {
+/**
+ * TinyMCE is an optional editor plugin. `renderDynamicField` decides, server-side, which
+ * editor backs a rich text field and marks the slot with
+ * `.richtext-container[data-editor-provider="tinymce"]`; the TinyMCE CDN bundle then mounts
+ * `.tox-tinymce` into exactly those slots. When no rich text plugin is active the field
+ * degrades to an amber-bannered plain <textarea>.
+ *
+ * "TinyMCE slot absent" is NOT the same as "plain textarea". There are three states, and on a
+ * fresh install the middle one is what renders: Lexical is the default rich text editor, so the
+ * field is a contenteditable surface plus a hidden input and `textarea[name="content"]` does not
+ * exist at all. Only with *no* editor plugin active does the field degrade to an amber-bannered
+ * plain <textarea>. Asserting a textarea in the else branch is what made this spec pass locally
+ * (no editor plugin rows) and fail on a fresh CI preview (Lexical active).
+ *
+ * Each test therefore asserts the branch the server actually rendered:
+ *   TinyMCE slot present -> TinyMCE must really mount (container, toolbar, buttons, typing)
+ *   TinyMCE slot absent  -> no TinyMCE chrome may leak in, and whichever editor did render must
+ *                           still back a usable, submittable field (`expectRichTextFieldUsable`)
+ * Both branches are falsifiable, and the discriminator is server-rendered markup rather than
+ * plugin state, so these specs are safe to run alongside the /admin/plugins specs.
+ */
+const TINYMCE_SLOT = '.richtext-container[data-editor-provider="tinymce"]';
+
+async function tinymceBacksField(page: Page): Promise<boolean> {
+  return (await page.locator(TINYMCE_SLOT).count()) > 0;
+}
+
+/**
+ * Walk the real "new content" path: content list -> collection picker -> collection form.
+ * `/admin/content` no longer has a bare `a[href="/admin/content/new"]` link; every link is
+ * `/admin/content/new?collection=<slug>` and slugs use underscores (`blog_post`).
+ */
+async function openNewContentForm(page: Page, collection: string) {
+  await navigateToAdminSection(page, 'content');
+  await expect(page.locator('h1')).toContainText('Content Management');
+
+  await page.goto('/admin/content/new', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('h1')).toContainText('Create New Content');
+
+  await page.click(`a[href="/admin/content/new?collection=${collection}"]`);
+  await page.waitForURL(new RegExp(`/admin/content/new\\?collection=${collection}`), { timeout: 15000 });
+  await page.waitForSelector('input[name="title"]', { timeout: 15000 });
+}
+
+/**
+ * blog_post requires title, slug, content and author. The author field is a user picker
+ * whose submit handler re-reads the visible search box, so the display value, its
+ * `dataset.linkedName` and the hidden input must all agree for the value to stick.
+ */
+async function fillRequiredBlogPostFields(page: Page, title: string) {
+  await page.fill('input[name="title"]', title);
+  await expect(page.locator('input[name="slug"]')).not.toHaveValue('');
+
+  await page.evaluate(() => {
+    const container = document.querySelector('.user-search-field-container');
+    const display = container?.querySelector('input[type="text"]') as HTMLInputElement | null;
+    const hidden = container?.querySelector('input[type="hidden"]') as HTMLInputElement | null;
+    if (display) {
+      display.value = 'Test Author';
+      display.dataset.linkedName = 'Test Author';
+    }
+    if (hidden) hidden.value = 'Test Author';
+  });
+}
+
+test.describe('Rich Text Editor (TinyMCE) @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
 
   test('should load TinyMCE for blog post content field', async ({ page }) => {
-    // Navigate to create new blog post
-    await navigateToAdminSection(page, 'content');
+    await openNewContentForm(page, 'blog_post');
 
-    // Click "New Content" link
-    await page.click('a[href="/admin/content/new"]');
+    if (await tinymceBacksField(page)) {
+      // TinyMCE must take the field over: container, toolbar and toolbar buttons
+      await expect(page.locator('.tox-tinymce').first()).toBeVisible({ timeout: 15000 });
+      await expect(page.locator('.tox-toolbar, .tox-toolbar__primary').first()).toBeVisible({ timeout: 10000 });
 
-    // Wait for collection selection page
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText('Create New Content');
-
-    // Click on Blog Posts collection
-    await page.click('text=Blog Posts');
-
-    // Wait for the form to load
-    await page.waitForSelector('input[name="title"]', { timeout: 10000 });
-
-    // Check if TinyMCE is initialized for content field
-    // TinyMCE creates an iframe with id that starts with the field id
-    const contentField = page.locator('textarea[name="content"]');
-    await expect(contentField).toBeAttached();
-
-    // Wait for TinyMCE to initialize (it should create an iframe or convert the textarea)
-    await page.waitForTimeout(2000); // Give TinyMCE time to initialize
-
-    // Check for TinyMCE editor elements
-    // TinyMCE should add the 'tox-tinymce' class or create an iframe
-    const tinyMCEContainer = page.locator('.tox-tinymce').first();
-    await expect(tinyMCEContainer).toBeVisible({ timeout: 5000 });
-
-    // Check for TinyMCE toolbar
-    const toolbar = page.locator('.tox-toolbar, .tox-toolbar__primary').first();
-    await expect(toolbar).toBeVisible({ timeout: 5000 });
-
-    // Verify toolbar has buttons
-    const toolbarButtons = page.locator('.tox-tbtn, button[aria-label*="Bold"], button[aria-label*="Italic"]');
-    expect(await toolbarButtons.count()).toBeGreaterThan(0);
+      const toolbarButtons = page.locator('.tox-tbtn, button[aria-label*="Bold"], button[aria-label*="Italic"]');
+      expect(await toolbarButtons.count()).toBeGreaterThan(0);
+    } else {
+      // No TinyMCE slot => no TinyMCE assets and no TinyMCE DOM, and the field still works
+      await expect(page.locator('script[src*="tiny.cloud"]')).toHaveCount(0);
+      await expect(page.locator('.tox-tinymce')).toHaveCount(0);
+      await expectRichTextFieldUsable(page, 'content');
+    }
   });
 
   test('should load TinyMCE for page content field', async ({ page }) => {
-    // Navigate to create new page
-    await navigateToAdminSection(page, 'content');
+    // The old "Pages" collection no longer exists. E2E Test is the other collection carrying
+    // a rich text field (`richContent`), so it covers the same "a second collection's rich
+    // text field gets identical editor treatment" case.
+    await openNewContentForm(page, 'e2e_test');
 
-    // Click "New Content" link
-    await page.click('a[href="/admin/content/new"]');
-
-    // Wait for collection selection page
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
-
-    // Click on Pages collection (find any link/card with "Pages" or "Page" text)
-    const pagesLink = page.locator('text=/^Pages?$/i').first();
-    await pagesLink.click();
-
-    // Wait for the form to load
-    await page.waitForSelector('input[name="title"]', { timeout: 10000 });
-
-    // Check if TinyMCE is initialized for content field
-    await page.waitForTimeout(2000); // Give TinyMCE time to initialize
-
-    // Check for TinyMCE editor elements
-    const tinyMCEContainer = page.locator('.tox-tinymce').first();
-    await expect(tinyMCEContainer).toBeVisible({ timeout: 5000 });
+    if (await tinymceBacksField(page)) {
+      await expect(page.locator('.tox-tinymce').first()).toBeVisible({ timeout: 15000 });
+    } else {
+      await expect(page.locator('script[src*="tiny.cloud"]')).toHaveCount(0);
+      await expect(page.locator('.tox-tinymce')).toHaveCount(0);
+      await expectRichTextFieldUsable(page, 'richContent');
+    }
   });
 
   test('should be able to type content in TinyMCE editor', async ({ page }) => {
-    // Navigate to create new blog post
-    await navigateToAdminSection(page, 'content');
-    await page.click('a[href="/admin/content/new"]');
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
-
-    await page.click('text=Blog Posts');
-
-    // Wait for TinyMCE to load
-    await page.waitForSelector('input[name="title"]', { timeout: 10000 });
-    await page.waitForTimeout(2000);
-
-    // Fill in title first
+    await openNewContentForm(page, 'blog_post');
     await page.fill('input[name="title"]', 'TinyMCE Test Post');
 
-    // Try to interact with TinyMCE editor
-    // Method 1: Check if there's an iframe and type into it
-    const iframe = page.frameLocator('iframe[id*="content"]').first();
-    const iframeExists = await page.locator('iframe[id*="content"]').count() > 0;
+    const testContent = 'This is test content from TinyMCE';
 
-    if (iframeExists) {
-      // TinyMCE uses iframe mode
-      const editorBody = iframe.locator('body[id="tinymce"]');
-      await editorBody.click();
-      await editorBody.fill('<p>This is test content from TinyMCE</p>');
-
-      // Verify content was entered
-      await expect(editorBody).toContainText('This is test content from TinyMCE');
-    } else {
-      // TinyMCE might be in inline mode or not loaded
-      // Check if the contenteditable div exists
-      const editableDiv = page.locator('[contenteditable="true"]').first();
-      if (await editableDiv.count() > 0) {
+    if (await tinymceBacksField(page)) {
+      if ((await page.locator('iframe[id*="content"]').count()) > 0) {
+        // TinyMCE iframe mode
+        const editorBody = page.frameLocator('iframe[id*="content"]').first().locator('body[id="tinymce"]');
+        await editorBody.click();
+        await editorBody.fill(`<p>${testContent}</p>`);
+        await expect(editorBody).toContainText(testContent);
+      } else {
+        // TinyMCE inline mode
+        const editableDiv = page.locator('.tox-tinymce [contenteditable="true"]').first();
+        await expect(editableDiv).toBeVisible();
         await editableDiv.click();
-        await editableDiv.fill('This is test content from TinyMCE');
-        await expect(editableDiv).toContainText('This is test content from TinyMCE');
+        await editableDiv.fill(testContent);
+        await expect(editableDiv).toContainText(testContent);
       }
+    } else {
+      // Whichever editor did render must accept the typed value and expose it on the control
+      // the form submits.
+      await expectRichTextFieldUsable(page, 'content');
+      await fillRichTextField(page, 'content', testContent);
+      expect(await richTextFieldValue(page, 'content')).toContain(testContent);
     }
   });
 
   test('should have TinyMCE toolbar buttons functional', async ({ page }) => {
-    await navigateToAdminSection(page, 'content');
-    await page.click('a[href="/admin/content/new"]');
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
+    await openNewContentForm(page, 'blog_post');
 
-    await page.click('text=Blog Posts');
+    if (await tinymceBacksField(page)) {
+      const boldButton = page.locator('button[aria-label*="Bold"], .tox-tbtn[aria-label*="Bold"]').first();
+      const italicButton = page.locator('button[aria-label*="Italic"], .tox-tbtn[aria-label*="Italic"]').first();
 
-    await page.waitForSelector('input[name="title"]', { timeout: 10000 });
-    await page.waitForTimeout(2000);
-
-    // Check for specific toolbar buttons
-    const boldButton = page.locator('button[aria-label*="Bold"], .tox-tbtn[aria-label*="Bold"]');
-    const italicButton = page.locator('button[aria-label*="Italic"], .tox-tbtn[aria-label*="Italic"]');
-
-    // These buttons should be visible
-    if (await boldButton.count() > 0) {
-      await expect(boldButton.first()).toBeVisible();
-    }
-
-    if (await italicButton.count() > 0) {
-      await expect(italicButton.first()).toBeVisible();
+      await expect(boldButton).toBeVisible({ timeout: 15000 });
+      await expect(boldButton).toBeEnabled();
+      await expect(italicButton).toBeVisible();
+      await expect(italicButton).toBeEnabled();
+    } else {
+      // No TinyMCE chrome may be rendered, and the fallback field stays editable
+      await expect(page.locator('.tox-toolbar, .tox-toolbar__primary')).toHaveCount(0);
+      await expect(page.locator('.tox-tbtn')).toHaveCount(0);
+      await expectRichTextFieldUsable(page, 'content');
     }
   });
 
   test('should save content from TinyMCE editor', async ({ page }) => {
-    await navigateToAdminSection(page, 'content');
-    await page.click('a[href="/admin/content/new"]');
-    await page.waitForURL('/admin/content/new', { timeout: 10000 });
+    await openNewContentForm(page, 'blog_post');
 
-    await page.click('text=Blog Posts');
-
-    await page.waitForSelector('input[name="title"]', { timeout: 10000 });
-    await page.waitForTimeout(2000);
-
-    // Fill in title
     const uniqueTitle = `TinyMCE Test ${Date.now()}`;
-    await page.fill('input[name="title"]', uniqueTitle);
-
-    // Try to add content to TinyMCE
-    const iframe = page.frameLocator('iframe[id*="content"]').first();
-    const iframeExists = await page.locator('iframe[id*="content"]').count() > 0;
+    await fillRequiredBlogPostFields(page, uniqueTitle);
 
     const testContent = 'This is rich text content from TinyMCE editor';
 
-    if (iframeExists) {
-      const editorBody = iframe.locator('body[id="tinymce"]');
+    if ((await tinymceBacksField(page)) && (await page.locator('iframe[id*="content"]').count()) > 0) {
+      const editorBody = page.frameLocator('iframe[id*="content"]').first().locator('body[id="tinymce"]');
       await editorBody.click();
       await editorBody.fill(`<p>${testContent}</p>`);
+    } else {
+      await fillRichTextField(page, 'content', testContent);
     }
 
-    // Submit the form
-    const saveButton = page.locator('button[type="submit"]:has-text("Save"), button:has-text("Create")');
-    await saveButton.click();
+    // A successful save redirects to the new document's edit page with a success flag; a
+    // validation failure would keep us on /new, so the redirect proves the content persisted.
+    await page.click('button[name="action"][value="save_and_close"]');
 
-    // Wait for redirect or success message
-    await page.waitForTimeout(2000);
-
-    // Verify we're back at content list or see success message
-    const isContentList = await page.locator('h1:has-text("Content Management")').count() > 0;
-    const hasSuccessMessage = await page.locator('.bg-green-100, text=successfully, text=created').count() > 0;
-
-    expect(isContentList || hasSuccessMessage).toBeTruthy();
+    await page.waitForURL(/\/admin\/content\/[^/]+\/edit\?success=/, { timeout: 20000 });
+    await expect(page.locator('input[name="title"]')).toHaveValue(uniqueTitle);
+    // The reloaded edit form re-renders the field through whichever editor is active.
+    await expect(
+      page.locator('textarea[name="content"], input[name="content"], iframe[id*="content"]').first()
+    ).toBeAttached();
   });
 });

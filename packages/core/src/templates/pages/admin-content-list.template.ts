@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../utils/sanitize'
 import { renderAdminLayoutCatalyst, AdminLayoutCatalystData } from '../layouts/admin-layout-catalyst.template'
 import { renderPagination, PaginationData } from '../pagination.template'
 import { renderTable, TableData, TableColumn } from '../table.template'
@@ -21,6 +22,11 @@ export interface ContentListPageData {
   page: number
   search?: string
   models: Array<{
+    name: string
+    displayName: string
+  }>
+  /** Non-internal collections for the "New Content" dropdown — same set as /admin/collections. */
+  newContentCollections: Array<{
     name: string
     displayName: string
   }>
@@ -106,9 +112,9 @@ export function renderContentListPage(data: ContentListPageData): string {
         <div class="flex items-center">
           <div>
             <div class="text-sm font-medium text-zinc-950 dark:text-white">
-              <a href="/admin/content/${row.id}/edit${currentParams ? `?ref=${encodeURIComponent(currentParams)}` : ''}" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">${row.title}</a>
+              <a href="/admin/content/${row.id}/edit${currentParams ? `?ref=${encodeURIComponent(currentParams)}` : ''}" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">${escapeHtml(row.title)}</a>
             </div>
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">${row.slug}</div>
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">${escapeHtml(row.slug)}</div>
           </div>
         </div>
       `
@@ -159,25 +165,22 @@ export function renderContentListPage(data: ContentListPageData): string {
           </button>
           <button
             class="inline-flex items-center justify-center p-1.5 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 ring-1 ring-inset ring-purple-600/20 dark:ring-purple-500/20 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
-            onclick="window.open('/api/content/${row.id}', '_blank')"
+            onclick="window.open('/api/content/${String(row.id).includes('/') ? String(row.id).split('/').pop() : row.id}', '_blank')"
             title="View API"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
             </svg>
           </button>
-          <button
+          <a
+            href="/admin/content/${row.id}/delete?source=list${currentParams ? `&ref=${encodeURIComponent(currentParams)}` : ''}"
             class="inline-flex items-center justify-center p-1.5 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
-            hx-delete="/admin/content/${row.id}"
-            hx-confirm="Are you sure you want to delete this content item?"
-            hx-target="#content-list"
-            hx-swap="outerHTML"
             title="Delete"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
             </svg>
-          </button>
+          </a>
         </div>
       `
     }
@@ -224,13 +227,43 @@ export function renderContentListPage(data: ContentListPageData): string {
           <h1 class="text-2xl/8 font-semibold text-zinc-950 dark:text-white sm:text-xl/8">Content Management</h1>
           <p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">Manage and organize your content items</p>
         </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-          <a href="/admin/content/new" class="inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm">
+        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none relative" id="new-content-dropdown">
+          <button
+            onclick="toggleNewContentDropdown()"
+            class="inline-flex items-center justify-center rounded-lg bg-zinc-950 dark:bg-white px-3.5 py-2.5 text-sm font-semibold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm"
+          >
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
             </svg>
             New Content
-          </a>
+            <svg class="ml-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div
+            id="new-content-menu"
+            class="hidden absolute right-0 mt-2 w-56 origin-top-right rounded-lg bg-white dark:bg-zinc-900 shadow-xl ring-1 ring-zinc-950/5 dark:ring-white/10 z-50 py-1"
+          >
+            ${data.newContentCollections.length === 0 ? `
+              <p class="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">No collections available</p>
+            ` : data.newContentCollections.map(col => `<a
+                href="/admin/content/new?collection=${col.name}"
+                class="flex items-center px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5 hover:text-zinc-950 dark:hover:text-white transition-colors"
+              >${col.displayName}</a>`).join('')}
+          </div>
+          <script>
+            function toggleNewContentDropdown() {
+              var menu = document.getElementById('new-content-menu');
+              menu.classList.toggle('hidden');
+            }
+            document.addEventListener('click', function(e) {
+              var dropdown = document.getElementById('new-content-dropdown');
+              var menu = document.getElementById('new-content-menu');
+              if (dropdown && menu && !dropdown.contains(e.target)) {
+                menu.classList.add('hidden');
+              }
+            });
+          </script>
         </div>
       </div>
       <!-- Filters -->
@@ -485,11 +518,14 @@ export function renderContentListPage(data: ContentListPageData): string {
         }
       }
 
-      // Select all functionality
+      // Select all functionality. renderTable gives the header checkbox the id
+      // 'select-all-' + tableId, so match the prefix — a bare 'select-all' never matches.
+      // This is delegated rather than bound per element because htmx swaps the table in.
       document.addEventListener('change', function(e) {
-        if (e.target.id === 'select-all') {
-          const checkboxes = document.querySelectorAll('.row-checkbox');
-          checkboxes.forEach(cb => cb.checked = e.target.checked);
+        if (e.target.id && e.target.id.indexOf('select-all-') === 0) {
+          const table = document.getElementById(e.target.id.replace('select-all-', ''));
+          const scope = table || document;
+          scope.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = e.target.checked);
           updateBulkActionsButton();
         } else if (e.target.classList.contains('row-checkbox')) {
           updateBulkActionsButton();

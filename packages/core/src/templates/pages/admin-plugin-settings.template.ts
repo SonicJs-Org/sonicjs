@@ -1,17 +1,24 @@
 import { renderAdminLayout, AdminLayoutData } from '../layouts/admin-layout-v2.template'
 import { renderAuthSettingsForm } from '../components/auth-settings-form.template'
+import { escapeHtml } from '../../utils/sanitize'
 import type { AuthSettings } from '../../services/auth-validation'
+import { getPluginDefinition } from '../../services/plugin-definition-registry'
 
 /**
- * Escape HTML attribute values to prevent XSS
+ * Coerce unknown setting values to string then HTML-escape.
+ * Settings are `any` — ai-search ships `selected_collections: []`, oauth-providers a
+ * `providers` object. Coerce before escaping so the page doesn't 500 on non-strings.
  */
-function escapeHtmlAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+function escapeHtmlAttr(value: unknown): string {
+  const str =
+    typeof value === 'string'
+      ? value
+      : value == null
+        ? ''
+        : typeof value === 'object'
+          ? JSON.stringify(value)
+          : String(value)
+  return escapeHtml(str)
 }
 
 export interface PluginSettings {
@@ -34,7 +41,7 @@ export interface PluginSettingsPageData {
     description: string
     version: string
     author: string
-    status: 'active' | 'inactive' | 'error'
+    status: 'active' | 'inactive' | 'error' | 'uninstalled'
     category: string
     icon: string
     downloadCount?: number
@@ -44,6 +51,11 @@ export interface PluginSettingsPageData {
     permissions?: string[]
     isCore?: boolean
     settings?: PluginSettings
+    /** Live user-profile config (user-profiles plugin only) — null when defineUserProfile() not called. */
+    profileConfig?: {
+      fields: Array<{ name: string; label: string; type: string; required: boolean }>
+      registrationFields: string[]
+    } | null
   }
   activity?: PluginActivity[]
   user?: {
@@ -51,11 +63,32 @@ export interface PluginSettingsPageData {
     email: string
     role: string
   }
+  /** Data returned by the plugin's settingsTabContent.loadData(), if defined. */
+  settingsTabData?: any
 }
 
+/**
+ * Plugins whose Settings tab is a static panel rather than a list of editable keys.
+ * They store no user-editable settings, so the key-count check below would hide the tab
+ * entirely — but the panel is the whole point (user-profiles documents its code-defined
+ * field model), so it has to be opted in explicitly.
+ */
+const STATIC_SETTINGS_PANEL_PLUGINS = new Set(['user-profiles'])
+
 export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
-  const { plugin, activity = [], user } = data
-  
+  const { plugin, activity = [], user, settingsTabData } = data
+  const isUninstalled = plugin.status === 'uninstalled'
+  // true only when the plugin has at least one user-configurable setting key
+  // (_-prefixed keys are internal metadata, not settings the user can edit)
+  const pluginDef = getPluginDefinition(plugin.id || plugin.name)
+  const pluginId = plugin.id || plugin.name
+  const hasUserSettings = !isUninstalled && (pluginDef?.settingsTabContent != null ||
+    Object.keys(plugin.settings || {}).some(k => !k.startsWith('_')) ||
+    hasCustomSettingsComponent(pluginId) ||
+    STATIC_SETTINGS_PANEL_PLUGINS.has(pluginId))
+  const defaultTab = isUninstalled ? 'info' : hasUserSettings ? 'settings' : 'info'
+
+
   const pageContent = `
     <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
       <!-- Header with Back Button -->
@@ -66,13 +99,24 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
             ${plugin.description}
           </p>
         </div>
-        <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+        <div class="mt-4 sm:mt-0 sm:ml-16 flex items-center gap-3">
           <a href="/admin/plugins" class="inline-flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm font-semibold text-zinc-950 dark:text-white ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
             Back to Plugins
           </a>
+          ${plugin.settings?._adminPath ? `
+          <a
+            href="${plugin.settings._adminPath}"
+            class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200"
+          >
+            <svg class="-ml-0.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+            View Page
+          </a>
+          ` : ''}
         </div>
       </div>
 
@@ -105,23 +149,25 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
       <!-- Tabs -->
       <div class="mb-6">
         <nav class="flex space-x-8" aria-label="Tabs">
-          <button onclick="showTab('settings')" id="settings-tab" class="tab-button active border-b-2 border-blue-400 py-2 px-1 text-sm font-medium text-blue-400">
+          ${hasUserSettings ? `
+          <a href="#settings" onclick="showTab('settings')" id="settings-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
             Settings
-          </button>
-          <button onclick="showTab('activity')" id="activity-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
-            Activity Log
-          </button>
-          <button onclick="showTab('info')" id="info-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
+          </a>
+          ` : ''}
+          <a href="#info" onclick="showTab('info')" id="info-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
             Information
-          </button>
+          </a>
+          <a href="#activity" onclick="showTab('activity')" id="activity-tab" class="tab-button border-b-2 border-transparent py-2 px-1 text-sm font-medium text-gray-400 hover:text-gray-300">
+            Activity Log
+          </a>
         </nav>
       </div>
 
       <!-- Tab Content -->
       <div id="tab-content">
         <!-- Settings Tab -->
-        <div id="settings-content" class="tab-content">
-          ${renderSettingsTab(plugin)}
+        <div id="settings-content" class="tab-content hidden">
+          ${hasUserSettings ? renderSettingsTab(plugin, settingsTabData) : ''}
         </div>
 
         <!-- Activity Tab -->
@@ -137,25 +183,67 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
     </div>
 
     <script>
+      const VALID_TABS = [${hasUserSettings ? "'settings', " : ""}'activity', 'info'];
+
       function showTab(tabName) {
-        // Hide all tab contents
+        if (!VALID_TABS.includes(tabName)) tabName = '${defaultTab}';
+
         document.querySelectorAll('.tab-content').forEach(content => {
           content.classList.add('hidden');
         });
-        
-        // Remove active class from all tabs
+
         document.querySelectorAll('.tab-button').forEach(tab => {
           tab.classList.remove('active', 'border-blue-400', 'text-blue-400');
           tab.classList.add('border-transparent', 'text-gray-400');
         });
-        
-        // Show selected tab content
-        document.getElementById(tabName + '-content').classList.remove('hidden');
-        
-        // Add active class to selected tab
+
+        const contentEl = document.getElementById(tabName + '-content');
+        if (contentEl) contentEl.classList.remove('hidden');
+
         const activeTab = document.getElementById(tabName + '-tab');
-        activeTab.classList.add('active', 'border-blue-400', 'text-blue-400');
-        activeTab.classList.remove('border-transparent', 'text-gray-400');
+        if (activeTab) {
+          activeTab.classList.add('active', 'border-blue-400', 'text-blue-400');
+          activeTab.classList.remove('border-transparent', 'text-gray-400');
+        }
+
+        if (window.location.hash !== '#' + tabName) {
+          history.replaceState(null, '', '#' + tabName);
+        }
+      }
+
+      function initTabFromHash() {
+        const hash = window.location.hash.replace('#', '');
+        showTab(VALID_TABS.includes(hash) ? hash : '${defaultTab}');
+      }
+
+      window.addEventListener('hashchange', initTabFromHash);
+      initTabFromHash();
+
+      async function installPlugin(pluginName) {
+        const button = event.target;
+        button.disabled = true;
+        button.textContent = 'Installing...';
+
+        try {
+          const response = await fetch('/admin/plugins/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: pluginName })
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            showNotification('Plugin installed successfully!', 'success');
+            setTimeout(() => location.reload(), 1500);
+          } else {
+            throw new Error(result.error || 'Failed to install plugin');
+          }
+        } catch (error) {
+          showNotification(error.message, 'error');
+          button.disabled = false;
+          button.textContent = 'Install';
+        }
       }
 
       async function togglePlugin(pluginId, action) {
@@ -191,9 +279,28 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
         const form = document.getElementById('settings-form');
         const formData = new FormData(form);
         const isAuthPlugin = '${plugin.id}' === 'core-auth';
+        const isOAuthPlugin = '${plugin.id}' === 'oauth-providers';
         let settings = {};
 
-        if (isAuthPlugin) {
+        if (isOAuthPlugin) {
+          // Build nested provider settings structure
+          const getVal = id => (document.getElementById(id) || {}).value || '';
+          const getChecked = id => !!(document.getElementById(id) || {}).checked;
+          settings = {
+            providers: {
+              github: {
+                clientId: getVal('oauth_github_clientId'),
+                clientSecret: getVal('oauth_github_clientSecret'),
+                enabled: getChecked('oauth_github_enabled'),
+              },
+              google: {
+                clientId: getVal('oauth_google_clientId'),
+                clientSecret: getVal('oauth_google_clientSecret'),
+                enabled: getChecked('oauth_google_enabled'),
+              },
+            }
+          };
+        } else if (isAuthPlugin) {
           // Handle nested auth settings structure
           settings = {
             requiredFields: {},
@@ -311,13 +418,15 @@ function renderStatusBadge(status: string): string {
   const statusColors: Record<string, string> = {
     active: 'bg-green-900/50 text-green-300 border-green-600/30',
     inactive: 'bg-gray-800/50 text-gray-400 border-gray-600/30',
-    error: 'bg-red-900/50 text-red-300 border-red-600/30'
+    error: 'bg-red-900/50 text-red-300 border-red-600/30',
+    uninstalled: 'bg-zinc-800/50 text-zinc-400 border-zinc-600/30',
   }
 
   const statusIcons: Record<string, string> = {
     active: '<div class="w-2 h-2 bg-green-400 rounded-full mr-2"></div>',
     inactive: '<div class="w-2 h-2 bg-gray-500 rounded-full mr-2"></div>',
-    error: '<div class="w-2 h-2 bg-red-400 rounded-full mr-2"></div>'
+    error: '<div class="w-2 h-2 bg-red-400 rounded-full mr-2"></div>',
+    uninstalled: '<div class="w-2 h-2 bg-zinc-500 rounded-full mr-2"></div>',
   }
 
   return `
@@ -328,20 +437,31 @@ function renderStatusBadge(status: string): string {
 }
 
 function renderToggleButton(plugin: any): string {
+  if (plugin.status === 'uninstalled') {
+    return `<button onclick="installPlugin('${plugin.name || plugin.id}')" class="bg-zinc-900 dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">Install</button>`
+  }
+
   if (plugin.isCore) {
     return '<span class="text-sm text-gray-400">Core Plugin</span>'
   }
 
-  return plugin.status === 'active' 
+  return plugin.status === 'active'
     ? `<button onclick="togglePlugin('${plugin.id}', 'deactivate')" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Deactivate</button>`
     : `<button onclick="togglePlugin('${plugin.id}', 'activate')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Activate</button>`
 }
 
-function renderSettingsTab(plugin: any): string {
+function renderSettingsTab(plugin: any, settingsTabData?: any): string {
   const settings = plugin.settings || {}
   const pluginId = plugin.id || plugin.name
+  const hasUserKeys = Object.keys(settings).some(k => !k.startsWith('_'))
 
-  // Check for custom settings component first
+  // Check plugin definition registry first (plugins self-register via definePlugin settingsTabContent)
+  const pluginDef = getPluginDefinition(pluginId)
+  if (pluginDef?.settingsTabContent) {
+    return pluginDef.settingsTabContent.render({ plugin, settings, data: settingsTabData })
+  }
+
+  // Legacy: hardcoded per-plugin renderers
   const customRenderer = pluginSettingsComponents[pluginId]
   if (customRenderer) {
     return `
@@ -362,31 +482,10 @@ function renderSettingsTab(plugin: any): string {
     `
   }
 
-  const isSeedDataPlugin = plugin.id === 'seed-data' || plugin.name === 'seed-data'
   const isAuthPlugin = plugin.id === 'core-auth' || plugin.name === 'core-auth'
   const isTurnstilePlugin = plugin.id === 'turnstile' || plugin.name === 'turnstile'
 
   return `
-    ${isSeedDataPlugin ? `
-      <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-semibold text-white mb-2">Seed Data Generator</h2>
-            <p class="text-gray-400">Generate realistic example data for testing and development.</p>
-          </div>
-          <a
-            href="/admin/seed-data"
-            target="_blank"
-            class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Open Seed Data Tool
-          </a>
-        </div>
-      </div>
-    ` : ''}
 
     <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6">
       ${isAuthPlugin ? `
@@ -400,16 +499,16 @@ function renderSettingsTab(plugin: any): string {
       `}
 
       <form id="settings-form" class="space-y-6">
-        ${isAuthPlugin && Object.keys(settings).length > 0
+        ${isAuthPlugin && hasUserKeys
           ? renderAuthSettingsForm(settings as AuthSettings)
-          : isTurnstilePlugin && Object.keys(settings).length > 0
+          : isTurnstilePlugin && hasUserKeys
             ? renderTurnstileSettingsForm(settings)
-            : Object.keys(settings).length > 0
+            : hasUserKeys
               ? renderSettingsFields(settings)
               : renderNoSettings(plugin)
         }
 
-        ${Object.keys(settings).length > 0 ? `
+        ${hasUserKeys ? `
         <div class="flex items-center justify-end pt-6 border-t border-white/10">
           <button
             type="button"
@@ -427,7 +526,7 @@ function renderSettingsTab(plugin: any): string {
 }
 
 function renderSettingsFields(settings: PluginSettings): string {
-  return Object.entries(settings).map(([key, value]) => {
+  return Object.entries(settings).filter(([key]) => !key.startsWith('_')).map(([key, value]) => {
     const fieldId = `setting_${key}`
     const displayName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
     
@@ -465,7 +564,7 @@ function renderSettingsFields(settings: PluginSettings): string {
             type="text" 
             name="${fieldId}" 
             id="${fieldId}" 
-            value="${value}"
+            value="${escapeHtmlAttr(value)}"
             class="backdrop-blur-sm bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:border-blue-400 focus:outline-none transition-colors w-full"
           >
         </div>
@@ -494,14 +593,14 @@ function renderTurnstileSettingsForm(settings: any): string {
     <!-- Site Key -->
     <div>
       <label for="setting_siteKey" class="block text-sm font-medium text-gray-300 mb-2">Site Key</label>
-      <input type="text" name="setting_siteKey" id="setting_siteKey" value="${escapeHtmlAttr(settings.siteKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
+      <input type="text" name="setting_siteKey" id="setting_siteKey" value="${escapeHtml(settings.siteKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
       <p class="text-xs text-gray-400 mt-1">Your Cloudflare Turnstile site key (public)</p>
     </div>
 
     <!-- Secret Key -->
     <div>
       <label for="setting_secretKey" class="block text-sm font-medium text-gray-300 mb-2">Secret Key</label>
-      <input type="password" name="setting_secretKey" id="setting_secretKey" value="${escapeHtmlAttr(settings.secretKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
+      <input type="password" name="setting_secretKey" id="setting_secretKey" value="${escapeHtml(settings.secretKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
       <p class="text-xs text-gray-400 mt-1">Your Cloudflare Turnstile secret key (private)</p>
     </div>
 
@@ -551,6 +650,11 @@ function renderTurnstileSettingsForm(settings: any): string {
 }
 
 function renderNoSettings(plugin: any): string {
+  // User Profiles plugin — profile fields are a code-defined data model, not UI settings.
+  if (plugin.id === 'user-profiles' || plugin.name === 'user-profiles') {
+    return renderUserProfilesSettingsContent(plugin)
+  }
+
   // Special handling for seed-data plugin
   if (plugin.id === 'seed-data' || plugin.name === 'seed-data') {
     return `
@@ -600,7 +704,7 @@ function renderActivityTab(activity: PluginActivity[]): string {
                   <span class="text-sm font-medium text-white">${item.action}</span>
                   <span class="text-xs text-gray-400">${formatTimestamp(item.timestamp)}</span>
                 </div>
-                <p class="text-sm text-gray-300 mt-1">${item.message}</p>
+                ${item.message ? `<p class="text-sm text-gray-300 mt-1">${item.message}</p>` : ''}
                 ${item.user ? `<p class="text-xs text-gray-400 mt-1">by ${item.user}</p>` : ''}
               </div>
             </div>
@@ -621,6 +725,48 @@ function renderActivityTab(activity: PluginActivity[]): string {
 
 function renderInformationTab(plugin: any): string {
   return `
+    ${plugin.description ? `
+    <!-- About -->
+    <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-3">About</h2>
+      <p class="text-gray-300 leading-relaxed">${plugin.description}</p>
+    </div>
+    ` : ''}
+
+    ${(plugin.settings?._routes?.length ?? 0) > 0 ? `
+    <!-- Routes -->
+    <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-4">Routes</h2>
+      <div class="space-y-2">
+        ${(plugin.settings._routes as Array<{ method: string; path: string; description?: string; requiresAuth?: boolean }>).map(r => {
+          const badge = r.method === 'GET'
+            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+            : r.method === 'POST'
+            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+            : r.method === 'DELETE'
+            ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+            : 'bg-white/10 text-gray-300 border border-white/20'
+          const pathHtml = r.method === 'GET'
+            ? `<a href="${r.path}" class="font-mono text-sm text-blue-400 hover:text-blue-300 hover:underline">${r.path}</a>`
+            : `<span class="font-mono text-sm text-gray-200">${r.path}</span>`
+          const authBadge = r.requiresAuth
+            ? `<span class="ml-2 text-xs text-amber-400/80">🔒 auth</span>`
+            : ''
+          return `
+          <div class="flex items-start gap-3 py-2 border-b border-white/5 last:border-0">
+            <span class="shrink-0 inline-block px-2 py-0.5 rounded text-xs font-bold ${badge}">${r.method}</span>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1 flex-wrap">
+                ${pathHtml}${authBadge}
+              </div>
+              ${r.description ? `<p class="text-xs text-gray-400 mt-0.5">${r.description}</p>` : ''}
+            </div>
+          </div>`
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Plugin Details -->
       <div class="backdrop-blur-md bg-black/20 rounded-xl border border-white/10 shadow-xl p-6">
@@ -704,6 +850,7 @@ type PluginSettingsRenderer = (plugin: any, settings: PluginSettings) => string
 const pluginSettingsComponents: Record<string, PluginSettingsRenderer> = {
   'otp-login': renderOTPLoginSettingsContent,
   'email': renderEmailSettingsContent,
+  'oauth-providers': renderOAuthProvidersSettingsContent,
 }
 
 /**
@@ -725,7 +872,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
   const loginButtonText = settings.loginButtonText || ''
   const previewButtonText = loginButtonText.trim() || `Sign in to ${siteName}`
   const previewLogoBorder = logoBorderWidth > 0 && logoBorderColor
-    ? `border: ${logoBorderWidth}px solid ${escapeHtmlAttr(logoBorderColor)}; border-radius: 8px;`
+    ? `border: ${logoBorderWidth}px solid ${escapeHtml(logoBorderColor)}; border-radius: 8px;`
     : ''
 
   return `
@@ -826,7 +973,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
               type="url"
               id="setting_logoUrl"
               name="setting_logoUrl"
-              value="${escapeHtmlAttr(logoUrl)}"
+              value="${escapeHtml(logoUrl)}"
               placeholder="https://yourdomain.com/logo.png"
               class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
             />
@@ -874,7 +1021,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
                 <input
                   type="color"
                   id="setting_logoBorderColor_picker"
-                  value="${escapeHtmlAttr(/^#[0-9a-fA-F]{6}$/.test(logoBorderColor) ? logoBorderColor : '#ffffff')}"
+                  value="${escapeHtml(/^#[0-9a-fA-F]{6}$/.test(logoBorderColor) ? logoBorderColor : '#ffffff')}"
                   oninput="document.getElementById('setting_logoBorderColor').value = this.value"
                   class="w-12 h-10 rounded-lg bg-white/5 border border-white/10 cursor-pointer"
                 />
@@ -882,7 +1029,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
                   type="text"
                   id="setting_logoBorderColor"
                   name="setting_logoBorderColor"
-                  value="${escapeHtmlAttr(logoBorderColor)}"
+                  value="${escapeHtml(logoBorderColor)}"
                   placeholder="#ffffff"
                   class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
                 />
@@ -899,7 +1046,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
               type="url"
               id="setting_loginUrl"
               name="setting_loginUrl"
-              value="${escapeHtmlAttr(loginUrl)}"
+              value="${escapeHtml(loginUrl)}"
               placeholder="https://yourdomain.com/login"
               class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
             />
@@ -914,8 +1061,8 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
               type="text"
               id="setting_loginButtonText"
               name="setting_loginButtonText"
-              value="${escapeHtmlAttr(loginButtonText)}"
-              placeholder="Sign in to ${escapeHtmlAttr(siteName)}"
+              value="${escapeHtml(loginButtonText)}"
+              placeholder="Sign in to ${escapeHtml(siteName)}"
               class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
             />
             <p class="text-xs text-gray-500 mt-1">Optional. Defaults to "Sign in to ${siteName}".</p>
@@ -1014,7 +1161,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
 
         <div class="bg-white rounded-lg overflow-hidden shadow-lg">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center;">
-            ${logoUrl ? `<img src="${escapeHtmlAttr(logoUrl)}" alt="Logo" style="max-width: ${logoWidth}px; width: 100%; height: auto; margin: 0 auto 16px; ${previewLogoBorder}">` : ''}
+            ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="max-width: ${logoWidth}px; width: 100%; height: auto; margin: 0 auto 16px; ${previewLogoBorder}">` : ''}
             <h3 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600;">Your Login Code</h3>
             <p style="margin: 0; opacity: 0.95; font-size: 14px;">Enter this code to sign in to ${siteName}</p>
           </div>
@@ -1028,8 +1175,8 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
 
             ${loginUrl ? `
             <div style="text-align: center; margin: 0 0 20px 0;">
-              <a href="${escapeHtmlAttr(loginUrl)}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px;">
-                ${escapeHtmlAttr(previewButtonText)}
+              <a href="${escapeHtml(loginUrl)}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px;">
+                ${escapeHtml(previewButtonText)}
               </a>
             </div>
             ` : ''}
@@ -1166,102 +1313,107 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
 /**
  * Email plugin settings content
  */
-function renderEmailSettingsContent(plugin: any, settings: PluginSettings): string {
-  const apiKey = settings.apiKey || ''
+function renderEmailSettingsContent(_plugin: any, settings: PluginSettings): string {
+  const provider = (settings.provider as string) || 'cloudflare'
+  const resendApiKey = settings.resendApiKey || ''
   const fromEmail = settings.fromEmail || ''
   const fromName = settings.fromName || ''
   const replyTo = settings.replyTo || ''
   const logoUrl = settings.logoUrl || ''
+  const cfAccountId = settings.cfAccountId || ''
+  const cfEmailApiToken = settings.cfEmailApiToken || ''
+
+  const inputClass = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white'
+  const selectClass = 'w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 focus:border-blue-500 focus:outline-none text-white [&>option]:bg-zinc-800'
+  const hintClass = 'text-xs text-gray-500 mt-1'
+  const envNote = (varName: string) =>
+    `<p class="${hintClass} text-amber-400/80">⚡ <code>${varName}</code> env var overrides this field when set.</p>`
 
   return `
     <div class="space-y-6">
-      <!-- Resend Configuration -->
+      <!-- Provider + Settings Form -->
       <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
-        <h3 class="text-lg font-semibold text-white mb-4">Resend Configuration</h3>
+        <h3 class="text-lg font-semibold text-white mb-4">Email Configuration</h3>
 
-        <form id="settings-form" class="space-y-4">
-          <!-- API Key -->
+        <form id="settings-form" class="space-y-5">
+
+          <!-- Provider selector -->
           <div>
-            <label for="setting_apiKey" class="block text-sm font-medium text-gray-300 mb-2">
-              Resend API Key <span class="text-red-500">*</span>
+            <label for="setting_provider" class="block text-sm font-medium text-gray-300 mb-2">
+              Email Provider <span class="text-red-500">*</span>
             </label>
-            <input
-              type="password"
-              id="setting_apiKey"
-              name="setting_apiKey"
-              value="${escapeHtmlAttr(apiKey)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="re_..."
-              required
-            />
-            <p class="text-xs text-gray-500 mt-1">
-              Get your API key from <a href="https://resend.com/api-keys" target="_blank" class="text-blue-400 hover:underline">resend.com/api-keys</a>
-            </p>
+            <select id="setting_provider" name="setting_provider" class="${selectClass}">
+              <option value="cloudflare" ${provider === 'cloudflare' ? 'selected' : ''}>Cloudflare Email Service</option>
+              <option value="resend" ${provider === 'resend' ? 'selected' : ''}>Resend</option>
+            </select>
+            ${envNote('RESEND_API_KEY')}
           </div>
 
-          <!-- From Email -->
+          <!-- Resend fields (visible when provider=resend) -->
+          <div id="resend-fields" class="space-y-4" style="${provider !== 'resend' ? 'display:none' : ''}">
+            <div>
+              <label for="setting_resendApiKey" class="block text-sm font-medium text-gray-300 mb-2">
+                Resend API Key <span class="text-red-500">*</span>
+              </label>
+              <input type="password" id="setting_resendApiKey" name="setting_resendApiKey"
+                value="${escapeHtml(resendApiKey)}" placeholder="re_..." class="${inputClass}" />
+              ${envNote('RESEND_API_KEY')}
+              <p class="${hintClass}">Get your key at resend.com/api-keys</p>
+            </div>
+          </div>
+
+          <!-- CF Email fields (visible when provider=cloudflare) -->
+          <div id="cf-fields" class="space-y-4" style="${provider !== 'cloudflare' ? 'display:none' : ''}">
+            <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-200">
+              Requires a <code>send_email</code> binding named <code>EMAIL</code> in your <code>wrangler.toml</code>.
+              No API key needed — auth is via the binding.
+            </div>
+            <div>
+              <label for="setting_cfAccountId" class="block text-sm font-medium text-gray-300 mb-2">CF Account ID</label>
+              <input type="text" id="setting_cfAccountId" name="setting_cfAccountId"
+                value="${escapeHtml(cfAccountId)}" placeholder="f61c658f..." class="${inputClass}" />
+              ${envNote('CF_ACCOUNT_ID')}
+              <p class="${hintClass}">Used by the delivery-sync cron. Found in Cloudflare dashboard sidebar.</p>
+            </div>
+            <div>
+              <label for="setting_cfEmailApiToken" class="block text-sm font-medium text-gray-300 mb-2">CF Email API Token</label>
+              <input type="password" id="setting_cfEmailApiToken" name="setting_cfEmailApiToken"
+                value="${escapeHtml(cfEmailApiToken)}" placeholder="••••••••" class="${inputClass}" />
+              ${envNote('EMAIL_API_TOKEN')}
+              <p class="${hintClass}">API token with Email Routing read permission.</p>
+            </div>
+          </div>
+
+          <!-- Common fields -->
           <div>
             <label for="setting_fromEmail" class="block text-sm font-medium text-gray-300 mb-2">
               From Email <span class="text-red-500">*</span>
             </label>
-            <input
-              type="email"
-              id="setting_fromEmail"
-              name="setting_fromEmail"
-              value="${escapeHtmlAttr(fromEmail)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="noreply@yourdomain.com"
-              required
-            />
-            <p class="text-xs text-gray-500 mt-1">Must be a verified domain in Resend</p>
+            <input type="email" id="setting_fromEmail" name="setting_fromEmail"
+              value="${escapeHtml(fromEmail)}" placeholder="noreply@yourdomain.com" class="${inputClass}" required />
           </div>
 
-          <!-- From Name -->
           <div>
             <label for="setting_fromName" class="block text-sm font-medium text-gray-300 mb-2">
               From Name <span class="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              id="setting_fromName"
-              name="setting_fromName"
-              value="${escapeHtmlAttr(fromName)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="Your App Name"
-              required
-            />
+            <input type="text" id="setting_fromName" name="setting_fromName"
+              value="${escapeHtml(fromName)}" placeholder="Your App Name" class="${inputClass}" required />
           </div>
 
-          <!-- Reply To -->
           <div>
-            <label for="setting_replyTo" class="block text-sm font-medium text-gray-300 mb-2">
-              Reply-To Email
-            </label>
-            <input
-              type="email"
-              id="setting_replyTo"
-              name="setting_replyTo"
-              value="${escapeHtmlAttr(replyTo)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="support@yourdomain.com"
-            />
+            <label for="setting_replyTo" class="block text-sm font-medium text-gray-300 mb-2">Reply-To Email</label>
+            <input type="email" id="setting_replyTo" name="setting_replyTo"
+              value="${escapeHtml(replyTo)}" placeholder="support@yourdomain.com" class="${inputClass}" />
           </div>
 
-          <!-- Logo URL -->
           <div>
-            <label for="setting_logoUrl" class="block text-sm font-medium text-gray-300 mb-2">
-              Logo URL
-            </label>
-            <input
-              type="url"
-              id="setting_logoUrl"
-              name="setting_logoUrl"
-              value="${escapeHtmlAttr(logoUrl)}"
-              class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-              placeholder="https://yourdomain.com/logo.png"
-            />
-            <p class="text-xs text-gray-500 mt-1">Logo to display in email templates</p>
+            <label for="setting_logoUrl" class="block text-sm font-medium text-gray-300 mb-2">Logo URL</label>
+            <input type="url" id="setting_logoUrl" name="setting_logoUrl"
+              value="${escapeHtml(logoUrl)}" placeholder="https://yourdomain.com/logo.png" class="${inputClass}" />
+            <p class="${hintClass}">Logo shown in email templates.</p>
           </div>
+
         </form>
       </div>
 
@@ -1269,73 +1421,246 @@ function renderEmailSettingsContent(plugin: any, settings: PluginSettings): stri
       <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
         <h3 class="text-lg font-semibold text-white mb-4">Send Test Email</h3>
         <div class="flex gap-3">
-          <input
-            type="email"
-            id="testEmailAddress"
-            placeholder="Enter email address"
-            class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
-          />
-          <button
-            type="button"
-            id="testEmailBtn"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all"
-          >
+          <input type="email" id="testEmailAddress" placeholder="Enter email address"
+            class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white" />
+          <button type="button" id="testEmailBtn"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all">
             Send Test
           </button>
         </div>
         <div id="testEmailResult" class="hidden mt-4 rounded-lg p-4"></div>
       </div>
 
-      <!-- Info Card -->
+      <!-- Templates info -->
       <div class="backdrop-blur-md bg-blue-500/10 border border-blue-500/20 rounded-xl p-6">
         <h3 class="font-semibold text-blue-400 mb-3">📧 Email Templates Included</h3>
         <ul class="text-sm text-blue-200 space-y-2">
-          <li>✓ Registration confirmation</li>
+          <li>✓ Welcome / registration confirmation</li>
           <li>✓ Email verification</li>
           <li>✓ Password reset</li>
           <li>✓ One-time code (2FA)</li>
+          <li>✓ Invitation</li>
         </ul>
         <p class="text-xs text-blue-300 mt-4">
-          Templates are code-based and can be customized by editing the plugin files.
+          Templates are code-based — customize by editing the plugin files.
         </p>
       </div>
     </div>
 
     <script>
-      document.getElementById('testEmailBtn').addEventListener('click', async () => {
-        const email = document.getElementById('testEmailAddress').value;
-        if (!email) {
-          alert('Please enter an email address');
-          return;
+      (function () {
+        const providerSel = document.getElementById('setting_provider');
+        const resendFields = document.getElementById('resend-fields');
+        const cfFields = document.getElementById('cf-fields');
+
+        function updateVisibility() {
+          const v = providerSel.value;
+          resendFields.style.display = v === 'resend' ? '' : 'none';
+          cfFields.style.display = v === 'cloudflare' ? '' : 'none';
         }
 
-        const resultEl = document.getElementById('testEmailResult');
-        resultEl.className = 'mt-4 rounded-lg p-4 bg-blue-500/20 border border-blue-500/30';
-        resultEl.innerHTML = '📧 Sending test email...';
-        resultEl.classList.remove('hidden');
+        providerSel.addEventListener('change', updateVisibility);
 
-        try {
-          const response = await fetch('/admin/plugins/email/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ toEmail: email })
-          });
+        document.getElementById('testEmailBtn').addEventListener('click', async () => {
+          const email = document.getElementById('testEmailAddress').value;
+          if (!email) { alert('Please enter an email address'); return; }
 
-          const data = await response.json();
+          const resultEl = document.getElementById('testEmailResult');
+          resultEl.className = 'mt-4 rounded-lg p-4 bg-blue-500/20 border border-blue-500/30';
+          resultEl.innerHTML = '📧 Sending test email...';
+          resultEl.classList.remove('hidden');
 
-          if (response.ok) {
-            resultEl.className = 'mt-4 rounded-lg p-4 bg-green-500/20 border border-green-500/30';
-            resultEl.innerHTML = '<p class="text-green-200">✅ ' + (data.message || 'Test email sent! Check your inbox.') + '</p>';
-          } else {
+          try {
+            const response = await fetch('/admin/email/test', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to: email })
+            });
+            const data = await response.json();
+            if (response.ok && data.success && !data.warning) {
+              resultEl.className = 'mt-4 rounded-lg p-4 bg-green-500/20 border border-green-500/30';
+              resultEl.innerHTML = '<p class="text-green-200">✅ Test email sent via <strong>' + data.provider + '</strong>. Check your inbox.</p>';
+            } else if (response.ok && data.warning) {
+              resultEl.className = 'mt-4 rounded-lg p-4 bg-yellow-500/20 border border-yellow-500/30';
+              resultEl.innerHTML = '<p class="text-yellow-200">⚠️ ' + data.warning + '</p>';
+            } else {
+              resultEl.className = 'mt-4 rounded-lg p-4 bg-red-500/20 border border-red-500/30';
+              const errMsg = data.error || data.result?.error || 'Failed to send test email.';
+              resultEl.innerHTML = '<p class="text-red-200">❌ ' + errMsg + '</p>';
+            }
+          } catch {
             resultEl.className = 'mt-4 rounded-lg p-4 bg-red-500/20 border border-red-500/30';
-            resultEl.innerHTML = '<p class="text-red-200">❌ ' + (data.error || 'Failed to send test email.') + '</p>';
+            resultEl.innerHTML = '<p class="text-red-200">❌ Network error. Please try again.</p>';
           }
-        } catch (error) {
-          resultEl.className = 'mt-4 rounded-lg p-4 bg-red-500/20 border border-red-500/30';
-          resultEl.innerHTML = '<p class="text-red-200">❌ Network error. Please try again.</p>';
-        }
-      });
+        });
+      })();
     </script>
+  `
+}
+
+/**
+ * User Profiles plugin settings content.
+ *
+ * Profile fields are a CODE-DEFINED data model (declared via defineUserProfile()
+ * in the app entry point) — not editable through the admin UI. This page explains
+ * where to define them and shows the current configured state.
+ */
+function renderUserProfilesSettingsContent(plugin: any): string {
+  const config = plugin.profileConfig as PluginSettingsPageData['plugin']['profileConfig']
+  const fields = config?.fields ?? []
+  const registrationFields = config?.registrationFields ?? []
+  const isConfigured = fields.length > 0
+
+  const codeExample = `import { defineUserProfile } from '@sonicjs-cms/core'
+
+defineUserProfile({
+  fields: [
+    { name: 'bio', label: 'Bio', type: 'textarea' },
+    { name: 'company', label: 'Company', type: 'text' },
+    { name: 'jobTitle', label: 'Job Title', type: 'text' },
+  ],
+  // Field names shown on the "Create User" form (optional):
+  registrationFields: ['company'],
+})`
+
+  const statusBanner = isConfigured
+    ? `
+      <div class="bg-green-500/20 border border-green-500/30 rounded-lg p-4">
+        <p class="text-green-200 text-sm">
+          <strong>✅ Profile fields configured.</strong>
+          ${fields.length} field${fields.length !== 1 ? 's' : ''} defined — the
+          <span class="font-medium">Profile Information</span> section now appears on the user create/edit pages.
+        </p>
+      </div>`
+    : `
+      <div class="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4">
+        <p class="text-yellow-200 text-sm">
+          <strong>⚠️ No profile fields defined yet.</strong>
+          The <span class="font-medium">Profile Information</span> section stays hidden on the user
+          create/edit pages until you declare fields in code with <code>defineUserProfile()</code>.
+        </p>
+      </div>`
+
+  const fieldsTable = isConfigured
+    ? `
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Configured Fields</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="text-gray-400 border-b border-white/10">
+                <th class="py-2 pr-4 font-medium">Name</th>
+                <th class="py-2 pr-4 font-medium">Label</th>
+                <th class="py-2 pr-4 font-medium">Type</th>
+                <th class="py-2 pr-4 font-medium">Required</th>
+                <th class="py-2 font-medium">On signup</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${fields.map(f => `
+                <tr class="border-b border-white/5 text-gray-200">
+                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtml(f.name)}</td>
+                  <td class="py-2 pr-4">${escapeHtml(f.label)}</td>
+                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtml(f.type)}</td>
+                  <td class="py-2 pr-4">${f.required ? 'Yes' : 'No'}</td>
+                  <td class="py-2">${registrationFields.includes(f.name) ? 'Yes' : 'No'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`
+    : ''
+
+  return `
+    <div class="space-y-6">
+      ${statusBanner}
+
+      <!-- Where to edit -->
+      <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 class="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+          <span>🧩</span> Define profile fields in code
+        </h3>
+        <p class="text-gray-300 text-sm mb-4">
+          User profile fields are part of your application's data model, so they live in code — not in this admin UI.
+          Add or change fields by calling <code class="text-blue-300">defineUserProfile()</code> in your app entry point,
+          then redeploy.
+        </p>
+        <div class="bg-black/40 border border-white/10 rounded-lg p-3 mb-4">
+          <p class="text-xs text-gray-400 mb-1">Edit this file:</p>
+          <code class="text-sm text-blue-300 font-mono">my-sonicjs-app/src/index.ts</code>
+        </div>
+        <p class="text-xs text-gray-400 mb-2">Example — add this near your <code>registerCollections([...])</code> call:</p>
+        <pre class="bg-black/60 border border-white/10 rounded-lg p-4 overflow-x-auto"><code class="text-sm text-gray-200 font-mono whitespace-pre">${escapeHtml(codeExample)}</code></pre>
+        <p class="text-xs text-gray-400 mt-4">
+          Supported field types: <code>text</code>, <code>textarea</code>, <code>number</code>, <code>boolean</code>,
+          <code>select</code>, <code>date</code>. Use <code>options</code> for <code>select</code> and
+          <code>required</code> / <code>validation</code> to enforce input rules.
+        </p>
+      </div>
+
+      ${fieldsTable}
+    </div>
+  `
+}
+
+/**
+ * OAuth Providers plugin settings — renders GitHub and Google credential fields.
+ * Settings are stored as { providers: { github: {...}, google: {...} } }.
+ * The saveSettings() JS function handles the nested structure for oauth-providers.
+ */
+function renderOAuthProvidersSettingsContent(plugin: any, settings: PluginSettings): string {
+  const providers = (settings.providers as Record<string, any>) || {}
+  const gh = providers.github || {}
+  const gg = providers.google || {}
+  const inputClass = 'backdrop-blur-sm bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:border-blue-400 focus:outline-none transition-colors w-full'
+
+  return `
+    <div class="space-y-6">
+      <form id="settings-form">
+        <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6 space-y-6">
+          <h3 class="text-lg font-semibold text-white">GitHub OAuth</h3>
+          <div>
+            <label for="oauth_github_clientId" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
+            <input type="text" id="oauth_github_clientId" name="oauth_github_clientId"
+              value="${escapeHtml(gh.clientId || '')}"
+              placeholder="GitHub OAuth App Client ID" class="${inputClass}" />
+          </div>
+          <div>
+            <label for="oauth_github_clientSecret" class="block text-sm font-medium text-gray-300 mb-2">Client Secret</label>
+            <input type="password" id="oauth_github_clientSecret" name="oauth_github_clientSecret"
+              value="${escapeHtml(gh.clientSecret || '')}"
+              placeholder="GitHub OAuth App Client Secret" class="${inputClass}" />
+          </div>
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="oauth_github_enabled" name="oauth_github_enabled"
+              ${gh.enabled ? 'checked' : ''} class="w-4 h-4 rounded border-white/10" />
+            <label for="oauth_github_enabled" class="text-sm text-gray-300">Enable GitHub login</label>
+          </div>
+        </div>
+
+        <div class="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-6 space-y-6 mt-6">
+          <h3 class="text-lg font-semibold text-white">Google OAuth</h3>
+          <div>
+            <label for="oauth_google_clientId" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
+            <input type="text" id="oauth_google_clientId" name="oauth_google_clientId"
+              value="${escapeHtml(gg.clientId || '')}"
+              placeholder="Google OAuth Client ID" class="${inputClass}" />
+          </div>
+          <div>
+            <label for="oauth_google_clientSecret" class="block text-sm font-medium text-gray-300 mb-2">Client Secret</label>
+            <input type="password" id="oauth_google_clientSecret" name="oauth_google_clientSecret"
+              value="${escapeHtml(gg.clientSecret || '')}"
+              placeholder="Google OAuth Client Secret" class="${inputClass}" />
+          </div>
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="oauth_google_enabled" name="oauth_google_enabled"
+              ${gg.enabled ? 'checked' : ''} class="w-4 h-4 rounded border-white/10" />
+            <label for="oauth_google_enabled" class="text-sm text-gray-300">Enable Google login</label>
+          </div>
+        </div>
+      </form>
+    </div>
   `
 }
 

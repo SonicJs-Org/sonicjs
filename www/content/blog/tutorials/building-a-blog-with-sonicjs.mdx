@@ -60,7 +60,7 @@ By the end of this tutorial, you'll have:
 Create a new SonicJS project:
 
 ```bash
-npm create sonicjs-app my-blog
+npx create-sonicjs@latest my-blog
 cd my-blog
 ```
 
@@ -71,39 +71,40 @@ cd my-blog
 Create `src/collections/authors.ts`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export const authorsCollection = defineCollection({
+export const authorsCollection: CollectionConfig = {
   name: 'authors',
-  slug: 'authors',
-  fields: {
-    name: {
-      type: 'string',
-      required: true,
-      maxLength: 100,
-    },
-    email: {
-      type: 'email',
-      required: true,
-      unique: true,
-    },
-    bio: {
-      type: 'text',
-      maxLength: 500,
-    },
-    avatar: {
-      type: 'media',
-    },
-    twitter: {
-      type: 'string',
-      maxLength: 50,
-    },
-    github: {
-      type: 'string',
-      maxLength: 50,
+  schema: {
+    properties: {
+      name: {
+        type: 'string',
+        required: true,
+        maxLength: 100,
+      },
+      email: {
+        type: 'string',
+        format: 'email',
+        required: true,
+      },
+      bio: {
+        type: 'string',
+        maxLength: 500,
+      },
+      avatar: {
+        type: 'string',
+      },
+      twitter: {
+        type: 'string',
+        maxLength: 50,
+      },
+      github: {
+        type: 'string',
+        maxLength: 50,
+      },
     },
   },
-})
+}
 ```
 
 ### Categories Collection
@@ -111,28 +112,28 @@ export const authorsCollection = defineCollection({
 Create `src/collections/categories.ts`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export const categoriesCollection = defineCollection({
+export const categoriesCollection: CollectionConfig = {
   name: 'categories',
-  slug: 'categories',
-  fields: {
-    name: {
-      type: 'string',
-      required: true,
-      maxLength: 50,
-    },
-    slug: {
-      type: 'string',
-      required: true,
-      unique: true,
-    },
-    description: {
-      type: 'text',
-      maxLength: 200,
+  schema: {
+    properties: {
+      name: {
+        type: 'string',
+        required: true,
+        maxLength: 50,
+      },
+      slug: {
+        type: 'string',
+        required: true,
+      },
+      description: {
+        type: 'string',
+        maxLength: 200,
+      },
     },
   },
-})
+}
 ```
 
 ### Posts Collection
@@ -140,64 +141,65 @@ export const categoriesCollection = defineCollection({
 Create `src/collections/posts.ts`:
 
 ```typescript
-import { defineCollection } from '@sonicjs-cms/core'
+import { CollectionConfig } from '@sonicjs-cms/core'
 
-export const postsCollection = defineCollection({
+export const postsCollection: CollectionConfig = {
   name: 'posts',
-  slug: 'posts',
-  fields: {
-    title: {
-      type: 'string',
-      required: true,
-      maxLength: 200,
-    },
-    slug: {
-      type: 'string',
-      required: true,
-      unique: true,
-    },
-    excerpt: {
-      type: 'text',
-      maxLength: 300,
-    },
-    content: {
-      type: 'richtext',
-      required: true,
-    },
-    featuredImage: {
-      type: 'media',
-    },
-    author: {
-      type: 'relation',
-      collection: 'authors',
-      required: true,
-    },
-    category: {
-      type: 'relation',
-      collection: 'categories',
-    },
-    tags: {
-      type: 'array',
-      of: 'string',
-    },
-    status: {
-      type: 'select',
-      options: ['draft', 'published', 'archived'],
-      default: 'draft',
-    },
-    publishedAt: {
-      type: 'datetime',
-    },
-    seo: {
-      type: 'object',
-      fields: {
-        metaTitle: { type: 'string', maxLength: 60 },
-        metaDescription: { type: 'string', maxLength: 160 },
-        ogImage: { type: 'media' },
+  schema: {
+    properties: {
+      title: {
+        type: 'string',
+        required: true,
+        maxLength: 200,
+      },
+      slug: {
+        type: 'string',
+        required: true,
+      },
+      excerpt: {
+        type: 'string',
+        maxLength: 300,
+      },
+      content: {
+        type: 'lexical',
+        required: true,
+      },
+      featuredImage: {
+        type: 'string',
+      },
+      author: {
+        type: 'reference',
+        collection: 'authors',
+        required: true,
+      },
+      category: {
+        type: 'reference',
+        collection: 'categories',
+      },
+      tags: {
+        type: 'array',
+        of: 'string',
+      },
+      status: {
+        type: 'string',
+        enum: ['draft', 'published', 'archived'],
+        default: 'draft',
+      },
+      publishedAt: {
+        type: 'string',
+        format: 'date-time',
+      },
+      seo: {
+        type: 'object',
+        properties: {
+          metaTitle: { type: 'string', maxLength: 60 },
+          metaDescription: { type: 'string', maxLength: 160 },
+          ogImage: { type: 'string' },
+        },
       },
     },
   },
-})
+}
 ```
 
 ## Step 3: Configure the CMS
@@ -205,49 +207,18 @@ export const postsCollection = defineCollection({
 Update `src/index.ts`:
 
 ```typescript
-import { Hono } from 'hono'
-import { createSonicJS } from '@sonicjs-cms/core'
-import { authPlugin, mediaPlugin, cachePlugin } from '@sonicjs-cms/core/plugins'
+import { createSonicJSApp, registerCollections } from '@sonicjs-cms/core'
 import { authorsCollection } from './collections/authors'
 import { categoriesCollection } from './collections/categories'
 import { postsCollection } from './collections/posts'
 
-type Env = {
-  DB: D1Database
-  CACHE: KVNamespace
-  STORAGE: R2Bucket
-}
+registerCollections([
+  authorsCollection,
+  categoriesCollection,
+  postsCollection,
+])
 
-const app = new Hono<{ Bindings: Env }>()
-
-app.use('*', async (c, next) => {
-  const cms = createSonicJS({
-    database: c.env.DB,
-    cache: c.env.CACHE,
-    storage: c.env.STORAGE,
-    collections: [
-      authorsCollection,
-      categoriesCollection,
-      postsCollection,
-    ],
-    plugins: [
-      authPlugin(),
-      mediaPlugin(),
-      cachePlugin({
-        defaultTTL: 3600,
-        patterns: {
-          '/api/content/posts': { ttl: 300 },
-          '/api/content/posts/*': { ttl: 600 },
-        },
-      }),
-    ],
-  })
-
-  c.set('cms', cms)
-  return next()
-})
-
-export default app
+export default createSonicJSApp()
 ```
 
 ## Step 4: Set Up Database
@@ -277,19 +248,14 @@ binding = "DB"
 database_name = "my-blog-db"
 database_id = "your-database-id"
 
-[[kv_namespaces]]
-binding = "CACHE"
-id = "your-kv-id"
-
 [[r2_buckets]]
-binding = "STORAGE"
+binding = "MEDIA_BUCKET"
 bucket_name = "my-blog-storage"
 ```
 
 Run migrations:
 
 ```bash
-npm run db:generate
 npm run db:migrate:local
 ```
 
@@ -304,7 +270,7 @@ npm run dev
 ### Create an Author
 
 ```bash
-curl -X POST http://localhost:8787/api/content/authors \
+curl -X POST http://localhost:8787/api/authors \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -318,7 +284,7 @@ curl -X POST http://localhost:8787/api/content/authors \
 ### Create a Category
 
 ```bash
-curl -X POST http://localhost:8787/api/content/categories \
+curl -X POST http://localhost:8787/api/categories \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -331,7 +297,7 @@ curl -X POST http://localhost:8787/api/content/categories \
 ### Create a Post
 
 ```bash
-curl -X POST http://localhost:8787/api/content/posts \
+curl -X POST http://localhost:8787/api/posts \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -351,13 +317,13 @@ curl -X POST http://localhost:8787/api/content/posts \
 
 ```bash
 # Get all published posts with author data
-curl "http://localhost:8787/api/content/posts?status=published&include=author,category"
+curl "http://localhost:8787/api/posts?status=published&include=author,category"
 
 # Search posts
-curl "http://localhost:8787/api/content/posts?search=hello"
+curl "http://localhost:8787/api/posts?search=hello"
 
 # Filter by category
-curl "http://localhost:8787/api/content/posts?category=category-id"
+curl "http://localhost:8787/api/posts?category=category-id"
 ```
 
 ## Step 6: Deploy to Production
@@ -366,7 +332,7 @@ Deploy your blog to Cloudflare's global network:
 
 ```bash
 # Apply production migrations
-npm run db:migrate:prod
+npm run db:migrate
 
 # Deploy
 npm run deploy
@@ -385,12 +351,12 @@ Use any frontend framework to consume your blog API:
 const API_URL = process.env.NEXT_PUBLIC_CMS_URL
 
 export async function getPosts() {
-  const res = await fetch(`${API_URL}/api/content/posts?status=published&include=author`)
+  const res = await fetch(`${API_URL}/api/posts?status=published&include=author`)
   return res.json()
 }
 
 export async function getPost(slug: string) {
-  const res = await fetch(`${API_URL}/api/content/posts?slug=${slug}&include=author,category`)
+  const res = await fetch(`${API_URL}/api/posts?slug=${slug}&include=author,category`)
   const data = await res.json()
   return data.data[0]
 }
@@ -425,8 +391,8 @@ export default async function BlogPage() {
 cachePlugin({
   defaultTTL: 3600,
   patterns: {
-    '/api/content/posts': { ttl: 60 },      // List updates quickly
-    '/api/content/posts/*': { ttl: 3600 },  // Individual posts cache longer
+    '/api/posts': { ttl: 60 },      // List updates quickly
+    '/api/posts/*': { ttl: 3600 },  // Individual posts cache longer
   },
 })
 ```

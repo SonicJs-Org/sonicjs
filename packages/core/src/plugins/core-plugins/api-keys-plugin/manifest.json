@@ -1,0 +1,25 @@
+{
+  "id": "api-keys",
+  "name": "API Keys",
+  "version": "1.0.0-beta.1",
+  "description": "Programmatic API access keys for headless / server-to-server REST access. Long-lived per-user secrets, hashed at rest, managed from an admin page.",
+  "author": "SonicJS Team",
+  "category": "security",
+  "tags": ["security", "api", "auth", "api-keys", "headless"],
+  "dependencies": [],
+  "permissions": {
+    "api-keys:manage": "Create and revoke API keys"
+  },
+  "adminMenu": {
+    "label": "API Keys",
+    "icon": "key",
+    "path": "/admin/plugins/api-keys",
+    "order": 86
+  },
+  "iconEmoji": "🔑",
+  "is_core": false,
+  "defaultSettings": {
+    "maxKeysPerUser": 50,
+    "defaultExpiryDays": 0
+  }
+}

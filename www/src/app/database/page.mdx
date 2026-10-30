@@ -5,7 +5,6 @@ export const sections = [
   { title: 'Drizzle ORM Integration', id: 'drizzle-orm-integration' },
   { title: 'Migration System', id: 'migration-system' },
   { title: 'Creating New Migrations', id: 'creating-new-migrations' },
-  { title: 'Collection Sync System', id: 'collection-sync-system' },
   { title: 'Query Patterns and Examples', id: 'query-patterns-and-examples' },
   { title: 'Prepared Statements', id: 'prepared-statements' },
   { title: 'Database Performance', id: 'database-performance' },
@@ -18,6 +17,10 @@ export const sections = [
 Comprehensive guide to SonicJS database architecture, schema, migrations, and operations using Cloudflare D1 and Drizzle ORM. {{ className: 'lead' }}
 
 ## Overview
+
+<Callout type="info" title="v3 Architecture: Document Model">
+In v3, content and media live in the **Document Model** (raw SQL repository). Drizzle ORM is used **only** for auth tables (`auth_user`, `auth_session`, etc.). Document queries go through `DocumentRepository` and `DocumentsService` — not Drizzle query builders.
+</Callout>
 
 SonicJS uses **Cloudflare D1**, a serverless SQLite database that runs at the edge, providing:
 
@@ -59,8 +62,8 @@ SonicJS uses **Cloudflare D1**, a serverless SQLite database that runs at the ed
     },
     {
       icon: '🔄',
-      title: 'Collection Sync',
-      description: 'Config-managed collections',
+      title: 'Document Repository',
+      description: 'Unified content + media store',
     },
   ]}
   columns={3}
@@ -158,131 +161,88 @@ export default {
 
 The database includes comprehensive tables for content management, user authentication, media storage, plugins, workflows, and system logging.
 
-#### users
+#### auth_user
 
-User authentication and profiles with role-based access control.
+Better Auth user table — authentication and identity only.
 
-<CodeGroup title="Users Table Schema">
+<CodeGroup title="auth_user Table Schema">
 
 ```sql
-CREATE TABLE users (
+CREATE TABLE auth_user (
   id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
-  username TEXT NOT NULL UNIQUE,
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
-  password_hash TEXT,
-  role TEXT NOT NULL DEFAULT 'viewer',
-  avatar TEXT,
-  is_active INTEGER NOT NULL DEFAULT 1,
-  last_login_at INTEGER,
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  image TEXT,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-
-  -- Extended profile fields
-  phone TEXT,
-  bio TEXT,
-  avatar_url TEXT,
-  timezone TEXT DEFAULT 'UTC',
-  language TEXT DEFAULT 'en',
-  email_notifications INTEGER DEFAULT 1,
-  theme TEXT DEFAULT 'dark',
-  two_factor_enabled INTEGER DEFAULT 0,
-  two_factor_secret TEXT,
-  password_reset_token TEXT,
-  password_reset_expires INTEGER,
-  email_verified INTEGER DEFAULT 0,
-  email_verification_token TEXT,
-  invitation_token TEXT,
-  invited_by TEXT REFERENCES users(id),
-  invited_at INTEGER,
-  accepted_invitation_at INTEGER
+  updated_at INTEGER NOT NULL
 );
-
--- Indexes
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_role ON users(role);
 ```
 
 </CodeGroup>
 
-#### collections
+#### Document Repository Tables
 
-Content collection definitions with JSON schemas.
+Content and media in v3 live in the **document repository** — five tables defined in `0002_documents.sql`. Collections are code-only (no DB table); register them via `registerCollections()`.
 
-<CodeGroup title="Collections Table Schema">
+<CodeGroup title="Document Repository Schema">
 
 ```sql
-CREATE TABLE collections (
+-- 1. document_types: registered schemas (code/plugin-owned)
+CREATE TABLE document_types (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  display_name TEXT NOT NULL,
-  description TEXT,
-  schema TEXT NOT NULL, -- JSON schema definition
-  is_active INTEGER NOT NULL DEFAULT 1,
-  managed INTEGER DEFAULT 0 NOT NULL, -- Config-managed collections
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  source TEXT NOT NULL,  -- 'system' | 'user'
+  settings TEXT,         -- JSON
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 
--- Indexes
-CREATE INDEX idx_collections_name ON collections(name);
-CREATE INDEX idx_collections_active ON collections(is_active);
-CREATE INDEX idx_collections_managed ON collections(managed);
-```
-
-</CodeGroup>
-
-#### content
-
-Actual content items with versioning and workflow support.
-
-<CodeGroup title="Content Table Schema">
-
-```sql
-CREATE TABLE content (
+-- 2. documents: every content/media record + every historical version
+--    q_* columns are VIRTUAL generated columns (json_extract from data JSON)
+CREATE TABLE documents (
   id TEXT PRIMARY KEY,
-  collection_id TEXT NOT NULL REFERENCES collections(id),
-  slug TEXT NOT NULL,
-  title TEXT NOT NULL,
-  data TEXT NOT NULL, -- JSON content data
-  status TEXT NOT NULL DEFAULT 'draft',
-  published_at INTEGER,
-  author_id TEXT NOT NULL REFERENCES users(id),
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-
-  -- Scheduling fields
-  scheduled_publish_at INTEGER,
-  scheduled_unpublish_at INTEGER,
-
-  -- Review workflow
-  review_status TEXT DEFAULT 'none',
-  reviewer_id TEXT REFERENCES users(id),
-  reviewed_at INTEGER,
-  review_notes TEXT,
-
-  -- SEO and metadata
-  meta_title TEXT,
-  meta_description TEXT,
-  featured_image_id TEXT REFERENCES media(id),
-  content_type TEXT DEFAULT 'standard',
-
-  -- Workflow state
-  workflow_state_id TEXT DEFAULT 'draft',
-  embargo_until INTEGER,
-  expires_at INTEGER,
-  version_number INTEGER DEFAULT 1,
-  is_auto_saved INTEGER DEFAULT 0
+  root_id TEXT NOT NULL,
+  version_number INTEGER NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  type TEXT NOT NULL REFERENCES document_types(id),
+  data TEXT NOT NULL,          -- JSON payload
+  is_current_draft INTEGER NOT NULL DEFAULT 0,
+  is_published INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL, -- seconds
+  updated_at INTEGER NOT NULL  -- seconds
+  -- q_* VIRTUAL generated columns added via MigrationService.ensureDocumentGeneratedColumns()
 );
 
--- Indexes
-CREATE INDEX idx_content_collection ON content(collection_id);
-CREATE INDEX idx_content_author ON content(author_id);
-CREATE INDEX idx_content_status ON content(status);
-CREATE INDEX idx_content_published ON content(published_at);
-CREATE INDEX idx_content_slug ON content(slug);
+-- 3. document_references: typed strong/weak edges between documents
+CREATE TABLE document_references (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  source_id TEXT NOT NULL REFERENCES documents(id),
+  target_id TEXT NOT NULL REFERENCES documents(id),
+  ref_type TEXT NOT NULL,
+  strength TEXT NOT NULL DEFAULT 'strong'
+);
+
+-- 4. document_facets: indexed rows for multi-valued scalar fields (e.g. tags)
+CREATE TABLE document_facets (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  document_id TEXT NOT NULL REFERENCES documents(id),
+  facet_key TEXT NOT NULL,
+  facet_value TEXT NOT NULL
+);
+
+-- 5. document_permissions: per-document ACL overrides
+CREATE TABLE document_permissions (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  document_id TEXT NOT NULL REFERENCES documents(id),
+  principal_type TEXT NOT NULL,
+  principal_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  effect TEXT NOT NULL DEFAULT 'allow'
+);
 ```
 
 </CodeGroup>
@@ -293,56 +253,54 @@ CREATE INDEX idx_content_slug ON content(slug);
 
 ### Schema Definition
 
-<CodeGroup title="Drizzle Schema">
+`db/schema.ts` defines **auth tables only**. Document SQL lives in raw migrations and `DocumentRepository` — never in Drizzle schema (VIRTUAL generated columns and partial unique indexes cannot be expressed by Drizzle).
+
+<CodeGroup title="Drizzle Schema (auth tables only)">
 
 ```typescript
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
-import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
 
-// Users table schema
-export const users = sqliteTable('users', {
+// Better Auth tables — the only tables managed by Drizzle
+export const authUser = sqliteTable('auth_user', {
   id: text('id').primaryKey(),
+  name: text('name').notNull(),
   email: text('email').notNull().unique(),
-  username: text('username').notNull().unique(),
-  firstName: text('first_name').notNull(),
-  lastName: text('last_name').notNull(),
-  passwordHash: text('password_hash'),
-  role: text('role').notNull().default('viewer'),
-  avatar: text('avatar'),
-  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  lastLoginAt: integer('last_login_at'),
+  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
+  image: text('image'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
 
-// Collections table schema
-export const collections = sqliteTable('collections', {
+export const authSession = sqliteTable('auth_session', {
   id: text('id').primaryKey(),
-  name: text('name').notNull().unique(),
-  displayName: text('display_name').notNull(),
-  description: text('description'),
-  schema: text('schema', { mode: 'json' }).notNull(),
-  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  managed: integer('managed', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  userId: text('user_id').notNull().references(() => authUser.id),
+  expiresAt: integer('expires_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
 });
 
-// Type inference
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
-export type Collection = typeof collections.$inferSelect;
-export type NewCollection = typeof collections.$inferInsert;
-
-// Zod validation schemas
-export const insertUserSchema = createInsertSchema(users, {
-  email: (schema) => schema.email(),
-  firstName: (schema) => schema.min(1),
-  lastName: (schema) => schema.min(1),
-  username: (schema) => schema.min(3),
+export const authAccount = sqliteTable('auth_account', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => authUser.id),
+  providerId: text('provider_id').notNull(),
+  accountId: text('account_id').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
 });
 
-export const selectUserSchema = createSelectSchema(users);
+export const authVerification = sqliteTable('auth_verification', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Document tables (documents, document_types, document_references,
+// document_facets, document_permissions) are defined in raw migrations
+// (0001_core.sql, 0002_documents.sql) and accessed via DocumentRepository.
+// Do NOT add them here.
 ```
 
 </CodeGroup>
@@ -359,13 +317,17 @@ export function createDb(d1: D1Database) {
   return drizzle(d1, { schema });
 }
 
-// Usage in worker
+// Usage in worker (auth tables via Drizzle; documents via DocumentRepository)
 export default {
   async fetch(request: Request, env: Env) {
     const db = createDb(env.DB);
 
-    // Now you can use db with full type safety
-    const users = await db.select().from(schema.users);
+    // Auth table query (Drizzle OK here)
+    const users = await db.select().from(schema.authUser);
+
+    // Document query — always use DocumentRepository, not raw db.*
+    // const repo = new DocumentRepository(env.DB, 'default');
+    // const docs = await repo.list({ type: 'blog-post' });
 
     return new Response(JSON.stringify(users));
   }
@@ -393,6 +355,12 @@ Migration SQL Files (.sql)
          ↓
    Runtime Execution (MigrationService)
 ```
+
+v3 has exactly **two** migration files:
+- `0001_core.sql` — Better Auth tables (`auth_user`, `auth_session`, `auth_account`, `auth_verification`)
+- `0002_documents.sql` — Document repository (5 tables + `q_*` generated columns + partial unique indexes)
+
+Next free: `0003_*`. Adding queryable scalar fields uses `MigrationService.ensureDocumentGeneratedColumns()` (self-healing, idempotent) — **not** a new migration file.
 
 The migration bundler:
 1. Reads all `.sql` files from `packages/core/migrations/`
@@ -519,7 +487,7 @@ When developing the SonicJS core package, follow these steps to create new migra
 
 ```bash {{ title: 'Step 1: Create SQL File' }}
 # Create a new migration file with sequential numbering
-# File: packages/core/migrations/027_your_migration.sql
+# File: packages/core/migrations/0003_your_migration.sql
 
 CREATE TABLE IF NOT EXISTS your_table (
   id TEXT PRIMARY KEY,
@@ -528,6 +496,10 @@ CREATE TABLE IF NOT EXISTS your_table (
 );
 
 CREATE INDEX IF NOT EXISTS idx_your_table_name ON your_table(name);
+
+# NOTE: To add queryable scalar fields to documents, do NOT create a new
+# migration file. Use MigrationService.ensureDocumentGeneratedColumns()
+# instead — it adds q_* VIRTUAL columns idempotently at bootstrap.
 ```
 
 ```bash {{ title: 'Step 2: Regenerate Bundle' }}
@@ -536,11 +508,10 @@ cd packages/core
 npm run generate:migrations
 
 # Output:
-# Generated migrations bundle with 27 migrations:
-#   - 001: Create Users (1234 bytes)
-#   - 002: Create Collections (567 bytes)
-#   ...
-#   - 027: Your Migration (890 bytes)
+# Generated migrations bundle with 3 migrations:
+#   - 0001_core: Better Auth tables
+#   - 0002_documents: Document repository (5 tables + q_* columns)
+#   - 0003_your_migration: Your Migration
 ```
 
 ```bash {{ title: 'Step 3: Rebuild Package' }}
@@ -571,7 +542,7 @@ wrangler d1 migrations apply DB --remote
 npm run db:migrate
 
 # Production
-npm run db:migrate:prod
+npm run db:migrate
 
 # Using wrangler directly
 wrangler d1 migrations apply DB --local
@@ -597,163 +568,70 @@ After creating or modifying migration SQL files, you **must** run `npm run build
 
 ---
 
-## Collection Sync System
-
-Collections can be managed through configuration files, allowing version-controlled schema definitions.
-
-### Sync Service
-
-<CodeGroup title="Collection Sync">
-
-```typescript
-/**
- * Sync all collection configurations to the database
- */
-export async function syncCollections(db: D1Database): Promise<CollectionSyncResult[]> {
-  console.log('🔄 Starting collection sync...');
-
-  const results: CollectionSyncResult[] = [];
-  const configs = await loadCollectionConfigs();
-
-  for (const config of configs) {
-    const result = await syncCollection(db, config);
-    results.push(result);
-  }
-
-  const created = results.filter(r => r.status === 'created').length;
-  const updated = results.filter(r => r.status === 'updated').length;
-  const unchanged = results.filter(r => r.status === 'unchanged').length;
-  const errors = results.filter(r => r.status === 'error').length;
-
-  console.log(`✅ Collection sync complete: ${created} created, ${updated} updated, ${unchanged} unchanged, ${errors} errors`);
-
-  return results;
-}
-```
-
-</CodeGroup>
-
-### Running Collection Sync
-
-<CodeGroup title="Sync Command">
-
-```bash
-# Sync collections from config files
-npm run sync-collections
-```
-
-</CodeGroup>
-
----
-
 ## Query Patterns and Examples
 
 ### Basic CRUD Operations
 
-<CodeGroup title="Create Operations">
+In v3, document reads and writes go through `DocumentRepository` and `DocumentsService` using raw `prepare/bind/batch` — **not** Drizzle query builders.
+
+<CodeGroup title="Create Document">
 
 ```typescript
-import { eq } from 'drizzle-orm';
-import { users, content, collections } from './db/schema';
+import { DocumentsService } from '@sonicjs/core/services/documents';
 
-// Create user
-const newUser = await db.insert(users).values({
-  id: crypto.randomUUID(),
-  email: 'john@example.com',
-  username: 'john_doe',
-  firstName: 'John',
-  lastName: 'Doe',
-  passwordHash: await hashPassword('secret123'),
-  role: 'editor',
-  createdAt: Date.now(),
-  updatedAt: Date.now()
-}).returning();
-
-// Create content
-const newContent = await db.insert(content).values({
-  id: crypto.randomUUID(),
-  collectionId: 'blog-posts-collection',
-  slug: 'my-first-post',
-  title: 'My First Post',
-  data: JSON.stringify({
+// Create a new document (draft)
+const doc = await documentsService.create({
+  tenantId: 'default',
+  type: 'blog-post',
+  data: {
+    title: 'My First Post',
+    slug: 'my-first-post',
     body: '<p>Hello world!</p>',
-    excerpt: 'My first blog post'
-  }),
-  status: 'draft',
-  authorId: newUser[0].id,
-  createdAt: Date.now(),
-  updatedAt: Date.now()
-}).returning();
+    excerpt: 'My first blog post',
+  },
+});
+
+// Publish a document
+await documentsService.publish({ rootId: doc.root_id, tenantId: 'default' });
 ```
 
 </CodeGroup>
 
-<CodeGroup title="Read Operations">
+<CodeGroup title="Read Documents">
 
 ```typescript
-// Get user by email
-const user = await db.select()
-  .from(users)
-  .where(eq(users.email, 'john@example.com'))
-  .limit(1);
+import { DocumentRepository } from '@sonicjs/core/services/document-repository';
 
-// Get all published content
-const publishedContent = await db.select()
-  .from(content)
-  .where(eq(content.status, 'published'))
-  .orderBy(desc(content.publishedAt))
-  .limit(20);
+const repo = new DocumentRepository(env.DB, 'default');
 
-// Get content with joins
-const contentWithAuthor = await db.select({
-  id: content.id,
-  title: content.title,
-  slug: content.slug,
-  authorName: sql`${users.firstName} || ' ' || ${users.lastName}`,
-  authorEmail: users.email
-})
-.from(content)
-.leftJoin(users, eq(content.authorId, users.id))
-.where(eq(content.status, 'published'));
+// List published documents of a type (keyset pagination)
+const posts = await repo.listPublished({
+  type: 'blog-post',
+  limit: 20,
+});
+
+// List current drafts
+const drafts = await repo.listDrafts({ type: 'blog-post' });
 ```
 
 </CodeGroup>
 
 ### Advanced Queries
 
-<CodeGroup title="Pagination">
+<CodeGroup title="Keyset Pagination">
 
 ```typescript
-import { desc, asc, count } from 'drizzle-orm';
+// Keyset pagination on (updated_at, id) — preferred for document lists
+const page1 = await repo.listPublished({ type: 'blog-post', limit: 20 });
 
-async function getContentPaginated(page: number, limit: number = 20) {
-  const offset = (page - 1) * limit;
-
-  // Get paginated results
-  const results = await db.select()
-    .from(content)
-    .where(eq(content.status, 'published'))
-    .orderBy(desc(content.publishedAt))
-    .limit(limit)
-    .offset(offset);
-
-  // Get total count
-  const [{ total }] = await db.select({ total: count() })
-    .from(content)
-    .where(eq(content.status, 'published'));
-
-  return {
-    data: results,
-    pagination: {
-      page,
-      limit,
-      total,
-      pages: Math.ceil(total / limit),
-      hasNext: page * limit < total,
-      hasPrev: page > 1
-    }
-  };
-}
+// Next page — pass cursor from last item
+const lastItem = page1[page1.length - 1];
+const page2 = await repo.listPublished({
+  type: 'blog-post',
+  limit: 20,
+  afterUpdatedAt: lastItem.updated_at,
+  afterId: lastItem.id,
+});
 ```
 
 </CodeGroup>
@@ -767,8 +645,8 @@ D1 supports prepared statements for better performance and SQL injection prevent
 <CodeGroup title="Prepared Statements">
 
 ```typescript
-// Define prepared statement
-const getUserStmt = db.prepare('SELECT * FROM users WHERE email = ?');
+// Define prepared statement (auth tables — raw D1 or Drizzle both OK)
+const getUserStmt = env.DB.prepare('SELECT * FROM auth_user WHERE email = ?');
 
 // Execute with parameter binding
 const user = await getUserStmt.bind('john@example.com').first();
@@ -778,31 +656,28 @@ const user = await getUserStmt.bind('john@example.com').first();
 
 ### Batch Operations
 
-<CodeGroup title="Batch Insert">
+<CodeGroup title="Batch Operations">
 
 ```typescript
-// Batch insert for better performance
+// D1 batch — all document writes use raw prepare/bind/batch (R1)
+const now = Math.floor(Date.now() / 1000); // documents use seconds
 const batch = [];
 
 for (const item of dataArray) {
-  const stmt = db.prepare(
-    'INSERT INTO content (id, title, slug, collection_id, data, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  const id = crypto.randomUUID();
+  const rootId = id;
+  batch.push(
+    env.DB.prepare(
+      `INSERT INTO documents
+         (id, root_id, version_number, tenant_id, type, data,
+          is_current_draft, is_published, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`
+    ).bind(id, rootId, 1, 'default', item.type, JSON.stringify(item.data), now, now)
   );
-
-  batch.push(stmt.bind(
-    crypto.randomUUID(),
-    item.title,
-    item.slug,
-    item.collectionId,
-    JSON.stringify(item.data),
-    item.authorId,
-    Date.now(),
-    Date.now()
-  ));
 }
 
-// Execute all at once
-await db.batch(batch);
+// Execute all at once (atomic batch)
+await env.DB.batch(batch);
 ```
 
 </CodeGroup>
@@ -816,23 +691,24 @@ await db.batch(batch);
 <CodeGroup title="Database Indexes">
 
 ```sql
--- Essential single-column indexes
-CREATE INDEX idx_content_status ON content(status);
-CREATE INDEX idx_content_published ON content(published_at);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_media_type ON media(mime_type);
+-- Document repository indexes (from 0002_documents.sql)
+CREATE INDEX idx_documents_root ON documents(root_id);
+CREATE INDEX idx_documents_type ON documents(type);
+CREATE INDEX idx_documents_tenant ON documents(tenant_id);
+CREATE INDEX idx_documents_updated ON documents(updated_at DESC);
 
--- Composite indexes for multi-column queries
-CREATE INDEX idx_content_collection_status ON content(collection_id, status);
-CREATE INDEX idx_content_author_status ON content(author_id, status, published_at DESC);
-CREATE INDEX idx_media_folder_type ON media(folder, mime_type);
+-- Partial indexes for draft/published axes
+CREATE INDEX idx_documents_current_draft ON documents(root_id, tenant_id)
+  WHERE is_current_draft = 1;
+CREATE INDEX idx_documents_published ON documents(root_id, tenant_id)
+  WHERE is_published = 1;
 
--- Covering indexes (include commonly selected columns)
-CREATE INDEX idx_content_published_covering ON content(status, published_at, title, slug);
+-- q_* virtual generated column indexes are added by
+-- MigrationService.ensureDocumentGeneratedColumns() at bootstrap
 
--- Partial indexes (filter specific conditions)
-CREATE INDEX idx_active_users ON users(email) WHERE is_active = 1;
-CREATE INDEX idx_published_content ON content(published_at DESC) WHERE status = 'published';
+-- Auth table indexes
+CREATE INDEX idx_auth_user_email ON auth_user(email);
+CREATE INDEX idx_auth_session_user ON auth_session(user_id);
 ```
 
 </CodeGroup>
@@ -879,13 +755,10 @@ class CachedQuery {
 const cache = new CachedQuery();
 
 const publishedPosts = await cache.get(
-  'content:published:latest',
+  'documents:blog-post:published:latest',
   async () => {
-    return await db.select()
-      .from(content)
-      .where(eq(content.status, 'published'))
-      .orderBy(desc(content.publishedAt))
-      .limit(20);
+    const repo = new DocumentRepository(env.DB, 'default');
+    return await repo.listPublished({ type: 'blog-post', limit: 20 });
   },
   3600 // 1 hour TTL
 );
@@ -959,10 +832,10 @@ wrangler d1 execute DB --file=./script.sql --local
 wrangler d1 execute DB --file=./script.sql --env production
 
 # Execute SQL command directly
-wrangler d1 execute DB --command="SELECT * FROM users LIMIT 5" --local
+wrangler d1 execute DB --command="SELECT * FROM auth_user LIMIT 5" --local
 
 # Execute with JSON output
-wrangler d1 execute DB --command="SELECT * FROM content" --json --local
+wrangler d1 execute DB --command="SELECT * FROM documents WHERE is_published = 1" --json --local
 ```
 
 </CodeGroup>

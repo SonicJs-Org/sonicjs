@@ -94,8 +94,6 @@ type Variables = {
     userId: string
     email: string
     role: string
-    exp: number
-    iat: number
   }
   requestId?: string
   startTime?: number
@@ -115,7 +113,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 app.get('/api/data', async (c) => {
   // Access D1 database
   const db = c.env.DB
-  const result = await db.prepare('SELECT * FROM content').all()
+  const result = await db.prepare('SELECT * FROM documents').all()
 
   // Access KV cache
   const kv = c.env.KV
@@ -263,15 +261,16 @@ export function bootstrapMiddleware() {
       const migrationService = new MigrationService(c.env.DB)
       await migrationService.runPendingMigrations()
 
-      // 2. Sync collection configurations
-      await syncCollections(c.env.DB)
+      // 2. Self-heal q_* generated columns
+      await migrationService.ensureDocumentGeneratedColumns()
 
-      // 3. Bootstrap core plugins
-      const bootstrapService = new PluginBootstrapService(c.env.DB)
-      if (await bootstrapService.isBootstrapNeeded()) {
-        await bootstrapService.bootstrapCorePlugins()
-        await bootstrapService.installDemoPlugins()
-      }
+      // 3. Register collections and document types
+      await loadCollectionConfigs()
+      await autoRegisterCollectionDocumentTypes(c.env.DB)
+      await bootstrapDocumentTypes(c.env.DB)
+
+      // 4. Boot plugins
+      await runPluginOnBoot(c.env)
 
       bootstrapComplete = true
     } catch (error) {
@@ -287,7 +286,7 @@ export function bootstrapMiddleware() {
 
 ### Authentication Middleware
 
-JWT-based authentication with KV caching:
+JWT (auth_token cookie + Bearer header) + Better Auth session; `c.get('user') = { userId, email, role }`:
 
 <CodeGroup title="Auth Middleware">
 
@@ -356,8 +355,8 @@ SonicJS features a powerful plugin architecture:
 
 **Plugin Types:**
 
-- **Core Plugins** (auto-installed): auth, media, cache, database-tools, seed-data
-- **Demo Plugins** (optional): workflow, FAQ, demo-login
+- **Core Plugins** (registered via `definePlugin()` + `registerPlugins()`): lexical-editor (default), media, cache, database-tools
+- **Optional Plugins**: FAQ, demo-login
 - **Custom Plugins** - Your own extensions
 
 <CodeGroup title="Plugin Lifecycle">

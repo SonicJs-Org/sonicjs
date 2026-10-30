@@ -11,6 +11,19 @@ This project is a Cloudflare-native headless CMS built with **Hono.js** and Type
 - **Frontend**: HTMX + HTML for admin interface
 - **Deployment**: Wrangler CLI
 
+## Token-Efficient Tooling (REQUIRED before grep/Read sprees)
+
+Repo indexed by **codegraph**. Bash auto-proxied by **rtk**. Default reply mode **caveman**.
+
+- **Code lookup**: call `mcp__codegraph__codegraph_explore` FIRST for any "how does X work / trace flow / where is X used" question. ONE call returns verbatim source grouped by file — replaces 5-20 Grep/Read calls.
+- **Symbol location only**: `codegraph_search`.
+- **Call graph / impact**: `codegraph_callers`, `codegraph_callees`, `codegraph_impact`.
+- **Bash**: hook rewrites to `rtk <cmd>` automatically. `rtk gain` to audit savings.
+- **Replies**: caveman mode (full) — drop articles/filler. Code/commits/security warnings stay normal. Toggle `/caveman` or "stop caveman".
+- **Subagent delegation** (compressed output, ~60% smaller results): `cavecrew-investigator` (locate), `cavecrew-builder` (1-2 file edit), `cavecrew-reviewer` (diff review).
+
+Anti-patterns: `grep -r` across repo when codegraph answers; reading 5+ files to learn a flow; spawning subagent for a known file; verbose narration.
+
 ## Development Workflow
 
 1. **Plan First**: Read the codebase, understand the problem, and write a plan to project-plan.md
@@ -20,6 +33,29 @@ This project is a Cloudflare-native headless CMS built with **Hono.js** and Type
 5. **High-Level Updates**: Give brief explanations of changes made at each step
 6. **Simplicity Focus**: Make minimal, targeted changes. Avoid complex refactoring.
 7. **Documentation**: Add a review section to project-plan.md summarizing changes
+
+## Database Schema Rules (STRICT — greenfield v3)
+
+**Only two table prefixes are allowed:**
+- `auth_` — BetterAuth core, RBAC, API tokens, user profiles, password history
+- `document_` — document model (document_types, documents, document_references, document_facets, document_permissions)
+
+**Never create custom feature tables.** No `collections`, `content`, `media`, `plugins`, `forms`, `system_logs`, or any other unprefixed tables. Every new data type must be a `document_type` with records in `documents`.
+
+**Plugin storage** — plugins are registered as `document_type='plugin'` rows in `documents`. No separate plugin tables.
+
+**Media storage** — media assets are `document_type='media_asset'` rows. No separate `media` table.
+
+**Migrations** — after editing any `.sql` file in `packages/core/migrations/`, always:
+1. Regenerate the bundle:
+   ```bash
+   cd packages/core && npx tsx scripts/generate-migrations.ts
+   ```
+2. Copy all `.sql` files to the app migrations folder:
+   ```bash
+   cp packages/core/migrations/*.sql my-sonicjs-app/migrations/
+   ```
+   Then remove any `.sql` files from `my-sonicjs-app/migrations/` that no longer exist in `packages/core/migrations/`.
 
 ## Key Principles
 - **Edge-First**: Leverage Cloudflare's global edge network
@@ -57,59 +93,12 @@ This project uses Claude's memory MCP server to maintain context across sessions
 - **Team Knowledge**: Shared memory means consistent AI assistance for all developers
 - **Learning**: Memory improves over time as more context is added
 
-## Recent Development Updates (December 2024)
+## Admin UI
 
-### Glass Morphism Design System Implementation
+Glass morphism design system. Reference existing admin templates for patterns:
+- Pages: `packages/core/src/templates/pages/admin-*.template.ts`
+- Layout: `packages/core/src/templates/layouts/admin-layout-v2.template.ts`
+- Components: `packages/core/src/templates/components/`
+- Routes: `packages/core/src/routes/admin.ts`
 
-The admin interface has been completely redesigned using a glass morphism design pattern for a modern, cohesive look.
-
-#### Design Components
-- **Backdrop Effects**: `backdrop-blur-md bg-black/20` for glass effect
-- **Borders**: `border border-white/10` for subtle definition
-- **Shadows**: `shadow-xl` for depth and layering
-- **Corners**: `rounded-xl` for modern appearance
-- **Spacing**: `space-y-6` for consistent layout rhythm
-
-#### Implemented Pages
-1. **Settings Page** (`admin-settings.template.ts`):
-   - Comprehensive tabbed interface (General, Appearance, Security, Notifications, Storage)
-   - Interactive JavaScript for tab switching and form handling
-   - Bulk save functionality and reset options
-   - Full glass morphism styling
-
-2. **Collections Pages**:
-   - **List Page**: Glass header, enhanced table, improved empty state, quick actions section
-   - **Form Page**: Glass breadcrumbs, consistent form styling, updated action buttons
-
-3. **Content List Page**: Updated with glass morphism styling and improved button interactions
-
-4. **Media Library**: Already implemented with glass morphism design patterns
-
-#### Navigation Updates
-- Added Settings link to admin sidebar
-- Updated icon consistency across navigation items
-- Proper navigation highlighting for current page
-
-#### Design Patterns Established
-- **Headers**: Glass cards with title, description, and primary actions
-- **Tables**: Glass containers with enhanced styling and hover effects
-- **Forms**: Glass backgrounds with consistent input styling
-- **Buttons**: Gradient buttons with glass hover effects
-- **Empty States**: Centered content with gradient icons and compelling CTAs
-- **Quick Actions**: Grid layouts with hover animations
-
-### Development Approach
-
-When working on new admin pages or components:
-1. Follow the established glass morphism patterns
-2. Use consistent spacing (`space-y-6`) between sections
-3. Apply glass backgrounds to major containers
-4. Use gradient buttons for primary actions
-5. Include hover effects and transitions for interactivity
-6. Maintain consistent typography and color usage
-
-### File Structure for Glass Morphism
-- All admin page templates in `src/templates/pages/admin-*.template.ts`
-- Shared layout in `src/templates/layouts/admin-layout-v2.template.ts`
-- Component templates in `src/templates/components/`
-- Route handlers in `src/routes/admin.ts`
+Use `codegraph_explore` to inspect current patterns before building new pages.

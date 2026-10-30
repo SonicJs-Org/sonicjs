@@ -54,7 +54,7 @@ function makeContext(probe: Probe, opts: { failD1?: boolean } = {}) {
             bind: () => this,
             first: async () => {
               if (opts.failD1) throw new Error('D1 unavailable')
-              return { n: 1 }
+              return { n: 1, roles: 1, auth: 1 }
             },
             all: async () => ({ results: [] }),
             run: async () => ({}),
@@ -118,7 +118,7 @@ describe('bootstrapMiddleware runs one bootstrap per isolate under concurrency',
     // repeat the round -- not that the round is one key wide.
     expect(probe.kvGets).toEqual([...new Set(probe.kvGets)])
     expect(probe.kvGets.length).toBeGreaterThan(0)
-    expect(probe.d1Queries.filter((q) => q.includes('document_types'))).toHaveLength(1)
+    expect(probe.d1Queries.filter((q) => q.includes('documents'))).toHaveLength(1)
     // ...and every request still reached the handler behind it.
     expect(nextCalls).toBe(5)
   })

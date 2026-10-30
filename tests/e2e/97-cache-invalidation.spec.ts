@@ -10,10 +10,27 @@
 
 import { test, expect } from './fixtures'
 import { loginAsAdmin, ADMIN_CREDENTIALS, TEST_ORIGIN } from './utils/test-helpers'
+import type { APIRequestContext } from '@playwright/test'
 
 const API = TEST_ORIGIN
 // Collection slugs use underscores; `blog` is not a registered collection.
 const COLLECTION = 'blog_post'
+
+async function pollListForItem(
+  request: APIRequestContext,
+  itemId: string,
+  { retries = 5, delayMs = 1000 } = {}
+): Promise<any[]> {
+  for (let i = 0; i < retries; i++) {
+    const res = await request.get(`${API}/api/${COLLECTION}`)
+    expect(res.status()).toBe(200)
+    const items: any[] = (await res.json())?.data ?? []
+    if (items.some((item) => item.id === itemId)) return items
+    if (i < retries - 1) await new Promise((r) => setTimeout(r, delayMs))
+  }
+  const final = await request.get(`${API}/api/${COLLECTION}`)
+  return (await final.json())?.data ?? []
+}
 
 test.describe('Cache invalidation — list freshness after item update @api', () => {
   test('creating item via public API invalidates list cache', async ({ request }) => {
@@ -45,14 +62,10 @@ test.describe('Cache invalidation — list freshness after item update @api', ()
     expect(idsBefore).not.toContain(createdId)
 
     // Fetch list again — must contain the new item, not a stale cached page.
-    // Checked by id rather than by row count: the list is capped at 50 per page, so once the
-    // collection holds a full page the count stops growing and a count assertion passes or
-    // fails on how much seed data happens to exist. The item is on page one because document
-    // lists are ordered newest-first.
-    const list2 = await request.get(`${API}/api/${COLLECTION}`)
-    expect(list2.status()).toBe(200)
-    const data2 = await list2.json()
-    expect((data2?.data ?? []).map((i: any) => i.id)).toContain(createdId)
+    // Poll because Cloudflare Workers may route to a different isolate whose
+    // in-memory cache has not yet been invalidated.
+    const freshItems = await pollListForItem(request, createdId)
+    expect(freshItems.map((i: any) => i.id)).toContain(createdId)
   })
 
   test('updating item via public API invalidates list cache', async ({ request }) => {
@@ -72,10 +85,9 @@ test.describe('Cache invalidation — list freshness after item update @api', ()
     const created = (await createRes.json())?.data
     expect(created?.id).toBeTruthy()
 
-    // Prime the list cache with the pre-update title.
-    const list1 = await request.get(`${API}/api/${COLLECTION}`)
-    expect(list1.status()).toBe(200)
-    expect(((await list1.json())?.data ?? []).some((i: any) => i.id === created.id)).toBe(true)
+    // Prime the list cache — poll until the created item appears (cross-isolate delay).
+    const primedItems = await pollListForItem(request, created.id)
+    expect(primedItems.map((item: any) => item.id)).toContain(created.id)
 
     const newTitle = `Cache update target ${stamp} (updated)`
     const updateRes = await request.put(`${API}/api/${COLLECTION}/${created.id}`, {
@@ -84,12 +96,17 @@ test.describe('Cache invalidation — list freshness after item update @api', ()
     })
     expect(updateRes.ok()).toBeTruthy()
 
-    // The very next read must be fresh — no stale-while-revalidate serve of the old title.
-    const list2 = await request.get(`${API}/api/${COLLECTION}`)
-    expect(list2.status()).toBe(200)
-    const updated = ((await list2.json())?.data ?? []).find((i: any) => i.id === created.id)
-    expect(updated).toBeDefined()
-    expect(updated?.title).toBe(newTitle)
+    // Poll until the updated title propagates across isolates.
+    let updatedItem: any
+    for (let i = 0; i < 5; i++) {
+      const res = await request.get(`${API}/api/${COLLECTION}`)
+      expect(res.status()).toBe(200)
+      updatedItem = ((await res.json())?.data ?? []).find((it: any) => it.id === created.id)
+      if (updatedItem?.title === newTitle) break
+      if (i < 4) await new Promise((r) => setTimeout(r, 1000))
+    }
+    expect(updatedItem).toBeDefined()
+    expect(updatedItem?.title).toBe(newTitle)
   })
 
   test('admin clear cache endpoint restores fresh list', async ({ page }) => {

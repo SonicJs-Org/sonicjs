@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../utils/sanitize'
+
 export interface TableColumn {
   key: string
   label: string
@@ -109,7 +111,7 @@ export function renderTable<T = any>(data: TableData<T>): string {
                   ` : ''}
                   ${data.columns.map((column, colIndex) => {
                     const value = (row as any)[column.key]
-                    const displayValue = column.render ? column.render(value, row) : value
+                    const displayValue = column.render ? column.render(value, row) : escapeHtml(String(value ?? ''))
                     const stopPropagation = column.key === 'actions' ? 'onclick="event.stopPropagation()"' : ''
                     const isFirst = colIndex === 0 && !data.selectable
                     const isLast = colIndex === data.columns.length - 1

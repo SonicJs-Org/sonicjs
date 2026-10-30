@@ -71,38 +71,23 @@ test.describe('Content Deletion UI Bug (Issue #522) @content', () => {
   });
 
   /**
-   * Delete one row through the per-row button and wait for the swap to settle.
+   * Delete one row via the confirmation-page flow and wait for the redirect to settle.
    *
-   * The button is `hx-delete` + `hx-confirm` targeting `#content-list` with `outerHTML`, and the
-   * handler answers with a stub that re-fetches the list from its own `hx-trigger="load"`. That
-   * second GET carries `model=post` — the DELETE URL has no query string for the handler to copy —
-   * so the list that lands after the swap is NOT the filtered one the click started from. Wait for
-   * both requests (the swap is where the redeclaration used to throw) and re-filter afterwards
-   * rather than asserting against whatever the stub pulled in.
+   * The per-row action is a link to `/admin/content/:id/delete`, not an `hx-delete` button
+   * anymore — there's no native confirm dialog to accept. Confirming on that page re-navigates
+   * back to the list, which re-executes the list's script tags same as the old htmx swap did.
    */
   async function deleteRow(page: Page, record: Record) {
-    const deleteButton = rowFor(page, record).locator('button[title="Delete"]');
-    await expect(deleteButton).toBeVisible();
+    const deleteLink = rowFor(page, record).locator('a[title="Delete"]');
+    await expect(deleteLink).toBeVisible();
+    await deleteLink.click();
 
-    page.once('dialog', (dialog) => dialog.accept());
+    await page.waitForURL(`**/admin/content/${record.id}/delete**`);
+    const confirmButton = page.locator('button:has-text("Delete Content")');
+    await expect(confirmButton).toBeVisible();
+    await confirmButton.click();
 
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.request().method() === 'DELETE' && r.url().includes(`/admin/content/${record.id}`)
-      ),
-      deleteButton.click(),
-    ]);
-    expect(response.ok(), `delete failed: HTTP ${response.status()}`).toBeTruthy();
-
-    // The stub's reload — this is the swap that executes the script tags.
-    await page
-      .waitForResponse(
-        (r) => r.request().method() === 'GET' && new URL(r.url()).pathname === '/admin/content',
-        { timeout: 15000 }
-      )
-      .catch(() => {
-        /* already in flight when the DELETE resolved; waitForHTMX still covers the settle */
-      });
+    await page.waitForURL('**/admin/content**');
     await waitForHTMX(page);
   }
 

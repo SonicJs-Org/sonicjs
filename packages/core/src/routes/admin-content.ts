@@ -9,6 +9,7 @@ import { CACHE_CONFIGS, getCacheService } from '../services/cache'
 import { PluginService } from '../services/plugin-service'
 import { ContentFormData, renderContentFormPage } from '../templates/pages/admin-content-form.template'
 import { ContentListPageData, renderContentListPage } from '../templates/pages/admin-content-list.template'
+import { ContentDeleteConfirmData, renderContentDeleteConfirmPage } from '../templates/pages/admin-content-delete-confirm.template'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
 import { escapeHtml, sanitizeRichText } from '../utils/sanitize'
 import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
@@ -361,6 +362,31 @@ async function getDocBackingType(db: D1Database, collectionName?: string | null)
   if (!collectionName) return null
   const dt = await new DocumentTypeRegistry(db).findById(collectionName)
   return dt && dt.isActive ? dt : null
+}
+
+// Soft-delete every version row of a document root (Option B). Shared by the HTMX DELETE
+// endpoint and the POST-from-confirmation-page endpoint so the two stay in sync.
+// Returns the root's type_id on success, or null if the root isn't a recognized document.
+async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: string): Promise<string | null> {
+  const docDel = await db
+    .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
+    .bind(rootId, tenantId).first() as any
+
+  const docDelType = docDel ? await getDocBackingType(db, docDel.type_id) : null
+  // Internal/auth-backed types aren't user-manageable collections — block them here so neither
+  // the HTMX DELETE nor the POST-from-confirmation-page caller can delete them by root_id alone.
+  if (!docDel || !docDelType || docDelType.settings.internal || docDelType.isAuth) {
+    return null
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, rootId, tenantId).run()
+  await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+  const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
+  await apiCacheDel.invalidate('api:content-filtered:*')
+  await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
+
+  return docDel.type_id
 }
 
 async function getCollectionByName(db: D1Database, name: string) {
@@ -1366,12 +1392,12 @@ adminContentRoutes.post('/', async (c) => {
     ).run()
 
     // Handle different actions
-    const referrerParams = formData.get('referrer_params') as string
+    const referrerParams = (formData.get('referrer_params') as string || '').replace(/[\r\n]/g, '')
     const redirectUrl = action === 'save_and_continue'
       ? `/admin/content/${contentId}/edit?success=Content saved successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ''}`
       : referrerParams
         ? `/admin/content?${referrerParams}&success=Content created successfully!`
-        : `/admin/content?collection=${collectionId}&success=Content created successfully!`
+        : `/admin/content?success=Content created successfully!`
 
     // Check if this is an HTMX request
     const isHTMX = c.req.header('HX-Request') === 'true'
@@ -1422,11 +1448,12 @@ const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
       if (docType && dcoll) {
         const fields = await getCollectionFields(db, dcoll.id)
         const { data, errors } = extractFieldData(fields, formData)
-        // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values,
-        // then derive from common data fields (e.g. collections with 'name' but no 'title' property)
+        // Title/slug may live outside schema fields — read from formData, then fall back to
+        // data.name (current form value), then to existing DB title. data.name must take
+        // priority over docRowU.title so renaming a 'name' field updates the list title.
         if (data.title === undefined) {
           const formTitle = (formData.get('title') as string || '').trim()
-          data.title = formTitle || docRowU.title || data.name || undefined
+          data.title = formTitle || data.name || docRowU.title || undefined
         }
         if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || docRowU.slug || undefined
         if (Object.keys(errors).length > 0) {
@@ -1461,10 +1488,10 @@ const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
         await apiCacheEdit.invalidate(`api:collection-content-filtered:${docRowU.type_id}:*`)
 
         const isHTMX = c.req.header('HX-Request') === 'true'
-        const referrerParams = formData.get('referrer_params') as string | null
+        const referrerParams = ((formData.get('referrer_params') as string | null) || '').replace(/[\r\n]/g, '') || null
         const listUrl = referrerParams
           ? `/admin/content?${referrerParams}`
-          : `/admin/content?collection=${dcoll.id}`
+          : '/admin/content'
 
         if (action === 'save_and_close') {
           return isHTMX
@@ -1520,10 +1547,11 @@ const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
 
     // Extract and validate field data
     const { data, errors } = extractFieldData(fields, formData)
-    // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values
+    // Title/slug may live outside schema fields — read from formData, then fall back to
+    // data.name (current form value), then to existing DB title.
     if (data.title === undefined) {
       const formTitle = (formData.get('title') as string || '').trim()
-      data.title = formTitle || existingContent.title || data.name || undefined
+      data.title = formTitle || data.name || existingContent.title || undefined
     }
     if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || existingContent.slug || undefined
 
@@ -1993,7 +2021,100 @@ adminContentRoutes.post('/bulk-action', async (c) => {
   }
 })
 
-// Delete content
+// Delete confirmation page
+adminContentRoutes.get('/:id/delete', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const user = c.get('user')
+    const db = c.env.DB
+    const url = new URL(c.req.url)
+    const referrerParams = url.searchParams.get('ref') || ''
+    // 'list' when the delete link came from a content-list row, so Cancel returns to that list
+    // (with its filters) instead of the edit page the user never visited.
+    const source = url.searchParams.get('source') || 'edit'
+
+    const tenantId = reqTenant(c)
+    const docRow = await db
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = ? AND deleted_at IS NULL")
+      .bind(id, tenantId).first() as any
+
+    if (!docRow) {
+      return c.redirect('/admin/content')
+    }
+
+    const docType = await getDocBackingType(db, docRow.type_id)
+    const dcoll = docType ? await getCollectionByName(db, docRow.type_id) : null
+
+    if (!dcoll) {
+      return c.redirect('/admin/content')
+    }
+
+    const cancelUrl = source === 'list'
+      ? (referrerParams ? `/admin/content?${referrerParams}` : '/admin/content')
+      : (referrerParams ? `/admin/content/${id}/edit?ref=${encodeURIComponent(referrerParams)}` : `/admin/content/${id}/edit`)
+
+    let authorName: string | undefined
+    if (docRow.created_by) {
+      const authorRow = await db
+        .prepare("SELECT name, first_name, last_name, email FROM auth_user WHERE id = ?")
+        .bind(docRow.created_by).first() as any
+      if (authorRow) {
+        authorName = authorRow.name ||
+          [authorRow.first_name, authorRow.last_name].filter(Boolean).join(' ') ||
+          authorRow.email
+      }
+    }
+
+    const confirmData: ContentDeleteConfirmData = {
+      id: docRow.root_id,
+      title: docRow.title,
+      slug: docRow.slug,
+      collectionName: dcoll.name,
+      collectionDisplayName: dcoll.display_name,
+      status: docRow.is_published ? 'published' : (docRow.status ?? 'draft'),
+      createdAt: docRow.created_at,
+      updatedAt: docRow.updated_at,
+      publishedAt: docRow.published_at,
+      authorName,
+      referrerParams,
+      cancelUrl,
+      user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+      version: c.get('appVersion'),
+    }
+
+    return c.html(renderContentDeleteConfirmPage(confirmData))
+  } catch (error) {
+    console.error('Delete confirmation page error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// Delete content (POST from confirmation page)
+adminContentRoutes.post('/:id/delete', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const db = c.env.DB
+    const formData = await c.req.formData()
+    // Strip CR/LF before these ever reach a redirect Location header — same guard used for
+    // referrer_params elsewhere in this file (header-injection / response-splitting defense).
+    const collection = ((formData.get('collection') as string) || '').replace(/[\r\n]/g, '')
+    const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
+
+    const tenantId = reqTenant(c)
+    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    if (!deletedTypeId) {
+      return c.redirect('/admin/content')
+    }
+
+    const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?collection=${collection}`
+    return c.redirect(redirectUrl)
+  } catch (error) {
+    console.error('Delete content error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// Delete content (HTMX DELETE)
 adminContentRoutes.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id')
@@ -2002,18 +2123,10 @@ adminContentRoutes.delete('/:id', async (c) => {
 
     // ── Option B: if :id is a document-backed root, soft-delete every version row of the root ──
     const tenantId = reqTenant(c)
-    const docDel = await db
-      .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
-      .bind(id, tenantId).first() as any
-    if (docDel && (await getDocBackingType(db, docDel.type_id))) {
-      const now = Math.floor(Date.now() / 1000)
-      await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, id, tenantId).run()
-      await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
-      const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
-      await apiCacheDel.invalidate('api:content-filtered:*')
-      await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
+    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    if (deletedTypeId) {
       return c.html(`
-        <div id="content-list" hx-get="/admin/content?model=${docDel.type_id}" hx-trigger="load" hx-swap="outerHTML">
+        <div id="content-list" hx-get="/admin/content?model=${deletedTypeId}" hx-trigger="load" hx-swap="outerHTML">
           <div class="flex items-center justify-center p-8"><span class="text-zinc-500">Deleting…</span></div>
         </div>
       `)
@@ -2313,20 +2426,109 @@ adminContentRoutes.post('/documents/:typeId/:documentId/unpublish', async (c) =>
   }
 })
 
-// ─── Delete (soft) ────────────────────────────────────────────────────────────
-adminContentRoutes.post('/documents/:typeId/:documentId/delete', async (c) => {
-  const { typeId, documentId } = c.req.param()
+// ─── Delete confirmation page (doc-backed, no collection) ────────────────────
+adminContentRoutes.get('/documents/:typeId/:rootId/delete', async (c) => {
+  const { typeId, rootId } = c.req.param()
   const db = c.env.DB
   try {
     const tenantId = reqTenant(c)
-    const { svc, docType } = await getDocService(db, typeId, tenantId)
-    if (docType?.settings?.pii) {
-      const row = await db.prepare('SELECT root_id FROM documents WHERE id = ? AND tenant_id = ?').bind(documentId, tenantId).first() as any
-      if (row) await svc.erase(row.root_id, tenantId)
-    } else {
-      await svc.softDelete(documentId)
+    const registry = new DocumentTypeRegistry(db)
+    const docType = await registry.findById(typeId)
+    if (!docType) return c.redirect('/admin/content')
+
+    const draftRow = await db
+      .prepare('SELECT * FROM documents WHERE root_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL')
+      .bind(rootId, tenantId).first() as any
+    if (!draftRow) return c.redirect('/admin/content')
+
+    let authorName: string | undefined
+    if (draftRow.created_by) {
+      const authorRow = await db
+        .prepare('SELECT name, first_name, last_name, email FROM auth_user WHERE id = ?')
+        .bind(draftRow.created_by).first() as any
+      if (authorRow) {
+        authorName = authorRow.name ||
+          [authorRow.first_name, authorRow.last_name].filter(Boolean).join(' ') ||
+          authorRow.email
+      }
     }
-    return c.redirect(`/admin/content?model=doc:${typeId}&message=Deleted`)
+
+    const url = new URL(c.req.url)
+    const referrerParams = url.searchParams.get('ref') || ''
+    const source = url.searchParams.get('source') || 'edit'
+    const id = `documents/${typeId}/${rootId}`
+    const cancelUrl = source === 'list'
+      ? (referrerParams ? `/admin/content?${referrerParams}` : '/admin/content')
+      : (referrerParams ? `/admin/content/${id}/edit?ref=${encodeURIComponent(referrerParams)}` : `/admin/content/${id}/edit`)
+
+    // id = "documents/:typeId/:rootId" so the template's default form action and Cancel link
+    // (which append /delete and /edit to data.id) resolve to this file's own doc-backed routes.
+    const confirmData: ContentDeleteConfirmData = {
+      id,
+      title: draftRow.title,
+      slug: draftRow.slug,
+      collectionName: typeId,
+      collectionDisplayName: docType.displayName ?? typeId,
+      status: draftRow.is_published ? 'published' : (draftRow.status ?? 'draft'),
+      createdAt: draftRow.created_at,
+      updatedAt: draftRow.updated_at,
+      publishedAt: draftRow.published_at,
+      authorName,
+      referrerParams: referrerParams || undefined,
+      cancelUrl,
+      user: userCtx(c),
+      version: c.get('appVersion'),
+    }
+
+    return c.html(renderContentDeleteConfirmPage(confirmData))
+  } catch (error) {
+    console.error('Document delete confirmation page error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// ─── Delete (soft) ────────────────────────────────────────────────────────────
+// :rootId here (not a specific version's :documentId) — deletes every version row of the root,
+// matching softDeleteDocumentRoot's semantics for collection-backed content (R7). No prior
+// caller passed a documentId into this route, so retargeting it to root_id breaks nothing.
+adminContentRoutes.post('/documents/:typeId/:rootId/delete', async (c) => {
+  const { typeId, rootId } = c.req.param()
+  const db = c.env.DB
+  try {
+    const tenantId = reqTenant(c)
+
+    const rootRow = await db
+      .prepare('SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1')
+      .bind(rootId, tenantId).first() as any
+    // The URL's :typeId picks which DocumentsService/eligibility rules apply below — so verify it
+    // actually matches the root being deleted, or a caller could delete an unrelated root (e.g. an
+    // internal/auth-backed one) by pairing its rootId with a harmless typeId.
+    if (!rootRow || rootRow.type_id !== typeId) {
+      return c.redirect('/admin/content')
+    }
+
+    const { svc, docType } = await getDocService(db, typeId, tenantId)
+    if (!docType || docType.settings.internal || docType.isAuth) {
+      return c.redirect('/admin/content')
+    }
+
+    if (docType.settings.pii) {
+      await svc.erase(rootId, tenantId)
+    } else {
+      const now = Math.floor(Date.now() / 1000)
+      await db
+        .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?')
+        .bind(now, now, rootId, tenantId).run()
+    }
+    await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+    const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
+    await apiCacheDel.invalidate('api:content-filtered:*')
+    await apiCacheDel.invalidate(`api:collection-content-filtered:${typeId}:*`)
+
+    const formData = await c.req.formData()
+    const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
+    const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?model=doc:${typeId}`
+    return c.redirect(`${redirectUrl}&message=Deleted`)
   } catch (err: any) {
     return c.redirect(`/admin/content?model=doc:${typeId}&message=${encodeURIComponent(err?.message ?? 'Delete failed')}`)
   }

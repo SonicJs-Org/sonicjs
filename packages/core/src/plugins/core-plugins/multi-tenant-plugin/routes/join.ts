@@ -19,6 +19,7 @@ import { TenantService } from '../services/tenant-service'
 import { AuthManager } from '../../../../middleware/auth'
 import { renderInvitationJoinPage, renderInvitationErrorPage } from '../templates/invitation-join.template'
 import { createAuth } from '../../../../auth/config'
+import { MAX_PASSWORD_LENGTH } from '../../../../services/auth-validation'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET?: string }
 type Variables = {
@@ -147,6 +148,7 @@ export function createJoinRoutes(): Hono<{ Bindings: Bindings; Variables: Variab
     if (!firstName) return rerender('First name is required.')
     if (!lastName) return rerender('Last name is required.')
     if (password.length < 8) return rerender('Password must be at least 8 characters.')
+    if (password.length > MAX_PASSWORD_LENGTH) return rerender(`Password must be at most ${MAX_PASSWORD_LENGTH} characters.`)
 
     // Ensure no existing account for this email.
     const existing = await db.prepare('SELECT id FROM auth_user WHERE LOWER(email) = ?')

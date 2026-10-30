@@ -69,20 +69,28 @@ export class PluginBootstrapService {
     .map((id) => registryToCorePlugin(PLUGIN_REGISTRY[id]!));
 
   /**
-   * Bootstrap all core plugins - install them if they don't exist
+   * Bootstrap all core plugins - install them if they don't exist.
+   * A plugin that fails is logged and skipped so the others still install; the ids of
+   * the ones that failed are returned so the caller can tell a partial bootstrap apart.
    */
-  async bootstrapCorePlugins(): Promise<void> {
+  async bootstrapCorePlugins(): Promise<string[]> {
     console.log("[PluginBootstrap] Starting core plugin bootstrap process...");
 
     try {
+      const failed: string[] = [];
       // Check each core plugin
       for (const corePlugin of this.CORE_PLUGINS) {
-        await this.ensurePluginInstalled(corePlugin);
+        if (!(await this.ensurePluginInstalled(corePlugin))) failed.push(corePlugin.id);
       }
 
-      console.log(
-        "[PluginBootstrap] Core plugin bootstrap completed successfully"
-      );
+      if (failed.length) {
+        console.warn(`[PluginBootstrap] Core plugin bootstrap completed with failures: ${failed.join(", ")}`);
+      } else {
+        console.log(
+          "[PluginBootstrap] Core plugin bootstrap completed successfully"
+        );
+      }
+      return failed;
     } catch (error) {
       console.error("[PluginBootstrap] Error during plugin bootstrap:", error);
       throw error;
@@ -90,9 +98,9 @@ export class PluginBootstrapService {
   }
 
   /**
-   * Ensure a specific plugin is installed
+   * Ensure a specific plugin is installed. Returns false if it failed (already logged).
    */
-  private async ensurePluginInstalled(plugin: CorePlugin): Promise<void> {
+  private async ensurePluginInstalled(plugin: CorePlugin): Promise<boolean> {
     try {
       // Check if plugin already exists
       const existingPlugin = await this.pluginService.getPlugin(plugin.id);
@@ -122,7 +130,6 @@ export class PluginBootstrapService {
           await this.pluginService.activatePlugin(plugin.id);
         }
 
-        // Only auto-activate on first install, respect user's activation state on subsequent boots
       } else {
         // Install the plugin
         console.log(
@@ -139,12 +146,13 @@ export class PluginBootstrapService {
         );
         await this.pluginService.activatePlugin(plugin.id);
       }
+      return true;
     } catch (error) {
       console.error(
         `[PluginBootstrap] Error ensuring plugin ${plugin.display_name}:`,
         error
       );
-      // Don't throw - continue with other plugins
+      return false;
     }
   }
 

@@ -3,6 +3,7 @@ import {
   renderConfirmationDialog,
 } from "../components/confirmation-dialog.template";
 import { MediaFile, renderMediaGrid } from "../components/media-grid.template";
+import { escapeHtml } from "../../utils/sanitize";
 import {
   AdminLayoutCatalystData,
   renderAdminLayoutCatalyst,
@@ -91,13 +92,13 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
                   .map(
                     (folder) => `
                   <li>
-                    <a href="/admin/media?folder=${folder.folder}"
+                    <a href="/admin/media?folder=${encodeURIComponent(folder.folder)}"
                        class="block px-3 py-2 text-sm rounded-lg transition-colors ${
                          data.currentFolder === folder.folder
                            ? "bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 font-medium"
                            : "text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                        }">
-                      ${folder.folder} (${folder.count})
+                      ${escapeHtml(folder.folder)} (${folder.count})
                     </a>
                   </li>
                 `
@@ -224,12 +225,12 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
                           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                       </button>
-                      <input type="hidden" name="folder" value="${
+                      <input type="hidden" name="folder" value="${escapeHtml(
                         data.currentFolder
-                      }">
-                      <input type="hidden" name="type" value="${
+                      )}">
+                      <input type="hidden" name="type" value="${escapeHtml(
                         data.currentType
-                      }">
+                      )}">
                     </div>
                   </div>
 
@@ -459,11 +460,11 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
                   .map(
                     (folder) => `
             <button
-              onclick="performBulkMove('${folder.folder}')"
+              onclick="performBulkMove(${escapeHtml(JSON.stringify(folder.folder))})"
               class="w-full text-left px-4 py-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-950 dark:text-white transition-colors ring-1 ring-inset ring-zinc-200 dark:ring-zinc-700"
             >
               <div class="flex items-center justify-between">
-                <span class="font-medium">${folder.folder}</span>
+                <span class="font-medium">${escapeHtml(folder.folder)}</span>
                 <span class="text-sm text-zinc-500 dark:text-zinc-400">${folder.count} files</span>
               </div>
             </button>

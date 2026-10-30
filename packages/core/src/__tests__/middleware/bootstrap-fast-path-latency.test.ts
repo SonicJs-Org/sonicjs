@@ -58,8 +58,9 @@ function makeContext(waited: Promise<unknown>[], kv: Record<string, string> = {}
         prepare() {
           return {
             bind: () => this,
-            // Non-zero row count == "D1 has data", which is what validates the KV flag.
-            first: async () => ({ n: 1 }),
+            // Non-zero counts == "D1 has data", which is what validates the KV flag.
+            // Satisfies both the old COUNT(*) guard and the new isSystemSeedPresent check.
+            first: async () => ({ n: 1, roles: 1, auth: 1 }),
             all: async () => ({ results: [] }),
             run: async () => ({}),
           }

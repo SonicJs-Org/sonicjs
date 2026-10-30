@@ -1,50 +1,38 @@
-import { test, expect } from './fixtures'
-import { loginAsAdmin, TEST_ORIGIN } from './utils/test-helpers'
+import { test as base, expect } from './fixtures'
+import { loginAsAdmin, TEST_ORIGIN, submitAndWaitForXhr } from './utils/test-helpers'
 
 // `e2e_test` is the only collection with a `json`-typed field (`metadata`), which is the field
 // this spec is about — `blog_post` has no json field, so its edit form renders no viewer at all.
 const COLLECTION = 'e2e_test'
 const SAMPLE_JSON = { version: 1, tags: ['a', 'b'], nested: { active: true } }
 
-test.describe('JSON field viewer @database', () => {
-  let contentId: string
-
-  test.beforeAll(async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL: TEST_ORIGIN })
-    const page = await ctx.newPage()
-    await page.goto(TEST_ORIGIN)
-    await loginAsAdmin(page)
-
-    const slug = `json-viewer-test-${Date.now()}`
+const test = base.extend<{ contentId: string }>({
+  contentId: async ({ page, resourceId }, use) => {
+    await loginAsAdmin(page, false)
     const res = await page.request.post(`${TEST_ORIGIN}/api/content`, {
       data: {
         collectionId: COLLECTION,
-        title: 'JSON Viewer Test',
-        slug,
+        title: `Test JSON Viewer ${resourceId}`,
+        slug: `json-viewer-${resourceId}`,
         data: { metadata: SAMPLE_JSON },
       },
     })
+    expect(res.ok(), `JSON fixture create failed: ${res.status()}`).toBeTruthy()
     const body = await res.json()
-    contentId = body.data?.id || body.id
+    const contentId = body.data?.id || body.id
     expect(contentId).toBeTruthy()
-    await ctx.close()
-  })
+    try {
+      await use(contentId)
+    } finally {
+      const deleted = await page.request.delete(`${TEST_ORIGIN}/api/content/${contentId}`)
+      expect(deleted.ok(), `JSON fixture cleanup failed: ${deleted.status()}`).toBeTruthy()
+    }
+  },
+})
 
-  test.afterAll(async ({ browser }) => {
-    if (!contentId) return
-    const ctx = await browser.newContext({ baseURL: TEST_ORIGIN })
-    const page = await ctx.newPage()
-    await page.goto(TEST_ORIGIN)
-    await loginAsAdmin(page)
-    await page.request.delete(`${TEST_ORIGIN}/api/content/${contentId}`)
-    await ctx.close()
-  })
+test.describe('JSON field viewer @database', () => {
 
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-  })
-
-  test('edit form shows JSON viewer, not [object Object]', async ({ page }) => {
+  test('edit form shows JSON viewer, not [object Object]', async ({ page, contentId }) => {
     await page.goto(`${TEST_ORIGIN}/admin/content/${contentId}/edit`)
     await page.waitForLoadState('domcontentloaded')
 
@@ -62,7 +50,7 @@ test.describe('JSON field viewer @database', () => {
     await expect(toggleBtn).toHaveText('Edit JSON')
   })
 
-  test('toggle switches to textarea and back to viewer', async ({ page }) => {
+  test('toggle switches to textarea and back to viewer', async ({ page, contentId }) => {
     await page.goto(`${TEST_ORIGIN}/admin/content/${contentId}/edit`)
     await page.waitForLoadState('domcontentloaded')
 
@@ -90,7 +78,7 @@ test.describe('JSON field viewer @database', () => {
     await expect(page.locator('[data-json-viewer]').first()).toBeVisible()
   })
 
-  test('invalid JSON shows inline error and blocks switch back to viewer', async ({ page }) => {
+  test('invalid JSON shows inline error and blocks switch back to viewer', async ({ page, contentId }) => {
     await page.goto(`${TEST_ORIGIN}/admin/content/${contentId}/edit`)
     await page.waitForLoadState('domcontentloaded')
 
@@ -112,7 +100,7 @@ test.describe('JSON field viewer @database', () => {
     await expect(textarea).toBeVisible()
   })
 
-  test('edited JSON saves correctly on form submit', async ({ page }) => {
+  test('edited JSON saves correctly on form submit', async ({ page, contentId }) => {
     await page.goto(`${TEST_ORIGIN}/admin/content/${contentId}/edit`)
     await page.waitForLoadState('domcontentloaded')
 
@@ -129,9 +117,9 @@ test.describe('JSON field viewer @database', () => {
     await expect(toggleBtn).toHaveText('Edit JSON')
 
     // Submit the form (content form action buttons are Save / Save & close / Publish)
-    await page.locator('button[name="action"][value="save"]').first().click()
-    await page.waitForLoadState('domcontentloaded')
-    await expect(page.locator('[data-json-toggle]').first()).toBeVisible({ timeout: 15000 })
+    await submitAndWaitForXhr(page, 'PUT', `/admin/content/${contentId}`, () =>
+      page.locator('button[name="action"][value="save"]').click())
+    await expect(page.getByText('Content saved successfully!', { exact: true })).toBeVisible()
 
     // Re-open and verify persisted
     await page.goto(`${TEST_ORIGIN}/admin/content/${contentId}/edit`)

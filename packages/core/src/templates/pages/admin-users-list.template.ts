@@ -3,6 +3,7 @@ import { renderPagination, PaginationData } from '../pagination.template'
 import { renderAlert } from '../alert.template'
 import { renderTable, TableColumn, TableData } from '../table.template'
 import { renderConfirmationDialog, getConfirmationDialogScript } from '../components/confirmation-dialog.template'
+import { escapeHtml } from '../../utils/sanitize'
 
 export interface User {
   id: string
@@ -48,7 +49,7 @@ export function renderUsersListPage(data: UsersListPageData): string {
       render: (value: string | null, row: User) => {
         const initials = `${row.firstName.charAt(0)}${row.lastName.charAt(0)}`.toUpperCase()
         if (value) {
-          return `<img src="${value}" alt="${row.firstName} ${row.lastName}" class="w-8 h-8 rounded-full">`
+          return `<img src="${escapeHtml(value)}" alt="${escapeHtml(row.firstName)} ${escapeHtml(row.lastName)}" class="w-8 h-8 rounded-full">`
         }
         return `
           <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-500 dark:from-cyan-300 dark:to-blue-400 rounded-full flex items-center justify-center">

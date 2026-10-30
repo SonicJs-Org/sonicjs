@@ -170,11 +170,20 @@ Anti-patterns: `grep -r` across repo when codegraph answers; reading 5+ files to
 
 Every feature/fix ships with a Playwright spec in `tests/e2e/`. Write the spec, but **do NOT run E2E tests locally** — they require a running wrangler dev server, consume excessive memory, and are validated by CI on PR. Running them locally is too expensive.
 
-### CI test selection strategy (dynamic)
+### CI runs the full E2E suite on every PR
 
-CI runs **smoke tests + tests tagged to changed areas only** — not the full suite. This keeps PR feedback fast.
+CI runs **every E2E test on every PR** — no changed-area tag selection. `pr-tests.yml` invokes
+`npx playwright test --config=tests/playwright.config.ts` with no `--grep`.
 
-**Tag every test** with `@smoke` (critical path, always runs) or a feature tag (`@media`, `@content`, `@auth`, `@api-keys`, `@database`, `@collections`, etc.):
+This replaced a dynamic tag-selection scheme (`@smoke` plus tags mapped from changed paths). That
+scheme made a defect invisible to CI whenever the specs covering it carried a tag the diff did not
+select: a `templates/pages/*` change selected `@smoke` only, while the `ai-search` specs are
+`@plugins`, so a 500 on `/admin/plugins/ai-search` shipped green. Budget notes live in
+`tests/playwright.config.ts` (workers, retries, per-test timeout) and the job cap is
+`timeout-minutes: 150` — a full run does not fit in 90.
+
+**Still tag every test** with `@smoke` (critical path) or a feature tag (`@media`, `@content`,
+`@auth`, `@api-keys`, `@database`, `@collections`, `@plugins`, `@forms`, `@api`, `@stats`):
 
 ```typescript
 test('does the thing @media', async ({ page }) => { … })
@@ -182,36 +191,20 @@ test('does the thing @media', async ({ page }) => { … })
 test.describe('Media Upload @media', () => { … })
 ```
 
-**Tag mapping** (CI uses `git diff --name-only` → selects tags to run):
+Tags no longer gate what CI runs, but they are how you run a subset locally
+(`npx playwright test --config=tests/playwright.config.ts --grep @media`), and
+`scripts/lint-e2e-tags.sh` still enforces that every test carries one. The tag may sit on the test
+or on any enclosing describe; a file whose first describe is tagged does **not** cover the rest of
+the file.
 
-| Changed path pattern | Tags to run |
-|---|---|
-| `src/routes/admin-content*` or `src/services/documents*` | `@smoke @content` |
-| `src/routes/admin-media*` or `src/services/media*` | `@smoke @media` |
-| `src/routes/api*` | `@smoke @api` |
-| `src/middleware/auth*`, `src/auth/*`, `src/routes/auth*`, `src/routes/admin-settings*`, anything `two-factor` | `@smoke @auth @api-keys` |
-| `src/services/api-keys*` or related | `@smoke @api-keys` |
-| `src/routes/admin-database*` | `@smoke @database` |
-| `src/routes/admin-plugins*`, `src/plugins/sdk/*`, `src/plugins/core-plugins/*`, plugin registry/middleware | `@smoke @plugins` |
-| `src/routes/admin-forms*`, `src/routes/public-forms*`, `forms-plugin` | `@smoke @forms` |
-| `src/middleware/tenant*`, anything `multi-tenant` | `@smoke @auth @plugins` |
-| `packages/core/migrations/*` | `@smoke @content @media @api` |
-| `src/routes/admin-rbac*`, `src/services/rbac*` | `@smoke @auth` |
-| `src/services/cache*`, `cache-plugin` | `@smoke @plugins @api` |
-| `packages/stats/*` | `@smoke @stats` |
-| Anything else / multiple areas | `@smoke` only |
-
-CI invocation: `npx playwright test --grep "@smoke|@<detected-tag>"`.
-
-**When writing a new spec**: choose the tightest matching feature tag. If it spans multiple features, use the primary one + `@smoke` if it tests login/nav/core flow.
-
-**A tag is mandatory, and CI enforces it.** `scripts/lint-e2e-tags.sh` fails the build if `--grep-invert` over the whole tag vocabulary lists any test — i.e. if a test exists that no changed path could ever select. The tag may sit on the test or on any enclosing describe; a file whose first describe is tagged does **not** cover the rest of the file.
+Note: `pull_request_target` runs the **base branch's** copy of `pr-tests.yml`, so a workflow edit
+on a feature branch stays inert until it merges to `main`.
 
 Workflow:
 1. Implement
 2. Add `tests/e2e/<NN>-<slug>.spec.ts` (NN = next sequential; current floor 118 — R11)
 3. Tag tests with `@smoke` and/or appropriate feature tag
-4. Commit implementation + tests together — CI selects and runs relevant tests
+4. Commit implementation + tests together — CI runs the whole suite
 
 Spec skeleton:
 

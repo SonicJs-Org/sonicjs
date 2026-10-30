@@ -38,13 +38,12 @@
  *   - `GET /auth/magic-link/verify`. **A residual window remains here, and it is not closed.**
  *     Blocking the send means an enrolled user never receives a NEW link, but a link mailed in
  *     the 15 minutes BEFORE they enrolled still resolves to a session with no second factor. It
- *     is not guarded because the token cannot be resolved to a user without consuming it: BA
- *     stores verification values in KV (this app supplies `secondaryStorage`, and
- *     `verification.storeInDatabase` is unset, so `auth_verification` is not used), keyed by
- *     BA's internal format, and `storeToken` is not exported. Closing it properly means moving
- *     verification values into D1 — a repo-wide change affecting magic-link, email-OTP and email
- *     verification, out of scope here. The exposure requires an attacker who owns the inbox AND a
- *     link requested in the same 15-minute window in which the victim enrolled.
+ *     is not guarded because the token cannot be resolved to a user without consuming it: the
+ *     value is keyed by BA's internal format and `storeToken` is not exported. Since Better Auth
+ *     1.7 the values also live in D1 (`verification.storeInDatabase: true` in `auth/config.ts`),
+ *     so a pre-verify lookup in `auth_verification` is now possible — a follow-up, not done here.
+ *     The exposure requires an attacker who owns the inbox AND a link requested in the same
+ *     15-minute window in which the victim enrolled.
  *   - `/auth/email-otp/verify-email`. It mints a session only under
  *     `emailVerification.autoSignInAfterVerification`, which SonicJS does not set; guarding it
  *     unconditionally would 403 legitimate email verification for enrolled users. **If that

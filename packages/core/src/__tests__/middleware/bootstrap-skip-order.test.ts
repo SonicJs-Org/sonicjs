@@ -41,7 +41,7 @@ function makeContext(path: string, probe: Probe, host = 'sonicjs-pr-demo.workers
           probe.d1Queries.push(sql)
           return {
             bind: () => this,
-            first: async () => ({ n: docTypeCount }),
+            first: async () => ({ n: docTypeCount, roles: docTypeCount, auth: docTypeCount }),
             all: async () => ({ results: [] }),
             run: async () => ({}),
           }
@@ -108,10 +108,12 @@ describe('bootstrapMiddleware path skips run before the KV fast-path', () => {
   it('still runs the KV fast-path for a normal admin request', async () => {
     // Negative control: the skips were moved, not the fast path. Without this a middleware that
     // short-circuits everything would pass every assertion above.
-    const { kvGets, d1Queries, nextCalled } = await runMiddleware('/admin/content')
+    const { kvGets, kvDeletes, d1Queries, nextCalled } = await runMiddleware('/admin/content')
     expect(kvGets.length).toBeGreaterThan(0)
-    expect(d1Queries.join(' ')).toContain('document_types')
+    expect(d1Queries.join(' ')).toContain('documents')
     expect(nextCalled).toBe(true)
+    // Seeds present → fast path succeeds, no KV deletion
+    expect(kvDeletes).toEqual([])
   })
 
   it('does not skip the login page render, which needs the full bootstrap', async () => {

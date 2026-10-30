@@ -14,6 +14,13 @@ export interface UserNewPageData {
   }
 }
 
+/**
+ * Renders the admin new-user creation page.
+ *
+ * Selects the Public role by default when a `role-public` option is present in
+ * the role list; other roles remain selectable. Falls back to the first
+ * available role when Public is absent.
+ */
 export function renderUserNewPage(data: UserNewPageData): string {
   const pageContent = `
     <div>

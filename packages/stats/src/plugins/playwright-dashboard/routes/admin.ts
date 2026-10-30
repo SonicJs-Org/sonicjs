@@ -98,7 +98,7 @@ adminRoutes.get('/', async (c) => {
     db.prepare(
       `SELECT date(datetime(created_at, 'unixepoch')) AS day,
               COUNT(*) AS runs,
-              SUM(CASE WHEN CAST(json_extract(data, '$.failed') AS INTEGER) = 0 THEN 1 ELSE 0 END) AS green_runs,
+              SUM(CASE WHEN CAST(json_extract(data, '$.failed') AS INTEGER) = 0 AND CAST(json_extract(data, '$.passed') AS INTEGER) > 0 THEN 1 ELSE 0 END) AS green_runs,
               SUM(CASE WHEN CAST(json_extract(data, '$.failed') AS INTEGER) > 0 THEN 1 ELSE 0 END) AS red_runs,
               AVG(CAST(json_extract(data, '$.passed') AS REAL) / MAX(CAST(json_extract(data, '$.total') AS REAL), 1) * 100) AS avg_pass_rate
        FROM documents WHERE ${RUNS_WHERE}
@@ -106,7 +106,7 @@ adminRoutes.get('/', async (c) => {
        GROUP BY day ORDER BY day ASC`
     ).all(),
 
-    // 7. Top 10 flakiest tests (most is_flaky=true occurrences across all runs)
+    // 7. Top 10 flakiest tests (most is_flaky=true occurrences, last 30 days)
     db.prepare(
       `SELECT json_extract(data, '$.test_title') AS test_title,
               json_extract(data, '$.test_file') AS test_file,
@@ -114,19 +114,32 @@ adminRoutes.get('/', async (c) => {
               COUNT(DISTINCT json_extract(data, '$.run_id')) AS affected_runs
        FROM documents WHERE ${TESTS_WHERE}
          AND json_extract(data, '$.is_flaky') = 1
+         AND created_at >= unixepoch('now', '-30 days')
        GROUP BY json_extract(data, '$.test_id')
        ORDER BY flaky_count DESC LIMIT 10`
     ).all(),
 
-    // 8. Top 10 most-failing tests (final attempts only, status=failed)
+    // 8. Top 10 most-failing tests — final attempt only (last 30 days)
+    // Only count the highest retry per (run_id, test_id, project_name) to avoid
+    // double-counting retried tests. Includes failed, timedOut, interrupted.
     db.prepare(
-      `SELECT json_extract(data, '$.test_title') AS test_title,
-              json_extract(data, '$.test_file') AS test_file,
-              json_extract(data, '$.error_message') AS error_message,
+      `SELECT json_extract(t1.data, '$.test_title') AS test_title,
+              json_extract(t1.data, '$.test_file') AS test_file,
+              json_extract(t1.data, '$.error_message') AS error_message,
               COUNT(*) AS fail_count
-       FROM documents WHERE ${TESTS_WHERE}
-         AND json_extract(data, '$.status') = 'failed'
-       GROUP BY json_extract(data, '$.test_id')
+       FROM documents t1
+       WHERE t1.type_id = 'playwright_tests' AND t1.is_published = 1 AND t1.deleted_at IS NULL
+         AND json_extract(t1.data, '$.status') IN ('failed', 'timedOut', 'interrupted')
+         AND t1.created_at >= unixepoch('now', '-30 days')
+         AND NOT EXISTS (
+           SELECT 1 FROM documents t2
+           WHERE t2.type_id = 'playwright_tests' AND t2.is_published = 1 AND t2.deleted_at IS NULL
+             AND json_extract(t2.data, '$.run_id') = json_extract(t1.data, '$.run_id')
+             AND json_extract(t2.data, '$.test_id') = json_extract(t1.data, '$.test_id')
+             AND json_extract(t2.data, '$.project_name') = json_extract(t1.data, '$.project_name')
+             AND CAST(json_extract(t2.data, '$.retry') AS INTEGER) > CAST(json_extract(t1.data, '$.retry') AS INTEGER)
+         )
+       GROUP BY json_extract(t1.data, '$.test_id')
        ORDER BY fail_count DESC LIMIT 10`
     ).all(),
   ])
@@ -258,9 +271,11 @@ adminRoutes.get('/', async (c) => {
           const flakyN = Number(r.flaky)
           const statusDot = failed > 0
             ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500" title="Has failures"></span>'
-            : flakyN > 0
-              ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" title="Flaky"></span>'
-              : '<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" title="All passed"></span>'
+            : Number(r.passed) === 0
+              ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-zinc-400" title="No passing tests"></span>'
+              : flakyN > 0
+                ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" title="Flaky"></span>'
+                : '<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" title="All passed"></span>'
           const commitLink = r.ci_run_url
             ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha).slice(0,7))}</a>`
             : esc(String(r.commit_sha).slice(0,7))

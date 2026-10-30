@@ -144,7 +144,7 @@ export default defineConfig({
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     ['html'],
-    ['json', { outputFile: 'test-results/results.json' }],
+    ['json', { outputFile: resolve(__dirname, '../test-results/results.json') }],
   ],
   /* Global setup and teardown */
   globalSetup: resolve(__dirname, './e2e/global-setup.ts'),

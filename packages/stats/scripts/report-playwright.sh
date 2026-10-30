@@ -34,6 +34,10 @@ if ! command -v jq &>/dev/null; then
   exit 1
 fi
 
+# Temp file for curl response; cleaned up on exit
+RESP_FILE=$(mktemp)
+trap 'rm -f "$RESP_FILE"' EXIT
+
 # GitHub Actions metadata (auto-detected)
 RUN_ID="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
 BRANCH="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')}"
@@ -46,10 +50,13 @@ fi
 TRIGGERED_BY="${GITHUB_EVENT_NAME:-manual}"
 
 # Parse the Playwright JSON output and build our payload.
-# Playwright JSON format has: config, suites[] (nested), each suite has specs[],
-# each spec has tests[], each test has results[].
 #
-# We flatten everything into individual test results.
+# Playwright JSON structure:
+#   suites[] (one per file) → suites[] (describe blocks, nested) → specs[] → tests[] → results[]
+#
+# We walk the nested suites tree, accumulate parent titles, and flatten every
+# tests[].results[] entry into a row with a stable test_id (spec.id::projectName).
+#
 PAYLOAD=$(jq -c --arg run_id "$RUN_ID" \
   --arg project "sonicjs" \
   --arg branch "$BRANCH" \
@@ -57,6 +64,22 @@ PAYLOAD=$(jq -c --arg run_id "$RUN_ID" \
   --arg commit_message "$COMMIT_MSG" \
   --arg ci_run_url "$CI_RUN_URL" \
   --arg triggered_by "$TRIGGERED_BY" '
+# Recursively walk nested suites, accumulating titles and inheriting file path.
+# Emits one object per spec: {id, title, file, tests}
+def flatten_specs(titles; file):
+  ((.file // file) as $f |
+    ((.specs // [])[] |
+      {
+        id: (.id // ""),
+        title: (titles + [.title] | join(" > ")),
+        file: $f,
+        tests: (.tests // [])
+      }
+    ),
+    ((.suites // [])[] | flatten_specs(titles + [.title]; $f))
+  )
+;
+
 {
   run: {
     run_id: $run_id,
@@ -67,22 +90,21 @@ PAYLOAD=$(jq -c --arg run_id "$RUN_ID" \
     ci_provider: "github_actions",
     ci_run_url: $ci_run_url,
     triggered_by: $triggered_by,
-    started_at: (.stats.startTime // now | todate),
+    started_at: (.stats.startTime // (now | todate)),
     finished_at: (now | todate),
     duration_ms: (.stats.duration // 0)
   },
   tests: [
-    .. | objects | select(.testId? != null and .results? != null) |
-    .testId as $test_id |
-    (.titlePath | join(" > ")) as $full_title |
-    (.location.file // "unknown") as $file |
-    (.projectName // null) as $proj |
+    .suites[] | flatten_specs([]; .file) |
+    . as $flat |
+    $flat.tests[] |
+    . as $test |
     .results | to_entries[] |
     {
-      test_id: $test_id,
-      test_title: $full_title,
-      test_file: $file,
-      project_name: $proj,
+      test_id: ($flat.id + "::" + ($test.projectName // "")),
+      test_title: $flat.title,
+      test_file: $flat.file,
+      project_name: $test.projectName,
       status: .value.status,
       duration_ms: .value.duration,
       retry: .key,
@@ -102,22 +124,28 @@ PAYLOAD=$(jq -c --arg run_id "$RUN_ID" \
       )
     }
   ]
-}' "$RESULTS_FILE")
+}' "$RESULTS_FILE" 2>/dev/null) || {
+  echo "⚠️  Failed to parse Playwright results JSON — skipping stats upload"
+  exit 0
+}
 
 echo "📊 Uploading Playwright results to $STATS_URL..."
 
-HTTP_CODE=$(curl -s -o /tmp/pw-stats-response.json -w "%{http_code}" \
+# Pipe payload through stdin to avoid ARG_MAX limits on large suites.
+# --max-time 30 prevents hanging. || HTTP_CODE=000 makes curl failures non-fatal.
+HTTP_CODE=$(echo "$PAYLOAD" | curl -s -o "$RESP_FILE" -w "%{http_code}" \
+  --max-time 30 \
   -X POST "$STATS_URL/v1/playwright-runs" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "$PAYLOAD")
+  --data-binary @- 2>/dev/null) || HTTP_CODE="000"
 
-if [ "$HTTP_CODE" -eq 201 ]; then
+if [ "$HTTP_CODE" = "201" ]; then
   echo "✅ Results uploaded successfully"
-  cat /tmp/pw-stats-response.json
+  cat "$RESP_FILE"
 else
   echo "⚠️  Upload failed with HTTP $HTTP_CODE (non-fatal)"
-  cat /tmp/pw-stats-response.json 2>/dev/null || true
+  cat "$RESP_FILE" 2>/dev/null || true
 fi
 
 # Never fail the CI pipeline because stats upload failed

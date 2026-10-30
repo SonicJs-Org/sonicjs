@@ -218,6 +218,10 @@ wrangler d1 execute sonicjs-ai --env production \
 
 </CodeGroup>
 
+### First-Boot Seeding
+
+On the first request to a fresh database, SonicJS seeds document types, RBAC roles, and core plugins automatically — no separate seed command needed beyond the admin credentials above. Seeding runs in two phases: document-type producers complete before RBAC/plugin consumers run, so a consumer insert can't race its producer and hit a `FOREIGN KEY constraint failed` error. A successful bootstrap is marked in KV; a partial failure is **not** marked, so the next request retries after a 30-second backoff instead of latching a broken state for 24 hours.
+
 ---
 
 ## R2 Storage Setup {{ id: 'r2-storage-setup' }}

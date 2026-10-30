@@ -289,3 +289,42 @@ The following are explicitly excluded from E2E testing:
 - Third-party service integrations
 - Email notifications
 - Background job processing
+
+## Executable suite infrastructure contract
+
+The journey/browser inventory above is a coverage specification, not a statement that
+all browsers or dataset sizes are currently exercised in CI. The implemented default
+project is Chromium. Full PR regression selection must remain unfiltered; smoke runs
+are diagnostic only.
+
+Operational instructions and ownership rules live in `tests/e2e/README.md`. Measured
+results, regressions and unverified acceptance criteria are recorded in
+`docs/testing/e2e-infrastructure-audit.md`.
+
+- Run only against an explicitly owned disposable target. Use one absolute local
+  persist directory for migrations, Wrangler and direct-D1 fixtures. Do not reset shared
+  environments. Local server reuse requires explicit opt-in; CI must own its server.
+- Setup must prove seed success, authenticated admin readiness and migration state before
+  running specs; HTTP 200 at the deployment root is insufficient. Deployed build identity
+  and complete Worker/D1/R2/KV ownership remain required, not yet verified draft behavior.
+- Allocate prerequisites independently using unique attempt-scoped identifiers. Track
+  resource IDs and delete only owned records in teardown, even after failures. Settings
+  and plugin mutations must restore their snapshots under narrowly shared coordination.
+- Reuse validated worker authentication only for accounts whose mutable state is not
+  changed concurrently. Preserve real login/logout coverage and use disposable users for
+  credential, role, session and second-factor mutations.
+- Register waits before actions; match method and exact endpoint, verify response success,
+  await completion and assert the resulting DOM/redirect. Verify saves by independent
+  reads or reload. Never use a typed value, suppressed error or retry recovery as proof.
+- Keep two CI workers and file-level parallelism until measurements support a change.
+  Filesystem locks coordinate one host only; sharding requires isolated environments or
+  actual cross-runner coordination. Do not steal locks based solely on elapsed age.
+- Retain readable HTML plus JSON/JUnit results and first-attempt failure traces/screenshots.
+  Preserve nonzero exits and upload diagnostic artifacts on failure when the runner survives.
+- Reliability acceptance targets three consecutive clean full-suite runs with retries
+  disabled at intended concurrency, plus the actual CI-policy run and unit/type/tag gates.
+  Record every failed attempt and changed candidate; explicitly report incomplete acceptance.
+
+Draft PR #1146 is not ready for sign-off: nested deletion confirmation still fails,
+preview storage/build isolation is unfinished, and base-branch workflow rollout prevents
+its new disposable-target guard from running under the existing preview job unchanged.

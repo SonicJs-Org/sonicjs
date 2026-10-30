@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import { createTestD1 } from '../utils/d1-sqlite'
-import { bootstrapDocumentTypes } from '../../services/document-types-seed'
+import { bootstrapDocumentTypes, autoRegisterCollectionDocumentTypes } from '../../services/document-types-seed'
 
 vi.mock('../../middleware/auth', () => ({
   requireAuth: () => async (_c: any, next: any) => next(),
@@ -15,6 +15,7 @@ vi.mock('../../middleware/auth', () => ({
 
 import adminContentRoutes from '../../routes/admin-content'
 import { getCollectionRegistry, resetCollectionRegistry } from '../../services/collection-registry'
+import { registerCollections } from '../../services/collection-loader'
 
 const BLOG_SCHEMA = JSON.stringify({
   type: 'object',
@@ -125,6 +126,48 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
     expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=? AND is_published=1").get(rootId).n).toBe(1)
   })
 
+  it('update title is reflected on the all-view content list', async () => {
+    await createPost('titlecheck') // v1 published with title "Post titlecheck"
+    const rootId = db.raw.prepare("SELECT root_id r FROM documents WHERE slug='titlecheck'").get().r
+
+    // Update title to something new
+    const res = await app.request(`/admin/content/${rootId}`, {
+      method: 'PUT',
+      body: form({ _method: 'PUT', collection_id: COLL, title: 'Brand New Title', slug: 'titlecheck', content: '<p>v2</p>', author: 'Ada', difficulty: 'beginner', status: 'published', action: 'save_and_close' }),
+    })
+    expect([200, 302]).toContain(res.status)
+
+    // Verify title persisted in DB on the current draft row
+    const draft = db.raw.prepare("SELECT title FROM documents WHERE root_id=? AND is_current_draft=1").get(rootId)
+    expect(draft.title).toBe('Brand New Title')
+
+    // Verify the all-view list renders the updated title
+    const listRes = await app.request('/admin/content')
+    expect(listRes.status).toBe(200)
+    const listHtml = await listRes.text()
+    expect(listHtml).toContain('Brand New Title')
+    expect(listHtml).not.toContain('Post titlecheck')
+  })
+
+  it('save-and-close redirects to unfiltered /admin/content (no collection param)', async () => {
+    await createPost('redirect-test')
+    const rootId = db.raw.prepare("SELECT root_id r FROM documents WHERE slug='redirect-test'").get().r
+    const res = await app.request(`/admin/content/${rootId}`, {
+      method: 'PUT',
+      body: form({ _method: 'PUT', collection_id: COLL, title: 'Redirect Test', slug: 'redirect-test', content: '<p>v2</p>', author: 'Ada', difficulty: 'beginner', status: 'published', action: 'save_and_close' }),
+    })
+    // Should redirect (302) or return HX-Redirect header
+    if (res.status === 302) {
+      const location = res.headers.get('Location') || ''
+      expect(location).toBe('/admin/content')
+      expect(location).not.toContain('collection=')
+    } else {
+      const hxRedirect = res.headers.get('HX-Redirect') || ''
+      expect(hxRedirect).toBe('/admin/content')
+      expect(hxRedirect).not.toContain('collection=')
+    }
+  })
+
   it('update with status=draft unpublishes the live revision (consistent status semantics)', async () => {
     await createPost('draftme') // v1 published
     const rootId = db.raw.prepare("SELECT root_id r FROM documents WHERE slug='draftme'").get().r
@@ -205,5 +248,72 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
     for (const id of ids) {
       expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE root_id=? AND deleted_at IS NOT NULL").get(id).n).toBeGreaterThan(0)
     }
+  })
+})
+
+// ── Collections without a title field (use name) — title derivation bug ─────
+
+const NAME_ONLY_SCHEMA = JSON.stringify({
+  type: 'object',
+  properties: {
+    name: { type: 'string', title: 'Name', required: true },
+    emoji: { type: 'string', title: 'Emoji' },
+    description: { type: 'string', title: 'Description' },
+  },
+  required: ['name'],
+})
+
+describe('admin-content title derivation from data.name field', () => {
+  let db: any
+  let app: any
+  const COLL = 'example'
+
+  beforeEach(async () => {
+    db = createTestD1()
+    const exampleCol = { name: 'example', displayName: 'Example', description: 'No title field', schema: JSON.parse(NAME_ONLY_SCHEMA) }
+    registerCollections([exampleCol])
+    getCollectionRegistry().register([exampleCol])
+    await bootstrapDocumentTypes(db)
+    await autoRegisterCollectionDocumentTypes(db)
+    app = buildApp(db)
+  })
+  afterEach(() => { db.close(); resetCollectionRegistry() })
+
+  function createExample(name: string) {
+    return app.request('/admin/content', {
+      method: 'POST',
+      body: form({ collection_id: COLL, name, emoji: '😈', description: 'test', status: 'published', action: 'save_and_publish' }),
+    })
+  }
+
+  it('create derives documents.title from data.name when no title field exists', async () => {
+    const res = await createExample('Cruel')
+    expect([200, 302]).toContain(res.status)
+    const row = db.raw.prepare("SELECT title FROM documents WHERE type_id='example' AND is_current_draft=1").get()
+    expect(row, 'document row must exist after create').toBeTruthy()
+    expect(row.title).toBe('Cruel')
+  })
+
+  it('update reflects changed name in list title (not stale DB title)', async () => {
+    await createExample('Cruel')
+    const rootId = db.raw.prepare("SELECT root_id r FROM documents WHERE type_id='example'").get().r
+
+    // Update name from "Cruel" to "Vicious"
+    const res = await app.request(`/admin/content/${rootId}`, {
+      method: 'PUT',
+      body: form({ _method: 'PUT', collection_id: COLL, name: 'Vicious', emoji: '😈', description: 'updated', status: 'published', action: 'save_and_close' }),
+    })
+    expect([200, 302]).toContain(res.status)
+
+    // DB title column must be "Vicious" (not stale "Cruel")
+    const draft = db.raw.prepare("SELECT title FROM documents WHERE root_id=? AND is_current_draft=1").get(rootId)
+    expect(draft.title).toBe('Vicious')
+
+    // All-view list must show the updated name
+    const listRes = await app.request('/admin/content')
+    expect(listRes.status).toBe(200)
+    const listHtml = await listRes.text()
+    expect(listHtml).toContain('Vicious')
+    expect(listHtml).not.toContain('>Cruel<')
   })
 })

@@ -15,16 +15,19 @@ import { createTestD1 } from '../utils/d1-sqlite'
 import { bootstrapDocumentTypes } from '../../services/document-types-seed'
 
 // optionalAuth/requireAuth/requireRole come from ../middleware (barrel) which re-exports ./auth. Mock
-// ./auth so optionalAuth derives the role from a test header (no JWT needed) and the write guards pass.
-vi.mock('../../middleware/auth', () => ({
-  requireAuth: () => async (_c: any, next: any) => next(),
-  requireRole: () => async (_c: any, next: any) => next(),
-  optionalAuth: () => async (c: any, next: any) => {
+// ./auth so the session comes from a test header (no JWT needed); writes still go through the document ACL.
+vi.mock('../../middleware/auth', () => {
+  const userFromHeader = async (c: any, next: any) => {
     const role = c.req.header('x-test-role')
     if (role) c.set('user', { userId: 'u1', email: 'a@b.c', role })
     await next()
-  },
-}))
+  }
+  return {
+    requireAuth: () => userFromHeader,
+    requireRole: () => async (_c: any, next: any) => next(),
+    optionalAuth: () => userFromHeader,
+  }
+})
 
 import apiRoutes from '../../routes/api'
 import { DocumentsService } from '../../services/documents'

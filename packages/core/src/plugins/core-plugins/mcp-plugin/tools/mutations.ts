@@ -88,6 +88,7 @@ export async function execCreate(
   const scope = await resolveWriteScope(ctx, typeId)
   // Base-grant check (no root yet): can this principal create this type?
   await assertAllowed(scope, ctx, '', 'create')
+  if (args.publish) await assertAllowed(scope, ctx, '', 'publish')
 
   // Redacted fields are invisible on read; strip them on write too so a client can't
   // populate a field it can never see back (write-but-not-read asymmetry).

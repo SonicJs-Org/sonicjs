@@ -11,26 +11,53 @@
  * providers, magic link, 2FA, etc.
  */
 /** Send an email via the SonicJS email plugin (Resend).
- *  Loads apiKey/fromEmail/fromName from the `plugins` table at runtime.
- *  Falls back to console.log when the plugin is unconfigured (local dev). */
+ *  Tries the v3 `documents` table first (primary), falls back to `plugins`
+ *  (legacy). Falls back to console.log when the plugin is unconfigured. */
 async function sendViaEmailPlugin(
   db: D1Database,
   to: string,
   subject: string,
   html: string
 ): Promise<void> {
-  try {
-    const row = (await db
-      .prepare("SELECT settings FROM plugins WHERE id = 'email'")
-      .first()) as { settings: string } | null
-    if (row?.settings) {
-      const { apiKey, fromEmail, fromName } = JSON.parse(row.settings) as {
-        apiKey?: string; fromEmail?: string; fromName?: string
+  type SettingsRow = { settings: string | null } | null
+  const loadSettings = async (): Promise<{ apiKey?: string; resendApiKey?: string; fromEmail?: string; fromName?: string } | null> => {
+    // Primary: v3 documents table (written by the plugin settings admin page).
+    try {
+      const docRow = (await db
+        .prepare(
+          `SELECT json_extract(data, '$.settings') AS settings
+           FROM documents
+           WHERE type_id = 'plugin' AND slug = 'email'
+             AND is_current_draft = 1 AND deleted_at IS NULL
+           LIMIT 1`
+        )
+        .first()) as SettingsRow
+      if (docRow?.settings) {
+        const parsed = JSON.parse(docRow.settings)
+        if (parsed && typeof parsed === 'object') return parsed
       }
-      if (apiKey && fromEmail) {
+    } catch { /* documents table absent — fall through */ }
+    // Fallback: legacy plugins table (written by POST /admin/email/settings).
+    try {
+      const pluginRow = (await db
+        .prepare("SELECT settings FROM plugins WHERE id = 'email'")
+        .first()) as SettingsRow
+      if (pluginRow?.settings) {
+        const parsed = JSON.parse(pluginRow.settings)
+        if (parsed && typeof parsed === 'object') return parsed
+      }
+    } catch { /* plugins table absent */ }
+    return null
+  }
+  try {
+    const settings = await loadSettings()
+    if (settings) {
+      const { apiKey, resendApiKey, fromEmail, fromName } = settings
+      const key = resendApiKey || apiKey
+      if (key && fromEmail) {
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             from: `${fromName ?? 'SonicJS'} <${fromEmail}>`,
             to: [to],

@@ -151,7 +151,10 @@ const customMigrationService = new MigrationService(db, {
 
 The optional second constructor argument is `MigrationServiceOptions`, containing
 `tableName?: string` (default: `d1_migrations`). The table must expose `name` and
-`applied_at` columns. Table names must match `^[A-Za-z_][A-Za-z0-9_]*$`; invalid
+`applied_at` columns. Each `name` value in a custom ledger must begin with the
+matching bundled numeric migration ID, including leading zeros (for example,
+`0001_core.sql` for bundled ID `0001`). Status parsing extracts the leading digits
+and matches that ID exactly. Table names must match `^[A-Za-z_][A-Za-z0-9_]*$`; invalid
 values are rejected before querying the database.
 
 For built-in admin status routes, pass the same options through

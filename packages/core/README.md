@@ -314,9 +314,14 @@ await migrationService.ensureSchemaCompatibility()
 
 ### Custom Migration Tracking Table
 
-Migration status reads `d1_migrations` by default. If Wrangler or a hosting adapter
-records applied migrations in another table with `name` and `applied_at` columns,
-configure that table explicitly:
+Migration status reads `d1_migrations` by default. Wrangler or a hosting adapter
+can record applied migrations in another table with `name` and `applied_at` columns.
+
+Each `name` value in a custom ledger must begin with the matching bundled numeric
+migration ID, including leading zeros (for example, `0001_core.sql` for bundled
+ID `0001`). Status parsing extracts the leading digits and matches that ID exactly.
+
+Configure that table explicitly:
 
 ```typescript
 import { createSonicJSApp, MigrationService } from '@sonicjs-cms/core'

@@ -10,6 +10,7 @@ vi.mock('../../middleware/bootstrap', async importOriginal => ({
 
 import { createSonicJSApp } from '../../app'
 
+/** Create an app exposing its captured migration options before authentication. */
 function configuredApp(migrations?: SonicJSConfig['migrations']) {
   return createSonicJSApp({
     migrations,

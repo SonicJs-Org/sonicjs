@@ -38,6 +38,14 @@ export function resolveMigrationTableName(options: MigrationServiceOptions = {})
 export class MigrationService {
   private readonly migrationTableName: string
 
+  /**
+   * Create a migration service using the deployment runner's status ledger.
+   * Validates and snapshots the table name before any database access.
+   *
+   * @param db - Database containing the migration ledger.
+   * @param options - Ledger selection; defaults to d1_migrations.
+   * @throws If the configured table name is not a valid SQL identifier.
+   */
   constructor(private db: D1Database, options: MigrationServiceOptions = {}) {
     this.migrationTableName = resolveMigrationTableName(options)
   }

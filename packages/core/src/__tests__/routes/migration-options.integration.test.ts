@@ -20,6 +20,13 @@ describe('Admin migration status options (real SQLite)', () => {
   })
   afterEach(() => db.close())
 
+  /**
+   * Mount both status routes with test-controlled ledger options and principal.
+   *
+   * @param options - Ledger options supplied through the request context.
+   * @param authenticated - Whether the fixture supplies an admin principal.
+   * @returns A test application exposing both migration-status endpoints.
+   */
   function appFor(options?: MigrationServiceOptions, authenticated = true) {
     const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
     app.use('*', async (c, next) => {

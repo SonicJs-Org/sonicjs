@@ -21,11 +21,29 @@ export interface MigrationStatus {
   migrations: Migration[]
 }
 
+export interface MigrationServiceOptions {
+  /** Applied-migration ledger used by the deployment runner. Defaults to d1_migrations. */
+  tableName?: string
+}
+
+/** Validate identifiers before interpolation: SQL parameters cannot bind table names. */
+export function resolveMigrationTableName(options: MigrationServiceOptions = {}): string {
+  const tableName = options.tableName === undefined ? 'd1_migrations' : options.tableName
+  if (typeof tableName !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(tableName) || tableName.trim() !== tableName) {
+    throw new Error('Invalid migrations.tableName: use letters, digits and underscores, starting with a letter or underscore')
+  }
+  return tableName
+}
+
 export class MigrationService {
-  constructor(private db: D1Database) {}
+  private readonly migrationTableName: string
+
+  constructor(private db: D1Database, options: MigrationServiceOptions = {}) {
+    this.migrationTableName = resolveMigrationTableName(options)
+  }
 
   /**
-   * Cloudflare D1 owns migration bookkeeping through `d1_migrations`.
+   * The deployment runner owns migration bookkeeping (d1_migrations by default).
    * SonicJS intentionally does not create its own tracking table.
    */
   async initializeMigrationsTable(): Promise<void> {
@@ -71,13 +89,13 @@ export class MigrationService {
   }
 
   /**
-   * Read Wrangler/D1's canonical migration table. If the table is absent, no
+   * Read the configured deployment runner's migration table. If it is absent, no
    * migrations have been applied by the supported migration runner yet.
    */
   private async getD1AppliedMigrations(): Promise<Map<string, any>> {
     try {
       const appliedResult = await this.db.prepare(
-        'SELECT name, applied_at FROM d1_migrations ORDER BY applied_at ASC'
+        `SELECT name AS name, applied_at AS applied_at FROM "${this.migrationTableName}" ORDER BY applied_at ASC`
       ).all()
 
       return new Map(

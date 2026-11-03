@@ -42,6 +42,7 @@ interface IngestPayload {
     ci_provider: string
     ci_run_url?: string
     triggered_by?: string
+    source?: 'local' | 'ci'
     started_at: string
     finished_at: string
     duration_ms: number
@@ -103,6 +104,7 @@ playwrightIngest.post('/', requirePlaywrightAuth(), async (c) => {
       ci_provider: body.run.ci_provider || 'github_actions',
       ci_run_url: body.run.ci_run_url,
       triggered_by: body.run.triggered_by,
+      source: body.run.source ?? (body.run.ci_provider === 'local' ? 'local' : 'ci'),
       total, passed, failed, skipped, flaky,
       duration_ms: body.run.duration_ms,
       started_at: body.run.started_at,

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { requireAuth } from '@sonicjs-cms/core'
 import { renderAdminLayoutCatalyst } from '@sonicjs-cms/core'
 import type { Bindings, Variables } from '@sonicjs-cms/core'
+import { STATS_ADMIN_MENU } from '../../../admin-menu'
 
 const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -34,8 +35,12 @@ const rowsOf = (r: { results?: unknown[] } | null): Row[] => (r?.results ?? []) 
 
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16']
 
-// ── Main dashboard (GET /) ───────────────────────────────────────────────
+// ── Main dashboard (GET /) or run detail (GET /?run=<run_id>) ───────────────
 adminRoutes.get('/', async (c) => {
+  const runId = c.req.query('run')
+  if (runId) return showRunDetail(c, runId)
+  const testId = c.req.query('test')
+  if (testId) return showTestHistory(c, testId)
   const db = c.env.DB
   const user = c.get('user')
 
@@ -64,12 +69,11 @@ adminRoutes.get('/', async (c) => {
               json_extract(data, '$.flaky') AS flaky,
               json_extract(data, '$.duration_ms') AS duration_ms,
               json_extract(data, '$.started_at') AS started_at,
-              json_extract(data, '$.finished_at') AS finished_at
+              json_extract(data, '$.finished_at') AS finished_at,
+              json_extract(data, '$.source') AS source
        FROM documents WHERE ${RUNS_WHERE}
        ORDER BY created_at DESC LIMIT 50`
     ).all(),
-
-    // 2. Total run count
     db.prepare(
       `SELECT COUNT(*) AS count FROM documents WHERE ${RUNS_WHERE}`
     ).first(),
@@ -119,27 +123,18 @@ adminRoutes.get('/', async (c) => {
        ORDER BY flaky_count DESC LIMIT 10`
     ).all(),
 
-    // 8. Top 10 most-failing tests — final attempt only (last 30 days)
-    // Only count the highest retry per (run_id, test_id, project_name) to avoid
-    // double-counting retried tests. Includes failed, timedOut, interrupted.
+    // 8. Top 10 most-failing tests (last 30 days)
+    // Counts all failed/timedOut/interrupted rows per test_id — includes retries,
+    // which slightly over-counts but avoids an O(n²) correlated subquery on D1.
     db.prepare(
-      `SELECT json_extract(t1.data, '$.test_title') AS test_title,
-              json_extract(t1.data, '$.test_file') AS test_file,
-              json_extract(t1.data, '$.error_message') AS error_message,
+      `SELECT json_extract(data, '$.test_title') AS test_title,
+              json_extract(data, '$.test_file') AS test_file,
+              json_extract(data, '$.error_message') AS error_message,
               COUNT(*) AS fail_count
-       FROM documents t1
-       WHERE t1.type_id = 'playwright_tests' AND t1.is_published = 1 AND t1.deleted_at IS NULL
-         AND json_extract(t1.data, '$.status') IN ('failed', 'timedOut', 'interrupted')
-         AND t1.created_at >= unixepoch('now', '-30 days')
-         AND NOT EXISTS (
-           SELECT 1 FROM documents t2
-           WHERE t2.type_id = 'playwright_tests' AND t2.is_published = 1 AND t2.deleted_at IS NULL
-             AND json_extract(t2.data, '$.run_id') = json_extract(t1.data, '$.run_id')
-             AND json_extract(t2.data, '$.test_id') = json_extract(t1.data, '$.test_id')
-             AND json_extract(t2.data, '$.project_name') = json_extract(t1.data, '$.project_name')
-             AND CAST(json_extract(t2.data, '$.retry') AS INTEGER) > CAST(json_extract(t1.data, '$.retry') AS INTEGER)
-         )
-       GROUP BY json_extract(t1.data, '$.test_id')
+       FROM documents WHERE ${TESTS_WHERE}
+         AND json_extract(data, '$.status') IN ('failed', 'timedOut', 'interrupted')
+         AND created_at >= unixepoch('now', '-30 days')
+       GROUP BY json_extract(data, '$.test_id')
        ORDER BY fail_count DESC LIMIT 10`
     ).all(),
   ])
@@ -256,19 +251,24 @@ adminRoutes.get('/', async (c) => {
         <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           <tr>
             <th class="py-2 text-left font-medium">Status</th>
+            <th class="py-2 text-left font-medium">Source</th>
             <th class="py-2 text-left font-medium">Branch</th>
             <th class="py-2 text-left font-medium">Commit</th>
             <th class="py-2 text-right font-medium">Passed</th>
             <th class="py-2 text-right font-medium">Failed</th>
             <th class="py-2 text-right font-medium">Flaky</th>
             <th class="py-2 text-right font-medium">Duration</th>
-            <th class="py-2 text-left font-medium">When</th>
+            <th class="py-2 pl-6 text-left font-medium">When</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
         ${recentRuns.map(r => {
           const failed = Number(r.failed)
           const flakyN = Number(r.flaky)
+          const src = String(r.source ?? 'ci')
+          const sourceBadge = src === 'local'
+            ? '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">local</span>'
+            : '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">CI</span>'
           const statusDot = failed > 0
             ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500" title="Has failures"></span>'
             : Number(r.passed) === 0
@@ -279,15 +279,16 @@ adminRoutes.get('/', async (c) => {
           const commitLink = r.ci_run_url
             ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha).slice(0,7))}</a>`
             : esc(String(r.commit_sha).slice(0,7))
-          return `<tr>
+          return `<tr class="cursor-pointer hover:bg-zinc-950/[0.02] dark:hover:bg-white/[0.02]" onclick="window.location='/admin/playwright?run=${encodeURIComponent(String(r.run_id))}'">
             <td class="py-2 pr-2">${statusDot}</td>
+            <td class="py-2 pr-3">${sourceBadge}</td>
             <td class="py-2 pr-4 font-mono text-xs text-zinc-700 dark:text-zinc-300">${esc(r.branch)}</td>
             <td class="py-2 pr-4 font-mono text-xs">${commitLink}${r.commit_message ? ` <span class="text-zinc-400">${esc(String(r.commit_message).slice(0, 50))}</span>` : ''}</td>
             <td class="py-2 text-right text-emerald-600 dark:text-emerald-400">${r.passed}/${r.total}</td>
             <td class="py-2 text-right ${failed > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-zinc-400'}">${r.failed}</td>
             <td class="py-2 text-right ${flakyN > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}">${r.flaky}</td>
             <td class="py-2 text-right text-zinc-500">${fmtDuration(Number(r.duration_ms))}</td>
-            <td class="py-2 text-xs text-zinc-400">${r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</td>
+            <td class="py-2 pl-6 text-xs text-zinc-400">${r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</td>
           </tr>`
         }).join('')}
         </tbody></table></div>`
@@ -342,9 +343,405 @@ adminRoutes.get('/', async (c) => {
         : undefined,
       scripts: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'],
       content,
-      dynamicMenuItems: c.get('pluginMenuItems'),
+      dynamicMenuItems: STATS_ADMIN_MENU,
     })
   )
 })
 
 export { adminRoutes as playwrightAdminRoutes }
+
+// ── Run detail view ──────────────────────────────────────────────────────────
+async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Variables: Variables }>, runId: string): Promise<Response> {
+  const db = c.env.DB
+  const user = c.get('user')
+
+  const [runR, testsR] = await Promise.all([
+    // Run metadata
+    db.prepare(
+      `SELECT json_extract(data, '$.run_id') AS run_id,
+              json_extract(data, '$.branch') AS branch,
+              json_extract(data, '$.commit_sha') AS commit_sha,
+              json_extract(data, '$.commit_message') AS commit_message,
+              json_extract(data, '$.ci_run_url') AS ci_run_url,
+              json_extract(data, '$.triggered_by') AS triggered_by,
+              json_extract(data, '$.total') AS total,
+              json_extract(data, '$.passed') AS passed,
+              json_extract(data, '$.failed') AS failed,
+              json_extract(data, '$.skipped') AS skipped,
+              json_extract(data, '$.flaky') AS flaky,
+              json_extract(data, '$.duration_ms') AS duration_ms,
+              json_extract(data, '$.started_at') AS started_at,
+              json_extract(data, '$.finished_at') AS finished_at
+       FROM documents
+       WHERE type_id = 'playwright_runs' AND is_published = 1 AND deleted_at IS NULL
+         AND json_extract(data, '$.run_id') = ?
+       LIMIT 1`
+    ).bind(runId).first(),
+
+    // All test results for this run, sorted by file then title then retry
+    db.prepare(
+      `SELECT json_extract(data, '$.test_id') AS test_id,
+              json_extract(data, '$.test_title') AS test_title,
+              json_extract(data, '$.test_file') AS test_file,
+              json_extract(data, '$.project_name') AS project_name,
+              json_extract(data, '$.status') AS status,
+              json_extract(data, '$.duration_ms') AS duration_ms,
+              CAST(json_extract(data, '$.retry') AS INTEGER) AS retry,
+              json_extract(data, '$.is_flaky') AS is_flaky,
+              json_extract(data, '$.error_message') AS error_message,
+              json_extract(data, '$.error_snippet') AS error_snippet
+       FROM documents
+       WHERE type_id = 'playwright_tests' AND is_published = 1 AND deleted_at IS NULL
+         AND json_extract(data, '$.run_id') = ?
+       ORDER BY json_extract(data, '$.test_file'),
+                json_extract(data, '$.test_title'),
+                CAST(json_extract(data, '$.retry') AS INTEGER)`
+    ).bind(runId).all(),
+  ])
+
+  if (!runR) {
+    return c.html(
+      renderAdminLayoutCatalyst({
+        title: 'Run not found',
+        pageTitle: 'Run not found',
+        currentPath: '/admin/playwright',
+        version: c.get('appVersion'),
+        user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
+        content: `<div class="py-16 text-center text-sm text-zinc-500">Run <code>${esc(runId)}</code> not found.</div>`,
+        dynamicMenuItems: STATS_ADMIN_MENU,
+      })
+    )
+  }
+
+  type TestRow = { test_id: string; test_title: string; test_file: string; project_name: string; status: string; duration_ms: number; retry: number; is_flaky: boolean | number; error_message: string | null; error_snippet: string | null }
+  const run = runR as Record<string, unknown>
+  const tests = (testsR?.results ?? []) as TestRow[]
+
+  const failed = Number(run.failed)
+  const flakyN = Number(run.flaky)
+  const passed = Number(run.passed)
+  const total = Number(run.total)
+
+  function fmtDuration(ms: number): string {
+    const s = Math.round(ms / 1000)
+    if (s < 60) return `${s}s`
+    const m = Math.floor(s / 60)
+    return `${m}m ${s % 60}s`
+  }
+
+  const statusBadge = (status: string) => {
+    const map: Record<string, string> = {
+      passed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
+      failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+      timedOut: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+      interrupted: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+      skipped: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+    }
+    return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[status] ?? map.skipped}">${esc(status)}</span>`
+  }
+
+  // Group tests by file for display
+  let lastFile = ''
+  const testRows = tests.map(t => {
+    const isNewFile = t.test_file !== lastFile
+    lastFile = t.test_file
+    const fileRow = isNewFile
+      ? `<tr><td colspan="6" class="pt-4 pb-1 text-xs font-mono font-semibold text-zinc-400 dark:text-zinc-500 select-all">${esc(t.test_file)}</td></tr>`
+      : ''
+    const isFlaky = t.is_flaky === 1 || t.is_flaky === true
+    return `${fileRow}<tr class="border-t border-zinc-950/5 dark:border-white/5 cursor-pointer hover:bg-zinc-950/[0.02] dark:hover:bg-white/[0.02]" onclick="window.location='/admin/playwright?test=${encodeURIComponent(String(t.test_id))}'">
+      <td class="py-2 pr-3">${statusBadge(t.status)}${isFlaky ? ' <span class="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">flaky</span>' : ''}</td>
+      <td class="py-2 pr-4 text-sm text-zinc-700 dark:text-zinc-300 max-w-sm">${esc(t.test_title)}${t.retry > 0 ? ` <span class="text-xs text-zinc-400">(retry ${t.retry})</span>` : ''}</td>
+      <td class="py-2 pr-3 text-xs text-zinc-400 font-mono">${t.project_name ? esc(t.project_name) : ''}</td>
+      <td class="py-2 pr-3 text-right text-xs text-zinc-500">${fmtDuration(Number(t.duration_ms))}</td>
+      <td class="py-2 text-xs text-red-500 dark:text-red-400 max-w-xs">${t.error_message ? `<span title="${esc(t.error_message)}">${esc(String(t.error_message).slice(0, 80))}${String(t.error_message).length > 80 ? '…' : ''}</span>` : ''}</td>
+    </tr>`
+  }).join('')
+
+  const headerStatusDot = failed > 0
+    ? '<span class="inline-block w-3 h-3 rounded-full bg-red-500 mr-2"></span>'
+    : passed === 0
+      ? '<span class="inline-block w-3 h-3 rounded-full bg-zinc-400 mr-2"></span>'
+      : flakyN > 0
+        ? '<span class="inline-block w-3 h-3 rounded-full bg-amber-500 mr-2"></span>'
+        : '<span class="inline-block w-3 h-3 rounded-full bg-emerald-500 mr-2"></span>'
+
+  const ciLink = run.ci_run_url
+    ? `<a href="${esc(String(run.ci_run_url))}" target="_blank" rel="noopener" class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm">${esc(String(run.commit_sha).slice(0,7))}</a>`
+    : `<span class="font-mono text-sm">${esc(String(run.commit_sha).slice(0,7))}</span>`
+
+  const content = `
+<div class="space-y-6">
+  <!-- Back link -->
+  <div>
+    <a href="/admin/playwright" class="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      All runs
+    </a>
+  </div>
+
+  <!-- Run header -->
+  <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="text-xl font-semibold text-zinc-950 dark:text-white flex items-center">
+          ${headerStatusDot}${esc(String(run.branch))}
+        </h1>
+        <div class="mt-1 text-sm text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
+          <span>Commit: ${ciLink}${run.commit_message ? ` — <span class="text-zinc-400">${esc(String(run.commit_message).slice(0,80))}</span>` : ''}</span>
+          ${run.triggered_by ? `<span>Trigger: <span class="font-medium">${esc(String(run.triggered_by))}</span></span>` : ''}
+          ${run.started_at ? `<span>${new Date(String(run.started_at)).toLocaleString()}</span>` : ''}
+          <span>Duration: <span class="font-medium">${fmtDuration(Number(run.duration_ms))}</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI bar -->
+    <div class="mt-4 grid grid-cols-4 gap-4">
+      <div class="text-center">
+        <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">${passed}</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Passed</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold ${failed > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'}">${failed}</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Failed</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold ${flakyN > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}">${flakyN}</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Flaky</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold text-zinc-400">${total}</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Total</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test results -->
+  <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10">
+    <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+      <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Test Results</h2>
+      <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">${tests.length} result${tests.length !== 1 ? 's' : ''} — grouped by file</p>
+    </div>
+    <div class="p-6 overflow-x-auto">
+      ${tests.length === 0
+        ? '<div class="py-8 text-center text-sm text-zinc-500">No test results stored for this run.</div>'
+        : `<table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <tr>
+                <th class="pb-2 text-left font-medium">Status</th>
+                <th class="pb-2 text-left font-medium">Test</th>
+                <th class="pb-2 text-left font-medium">Project</th>
+                <th class="pb-2 text-right font-medium pr-3">Duration</th>
+                <th class="pb-2 text-left font-medium">Error</th>
+              </tr>
+            </thead>
+            <tbody>${testRows}</tbody>
+          </table>`
+      }
+    </div>
+  </div>
+</div>`
+
+  return c.html(
+    renderAdminLayoutCatalyst({
+      title: `Run: ${esc(runId)}`,
+      pageTitle: 'Playwright CI/CD',
+      currentPath: '/admin/playwright',
+      version: c.get('appVersion'),
+      user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
+      content,
+      dynamicMenuItems: STATS_ADMIN_MENU,
+    })
+  )
+}
+
+// ── Test history view ─────────────────────────────────────────────────────────
+async function showTestHistory(c: import('hono').Context<{ Bindings: Bindings; Variables: Variables }>, testId: string): Promise<Response> {
+  const db = c.env.DB
+  const user = c.get('user')
+
+  const resultsR = await db.prepare(
+    `SELECT
+       json_extract(t.data, '$.test_title')    AS test_title,
+       json_extract(t.data, '$.test_file')     AS test_file,
+       json_extract(t.data, '$.project_name')  AS project_name,
+       json_extract(t.data, '$.status')        AS status,
+       json_extract(t.data, '$.duration_ms')   AS duration_ms,
+       CAST(json_extract(t.data, '$.retry') AS INTEGER) AS retry,
+       json_extract(t.data, '$.is_flaky')      AS is_flaky,
+       json_extract(t.data, '$.error_message') AS error_message,
+       json_extract(t.data, '$.run_id')        AS run_id,
+       json_extract(r.data, '$.branch')        AS branch,
+       json_extract(r.data, '$.commit_sha')    AS commit_sha,
+       json_extract(r.data, '$.ci_run_url')    AS ci_run_url,
+       json_extract(r.data, '$.started_at')    AS started_at
+     FROM documents t
+     LEFT JOIN documents r
+       ON r.type_id = 'playwright_runs'
+       AND r.is_published = 1
+       AND r.deleted_at IS NULL
+       AND json_extract(r.data, '$.run_id') = json_extract(t.data, '$.run_id')
+     WHERE t.type_id = 'playwright_tests'
+       AND t.is_published = 1
+       AND t.deleted_at IS NULL
+       AND json_extract(t.data, '$.test_id') = ?
+     ORDER BY t.created_at DESC
+     LIMIT 200`
+  ).bind(testId).all()
+
+  type HistRow = {
+    test_title: string; test_file: string; project_name: string
+    status: string; duration_ms: number; retry: number
+    is_flaky: boolean | number; error_message: string | null
+    run_id: string; branch: string | null; commit_sha: string | null
+    ci_run_url: string | null; started_at: string | null
+  }
+  const rows = (resultsR?.results ?? []) as HistRow[]
+
+  if (rows.length === 0) {
+    return c.html(
+      renderAdminLayoutCatalyst({
+        title: 'Test not found',
+        pageTitle: 'Playwright CI/CD',
+        currentPath: '/admin/playwright',
+        version: c.get('appVersion'),
+        user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
+        content: `<div class="py-16 text-center text-sm text-zinc-500">No results found for test ID <code>${esc(testId)}</code>.</div>`,
+        dynamicMenuItems: STATS_ADMIN_MENU,
+      })
+    )
+  }
+
+  const testTitle = rows[0].test_title
+  const testFile  = rows[0].test_file
+
+  function fmtDuration(ms: number): string {
+    const s = Math.round(ms / 1000)
+    if (s < 60) return `${s}s`
+    return `${Math.floor(s / 60)}m ${s % 60}s`
+  }
+
+  const statusBadge2 = (status: string, isFlaky: boolean) => {
+    const map: Record<string, string> = {
+      passed:      'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
+      failed:      'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+      timedOut:    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+      interrupted: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+      skipped:     'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+    }
+    return `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[status] ?? map.skipped}">${esc(status)}</span>`
+      + (isFlaky ? ' <span class="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">flaky</span>' : '')
+  }
+
+  const trendDots = rows.slice(0, 30).reverse().map(r => {
+    const isFlaky = r.is_flaky === 1 || r.is_flaky === true
+    const color = r.status === 'passed' && !isFlaky ? '#10b981'
+      : isFlaky ? '#f59e0b'
+      : r.status === 'skipped' ? '#71717a'
+      : '#ef4444'
+    return `<span title="${esc(`${r.branch ?? ''} · ${r.status}${isFlaky ? ' (flaky)' : ''}`)}" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>`
+  }).join('')
+
+  const finalByRun = new Map<string, HistRow>()
+  for (const r of rows) {
+    const ex = finalByRun.get(r.run_id)
+    if (!ex || r.retry > ex.retry) finalByRun.set(r.run_id, r)
+  }
+  const finals     = [...finalByRun.values()]
+  const passCount  = finals.filter(r => r.status === 'passed').length
+  const failCount  = finals.filter(r => r.status !== 'passed' && r.status !== 'skipped').length
+  const flakyCount = finals.filter(r => r.is_flaky === 1 || r.is_flaky === true).length
+  const passRate   = finals.length > 0 ? Math.round((passCount / finals.length) * 100) : 0
+
+  const tableRows2 = rows.map(r => {
+    const isFlaky = r.is_flaky === 1 || r.is_flaky === true
+    const runLink = `<a href="/admin/playwright?run=${encodeURIComponent(r.run_id)}" onclick="event.stopPropagation()" class="font-mono text-xs text-indigo-600 dark:text-indigo-400 hover:underline">${esc(r.run_id.slice(0, 20))}</a>`
+    const commitLink = r.ci_run_url
+      ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="font-mono text-xs hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha ?? '').slice(0,7))}</a>`
+      : `<span class="font-mono text-xs">${esc(String(r.commit_sha ?? '').slice(0,7))}</span>`
+    return `<tr class="border-t border-zinc-950/5 dark:border-white/5">
+      <td class="py-2 pr-3 text-xs text-zinc-400">${r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</td>
+      <td class="py-2 pr-3 font-mono text-xs text-zinc-600 dark:text-zinc-400">${esc(r.branch ?? '')}</td>
+      <td class="py-2 pr-3">${commitLink}</td>
+      <td class="py-2 pr-3">${statusBadge2(r.status, isFlaky)}</td>
+      <td class="py-2 pr-3 text-right text-xs text-zinc-500">${fmtDuration(Number(r.duration_ms))}</td>
+      <td class="py-2 pr-3 text-xs text-zinc-400 text-center">${r.retry > 0 ? `<span class="text-amber-500">#${r.retry}</span>` : '—'}</td>
+      <td class="py-2 pr-3">${runLink}</td>
+      <td class="py-2 text-xs text-red-500 dark:text-red-400 max-w-xs">${r.error_message ? `<span title="${esc(r.error_message)}">${esc(String(r.error_message).slice(0, 60))}${String(r.error_message).length > 60 ? '…' : ''}</span>` : ''}</td>
+    </tr>`
+  }).join('')
+
+  const content = `
+<div class="space-y-6">
+  <nav class="flex items-center gap-2 text-sm text-zinc-500">
+    <a href="/admin/playwright" class="hover:text-zinc-700 dark:hover:text-zinc-300">All runs</a>
+    <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+    <span class="text-zinc-950 dark:text-white truncate max-w-xl">${esc(testTitle)}</span>
+  </nav>
+
+  <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
+    <h1 class="text-xl font-semibold text-zinc-950 dark:text-white">${esc(testTitle)}</h1>
+    <p class="mt-1 text-xs font-mono text-zinc-400">${esc(testFile)}</p>
+    <div class="mt-4 flex items-center gap-1 flex-wrap">
+      <span class="text-xs text-zinc-500 mr-1">Last ${Math.min(rows.length, 30)} runs (oldest → newest):</span>
+      ${trendDots}
+      <span class="ml-2 text-xs text-zinc-400">🟢 pass &nbsp;🟡 flaky &nbsp;🔴 fail &nbsp;⚫ skip</span>
+    </div>
+    <div class="mt-4 grid grid-cols-4 gap-4">
+      <div class="text-center">
+        <div class="text-2xl font-bold ${passRate >= 90 ? 'text-emerald-600 dark:text-emerald-400' : passRate >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}">${passRate}%</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Pass rate</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold ${failCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'}">${failCount}</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Failures</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold ${flakyCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}">${flakyCount}</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Flaky</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold text-zinc-400">${finals.length}</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Runs seen</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10">
+    <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+      <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Run History</h2>
+      <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">${rows.length} result${rows.length !== 1 ? 's' : ''} including retries — newest first. Click Run to drill into that run.</p>
+    </div>
+    <div class="p-6 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <tr>
+            <th class="pb-2 text-left font-medium">When</th>
+            <th class="pb-2 text-left font-medium">Branch</th>
+            <th class="pb-2 text-left font-medium">Commit</th>
+            <th class="pb-2 text-left font-medium">Status</th>
+            <th class="pb-2 text-right font-medium pr-3">Duration</th>
+            <th class="pb-2 text-center font-medium">Retry</th>
+            <th class="pb-2 text-left font-medium">Run</th>
+            <th class="pb-2 text-left font-medium">Error</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows2}</tbody>
+      </table>
+    </div>
+  </div>
+</div>`
+
+  return c.html(
+    renderAdminLayoutCatalyst({
+      title: `Test: ${testTitle}`,
+      pageTitle: 'Playwright CI/CD',
+      currentPath: '/admin/playwright',
+      version: c.get('appVersion'),
+      user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
+      content,
+      dynamicMenuItems: STATS_ADMIN_MENU,
+    })
+  )
+}

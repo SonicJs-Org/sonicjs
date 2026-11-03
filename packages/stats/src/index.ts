@@ -21,6 +21,10 @@ import { playwrightDashboardPlugin } from './plugins/playwright-dashboard'
 // Import routes
 import { playwrightIngest } from './routes/playwright-ingest'
 
+// Shared sidebar menu — injected on every /admin/* request so both links
+// appear regardless of plugin active-status checks in pluginMenuMiddleware.
+import { STATS_ADMIN_MENU } from './admin-menu'
+
 // Register collections
 registerCollections([
   installsCollection,
@@ -42,6 +46,15 @@ const config: SonicJSConfig = {
 }
 
 const app = createSonicJSApp(config)
+
+// Force both sidebar links into every admin page.
+// pluginMenuMiddleware (core) filters plugins by their D1 active-status, which
+// these stats-only plugins don't have. Overriding here — inside its await next()
+// — ensures the after-next marker replacement picks up the full menu.
+app.use('/admin/*', async (c, next) => {
+  c.set('pluginMenuItems', STATS_ADMIN_MENU)
+  return next()
+})
 
 // Unauthenticated telemetry ingestion for create-sonicjs CLI.
 // CLI posts to /v1/events; this handler writes directly to D1 bypassing ACL.

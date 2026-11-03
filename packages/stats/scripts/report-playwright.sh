@@ -39,7 +39,16 @@ RESP_FILE=$(mktemp)
 trap 'rm -f "$RESP_FILE"' EXIT
 
 # GitHub Actions metadata (auto-detected)
-RUN_ID="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  SOURCE="ci"
+  RUN_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
+  CI_PROVIDER="github_actions"
+else
+  SOURCE="local"
+  # Use a timestamp so each local run gets a unique ID
+  RUN_ID="local-$(date +%s)"
+  CI_PROVIDER="local"
+fi
 BRANCH="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')}"
 COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo 'unknown')}"
 COMMIT_MSG="$(git log -1 --format=%s 2>/dev/null | head -c 200 || echo '')"
@@ -63,7 +72,9 @@ PAYLOAD=$(jq -c --arg run_id "$RUN_ID" \
   --arg commit_sha "$COMMIT_SHA" \
   --arg commit_message "$COMMIT_MSG" \
   --arg ci_run_url "$CI_RUN_URL" \
-  --arg triggered_by "$TRIGGERED_BY" '
+  --arg triggered_by "$TRIGGERED_BY" \
+  --arg source "$SOURCE" \
+  --arg ci_provider "$CI_PROVIDER" '
 # Recursively walk nested suites, accumulating titles and inheriting file path.
 # Emits one object per spec: {id, title, file, tests}
 def flatten_specs(titles; file):
@@ -87,9 +98,10 @@ def flatten_specs(titles; file):
     branch: $branch,
     commit_sha: $commit_sha,
     commit_message: $commit_message,
-    ci_provider: "github_actions",
+    ci_provider: $ci_provider,
     ci_run_url: $ci_run_url,
     triggered_by: $triggered_by,
+    source: $source,
     started_at: (.stats.startTime // (now | todate)),
     finished_at: (now | todate),
     duration_ms: (.stats.duration // 0)

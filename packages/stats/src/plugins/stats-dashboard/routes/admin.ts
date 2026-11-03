@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { requireAuth } from '@sonicjs-cms/core'
 import { renderAdminLayoutCatalyst } from '@sonicjs-cms/core'
 import type { Bindings, Variables } from '@sonicjs-cms/core'
+import { STATS_ADMIN_MENU } from '../../../admin-menu'
 
 const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -682,7 +683,7 @@ adminRoutes.get('/', async (c) => {
       // Chart.js is not in the shared layout — this page charts, so it asks for it.
       scripts: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'],
       content,
-      dynamicMenuItems: c.get('pluginMenuItems'),
+      dynamicMenuItems: STATS_ADMIN_MENU,
     })
   )
 })

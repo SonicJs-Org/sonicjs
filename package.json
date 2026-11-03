@@ -26,6 +26,7 @@
     "test:cov": "npm run test:cov --workspace=@sonicjs-cms/core",
     "test:watch": "npm run test:watch --workspace=@sonicjs-cms/core",
     "e2e": "playwright test --config=tests/playwright.config.ts",
+    "e2e:report": "bash packages/stats/scripts/report-playwright.sh test-results/results.json",
     "e2e:ui": "playwright test --config=tests/playwright.config.ts --ui",
     "e2e:smoke": "playwright test --config=tests/playwright.smoke.config.ts",
     "e2e:smoke:ui": "playwright test --config=tests/playwright.smoke.config.ts --ui",

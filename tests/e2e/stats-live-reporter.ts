@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
 
 const here = dirname(fileURLToPath(import.meta.url))
+// Repository root — used to compute relative test file paths
+const repoRoot = resolve(here, '../..')
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -134,10 +136,15 @@ export default class StatsLiveReporter implements Reporter {
 
     const isFlaky = result.status === 'passed' && result.retry > 0
 
+    // Convert absolute path to repo-relative for portability across machines
+    const relativeFile = file.startsWith(repoRoot)
+      ? file.slice(repoRoot.length + 1)
+      : file
+
     const payload: TestPayload = {
       test_id: test.id,
       test_title: test.titlePath().filter(Boolean).join(' › '),
-      test_file: file,
+      test_file: relativeFile,
       // Use Playwright's project API — most reliable source of the project name.
       project_name: test.parent?.project()?.name ?? undefined,
       status: normaliseStatus(result.status),

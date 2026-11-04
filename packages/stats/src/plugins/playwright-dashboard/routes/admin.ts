@@ -74,7 +74,8 @@ adminRoutes.get('/', async (c) => {
               json_extract(data, '$.run_status') AS run_status
        FROM documents WHERE ${RUNS_WHERE}
        ORDER BY
-         CASE WHEN json_extract(data, '$.run_status') = 'running' THEN 0 ELSE 1 END,
+         CASE WHEN json_extract(data, '$.run_status') = 'running'
+                AND created_at >= unixepoch('now', '-180 minutes') THEN 0 ELSE 1 END,
          created_at DESC
        LIMIT 50`
     ).all(),

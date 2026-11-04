@@ -110,8 +110,9 @@ playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
     return c.json({ error: 'Invalid JSON body' }, 400)
   }
 
-  if (!body.run_id || !body.branch) {
-    return c.json({ error: 'Missing required fields: run_id, branch' }, 400)
+  // Validate all required fields for a valid run start
+  if (!body.run_id || !body.branch || !body.commit_sha || !body.ci_provider || !body.started_at) {
+    return c.json({ error: 'Missing required fields: run_id, branch, commit_sha, ci_provider, started_at' }, 400)
   }
 
   try {
@@ -190,6 +191,11 @@ playwrightIngest.post('/:run_id/complete', requirePlaywrightAuth(), async (c) =>
   let body: { finished_at: string; duration_ms: number; run_status?: 'complete' | 'failed' }
   try { body = await c.req.json() } catch {
     return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  // Validate required completion fields
+  if (!body.finished_at || typeof body.duration_ms !== 'number') {
+    return c.json({ error: 'Missing required fields: finished_at (string), duration_ms (number)' }, 400)
   }
 
   try {

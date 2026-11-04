@@ -81,7 +81,7 @@
     "better-sqlite3": "12.11.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260724.1",
+    "@cloudflare/workers-types": "^4.20260702.0",
     "@playwright/test": "^1.53.1",
     "@types/node": "^24.9.2",
     "@types/semver": "^7.7.0",

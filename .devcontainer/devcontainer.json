@@ -1,0 +1,20 @@
+{
+  "name": "SonicJS Dev",
+  "build": { "dockerfile": "Dockerfile" },
+  "forwardPorts": [9115],
+  "remoteUser": "node",
+  "mounts": [
+    "source=sonicjs-node_modules,target=/IdeaProjects/sonicjs/node_modules,type=volume",
+    "source=sonicjs-core-node_modules,target=/IdeaProjects/sonicjs/packages/core/node_modules,type=volume",
+    "source=sonicjs-create-app-node_modules,target=/IdeaProjects/sonicjs/packages/create-app/node_modules,type=volume",
+    "source=sonicjs-stats-node_modules,target=/IdeaProjects/sonicjs/packages/stats/node_modules,type=volume",
+    "source=sonicjs-www-node_modules,target=/IdeaProjects/sonicjs/www/node_modules,type=volume",
+    "source=sonicjs-my-app-node_modules,target=/IdeaProjects/sonicjs/my-sonicjs-app/node_modules,type=volume"
+  ],
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations" : {
+    "jetbrains" : {
+      "backend" : "WebStorm"
+    }
+  }
+}

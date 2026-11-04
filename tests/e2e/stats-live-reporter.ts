@@ -190,9 +190,8 @@ export default class StatsLiveReporter implements Reporter {
     // Await all in-flight batches before sealing the run.
     await Promise.allSettled(this.pendingPosts)
 
-    const runStatus = result.status === 'passed' ? 'complete'
-      : result.status === 'failed' ? 'failed'
-      : 'complete'
+    // Every non-passed outcome (failed, timedout, interrupted) is stored as 'failed'.
+    const runStatus = result.status === 'passed' ? 'complete' : 'failed'
 
     try {
       await this.postJson(`/v1/playwright-runs/${encodeURIComponent(this.runId)}/complete`, {
@@ -219,17 +218,25 @@ export default class StatsLiveReporter implements Reporter {
   }
 
   private async postJson(path: string, body: unknown): Promise<void> {
-    const res = await fetch(`${this.statsUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
+    // 10-second abort so an unresponsive stats server never stalls the e2e run.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 10_000)
+    try {
+      const res = await fetch(`${this.statsUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
+      }
+    } finally {
+      clearTimeout(timer)
     }
   }
 }

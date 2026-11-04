@@ -145,7 +145,15 @@ adminRoutes.get('/', async (c) => {
 
   // ── Aggregate data ──────────────────────────────────────────────────
   const recentRuns = rowsOf(recentRunsR)
-  const hasLiveRuns = recentRuns.some(r => String(r.run_status ?? '') === 'running')
+  // A run is "live" only if its run_status is 'running' AND it started within
+  // the last 180 min (longer than the 150-min CI timeout) to avoid showing
+  // abandoned runs as indefinitely live.
+  const LIVE_STALE_MS = 180 * 60 * 1000
+  const hasLiveRuns = recentRuns.some(r => {
+    if (String(r.run_status ?? '') !== 'running') return false
+    const startedAt = r.started_at ? new Date(String(r.started_at)).getTime() : 0
+    return Date.now() - startedAt < LIVE_STALE_MS
+  })
   const totalRuns = Number((totalRunsR as Row | null)?.count ?? 0)
   const pr = (passRateR ?? {}) as Row
   const overallPassRate = Number(pr.total_tests) > 0
@@ -274,7 +282,8 @@ adminRoutes.get('/', async (c) => {
           const sourceBadge = src === 'local'
             ? '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">local</span>'
             : '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">CI</span>'
-          const isLive = String(r.run_status ?? '') === 'running'
+          const isLive = String(r.run_status ?? '') === 'running' &&
+            (r.started_at ? Date.now() - new Date(String(r.started_at)).getTime() < LIVE_STALE_MS : false)
           const liveBadge = isLive
             ? '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 animate-pulse">● live</span>'
             : ''
@@ -482,7 +491,10 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
     ? `<a href="${esc(String(run.ci_run_url))}" target="_blank" rel="noopener" class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm">${esc(String(run.commit_sha).slice(0,7))}</a>`
     : `<span class="font-mono text-sm">${esc(String(run.commit_sha).slice(0,7))}</span>`
 
-  const isRunLive = String((run as any).run_status ?? '') === 'running'
+  const isRunLive = String((run as any).run_status ?? '') === 'running' &&
+    ((run as any).started_at
+      ? Date.now() - new Date(String((run as any).started_at)).getTime() < 180 * 60 * 1000
+      : false)
   const liveRefreshScript = isRunLive
     ? `<script>setTimeout(()=>location.reload(),5000)</script>\n`
     : ''

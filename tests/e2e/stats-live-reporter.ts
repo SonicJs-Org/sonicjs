@@ -5,7 +5,7 @@
  * Lifecycle:
  *   onBegin  → POST /v1/playwright-runs/start  (opens a "running" run)
  *   onTestEnd → buffer by file; flush via POST /v1/playwright-runs/:id/tests when file is done
- *   onEnd    → POST /v1/playwright-runs/:id/complete  (seals the run)
+  *   onEnd    → awaits all pending POSTs, then POST /v1/playwright-runs/:id/complete
  *
  * Self-disables when PLAYWRIGHT_STATS_API_KEY is not set (checks env + .dev.vars).
  * Never throws — all errors are logged as warnings and swallowed.
@@ -54,10 +54,9 @@ interface TestPayload {
   error_message?: string
 }
 
-/** Convert Playwright's result status (which uses 'timedout') to our DB enum ('timedOut'). */
+/** Normalise Playwright's result.status to the DB enum. All values are already camelCase. */
 function normaliseStatus(s: string): TestPayload['status'] {
-  if (s === 'timedout') return 'timedOut'
-  if (['passed', 'failed', 'skipped', 'interrupted'].includes(s)) return s as TestPayload['status']
+  if (['passed', 'failed', 'timedOut', 'skipped', 'interrupted'].includes(s)) return s as TestPayload['status']
   return 'failed'
 }
 
@@ -72,10 +71,13 @@ export default class StatsLiveReporter implements Reporter {
   private filePendingCount = new Map<string, number>()
   /** Buffered test results per absolute file path. */
   private fileBuffer = new Map<string, TestPayload[]>()
-  /** Tracks test outcomes to detect flakiness (passed after retry). */
-  private testOutcomes = new Map<string, { passed: boolean; retries: number }>()
+  /**
+   * All in-flight POST promises. Awaited in onEnd before sending /complete so
+   * the run is not sealed before all file batches have landed.
+   */
+  private pendingPosts: Promise<void>[] = []
 
-  onBegin(config: FullConfig, rootSuite: Suite): void {
+  onBegin(_config: FullConfig, rootSuite: Suite): void {
     this.apiKey = getApiKey()
     if (!this.apiKey) return   // opt-out — no key configured
 
@@ -108,7 +110,7 @@ export default class StatsLiveReporter implements Reporter {
       ? ''
       : getGitValue('git log -1 --format=%s', '')
 
-    this.postJson('/v1/playwright-runs/start', {
+    const startPost = this.postJson('/v1/playwright-runs/start', {
       run_id: this.runId,
       project: 'sonicjs',
       branch,
@@ -122,6 +124,7 @@ export default class StatsLiveReporter implements Reporter {
       source: isCI ? 'ci' : 'local',
       started_at: new Date().toISOString(),
     }).catch(err => console.warn('[stats-reporter] onBegin POST failed:', err))
+    this.pendingPosts.push(startPost)
   }
 
   onTestEnd(test: TestCase, result: TestResult): void {
@@ -129,20 +132,14 @@ export default class StatsLiveReporter implements Reporter {
 
     const file = test.location.file
 
-    // Track outcome for flakiness detection (passed after at least one retry)
-    const key = `${test.id}::${test.parent?.title ?? ''}`
-    const prev = this.testOutcomes.get(key)
-    this.testOutcomes.set(key, {
-      passed: result.status === 'passed' || (prev?.passed ?? false),
-      retries: (prev?.retries ?? 0) + (result.retry > 0 ? 1 : 0),
-    })
     const isFlaky = result.status === 'passed' && result.retry > 0
 
     const payload: TestPayload = {
       test_id: test.id,
       test_title: test.titlePath().filter(Boolean).join(' › '),
       test_file: file,
-      project_name: test.parent?.parent?.title || undefined,
+      // Use Playwright's project API — most reliable source of the project name.
+      project_name: test.parent?.project()?.name ?? undefined,
       status: normaliseStatus(result.status),
       duration_ms: result.duration,
       retry: result.retry,
@@ -152,18 +149,28 @@ export default class StatsLiveReporter implements Reporter {
         : undefined,
     }
 
+    // Always buffer the attempt (all retries are stored for history).
     const buf = this.fileBuffer.get(file) ?? []
     buf.push(payload)
     this.fileBuffer.set(file, buf)
+
+    // Only decrement the pending counter on the FINAL attempt of this test.
+    // A test is finished when it passed/skipped, or exhausted all retries.
+    const isFinalAttempt =
+      result.status === 'passed' ||
+      result.status === 'skipped' ||
+      result.retry >= test.retries
+
+    if (!isFinalAttempt) return   // more retries coming — don't flush yet
 
     const pending = (this.filePendingCount.get(file) ?? 1) - 1
     this.filePendingCount.set(file, pending)
 
     if (pending === 0) {
-      // All tests in this file are done — flush the buffer
-      this.flushFile(file).catch(err =>
+      const flushPost = this.flushFile(file).catch(err =>
         console.warn(`[stats-reporter] flush failed for ${file}:`, err)
       )
+      this.pendingPosts.push(flushPost)
     }
   }
 
@@ -173,11 +180,15 @@ export default class StatsLiveReporter implements Reporter {
     // Flush any files that never reached zero (e.g. tests skipped at runtime)
     for (const [file, buf] of this.fileBuffer) {
       if (buf.length > 0) {
-        await this.flushFile(file).catch(err =>
+        const flushPost = this.flushFile(file).catch(err =>
           console.warn(`[stats-reporter] final flush failed for ${file}:`, err)
         )
+        this.pendingPosts.push(flushPost)
       }
     }
+
+    // Await all in-flight batches before sealing the run.
+    await Promise.allSettled(this.pendingPosts)
 
     const runStatus = result.status === 'passed' ? 'complete'
       : result.status === 'failed' ? 'failed'

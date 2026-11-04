@@ -181,9 +181,10 @@ jobs:
       - name: Run full E2E regression suite
         timeout-minutes: 140
         env:
-          # Live stats reporter reads this key — empty on fork PRs (no secret access),
-          # so StatsLiveReporter self-disables for untrusted runs automatically.
-          PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
+          # Gate stats key on TRUSTED_PREVIEW: fork PRs can't access secrets anyway,
+          # but the explicit expression makes the intent auditable and prevents the key
+          # from reaching the step env even if workflow authorization rules change.
+          PLAYWRIGHT_STATS_API_KEY: ${{ env.TRUSTED_PREVIEW == 'true' && secrets.PLAYWRIGHT_STATS_API_KEY || '' }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
         run: |
           set -euo pipefail

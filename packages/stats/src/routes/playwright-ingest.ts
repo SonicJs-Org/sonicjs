@@ -101,24 +101,20 @@ interface IngestPayload {
  * Opens a "running" run record. Called by StatsLiveReporter.onBegin().
  */
 playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
+  let body: {
+    run_id: string; project?: string; branch: string; commit_sha: string
+    commit_message?: string; ci_provider: string; ci_run_url?: string
+    triggered_by?: string; source?: 'local' | 'ci'; started_at: string
+  }
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  if (!body.run_id || !body.branch) {
+    return c.json({ error: 'Missing required fields: run_id, branch' }, 400)
+  }
+
   try {
-    const body = await c.req.json<{
-      run_id: string
-      project?: string
-      branch: string
-      commit_sha: string
-      commit_message?: string
-      ci_provider: string
-      ci_run_url?: string
-      triggered_by?: string
-      source?: 'local' | 'ci'
-      started_at: string
-    }>()
-
-    if (!body.run_id || !body.branch) {
-      return c.json({ error: 'Missing required fields: run_id, branch' }, 400)
-    }
-
     const db = (c.env as any).DB as D1Database
     const now = Math.floor(Date.now() / 1000)
     const runDocId = crypto.randomUUID()
@@ -159,14 +155,17 @@ playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
  * Appends a batch of test results to an existing run. Called per-file by StatsLiveReporter.
  */
 playwrightIngest.post('/:run_id/tests', requirePlaywrightAuth(), async (c) => {
+  let body: { tests: TestInput[] }
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  if (!Array.isArray(body.tests) || body.tests.length === 0) {
+    return c.json({ error: 'Missing required field: tests[]' }, 400)
+  }
+
   try {
     const externalRunId = c.req.param('run_id')
-    const body = await c.req.json<{ tests: TestInput[] }>()
-
-    if (!Array.isArray(body.tests) || body.tests.length === 0) {
-      return c.json({ error: 'Missing required field: tests[]' }, 400)
-    }
-
     const db = (c.env as any).DB as D1Database
     const stmts = buildTestInserts(db, externalRunId ?? '', body.tests)
 
@@ -188,14 +187,13 @@ playwrightIngest.post('/:run_id/tests', requirePlaywrightAuth(), async (c) => {
  * and sets run_status to 'complete' or 'failed'. Called by StatsLiveReporter.onEnd().
  */
 playwrightIngest.post('/:run_id/complete', requirePlaywrightAuth(), async (c) => {
+  let body: { finished_at: string; duration_ms: number; run_status?: 'complete' | 'failed' }
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
   try {
     const externalRunId = c.req.param('run_id')
-    const body = await c.req.json<{
-      finished_at: string
-      duration_ms: number
-      run_status?: 'complete' | 'failed'
-    }>()
-
     const db = (c.env as any).DB as D1Database
 
     // Recompute aggregate counts from the stored test rows (final attempt per test only)

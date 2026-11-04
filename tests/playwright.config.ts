@@ -28,6 +28,8 @@ export default defineConfig({
     ['html', { outputFolder: resolve(here, '../playwright-report'), open: 'never' }],
     ['json', { outputFile: resolve(here, '../test-results/results.json') }],
     ['junit', { outputFile: resolve(here, '../test-results/junit.xml') }],
+    // Live stats reporter — self-disables when PLAYWRIGHT_STATS_API_KEY is not set
+    [resolve(here, './e2e/stats-live-reporter.ts')],
   ],
   globalSetup: resolve(here, './e2e/global-setup.ts'),
   globalTeardown: resolve(here, './e2e/global-teardown.ts'),

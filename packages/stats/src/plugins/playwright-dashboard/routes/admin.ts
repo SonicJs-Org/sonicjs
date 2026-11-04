@@ -70,9 +70,13 @@ adminRoutes.get('/', async (c) => {
               json_extract(data, '$.duration_ms') AS duration_ms,
               json_extract(data, '$.started_at') AS started_at,
               json_extract(data, '$.finished_at') AS finished_at,
-              json_extract(data, '$.source') AS source
+              json_extract(data, '$.source') AS source,
+              json_extract(data, '$.run_status') AS run_status
        FROM documents WHERE ${RUNS_WHERE}
-       ORDER BY created_at DESC LIMIT 50`
+       ORDER BY
+         CASE WHEN json_extract(data, '$.run_status') = 'running' THEN 0 ELSE 1 END,
+         created_at DESC
+       LIMIT 50`
     ).all(),
     db.prepare(
       `SELECT COUNT(*) AS count FROM documents WHERE ${RUNS_WHERE}`
@@ -141,6 +145,7 @@ adminRoutes.get('/', async (c) => {
 
   // ── Aggregate data ──────────────────────────────────────────────────
   const recentRuns = rowsOf(recentRunsR)
+  const hasLiveRuns = recentRuns.some(r => String(r.run_status ?? '') === 'running')
   const totalRuns = Number((totalRunsR as Row | null)?.count ?? 0)
   const pr = (passRateR ?? {}) as Row
   const overallPassRate = Number(pr.total_tests) > 0
@@ -269,6 +274,10 @@ adminRoutes.get('/', async (c) => {
           const sourceBadge = src === 'local'
             ? '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">local</span>'
             : '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">CI</span>'
+          const isLive = String(r.run_status ?? '') === 'running'
+          const liveBadge = isLive
+            ? '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 animate-pulse">● live</span>'
+            : ''
           const statusDot = failed > 0
             ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500" title="Has failures"></span>'
             : Number(r.passed) === 0
@@ -280,7 +289,7 @@ adminRoutes.get('/', async (c) => {
             ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha).slice(0,7))}</a>`
             : esc(String(r.commit_sha).slice(0,7))
           return `<tr class="cursor-pointer hover:bg-zinc-950/[0.02] dark:hover:bg-white/[0.02]" onclick="window.location='/admin/playwright?run=${encodeURIComponent(String(r.run_id))}'">
-            <td class="py-2 pr-2">${statusDot}</td>
+            <td class="py-2 pr-2">${statusDot}${liveBadge ? ' ' + liveBadge : ''}</td>
             <td class="py-2 pr-3">${sourceBadge}</td>
             <td class="py-2 pr-4 font-mono text-xs text-zinc-700 dark:text-zinc-300">${esc(r.branch)}</td>
             <td class="py-2 pr-4 font-mono text-xs">${commitLink}${r.commit_message ? ` <span class="text-zinc-400">${esc(String(r.commit_message).slice(0, 50))}</span>` : ''}</td>
@@ -342,7 +351,9 @@ adminRoutes.get('/', async (c) => {
         ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role }
         : undefined,
       scripts: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'],
-      content,
+      content: (hasLiveRuns
+        ? `<script>setTimeout(()=>location.reload(),8000)</script>\n` : '')
+        + content,
       dynamicMenuItems: STATS_ADMIN_MENU,
     })
   )
@@ -371,7 +382,8 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
               json_extract(data, '$.flaky') AS flaky,
               json_extract(data, '$.duration_ms') AS duration_ms,
               json_extract(data, '$.started_at') AS started_at,
-              json_extract(data, '$.finished_at') AS finished_at
+              json_extract(data, '$.finished_at') AS finished_at,
+              json_extract(data, '$.run_status') AS run_status
        FROM documents
        WHERE type_id = 'playwright_runs' AND is_published = 1 AND deleted_at IS NULL
          AND json_extract(data, '$.run_id') = ?
@@ -470,7 +482,18 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
     ? `<a href="${esc(String(run.ci_run_url))}" target="_blank" rel="noopener" class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm">${esc(String(run.commit_sha).slice(0,7))}</a>`
     : `<span class="font-mono text-sm">${esc(String(run.commit_sha).slice(0,7))}</span>`
 
-  const content = `
+  const isRunLive = String((run as any).run_status ?? '') === 'running'
+  const liveRefreshScript = isRunLive
+    ? `<script>setTimeout(()=>location.reload(),5000)</script>\n`
+    : ''
+  const liveBanner = isRunLive
+    ? `<div class="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-2 flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <span class="animate-pulse">●</span>
+        <span>Run in progress — page auto-refreshes every 5 s as tests complete</span>
+       </div>`
+    : ''
+
+  const content = `${liveRefreshScript}
 <div class="space-y-6">
   <!-- Back link -->
   <div>
@@ -479,6 +502,7 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
       All runs
     </a>
   </div>
+  ${liveBanner}
 
   <!-- Run header -->
   <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">

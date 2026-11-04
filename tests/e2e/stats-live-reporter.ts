@@ -210,11 +210,12 @@ export default class StatsLiveReporter implements Reporter {
   private async flushFile(file: string): Promise<void> {
     const buf = this.fileBuffer.get(file)
     if (!buf || buf.length === 0) return
-    this.fileBuffer.delete(file)   // clear before await to avoid double-flush
 
     await this.postJson(`/v1/playwright-runs/${encodeURIComponent(this.runId)}/tests`, {
       tests: buf,
     })
+    // Delete only after successful POST — if timeout/error, onEnd will retry
+    this.fileBuffer.delete(file)
   }
 
   private async postJson(path: string, body: unknown): Promise<void> {

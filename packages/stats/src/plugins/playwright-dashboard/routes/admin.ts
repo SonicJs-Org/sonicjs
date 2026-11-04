@@ -70,9 +70,14 @@ adminRoutes.get('/', async (c) => {
               json_extract(data, '$.duration_ms') AS duration_ms,
               json_extract(data, '$.started_at') AS started_at,
               json_extract(data, '$.finished_at') AS finished_at,
-              json_extract(data, '$.source') AS source
+              json_extract(data, '$.source') AS source,
+              json_extract(data, '$.run_status') AS run_status
        FROM documents WHERE ${RUNS_WHERE}
-       ORDER BY created_at DESC LIMIT 50`
+       ORDER BY
+         CASE WHEN json_extract(data, '$.run_status') = 'running'
+                AND created_at >= unixepoch('now', '-180 minutes') THEN 0 ELSE 1 END,
+         created_at DESC
+       LIMIT 50`
     ).all(),
     db.prepare(
       `SELECT COUNT(*) AS count FROM documents WHERE ${RUNS_WHERE}`
@@ -141,6 +146,9 @@ adminRoutes.get('/', async (c) => {
 
   // ── Aggregate data ──────────────────────────────────────────────────
   const recentRuns = rowsOf(recentRunsR)
+  // A run is "live" only if its run_status is 'running' AND it started within
+  // the last 180 min (longer than the 150-min CI timeout) to avoid showing
+  // abandoned runs as indefinitely live.
   const LIVE_STALE_MS = 180 * 60 * 1000
   const hasLiveRuns = recentRuns.some(r => {
     if (String(r.run_status ?? '') !== 'running') return false
@@ -399,7 +407,9 @@ adminRoutes.get('/', async (c) => {
         ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role }
         : undefined,
       scripts: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'],
-      content,
+      content: (hasLiveRuns
+        ? `<script>setTimeout(()=>location.reload(),8000)</script>\n` : '')
+        + content,
       dynamicMenuItems: STATS_ADMIN_MENU,
     })
   )
@@ -428,7 +438,8 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
               json_extract(data, '$.flaky') AS flaky,
               json_extract(data, '$.duration_ms') AS duration_ms,
               json_extract(data, '$.started_at') AS started_at,
-              json_extract(data, '$.finished_at') AS finished_at
+              json_extract(data, '$.finished_at') AS finished_at,
+              json_extract(data, '$.run_status') AS run_status
        FROM documents
        WHERE type_id = 'playwright_runs' AND is_published = 1 AND deleted_at IS NULL
          AND json_extract(data, '$.run_id') = ?
@@ -527,7 +538,21 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
     ? `<a href="${esc(String(run.ci_run_url))}" target="_blank" rel="noopener" class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm">${esc(String(run.commit_sha).slice(0,7))}</a>`
     : `<span class="font-mono text-sm">${esc(String(run.commit_sha).slice(0,7))}</span>`
 
-  const content = `
+  const isRunLive = String((run as any).run_status ?? '') === 'running' &&
+    ((run as any).started_at
+      ? Date.now() - new Date(String((run as any).started_at)).getTime() < 180 * 60 * 1000
+      : false)
+  const liveRefreshScript = isRunLive
+    ? `<script>setTimeout(()=>location.reload(),5000)</script>\n`
+    : ''
+  const liveBanner = isRunLive
+    ? `<div class="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-2 flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <span class="animate-pulse">●</span>
+        <span>Run in progress — page auto-refreshes every 5 s as tests complete</span>
+       </div>`
+    : ''
+
+  const content = `${liveRefreshScript}
 <div class="space-y-6">
   <!-- Back link -->
   <div>
@@ -536,6 +561,7 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
       All runs
     </a>
   </div>
+  ${liveBanner}
 
   <!-- Run header -->
   <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">

@@ -203,150 +203,196 @@ adminRoutes.get('/', async (c) => {
 
   // ── Render ─────────────────────────────────────────────────────────
   const content = `
-<div class="space-y-8">
+<div class="space-y-6">
+  <!-- Page header -->
   <div>
     <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Playwright CI/CD</h1>
     <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Test run history, flaky detection, and failure trends</p>
   </div>
 
-  <!-- KPI row -->
-  <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-    ${kpi('Total Runs', totalRuns.toLocaleString(), 'all time')}
-    ${kpi('Pass Rate', overallPassRate + '%', 'across all runs', overallPassRate >= 90 ? 'text-emerald-600 dark:text-emerald-400' : overallPassRate >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')}
-    ${kpi('Flaky Tests', totalFlaky.toLocaleString(), 'total flaky occurrences', totalFlaky > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')}
-    ${kpi('Avg Duration', avgDuration > 0 ? fmtDuration(avgDuration * 1000) : '—', 'per run')}
+  <!-- Tab nav -->
+  <div class="border-b border-zinc-950/10 dark:border-white/10">
+    <nav class="-mb-px flex gap-x-6" aria-label="Tabs">
+      <button id="tab-runs" onclick="pwTab('runs')"
+        class="whitespace-nowrap border-b-2 pb-3 text-sm font-medium transition-colors"
+        aria-selected="true">
+        Runs
+      </button>
+      <button id="tab-stats" onclick="pwTab('stats')"
+        class="whitespace-nowrap border-b-2 pb-3 text-sm font-medium transition-colors"
+        aria-selected="false">
+        Stats
+      </button>
+    </nav>
   </div>
 
-  <!-- Daily trend chart -->
-  ${card('Run Trend (Last 30 Days)', 'Green (all pass) vs red (has failures) runs per day',
-    dailyRuns.length > 0
-      ? '<canvas id="chartDaily" height="240"></canvas>'
-      : '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No runs yet. Send your first Playwright run to see the trend.</div>'
-  )}
-
-  <!-- Flaky + Failing side by side -->
-  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-    ${card('🔄 Top Flaky Tests', 'Tests that fail then pass on retry — sorted by frequency', topFlaky.length === 0
-      ? '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No flaky tests detected yet.</div>'
-      : `<div class="overflow-x-auto"><table class="w-full text-sm">
-          <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            <tr><th class="py-2 text-left font-medium">Test</th><th class="py-2 text-right font-medium">Flaky Count</th><th class="py-2 text-right font-medium">Runs Affected</th></tr>
+  <!-- ── Runs panel ───────────────────────────────────────────────── -->
+  <div id="panel-runs">
+    ${recentRuns.length === 0
+      ? '<div class="py-16 text-center text-sm text-zinc-500 dark:text-zinc-400">No runs yet.</div>'
+      : `<div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400 border-b border-zinc-950/5 dark:border-white/5">
+            <tr>
+              <th class="px-4 py-3 text-left font-medium">Status</th>
+              <th class="px-4 py-3 text-left font-medium">Source</th>
+              <th class="px-4 py-3 text-left font-medium">Branch</th>
+              <th class="px-4 py-3 text-left font-medium">Commit</th>
+              <th class="px-4 py-3 text-right font-medium">Passed</th>
+              <th class="px-4 py-3 text-right font-medium">Failed</th>
+              <th class="px-4 py-3 text-right font-medium">Flaky</th>
+              <th class="px-4 py-3 text-right font-medium">Duration</th>
+              <th class="px-4 py-3 text-left font-medium">When</th>
+            </tr>
           </thead>
           <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
-          ${topFlaky.map(r => `<tr>
-            <td class="py-2 pr-4"><div class="text-zinc-700 dark:text-zinc-300">${esc(r.test_title)}</div><div class="text-xs text-zinc-400 font-mono">${esc(r.test_file)}</div></td>
-            <td class="py-2 text-right font-semibold text-amber-600 dark:text-amber-400">${Number(r.flaky_count)}</td>
-            <td class="py-2 text-right text-zinc-500">${Number(r.affected_runs)}</td>
-          </tr>`).join('')}
-          </tbody></table></div>`
-    )}
-
-    ${card('❌ Top Failing Tests', 'Most frequently failing tests (final attempt)', topFailing.length === 0
-      ? '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No failures recorded yet.</div>'
-      : `<div class="overflow-x-auto"><table class="w-full text-sm">
-          <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            <tr><th class="py-2 text-left font-medium">Test</th><th class="py-2 text-left font-medium">Error</th><th class="py-2 text-right font-medium">Fails</th></tr>
-          </thead>
-          <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
-          ${topFailing.map(r => `<tr>
-            <td class="py-2 pr-4"><div class="text-zinc-700 dark:text-zinc-300">${esc(r.test_title)}</div><div class="text-xs text-zinc-400 font-mono">${esc(r.test_file)}</div></td>
-            <td class="py-2 pr-4 text-xs text-zinc-500 dark:text-zinc-400 max-w-xs truncate">${esc(r.error_message)}</td>
-            <td class="py-2 text-right font-semibold text-red-600 dark:text-red-400">${Number(r.fail_count)}</td>
-          </tr>`).join('')}
-          </tbody></table></div>`
-    )}
+          ${recentRuns.map(r => {
+            const failed = Number(r.failed)
+            const flakyN = Number(r.flaky)
+            const src = String(r.source ?? 'ci')
+            const sourceBadge = src === 'local'
+              ? '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">local</span>'
+              : '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">CI</span>'
+            const isLive = String(r.run_status ?? '') === 'running' &&
+              (r.started_at ? Date.now() - new Date(String(r.started_at)).getTime() < LIVE_STALE_MS : false)
+            const liveBadge = isLive
+              ? '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 animate-pulse">● live</span>'
+              : ''
+            const statusDot = failed > 0
+              ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500" title="Has failures"></span>'
+              : Number(r.passed) === 0
+                ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-zinc-400" title="No passing tests"></span>'
+                : flakyN > 0
+                  ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" title="Flaky"></span>'
+                  : '<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" title="All passed"></span>'
+            const commitLink = r.ci_run_url
+              ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha).slice(0,7))}</a>`
+              : esc(String(r.commit_sha).slice(0,7))
+            return `<tr class="cursor-pointer hover:bg-zinc-950/[0.02] dark:hover:bg-white/[0.02]" onclick="window.location='/admin/playwright?run=${encodeURIComponent(String(r.run_id))}'">
+              <td class="px-4 py-2.5">${statusDot}${liveBadge ? ' ' + liveBadge : ''}</td>
+              <td class="px-4 py-2.5">${sourceBadge}</td>
+              <td class="px-4 py-2.5 font-mono text-xs text-zinc-700 dark:text-zinc-300">${esc(r.branch)}</td>
+              <td class="px-4 py-2.5 font-mono text-xs">${commitLink}${r.commit_message ? ` <span class="text-zinc-400">${esc(String(r.commit_message).slice(0, 50))}</span>` : ''}</td>
+              <td class="px-4 py-2.5 text-right text-emerald-600 dark:text-emerald-400">${r.passed}/${r.total}</td>
+              <td class="px-4 py-2.5 text-right ${failed > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-zinc-400'}">${r.failed}</td>
+              <td class="px-4 py-2.5 text-right ${flakyN > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}">${r.flaky}</td>
+              <td class="px-4 py-2.5 text-right text-zinc-500">${fmtDuration(Number(r.duration_ms))}</td>
+              <td class="px-4 py-2.5 text-xs text-zinc-400">${r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</td>
+            </tr>`
+          }).join('')}
+          </tbody>
+        </table>
+      </div>`
+    }
   </div>
 
-  <!-- Recent Runs table -->
-  ${card('Recent Runs', 'Last 50 CI/CD runs', recentRuns.length === 0
-    ? '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No runs yet.</div>'
-    : `<div class="overflow-x-auto"><table class="w-full text-sm">
-        <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          <tr>
-            <th class="py-2 text-left font-medium">Status</th>
-            <th class="py-2 text-left font-medium">Source</th>
-            <th class="py-2 text-left font-medium">Branch</th>
-            <th class="py-2 text-left font-medium">Commit</th>
-            <th class="py-2 text-right font-medium">Passed</th>
-            <th class="py-2 text-right font-medium">Failed</th>
-            <th class="py-2 text-right font-medium">Flaky</th>
-            <th class="py-2 text-right font-medium">Duration</th>
-            <th class="py-2 pl-6 text-left font-medium">When</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
-        ${recentRuns.map(r => {
-          const failed = Number(r.failed)
-          const flakyN = Number(r.flaky)
-          const src = String(r.source ?? 'ci')
-          const sourceBadge = src === 'local'
-            ? '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">local</span>'
-            : '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">CI</span>'
-          const isLive = String(r.run_status ?? '') === 'running' &&
-            (r.started_at ? Date.now() - new Date(String(r.started_at)).getTime() < LIVE_STALE_MS : false)
-          const liveBadge = isLive
-            ? '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 animate-pulse">● live</span>'
-            : ''
-          const statusDot = failed > 0
-            ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500" title="Has failures"></span>'
-            : Number(r.passed) === 0
-              ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-zinc-400" title="No passing tests"></span>'
-              : flakyN > 0
-                ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" title="Flaky"></span>'
-                : '<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" title="All passed"></span>'
-          const commitLink = r.ci_run_url
-            ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha).slice(0,7))}</a>`
-            : esc(String(r.commit_sha).slice(0,7))
-          return `<tr class="cursor-pointer hover:bg-zinc-950/[0.02] dark:hover:bg-white/[0.02]" onclick="window.location='/admin/playwright?run=${encodeURIComponent(String(r.run_id))}'">
-            <td class="py-2 pr-2">${statusDot}${liveBadge ? ' ' + liveBadge : ''}</td>
-            <td class="py-2 pr-3">${sourceBadge}</td>
-            <td class="py-2 pr-4 font-mono text-xs text-zinc-700 dark:text-zinc-300">${esc(r.branch)}</td>
-            <td class="py-2 pr-4 font-mono text-xs">${commitLink}${r.commit_message ? ` <span class="text-zinc-400">${esc(String(r.commit_message).slice(0, 50))}</span>` : ''}</td>
-            <td class="py-2 text-right text-emerald-600 dark:text-emerald-400">${r.passed}/${r.total}</td>
-            <td class="py-2 text-right ${failed > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-zinc-400'}">${r.failed}</td>
-            <td class="py-2 text-right ${flakyN > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}">${r.flaky}</td>
-            <td class="py-2 text-right text-zinc-500">${fmtDuration(Number(r.duration_ms))}</td>
-            <td class="py-2 pl-6 text-xs text-zinc-400">${r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</td>
-          </tr>`
-        }).join('')}
-        </tbody></table></div>`
-  )}
+  <!-- ── Stats panel (hidden by default) ──────────────────────────── -->
+  <div id="panel-stats" class="hidden space-y-8">
+    <!-- KPI row -->
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      ${kpi('Total Runs', totalRuns.toLocaleString(), 'all time')}
+      ${kpi('Pass Rate', overallPassRate + '%', 'across all runs', overallPassRate >= 90 ? 'text-emerald-600 dark:text-emerald-400' : overallPassRate >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')}
+      ${kpi('Flaky Tests', totalFlaky.toLocaleString(), 'total flaky occurrences', totalFlaky > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')}
+      ${kpi('Avg Duration', avgDuration > 0 ? fmtDuration(avgDuration * 1000) : '—', 'per run')}
+    </div>
+
+    <!-- Daily trend chart -->
+    ${card('Run Trend (Last 30 Days)', 'Green (all pass) vs red (has failures) runs per day',
+      dailyRuns.length > 0
+        ? '<canvas id="chartDaily" height="240"></canvas>'
+        : '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No runs yet.</div>'
+    )}
+
+    <!-- Flaky + Failing side by side -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      ${card('🔄 Top Flaky Tests', 'Tests that fail then pass on retry — sorted by frequency', topFlaky.length === 0
+        ? '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No flaky tests detected yet.</div>'
+        : `<div class="overflow-x-auto"><table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <tr><th class="py-2 text-left font-medium">Test</th><th class="py-2 text-right font-medium">Flaky</th><th class="py-2 text-right font-medium">Runs</th></tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+            ${topFlaky.map(r => `<tr>
+              <td class="py-2 pr-4"><div class="text-zinc-700 dark:text-zinc-300">${esc(r.test_title)}</div><div class="text-xs text-zinc-400 font-mono">${esc(r.test_file)}</div></td>
+              <td class="py-2 text-right font-semibold text-amber-600 dark:text-amber-400">${Number(r.flaky_count)}</td>
+              <td class="py-2 text-right text-zinc-500">${Number(r.affected_runs)}</td>
+            </tr>`).join('')}
+            </tbody></table></div>`
+      )}
+      ${card('❌ Top Failing Tests', 'Most frequently failing tests (last 30 days)', topFailing.length === 0
+        ? '<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No failures recorded yet.</div>'
+        : `<div class="overflow-x-auto"><table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <tr><th class="py-2 text-left font-medium">Test</th><th class="py-2 text-left font-medium">Error</th><th class="py-2 text-right font-medium">Fails</th></tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+            ${topFailing.map(r => `<tr>
+              <td class="py-2 pr-4"><div class="text-zinc-700 dark:text-zinc-300">${esc(r.test_title)}</div><div class="text-xs text-zinc-400 font-mono">${esc(r.test_file)}</div></td>
+              <td class="py-2 pr-4 text-xs text-zinc-500 dark:text-zinc-400 max-w-xs truncate">${esc(r.error_message)}</td>
+              <td class="py-2 text-right font-semibold text-red-600 dark:text-red-400">${Number(r.fail_count)}</td>
+            </tr>`).join('')}
+            </tbody></table></div>`
+      )}
+    </div>
+  </div>
 </div>
 
 <script>
 (function () {
-  if (typeof Chart === 'undefined') return;
-  var D = ${jsonForScript(charts)};
-  var P = ${jsonForScript(PALETTE)};
-  var dark = document.documentElement.classList.contains('dark');
-  var grid = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  var tick = dark ? '#a1a1aa' : '#52525b';
-  Chart.defaults.color = tick;
-  Chart.defaults.font.size = 11;
+  var ACTIVE   = 'border-zinc-950 dark:border-white text-zinc-950 dark:text-white';
+  var INACTIVE = 'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-300';
+  var chartInited = false;
 
-  // Daily stacked bar (green/red runs) + pass rate line
-  var el = document.getElementById('chartDaily');
-  if (el && D.daily.labels.length) {
-    new Chart(el, {
-      type: 'bar',
-      data: {
-        labels: D.daily.labels,
-        datasets: [
-          { label: 'Green runs', data: D.daily.green, backgroundColor: '#10b981', stack: 'runs' },
-          { label: 'Red runs', data: D.daily.red, backgroundColor: '#ef4444', stack: 'runs' },
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
-        scales: {
-          x: { grid: { display: false }, ticks: { color: tick, maxRotation: 60 }, stacked: true },
-          y: { grid: { color: grid }, ticks: { color: tick }, beginAtZero: true, stacked: true },
-        }
-      }
+  function pwTab(name) {
+    ['runs', 'stats'].forEach(function(t) {
+      var btn   = document.getElementById('tab-'   + t);
+      var panel = document.getElementById('panel-' + t);
+      var active = (t === name);
+      if (btn)   { btn.className = btn.className.replace(/(border-zinc-950 dark:border-white text-zinc-950 dark:text-white|border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-300)/g, '').trim() + ' ' + (active ? ACTIVE : INACTIVE); btn.setAttribute('aria-selected', active); }
+      if (panel) { panel.classList.toggle('hidden', !active); }
     });
+    // Lazy-init chart the first time the stats tab is shown
+    if (name === 'stats' && !chartInited) { initChart(); chartInited = true; }
+    try { history.replaceState(null, '', '#' + name); } catch(e) {}
   }
+
+  function initChart() {
+    if (typeof Chart === 'undefined') return;
+    var D = ${jsonForScript(charts)};
+    var P = ${jsonForScript(PALETTE)};
+    var dark = document.documentElement.classList.contains('dark');
+    var grid = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    var tick = dark ? '#a1a1aa' : '#52525b';
+    Chart.defaults.color = tick;
+    Chart.defaults.font.size = 11;
+    var el = document.getElementById('chartDaily');
+    if (el && D.daily.labels.length) {
+      new Chart(el, {
+        type: 'bar',
+        data: {
+          labels: D.daily.labels,
+          datasets: [
+            { label: 'Green runs', data: D.daily.green, backgroundColor: '#10b981', stack: 'runs' },
+            { label: 'Red runs',   data: D.daily.red,   backgroundColor: '#ef4444', stack: 'runs' },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: tick, maxRotation: 60 }, stacked: true },
+            y: { grid: { color: grid },    ticks: { color: tick }, beginAtZero: true, stacked: true },
+          }
+        }
+      });
+    }
+  }
+
+  // Init on load — restore from hash or default to 'runs'
+  var init = (location.hash.slice(1) === 'stats') ? 'stats' : 'runs';
+  pwTab(init);
+  // Expose for inline onclick
+  window.pwTab = pwTab;
 })();
 </script>`
 

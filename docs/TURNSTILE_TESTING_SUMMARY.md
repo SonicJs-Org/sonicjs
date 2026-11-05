@@ -171,7 +171,7 @@ npm run e2e tests/e2e/forms.spec.ts
 
 ### Run Only Turnstile Tests
 ```bash
-npm run e2e tests/e2e/forms.spec.ts
+npm run e2e -- tests/e2e/forms.spec.ts --grep 'Source: 51-turnstile-integration.spec.ts'
 ```
 
 ### Run Specific Test Suite

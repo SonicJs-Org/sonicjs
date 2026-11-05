@@ -454,12 +454,15 @@ test.describe("Source: 68-plugin-activity-log.spec.ts", () => {
       // Use a non-core plugin that can be toggled. Core plugins (turnstile, email, …)
       // render a "Core Plugin" label instead of an activate/deactivate button.
       const pluginId = 'hello-world'
-      // File order no longer supplies this prerequisite. Installation is idempotent
-      // and preserves the status of a plugin that was already installed.
-      expect((await page.request.post('/admin/plugins/install', {
-        data: { name: pluginId, id: pluginId },
-        headers: { Origin: new URL(page.url()).origin },
-      })).ok(), 'Activity fixture plugin installation failed').toBe(true)
+      // File order no longer supplies this prerequisite. Inspect the original
+      // status first: reinstalling an inactive plugin would activate it.
+      await page.goto(`/admin/plugins/${pluginId}`)
+      if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
+        expect((await page.request.post('/admin/plugins/install', {
+          data: { name: pluginId, id: pluginId },
+          headers: { Origin: new URL(page.url()).origin },
+        })).ok(), 'Activity fixture plugin installation failed').toBe(true)
+      }
       await page.goto(`/admin/plugins/${pluginId}`)
 
       const deactivateBtn = page.getByRole('button', { name: 'Deactivate', exact: true })

@@ -14,7 +14,7 @@ for (const [name, expected] of [
   ['smoke', smokeBaseline],
   ['infrastructure', baseline.filter(leaf => JSON.parse(leaf)[0] === '126-runner-contracts.spec.ts')],
 ]) {
-  const raw = execFileSync(resolve(root, 'node_modules/.bin/playwright'), [
+  const raw = execFileSync(process.execPath, [resolve(root, 'node_modules/playwright/cli.js'),
     'test', `--config=tests/playwright.${name}.config.ts`, '--list', '--reporter=json',
   ], { cwd: root, env: environment, encoding: 'utf8', maxBuffer: 20_000_000 })
   const actual = collectLeaves(JSON.parse(raw))

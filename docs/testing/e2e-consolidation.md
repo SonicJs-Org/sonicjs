@@ -3,14 +3,19 @@
 The suite has 53 active specs and preserves all 756 tests from the 149-spec baseline
 `0ee0006f1ae5bb6f8532a147bb0563f57a95d551`. Consolidation reduces files, not tests.
 The original plan's smaller file estimate omitted 17 specs and understated several
-groups. The verified layout contains 24 consolidated suites and 29 standalones.
+groups. The verified layout contains 23 multi-source targets plus the renamed
+single-source `auth-ui.spec.ts`: 24 renamed/merged targets and 29 unchanged standalones.
+Counting by source multiplicity instead gives 23 multi-source and 30 single-source
+specs; both descriptions account for the same 53 active specs.
 
 Each `Source: <original filename>` describe block preserves the original module's
 hooks, state, configuration, serial boundaries, conditional skips and fixture factory.
 Test names and original assertions are preserved. The plugin activity regression has
-one additional checked, idempotent install prerequisite before navigation, because
+one additional checked install prerequisite after inspecting the initial detail page, because
 file consolidation removed its implicit dependency on earlier installation tests.
-The guard permits only that exact named preparation and compares the remaining body
+Installation runs only for an uninstalled plugin; installed active/inactive states retain
+their original toggle branch and final state. The guard permits only that exact named
+preparation and compares the remaining body
 against the pinned original. The JSON viewer retains its extended factory;
 tenant cleanup retains original IDs, admin flags and foreign-key deletion order.
 Locks remain shared across files; test-scoped locks do not protect `beforeAll`.

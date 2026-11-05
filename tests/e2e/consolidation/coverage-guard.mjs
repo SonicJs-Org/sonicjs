@@ -90,7 +90,7 @@ function wrappers(source, entries) {
 
 // One explicit fixture repair exposed by consolidation: the activity test used to
 // inherit an installed plugin from earlier files. Preserve its complete original
-// body while requiring this exact checked install before its first navigation.
+// body while requiring this exact detail inspection and install only if missing.
 function preparedSource(source, entry) {
   if (!entry.preparation) return source
   if (entry.source !== '68-plugin-activity-log.spec.ts' || entry.preparation !== 'install-activity-plugin') fail('unapproved source preparation')
@@ -104,10 +104,13 @@ function preparedSource(source, entry) {
   const body = matches[0].arguments[1]?.body
   const first = body && ts.isBlock(body) && body.statements[0]
   if (!first || declarationName(first) !== 'pluginId') fail('activity preparation anchor changed')
-  const installation = `\nexpect((await page.request.post('/admin/plugins/install', {
+  const installation = `\nawait page.goto(\`/admin/plugins/\${pluginId}\`);
+  if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
+  expect((await page.request.post('/admin/plugins/install', {
     data: { name: pluginId, id: pluginId },
     headers: { Origin: new URL(page.url()).origin },
-  })).ok(), 'Activity fixture plugin installation failed').toBe(true);\n`
+  })).ok(), 'Activity fixture plugin installation failed').toBe(true);
+  }\n`
   return parse(source.text.slice(0, first.end) + installation + source.text.slice(first.end))
 }
 
@@ -273,7 +276,7 @@ export function verifyCollection(options = {}) {
   // The baseline was local and non-CI. Do not inherit a remote URL or CI's
   // longer default timeout; explicit per-test timeouts still compare exactly.
   for (const key of ['CI', 'BASE_URL', 'E2E_REUSE_SERVER', 'PLAYWRIGHT_STATS_API_KEY']) delete environment[key]
-  const raw = (options.execute || execFileSync)(resolve(root, 'node_modules/.bin/playwright'), ['test', '--config=tests/playwright.config.ts', '--list', '--reporter=json', '--workers=2', '--retries=0'], { cwd: root, env: environment, encoding: 'utf8', maxBuffer: 20_000_000 })
+  const raw = (options.execute || execFileSync)(process.execPath, [resolve(root, 'node_modules/playwright/cli.js'), 'test', '--config=tests/playwright.config.ts', '--list', '--reporter=json', '--workers=2', '--retries=0'], { cwd: root, env: environment, encoding: 'utf8', maxBuffer: 20_000_000 })
   const current = collectLeaves(JSON.parse(raw), data)
   const baseline = options.baseline || JSON.parse(readFileSync(resolve(here, 'baseline-leaves.json'), 'utf8'))
   compareMultisets(baseline.map(normalizeLeaf), current.map(normalizeLeaf))

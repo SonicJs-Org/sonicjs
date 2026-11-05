@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 import { compareMultisets, statementInventory } from './coverage-guard.mjs'
 
 test('multiplicities detect removal even when another title is duplicated', () => {
@@ -56,19 +57,24 @@ function activityPreparation() {
     await page.goto('/admin/plugins/' + pluginId);
     expect(await page.title()).toBe('Plugin');
   });`
-  const installation = `expect((await page.request.post('/admin/plugins/install', {
+  const installation = `await page.goto(\`/admin/plugins/\${pluginId}\`);
+  if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
+  expect((await page.request.post('/admin/plugins/install', {
     data: { name: pluginId, id: pluginId },
     headers: { Origin: new URL(page.url()).origin },
-  })).ok(), 'Activity fixture plugin installation failed').toBe(true);`
+  })).ok(), 'Activity fixture plugin installation failed').toBe(true);
+  }`
   const original = "import { test, expect } from './fixtures';\n" + body
   const current = original.split('\n')[0] + `\ntest.describe('Source: ${source}', () => {\n` + body.replace("const pluginId = 'hello-world';", "const pluginId = 'hello-world';\n" + installation) + '\n});'
   const data = { base: 'test-base', sources: [{ source, target: 'plugin-catalog.spec.ts', sourceHash: createHash('sha256').update(original).digest('hex'), preparation: 'install-activity-plugin' }] }
   return { data, readOriginal: () => original, readCurrent: () => current, listCurrent: () => ['plugin-catalog.spec.ts'], current }
 }
 
-test('activity prerequisite preserves original tests and requires a checked installation', () => {
+test('activity prerequisite preserves original tests and requires installation only when missing', () => {
   assert.deepEqual(verifySources(activityPreparation()), { originalSpecs: 1, activeSpecs: 1 })
   for (const mutate of [
+    text => text.replace("if (await page.getByRole('button', { name: 'Install', exact: true }).count())", 'if (true)'),
+    text => text.replace("name: 'Install'", "name: 'Activate'"),
     text => text.replace("'/admin/plugins/install'", "'/admin/plugins/uninstall'"),
     text => text.replace(".ok(), 'Activity", ".status(), 'Activity"),
     text => text.replace("toBe('Plugin')", 'toBeTruthy()'),
@@ -176,8 +182,10 @@ test('collection uses baseline-equivalent environment independently of caller CI
   const data = fixture().data
   const sample = report('source-a.spec.ts', '/checkout/tests/e2e/source-a.spec.ts')
   const baseline = collectLeaves(sample, data)
-  const result = verifyCollection({ data, baseline, environment: { CI: 'true', BASE_URL: 'https://remote.invalid', E2E_REUSE_SERVER: '1', PATH: '/original/path' }, execute: (_binary, args, options) => {
+  const result = verifyCollection({ data, baseline, environment: { CI: 'true', BASE_URL: 'https://remote.invalid', E2E_REUSE_SERVER: '1', PATH: '/original/path' }, execute: (binary, args, options) => {
     called = true
+    assert.equal(binary, process.execPath)
+    assert.equal(args[0], fileURLToPath(new URL('../../../node_modules/playwright/cli.js', import.meta.url)))
     assert.equal(options.env.CI, undefined)
     assert.equal(options.env.BASE_URL, undefined)
     assert.equal(options.env.E2E_REUSE_SERVER, undefined)

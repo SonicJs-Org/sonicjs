@@ -156,6 +156,64 @@ playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
 })
 
 /**
+ * Update run aggregate counts in real-time after tests are stored.
+ * Queries all tests for this run, computes passed/failed/flaky/total, updates run document.
+ */
+async function updateRunAggregates(db: D1Database, externalRunId: string): Promise<void> {
+  // Query all tests for this run
+  const testsR = await db.prepare(
+    `SELECT json_extract(data, '$.test_id')       AS test_id,
+            json_extract(data, '$.project_name')   AS project_name,
+            CAST(json_extract(data, '$.retry') AS INTEGER) AS retry,
+            json_extract(data, '$.status')         AS status,
+            json_extract(data, '$.is_flaky')       AS is_flaky
+     FROM documents
+     WHERE type_id = 'playwright_tests'
+       AND is_published = 1
+       AND deleted_at IS NULL
+       AND json_extract(data, '$.run_id') = ?`
+  ).bind(externalRunId).all()
+
+  type TestRow = { test_id: string; project_name: string; retry: number; status: string; is_flaky: number | boolean }
+  const rows = (testsR?.results ?? []) as TestRow[]
+
+  // Keep only the final attempt per (test_id, project_name)
+  const finalByKey = new Map<string, TestRow>()
+  for (const r of rows) {
+    const key = `${r.test_id}::${r.project_name ?? ''}`
+    const ex = finalByKey.get(key)
+    if (!ex || r.retry > ex.retry) finalByKey.set(key, r)
+  }
+
+  let passed = 0, failed = 0, skipped = 0, flaky = 0
+  for (const r of finalByKey.values()) {
+    if (r.status === 'passed') passed++
+    else if (r.status === 'failed' || r.status === 'timedOut' || r.status === 'interrupted') failed++
+    else if (r.status === 'skipped') skipped++
+    if (r.is_flaky === true || r.is_flaky === 1) flaky++
+  }
+  const total = passed + failed + skipped
+
+  // Update the run document with new counts
+  const now = Math.floor(Date.now() / 1000)
+  await db.prepare(
+    `UPDATE documents
+     SET data = json_set(data,
+       '$.total', ?,
+       '$.passed', ?,
+       '$.failed', ?,
+       '$.skipped', ?,
+       '$.flaky', ?
+     ),
+     updated_at = ?
+     WHERE type_id = 'playwright_runs'
+       AND is_published = 1
+       AND deleted_at IS NULL
+       AND json_extract(data, '$.run_id') = ?`
+  ).bind(total, passed, failed, skipped, flaky, now, externalRunId).run()
+}
+
+/**
  * POST /:run_id/tests
  * Appends a batch of test results to an existing run. Called per-file by StatsLiveReporter.
  */
@@ -178,6 +236,9 @@ playwrightIngest.post('/:run_id/tests', requirePlaywrightAuth(), async (c) => {
     for (let i = 0; i < stmts.length; i += BATCH_SIZE) {
       await db.batch(stmts.slice(i, i + BATCH_SIZE))
     }
+
+    // Update run aggregates in real-time
+    await updateRunAggregates(db, externalRunId ?? '')
 
     return c.json({ success: true, tests_stored: body.tests.length }, 201)
   } catch (err) {

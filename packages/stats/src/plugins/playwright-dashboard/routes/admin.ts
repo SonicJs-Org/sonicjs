@@ -277,9 +277,9 @@ adminRoutes.get('/', async (c) => {
                 ? '<span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" title="Flaky"></span>'
                 : '<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" title="All passed"></span>'
           const commitLink = r.ci_run_url
-            ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha).slice(0,7))}</a>`
+            ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400" onclick="event.stopPropagation()">${esc(String(r.commit_sha).slice(0,7))}</a>`
             : esc(String(r.commit_sha).slice(0,7))
-          return `<tr>
+          return `<tr class="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors" onclick="window.location.href='/admin/playwright/run/${esc(r.run_id)}'">
             <td class="py-2 pr-2">${statusDot}</td>
             <td class="py-2 pr-4 font-mono text-xs text-zinc-700 dark:text-zinc-300">${esc(r.branch)}</td>
             <td class="py-2 pr-4 font-mono text-xs">${commitLink}${r.commit_message ? ` <span class="text-zinc-400">${esc(String(r.commit_message).slice(0, 50))}</span>` : ''}</td>
@@ -341,6 +341,286 @@ adminRoutes.get('/', async (c) => {
         ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role }
         : undefined,
       scripts: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'],
+      content,
+      dynamicMenuItems: c.get('pluginMenuItems'),
+    })
+  )
+})
+
+// ── Run Details (GET /run/:runId) ────────────────────────────────────────
+adminRoutes.get('/run/:runId', async (c) => {
+  const db = c.env.DB
+  const user = c.get('user')
+  const runId = c.req.param('runId')
+  const filter = c.req.query('filter') || 'all' // all | passed | failed | flaky | skipped
+
+  // Fetch run metadata
+  const runR = await db.prepare(
+    `SELECT json_extract(data, '$.run_id') AS run_id,
+            json_extract(data, '$.branch') AS branch,
+            json_extract(data, '$.commit_sha') AS commit_sha,
+            json_extract(data, '$.commit_message') AS commit_message,
+            json_extract(data, '$.ci_run_url') AS ci_run_url,
+            json_extract(data, '$.triggered_by') AS triggered_by,
+            json_extract(data, '$.total') AS total,
+            json_extract(data, '$.passed') AS passed,
+            json_extract(data, '$.failed') AS failed,
+            json_extract(data, '$.skipped') AS skipped,
+            json_extract(data, '$.flaky') AS flaky,
+            json_extract(data, '$.duration_ms') AS duration_ms,
+            json_extract(data, '$.started_at') AS started_at,
+            json_extract(data, '$.finished_at') AS finished_at
+     FROM documents WHERE ${RUNS_WHERE} AND json_extract(data, '$.run_id') = ?
+     LIMIT 1`
+  ).bind(runId).first()
+
+  if (!runR) {
+    return c.html(
+      renderAdminLayoutCatalyst({
+        title: 'Run Not Found',
+        pageTitle: 'Run Not Found',
+        currentPath: '/admin/playwright',
+        version: c.get('appVersion'),
+        user: user
+          ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role }
+          : undefined,
+        content: `
+          <div class="text-center py-12">
+            <p class="text-zinc-500 dark:text-zinc-400">Run not found.</p>
+            <a href="/admin/playwright" class="mt-4 inline-block text-indigo-600 dark:text-indigo-400 hover:underline">← Back to dashboard</a>
+          </div>
+        `,
+        dynamicMenuItems: c.get('pluginMenuItems'),
+      })
+    )
+  }
+
+  const run = runR as Row
+
+  // Build filter clause for tests
+  let statusClause = ''
+  if (filter === 'passed') {
+    statusClause = `AND json_extract(data, '$.status') = 'passed' AND json_extract(data, '$.is_flaky') != 1`
+  } else if (filter === 'failed') {
+    statusClause = `AND json_extract(data, '$.status') IN ('failed', 'timedOut', 'interrupted')`
+  } else if (filter === 'flaky') {
+    statusClause = `AND json_extract(data, '$.is_flaky') = 1`
+  } else if (filter === 'skipped') {
+    statusClause = `AND json_extract(data, '$.status') = 'skipped'`
+  }
+
+  // Fetch tests for this run (final attempt per test_id/project_name)
+  const testsR = await db.prepare(
+    `SELECT json_extract(t1.data, '$.test_id') AS test_id,
+            json_extract(t1.data, '$.test_title') AS test_title,
+            json_extract(t1.data, '$.test_file') AS test_file,
+            json_extract(t1.data, '$.project_name') AS project_name,
+            json_extract(t1.data, '$.status') AS status,
+            json_extract(t1.data, '$.is_flaky') AS is_flaky,
+            json_extract(t1.data, '$.retry') AS retry,
+            json_extract(t1.data, '$.duration_ms') AS duration_ms,
+            json_extract(t1.data, '$.error_message') AS error_message
+     FROM documents t1
+     WHERE t1.type_id = 'playwright_tests' AND t1.is_published = 1 AND t1.deleted_at IS NULL
+       AND json_extract(t1.data, '$.run_id') = ?
+       ${statusClause}
+       AND NOT EXISTS (
+         SELECT 1 FROM documents t2
+         WHERE t2.type_id = 'playwright_tests' AND t2.is_published = 1 AND t2.deleted_at IS NULL
+           AND json_extract(t2.data, '$.run_id') = json_extract(t1.data, '$.run_id')
+           AND json_extract(t2.data, '$.test_id') = json_extract(t1.data, '$.test_id')
+           AND json_extract(t2.data, '$.project_name') = json_extract(t1.data, '$.project_name')
+           AND CAST(json_extract(t2.data, '$.retry') AS INTEGER) > CAST(json_extract(t1.data, '$.retry') AS INTEGER)
+       )
+     ORDER BY json_extract(t1.data, '$.test_file'), json_extract(t1.data, '$.test_title')`
+  ).bind(runId).all()
+
+  const tests = rowsOf(testsR)
+
+  // Count tests by status for filter badges
+  const countsR = await db.prepare(
+    `SELECT
+       SUM(CASE WHEN json_extract(t1.data, '$.status') = 'passed' AND json_extract(t1.data, '$.is_flaky') != 1 THEN 1 ELSE 0 END) AS passed_count,
+       SUM(CASE WHEN json_extract(t1.data, '$.status') IN ('failed', 'timedOut', 'interrupted') THEN 1 ELSE 0 END) AS failed_count,
+       SUM(CASE WHEN json_extract(t1.data, '$.is_flaky') = 1 THEN 1 ELSE 0 END) AS flaky_count,
+       SUM(CASE WHEN json_extract(t1.data, '$.status') = 'skipped' THEN 1 ELSE 0 END) AS skipped_count
+     FROM documents t1
+     WHERE t1.type_id = 'playwright_tests' AND t1.is_published = 1 AND t1.deleted_at IS NULL
+       AND json_extract(t1.data, '$.run_id') = ?
+       AND NOT EXISTS (
+         SELECT 1 FROM documents t2
+         WHERE t2.type_id = 'playwright_tests' AND t2.is_published = 1 AND t2.deleted_at IS NULL
+           AND json_extract(t2.data, '$.run_id') = json_extract(t1.data, '$.run_id')
+           AND json_extract(t2.data, '$.test_id') = json_extract(t1.data, '$.test_id')
+           AND json_extract(t2.data, '$.project_name') = json_extract(t1.data, '$.project_name')
+           AND CAST(json_extract(t2.data, '$.retry') AS INTEGER) > CAST(json_extract(t1.data, '$.retry') AS INTEGER)
+       )`
+  ).bind(runId).first() as Row | null
+
+  const counts = {
+    all: Number(run.total) || 0,
+    passed: Number(countsR?.passed_count ?? 0),
+    failed: Number(countsR?.failed_count ?? 0),
+    flaky: Number(countsR?.flaky_count ?? 0),
+    skipped: Number(countsR?.skipped_count ?? 0),
+  }
+
+  // Format duration helper
+  function fmtDuration(ms: number): string {
+    const s = Math.round(ms / 1000)
+    if (s < 60) return `${s}s`
+    const m = Math.floor(s / 60)
+    return `${m}m ${s % 60}s`
+  }
+
+  // Filter tab helper
+  const filterTab = (key: string, label: string, count: number, color: string) => {
+    const active = filter === key
+    const baseClasses = 'px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2'
+    const activeClasses = active
+      ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900'
+      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+    const badge = count > 0
+      ? `<span class="px-1.5 py-0.5 text-xs rounded-full ${active ? 'bg-white/20 dark:bg-zinc-900/20' : color}">${count}</span>`
+      : ''
+    return `<a href="?filter=${key}" class="${baseClasses} ${activeClasses}">${label}${badge}</a>`
+  }
+
+  // Status badge helper
+  const statusBadge = (status: string, isFlaky: boolean) => {
+    if (isFlaky) {
+      return '<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">flaky</span>'
+    }
+    switch (status) {
+      case 'passed':
+        return '<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">passed</span>'
+      case 'failed':
+      case 'timedOut':
+      case 'interrupted':
+        return `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">${status}</span>`
+      case 'skipped':
+        return '<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400">skipped</span>'
+      default:
+        return `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400">${status}</span>`
+    }
+  }
+
+  const content = `
+<div class="space-y-6">
+  <!-- Back link + header -->
+  <div>
+    <a href="/admin/playwright" class="text-sm text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400">← Back to dashboard</a>
+    <h1 class="mt-2 text-2xl font-semibold text-zinc-950 dark:text-white">Run Details</h1>
+  </div>
+
+  <!-- Run info card -->
+  <div class="rounded-lg bg-white dark:bg-zinc-800 p-6 ring-1 ring-zinc-950/5 dark:ring-white/10">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">Branch</p>
+        <p class="mt-1 font-mono text-lg font-semibold text-zinc-950 dark:text-white">${esc(run.branch)}</p>
+      </div>
+      <div>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">Commit</p>
+        <p class="mt-1 font-mono text-sm text-zinc-700 dark:text-zinc-300">
+          ${run.ci_run_url
+            ? `<a href="${esc(run.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(run.commit_sha).slice(0, 7))}</a>`
+            : esc(String(run.commit_sha).slice(0, 7))
+          }
+          ${run.commit_message ? `<span class="ml-2 text-zinc-400">${esc(String(run.commit_message).slice(0, 60))}</span>` : ''}
+        </p>
+      </div>
+      <div>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">Started</p>
+        <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">${run.started_at ? new Date(run.started_at).toLocaleString() : '—'}</p>
+      </div>
+      <div>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">Duration</p>
+        <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">${fmtDuration(Number(run.duration_ms))}</p>
+      </div>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="mt-6 flex flex-wrap gap-6 border-t border-zinc-950/5 dark:border-white/10 pt-6">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">${run.passed}</span>
+        <span class="text-sm text-zinc-500">passed</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-2xl font-bold ${Number(run.failed) > 0 ? 'text-red-600 dark:text-red-400' : 'text-zinc-400'}">${run.failed}</span>
+        <span class="text-sm text-zinc-500">failed</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-2xl font-bold ${Number(run.flaky) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}">${run.flaky}</span>
+        <span class="text-sm text-zinc-500">flaky</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-2xl font-bold text-zinc-400">${run.skipped}</span>
+        <span class="text-sm text-zinc-500">skipped</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter tabs -->
+  <div class="flex flex-wrap gap-2">
+    ${filterTab('all', 'All', counts.all, 'bg-zinc-200 dark:bg-zinc-600 text-zinc-700 dark:text-zinc-300')}
+    ${filterTab('passed', 'Passed', counts.passed, 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400')}
+    ${filterTab('failed', 'Failed', counts.failed, 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400')}
+    ${filterTab('flaky', 'Flaky', counts.flaky, 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400')}
+    ${filterTab('skipped', 'Skipped', counts.skipped, 'bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400')}
+  </div>
+
+  <!-- Tests table -->
+  <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10">
+    <div class="px-6 py-4 border-b border-zinc-950/5 dark:border-white/10">
+      <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Tests</h2>
+      <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+        Showing ${tests.length} test${tests.length === 1 ? '' : 's'}${filter !== 'all' ? ` (${filter})` : ''}
+      </p>
+    </div>
+    <div class="p-6">
+      ${tests.length === 0
+        ? `<div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">No tests match the current filter.</div>`
+        : `<div class="overflow-x-auto"><table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <tr>
+                <th class="py-2 text-left font-medium">Status</th>
+                <th class="py-2 text-left font-medium">Test</th>
+                <th class="py-2 text-left font-medium">Project</th>
+                <th class="py-2 text-right font-medium">Duration</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-950/5 dark:divide-white/5">
+            ${tests.map(t => `
+              <tr>
+                <td class="py-3 pr-4">${statusBadge(t.status, Boolean(t.is_flaky))}</td>
+                <td class="py-3 pr-4">
+                  <div class="text-zinc-700 dark:text-zinc-300">${esc(t.test_title)}</div>
+                  <div class="text-xs text-zinc-400 font-mono">${esc(t.test_file)}</div>
+                  ${t.error_message && (t.status === 'failed' || t.status === 'timedOut' || t.status === 'interrupted')
+                    ? `<div class="mt-1 text-xs text-red-500 dark:text-red-400 max-w-lg truncate" title="${esc(t.error_message)}">${esc(t.error_message)}</div>`
+                    : ''}
+                </td>
+                <td class="py-3 pr-4 text-xs text-zinc-500 dark:text-zinc-400">${esc(t.project_name || '—')}</td>
+                <td class="py-3 text-right text-zinc-500">${fmtDuration(Number(t.duration_ms))}</td>
+              </tr>
+            `).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>
+  </div>
+</div>`
+
+  return c.html(
+    renderAdminLayoutCatalyst({
+      title: `Run ${runId}`,
+      pageTitle: 'Run Details',
+      currentPath: '/admin/playwright',
+      version: c.get('appVersion'),
+      user: user
+        ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role }
+        : undefined,
       content,
       dynamicMenuItems: c.get('pluginMenuItems'),
     })

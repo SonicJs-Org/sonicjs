@@ -36,11 +36,11 @@ are never retried by setup. No browser is launched for API readiness.
 
 ```bash
 # Affected spec, isolated test, concurrency/repetition checks
-npm run e2e -- 83-json-field-viewer --workers=2 --repeat-each=3 --retries=0
-npm run e2e -- 83-json-field-viewer --grep 'edited JSON saves' --retries=0
-npm run e2e -- 39-slug-generation --grep 'detect duplicate slugs' --repeat-each=3 --workers=2 --retries=0
+npm run e2e -- fields.spec.ts --workers=2 --repeat-each=3 --retries=0
+npm run e2e -- fields.spec.ts --grep 'edited JSON saves' --retries=0
+npm run e2e -- content-forms.spec.ts --grep 'detect duplicate slugs' --repeat-each=3 --workers=2 --retries=0
 
-# Full suite, not smoke; three consecutive clean runs are the acceptance target
+# Full suite; consolidation acceptance uses two workers and zero retries
 npm run e2e -- --workers=2 --retries=0
 # CI policy: two workers, one diagnostic retry, retry recoveries also fail CI
 CI=true npm run e2e
@@ -59,6 +59,23 @@ bash scripts/lint-e2e-no-skip.sh
 npm run type-check
 npm test
 ```
+
+## Consolidated suites
+
+The suite contains 53 active specs and all 756 original tests. Source-level describe
+scopes preserve hooks, state, serial groups, locks and extended fixture factories.
+See [the full source mapping and exceptions](../../docs/testing/e2e-consolidation.md).
+
+```bash
+node --test tests/e2e/consolidation/*.checks.mjs
+node tests/e2e/consolidation/coverage-guard.mjs
+node tests/e2e/consolidation/selection-guard.mjs
+```
+
+These checks preserve source AST/imports and collected test multiplicities, including
+all 28 original smoke tests and the two serverless runner contracts. Shared helpers
+live in `fixtures/{auth,media,plugin,content}-fixtures.ts`; media/plugin/content reuse
+the established implementations in `utils/test-helpers.ts`.
 
 ## Ownership, isolation and authentication
 
@@ -79,7 +96,7 @@ npm test
   before reuse; session-check transport/5xx errors are failures, not evidence of logout.
   A successful global seed is shared with workers to avoid repeated seed hashing.
   Sign-in transport failures are not blindly retried. Real UI authentication coverage
-  remains in `02-authentication` and the auth-specific specs.
+  remains in `auth-ui.spec.ts` and the auth-specific specs.
 - The shared admin is **not** safe for concurrent credential/role/session/2FA mutations.
   Such tests must create disposable users. Cache reuse is not account isolation.
 - Settings/plugin mutations must snapshot original state and restore it in `finally`
@@ -110,6 +127,12 @@ An orphaned lock is deliberately **not** removed automatically: after stopping e
 runner targeting that environment, inspect the named directory/owner and remove it.
 Filesystem locks cannot coordinate separate CI runners. Do not shard a deployment.
 Two file-level workers remain the CI default; within-file parallelism stays disabled.
+Local API requests use distinct stable client addresses per file so unrelated auth files do
+not exhaust one `unknown` rate-limit bucket. Hooks and tests in a file share that
+identity; remote targets and explicit client headers are unchanged. The actual rate
+limiter and its assertions remain enabled. Local contexts also cache unchanged public
+vendor assets per worker, avoiding repeated CDN stalls. Application requests stay
+native, failed upstream responses stay failed, and document/load timeouts are unchanged.
 
 ## CI and diagnostics
 

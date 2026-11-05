@@ -57,13 +57,18 @@
       "source": "05-content.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "aea5aea885170cd67659b7a80437fb04691dd0572349533509753226f664bf6c"
+      "sourceHash": "aea5aea885170cd67659b7a80437fb04691dd0572349533509753226f664bf6c",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "06-media.spec.ts",
       "target": "media-core.spec.ts",
       "phase": 3,
-      "sourceHash": "81df7075ecafe2c90a4a977423e48eebd2ee625732fc295c47396c8bc20918d0"
+      "sourceHash": "81df7075ecafe2c90a4a977423e48eebd2ee625732fc295c47396c8bc20918d0",
+      "aliases": []
     },
     {
       "source": "07-api.spec.ts",
@@ -81,25 +86,38 @@
       "source": "09-media-bulk-actions.spec.ts",
       "target": "media-core.spec.ts",
       "phase": 3,
-      "sourceHash": "f194d726734bf5f26a11bff870fd1db4a378ab0fa361b67b98083eb42c9bb172"
+      "sourceHash": "f194d726734bf5f26a11bff870fd1db4a378ab0fa361b67b98083eb42c9bb172",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "10-media-view-switching.spec.ts",
       "target": "media-core.spec.ts",
       "phase": 3,
-      "sourceHash": "2fa2d27c2753390c5a2416edd45d3bedd6b7ac64676d5da67d9d61ec82c44c0f"
+      "sourceHash": "2fa2d27c2753390c5a2416edd45d3bedd6b7ac64676d5da67d9d61ec82c44c0f",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "100-content-title-preserved-on-edit.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "f387ee34367289d03ab09a5d78756d22710adf294b0dd661c756190d6b63dda1"
+      "sourceHash": "f387ee34367289d03ab09a5d78756d22710adf294b0dd661c756190d6b63dda1",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "100-demo-login-stats.spec.ts",
       "target": "dashboard.spec.ts",
       "phase": 9,
-      "sourceHash": "3ed80800e99c27f9485acb87f4d7334fdfa130b9f4a81a51a3fc4dede7904aa3"
+      "sourceHash": "3ed80800e99c27f9485acb87f4d7334fdfa130b9f4a81a51a3fc4dede7904aa3",
+      "aliases": []
     },
     {
       "source": "100-graphql.spec.ts",
@@ -138,67 +156,83 @@
       "source": "115-admin-set-password.spec.ts",
       "target": "users.spec.ts",
       "phase": 9,
-      "sourceHash": "3cdbacbac845dba8e0461b293f16c466abf519c16c00c3b6ce0fd2145d89e85a"
+      "sourceHash": "3cdbacbac845dba8e0461b293f16c466abf519c16c00c3b6ce0fd2145d89e85a",
+      "aliases": []
     },
     {
       "source": "116-register-credential.spec.ts",
       "target": "users.spec.ts",
       "phase": 9,
-      "sourceHash": "074d381a361fc1e9db01165ce85f8c3e569b0bf68d8f610e7f3e7c3e255fb443"
+      "sourceHash": "074d381a361fc1e9db01165ce85f8c3e569b0bf68d8f610e7f3e7c3e255fb443",
+      "aliases": []
     },
     {
       "source": "117-content-form-no-htmx.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "e2c6c1a93230d4a5255dde025ff24224986f8059dd8bed518df86eb740163020"
+      "sourceHash": "e2c6c1a93230d4a5255dde025ff24224986f8059dd8bed518df86eb740163020",
+      "aliases": []
     },
     {
       "source": "118-admin-background-request-load.spec.ts",
       "target": "infra.spec.ts",
       "phase": 9,
-      "sourceHash": "4f7449fd32742579c0ed8ffa02cc5060cafc4c24629c9e20b90a2c47316cc3fc"
+      "sourceHash": "4f7449fd32742579c0ed8ffa02cc5060cafc4c24629c9e20b90a2c47316cc3fc",
+      "aliases": []
     },
     {
       "source": "118-content-save-and-close.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "3c5e53a0937bcab6983b7ff29259ab5666e9684469ac1ae1e6371f22c89a64c5"
+      "sourceHash": "3c5e53a0937bcab6983b7ff29259ab5666e9684469ac1ae1e6371f22c89a64c5",
+      "aliases": []
     },
     {
       "source": "119-admin-dashboard-fragments.spec.ts",
       "target": "dashboard.spec.ts",
       "phase": 9,
-      "sourceHash": "cd7ddd85d47fff11b08af945167b95047cf6c500f2e27a6a4ff0eabf7ff1facf"
+      "sourceHash": "cd7ddd85d47fff11b08af945167b95047cf6c500f2e27a6a4ff0eabf7ff1facf",
+      "aliases": []
     },
     {
       "source": "120-bootstrap-skip-latency.spec.ts",
       "target": "infra.spec.ts",
       "phase": 9,
-      "sourceHash": "cb25c696862c65a2e8071266d8f544fca66c60df35c25d71e52971cb93787365"
+      "sourceHash": "cb25c696862c65a2e8071266d8f544fca66c60df35c25d71e52971cb93787365",
+      "aliases": []
     },
     {
       "source": "121-plugin-card-display-names.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "e452951356b4a4063f84adce97c81ed67dfc6bfe43663e1d87dd42564cd45c9a"
+      "sourceHash": "e452951356b4a4063f84adce97c81ed67dfc6bfe43663e1d87dd42564cd45c9a",
+      "aliases": []
     },
     {
       "source": "122-content-form-no-background-write.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "fbf4c0bf3470b7fc8d712c27ffba3fc4d3eaa7d20050cfd683f7cdf39072b178"
+      "sourceHash": "fbf4c0bf3470b7fc8d712c27ffba3fc4d3eaa7d20050cfd683f7cdf39072b178",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "123-admin-page-weight.spec.ts",
       "target": "dashboard.spec.ts",
       "phase": 9,
-      "sourceHash": "e4000fc6b9f37cd0d28476e098e9978967c62fe9914b7ca0c84ba86098484514"
+      "sourceHash": "e4000fc6b9f37cd0d28476e098e9978967c62fe9914b7ca0c84ba86098484514",
+      "aliases": []
     },
     {
       "source": "124-admin-template-xss.spec.ts",
       "target": "security.spec.ts",
       "phase": 9,
-      "sourceHash": "33da4fbdb105f8ebcce625986a968d156868a4bd1fe46ba4b0ddf028c48e55b4"
+      "sourceHash": "33da4fbdb105f8ebcce625986a968d156868a4bd1fe46ba4b0ddf028c48e55b4",
+      "aliases": [
+        "const test = source1_test;"
+      ]
     },
     {
       "source": "124-better-auth-upgrade.spec.ts",
@@ -210,7 +244,14 @@
       "source": "125-content-delete-confirmation-page.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "d628608328bf05d5bcdfcef7f3a760a5d6f60d9317ded5670169a4f876c5dc80"
+      "sourceHash": "d628608328bf05d5bcdfcef7f3a760a5d6f60d9317ded5670169a4f876c5dc80",
+      "aliases": [
+        "const test = source5_test;",
+        "const expect = source6_expect;"
+      ],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "126-runner-contracts.spec.ts",
@@ -234,37 +275,52 @@
       "source": "15-plugins.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "3d524ad4fa73afc502b5232cfcc45de347c7f86aabbef400eddd46df1a03cb1b"
+      "sourceHash": "3d524ad4fa73afc502b5232cfcc45de347c7f86aabbef400eddd46df1a03cb1b",
+      "aliases": [],
+      "redirects": {
+        "ensurePluginActive": "./fixtures/plugin-fixtures"
+      }
     },
     {
       "source": "15-user-xss-prevention.spec.ts",
       "target": "users.spec.ts",
       "phase": 9,
-      "sourceHash": "0258834fb547883983b1f5defee223d8f0eebec3b65b67232cddab518114a274"
+      "sourceHash": "0258834fb547883983b1f5defee223d8f0eebec3b65b67232cddab518114a274",
+      "aliases": []
     },
     {
       "source": "16-user-management.spec.ts",
       "target": "users.spec.ts",
       "phase": 9,
-      "sourceHash": "f5ed89c570ec1e288a7f8a15319fdba2d110da58bb282bc28fd03eeff037d1d5"
+      "sourceHash": "f5ed89c570ec1e288a7f8a15319fdba2d110da58bb282bc28fd03eeff037d1d5",
+      "aliases": []
     },
     {
       "source": "17-media-upload-immediate.spec.ts",
       "target": "media-upload.spec.ts",
       "phase": 3,
-      "sourceHash": "dc172ed99fd62d220b42f7cd15ceb66224bab7640ac6118ed97bd679928707c1"
+      "sourceHash": "dc172ed99fd62d220b42f7cd15ceb66224bab7640ac6118ed97bd679928707c1",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "18-media-bulk-menu-zindex.spec.ts",
       "target": "media-core.spec.ts",
       "phase": 3,
-      "sourceHash": "9d86efcffe49a60da0ea15f28273f18e8f3cb2d4254990a0c6553eee362ee1f4"
+      "sourceHash": "9d86efcffe49a60da0ea15f28273f18e8f3cb2d4254990a0c6553eee362ee1f4",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "19-content-media-selector.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "19d309bdae54adf6337b688abb6d45f8b026eed00f6d28c646acb7e0c8233784"
+      "sourceHash": "19d309bdae54adf6337b688abb6d45f8b026eed00f6d28c646acb7e0c8233784",
+      "aliases": []
     },
     {
       "source": "20-content-api-collection-filter.spec.ts",
@@ -276,109 +332,140 @@
       "source": "21-plugin-version-display.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "9cf7f6655d792fef3bdd12bf41d0bcb6d40faa1b28565ded79a134f01b98110a"
+      "sourceHash": "9cf7f6655d792fef3bdd12bf41d0bcb6d40faa1b28565ded79a134f01b98110a",
+      "aliases": []
     },
     {
       "source": "23-content-api-crud.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "28a69bed5aa13a3530b2dcdb89dd16a9d58e176b2cec464646980030adf07aa9"
+      "sourceHash": "28a69bed5aa13a3530b2dcdb89dd16a9d58e176b2cec464646980030adf07aa9",
+      "aliases": []
     },
     {
       "source": "24-media-thumbnail-loading.spec.ts",
       "target": "media-upload.spec.ts",
       "phase": 3,
-      "sourceHash": "694953bbd641416954370d309489695db5851f3c29599d04fa2f058385a50655"
+      "sourceHash": "694953bbd641416954370d309489695db5851f3c29599d04fa2f058385a50655",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "25-media-cleanup-unused.spec.ts",
       "target": "media-core.spec.ts",
       "phase": 3,
-      "sourceHash": "48c7fed3fbabea988900151105549f6682b276e76b2d07a23898ab5a4633048e"
+      "sourceHash": "48c7fed3fbabea988900151105549f6682b276e76b2d07a23898ab5a4633048e",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "26-content-duplicate.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "e7a19be0a83ee7d728c009a887a2321ae83c862af0c7a1c3f2a688d819649aef"
+      "sourceHash": "e7a19be0a83ee7d728c009a887a2321ae83c862af0c7a1c3f2a688d819649aef",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "27-profile-picture-upload.spec.ts",
       "target": "users.spec.ts",
       "phase": 9,
-      "sourceHash": "ad3c60fc26b73d87900e6aee721f8aeb76cd1ce0b58dda6ea9d18771114b2ba5"
+      "sourceHash": "ad3c60fc26b73d87900e6aee721f8aeb76cd1ce0b58dda6ea9d18771114b2ba5",
+      "aliases": []
     },
     {
       "source": "27-settings-general.spec.ts",
       "target": "settings.spec.ts",
       "phase": 9,
-      "sourceHash": "2370981b414be8b1011b3ec552af53c56a5ce5a1e447db34268ce5b37fd2cbdd"
+      "sourceHash": "2370981b414be8b1011b3ec552af53c56a5ce5a1e447db34268ce5b37fd2cbdd",
+      "aliases": []
     },
     {
       "source": "28-plugin-filters-search.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "386a9c3c98a82839c906c5203abc1ff0e5c60250fd343cd61cbef433224dc503"
+      "sourceHash": "386a9c3c98a82839c906c5203abc1ff0e5c60250fd343cd61cbef433224dc503",
+      "aliases": [],
+      "redirects": {
+        "ensurePluginActive": "./fixtures/plugin-fixtures",
+        "setPluginStatus": "./fixtures/plugin-fixtures"
+      }
     },
     {
       "source": "29-email-plugin-settings.spec.ts",
       "target": "plugin-settings.spec.ts",
       "phase": 4,
-      "sourceHash": "59f680876bc907952a2b138e086456f1f73086edd9b67581845dc9236a11cf86"
+      "sourceHash": "59f680876bc907952a2b138e086456f1f73086edd9b67581845dc9236a11cf86",
+      "aliases": []
     },
     {
       "source": "30-richtext-tinymce.spec.ts",
       "target": "richtext.spec.ts",
       "phase": 8,
-      "sourceHash": "45f2394ca59c5e16136a307cd103b0b29c4087be5d02d842d01eedb2c46c5589"
+      "sourceHash": "45f2394ca59c5e16136a307cd103b0b29c4087be5d02d842d01eedb2c46c5589",
+      "aliases": []
     },
     {
       "source": "31-richtext-quill.spec.ts",
       "target": "richtext.spec.ts",
       "phase": 8,
-      "sourceHash": "a3e422908264423ef18e89a82ede00ac9fac332a87f93a4b406ae93f49ec8767"
+      "sourceHash": "a3e422908264423ef18e89a82ede00ac9fac332a87f93a4b406ae93f49ec8767",
+      "aliases": []
     },
     {
       "source": "32-mdxeditor-new-content.spec.ts",
       "target": "richtext.spec.ts",
       "phase": 8,
-      "sourceHash": "c7b39e00968ecb9e961b0000ef42068082321b52d06dee83514e602f1723a18b"
+      "sourceHash": "c7b39e00968ecb9e961b0000ef42068082321b52d06dee83514e602f1723a18b",
+      "aliases": []
     },
     {
       "source": "32-mdxeditor-richtext.spec.ts",
       "target": "richtext.spec.ts",
       "phase": 8,
-      "sourceHash": "fafabda9be689f45bc59580976364dbd872e1966e05b71736eeac0d53ba7f84c"
+      "sourceHash": "fafabda9be689f45bc59580976364dbd872e1966e05b71736eeac0d53ba7f84c",
+      "aliases": []
     },
     {
       "source": "33-field-type-editor-options.spec.ts",
       "target": "collections.spec.ts",
       "phase": 9,
-      "sourceHash": "fd93943ea0b657121b46643320d152c22fe6c76857a31e8cdbf0a48605bd7bf7"
+      "sourceHash": "fd93943ea0b657121b46643320d152c22fe6c76857a31e8cdbf0a48605bd7bf7",
+      "aliases": []
     },
     {
       "source": "34-field-type-persistence.spec.ts",
       "target": "collections.spec.ts",
       "phase": 9,
-      "sourceHash": "422112efe34475d1153195ce76924882b5547d28fcdef37441385b69e1871f03"
+      "sourceHash": "422112efe34475d1153195ce76924882b5547d28fcdef37441385b69e1871f03",
+      "aliases": []
     },
     {
       "source": "35-collection-field-type-badges.spec.ts",
       "target": "collections.spec.ts",
       "phase": 9,
-      "sourceHash": "98b7cbc0a622ca9ce40475aa6088c541e04ebd3c0a6f2cbf53dbf39c059d6257"
+      "sourceHash": "98b7cbc0a622ca9ce40475aa6088c541e04ebd3c0a6f2cbf53dbf39c059d6257",
+      "aliases": []
     },
     {
       "source": "36-collection-field-easymdx-edit.spec.ts",
       "target": "collections.spec.ts",
       "phase": 9,
-      "sourceHash": "31cfcbb5ee0d406b525307b570cc2e883a202c5df82b307bd5336f6ba4564ee4"
+      "sourceHash": "31cfcbb5ee0d406b525307b570cc2e883a202c5df82b307bd5336f6ba4564ee4",
+      "aliases": []
     },
     {
       "source": "36-easymde-plugin-visible.spec.ts",
       "target": "richtext.spec.ts",
       "phase": 8,
-      "sourceHash": "72534c61ba0c497babe49c4f39d283b54bb0c4bf34106a05cc88ec8c189f0b79"
+      "sourceHash": "72534c61ba0c497babe49c4f39d283b54bb0c4bf34106a05cc88ec8c189f0b79",
+      "aliases": []
     },
     {
       "source": "37-disable-registration.spec.ts",
@@ -390,133 +477,175 @@
       "source": "38-turnstile-plugin.spec.ts",
       "target": "plugin-catalog.spec.ts",
       "phase": 4,
-      "sourceHash": "e060f602cb0a936b7787805b16a632e1b4c72acafd504fab302314a65fd93db7"
+      "sourceHash": "e060f602cb0a936b7787805b16a632e1b4c72acafd504fab302314a65fd93db7",
+      "aliases": []
     },
     {
       "source": "39-ai-search-plugin.spec.ts",
       "target": "plugin-catalog.spec.ts",
       "phase": 4,
-      "sourceHash": "b91812aa3943cc2bba91fa7ba572c58afeaa43e5f2088f25d828eabae5f74938"
+      "sourceHash": "b91812aa3943cc2bba91fa7ba572c58afeaa43e5f2088f25d828eabae5f74938",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "39-slug-generation.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "19531e1a1b115acade074dfd5d920398ba52bc2e88e95d450b993bf188576883"
+      "sourceHash": "19531e1a1b115acade074dfd5d920398ba52bc2e88e95d450b993bf188576883",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "41-reference-fields.spec.ts",
       "target": "fields.spec.ts",
       "phase": 9,
-      "sourceHash": "fbb05f1fa8738ceb03fab56d304d981e5433200b27c959ad8e32e55ee8c79d15"
+      "sourceHash": "fbb05f1fa8738ceb03fab56d304d981e5433200b27c959ad8e32e55ee8c79d15",
+      "aliases": []
     },
     {
       "source": "42-content-deletion-bug.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "84ad96554cdae520d7d50e93a5d9533c0a3dd8ebb56770e5b7963d6cebee5e8f"
+      "sourceHash": "84ad96554cdae520d7d50e93a5d9533c0a3dd8ebb56770e5b7963d6cebee5e8f",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "42-dynamic-field-tdz.spec.ts",
       "target": "fields.spec.ts",
       "phase": 9,
-      "sourceHash": "7329a76c7ddbb5ef3c37f1949cd4ea07d476e64e339515c2780f9c62d5fd0f59"
+      "sourceHash": "7329a76c7ddbb5ef3c37f1949cd4ea07d476e64e339515c2780f9c62d5fd0f59",
+      "aliases": [
+        "type Page = source6_Page;"
+      ]
     },
     {
       "source": "43-cache-plugin.spec.ts",
       "target": "cache.spec.ts",
       "phase": 7,
-      "sourceHash": "40f305da51b170bca6c19b26b25634f4dca959063720d1c2701f359f8ef36bac"
+      "sourceHash": "40f305da51b170bca6c19b26b25634f4dca959063720d1c2701f359f8ef36bac",
+      "aliases": [],
+      "redirects": {
+        "ensurePluginActive": "./fixtures/plugin-fixtures"
+      }
     },
     {
       "source": "47-settings-wip-cleanup.spec.ts",
       "target": "settings.spec.ts",
       "phase": 9,
-      "sourceHash": "727cd6da7dcc8fed684464a2967f8abe2a715cc925a45e64a6fdbaf8217fa6a5"
+      "sourceHash": "727cd6da7dcc8fed684464a2967f8abe2a715cc925a45e64a6fdbaf8217fa6a5",
+      "aliases": []
     },
     {
       "source": "50-forms.spec.ts",
       "target": "forms.spec.ts",
       "phase": 6,
-      "sourceHash": "4c022fa5b661909ce5c0bff9e8881670016b0a8cde78155b9dc87d17682309d6"
+      "sourceHash": "4c022fa5b661909ce5c0bff9e8881670016b0a8cde78155b9dc87d17682309d6",
+      "aliases": []
     },
     {
       "source": "51-turnstile-integration.spec.ts",
       "target": "forms.spec.ts",
       "phase": 6,
-      "sourceHash": "1070131d15c1a103a85e7af56e429861c730c99e99e4b2f4f8736f7e55121b4a"
+      "sourceHash": "1070131d15c1a103a85e7af56e429861c730c99e99e4b2f4f8736f7e55121b4a",
+      "aliases": []
     },
     {
       "source": "52-forms-smoke.spec.ts",
       "target": "forms.spec.ts",
       "phase": 6,
-      "sourceHash": "112fa65d87e50c8d6738b446afc6743abb356f9c7edd5d726ac5a4d115cf9f8c"
+      "sourceHash": "112fa65d87e50c8d6738b446afc6743abb356f9c7edd5d726ac5a4d115cf9f8c",
+      "aliases": [],
+      "redirects": {
+        "ensurePluginActive": "./fixtures/plugin-fixtures"
+      }
     },
     {
       "source": "53-block-media-persist.spec.ts",
       "target": "fields.spec.ts",
       "phase": 9,
-      "sourceHash": "1aef21c871db281907f56a87b95d0350d95c7cc6fe22b097d36e5eacf705d8ef"
+      "sourceHash": "1aef21c871db281907f56a87b95d0350d95c7cc6fe22b097d36e5eacf705d8ef",
+      "aliases": []
     },
     {
       "source": "53-forms-as-content.spec.ts",
       "target": "forms.spec.ts",
       "phase": 6,
-      "sourceHash": "a490a3c76db0f850451ca534b142cf1a6f6dbccf2a09c59eec30b05e50de4678"
+      "sourceHash": "a490a3c76db0f850451ca534b142cf1a6f6dbccf2a09c59eec30b05e50de4678",
+      "aliases": []
     },
     {
       "source": "53-object-layout.spec.ts",
       "target": "fields.spec.ts",
       "phase": 9,
-      "sourceHash": "3786f37e00951d9a6e9feed4feba041b7372c6dd5882250916dae9610c6b25e2"
+      "sourceHash": "3786f37e00951d9a6e9feed4feba041b7372c6dd5882250916dae9610c6b25e2",
+      "aliases": []
     },
     {
       "source": "54-hero-cta-style-persistence.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "33240bce738ac9e1a566c9b061e0e52b6c75825fcd92f399b04af8a7efdbb0c9"
+      "sourceHash": "33240bce738ac9e1a566c9b061e0e52b6c75825fcd92f399b04af8a7efdbb0c9",
+      "aliases": []
     },
     {
       "source": "55-collapsible-state-persistence.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "dc13f873728fc820c3466bd6210a2b7424bf8e419fc4707ea16665f53c0a2f72"
+      "sourceHash": "dc13f873728fc820c3466bd6210a2b7424bf8e419fc4707ea16665f53c0a2f72",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "56-collapsible-validation-visibility.spec.ts",
       "target": "content-forms.spec.ts",
       "phase": 6,
-      "sourceHash": "f73831f180ce8a3995545434f01439806a2ef6226b1a3baeb51407ef3c074b3c"
+      "sourceHash": "f73831f180ce8a3995545434f01439806a2ef6226b1a3baeb51407ef3c074b3c",
+      "aliases": []
     },
     {
       "source": "57-nested-array-serialization-scope.spec.ts",
       "target": "content-serialization.spec.ts",
       "phase": 6,
-      "sourceHash": "a4fea360a226534d1ab70c41f1746fa2575008ab2603e4ce40cd92e242180d8a"
+      "sourceHash": "a4fea360a226534d1ab70c41f1746fa2575008ab2603e4ce40cd92e242180d8a",
+      "aliases": []
     },
     {
       "source": "58-nested-object-serialization.spec.ts",
       "target": "content-serialization.spec.ts",
       "phase": 6,
-      "sourceHash": "5c2a7193084c178a891ff3edf29451ec57a0aea7e5a107f613511620a2da07cf"
+      "sourceHash": "5c2a7193084c178a891ff3edf29451ec57a0aea7e5a107f613511620a2da07cf",
+      "aliases": []
     },
     {
       "source": "59-array-media-picker-targeting.spec.ts",
       "target": "content-serialization.spec.ts",
       "phase": 6,
-      "sourceHash": "47044c59d0f9356100b2f9b5c331c626ad08b5537de1496e0f66c04efa8c849e"
+      "sourceHash": "47044c59d0f9356100b2f9b5c331c626ad08b5537de1496e0f66c04efa8c849e",
+      "aliases": []
     },
     {
       "source": "62-public-content-api-status-visibility.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "f522554ef983c939104d556f02d2adef1e9d8d95610269de0c7d2755d6786843"
+      "sourceHash": "f522554ef983c939104d556f02d2adef1e9d8d95610269de0c7d2755d6786843",
+      "aliases": []
     },
     {
       "source": "63-document-blog-crud.spec.ts",
       "target": "content-crud.spec.ts",
       "phase": 6,
-      "sourceHash": "9cb72e742fe5a5bde15019466efd784e9748dc52b2b07027bc37284861e67485"
+      "sourceHash": "9cb72e742fe5a5bde15019466efd784e9748dc52b2b07027bc37284861e67485",
+      "aliases": []
     },
     {
       "source": "65-default-blog-post-seed.spec.ts",
@@ -535,7 +664,8 @@
       "source": "67-rbac.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "da076966639dc8cee8fe1416c644b0440e3542c793d329327e76ff955cf99043"
+      "sourceHash": "da076966639dc8cee8fe1416c644b0440e3542c793d329327e76ff955cf99043",
+      "aliases": []
     },
     {
       "source": "68-blog-post-validation-no-nesting.spec.ts",
@@ -547,7 +677,8 @@
       "source": "68-example-plugin-settings.spec.ts",
       "target": "plugin-settings.spec.ts",
       "phase": 4,
-      "sourceHash": "4a38ff0e3dab825b230570776afac103f66555fd8985f6ea056b92edc19eb48e"
+      "sourceHash": "4a38ff0e3dab825b230570776afac103f66555fd8985f6ea056b92edc19eb48e",
+      "aliases": []
     },
     {
       "source": "68-login-redirect.spec.ts",
@@ -559,13 +690,16 @@
       "source": "68-plugin-activity-log.spec.ts",
       "target": "plugin-catalog.spec.ts",
       "phase": 4,
-      "sourceHash": "f23d05a7ad89e6a271a4fe2b4eab131c461b5b31ab818df85cf1af1c54e7b2bb"
+      "sourceHash": "f23d05a7ad89e6a271a4fe2b4eab131c461b5b31ab818df85cf1af1c54e7b2bb",
+      "aliases": [],
+      "preparation": "install-activity-plugin"
     },
     {
       "source": "68-plugin-install-click.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "79d6da1ef051c06186c2f4cc86bb269a26b8e56463d5404605dae9892a5d315b"
+      "sourceHash": "79d6da1ef051c06186c2f4cc86bb269a26b8e56463d5404605dae9892a5d315b",
+      "aliases": []
     },
     {
       "source": "68-user-profile-document.spec.ts",
@@ -577,97 +711,113 @@
       "source": "69-plugins-nav-accordion.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "d8b7f775a32235dd11f41b2b855dc1fd4793f01cc8d3d12aa4056f589044cfc3"
+      "sourceHash": "d8b7f775a32235dd11f41b2b855dc1fd4793f01cc8d3d12aa4056f589044cfc3",
+      "aliases": []
     },
     {
       "source": "70-collection-registry.spec.ts",
       "target": "collections.spec.ts",
       "phase": 9,
-      "sourceHash": "082b41c009ed956ae3d9a88a44838ab9b196fed2fc001321145a68a2268c7be1"
+      "sourceHash": "082b41c009ed956ae3d9a88a44838ab9b196fed2fc001321145a68a2268c7be1",
+      "aliases": []
     },
     {
       "source": "70-multi-tenant.spec.ts",
       "target": "multi-tenant.spec.ts",
       "phase": 5,
-      "sourceHash": "eb583713e728878298ff8e0a671ca7c158cf134a96505f04483afbefa5ce66c4"
+      "sourceHash": "eb583713e728878298ff8e0a671ca7c158cf134a96505f04483afbefa5ce66c4",
+      "aliases": []
     },
     {
       "source": "70-rbac-roles-verbs.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "ca40f2a725add1d3e1ec53b71e208a3f577597b2f26182034f8e6b0e3ccc6ea4"
+      "sourceHash": "ca40f2a725add1d3e1ec53b71e208a3f577597b2f26182034f8e6b0e3ccc6ea4",
+      "aliases": []
     },
     {
       "source": "71-home-link-redirect.spec.ts",
       "target": "dashboard.spec.ts",
       "phase": 9,
-      "sourceHash": "8730f994f445b971736d899d33d9fd83e37497ca06b49abe55461a6b952f3ffc"
+      "sourceHash": "8730f994f445b971736d899d33d9fd83e37497ca06b49abe55461a6b952f3ffc",
+      "aliases": []
     },
     {
       "source": "71-tenant-membership-gate.spec.ts",
       "target": "multi-tenant.spec.ts",
       "phase": 5,
-      "sourceHash": "7f94a868aa523d5af93f67c803625edce60dbc1bf458b34d75bcc2c782cb84b6"
+      "sourceHash": "7f94a868aa523d5af93f67c803625edce60dbc1bf458b34d75bcc2c782cb84b6",
+      "aliases": []
     },
     {
       "source": "72-collection-base-routes.spec.ts",
       "target": "collections.spec.ts",
       "phase": 9,
-      "sourceHash": "5ad24b3952727fc6d89b5cf5e2d4eade26fba172f40abb36785563cb523fb03a"
+      "sourceHash": "5ad24b3952727fc6d89b5cf5e2d4eade26fba172f40abb36785563cb523fb03a",
+      "aliases": []
     },
     {
       "source": "72-per-tenant-roles.spec.ts",
       "target": "multi-tenant.spec.ts",
       "phase": 5,
-      "sourceHash": "d59bc33854030fdd5488408de2ddb338f4c31bbf8f537e4860b2d65b6c15063f"
+      "sourceHash": "d59bc33854030fdd5488408de2ddb338f4c31bbf8f537e4860b2d65b6c15063f",
+      "aliases": []
     },
     {
       "source": "73-tenant-members.spec.ts",
       "target": "multi-tenant.spec.ts",
       "phase": 5,
-      "sourceHash": "0a5cf737304e75f5d01f14c7d26a36bffbc0d556497482300fefaf6cba287f2f"
+      "sourceHash": "0a5cf737304e75f5d01f14c7d26a36bffbc0d556497482300fefaf6cba287f2f",
+      "aliases": []
     },
     {
       "source": "74-tenant-invitations.spec.ts",
       "target": "multi-tenant.spec.ts",
       "phase": 5,
-      "sourceHash": "ab5b56acb721970ec40af2a018f2cc67887a97dcc0e0fb871b8689974a4e3c2d"
+      "sourceHash": "ab5b56acb721970ec40af2a018f2cc67887a97dcc0e0fb871b8689974a4e3c2d",
+      "aliases": []
     },
     {
       "source": "75-global-document-types.spec.ts",
       "target": "multi-tenant.spec.ts",
       "phase": 5,
-      "sourceHash": "0e134172d883924468ecd514b0d3fdbd50426a4d905635d13b79e537a17149e9"
+      "sourceHash": "0e134172d883924468ecd514b0d3fdbd50426a4d905635d13b79e537a17149e9",
+      "aliases": []
     },
     {
       "source": "76-plugin-menu-singleton.spec.ts",
       "target": "plugin-catalog.spec.ts",
       "phase": 4,
-      "sourceHash": "4849c0696d44f9bd656ff89873da540721f86bab89a14fd44b4da389f4c931e5"
+      "sourceHash": "4849c0696d44f9bd656ff89873da540721f86bab89a14fd44b4da389f4c931e5",
+      "aliases": []
     },
     {
       "source": "76-user-tenant-memberships.spec.ts",
       "target": "multi-tenant.spec.ts",
       "phase": 5,
-      "sourceHash": "c7cf3086ca86a93e4d7c30669ab9079ad91f990587e3706988dcab08c11eea4e"
+      "sourceHash": "c7cf3086ca86a93e4d7c30669ab9079ad91f990587e3706988dcab08c11eea4e",
+      "aliases": []
     },
     {
       "source": "77-lexical-editor.spec.ts",
       "target": "richtext.spec.ts",
       "phase": 8,
-      "sourceHash": "b257159568c01ae84c350fb81d11eb62ee9efd9112e650936aadbd202bee8e48"
+      "sourceHash": "b257159568c01ae84c350fb81d11eb62ee9efd9112e650936aadbd202bee8e48",
+      "aliases": []
     },
     {
       "source": "77-schema-driven-settings.spec.ts",
       "target": "plugin-settings.spec.ts",
       "phase": 4,
-      "sourceHash": "054c4f60dd739c34eeeb1f22ea5476c3644cb107f2f29f2fb309806508b4a74a"
+      "sourceHash": "054c4f60dd739c34eeeb1f22ea5476c3644cb107f2f29f2fb309806508b4a74a",
+      "aliases": []
     },
     {
       "source": "78-author-user-search.spec.ts",
       "target": "users.spec.ts",
       "phase": 9,
-      "sourceHash": "2173abba1ae7e6eb9024442cb89ea294329b2e0ef498a4af682b9e8ab26fa8fb"
+      "sourceHash": "2173abba1ae7e6eb9024442cb89ea294329b2e0ef498a4af682b9e8ab26fa8fb",
+      "aliases": []
     },
     {
       "source": "78-new-content-dropdown.spec.ts",
@@ -679,13 +829,17 @@
       "source": "79-plugin-filter-url.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "56d5f33463e189e7cefeaea0cfe4be424ee3ca59f71dc5c9e2b27636d28a4550"
+      "sourceHash": "56d5f33463e189e7cefeaea0cfe4be424ee3ca59f71dc5c9e2b27636d28a4550",
+      "aliases": [
+        "type Page = source8_Page;"
+      ]
     },
     {
       "source": "80-cache-warming-documents.spec.ts",
       "target": "cache.spec.ts",
       "phase": 7,
-      "sourceHash": "dfef3f46d55bcb009e2830dfdb146ac2a73899f70949c3a4d8afd845bb46b85e"
+      "sourceHash": "dfef3f46d55bcb009e2830dfdb146ac2a73899f70949c3a4d8afd845bb46b85e",
+      "aliases": []
     },
     {
       "source": "80-redirect-management.spec.ts",
@@ -697,31 +851,41 @@
       "source": "80-security-audit-document-model.spec.ts",
       "target": "security.spec.ts",
       "phase": 9,
-      "sourceHash": "82a94850fc2159cc0d06e3c5c584a5823137ff34783e58d037aaf87fc4b6391c"
+      "sourceHash": "82a94850fc2159cc0d06e3c5c584a5823137ff34783e58d037aaf87fc4b6391c",
+      "aliases": [
+        "const expect = source4_expect;"
+      ]
     },
     {
       "source": "80-user-profile-code-config.spec.ts",
       "target": "users.spec.ts",
       "phase": 9,
-      "sourceHash": "f419b242b9a71db26b554c5e50d9a879370113de14536ce8430d347dfdd5ce9d"
+      "sourceHash": "f419b242b9a71db26b554c5e50d9a879370113de14536ce8430d347dfdd5ce9d",
+      "aliases": []
     },
     {
       "source": "81-admin-rbac-access.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "b3da8d3f75c5d6110d194e0ab71156651a4249321a1580163727c64a75d75f3c"
+      "sourceHash": "b3da8d3f75c5d6110d194e0ab71156651a4249321a1580163727c64a75d75f3c",
+      "aliases": []
     },
     {
       "source": "81-cache-collection-settings.spec.ts",
       "target": "cache.spec.ts",
       "phase": 7,
-      "sourceHash": "dcc9d7a60225362f5b7e271bbc3c4c937feea99777dd22b78f6fd0d866c390fd"
+      "sourceHash": "dcc9d7a60225362f5b7e271bbc3c4c937feea99777dd22b78f6fd0d866c390fd",
+      "aliases": []
     },
     {
       "source": "81-media-document-model.spec.ts",
       "target": "media-api.spec.ts",
       "phase": 3,
-      "sourceHash": "f4199229a1b63d93cc17ae4f59daa84fd778f61d01cc455322b3294f018b506f"
+      "sourceHash": "f4199229a1b63d93cc17ae4f59daa84fd778f61d01cc455322b3294f018b506f",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "81-versioning-optional.spec.ts",
@@ -733,13 +897,17 @@
       "source": "82-cors-auth-headers.spec.ts",
       "target": "security.spec.ts",
       "phase": 9,
-      "sourceHash": "97b17b2c59217b73df087557a02419482b98d59e1a45950c22093b7897314994"
+      "sourceHash": "97b17b2c59217b73df087557a02419482b98d59e1a45950c22093b7897314994",
+      "aliases": [
+        "const expect = source4_expect;"
+      ]
     },
     {
       "source": "83-json-field-viewer.spec.ts",
       "target": "fields.spec.ts",
       "phase": 9,
-      "sourceHash": "5edd625f67dd7502bdfc38f865eb12f7e8c73a9b93883f36025a366676c0853a"
+      "sourceHash": "5edd625f67dd7502bdfc38f865eb12f7e8c73a9b93883f36025a366676c0853a",
+      "aliases": []
     },
     {
       "source": "83-login-returns-token.spec.ts",
@@ -752,7 +920,8 @@
       "source": "85-admin-panel-roles-naming.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "58159fd2f17916018792f3d361613cfb8286dca67ca0fce39fcf9f27128380b0"
+      "sourceHash": "58159fd2f17916018792f3d361613cfb8286dca67ca0fce39fcf9f27128380b0",
+      "aliases": []
     },
     {
       "source": "86-api-key-auth.spec.ts",
@@ -770,25 +939,32 @@
       "source": "88-media-library-fixes.spec.ts",
       "target": "media-core.spec.ts",
       "phase": 3,
-      "sourceHash": "8081f45e2ed45e8bc3842f712f923d186b9fd3e0b75c9d3e05234036e2a9185b"
+      "sourceHash": "8081f45e2ed45e8bc3842f712f923d186b9fd3e0b75c9d3e05234036e2a9185b",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "88-plugin-system.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "ec1016bcbc5ff7b8a3a24fa26512d2de2babd9f61b853e6e25d9587e30fd47b2"
+      "sourceHash": "ec1016bcbc5ff7b8a3a24fa26512d2de2babd9f61b853e6e25d9587e30fd47b2",
+      "aliases": []
     },
     {
       "source": "89-hello-cruel-world-plugin.spec.ts",
       "target": "plugin-catalog.spec.ts",
       "phase": 4,
-      "sourceHash": "28ef215f2488aba3fac1acac7a5e90eb9961f9bc50248772ae5626e3d97b655f"
+      "sourceHash": "28ef215f2488aba3fac1acac7a5e90eb9961f9bc50248772ae5626e3d97b655f",
+      "aliases": []
     },
     {
       "source": "90-plugin-stale-settings-pruning.spec.ts",
       "target": "plugin-settings.spec.ts",
       "phase": 4,
-      "sourceHash": "4f71cceff1be44c1618e4fc1498f68fdf5f4a0c07c7feb07fe6ddfc2f4edd3c6"
+      "sourceHash": "4f71cceff1be44c1618e4fc1498f68fdf5f4a0c07c7feb07fe6ddfc2f4edd3c6",
+      "aliases": []
     },
     {
       "source": "91-database-table-search.spec.ts",
@@ -800,13 +976,18 @@
       "source": "91-media-upload-date.spec.ts",
       "target": "media-upload.spec.ts",
       "phase": 3,
-      "sourceHash": "e29c88cfd61f5f26528a3a6e996263d3ca80c615c4ac261dbce4a01bb165636c"
+      "sourceHash": "e29c88cfd61f5f26528a3a6e996263d3ca80c615c4ac261dbce4a01bb165636c",
+      "aliases": [],
+      "redirects": {
+        "gotoMediaLibrary": "./fixtures/media-fixtures"
+      }
     },
     {
       "source": "91-plugin-routes-tab-persistence.spec.ts",
       "target": "plugin-settings.spec.ts",
       "phase": 4,
-      "sourceHash": "0d09b706336dad0f7c35a512b1cc05e8e94dd0de7a2989d8b3d4e0bb82c253aa"
+      "sourceHash": "0d09b706336dad0f7c35a512b1cc05e8e94dd0de7a2989d8b3d4e0bb82c253aa",
+      "aliases": []
     },
     {
       "source": "92-api-keys-copy-before-redirect.spec.ts",
@@ -818,19 +999,22 @@
       "source": "92-media-create-folder.spec.ts",
       "target": "media-api.spec.ts",
       "phase": 3,
-      "sourceHash": "48977ecb366537d1e5221e8e3b4b592e6edc21d570cbc98165c6aa5c4bb6e6a6"
+      "sourceHash": "48977ecb366537d1e5221e8e3b4b592e6edc21d570cbc98165c6aa5c4bb6e6a6",
+      "aliases": []
     },
     {
       "source": "93-disabled-plugin-sidebar.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "3c616197dfccde17229ebe7b320b24297ff5ee2972e2c72b0aabdad3d8d2e8b6"
+      "sourceHash": "3c616197dfccde17229ebe7b320b24297ff5ee2972e2c72b0aabdad3d8d2e8b6",
+      "aliases": []
     },
     {
       "source": "93-oauth-providers-settings.spec.ts",
       "target": "plugin-settings.spec.ts",
       "phase": 4,
-      "sourceHash": "6d0c20e52888b19582321275eab19669c8ab8d17f374838637d6a6bfa1031beb"
+      "sourceHash": "6d0c20e52888b19582321275eab19669c8ab8d17f374838637d6a6bfa1031beb",
+      "aliases": []
     },
     {
       "source": "94-content-edit-info-sidebar.spec.ts",
@@ -842,7 +1026,8 @@
       "source": "94-removed-plugin-deactivated.spec.ts",
       "target": "plugin-core.spec.ts",
       "phase": 4,
-      "sourceHash": "0d947c3bf8cc5e17966b05b80436cacbca7a601969bb174ec36796ca4d671fed"
+      "sourceHash": "0d947c3bf8cc5e17966b05b80436cacbca7a601969bb174ec36796ca4d671fed",
+      "aliases": []
     },
     {
       "source": "94-self-host-smoke.spec.ts",
@@ -860,13 +1045,18 @@
       "source": "95-viewer-sidebar-scope.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "ba426bc78d7ed3a97db96986240d51f39007023e00a801ffce27f261840ba00d"
+      "sourceHash": "ba426bc78d7ed3a97db96986240d51f39007023e00a801ffce27f261840ba00d",
+      "aliases": []
     },
     {
       "source": "96-block-stable-ids.spec.ts",
       "target": "fields.spec.ts",
       "phase": 9,
-      "sourceHash": "2934a5e1106a5ffd5d1ac2c88fbe530104abadfb7054cb7849b8468538b64976"
+      "sourceHash": "2934a5e1106a5ffd5d1ac2c88fbe530104abadfb7054cb7849b8468538b64976",
+      "aliases": [],
+      "redirects": {
+        "saveNewContent": "./fixtures/content-fixtures"
+      }
     },
     {
       "source": "96-mcp-endpoint.spec.ts",
@@ -878,7 +1068,8 @@
       "source": "97-cache-invalidation.spec.ts",
       "target": "cache.spec.ts",
       "phase": 7,
-      "sourceHash": "134dc9de102b734756709417f6acb8b6d34d47922419d0cf75594e0f5090f680"
+      "sourceHash": "134dc9de102b734756709417f6acb8b6d34d47922419d0cf75594e0f5090f680",
+      "aliases": []
     },
     {
       "source": "97-otp-request-route.spec.ts",
@@ -890,25 +1081,29 @@
       "source": "97-stats-dashboard-fixes.spec.ts",
       "target": "dashboard.spec.ts",
       "phase": 9,
-      "sourceHash": "ac5b9b951cc5654381d43023fe25094387baa9744812a52452a7b577de59bd49"
+      "sourceHash": "ac5b9b951cc5654381d43023fe25094387baa9744812a52452a7b577de59bd49",
+      "aliases": []
     },
     {
       "source": "97-user-edit-dynamic-roles.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "a225d02e58caa44117952eaac4ccdc2857a10b91492303a6886f1662212f7d43"
+      "sourceHash": "a225d02e58caa44117952eaac4ccdc2857a10b91492303a6886f1662212f7d43",
+      "aliases": []
     },
     {
       "source": "98-public-role-api-acl.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "8f2200e54f4a5c4098ab5cc103c323cd430bd664233be0ac3e7701d9a7f66f17"
+      "sourceHash": "8f2200e54f4a5c4098ab5cc103c323cd430bd664233be0ac3e7701d9a7f66f17",
+      "aliases": []
     },
     {
       "source": "99-rbac-grant-api-access.spec.ts",
       "target": "rbac.spec.ts",
       "phase": 5,
-      "sourceHash": "2a858549c5b490b52c6cf2a7a4430a5bae809e5a0f4a6d9516d4f80dcf38ee68"
+      "sourceHash": "2a858549c5b490b52c6cf2a7a4430a5bae809e5a0f4a6d9516d4f80dcf38ee68",
+      "aliases": []
     },
     {
       "source": "smoke.spec.ts",

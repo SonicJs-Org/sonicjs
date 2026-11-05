@@ -14,7 +14,7 @@ I've created a comprehensive end-to-end testing suite for the entire SonicJS AI 
    - Authentication requirements
    - 404 error handling
 
-2. **`02-authentication.spec.ts`** - Authentication & Session Management
+2. **`auth-ui.spec.ts`** - Authentication & Session Management
    - Login form validation
    - Valid/invalid credential handling
    - Session persistence
@@ -35,14 +35,14 @@ I've created a comprehensive end-to-end testing suite for the entire SonicJS AI 
    - Collection actions
    - Navigation to collection content
 
-5. **`05-content.spec.ts`** - Content Management
+5. **`content-crud.spec.ts`** - Content Management
    - Content listing and filtering
    - Bulk operations
    - Workflow actions
    - Pagination handling
    - Mobile responsiveness
 
-6. **`06-media.spec.ts`** - Media Management
+6. **`media-core.spec.ts`** - Media Management
    - File upload functionality
    - File type validation
    - Media library display

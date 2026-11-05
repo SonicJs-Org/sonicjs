@@ -4,7 +4,7 @@
 
 ### ✅ **Total E2E Tests: 70+ Tests**
 
-#### **Form.io Tests** (`50-forms.spec.ts`) - 35 tests
+#### **Form.io Tests** (`forms.spec.ts`) - 35 tests
 - Forms Management (5 tests)
 - Form Builder UI (8 tests)
 - Public Form Rendering (3 tests)
@@ -12,7 +12,7 @@
 - Headless API (7 tests)
 - Form Deletion (1 test)
 
-#### **Turnstile Tests** (`51-turnstile-integration.spec.ts`) - 35+ tests
+#### **Turnstile Tests** (`forms.spec.ts`) - 35+ tests
 - Plugin Configuration (4 tests)
 - Component in Builder (6 tests)
 - Widget on Public Forms (3 tests)
@@ -166,12 +166,12 @@ npm run e2e
 
 ### Run Only Forms Tests
 ```bash
-npm run e2e tests/e2e/50-forms.spec.ts
+npm run e2e tests/e2e/forms.spec.ts
 ```
 
 ### Run Only Turnstile Tests
 ```bash
-npm run e2e tests/e2e/51-turnstile-integration.spec.ts
+npm run e2e tests/e2e/forms.spec.ts
 ```
 
 ### Run Specific Test Suite
@@ -291,8 +291,8 @@ Monitor at: https://github.com/mmcintosh/sonicjs/pull/24
 
 - Test Helpers: `tests/e2e/utils/test-helpers.ts`
 - Playwright Config: `tests/playwright.config.ts`
-- Forms E2E Tests: `tests/e2e/50-forms.spec.ts`
-- Turnstile E2E Tests: `tests/e2e/51-turnstile-integration.spec.ts`
+- Forms E2E Tests: `tests/e2e/forms.spec.ts`
+- Turnstile E2E Tests: `tests/e2e/forms.spec.ts`
 
 ---
 

@@ -41,7 +41,7 @@ function imports(source) {
   const result = new Map()
   for (const node of source.statements.filter(ts.isImportDeclaration)) {
     const clause = node.importClause
-    if (!clause || clause.name || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings) || node.attributes || !ts.isStringLiteral(node.moduleSpecifier)) fail('unsupported import shape')
+    if (!clause || clause.name || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings) || !clause.namedBindings.elements.length || node.attributes || !ts.isStringLiteral(node.moduleSpecifier)) fail('unsupported import shape')
     for (const element of clause.namedBindings.elements) {
       const local = element.name.text, imported = (element.propertyName || element.name).text
       if (result.has(local)) fail(`duplicate import binding: ${local}`)
@@ -88,6 +88,29 @@ function wrappers(source, entries) {
   return result
 }
 
+// One explicit fixture repair exposed by consolidation: the activity test used to
+// inherit an installed plugin from earlier files. Preserve its complete original
+// body while requiring this exact checked install before its first navigation.
+function preparedSource(source, entry) {
+  if (!entry.preparation) return source
+  if (entry.source !== '68-plugin-activity-log.spec.ts' || entry.preparation !== 'install-activity-plugin') fail('unapproved source preparation')
+  const matches = []
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'test' && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text === 'activity tab shows entries after toggling a plugin') matches.push(node)
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  if (matches.length !== 1) fail('missing/ambiguous activity preparation target')
+  const body = matches[0].arguments[1]?.body
+  const first = body && ts.isBlock(body) && body.statements[0]
+  if (!first || declarationName(first) !== 'pluginId') fail('activity preparation anchor changed')
+  const installation = `\nexpect((await page.request.post('/admin/plugins/install', {
+    data: { name: pluginId, id: pluginId },
+    headers: { Origin: new URL(page.url()).origin },
+  })).ok(), 'Activity fixture plugin installation failed').toBe(true);\n`
+  return parse(source.text.slice(0, first.end) + installation + source.text.slice(first.end))
+}
+
 // Injectable readers let negative checks exercise this exact verifier without touching
 // live test sources, including while a parent browser campaign is running.
 export function verifySources(options = {}) {
@@ -96,7 +119,7 @@ export function verifySources(options = {}) {
   const getCurrent = options.readCurrent || readCurrent
   const active = (options.listCurrent || (() => readdirSync(resolve(root, 'tests/e2e')).filter(f => f.endsWith('.spec.ts'))))()
   const activeSet = new Set(active)
-  const groups = new Map(), originals = new Map(), fixtures = new Map()
+  const groups = new Map(), originals = new Map(), fixtures = new Map(), sharedModules = new Map()
   for (const entry of data.sources) {
     const original = getOriginal(entry, data)
     if (entry.sourceHash !== hash(original)) fail(`baseline source hash mismatch: ${entry.source}`)
@@ -119,8 +142,18 @@ export function verifySources(options = {}) {
     same(outerImports.get('test'), { module: './fixtures', imported: 'test', type: false }, `wrapper test import must retain hardened fixtures: ${target}`)
     const usedImports = new Set(['test'])
     for (const entry of entries) {
-      const before = originals.get(entry.source)
+      const before = preparedSource(originals.get(entry.source), entry)
       const expectedImports = imports(before)
+      for (const [local, module] of Object.entries(entry.redirects || {})) {
+        const binding = expectedImports.get(local)
+        if (!binding || binding.module !== './utils/test-helpers' || binding.type || !module.startsWith('./fixtures/')) fail(`invalid shared fixture redirect: ${local}`)
+        const file = module.slice(2) + '.ts'
+        extractedModule(file)
+        const exports = sharedModules.get(file) || new Map()
+        exports.set(binding.imported, binding.imported)
+        sharedModules.set(file, exports)
+        expectedImports.set(local, { ...binding, module })
+      }
       const extracts = entry.extracts || []
       const seenExtracts = new Set()
       for (const extraction of extracts) {
@@ -164,6 +197,21 @@ export function verifySources(options = {}) {
       if (!expected || printed(node, fixture).replace(/^export /, '') !== expected) fail(`extracted fixture helper changed: ${file}:${name}`)
       if (node.modifiers?.length !== 1 || node.modifiers[0].kind !== ts.SyntaxKind.ExportKeyword) fail(`fixture helper must be an explicit export: ${file}:${name}`)
     }
+  }
+  // Helper facades reuse the existing implementations without changing their bodies,
+  // dependency scope, state or public identity. No executable statements are allowed.
+  for (const [file, expected] of sharedModules) {
+    if (fixtures.has(file)) fail(`mixed extracted/shared fixture: ${file}`)
+    const actual = new Map()
+    for (const node of parse(getCurrent(file)).statements) {
+      if (!ts.isExportDeclaration(node) || node.isTypeOnly || node.attributes || node.modifiers?.length || !node.moduleSpecifier || !ts.isStringLiteral(node.moduleSpecifier) || node.moduleSpecifier.text !== '../utils/test-helpers' || !node.exportClause || !ts.isNamedExports(node.exportClause) || !node.exportClause.elements.length) fail(`invalid shared fixture export: ${file}`)
+      for (const element of node.exportClause.elements) {
+        const local = element.name.text
+        if (element.isTypeOnly || actual.has(local)) fail(`duplicate/type-only shared fixture export: ${file}:${local}`)
+        actual.set(local, (element.propertyName || element.name).text)
+      }
+    }
+    same([...expected].sort(), [...actual].sort(), `shared fixture export identity changed: ${file}`)
   }
   return { originalSpecs: data.sources.length, activeSpecs: active.length }
 }

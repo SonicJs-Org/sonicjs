@@ -25,7 +25,7 @@ When implementing features or fixes:
 ### File Naming
 - Use descriptive names: `##-feature-description.spec.ts`
 - Number sequentially based on existing tests
-- Example: `36-easymde-plugin-visible.spec.ts`
+- Example: `richtext.spec.ts`
 
 ### Test Structure
 ```typescript

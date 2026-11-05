@@ -49,6 +49,66 @@ const fixture = () => {
 import { createHash } from 'node:crypto'
 import { verifySources, collectLeaves, verifyCollection } from './coverage-guard.mjs'
 
+function activityPreparation() {
+  const source = '68-plugin-activity-log.spec.ts'
+  const body = `test('activity tab shows entries after toggling a plugin', async ({ page }) => {
+    const pluginId = 'hello-world';
+    await page.goto('/admin/plugins/' + pluginId);
+    expect(await page.title()).toBe('Plugin');
+  });`
+  const installation = `expect((await page.request.post('/admin/plugins/install', {
+    data: { name: pluginId, id: pluginId },
+    headers: { Origin: new URL(page.url()).origin },
+  })).ok(), 'Activity fixture plugin installation failed').toBe(true);`
+  const original = "import { test, expect } from './fixtures';\n" + body
+  const current = original.split('\n')[0] + `\ntest.describe('Source: ${source}', () => {\n` + body.replace("const pluginId = 'hello-world';", "const pluginId = 'hello-world';\n" + installation) + '\n});'
+  const data = { base: 'test-base', sources: [{ source, target: 'plugin-catalog.spec.ts', sourceHash: createHash('sha256').update(original).digest('hex'), preparation: 'install-activity-plugin' }] }
+  return { data, readOriginal: () => original, readCurrent: () => current, listCurrent: () => ['plugin-catalog.spec.ts'], current }
+}
+
+test('activity prerequisite preserves original tests and requires a checked installation', () => {
+  assert.deepEqual(verifySources(activityPreparation()), { originalSpecs: 1, activeSpecs: 1 })
+  for (const mutate of [
+    text => text.replace("'/admin/plugins/install'", "'/admin/plugins/uninstall'"),
+    text => text.replace(".ok(), 'Activity", ".status(), 'Activity"),
+    text => text.replace("toBe('Plugin')", 'toBeTruthy()'),
+    text => text.replace("'Activity fixture plugin installation failed').toBe(true)", "'Activity fixture plugin installation failed').toBe(false)"),
+  ]) {
+    const sample = activityPreparation()
+    sample.readCurrent = () => mutate(sample.current)
+    assert.throws(() => verifySources(sample), /preservation/i)
+  }
+  const unknown = activityPreparation()
+  unknown.data.sources[0].preparation = 'skip-activity-test'
+  assert.throws(() => verifySources(unknown), /preservation/i)
+})
+
+function sharedHelpers() {
+  const sample = fixture()
+  const original = sample.readOriginal() + "\nimport { saveNewContent } from './utils/test-helpers';"
+  sample.readOriginal = () => original
+  sample.data.sources[0].sourceHash = createHash('sha256').update(original).digest('hex')
+  sample.data.sources[0].redirects = { saveNewContent: './fixtures/content-fixtures' }
+  sample.files.set('merged.spec.ts', "import { saveNewContent } from './fixtures/content-fixtures';\n" + sample.files.get('merged.spec.ts'))
+  sample.files.set('fixtures/content-fixtures.ts', "export { saveNewContent } from '../utils/test-helpers';")
+  return sample
+}
+
+test('shared fixture modules preserve original helper implementations by exact re-export', () => {
+  assert.deepEqual(verifySources(sharedHelpers()), { originalSpecs: 1, activeSpecs: 1 })
+})
+
+for (const [label, text] of [
+  ['implementation origin', "export { saveNewContent } from '../utils/other';"],
+  ['export identity', "export { other as saveNewContent } from '../utils/test-helpers';"],
+  ['extra effects', "export { saveNewContent } from '../utils/test-helpers'; doSomething();"],
+  ['stub', 'export async function saveNewContent() {}'],
+]) test(`shared fixture rejects changed ${label}`, () => {
+  const sample = sharedHelpers()
+  sample.files.set('fixtures/content-fixtures.ts', text)
+  assert.throws(() => verifySources(sample), /preservation|fixture|import|export/i)
+})
+
 test('actual verifier accepts scoped extended factories and validated extraction aliases', () => {
   assert.deepEqual(verifySources(fixture()), { originalSpecs: 1, activeSpecs: 1 })
 })
@@ -57,6 +117,8 @@ for (const [label, mutate] of [
   ['changed hardened fixture import', text => text.replace("from './fixtures'", "from '@playwright/test'")],
   ['added outer skip hook', text => text + '\ntest.beforeEach(() => test.skip());'],
   ['unapproved outer import', text => "import { test as extra } from '@playwright/test';\n" + text],
+  ['empty named side-effect import', text => "import {} from './side-effects';\n" + text],
+  ['changed extracted helper module', text => text.replace("from './fixtures/auth-fixtures'", "from './fixtures/other-fixtures'")],
   ['added outer configuration', text => text + "\ntest.use({ storageState: 'other.json' });"],
   ['serial wrapper tampering', text => text.replace("test.describe('Source:", "test.describe.serial('Source:")],
   ['async wrapper tampering', text => text.replace("source-a.spec.ts', () =>", "source-a.spec.ts', async () =>")],
@@ -146,4 +208,13 @@ test('extraction alias metadata cannot authorize a different imported implementa
   sample.data.sources[0].aliases = ['const uniqueEmail = expect;']
   sample.files.set('merged.spec.ts', sample.files.get('merged.spec.ts').replace('uniqueEmail = extractedEmail', 'uniqueEmail = expect'))
   assert.throws(() => verifySources(sample), /import alias origin/)
+})
+
+
+test('extracted helper implementation must retain its export and exported name', () => {
+  for (const change of [text => text.replace('export function', 'function'), text => text.replace('function uniqueEmail', 'function renamedEmail')]) {
+    const sample = fixture()
+    sample.files.set('fixtures/auth-fixtures.ts', change(sample.files.get('fixtures/auth-fixtures.ts')))
+    assert.throws(() => verifySources(sample), /fixture|export/i)
+  }
 })

@@ -39,7 +39,9 @@ adminRoutes.get('/', async (c) => {
   const db = c.env.DB
   const user = c.get('user')
 
-  const [
+  let recentRunsR, totalRunsR, passRateR, flakyTotalR, avgDurationR, dailyRunsR, topFlakyR, topFailingR
+  try {
+  [
     recentRunsR,
     totalRunsR,
     passRateR,
@@ -143,6 +145,24 @@ adminRoutes.get('/', async (c) => {
        ORDER BY fail_count DESC LIMIT 10`
     ).all(),
   ])
+  } catch (dbErr) {
+    console.error('[playwright-dashboard] DB error:', dbErr)
+    return c.html(
+      renderAdminLayoutCatalyst({
+        title: 'Playwright',
+        pageTitle: 'Playwright CI/CD',
+        currentPath: '/admin/playwright',
+        version: c.get('appVersion'),
+        user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
+        content: `<div class="py-16 text-center">
+          <p class="text-lg font-semibold text-red-600 dark:text-red-400">Database temporarily unavailable</p>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Please refresh the page to try again.</p>
+          <button onclick="location.reload()" class="mt-4 inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Refresh</button>
+        </div>`,
+      }),
+      500
+    )
+  }
 
   // ── Aggregate data ──────────────────────────────────────────────────
   const recentRuns = rowsOf(recentRunsR)
@@ -354,8 +374,13 @@ adminRoutes.get('/run/:runId', async (c) => {
   const runId = c.req.param('runId')
   const filter = c.req.query('filter') || 'all' // all | passed | failed | flaky | skipped
 
+  let runR
+  let run: Row
+  let tests: Row[]
+  let countsR: Row | null
+  try {
   // Fetch run metadata
-  const runR = await db.prepare(
+  runR = await db.prepare(
     `SELECT json_extract(data, '$.run_id') AS run_id,
             json_extract(data, '$.branch') AS branch,
             json_extract(data, '$.commit_sha') AS commit_sha,
@@ -395,7 +420,7 @@ adminRoutes.get('/run/:runId', async (c) => {
     )
   }
 
-  const run = runR as Row
+  run = runR as Row
 
   // Build filter clause for tests
   let statusClause = ''
@@ -435,10 +460,10 @@ adminRoutes.get('/run/:runId', async (c) => {
      ORDER BY json_extract(t1.data, '$.test_file'), json_extract(t1.data, '$.test_title')`
   ).bind(runId).all()
 
-  const tests = rowsOf(testsR)
+  tests = rowsOf(testsR)
 
   // Count tests by status for filter badges
-  const countsR = await db.prepare(
+  countsR = await db.prepare(
     `SELECT
        SUM(CASE WHEN json_extract(t1.data, '$.status') = 'passed' AND json_extract(t1.data, '$.is_flaky') != 1 THEN 1 ELSE 0 END) AS passed_count,
        SUM(CASE WHEN json_extract(t1.data, '$.status') IN ('failed', 'timedOut', 'interrupted') THEN 1 ELSE 0 END) AS failed_count,
@@ -456,6 +481,25 @@ adminRoutes.get('/run/:runId', async (c) => {
            AND CAST(json_extract(t2.data, '$.retry') AS INTEGER) > CAST(json_extract(t1.data, '$.retry') AS INTEGER)
        )`
   ).bind(runId).first() as Row | null
+  } catch (dbErr) {
+    console.error('[playwright-dashboard] /run/:runId DB error:', dbErr)
+    return c.html(
+      renderAdminLayoutCatalyst({
+        title: 'Error',
+        pageTitle: 'Playwright CI/CD',
+        currentPath: '/admin/playwright',
+        version: c.get('appVersion'),
+        user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
+        content: `<div class="py-16 text-center">
+          <p class="text-lg font-semibold text-red-600 dark:text-red-400">Database temporarily unavailable</p>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Please refresh the page to try again.</p>
+          <a href="/admin/playwright" class="mt-4 inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">← Back to runs</a>
+        </div>`,
+        dynamicMenuItems: c.get('pluginMenuItems'),
+      }),
+      500
+    )
+  }
 
   const counts = {
     all: Number(run.total) || 0,

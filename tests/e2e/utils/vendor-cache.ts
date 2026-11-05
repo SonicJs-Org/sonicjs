@@ -29,14 +29,21 @@ export async function cacheVendorAssets(context: BrowserContext, origin: string,
   marked[PREPARED] = context.route(isVendorAsset, async route => {
     const request = route.request()
     if (request.method() !== 'GET') return route.continue()
-    const requestHeaders = request.headers()
-    const key = JSON.stringify([request.url(), requestHeaders['user-agent'], requestHeaders.accept, requestHeaders.origin])
+    // headers() omits Cookie. Forward the full browser representation, and supply
+    // even an empty Cookie so the worker client's cookie jar cannot fill it in.
+    const requestHeaders = await request.allHeaders().catch(error => {
+      if (closed) return undefined
+      throw error
+    })
+    if (closed || !requestHeaders) return
+    const forwardedHeaders = { ...requestHeaders, cookie: requestHeaders.cookie || '', 'accept-encoding': 'gzip, deflate, br' }
+    const key = JSON.stringify([request.url(), Object.entries(forwardedHeaders).sort(([a], [b]) => a.localeCompare(b))])
     let pending = pendingResponses.get(key)
     if (!pending) {
       pending = responses.has(key) ? Promise.resolve(responses.get(key)!) : (async () => {
-        const options = { maxRedirects: 0, maxRetries: 0 }
+        const options = { maxRedirects: 0, maxRetries: 0, headers: forwardedHeaders }
         const response = client
-          ? await client.get(request.url(), { ...options, headers: { ...requestHeaders, 'accept-encoding': 'gzip, deflate, br' } })
+          ? await client.get(request.url(), options)
           : await route.fetch(options)
         const headers = { ...response.headers() }
         for (const name of ['content-encoding', 'content-length', 'transfer-encoding', 'connection']) delete headers[name]
@@ -46,14 +53,18 @@ export async function cacheVendorAssets(context: BrowserContext, origin: string,
     }
     try {
       const response = await pending
-      if (response.status >= 200 && response.status < 400 && response.status !== 304) responses.set(key, response)
+      const cacheControl = response.headers['cache-control'] || ''
+      const variesOnAnything = (response.headers.vary || '').split(',').some(name => name.trim() === '*')
+      if (response.status >= 200 && response.status < 400 && response.status !== 304 &&
+        !/(?:^|,)\s*(?:private|no-store)(?:\s*(?:=|,|$))/i.test(cacheControl) &&
+        !variesOnAnything && !('set-cookie' in response.headers)) responses.set(key, response)
       if (closed) return
       await route.fulfill({ ...response, headers: { ...response.headers } })
     } catch (error) {
       if (closed) return
       throw error
     } finally {
-      pendingResponses.delete(key)
+      if (pendingResponses.get(key) === pending) pendingResponses.delete(key)
     }
   })
   await marked[PREPARED]

@@ -57,20 +57,46 @@ function activityPreparation() {
     await page.goto('/admin/plugins/' + pluginId);
     expect(await page.title()).toBe('Plugin');
   });`
-  const installation = `await page.goto(\`/admin/plugins/\${pluginId}\`);
-  if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
-  expect((await page.request.post('/admin/plugins/install', {
-    data: { name: pluginId, id: pluginId },
-    headers: { Origin: new URL(page.url()).origin },
-  })).ok(), 'Activity fixture plugin installation failed').toBe(true);
-  }`
+  const installation = `
+  let installedByTest = false;
+  const primaryErrors: unknown[] = [];
+  try {
+    await page.goto(\`/admin/plugins/\${pluginId}\`);
+    if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
+      const installResponse = await page.request.post('/admin/plugins/install', {
+        data: { name: pluginId, id: pluginId },
+        headers: { Origin: new URL(page.url()).origin },
+      });
+      installedByTest = installResponse.ok();
+      expect(installResponse.ok(), 'Activity fixture plugin installation failed').toBe(true);
+    }
+  `
+  const cleanup = `
+  } catch (error) {
+    primaryErrors.push(error);
+    throw error;
+  } finally {
+    if (installedByTest) {
+      try {
+        const uninstallResponse = await page.request.post(\`/admin/plugins/\${pluginId}/uninstall\`, {
+          headers: { Origin: new URL(page.url()).origin },
+        });
+        expect(uninstallResponse.ok(), 'Activity fixture plugin cleanup failed').toBe(true);
+        expect((await uninstallResponse.json()).success, 'Activity fixture plugin cleanup unsuccessful').toBe(true);
+      } catch (cleanupError) {
+        if (primaryErrors.length) throw new AggregateError([...primaryErrors, cleanupError], 'Activity test and plugin cleanup failed');
+        throw cleanupError;
+      }
+    }
+  }
+  `
   const original = "import { test, expect } from './fixtures';\n" + body
-  const current = original.split('\n')[0] + `\ntest.describe('Source: ${source}', () => {\n` + body.replace("const pluginId = 'hello-world';", "const pluginId = 'hello-world';\n" + installation) + '\n});'
+  const current = original.split('\n')[0] + `\ntest.describe('Source: ${source}', () => {\n` + body.replace("const pluginId = 'hello-world';", "const pluginId = 'hello-world';\n" + installation).replace("toBe('Plugin');", "toBe('Plugin');\n" + cleanup) + '\n});'
   const data = { base: 'test-base', sources: [{ source, target: 'plugin-catalog.spec.ts', sourceHash: createHash('sha256').update(original).digest('hex'), preparation: 'install-activity-plugin' }] }
   return { data, readOriginal: () => original, readCurrent: () => current, listCurrent: () => ['plugin-catalog.spec.ts'], current }
 }
 
-test('activity prerequisite preserves original tests and requires installation only when missing', () => {
+test('activity prerequisite pins owned cleanup and preserves every original body statement', () => {
   assert.deepEqual(verifySources(activityPreparation()), { originalSpecs: 1, activeSpecs: 1 })
   for (const mutate of [
     text => text.replace("if (await page.getByRole('button', { name: 'Install', exact: true }).count())", 'if (true)'),
@@ -78,6 +104,14 @@ test('activity prerequisite preserves original tests and requires installation o
     text => text.replace("'/admin/plugins/install'", "'/admin/plugins/uninstall'"),
     text => text.replace(".ok(), 'Activity", ".status(), 'Activity"),
     text => text.replace("toBe('Plugin')", 'toBeTruthy()'),
+    text => text.replace('if (installedByTest)', 'if (true)'),
+    text => text.replace('installedByTest = installResponse.ok()', 'installedByTest = true'),
+    text => text.replace('primaryErrors.push(error)', 'primaryErrors.push(cleanupError)'),
+    text => text.replace('throw cleanupError;', ''),
+    text => text.replace('new AggregateError([...primaryErrors, cleanupError]', 'new AggregateError([cleanupError]'),
+    text => text.replace('uninstallResponse.json()).success', 'uninstallResponse.json()).error'),
+    text => text.replace("toBe('Plugin');", "toBe('Plugin'); doSomething();"),
+    text => text.replace("expect(await page.title()).toBe('Plugin');", ''),
     text => text.replace("'Activity fixture plugin installation failed').toBe(true)", "'Activity fixture plugin installation failed').toBe(false)"),
   ]) {
     const sample = activityPreparation()

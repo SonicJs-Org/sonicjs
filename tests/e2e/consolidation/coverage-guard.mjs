@@ -90,7 +90,8 @@ function wrappers(source, entries) {
 
 // One explicit fixture repair exposed by consolidation: the activity test used to
 // inherit an installed plugin from earlier files. Preserve its complete original
-// body while requiring this exact detail inspection and install only if missing.
+// body inside this exact wrapper: inspect/install only if missing, then remove only
+// that owned installation. No arbitrary body or cleanup substitutions are permitted.
 function preparedSource(source, entry) {
   if (!entry.preparation) return source
   if (entry.source !== '68-plugin-activity-log.spec.ts' || entry.preparation !== 'install-activity-plugin') fail('unapproved source preparation')
@@ -104,14 +105,40 @@ function preparedSource(source, entry) {
   const body = matches[0].arguments[1]?.body
   const first = body && ts.isBlock(body) && body.statements[0]
   if (!first || declarationName(first) !== 'pluginId') fail('activity preparation anchor changed')
-  const installation = `\nawait page.goto(\`/admin/plugins/\${pluginId}\`);
-  if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
-  expect((await page.request.post('/admin/plugins/install', {
-    data: { name: pluginId, id: pluginId },
-    headers: { Origin: new URL(page.url()).origin },
-  })).ok(), 'Activity fixture plugin installation failed').toBe(true);
-  }\n`
-  return parse(source.text.slice(0, first.end) + installation + source.text.slice(first.end))
+  const installation = `
+  let installedByTest = false;
+  const primaryErrors: unknown[] = [];
+  try {
+    await page.goto(\`/admin/plugins/\${pluginId}\`);
+    if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
+      const installResponse = await page.request.post('/admin/plugins/install', {
+        data: { name: pluginId, id: pluginId },
+        headers: { Origin: new URL(page.url()).origin },
+      });
+      installedByTest = installResponse.ok();
+      expect(installResponse.ok(), 'Activity fixture plugin installation failed').toBe(true);
+    }
+  `
+  const cleanup = `
+  } catch (error) {
+    primaryErrors.push(error);
+    throw error;
+  } finally {
+    if (installedByTest) {
+      try {
+        const uninstallResponse = await page.request.post(\`/admin/plugins/\${pluginId}/uninstall\`, {
+          headers: { Origin: new URL(page.url()).origin },
+        });
+        expect(uninstallResponse.ok(), 'Activity fixture plugin cleanup failed').toBe(true);
+        expect((await uninstallResponse.json()).success, 'Activity fixture plugin cleanup unsuccessful').toBe(true);
+      } catch (cleanupError) {
+        if (primaryErrors.length) throw new AggregateError([...primaryErrors, cleanupError], 'Activity test and plugin cleanup failed');
+        throw cleanupError;
+      }
+    }
+  }
+  `
+  return parse(source.text.slice(0, first.end) + installation + source.text.slice(first.end, body.end - 1) + cleanup + source.text.slice(body.end - 1))
 }
 
 // Injectable readers let negative checks exercise this exact verifier without touching

@@ -14,7 +14,9 @@ visit(source)
 assert.equal(callbacks.length, 1)
 const callback = ts.transpile(`(${callbacks[0].getText(source)})`, { target: ts.ScriptTarget.ESNext })
 
-for (const initial of ['missing', 'active', 'inactive']) test(`activity prerequisite preserves ${initial} starting state and toggle branch`, async () => {
+for (const initial of ['missing', 'active', 'inactive']) for (const failAssertion of [false, true]) for (const cleanup of (initial === 'missing' ? ['ok', 'http-error', 'unsuccessful', 'transport-error'] : ['ok'])) test(`activity prerequisite preserves ${initial} with assertion failure=${failAssertion}, cleanup=${cleanup}`, async () => {
+  const primary = new Error('forced original activity assertion failure')
+  const cleanupFault = new Error('forced cleanup transport failure')
   let status = initial
   const events = []
   const button = name => ({
@@ -32,6 +34,14 @@ for (const initial of ['missing', 'active', 'inactive']) test(`activity prerequi
     goto: async path => { assert.equal(path, '/admin/plugins/hello-world'); events.push('detail') },
     getByRole: (role, { name, exact }) => { assert.equal(role, 'button'); assert.equal(exact, true); return button(name) },
     request: { post: async (path, options) => {
+      assert.equal(options.headers.Origin, 'http://localhost:8787')
+      if (path === '/admin/plugins/hello-world/uninstall') {
+        assert.equal(initial, 'missing', 'never uninstall a preexisting plugin')
+        events.push('uninstall')
+        if (cleanup === 'transport-error') throw cleanupFault
+        if (cleanup === 'ok') status = 'missing'
+        return { ok: () => cleanup !== 'http-error', json: async () => ({ success: cleanup !== 'unsuccessful' }) }
+      }
       assert.equal(path, '/admin/plugins/install')
       assert.deepEqual(JSON.parse(JSON.stringify(options.data)), { name: 'hello-world', id: 'hello-world' })
       events.push('install')
@@ -44,11 +54,28 @@ for (const initial of ['missing', 'active', 'inactive']) test(`activity prerequi
   const expect = actual => ({
     toBe: expected => assert.equal(actual, expected),
     toBeVisible: async () => assert.equal(await actual.visible(), true),
-    not: { toContainText: text => assert.equal(actual.text.includes(text), false) },
+    not: { toContainText: text => {
+      if (failAssertion) throw primary
+      assert.equal(actual.text.includes(text), false)
+    } },
   })
-  await vm.runInNewContext(callback, { expect, URL })({ page })
+  const run = vm.runInNewContext(callback, { expect, URL })({ page })
+  if (cleanup !== 'ok') await assert.rejects(run, error => {
+    const failure = failAssertion ? error.errors?.[1] : error
+    if (failAssertion) {
+      assert.equal(error.name, 'AggregateError')
+      assert.equal(error.errors.length, 2)
+      assert.equal(error.errors[0], primary, 'retain original assertion error')
+    }
+    if (cleanup === 'transport-error') assert.equal(failure, cleanupFault)
+    else assert.equal(failure.name, 'AssertionError', 'cleanup failure must surface')
+    return true
+  })
+  else if (failAssertion) await assert.rejects(run, error => error === primary)
+  else await run
   assert.equal(events.filter(event => event === 'install').length, Number(initial === 'missing'))
   assert.equal(events[0], 'detail', 'observe original detail before installing')
   assert.deepEqual(events.filter(event => ['Activate', 'Deactivate'].includes(event)), initial === 'inactive' ? ['Activate', 'Deactivate'] : ['Deactivate', 'Activate'])
-  assert.equal(status, initial === 'missing' ? 'active' : initial)
+  assert.equal(events.filter(event => event === 'uninstall').length, Number(initial === 'missing'))
+  assert.equal(status, initial === 'missing' && cleanup !== 'ok' ? 'active' : initial)
 })

@@ -454,55 +454,78 @@ test.describe("Source: 68-plugin-activity-log.spec.ts", () => {
       // Use a non-core plugin that can be toggled. Core plugins (turnstile, email, …)
       // render a "Core Plugin" label instead of an activate/deactivate button.
       const pluginId = 'hello-world'
-      // File order no longer supplies this prerequisite. Inspect the original
-      // status first: reinstalling an inactive plugin would activate it.
-      await page.goto(`/admin/plugins/${pluginId}`)
-      if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
-        expect((await page.request.post('/admin/plugins/install', {
-          data: { name: pluginId, id: pluginId },
-          headers: { Origin: new URL(page.url()).origin },
-        })).ok(), 'Activity fixture plugin installation failed').toBe(true)
+      // Only remove an installation created here; preexisting plugins remain installed.
+      let installedByTest = false
+      const primaryErrors: unknown[] = []
+      try {
+        // File order no longer supplies this prerequisite. Inspect the original
+        // status first: reinstalling an inactive plugin would activate it.
+        await page.goto(`/admin/plugins/${pluginId}`)
+        if (await page.getByRole('button', { name: 'Install', exact: true }).count()) {
+          const installResponse = await page.request.post('/admin/plugins/install', {
+            data: { name: pluginId, id: pluginId },
+            headers: { Origin: new URL(page.url()).origin },
+          })
+          installedByTest = installResponse.ok()
+          expect(installResponse.ok(), 'Activity fixture plugin installation failed').toBe(true)
+        }
+        await page.goto(`/admin/plugins/${pluginId}`)
+
+        const deactivateBtn = page.getByRole('button', { name: 'Deactivate', exact: true })
+        const activateBtn = page.getByRole('button', { name: 'Activate', exact: true })
+
+        // Determine current status from the header badge
+        const isActive = (await deactivateBtn.count()) > 0
+
+        // Toggle the plugin to generate activity, then toggle it straight back so the
+        // rest of the suite still sees this plugin in its original state. The page
+        // reloads ~1s after a successful toggle.
+        if (isActive) {
+          await deactivateBtn.click()
+          await expect(activateBtn).toBeVisible({ timeout: 20000 })
+          await activateBtn.click()
+          await expect(deactivateBtn).toBeVisible({ timeout: 20000 })
+        } else {
+          await activateBtn.click()
+          await expect(deactivateBtn).toBeVisible({ timeout: 20000 })
+          await deactivateBtn.click()
+          await expect(activateBtn).toBeVisible({ timeout: 20000 })
+        }
+
+        // Reload and check activity tab
+        await page.goto(`/admin/plugins/${pluginId}`)
+        const activityTab = page.locator('#activity-tab')
+        await activityTab.click()
+
+        const activityPanel = page.locator('#activity-content')
+        await expect(activityPanel).toBeVisible()
+
+        // Should have at least one activity entry (activated or deactivated)
+        const entries = activityPanel.locator('[class*="flex"][class*="items"]')
+        const noActivity = activityPanel.getByText('No recent activity')
+        const hasEntries = await entries.count() > 0
+        const hasNoActivity = await noActivity.isVisible()
+
+        // One of these must be true — the panel renders real state, not blank
+        expect(hasEntries || hasNoActivity).toBe(true)
+        await expect(activityPanel).not.toContainText('undefined')
+      } catch (error) {
+        primaryErrors.push(error)
+        throw error
+      } finally {
+        if (installedByTest) {
+          try {
+            const uninstallResponse = await page.request.post(`/admin/plugins/${pluginId}/uninstall`, {
+              headers: { Origin: new URL(page.url()).origin },
+            })
+            expect(uninstallResponse.ok(), 'Activity fixture plugin cleanup failed').toBe(true)
+            expect((await uninstallResponse.json()).success, 'Activity fixture plugin cleanup unsuccessful').toBe(true)
+          } catch (cleanupError) {
+            if (primaryErrors.length) throw new AggregateError([...primaryErrors, cleanupError], 'Activity test and plugin cleanup failed')
+            throw cleanupError
+          }
+        }
       }
-      await page.goto(`/admin/plugins/${pluginId}`)
-
-      const deactivateBtn = page.getByRole('button', { name: 'Deactivate', exact: true })
-      const activateBtn = page.getByRole('button', { name: 'Activate', exact: true })
-
-      // Determine current status from the header badge
-      const isActive = (await deactivateBtn.count()) > 0
-
-      // Toggle the plugin to generate activity, then toggle it straight back so the
-      // rest of the suite still sees this plugin in its original state. The page
-      // reloads ~1s after a successful toggle.
-      if (isActive) {
-        await deactivateBtn.click()
-        await expect(activateBtn).toBeVisible({ timeout: 20000 })
-        await activateBtn.click()
-        await expect(deactivateBtn).toBeVisible({ timeout: 20000 })
-      } else {
-        await activateBtn.click()
-        await expect(deactivateBtn).toBeVisible({ timeout: 20000 })
-        await deactivateBtn.click()
-        await expect(activateBtn).toBeVisible({ timeout: 20000 })
-      }
-
-      // Reload and check activity tab
-      await page.goto(`/admin/plugins/${pluginId}`)
-      const activityTab = page.locator('#activity-tab')
-      await activityTab.click()
-
-      const activityPanel = page.locator('#activity-content')
-      await expect(activityPanel).toBeVisible()
-
-      // Should have at least one activity entry (activated or deactivated)
-      const entries = activityPanel.locator('[class*="flex"][class*="items"]')
-      const noActivity = activityPanel.getByText('No recent activity')
-      const hasEntries = await entries.count() > 0
-      const hasNoActivity = await noActivity.isVisible()
-
-      // One of these must be true — the panel renders real state, not blank
-      expect(hasEntries || hasNoActivity).toBe(true)
-      await expect(activityPanel).not.toContainText('undefined')
     })
   })
 })

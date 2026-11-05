@@ -77,7 +77,7 @@ Create `tests/reporting/options.ts` with factories for runner options and absolu
 - Local opt-in: `SONICJS_TEST_UPLOAD=1` plus locally supplied `FLAKINESS_ACCESS_TOKEN`; no token in source, CMS settings, or `.dev.vars` fallback.
 - CI: **always `disableUpload: true`**, regardless of mutable local opt-in settings. Test jobs get neither Flakiness access tokens nor `id-token: write`.
 - No credentials: still generate local reports and print a concise upload-disabled notice.
-- Outputs: `test-results/flakiness/<suite>/<invocation>/`, one directory per actual invocation. Include job/shard/attempt disambiguators when applicable; never share mutable output directories between concurrent runs.
+- Outputs: `flakiness-reports/<suite>/<invocation>/`, one directory per actual invocation, outside every Playwright `outputDir` (currently root `test-results/`). Playwright clears its output directory before a run, so putting reports beneath it could erase earlier Vitest or Playwright reports despite unique invocation names. Include job/shard/attempt disambiguators when applicable. Separate CI jobs have separate workspaces; concurrent local invocations in the same checkout still need distinct report directories and must not clean the shared report root.
 - Preserve standard terminal reporters and existing machine-readable/native artifacts.
 - Vitest: set `includeTaskLocation: true`, retain `default`, and preflight duplicate full test names. Do not silently use unstable automatic renaming.[3]
 
@@ -88,7 +88,7 @@ Illustrative vendor configuration inside the shared factories (not a complete pa
 ['@flakiness/playwright', {
   flakinessProject: process.env.FLAKINESS_PROJECT,
   outputFolder: absoluteSuiteOutputDirectory,
-  disableUpload: isCI || !localUploadOptIn,
+  disableUpload: isCI || !localUploadOptIn || !process.env.FLAKINESS_ACCESS_TOKEN,
   open: 'never',
 }]
 
@@ -100,7 +100,7 @@ Illustrative vendor configuration inside the shared factories (not a complete pa
     ['@flakiness/vitest', {
       flakinessProject: process.env.FLAKINESS_PROJECT,
       outputFolder: absoluteSuiteOutputDirectory,
-      disableUpload: isCI || !localUploadOptIn,
+      disableUpload: isCI || !localUploadOptIn || !process.env.FLAKINESS_ACCESS_TOKEN,
     }],
   ],
 }
@@ -108,7 +108,7 @@ Illustrative vendor configuration inside the shared factories (not a complete pa
 
 ### Identity and metadata
 
-Use stable `FK_ENV_SUITE`, `FK_ENV_TARGET` (`local-worker`, `preview-worker`, `www`), and `FK_ENV_SOURCE` (`local`, `ci`). These properties split histories, so do **not** put changing run IDs, SHAs, branch names, preview URLs, PR numbers, or timestamps into `FK_ENV_*`.[7]
+Use stable `FK_ENV_SUITE`, `FK_ENV_TARGET` (`local-worker`, `preview-worker`, `www`, or `none` for suites without an application target), and `FK_ENV_SOURCE` (`local`, `ci`). These properties split histories, so do **not** put changing run IDs, SHAs, branch names, preview URLs, PR numbers, or timestamps into `FK_ENV_*`.[7]
 
 Use titles/CI links and a sidecar manifest for changing invocation metadata: producer workflow/run ID/attempt, job, shard, suite, actual `git rev-parse HEAD`, PR association, sanitized target URL, start/end, and producer step outcome. Preserve Playwright project/browser identity. Verify the vendor's recorded commit matches the actual checkout; do not blindly replace it with `GITHUB_SHA`.
 
@@ -120,7 +120,7 @@ Use the documented two-workflow artifact handoff as the basis, extended to all C
 
 - Retain existing test commands, failure propagation, deployment conditions, and cleanup.
 - Set report-generation metadata before each test step; no uploader credentials.
-- Upload all generated report directories and their manifests under `always()`, including unit reports when subsequent E2E never starts.
+- Upload all generated report directories and their manifests under `always()`, including unit reports when subsequent E2E never starts. Explicitly add the new root `flakiness-reports/` to the artifact paths; it is outside the existing `test-results/` artifact path. Keep both native and vendor-report paths.
 - Artifact names include producer run ID, run attempt, job, and suite. Preserve relative report/attachment structure and native evidence; start with existing seven-day GitHub retention.
 - Handle failing tests and partial reports explicitly. Hard-killed/cancelled jobs may not produce a usable vendor report; mark missing/interrupted evidence in the workflow summary, never infer success.
 - Keep old stats reporting only for the bounded comparison period; never add new privileges to preserve it.
@@ -128,7 +128,7 @@ Use the documented two-workflow artifact handoff as the basis, extended to all C
 ### Consumer: new `.github/workflows/flakiness-upload.yml`
 
 - Trigger `workflow_run` on **`PR Tests`**, `types: [completed]`; also support any additional producer workflows identified in Task 1.
-- Validate repository, producer workflow ID/path, event, run ID, attempt, and allowed producer outcomes using GitHub metadata. Cover `push` and the existing **`pull_request_target`** trigger; do not copy a fork example that handles only `pull_request`.
+- Validate repository, producer workflow ID/path, event, run ID, attempt, and allowed producer outcomes using GitHub metadata. Include both `success` and `failure` conclusions so failed-test evidence is published; handle cancelled/skipped runs explicitly as interrupted or missing evidence, never successful empty runs. Cover `push` and the existing **`pull_request_target`** trigger; do not copy a fork example that handles only `pull_request`.
 - Use a fresh runner, job-scoped `actions: read`, `contents: read`, `id-token: write`; no Cloudflare/npm-publish secrets, privileged caches, or PR checkout/dependency installation.
 - If repository helpers are needed, check out only the trusted default-branch revision, with persisted credentials disabled. Install the exact pinned CLI independently of artifact contents; pin Actions to reviewed immutable revisions.
 - Download artifacts only from the exact triggering run/attempt. Treat all archives, report fields, and manifests as untrusted input.
@@ -165,7 +165,7 @@ For every code-producing task: write focused failing tests, run them and confirm
 1. Add `test:reporting` → `vitest run --config tests/reporting/vitest.config.ts` and a configuration that selects only reporting contract tests.
 2. Write policy tests: local/no token, explicit local upload, CI override, absolute per-suite paths, repeated invocations, and no secret fallback.
 3. Confirm failures before creating `tests/reporting/options.ts`; install reviewed exact vendor versions without runner upgrades.
-4. Ignore generated report artifacts; fresh `npm ci` must succeed with the lockfile.
+4. Ignore generated `flakiness-reports/` artifacts; fresh `npm ci` must succeed with the lockfile.
 
 **Verify:** `npm run test:reporting`; `npm run type-check`. A clean-install check uses CI-equivalent Node/npm and must not depend on pre-existing `node_modules`.
 
@@ -175,7 +175,7 @@ For every code-producing task: write focused failing tests, run them and confirm
 
 1. Write configuration-contract tests proving every effective reporter list contains the vendor reporter exactly once, all existing native reporters remain, and infrastructure still owns no server/setup/teardown.
 2. Add the shared factory to base, smoke, www, infrastructure, and no-server behavior without duplicate inheritance.
-3. Write focused subprocess fixtures for pass, final failure, retry recovery, skip/expected failure, setup failure, timeout/interruption, and attachments. Test actual report JSON and original process exit codes, not only mocked options.
+3. Write focused subprocess fixtures for pass, final failure, retry recovery, skip/expected failure, setup failure, timeout/interruption, and attachments. Test actual report JSON and original process exit codes, not only mocked options. Add a preservation regression: generate a Vitest report, run two sequential Playwright fixtures with native output cleanup enabled, then assert all three invocation reports and attachments remain intact under `flakiness-reports/`.
 4. Isolate synthetic fixtures from production suites; upload-disabled tests must make no external requests. Test reporter/report-directory failures and bounded behavior.
 
 **Verify:** `npm run test:reporting`; Playwright collection identity matches baseline for each config. Real fixtures prove reporting preserves attempts and failure meanings; unsupported vendor behavior becomes an explicit cutover blocker.
@@ -189,7 +189,7 @@ For every code-producing task: write focused failing tests, run them and confirm
 3. Add native integration or a single JUnit-conversion path for any remaining active runner. Pin that converter if needed; avoid legacy deprecated CLI conversion commands.[4][6]
 4. Ensure adding the reporting-contract suite does not recursively discover/run itself through core or root test globs.
 
-**Verify:** `npm run test:reporting`; `npm test -- --run`; `npm run test:cov`; SDK via `npx vitest run --config packages/sdk/vitest.config.ts --root packages/sdk` after confirming resolved config/root behavior. Document actual discovered workspace scripts instead of inventing them.
+**Verify:** `npm run test:reporting`; `npm test -- --run`; `npm run test:cov`; SDK via `(cd packages/sdk && npx vitest run --config vitest.config.ts)` after confirming resolved config/root behavior. Document actual discovered workspace scripts instead of inventing them.
 
 ### Task 5 — Add artifact and provenance validation
 

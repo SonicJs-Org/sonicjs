@@ -69,6 +69,7 @@ describe('mcp plugin — endpoint over real SQLite', () => {
         schema: SCHEMA,
         access: {
           admin: ['read', 'create', 'update', 'delete', 'publish', 'manage'],
+          author: ['read', 'create'],
           viewer: ['read'],
         },
       },
@@ -156,6 +157,15 @@ describe('mcp plugin — endpoint over real SQLite', () => {
     expect(res.result.content[0].text).toMatch(/denied/i)
     // and nothing was written
     expect(parseContent(await call(app, 'list_mcp_post', { status: 'draft' }, 'admin'))).toHaveLength(0)
+  })
+
+  it('create with publish also needs the publish grant', async () => {
+    const refused = await call(app, 'create_mcp_post', { title: 'Live', publish: true }, 'author')
+    expect(refused.result.isError).toBe(true)
+    expect(refused.result.content[0].text).toMatch(/denied/i)
+    expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE type_id='mcp_post'").get().n).toBe(0)
+    const draft = parseContent(await call(app, 'create_mcp_post', { title: 'Draft' }, 'author'))
+    expect(draft.status).toBe('draft')
   })
 
   it('get on a missing document returns an MCP tool error, not a crash', async () => {

@@ -23,6 +23,7 @@
     "dev:react-demo": "cd demos/employee-directory && npm run dev",
     "deploy:demo": "cd demos/employee-directory && npm run build && npx wrangler pages deploy dist --project-name sonicjs-sdk-demo --branch main",
     "test": "npm run test --workspace=@sonicjs-cms/core",
+    "test:reporting": "vitest run --config tests/reporting/vitest.config.ts",
     "test:cov": "npm run test:cov --workspace=@sonicjs-cms/core",
     "test:watch": "npm run test:watch --workspace=@sonicjs-cms/core",
     "e2e": "playwright test --config=tests/playwright.config.ts",
@@ -79,6 +80,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260724.1",
+    "@flakiness/playwright": "2.0.3",
+    "@flakiness/vitest": "1.12.0",
     "@playwright/test": "^1.53.1",
     "@types/node": "^24.9.2",
     "@types/semver": "^7.7.0",

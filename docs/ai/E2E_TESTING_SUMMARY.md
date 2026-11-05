@@ -175,7 +175,7 @@ Tests run on 5 different browser configurations:
 ### Debug Commands
 ```bash
 # Visual step-through
-npx playwright test --debug tests/e2e/02-authentication.spec.ts
+npm run e2e -- auth-ui.spec.ts --debug
 
 # See browser execution
 npx playwright test --headed

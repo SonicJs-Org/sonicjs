@@ -187,3 +187,44 @@ WWW discovery fails because `tests/www/01-marketing-home.spec.ts` imports missin
 exclusions applied. Full type-check/unit/E2E execution is intentionally outside
 this collection-only task. Baseline establishes identities for subsequent reporter
 comparison, not application correctness or complete reporting coverage.
+
+## Task 3: Playwright integration evidence
+
+The main, smoke, WWW and infrastructure configurations append the shared official
+reporter tuple. No-server inherits main's tuple once and retains its CMS target.
+Main keeps list/HTML/JSON/JUnit and the existing stats reporter; smoke keeps its
+four native reporters; WWW keeps HTML; infrastructure keeps list and no application
+lifecycle. A source comparison against Task2 verifies every non-reporting config
+byte remains unchanged. Targets are local-worker/preview-worker for CMS, www for
+marketing and none for infrastructure. Config imports create no directories or
+execution manifests. `--list` omits the vendor: version 2.0.3 otherwise writes a
+synthetic run report during collection. Upload policy remains the shared factory's.
+
+Focused fixtures live under `tests/reporting/fixtures` with `.case.ts` names and
+explicit config matches, outside production discovery. Actual subprocess contracts
+exercise pass, final fail, two-attempt recovery, static/runtime skip, expected
+failure, setup/import failure, timeout, SIGINT, file/buffer attachments and native
+JSON/JUnit/HTML. Children load a network-denial hook covering fetch, HTTP(S), TLS
+and socket connects; a separate probe verifies denial. Actual Vitest output and
+two sequential Playwright reports/attachments survive clearing the same native
+outputDir. Shared flakiness root is never cleaned. Native report directories must
+be siblings of the vendor directory because the vendor removes its own directory.
+File collisions and unwritable directories produce bounded reporter errors while
+expected test failure retains exit 1.
+
+**Cutover blocker:** pinned Playwright reporter 2.0.3 drops the interrupted attempt
+from vendor JSON on SIGINT. Native JSON records `interrupted`, process exits 130,
+but vendor test has an empty attempts array. Contract explicitly characterizes this
+loss; it does not establish complete interruption reporting. No vendor lifecycle
+patch or replacement wrapper applied. Setup/import errors survive as unattributed
+errors; expected failures retain failed status plus expectedStatus=failed and exit 0.
+
+Evidence: `/Users/lane/.hermes/cache/scratch/sonicjs-flakiness-evidence/task3`.
+Configuration, subprocess and interruption RED logs precede implementations;
+preservation was an immediately passing characterization. Final contract/typecheck
+logs record actual outcomes. `after-playwright/` retains fresh collection output;
+`multiplicity-comparison.json` verifies unchanged file/project/title multiplicities
+for every successful baseline invocation. Counts remain core 2068, SDK 68, CMS and
+no-server 756 each, smoke 28, runner 2, root 0. WWW and sample retain their existing
+collection errors. This verifies focused wiring, not a completed migration or full
+application E2E correctness.

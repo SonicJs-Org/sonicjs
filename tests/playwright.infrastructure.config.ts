@@ -1,3 +1,4 @@
+import { playwrightReporting } from './reporting/options'
 import { defineConfig } from '@playwright/test'
 import base from './playwright.config'
 
@@ -9,5 +10,5 @@ export default defineConfig({
   globalTeardown: undefined,
   webServer: undefined,
   retries: 0,
-  reporter: [['list']],
+  reporter: [['list'], ...playwrightReporting('runner-contracts', 'none')],
 })

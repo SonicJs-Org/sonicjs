@@ -126,3 +126,13 @@ export function assertUniqueTestNames(tests: readonly {
     seen.add(identity)
   }
 }
+
+/** Config evaluation is side-effect free on disk. List mode must never emit run reports.
+ * Inherited configs may replace this tuple; only the effective tuple is instantiated.
+ */
+export function playwrightReporting(suite: ReportingSuite, target: ReportingTarget): ReportingOptions['playwright'][] {
+  if (process.argv.includes('--list')) return []
+  const options = createReportingOptions({ suite, target })
+  Object.assign(process.env, options.environment)
+  return [options.playwright]
+}

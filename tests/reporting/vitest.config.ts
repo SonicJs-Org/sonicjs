@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   root: fileURLToPath(new URL('../..', import.meta.url)),
   test: {
-    include: ['tests/reporting/options.test.ts'],
+    include: ['tests/reporting/*.test.ts'],
     reporters: ['default'],
     includeTaskLocation: true,
     testTimeout: 30_000,

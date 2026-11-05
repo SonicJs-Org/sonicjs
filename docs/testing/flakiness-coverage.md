@@ -1,10 +1,10 @@
 # Flakiness runner coverage inventory
 
 Inventory base: `7b6ecb7b8cd9728f2edc75316445feac311f3707`, branch
-`feat/flakiness-reporters`, collected 2026-11-05. This first change inventories
-coverage only. Reporter wiring and service cutover are future work. No claim of
-complete reporting coverage is made: the CLI verifier and manual API collection
-remain explicit exclusions, and WWW discovery currently fails.
+`feat/flakiness-reporters`, collected 2026-11-05. Baseline identities remain immutable. Tasks 2–4 add local reporter wiring;
+service cutover remains future work. Current staged behavior and validation are
+recorded below; WWW discovery, sample collection, and the local CLI installation
+have explicit blockers. Manual API collection remains excluded.
 
 ## Locked tools and prerequisite
 
@@ -39,9 +39,9 @@ Watch/UI variants retain the same destination as their batch runner.
 | root `e2e:www` | `playwright test --config=tests/playwright.www.config.ts` | `www-e2e`, discovery blocker below |
 | direct no-server config | `playwright test --config=tests/playwright-no-server.config.ts` | `cms-e2e`, same actual target as main: `BASE_URL` or `http://localhost:8787`; only server ownership differs |
 | direct infrastructure config | `playwright test --config=tests/playwright.infrastructure.config.ts` | `runner-contracts` |
-| future reporting contract config | Not present at inventory base | reserve `reporting-contracts`; do not include in baseline totals |
-| create-app `test` | `node test-cli.js` | Genuine standalone manual CLI verifier; excluded from Vitest/Playwright adapters, remains uncovered by proposed reporter wiring |
-| sample app `test`, `test:watch` | `vitest --run`; `vitest` | Active script entry points, but no local Vitest config; ancestor root config/include is relative to invocation cwd. Collection exits 1 on Playwright API in contact-form spec; reporting destination deferred pending dedicated config/runner decision, explicitly uncovered |
+| reporting contract config | `npm run test:reporting` | `reporting-contracts`; separate discovery, absent from immutable baseline totals |
+| create-app `test` | `vitest run --config vitest.config.ts`, delegates unchanged `node test-cli.js` | `create-app-cli`; one real verifier, local missing-dependency failure retained |
+| sample app `test`, `test:watch` | `vitest --run`; `vitest` | `sample-unit`; local config deliberately inherits root discovery/excludes/coverage relative to cwd. Genuine Playwright-import collection failure reported, exit 1; no tests skipped/moved |
 | starter `test`, `test:watch` | `vitest --run`; `vitest` | Generated project scaffolding, no tracked test/config; not repository suite; consumer-owned reporting |
 | stats, templates, WWW, employee-directory | No test scripts | Excluded: builds, lint, type checks, preview and deployment are not tests |
 
@@ -57,8 +57,8 @@ The sample's `src/plugins/contact-form/test/contact.spec.ts` imports Playwright,
 contains two browser tests, but lies outside all five Playwright testDirs.
 The sample Vitest command does discover it through the inherited config, but
 collection fails with `Playwright Test did not expect test.describe() to be called here.`
-This is a broken active script path, not a dead test. It remains explicitly
-uncovered until an intentional browser config or test migration exists;
+This is a broken active script path, not a dead test. Task4 now records this collection failure under `sample-unit`; browser execution
+remains blocked until an intentional browser config or test migration exists;
 do not claim CMS collection covers it. Starter commands likewise do not create
 tests. `tests/postman/` is a manual Postman collection with request assertions
 and authentication pre-request scripts; no active Newman/CI caller, excluded
@@ -228,3 +228,118 @@ for every successful baseline invocation. Counts remain core 2068, SDK 68, CMS a
 no-server 756 each, smoke 28, runner 2, root 0. WWW and sample retain their existing
 collection errors. This verifies focused wiring, not a completed migration or full
 application E2E correctness.
+
+
+## Task 4: Vitest and remaining active runners
+
+Official `@flakiness/vitest` **1.12.0** now accompanies the default terminal reporter
+in core, SDK, root, reporting contracts, sample, and create-app CLI configs.
+`includeTaskLocation: true` is enabled for actual runs. Core/root includes,
+excludes, coverage formats and thresholds are unchanged; SDK discovery stays
+relative to invocation cwd. Production discovery cannot recurse into reporting
+contracts or `.case.ts` child fixtures. Runner pins remain 4.1.11 / 1.63.0.
+
+The create-app wrapper executes the existing `test-cli.js` in its original package
+cwd, inherits its stdout/stderr, rejects its failure/signal, and leaves generated
+project cleanup with that verifier. It adds no invented build/typecheck cases.
+The original verifier is unchanged. Both direct and wrapped executions currently
+exit 1 because the local install lacks `@sindresorhus/merge-streams` (execa runtime
+dependency). The wrapper records a real failed test. Successful scaffold checks
+remain unverified until parent repairs installation and reruns both commands;
+this is an explicit acceptance blocker, not a passing CLI claim. No converter
+package or alternative JUnit ingestion path was introduced.
+
+`vitest-integration.ts` observes documented reporter hooks alongside the official
+reporter. Every `onTestRunStart`, including watch reruns, allocates an independent
+absolute repository `flakiness-reports/<suite>/<invocation>/` folder and applies
+stable suite/target/source metadata and the actual checked-out commit. The initial
+configuration reserves a folder; actual start time is recorded at the start hook.
+Native pinned reporter watch behavior is verified separately: it creates fresh
+per-run internal state but rewrites the same configured output folder. Integration
+updates only its public options at the start hook; official reporter still owns
+all attempts and report generation. Real pass→fail watch fixtures prove both
+native overwrite behavior and integrated independent reports with one attempt each.
+
+Collection preflight uses vendor identity semantics: environment name
+(`project.name || 'vitest'`), relative filename, and ordered ancestor/test titles.
+Duplicate identities fail clearly and force upload disabled before vendor
+finalization. Distinct filenames remain distinct identities. No auto-renaming,
+broad suite renaming, exclusions, or fabricated attempts are enabled. A colliding
+output path remains a visible nonzero runner failure even when assertions pass.
+
+Independent Playwright metadata reporter now prints the disabled-upload notice,
+records actual start/end and suite outcome, and sanitizes the effective project's
+baseURL (credentials/query/fragment removed). Both integrations reuse the shared
+manifest writer at `<invocation>/invocation.json`; official reporters receive
+`<invocation>/vendor/` as `outputFolder`, so cleanup preserves lifecycle evidence.
+Archive `invocationFolder` to retain both metadata and vendor reports.
+Playwright native JSON/JUnit/HTML/attachments and legacy stats wiring stay intact.
+Vitest may exit 130 before its end hook: an exit observer completes the sidecar
+without intercepting signals or changing exits. Hard kill cannot finalize a
+manifest; a missing end time is incomplete evidence. **Cutover blocker retained:**
+Playwright reporter 2.0.3 drops interrupted attempts while native JSON and completed
+sidecar record interruption/exit 130. Vitest SIGINT can leave no vendor report at
+all; completed sidecar records interruption. Neither vendor report is rewritten.
+
+### Local commands and evidence
+
+Use Node **22.23.1**, npm **10.9.8**, installed repository dependencies; no account
+or credentials required for local reports:
+
+```sh
+npm run test:reporting
+npm test -- --run
+npm run test:cov
+(cd packages/sdk && npx --no-install vitest run --config vitest.config.ts)
+npx --no-install vitest run --config vitest.config.ts
+(cd my-sonicjs-app && npm test)
+(cd packages/create-app && node test-cli.js)
+(cd packages/create-app && npm test)
+```
+
+Task4 evidence: `/Users/lane/.hermes/cache/scratch/sonicjs-flakiness-evidence/task4`.
+`red-wiring.log` records failing contracts before wiring; `green-wiring.log` records
+GREEN. Real subprocess tests cover pass, final fail, retry recovery, skip, import,
+setup, duplicates, invalid output, SIGINT and watch. Children receive a credential
+allowlist environment (no vendor/stats secrets), CI disables upload, and outbound
+fetch/HTTP/HTTPS/socket calls are denied. Contract discovery is independent and
+reports itself without recursively discovering subprocess fixtures.
+
+`reporting-final.log` records **73 passed contracts**, six files, exit 0.
+`npm run type-check` and targeted integration/config TypeScript checks exit 0.
+`verification-summary.log` and saved `*-list.stdout.json` compare identity
+multiplicities against immutable baseline: core **2,068**, SDK **68**, root **0**,
+all unchanged, list exit 0. Actual core and coverage runs exit 0: **2,068 passed,
+247 skipped**, 148 passed files / 6 skipped files. SDK exits 0: **68 passed**, six
+files. Root actual run exits **1**, zero tests; this is not a passing suite. Sample
+exits **1**, one failed contact-form collection, zero executed tests; official
+report includes the real import error. CLI original and wrapper both exit **1**
+with the missing dependency described above. Coverage/Codecov wiring is unchanged.
+
+### Staged operation and future cutover gates
+
+Reports remain local by default. Inspect `report.json`, `attachments/` and sibling
+manifest; official report output prints its viewing command (`npx flakiness show
+<folder>` requires the separately available Flakiness viewer; no viewer dependency
+or install is added here). Existing native viewing still works with
+`npx playwright show-report playwright-report` and `npx playwright show-trace
+<path/to/trace.zip>`; coverage HTML remains in the runner's coverage directory.
+
+Direct local upload requires **all three** externally provisioned values:
+`SONICJS_TEST_UPLOAD=1`, `FLAKINESS_ACCESS_TOKEN`, `FLAKINESS_PROJECT`. Supply through
+local environment only. Account/project/token provisioning is external setup and
+is not performed or authorized here. CI always sets reporter `disableUpload`,
+including credential-bearing/OIDC contexts; no OIDC integration is enabled.
+There is no publishing workflow, standalone uploader, or live Flakiness progress
+integration. No legacy history import occurred. Existing dashboard, stats-live
+reporter, API credentials and reporting scripts remain active and unchanged.
+
+Reports can contain source, assertion output, traces and test data. Hosted privacy,
+access and retention approval is pending; local token opt-in does not certify
+hosted approval. Historical dashboard plans remain applicable until cutover; this
+section is only a future supersession link. Separate roll-forward publishing and
+retirement PRs require real hosted service evidence, resolved interruption and
+collection blockers, successful CLI verification, and user decisions on hosted
+privacy/retention, history, progress and dashboard retirement. No deletion,
+account setup, upload, deployment or workflow service configuration belongs to
+this additive phase.

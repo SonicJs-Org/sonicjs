@@ -1475,3 +1475,35 @@ SonicJS AI uses a comprehensive testing strategy combining:
 - **CI/CD integration** for automated testing
 
 Follow the patterns and examples in this guide to write effective tests for your features and ensure the quality of the SonicJS AI platform.
+
+
+## Staged Flakiness reporting
+
+Official reporters now generate local reports alongside existing terminal/native
+outputs for core, SDK, root, reporting contracts, Playwright, sample and CLI
+verification. Run `npm run test:reporting`, `npm test -- --run`, `npm run test:cov`,
+`(cd packages/sdk && npx --no-install vitest run --config vitest.config.ts)`,
+`(cd my-sonicjs-app && npm test)` or `(cd packages/create-app && npm test)` from
+repository root. Root direct Vitest has zero tests/exit 1; sample still fails on
+Playwright-import collection. CLI retains its genuine verifier and currently
+fails on a missing local execa dependency. These failures are not green coverage.
+
+Outputs: `flakiness-reports/<suite>/<invocation>/vendor/report.json` plus attachments;
+completed lifecycle metadata is `<invocation>/invocation.json`. Archive the invocation
+root (`invocationFolder`) for both; `outputFolder` denotes only its `vendor/` child.
+Native Playwright report/trace viewing and coverage HTML stay unchanged. Vendor
+output prints `npx flakiness show <folder>` for a separately installed viewer;
+this phase adds no viewer installation or uploader.
+
+Upload defaults off and always stays off in CI; no OIDC integration. Direct local
+upload needs `SONICJS_TEST_UPLOAD=1`, `FLAKINESS_ACCESS_TOKEN` and `FLAKINESS_PROJECT`
+in environment, with external account/project setup handled separately. No account
+setup or credentials are included. Hosted privacy/access/retention approval remains
+pending. No live Flakiness progress or history import exists. Legacy dashboard,
+stats credentials, scripts and live reporting remain active unchanged.
+
+Playwright 2.0.3 omits interrupted attempts; native JSON and sidecar preserve the
+interruption. Vitest SIGINT can prevent vendor output; sidecar records exit 130.
+Publishing and dashboard retirement require separate roll-forward PRs gated on
+real service evidence and explicit user decisions; historical plans are not yet
+superseded. See [coverage, exact commands, blockers and future gates](testing/flakiness-coverage.md).

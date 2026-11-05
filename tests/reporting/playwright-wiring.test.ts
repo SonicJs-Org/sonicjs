@@ -7,12 +7,12 @@ import noServer from '../playwright-no-server.config'
 
 const names = (config: typeof main): string[] => typeof config.reporter === 'string' ? [config.reporter] : (config.reporter ?? []).map(r => r[0])
 test.each([
-  [main, ['list', 'html', 'json', 'junit'], 'cms-e2e'],
-  [smoke, ['list', 'html', 'json', 'junit'], 'cms-smoke'],
-  [infra, ['list'], 'runner-contracts'],
-  [www, ['html'], 'www-e2e'],
-  [noServer, ['list', 'html', 'json', 'junit'], 'cms-e2e'],
-] as const)('retains native reporters and one vendor: %s', (config, native, suite) => {
+  ['main', main, ['list', 'html', 'json', 'junit'], 'cms-e2e'],
+  ['smoke', smoke, ['list', 'html', 'json', 'junit'], 'cms-smoke'],
+  ['infra', infra, ['list'], 'runner-contracts'],
+  ['www', www, ['html'], 'www-e2e'],
+  ['no-server', noServer, ['list', 'html', 'json', 'junit'], 'cms-e2e'],
+] as const)('retains native reporters and one vendor: %s', (_name, config, native, suite) => {
   expect(names(config).filter(n => n === '@flakiness/playwright')).toHaveLength(1)
   expect(names(config).filter(n => ['list', 'html', 'json', 'junit'].includes(n))).toEqual(native)
   expect(JSON.stringify(config.reporter)).toContain(`/flakiness-reports/${suite}/`)

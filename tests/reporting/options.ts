@@ -3,12 +3,13 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { ReporterDescription } from '@playwright/test'
 import type PlaywrightReporter from '@flakiness/playwright'
 
 export const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/, '')
 export const reportingSuites = [
   'core-unit', 'sdk-unit', 'root-unit', 'cms-e2e', 'cms-smoke', 'www-e2e',
-  'runner-contracts', 'reporting-contracts',
+  'runner-contracts', 'reporting-contracts', 'create-app-cli', 'sample-unit',
 ] as const
 export const reportingTargets = ['local-worker', 'preview-worker', 'www', 'none'] as const
 export type ReportingSuite = typeof reportingSuites[number]
@@ -40,6 +41,9 @@ export interface InvocationManifest {
   targetURL?: string
 }
 export interface ReportingOptions {
+  /** Archive this root to retain lifecycle metadata and vendor evidence. */
+  invocationFolder: string
+  /** Official reporter output only; vendor may recursively clean this directory. */
   outputFolder: string
   playwright: ['@flakiness/playwright', PlaywrightOptions]
   vitest: {
@@ -59,7 +63,7 @@ const present = (value: string | undefined): boolean => Boolean(value?.trim())
 const enabledFlag = (value: string | undefined): boolean => present(value) && !['false', '0', 'no'].includes(value!.trim().toLowerCase())
 const segment = (value: string | undefined): string => (value ?? 'local').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80)
 
-function sanitizeURL(value?: string): string | undefined {
+export function sanitizeURL(value?: string): string | undefined {
   if (!value) return undefined
   const url = new URL(value)
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported target URL protocol')
@@ -85,11 +89,13 @@ export function createReportingOptions(input: {
   const disableUpload = isCI || env.SONICJS_TEST_UPLOAD !== '1' ||
     !present(env.FLAKINESS_ACCESS_TOKEN) || !present(env.FLAKINESS_PROJECT)
   const invocation = `${segment(env.GITHUB_JOB)}-${segment(env.SONICJS_TEST_SHARD)}-${segment(env.GITHUB_RUN_ATTEMPT)}-${randomUUID()}`
-  const outputFolder = join(repositoryRoot, 'flakiness-reports', input.suite, invocation)
+  const invocationFolder = join(repositoryRoot, 'flakiness-reports', input.suite, invocation)
+  const outputFolder = join(invocationFolder, 'vendor')
   // Never use GITHUB_SHA: pull_request_target can check out a different commit.
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repositoryRoot, encoding: 'utf8' }).trim()
   const common = { flakinessProject: env.FLAKINESS_PROJECT?.trim() || undefined, outputFolder, disableUpload }
   return {
+    invocationFolder,
     outputFolder,
     playwright: ['@flakiness/playwright', { ...common, open: 'never' }],
     vitest: { includeTaskLocation: true, reporters: ['default', ['@flakiness/vitest', { ...common, commitId: commit }]] },
@@ -111,8 +117,9 @@ export function writeInvocationManifest(options: ReportingOptions, completion?: 
   const manifest = completion
     ? { ...options.manifest, endedAt: new Date().toISOString(), outcome: completion.outcome }
     : options.manifest
+  mkdirSync(options.invocationFolder, { recursive: true })
   mkdirSync(options.outputFolder, { recursive: true })
-  writeFileSync(join(options.outputFolder, 'invocation.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  writeFileSync(join(options.invocationFolder, 'invocation.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 /** Task 4 calls after collection, before the vendor can rename/fail duplicate records. */
@@ -130,9 +137,9 @@ export function assertUniqueTestNames(tests: readonly {
 /** Config evaluation is side-effect free on disk. List mode must never emit run reports.
  * Inherited configs may replace this tuple; only the effective tuple is instantiated.
  */
-export function playwrightReporting(suite: ReportingSuite, target: ReportingTarget): ReportingOptions['playwright'][] {
+export function playwrightReporting(suite: ReportingSuite, target: ReportingTarget): ReporterDescription[] {
   if (process.argv.includes('--list')) return []
   const options = createReportingOptions({ suite, target })
   Object.assign(process.env, options.environment)
-  return [options.playwright]
+  return [[fileURLToPath(new URL('./playwright-metadata.ts', import.meta.url)), { reporting: options }], options.playwright]
 }

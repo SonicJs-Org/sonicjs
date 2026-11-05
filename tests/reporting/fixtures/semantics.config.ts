@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from '@playwright/test'
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -25,12 +26,14 @@ export default defineConfig({
   retries: process.env.CASE_MODE === 'retry' ? 1 : 0,
   timeout: 500,
   workers: 1,
+  use: { baseURL: process.env.REPORT_TARGET_URL },
   outputDir: join(repositoryRoot, 'test-results/reporting-contracts'),
   reporter: [
     ['list'],
     ['json', { outputFile: join(`${options.outputFolder}-native`, 'native.json') }],
     ['junit', { outputFile: join(`${options.outputFolder}-native`, 'native.xml') }],
     ['html', { outputFolder: join(`${options.outputFolder}-native`, 'html'), open: 'never' }],
+    [fileURLToPath(new URL('../playwright-metadata.ts', import.meta.url)), { reporting: options }],
     options.playwright,
   ],
 })

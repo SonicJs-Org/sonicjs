@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { repositoryRoot } from './options'
 
@@ -9,16 +9,24 @@ function run(mode: string) {
   const result = spawnSync(process.execPath, [join(repositoryRoot, 'node_modules/@playwright/test/cli.js'), 'test', '--config', join(fixture, 'semantics.config.ts')], {
     cwd: repositoryRoot, encoding: 'utf8', timeout: 20_000,
     env: { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, CI: '1', CASE_MODE: mode,
+      REPORT_TARGET_URL: 'https://user:secret@example.invalid/path?token=secret#secret',
       NODE_OPTIONS: `--require=${join(fixture, 'deny-network.cjs')}` },
   })
   expect(result.error).toBeUndefined()
   const folder = result.stdout.match(/REPORT_FOLDER=(.+)/)?.[1]?.trim()
   expect(folder, result.stdout + result.stderr).toBeTruthy()
+  expect(folder).toMatch(/\/vendor$/)
+  expect(existsSync(`${dirname(folder!)}-metadata`)).toBe(false)
   return { ...result, folder: folder!, report: JSON.parse(readFileSync(join(folder!, 'report.json'), 'utf8')) }
 }
 test.each(['pass', 'fail', 'retry', 'static-skip', 'runtime-skip', 'expected-failure', 'timeout', 'setup', 'import'])('actual vendor and native status: %s', mode => {
   const result = run(mode)
   expect(result.status, result.stdout + result.stderr).toBe(['fail', 'timeout', 'setup', 'import'].includes(mode) ? 1 : 0)
+  const manifest = JSON.parse(readFileSync(join(dirname(result.folder), 'invocation.json'), 'utf8'))
+  expect(manifest.outcome).toBe(['fail', 'timeout', 'setup', 'import'].includes(mode) ? 'failed' : 'passed')
+  expect(manifest.endedAt).toBeTruthy()
+  expect(manifest.targetURL).toBe('https://example.invalid/path')
+  expect(JSON.stringify(manifest)).not.toContain('secret')
   if (!['setup', 'import'].includes(mode)) expect(result.report.environments[0].metadata).toMatchObject({ suite: 'runner-contracts', target: 'none' })
   if (['setup', 'import'].includes(mode)) expect(result.report.unattributedErrors.length).toBeGreaterThan(0)
   expect(existsSync(join(`${result.folder}-native`, 'native.json'))).toBe(true)
@@ -97,6 +105,7 @@ test('SIGINT exits 130; pinned vendor drops interrupted attempts (cutover blocke
   const folder = output.match(/REPORT_FOLDER=(.+)/)![1].trim()
   const report = JSON.parse(readFileSync(join(folder, 'report.json'), 'utf8'))
   const native = JSON.parse(readFileSync(join(`${folder}-native`, 'native.json'), 'utf8'))
+  expect(JSON.parse(readFileSync(join(dirname(folder), 'invocation.json'), 'utf8')).outcome).toBe('interrupted')
   expect(native.suites[0].specs[0].tests[0].results[0].status).toBe('interrupted')
   expect(report.suites[0].tests[0].attempts).toEqual([])
 })

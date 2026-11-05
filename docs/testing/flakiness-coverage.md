@@ -349,3 +349,41 @@ collection blockers, successful CLI verification, and user decisions on hosted
 privacy/retention, history, progress and dashboard retirement. No deletion,
 account setup, upload, deployment or workflow service configuration belongs to
 this additive phase.
+
+### Invocation metadata sources
+
+CMS reporting classifies absent `BASE_URL`, `localhost`, `127.0.0.1` and IPv6
+loopback as `local-worker`; external preview URLs report `preview-worker`.
+Unparseable URL values retain the previous presence-based classification without
+adding runner validation. Main and smoke use the same supplied-environment
+helper; no-server inherits main.
+This classification changes metadata only; existing BASE_URL execution policy,
+retries, workers, discovery and server ownership remain unchanged.
+
+PR association uses a valid positive safe-integer `GITHUB_EVENT_NUMBER` caller
+override first, then the allowlisted `pull_request.number` from
+`GITHUB_EVENT_PATH` for `pull_request`/`pull_request_target`, then an exact
+`refs/pull/N/merge` or `refs/pull/N/head` ref. Push branches never imply a PR.
+The manifest records association source and `associated`, `no-pr`, `missing` or
+`malformed` status; absent identity remains absent. Payload/path/errors are not
+copied into reports. These fields are **self-reported, untrusted producer data**;
+trusted provenance validation remains later work.
+
+`GITHUB_WORKFLOW` supplies a printable allowlisted workflow name. A run link is
+constructed only from valid HTTPS `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY` and
+positive `GITHUB_RUN_ID`; credentials/query/fragment inputs are rejected. Missing
+inputs leave fields absent. Actual checked-out commit still comes from git HEAD,
+never `GITHUB_SHA`. None of these fields adds `FK_ENV` history dimensions.
+
+Keep both executable sources **and git HEAD fixed for the entire invocation**.
+The pinned Playwright reporter discovers git identity during finalization and has
+no public commit-ID override. A commit made while tests run can therefore disagree
+with the start manifest even when browser source is unchanged. Treat that mismatch
+as invalid attribution and rerun/reject the evidence; do not rewrite vendor JSON.
+
+Synthetic contract subprocess reports deliberately include controlled failures.
+The later producer/uploader must select actual producer invocations by run, job
+and attempt and exclude fixture reports, not blindly upload the shared report root.
+Existing native GitHub artifact paths remain unchanged in this additive PR; adding
+retention for the new report root and its trusted handoff belongs to the publishing
+stage. Local reports are not proof of hosted delivery.

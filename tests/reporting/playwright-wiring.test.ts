@@ -34,6 +34,7 @@ test('all non-reporting production configuration bytes match Task2', async () =>
     const path = `tests/${file}`
     const original = execFileSync('git', ['show', `4498f0126:${path}`], { cwd: repositoryRoot, encoding: 'utf8' })
     const current = readFileSync(`${repositoryRoot}/${path}`, 'utf8')
+      .replace("import { cmsReportingTarget, playwrightReporting } from './reporting/options'\n", '')
       .replace("import { playwrightReporting } from './reporting/options'\n", '')
       .replace(/^    \.\.\.playwrightReporting\(.+\),\n/gm, '')
       .replace("reporter: [['list'], ...playwrightReporting('runner-contracts', 'none')],", "reporter: [['list']],")

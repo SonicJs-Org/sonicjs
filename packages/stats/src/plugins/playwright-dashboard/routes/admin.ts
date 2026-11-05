@@ -98,24 +98,27 @@ adminRoutes.get('/', async (c) => {
       `SELECT COUNT(*) AS count FROM documents WHERE ${RUNS_WHERE}`
     ).first(),
 
-    // 3. Overall pass rate (across all runs)
+    // 3. Overall pass rate (across all completed runs — exclude 'running')
     db.prepare(
       `SELECT
          SUM(CAST(json_extract(data, '$.passed') AS INTEGER)) AS total_passed,
          SUM(CAST(json_extract(data, '$.total') AS INTEGER)) AS total_tests
-       FROM documents WHERE ${RUNS_WHERE}`
+       FROM documents WHERE ${RUNS_WHERE}
+         AND json_extract(data, '$.run_status') != 'running'`
     ).first(),
 
-    // 4. Total flaky test occurrences
+    // 4. Total flaky test occurrences (exclude 'running')
     db.prepare(
       `SELECT SUM(CAST(json_extract(data, '$.flaky') AS INTEGER)) AS total_flaky
-       FROM documents WHERE ${RUNS_WHERE}`
+       FROM documents WHERE ${RUNS_WHERE}
+         AND json_extract(data, '$.run_status') != 'running'`
     ).first(),
 
-    // 5. Average run duration
+    // 5. Average run duration (exclude 'running' — incomplete runs skew the average)
     db.prepare(
       `SELECT AVG(CAST(json_extract(data, '$.duration_ms') AS REAL)) AS avg_ms
-       FROM documents WHERE ${RUNS_WHERE}`
+       FROM documents WHERE ${RUNS_WHERE}
+         AND json_extract(data, '$.run_status') != 'running'`
     ).first(),
 
     // 6. Runs per day (last 30 days) — for the trend chart
@@ -162,12 +165,15 @@ adminRoutes.get('/', async (c) => {
   // ── Aggregate data ──────────────────────────────────────────────────
   const recentRuns = rowsOf(recentRunsR)
   // A run is "live" only if its run_status is 'running' AND it started within
-  // the last 180 min (longer than the 150-min CI timeout) to avoid showing
-  // abandoned runs as indefinitely live.
+  // the last 180 min (longer than the 150-min CI timeout) AND started_at is not
+  // in the future (clock skew protection) to avoid showing abandoned or
+  // malformed runs as indefinitely live.
   const LIVE_STALE_MS = 180 * 60 * 1000
   const hasLiveRuns = recentRuns.some(r => {
     if (String(r.run_status ?? '') !== 'running') return false
     const startedAt = r.started_at ? new Date(String(r.started_at)).getTime() : 0
+    // Reject future started_at values (clock skew protection)
+    if (startedAt > Date.now()) return false
     return Date.now() - startedAt < LIVE_STALE_MS
   })
   const totalRuns = Number((totalRunsR as Row | null)?.count ?? 0)
@@ -273,7 +279,11 @@ adminRoutes.get('/', async (c) => {
               ? '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">local</span>'
               : '<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">CI</span>'
             const isLive = String(r.run_status ?? '') === 'running' &&
-              (r.started_at ? Date.now() - new Date(String(r.started_at)).getTime() < LIVE_STALE_MS : false)
+              (r.started_at ? (() => {
+                const startedAt = new Date(String(r.started_at)).getTime()
+                // Reject future started_at values (clock skew protection)
+                return startedAt <= Date.now() && Date.now() - startedAt < LIVE_STALE_MS
+              })() : false)
             const liveBadge = isLive
               ? '<span class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 animate-pulse">● live</span>'
               : ''

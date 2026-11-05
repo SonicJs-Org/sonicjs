@@ -119,6 +119,23 @@ playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
   try {
     const db = (c.env as any).DB as D1Database
     const now = Math.floor(Date.now() / 1000)
+
+    // Idempotency: check if run already exists (replay protection)
+    const existingRun = await db.prepare(
+      `SELECT id, json_extract(data, '$.run_status') AS run_status
+       FROM documents
+       WHERE type_id = 'playwright_runs'
+         AND is_published = 1
+         AND deleted_at IS NULL
+         AND json_extract(data, '$.run_id') = ?
+       ORDER BY created_at DESC LIMIT 1`
+    ).bind(body.run_id).first<{ id: string; run_status: string }>()
+
+    if (existingRun) {
+      // Run already exists — return success with created=false so caller knows
+      return c.json({ success: true, run_id: body.run_id, created: false, existing_status: existingRun.run_status }, 200)
+    }
+
     const runDocId = crypto.randomUUID()
 
     const runData = {
@@ -148,7 +165,7 @@ playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
        VALUES (?, ?, 'playwright_runs', 1, 'published', ?, ?, ?, ?, ?)`
     ).bind(runDocId, runDocId, runTitle, JSON.stringify(runData), now, now, now).run()
 
-    return c.json({ success: true, run_id: body.run_id }, 201)
+    return c.json({ success: true, run_id: body.run_id, created: true }, 201)
   } catch (err) {
     console.error('[playwright] /start failed:', err)
     return c.json({ error: 'Internal server error' }, 500)
@@ -230,6 +247,27 @@ playwrightIngest.post('/:run_id/tests', requirePlaywrightAuth(), async (c) => {
   try {
     const externalRunId = c.req.param('run_id')
     const db = (c.env as any).DB as D1Database
+
+    // Verify run exists and is still 'running' — reject batches for completed/unknown runs
+    const runRow = await db.prepare(
+      `SELECT id, data FROM documents
+       WHERE type_id = 'playwright_runs'
+         AND is_published = 1
+         AND deleted_at IS NULL
+         AND json_extract(data, '$.run_id') = ?
+       ORDER BY created_at DESC LIMIT 1`
+    ).bind(externalRunId).first<{ id: string; data: string }>()
+
+    if (!runRow) {
+      return c.json({ error: `Run not found: ${externalRunId}` }, 404)
+    }
+
+    const runData = JSON.parse(runRow.data ?? '{}')
+    if (runData.run_status !== 'running') {
+      return c.json({ error: `Run already completed with status '${runData.run_status}'; cannot append tests` }, 409)
+    }
+
+    // Insert test results
     const stmts = buildTestInserts(db, externalRunId ?? '', body.tests)
 
     const BATCH_SIZE = 500

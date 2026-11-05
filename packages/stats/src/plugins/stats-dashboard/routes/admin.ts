@@ -6,6 +6,17 @@ import { STATS_ADMIN_MENU } from '../../../admin-menu'
 
 const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
+/** Merge stats plugin menu items with core plugin items from context */
+function getMergedMenuItems(c: import('hono').Context<{ Bindings: Bindings; Variables: Variables }>): typeof STATS_ADMIN_MENU {
+  const coreItems = c.get('pluginMenuItems') || []
+  return [
+    ...STATS_ADMIN_MENU,
+    ...coreItems.filter((item: { path: string }) => 
+      !STATS_ADMIN_MENU.some(s => s.path === item.path)
+    )
+  ]
+}
+
 adminRoutes.use('*', requireAuth())
 adminRoutes.use('*', async (c, next) => {
   const user = c.get('user')
@@ -683,7 +694,7 @@ adminRoutes.get('/', async (c) => {
       // Chart.js is not in the shared layout — this page charts, so it asks for it.
       scripts: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'],
       content,
-      dynamicMenuItems: STATS_ADMIN_MENU,
+      dynamicMenuItems: getMergedMenuItems(c),
     })
   )
 })

@@ -105,6 +105,7 @@ playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
     run_id: string; project?: string; branch: string; commit_sha: string
     commit_message?: string; ci_provider: string; ci_run_url?: string
     triggered_by?: string; source?: 'local' | 'ci'; started_at: string
+    expected_total?: number; pr_number?: number | null; base_url?: string | null
   }
   try { body = await c.req.json() } catch {
     return c.json({ error: 'Invalid JSON body' }, 400)
@@ -135,6 +136,9 @@ playwrightIngest.post('/start', requirePlaywrightAuth(), async (c) => {
       duration_ms: 0,
       started_at: body.started_at,
       finished_at: null,
+      expected_total: body.expected_total ?? null,
+      pr_number: body.pr_number ?? null,
+      base_url: body.base_url ?? null,
     }
 
     const runTitle = `${runData.project} — ${runData.branch} — running`

@@ -47,15 +47,6 @@ const config: SonicJSConfig = {
 
 const app = createSonicJSApp(config)
 
-// Force both sidebar links into every admin page.
-// pluginMenuMiddleware (core) filters plugins by their D1 active-status, which
-// these stats-only plugins don't have. Overriding here — inside its await next()
-// — ensures the after-next marker replacement picks up the full menu.
-app.use('/admin/*', async (c, next) => {
-  c.set('pluginMenuItems', STATS_ADMIN_MENU)
-  return next()
-})
-
 // Unauthenticated telemetry ingestion for create-sonicjs CLI.
 // CLI posts to /v1/events; this handler writes directly to D1 bypassing ACL.
 app.post('/v1/events', async (c) => {

@@ -6,6 +6,18 @@ import { STATS_ADMIN_MENU } from '../../../admin-menu'
 
 const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
+/** Merge stats plugin menu items with core plugin items from context */
+function getMergedMenuItems(c: import('hono').Context<{ Bindings: Bindings; Variables: Variables }>): typeof STATS_ADMIN_MENU {
+  const coreItems = c.get('pluginMenuItems') || []
+  // Put stats items first, then core items that aren't duplicates
+  return [
+    ...STATS_ADMIN_MENU,
+    ...coreItems.filter((item: { path: string }) => 
+      !STATS_ADMIN_MENU.some(s => s.path === item.path)
+    )
+  ]
+}
+
 adminRoutes.use('*', requireAuth())
 adminRoutes.use('*', async (c, next) => {
   const user = c.get('user')
@@ -62,6 +74,9 @@ adminRoutes.get('/', async (c) => {
               json_extract(data, '$.commit_message') AS commit_message,
               json_extract(data, '$.ci_run_url') AS ci_run_url,
               json_extract(data, '$.triggered_by') AS triggered_by,
+              json_extract(data, '$.expected_total') AS expected_total,
+              json_extract(data, '$.pr_number') AS pr_number,
+              json_extract(data, '$.base_url') AS base_url,
               json_extract(data, '$.total') AS total,
               json_extract(data, '$.passed') AS passed,
               json_extract(data, '$.failed') AS failed,
@@ -237,12 +252,15 @@ adminRoutes.get('/', async (c) => {
             <tr>
               <th class="px-4 py-3 text-left font-medium">Status</th>
               <th class="px-4 py-3 text-left font-medium">Source</th>
+              <th class="px-4 py-3 text-center font-medium">PR</th>
               <th class="px-4 py-3 text-left font-medium">Branch</th>
               <th class="px-4 py-3 text-left font-medium">Commit</th>
               <th class="px-4 py-3 text-right font-medium">Passed</th>
               <th class="px-4 py-3 text-right font-medium">Failed</th>
               <th class="px-4 py-3 text-right font-medium">Flaky</th>
+              <th class="px-4 py-3 text-right font-medium">Progress</th>
               <th class="px-4 py-3 text-right font-medium">Duration</th>
+              <th class="px-4 py-3 text-left font-medium">Preview</th>
               <th class="px-4 py-3 text-left font-medium">When</th>
             </tr>
           </thead>
@@ -269,15 +287,31 @@ adminRoutes.get('/', async (c) => {
             const commitLink = r.ci_run_url
               ? `<a href="${esc(r.ci_run_url)}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">${esc(String(r.commit_sha).slice(0,7))}</a>`
               : esc(String(r.commit_sha).slice(0,7))
+            const prNum = r.pr_number ? Number(r.pr_number) : null
+            const prLink = prNum
+              ? `<a href="https://github.com/SonicJs-Org/sonicjs/pull/${prNum}" target="_blank" rel="noopener" class="hover:text-indigo-600 dark:hover:text-indigo-400">#${prNum}</a>`
+              : '—'
+            const expectedTotal = r.expected_total ? Number(r.expected_total) : null
+            const total = Number(r.total) || 0
+            const progressPct = expectedTotal && expectedTotal > 0 ? Math.round((total / expectedTotal) * 100) : null
+            const progressDisplay = isLive 
+              ? (progressPct !== null ? `${progressPct}%` : '—')
+              : '<span class="text-emerald-600">✓</span>'
+            const baseUrlLink = r.base_url
+              ? `<a href="${esc(r.base_url)}" target="_blank" rel="noopener" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 text-xs" onclick="event.stopPropagation()">🔗</a>`
+              : '—'
             return `<tr class="cursor-pointer hover:bg-zinc-950/[0.02] dark:hover:bg-white/[0.02]" onclick="window.location='/admin/playwright?run=${encodeURIComponent(String(r.run_id))}'">
               <td class="px-4 py-2.5">${statusDot}${liveBadge ? ' ' + liveBadge : ''}</td>
               <td class="px-4 py-2.5">${sourceBadge}</td>
+              <td class="px-4 py-2.5 text-center">${prLink}</td>
               <td class="px-4 py-2.5 font-mono text-xs text-zinc-700 dark:text-zinc-300">${esc(r.branch)}</td>
               <td class="px-4 py-2.5 font-mono text-xs">${commitLink}${r.commit_message ? ` <span class="text-zinc-400">${esc(String(r.commit_message).slice(0, 50))}</span>` : ''}</td>
               <td class="px-4 py-2.5 text-right text-emerald-600 dark:text-emerald-400">${r.passed}/${r.total}</td>
               <td class="px-4 py-2.5 text-right ${failed > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-zinc-400'}">${r.failed}</td>
               <td class="px-4 py-2.5 text-right ${flakyN > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}">${r.flaky}</td>
+              <td class="px-4 py-2.5 text-right text-zinc-500">${progressDisplay}</td>
               <td class="px-4 py-2.5 text-right text-zinc-500">${fmtDuration(Number(r.duration_ms))}</td>
+              <td class="px-4 py-2.5 text-center">${baseUrlLink}</td>
               <td class="px-4 py-2.5 text-xs text-zinc-400">${r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</td>
             </tr>`
           }).join('')}
@@ -410,7 +444,7 @@ adminRoutes.get('/', async (c) => {
       content: (hasLiveRuns
         ? `<script>setTimeout(()=>location.reload(),8000)</script>\n` : '')
         + content,
-      dynamicMenuItems: STATS_ADMIN_MENU,
+      dynamicMenuItems: getMergedMenuItems(c),
     })
   )
 })
@@ -431,6 +465,9 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
               json_extract(data, '$.commit_message') AS commit_message,
               json_extract(data, '$.ci_run_url') AS ci_run_url,
               json_extract(data, '$.triggered_by') AS triggered_by,
+              json_extract(data, '$.expected_total') AS expected_total,
+              json_extract(data, '$.pr_number') AS pr_number,
+              json_extract(data, '$.base_url') AS base_url,
               json_extract(data, '$.total') AS total,
               json_extract(data, '$.passed') AS passed,
               json_extract(data, '$.failed') AS failed,
@@ -476,7 +513,7 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
         version: c.get('appVersion'),
         user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
         content: `<div class="py-16 text-center text-sm text-zinc-500">Run <code>${esc(runId)}</code> not found.</div>`,
-        dynamicMenuItems: STATS_ADMIN_MENU,
+        dynamicMenuItems: getMergedMenuItems(c),
       })
     )
   }
@@ -567,20 +604,21 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
   <div class="rounded-lg bg-white dark:bg-zinc-800 ring-1 ring-zinc-950/5 dark:ring-white/10 p-6">
     <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
-        <h1 class="text-xl font-semibold text-zinc-950 dark:text-white flex items-center">
-          ${headerStatusDot}${esc(String(run.branch))}
+        <h1 class="text-xl font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
+          ${headerStatusDot}${esc(String(run.branch))}${run.pr_number ? ` <a href="https://github.com/SonicJs-Org/sonicjs/pull/${run.pr_number}" target="_blank" rel="noopener" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 text-base font-normal">#${run.pr_number}</a>` : ''}
         </h1>
         <div class="mt-1 text-sm text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
           <span>Commit: ${ciLink}${run.commit_message ? ` — <span class="text-zinc-400">${esc(String(run.commit_message).slice(0,80))}</span>` : ''}</span>
           ${run.triggered_by ? `<span>Trigger: <span class="font-medium">${esc(String(run.triggered_by))}</span></span>` : ''}
           ${run.started_at ? `<span>${new Date(String(run.started_at)).toLocaleString()}</span>` : ''}
           <span>Duration: <span class="font-medium">${fmtDuration(Number(run.duration_ms))}</span></span>
+          ${run.base_url ? `<span>Preview: <a href="${esc(String(run.base_url))}" target="_blank" rel="noopener" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">${esc(String(run.base_url).replace(/^https?:\/\//, ''))}</a></span>` : ''}
         </div>
       </div>
     </div>
 
     <!-- KPI bar -->
-    <div class="mt-4 grid grid-cols-4 gap-4">
+    <div class="mt-4 grid grid-cols-5 gap-4">
       <div class="text-center">
         <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">${passed}</div>
         <div class="text-xs text-zinc-500 uppercase tracking-wide">Passed</div>
@@ -596,6 +634,16 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
       <div class="text-center">
         <div class="text-2xl font-bold text-zinc-400">${total}</div>
         <div class="text-xs text-zinc-500 uppercase tracking-wide">Total</div>
+      </div>
+      <div class="text-center">
+        <div class="text-2xl font-bold ${isRunLive ? 'text-indigo-600 dark:text-indigo-400' : 'text-emerald-600 dark:text-emerald-400'}">${
+          isRunLive
+            ? (run.expected_total && Number(run.expected_total) > 0
+              ? Math.round((total / Number(run.expected_total)) * 100) + '%'
+              : '—')
+            : '✓'
+        }</div>
+        <div class="text-xs text-zinc-500 uppercase tracking-wide">Progress</div>
       </div>
     </div>
   </div>
@@ -634,7 +682,7 @@ async function showRunDetail(c: import('hono').Context<{ Bindings: Bindings; Var
       version: c.get('appVersion'),
       user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
       content,
-      dynamicMenuItems: STATS_ADMIN_MENU,
+      dynamicMenuItems: getMergedMenuItems(c),
     })
   )
 }
@@ -691,7 +739,7 @@ async function showTestHistory(c: import('hono').Context<{ Bindings: Bindings; V
         version: c.get('appVersion'),
         user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
         content: `<div class="py-16 text-center text-sm text-zinc-500">No results found for test ID <code>${esc(testId)}</code>.</div>`,
-        dynamicMenuItems: STATS_ADMIN_MENU,
+        dynamicMenuItems: getMergedMenuItems(c),
       })
     )
   }
@@ -824,7 +872,7 @@ async function showTestHistory(c: import('hono').Context<{ Bindings: Bindings; V
       version: c.get('appVersion'),
       user: user ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role } : undefined,
       content,
-      dynamicMenuItems: STATS_ADMIN_MENU,
+      dynamicMenuItems: getMergedMenuItems(c),
     })
   )
 }

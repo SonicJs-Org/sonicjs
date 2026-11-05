@@ -42,7 +42,7 @@ npm run e2e -- 39-slug-generation --grep 'detect duplicate slugs' --repeat-each=
 
 # Full suite, not smoke; three consecutive clean runs are the acceptance target
 npm run e2e -- --workers=2 --retries=0
-# CI policy: two workers, one diagnostic retry, retry recoveries also fail CI
+# CI policy: two workers; remote retries 3, local CI retries 1; retry-green permitted
 CI=true npm run e2e
 
 # Use an ALREADY RUNNING, owned server (BASE_URL is honored)
@@ -135,7 +135,7 @@ Artifacts `e2e-<run_id>-<attempt>` include:
 
 Open traces with `npx playwright show-trace path/to/trace.zip`. Diagnose the **first**
 attempt and distinguish setup from assertion failures. A retry recovery is not an
-infrastructure diagnosis. CI fails on recovered flakes as well as final failures.
+infrastructure diagnosis. Current CI permits retry-green (remote retries 3, local CI retries 1); final failures fail CI.
 Artifacts upload under `always()`; hard runner termination can still prevent final
 report creation/upload. Traces can contain disposable session cookies and test data:
 retain briefly, restrict artifact access and never add `.dev.vars` or raw credentials.

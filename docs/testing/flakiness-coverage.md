@@ -3,8 +3,8 @@
 Inventory base: `7b6ecb7b8cd9728f2edc75316445feac311f3707`, branch
 `feat/flakiness-reporters`, collected 2026-11-05. Baseline identities remain immutable. Tasks 2–4 add local reporter wiring;
 service cutover remains future work. Current staged behavior and validation are
-recorded below; WWW discovery, sample collection, and the local CLI installation
-have explicit blockers. Manual API collection remains excluded.
+recorded below; WWW discovery and sample collection have explicit blockers.
+CLI verification now passes locally. Manual API collection remains excluded.
 
 ## Locked tools and prerequisite
 
@@ -40,14 +40,15 @@ Watch/UI variants retain the same destination as their batch runner.
 | direct no-server config | `playwright test --config=tests/playwright-no-server.config.ts` | `cms-e2e`, same actual target as main: `BASE_URL` or `http://localhost:8787`; only server ownership differs |
 | direct infrastructure config | `playwright test --config=tests/playwright.infrastructure.config.ts` | `runner-contracts` |
 | reporting contract config | `npm run test:reporting` | `reporting-contracts`; separate discovery, absent from immutable baseline totals |
-| create-app `test` | `vitest run --config vitest.config.ts`, delegates unchanged `node test-cli.js` | `create-app-cli`; one real verifier, local missing-dependency failure retained |
+| create-app `test` | `vitest run --config vitest.config.ts`, delegates `node test-cli.js` | `create-app-cli`; one real verifier; direct and wrapped runs pass |
 | sample app `test`, `test:watch` | `vitest --run`; `vitest` | `sample-unit`; local config deliberately inherits root discovery/excludes/coverage relative to cwd. Genuine Playwright-import collection failure reported, exit 1; no tests skipped/moved |
 | starter `test`, `test:watch` | `vitest --run`; `vitest` | Generated project scaffolding, no tracked test/config; not repository suite; consumer-owned reporting |
 | stats, templates, WWW, employee-directory | No test scripts | Excluded: builds, lint, type checks, preview and deployment are not tests |
 
 `packages/create-app/test-cli.js` spawns the CLI with `--template=starter`,
 `--database=test-db`, `--bucket=test-media`, `--include-example`, `--skip-install`,
-`--skip-git`, `--skip-cloudflare`; checks generated files and DB/R2/CACHE_KV
+`--skip-git`, `--skip-cloudflare`, and explicit disposable `--admin-email` /
+`--admin-password` flags; sets child `SONICJS_TELEMETRY=false`; checks generated files and DB/R2/CACHE_KV
 configuration, and cleans its generated directory. It is an active verifier
 with exit status, not a dead documentation example. It has no collection mode,
 so was not executed in this collection-only task. No node:test runner or Jest,
@@ -242,12 +243,14 @@ contracts or `.case.ts` child fixtures. Runner pins remain 4.1.11 / 1.63.0.
 The create-app wrapper executes the existing `test-cli.js` in its original package
 cwd, inherits its stdout/stderr, rejects its failure/signal, and leaves generated
 project cleanup with that verifier. It adds no invented build/typecheck cases.
-The original verifier is unchanged. Both direct and wrapped executions currently
-exit 1 because the local install lacks `@sindresorhus/merge-streams` (execa runtime
-dependency). The wrapper records a real failed test. Successful scaffold checks
-remain unverified until parent repairs installation and reruns both commands;
-this is an explicit acceptance blocker, not a passing CLI claim. No converter
-package or alternative JUnit ingestion path was introduced.
+The verifier now supplies public disposable admin fixture flags and disables child
+telemetry. Both admin flags are required to bypass the existing admin prompts;
+all original assertions, skip flags, output, cleanup and 60-second timeout remain.
+After parent's dependency-closure repair, direct and wrapped runs reproduced the
+pre-existing admin-prompt timeout (exit 1). With the harness flags supplied, both
+runs exit 0 on Node 22.23.1; the wrapper records one passed test. No product CLI
+behavior changed. No converter package or alternative JUnit ingestion path was
+introduced.
 
 `vitest-integration.ts` observes documented reporter hooks alongside the official
 reporter. Every `onTestRunStart`, including watch reruns, allocates an independent
@@ -313,8 +316,11 @@ all unchanged, list exit 0. Actual core and coverage runs exit 0: **2,068 passed
 247 skipped**, 148 passed files / 6 skipped files. SDK exits 0: **68 passed**, six
 files. Root actual run exits **1**, zero tests; this is not a passing suite. Sample
 exits **1**, one failed contact-form collection, zero executed tests; official
-report includes the real import error. CLI original and wrapper both exit **1**
-with the missing dependency described above. Coverage/Codecov wiring is unchanged.
+report includes the real import error. CLI original and wrapper both exit **0**, with all scaffold checks passing and
+**1 passed** wrapper test. RED evidence: `cli-original-closure.log` and
+`cli-wrapper-closure.log`; final outputs: `cli-original-noninteractive.log` and
+`cli-wrapper-noninteractive.log` under Task4 evidence. Local reporter artifacts
+are archived in `cli-noninteractive-reports/`. Coverage/Codecov wiring is unchanged.
 
 ### Staged operation and future cutover gates
 

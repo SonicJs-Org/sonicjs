@@ -22,9 +22,10 @@ export default defineConfig({
   // failOnFlakyTests: ci && !remotePreview,
   maxFailures: ci ? 25 : 0,
   timeout: ci ? 120_000 : 90_000,
-  // Playwright workers are mostly I/O-bound waiting on HTTP responses; 3 workers on a 2-core
-  // runner is well-validated and reduces total E2E runtime by ~30% with no additional infra.
-  workers: ci ? 3 : 1,
+  // Playwright workers are I/O-bound on HTTP responses, but CF preview Workers have
+  // limited concurrency headroom. Measured runs show 3 workers causes early timeouts
+  // from Worker overload; keep 2 workers for the remote-preview path.
+  workers: ci ? 2 : 1,
   outputDir: resolve(here, '../test-results'),
   reporter: [
     ['list'],

@@ -693,7 +693,7 @@ userRoutes.post('/users/new', async (c) => {
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     const bio = sanitizeInput(formData.get('bio')?.toString()) || null
     const role = formData.get('role')?.toString() || ''
-    const rbac = new RbacService(db)
+    const rbac = new RbacService(db, c.env.CACHE_KV)
     if (!(await rbac.getRoles()).some((r) => r.id === role)) {
       return c.html(renderAlert({ type: 'error', message: 'Please choose a valid role.', dismissible: true }))
     }
@@ -1046,7 +1046,7 @@ userRoutes.put('/users/:id', async (c) => {
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     // '' is the form's "No role".
     const role = formData.get('role')?.toString() || ''
-    const rbac = new RbacService(db)
+    const rbac = new RbacService(db, c.env.CACHE_KV)
     if (role && !(await rbac.getRoles()).some((r) => r.id === role)) {
       return c.html(renderAlert({ type: 'error', message: 'Please choose a valid role.', dismissible: true }))
     }
@@ -1350,7 +1350,7 @@ userRoutes.post('/invite-user', async (c) => {
     if (!email || !firstName || !lastName) {
       return c.json({ error: 'Email, first name, and last name are required' }, 400)
     }
-    const rbac = new RbacService(db)
+    const rbac = new RbacService(db, c.env.CACHE_KV)
     if (role && !(await rbac.getRoles()).some((r) => r.id === role)) {
       return c.json({ error: 'Unknown role' }, 400)
     }

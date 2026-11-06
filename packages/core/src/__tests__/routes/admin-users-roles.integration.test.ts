@@ -31,6 +31,7 @@ describe('admin users assign RBAC roles', () => {
   let db: any
   let app: any
   let rbac: RbacService
+  let kv: Map<string, string>
   const label = (id: string) => db.raw.prepare('SELECT role FROM auth_user WHERE id=?').get(id)?.role
   const rolesOf = async (id: string) => (await rbac.getRolesForUser(id)).map((r) => r.id).sort()
   const addUser = (id: string, role: string) =>
@@ -50,7 +51,9 @@ describe('admin users assign RBAC roles', () => {
     addUser('AdminId', 'admin')
     await rbac.setUserRoles('AdminId', ['role-admin'])
     app = new Hono()
-    app.use('*', async (c, next) => { (c as any).env = { DB: db }; await next() })
+    kv = new Map()
+    const CACHE_KV = { get: async (k) => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, v) }, delete: async (k) => { kv.delete(k) } }
+    app.use('*', async (c, next) => { (c as any).env = { DB: db, CACHE_KV }; await next() })
     app.route('/admin', userRoutes)
   })
   afterEach(() => db.close())
@@ -149,6 +152,14 @@ describe('admin users assign RBAC roles', () => {
     expect(text).toContain('Refusing to update roles')
     expect(await rolesOf('AdminId')).toEqual(['role-admin'])
     expect(label('AdminId')).toBe('admin')
+  })
+
+  it('a role change clears the user’s cached permissions', async () => {
+    addUser('Demoted', 'admin')
+    await rbac.setUserRoles('Demoted', ['role-admin'])
+    kv.set('rbac:perms:Demoted', '["rbac:manage"]')
+    await save('Demoted', 'role-editor')
+    expect(kv.has('rbac:perms:Demoted')).toBe(false)
   })
 
   it('invite validates the role and assigns it', async () => {

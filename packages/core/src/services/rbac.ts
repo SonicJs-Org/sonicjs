@@ -249,6 +249,15 @@ export class RbacService {
     return (role.data.grants ?? []).some((g) => this.grantMatches(g, resource, verb))
   }
 
+  /** Highest scope a role (by slug or name) grants for resource+verb. */
+  async getRoleScope(roleNameOrSlug: string, resource: string, verb: string): Promise<PermissionScope> {
+    const roles = await this.listDocs<RoleData>(T_ROLE)
+    const role = roles.find((r) => r.slug === roleNameOrSlug || r.data.name === roleNameOrSlug)
+    return this.strongestScope(
+      (role?.data.grants ?? []).filter((g) => this.grantMatches(g, resource, verb)).map((g) => (g.scope === 'own' ? 'own' : 'any')),
+    )
+  }
+
   /** True if a role document exists for this id or name. Use to distinguish "no RBAC role → default allow" from "role exists but no grant → deny". */
   async hasRbacRole(idOrName: string): Promise<boolean> {
     const roles = await this.listDocs<RoleData>(T_ROLE)

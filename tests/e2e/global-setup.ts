@@ -41,6 +41,13 @@ export async function prepareEnvironment(baseURL: string): Promise<void> {
 }
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
+  // In sharded CI runs, the setup job already ran e2e-readiness.ts which calls
+  // prepareEnvironment once before all shards start. Skip here to avoid 4 concurrent
+  // seed calls on the same DB and to save time. Set E2E_ADMIN_SEEDED=1 in shard job env.
+  if (process.env.E2E_ADMIN_SEEDED === '1') {
+    console.log('E2E global setup: skipping seed (E2E_ADMIN_SEEDED=1 — already seeded by CI setup job)')
+    return
+  }
   const baseURL = config.projects[0]?.use.baseURL
   if (!baseURL) throw new Error('E2E setup requires baseURL')
   await prepareEnvironment(baseURL)

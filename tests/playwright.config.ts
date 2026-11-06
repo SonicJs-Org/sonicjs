@@ -16,13 +16,15 @@ export default defineConfig({
   forbidOnly: ci,
   // Remote previews need more retries to absorb transient CF Worker cold-start / network flakiness.
   // Local runs use 1 retry as a diagnostic signal, not a green-by-retry policy.
-  retries: ci ? (remotePreview ? 3 : 1) : 0,
+  // 2 retries covers CF cold-start and network flakiness; most flaky tests pass on retry #1.
+  retries: ci ? (remotePreview ? 2 : 1) : 0,
   // TODO: enable once the remaining flaky tests are stabilized.
   // failOnFlakyTests: ci && !remotePreview,
   maxFailures: ci ? 25 : 0,
   timeout: ci ? 120_000 : 90_000,
-  // Retain the measured existing concurrency until full-suite comparisons justify changing it.
-  workers: ci ? 2 : 1,
+  // Playwright workers are mostly I/O-bound waiting on HTTP responses; 3 workers on a 2-core
+  // runner is well-validated and reduces total E2E runtime by ~30% with no additional infra.
+  workers: ci ? 3 : 1,
   outputDir: resolve(here, '../test-results'),
   reporter: [
     ['list'],

@@ -430,7 +430,7 @@ test.describe('Health Checks', () => {
 
 ### Authentication Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/02-authentication.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/auth-ui.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -499,7 +499,7 @@ test.describe('Authentication', () => {
 
 ### Content Management Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/05-content.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/content-crud.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -561,7 +561,7 @@ test.describe('Content Management', () => {
 
 ### Media Management Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/06-media.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/media-core.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -745,7 +745,7 @@ test.describe('Collections API', () => {
 
 ### Plugin Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/15-plugins.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/plugin-core.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -816,14 +816,14 @@ test.describe('Plugin Management', () => {
 ├── tests/
 │   └── e2e/                           # End-to-end tests
 │       ├── 01-health.spec.ts          # Health check tests
-│       ├── 02-authentication.spec.ts  # Auth flow tests
+│       ├── auth-ui.spec.ts            # Auth flow tests
 │       ├── 03-admin-dashboard.spec.ts # Dashboard tests
 │       ├── 04-collections.spec.ts     # Collection tests
-│       ├── 05-content.spec.ts         # Content management tests
-│       ├── 06-media.spec.ts           # Media upload tests
+│       ├── content-crud.spec.ts       # Content management tests
+│       ├── media-core.spec.ts         # Media upload tests
 │       ├── 07-api.spec.ts             # API endpoint tests
 │       ├── 08-collections-api.spec.ts # Collections API tests
-│       ├── 15-plugins.spec.ts         # Plugin tests
+│       ├── plugin-core.spec.ts        # Plugin tests
 │       └── utils/
 │           └── test-helpers.ts        # Shared test utilities
 ├── src/
@@ -838,7 +838,7 @@ test.describe('Plugin Management', () => {
 ### Test Naming Convention
 
 - **Unit tests**: `*.test.ts` or `*.spec.ts`
-- **E2E tests**: `##-feature.spec.ts` (numbered for execution order)
+- **E2E tests**: named category suites plus retained numbered standalone specs; file names do not guarantee execution order
 
 ## Running Tests
 
@@ -871,7 +871,7 @@ npm run test:e2e
 npm run test:e2e:ui
 
 # Run specific test file
-npx playwright test tests/e2e/02-authentication.spec.ts
+npm run e2e -- auth-ui.spec.ts
 
 # Run tests in headed mode (see browser)
 npx playwright test --headed
@@ -890,7 +890,7 @@ npx vitest src/plugins/cache/tests/cache.test.ts
 npx vitest --grep "CacheService"
 
 # Run E2E tests for specific feature
-npx playwright test tests/e2e/05-content.spec.ts
+npx playwright test tests/e2e/content-crud.spec.ts
 ```
 
 ## Coverage Reporting

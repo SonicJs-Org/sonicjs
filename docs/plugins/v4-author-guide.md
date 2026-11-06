@@ -322,7 +322,7 @@ test('configure form renders', async ({ page }) => {
 Run:
 ```bash
 npm run e2e                                              # full suite
-npx playwright test tests/e2e/77-schema-driven-settings.spec.ts --headed
+npx playwright test tests/e2e/plugin-settings.spec.ts --headed
 ```
 
 ---

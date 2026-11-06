@@ -7,7 +7,7 @@ export interface ProducerProvenanceInput {
     event: string; status: string; conclusion: string | null;
     headBranch: string; headSha: string;
   };
-  /** Complete jobs for this exact attempt; key is established by trusted adapter. */
+  /** Only declared producing jobs (currently test), filtered by trusted adapter; not all API jobs. */
   jobs: Array<{
     id: number; key: string; runId: number; runAttempt: number; status: string;
     steps: Array<{ number: number; name: string; status: string; conclusion: string | null }>;
@@ -36,3 +36,47 @@ export interface ValidatedProducerProvenance {
 }
 /** Throws Error for rejected / non-publishable provenance. No environment or filesystem effects. */
 export function validateProducerProvenance(input: ProducerProvenanceInput): ValidatedProducerProvenance;
+export const ARTIFACT_LIMITS: Readonly<{ reportBytes: number; manifestBytes: number; fileBytes: number; totalBytes: number; files: number; depth: number; nodes: number; stringBytes: number; invocations: number }>;
+export function validateNativeReport(bytes: Buffer): NativeReport;
+export interface ArtifactInput { kind: 'directory' | 'zip'; path: string }
+export interface ArtifactValidationInput {
+  input: ArtifactInput | readonly ArtifactInput[];
+  /** Existing private, owned directory outside the input; no temporary fallback. */
+  stagingParent: string;
+  trusted: ProducerProvenanceInput;
+}
+export interface SnapshotFile { readonly path: string; readonly bytes: number; readonly sha256: string }
+export interface UploadSnapshot {
+  readonly id: string;
+  readonly suite: 'core-unit' | 'cms-e2e'; readonly invocation: string;
+  readonly jobId: number; readonly stepNumber: number;
+  readonly reportPath: string; readonly manifestPath: string;
+  readonly outcome: 'passed' | 'failed';
+  readonly counts: Readonly<{ tests: number; attempts: number; passed: number; failed: number; skipped: number; suiteErrors: number }>;
+  readonly files: readonly SnapshotFile[];
+}
+export interface ArtifactSnapshots {
+  readonly root: string;
+  readonly provenance: DeepReadonly<ValidatedProducerProvenance>;
+  readonly invocations: readonly UploadSnapshot[];
+}
+/** Validates all evidence before returning any snapshots. Throws and cleans private staging on failure. */
+export function validateArtifactPayload(input: ArtifactValidationInput): Promise<ArtifactSnapshots>;
+/** Must be called immediately before each future child read. Rechecks owned files and complete tree. */
+export function verifyUploadSnapshots(snapshots: ArtifactSnapshots): Promise<void>;
+
+type ParsedReport = import('zod/v4').infer<typeof import('@flakiness/flakiness-report').Schema.Report>;
+type ParsedSuite = import('zod/v4').infer<typeof import('@flakiness/flakiness-report').Schema.Suite>;
+type ParsedTest = import('zod/v4').infer<typeof import('@flakiness/flakiness-report').Schema.Test>;
+type ParsedAttempt = import('zod/v4').infer<typeof import('@flakiness/flakiness-report').Schema.RunAttempt>;
+type ParsedStep = import('zod/v4').infer<typeof import('@flakiness/flakiness-report').Schema.TestStep>;
+// Package's generated recursive Zod declarations widen children to Record<string, unknown>.
+// Runtime Schema.Report validates those children; restore their structural public types here.
+export type NativeReport = Omit<ParsedReport, 'suites' | 'tests'> & { suites?: NativeSuite[]; tests?: NativeTest[] };
+export type NativeSuite = Omit<ParsedSuite, 'suites' | 'tests'> & { suites?: NativeSuite[]; tests?: NativeTest[] };
+export type NativeTest = Omit<ParsedTest, 'attempts'> & { attempts: NativeAttempt[] };
+export type NativeAttempt = Omit<ParsedAttempt, 'steps'> & { steps?: NativeStep[] };
+export type NativeStep = Omit<ParsedStep, 'steps'> & { steps?: NativeStep[] };
+export type NativeAttachment = import('zod/v4').infer<typeof import('@flakiness/flakiness-report').Schema.Attachment>;
+
+export type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T;

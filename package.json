@@ -80,11 +80,13 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260724.1",
+    "@flakiness/flakiness-report": "0.36.0",
     "@flakiness/playwright": "2.0.3",
     "@flakiness/vitest": "1.12.0",
     "@playwright/test": "^1.53.1",
     "@types/node": "^24.9.2",
     "@types/semver": "^7.7.0",
+    "@types/yauzl": "3.4.0",
     "@vitest/coverage-v8": "^4.1.9",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.3",
@@ -92,7 +94,8 @@
     "tsx": "^4.20.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9",
-    "wrangler": "^4.153.0"
+    "wrangler": "^4.153.0",
+    "yauzl": "3.4.0"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

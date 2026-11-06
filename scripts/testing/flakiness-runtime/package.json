@@ -1,0 +1,15 @@
+{
+  "name": "sonicjs-flakiness-runtime",
+  "private": true,
+  "description": "Pinned independent CLI runtime for Flakiness upload orchestration. Install with --ignore-scripts outside the PR checkout before credentials.",
+  "engines": {
+    "node": "^20.17.0 || >=22.9.0"
+  },
+  "dependencies": {
+    "@flakiness/flakiness-report": "0.36.0",
+    "@flakiness/sdk": "3.6.0",
+    "flakiness": "0.327.0",
+    "yauzl": "3.4.0",
+    "zod": "4.4.3"
+  }
+}

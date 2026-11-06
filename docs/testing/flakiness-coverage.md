@@ -573,3 +573,51 @@ Synthetic schema-valid stress reports use 140,000 nested suites, tests, or steps
 budget preflight before exercising recursive collection, default passed/env0
 counts, nested attachment resolution, and original report-byte preservation.
 These fixtures are synthetic validation cases, not live producer evidence.
+
+## Upload Orchestration (Task 5)
+
+`scripts/testing/upload-flakiness.mjs` provides the durable delivery layer that sits
+between validated private snapshots and the pinned CLI runtime.
+
+**Entry points:**
+- `validateOnly(snapshots)` — always safe; verifies snapshot integrity, returns
+  `state:'validation-only'` for all invocations. No auth, CLI, or ledger access.
+- `executeUpload(snapshots, config, auth, { enableUpload: true })` — executes CLI with
+  isolated environment and durable per-logical-key ledger. Without `enableUpload:true`,
+  behaves identically to `validateOnly`.
+
+**Logical key vs content digest:** The ledger key encodes
+`repo/runId/runAttempt/jobId/suite/invocation`. Content changes under the same key are
+rejected (blocked). Real reconciliation and delivery verification are Task 7.
+
+**Delivery states:** `validation-only` | `blocked` | `failed` | `ambiguous` |
+`accepted-unverified`. Never retry `ambiguous` automatically; a lost response is not
+proof of no remote effect.
+
+**CLI execution invariants:**
+- Verifies all snapshots before accessing auth or spawning any child
+- Fixed literal `--project SonicJs/sonicjs --endpoint https://flakiness.io`
+- Isolated HOME and TMPDIR per child; stripped env (no FLAKINESS_*, NODE_OPTIONS, etc.)
+- Bounded stdout (64 KB); finite timeout (default 120 s); SIGTERM + SIGKILL escalation
+- One valid `https://flakiness.io/...` URL required for `accepted-unverified`; zero or
+  multiple is `ambiguous`; non-zero exit or signal is `failed`
+
+**Independent CLI runtime** (`scripts/testing/flakiness-runtime/`): pinned
+`flakiness@0.327.0`, `@flakiness/sdk@3.6.0`, `@flakiness/flakiness-report@0.36.0`,
+`zod@4.4.3`, `yauzl@3.4.0`. Install with `npm ci --ignore-scripts` outside the PR
+checkout before credentials. Node 22.23.1 engine compatible; all 44 package
+integrities verified against official npm tarballs by parent.
+
+**Test coverage:** 23 contracts in `tests/reporting/upload-orchestration.test.ts` using
+fake CLI scripts (`fixtures/fake-cli-*.mjs`). Tests verify: validation-only default,
+auth lazy-read (never accessed on snapshot failure), fixed args/env isolation, testedSha
+pass-through, all receipt URL states, timeout/overflow/signal, partial batch independent
+recording, ledger blocking (started/ambiguous/accepted-unverified/changed-content), and
+corrupt/unsafe key rejection.
+
+**Not yet implemented:** real auth acquisition (Task 6), service delivery verification
+and reconciliation (Task 7). `accepted-unverified` is not proof of hosted delivery.
+Hosted setup, privacy/retention decisions, OIDC, and cutover remain separate gates.
+
+**Linux execution:** Python FD bridge has been exercised on macOS. Linux verification
+is pending published CI (see `docs/testing/reporting-contracts-ci.md`).

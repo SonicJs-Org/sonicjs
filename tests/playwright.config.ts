@@ -16,8 +16,9 @@ export default defineConfig({
   forbidOnly: ci,
   // Remote previews need more retries to absorb transient CF Worker cold-start / network flakiness.
   // Local runs use 1 retry as a diagnostic signal, not a green-by-retry policy.
-  // 2 retries covers CF cold-start and network flakiness; most flaky tests pass on retry #1.
-  retries: ci ? (remotePreview ? 2 : 1) : 0,
+  // Measured runs confirm some tail-exhaustion tests need retry #3; keep at 3 for the
+  // remote-preview path. Per-shard suites are smaller so total retry cost is still lower.
+  retries: ci ? (remotePreview ? 3 : 1) : 0,
   // TODO: enable once the remaining flaky tests are stabilized.
   // failOnFlakyTests: ci && !remotePreview,
   maxFailures: ci ? 25 : 0,

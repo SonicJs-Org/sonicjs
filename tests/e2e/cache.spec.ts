@@ -595,6 +595,21 @@ test.describe("Source: 97-cache-invalidation.spec.ts", () => {
   }
 
   test.describe('Cache invalidation — list freshness after item update @api', () => {
+    test.beforeAll(async ({ request }) => {
+      // Earlier sections of this consolidated spec file (43-cache-plugin,
+      // 80-cache-warming-documents) warm the KV cache for blog_post with a
+      // long TTL.  Without clearing first, the list endpoint keeps serving
+      // the warmed snapshot and newly-created items never appear — causing
+      // the cache-invalidation assertions below to fail on every retry.
+      const loginRes = await request.post(`${API}/auth/sign-in/email`, {
+        data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
+        headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+      })
+      if (loginRes.ok()) {
+        await request.post(`${API}/admin/cache/clear`)
+      }
+    })
+
     test('creating item via public API invalidates list cache', async ({ request }) => {
       const loginRes = await request.post(`${API}/auth/sign-in/email`, {
         data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },

@@ -124,6 +124,28 @@ describe('admin users assign RBAC roles', () => {
     await rbac.createRole('viewer', 'Viewer')
     addUser('Plain', 'viewer')
     expect(selected(await editPage('Plain'))).toBe('')
+    await save('Plain', '')
+    expect(await rolesOf('Plain')).toEqual([])
+    expect(label('Plain')).toBe('viewer')
+  })
+
+  it('saving an unknown user id is a 404 and assigns nothing', async () => {
+    const res = await save('Ghost', 'role-editor')
+    expect(res.status).toBe(404)
+    expect(await rolesOf('Ghost')).toEqual([])
+  })
+
+  it('a refused role assignment does not leave a created or invited user behind', async () => {
+    db.raw.prepare("UPDATE auth_user SET is_active = 0 WHERE id = 'AdminId'").run()
+    const res = await app.request('/admin/users/new', {
+      method: 'POST',
+      body: form({ first_name: 'N', last_name: 'R', email: 'nr@x.y', password: 'Password123!', confirm_password: 'Password123!', role: 'role-editor', is_active: '1' }),
+    })
+    expect(await res.text()).toContain('Refusing to update roles')
+    const inv = await app.request('/admin/invite-user', { method: 'POST', body: form({ email: 'ni@x.y', first_name: 'N', last_name: 'I', role: 'role-editor' }) })
+    expect(inv.status).toBe(400)
+    expect(db.raw.prepare("SELECT COUNT(*) n FROM auth_user WHERE email IN ('nr@x.y', 'ni@x.y')").get().n).toBe(0)
+    expect(db.raw.prepare("SELECT COUNT(*) n FROM auth_account WHERE user_id NOT IN (SELECT id FROM auth_user)").get().n).toBe(0)
   })
 
   it('repeated saves keep the label, and custom role names cannot pose as legacy labels', async () => {

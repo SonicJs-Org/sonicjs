@@ -37,8 +37,7 @@ test.describe('Admin user roles @auth @lock-auth-registration', () => {
 
     await loginAsAdmin(page)
     await page.goto(`/admin/users/${userId}/edit`)
-    // The old form preselected nothing, so the browser submitted the first option: Administrator.
-    await expect(page.locator('select[name="role"]')).not.toHaveValue('role-admin')
+    await expect(page.locator('#user-edit-form select[name="role"]')).not.toHaveValue('role-admin')
     await page.fill('input[name="phone"]', '555-0100')
     await submitAndWaitForXhr(page, 'PUT', `/admin/users/${userId}`, () =>
       page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()

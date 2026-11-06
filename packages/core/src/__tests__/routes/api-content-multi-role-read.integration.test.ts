@@ -53,7 +53,12 @@ describe('content API reads use every held RBAC role', () => {
     const doc = await docs.create({ typeId: 'notes', title: 'N1', slug: 'n1', data: { title: 'N1' } })
     await docs.publish(doc.rootId ?? doc.id)
     app = new Hono()
-    app.use('*', async (c, next) => { (c as any).env = { DB: db }; await next() })
+    app.use('*', async (c, next) => {
+      ;(c as any).env = { DB: db }
+      const tenant = c.req.header('x-test-tenant')
+      if (tenant) c.set('tenantId', tenant)
+      await next()
+    })
     app.route('/api', apiRoutes)
   })
   afterEach(() => { db.close(); resetCollectionRegistry() })
@@ -64,6 +69,11 @@ describe('content API reads use every held RBAC role', () => {
     expect(res.status).toBe(200)
     expect((await res.json()).data.map((d: any) => d.slug)).toContain('n1')
     expect((await read('/api/notes', 'Multi')).status).toBe(200)
+  })
+
+  it('outside the default tenant only the tenant role counts', async () => {
+    const res = await app.request('/api/notes', { headers: { 'x-test-user': 'Multi', 'x-test-tenant': 'acme' } })
+    expect(res.status).toBe(403)
   })
 
   it('a user without the grant is still refused', async () => {

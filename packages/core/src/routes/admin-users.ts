@@ -801,7 +801,16 @@ userRoutes.post('/users/new', async (c) => {
         VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
         .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
     ])
-    await rbac.setUserRoles(userId, [role])
+    try {
+      await rbac.setUserRoles(userId, [role])
+    } catch (err) {
+      // Don't leave a user behind without the role it was created for.
+      await db.batch([
+        db.prepare('DELETE FROM auth_account WHERE user_id = ?').bind(userId),
+        db.prepare('DELETE FROM auth_user WHERE id = ?').bind(userId),
+      ])
+      return c.html(renderAlert({ type: 'error', message: err instanceof Error ? err.message : 'Could not assign the role.', dismissible: true }))
+    }
 
     // Save registration profile fields if profile plugin is configured
     if (sanitizedRegistrationCustom !== null && Object.keys(sanitizedRegistrationCustom).length > 0) {
@@ -1133,7 +1142,9 @@ userRoutes.put('/users/:id', async (c) => {
     }
 
     // The form edits one role: swap the one it showed and keep the user's others.
-    const label = (await db.prepare('SELECT role FROM auth_user WHERE id = ?').bind(userId).first() as any)?.role ?? null
+    const target = await db.prepare('SELECT role FROM auth_user WHERE id = ?').bind(userId).first() as { role: string | null } | null
+    if (!target) return c.html(renderAlert({ type: 'error', message: 'User not found.', dismissible: true }), 404)
+    const label = target.role
     const shown = await formRoleFor(rbac, userId, label)
     const held = (await rbac.getRolesForUser(userId)).map((r) => r.id).filter((id) => id !== shown)
     try {
@@ -1390,7 +1401,14 @@ userRoutes.post('/invite-user', async (c) => {
       invitationToken, user!.userId, Date.now(),
       0, 0, Date.now(), Date.now()
     ).run()
-    if (role) await rbac.setUserRoles(userId, [role])
+    if (role) {
+      try {
+        await rbac.setUserRoles(userId, [role])
+      } catch (err) {
+        await db.prepare('DELETE FROM auth_user WHERE id = ?').bind(userId).run()
+        return c.json({ error: err instanceof Error ? err.message : 'Could not assign the role' }, 400)
+      }
+    }
 
     // Log the activity
     await logActivity(

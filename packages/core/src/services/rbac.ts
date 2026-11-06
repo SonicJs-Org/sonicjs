@@ -436,7 +436,7 @@ export class RbacService {
     const allRoles = await this.listDocs<RoleData>(T_ROLE)
     const byId = new Map(allRoles.map((r) => [r.slug, r.data]))
     const names = roleIds.map((id) => byId.get(id)?.name).filter((n): n is string => !!n)
-    // Other roles project their id: read checks accept it, and it can't collide with a requireRole label.
+    // Other roles project their id, so they match neither a requireRole label nor the role-keyed baseGrants.
     const primaryRole =
       RbacService.LEGACY_ROLE_PRECEDENCE.find((r) => names.includes(r)) ||
       (names.includes('viewer') ? 'viewer' : roleIds.filter((id) => byId.has(id)).sort()[0]) ||

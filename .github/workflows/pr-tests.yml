@@ -420,14 +420,11 @@ jobs:
       - name: Build core package
         run: npm run build:core
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
-          restore-keys: playwright-chromium-
-
       - name: Install matching Playwright browser and OS dependencies
+        # No browser cache on the untrusted path: fork-controlled code runs before the
+        # cache is saved and could replace files in ~/.cache/ms-playwright. A tampered
+        # browser would then be restored by trusted shard jobs that have PLAYWRIGHT_STATS_API_KEY.
+        # Same principle as the npm cache gate above (omitted for untrusted runs).
         run: npx playwright install --with-deps chromium
 
       - name: Prepare isolated local D1 for rollout, forks and Dependabot

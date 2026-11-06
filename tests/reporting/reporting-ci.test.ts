@@ -154,6 +154,8 @@ describe('steps', () => {
     expect(step!.uses).toBe('actions/checkout@11d5960a326750d5838078e36cf38b85af677262')
     const withBlock = step!.with as Record<string, unknown>
     expect(withBlock?.['persist-credentials']).toBe(false)
+    // Full history required so wiring tests can git-show stage1 commits
+    expect(withBlock?.['fetch-depth']).toBe(0)
   })
 
   test('setup-node uses exact pinned SHA with node-version 22.23.1', () => {

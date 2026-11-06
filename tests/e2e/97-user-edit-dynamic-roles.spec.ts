@@ -28,12 +28,15 @@ test.describe('User edit — dynamic role dropdown @auth', () => {
     await loginAsAdmin(page)
   })
 
-  test('user-new form contains admin role option', async ({ page }) => {
+  test('user-new form defaults to Public and allows selecting Admin', async ({ page }) => {
     await page.goto('/admin/users/new')
     await page.waitForLoadState('networkidle')
     const select = page.locator('select[name="role"]')
     await expect(select).toBeVisible()
     await expect(select.locator('option[value="role-admin"]')).toBeAttached()
+    await expect(select).toHaveValue('role-public')
+    await select.selectOption('role-admin')
+    await expect(select).toHaveValue('role-admin')
   })
 
   test('user-edit form contains admin role option', async ({ page }) => {

@@ -221,7 +221,9 @@ jobs:
 
   # ── Trusted E2E: matrix shards ───────────────────────────────────────────────
   # Waits for unit-tests (quality gate) and e2e-setup (CF deployment) in parallel.
-  # 4 shards split 149 spec files ~evenly, targeting ~15–20 min each vs ~50 min total.
+  # @lock-* tests are intentionally excluded here — they share global auth/plugin
+  # state across spec files and must run on a single runner (see e2e-locked job below).
+  # Non-locked tests (~80% of the suite) are sharded 4-ways for speed.
   # fail-fast: false ensures all shards complete so the cleanup job always runs.
   e2e-shard:
     needs: [unit-tests, e2e-setup]
@@ -269,7 +271,7 @@ jobs:
       - name: Install matching Playwright browser and OS dependencies
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E regression suite — shard ${{ matrix.shard }}/4
+      - name: Run E2E regression suite — shard ${{ matrix.shard }}/4 (non-locked tests)
         timeout-minutes: 50
         env:
           # Gate stats key on e2e-setup path (trusted) only; prevents the key from
@@ -281,6 +283,7 @@ jobs:
           mkdir -p e2e-logs
           npx playwright test --config=tests/playwright.config.ts \
             --shard=${{ matrix.shard }}/4 \
+            --grep-invert "@lock-" \
             2>&1 | tee e2e-logs/playwright-shard-${{ matrix.shard }}.log
 
       - name: Upload Playwright shard ${{ matrix.shard }} results to stats
@@ -295,6 +298,86 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            e2e-logs/
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ── Trusted E2E: @lock-* tests (serial, single runner) ───────────────────────
+  # @lock-* tags appear in MULTIPLE spec files sharing global auth/plugin/registration
+  # state. File-level sharding (--shard) can place them on different runners where
+  # the filesystem-based locks cannot coordinate. These tests MUST run on one runner
+  # with workers: 1 to avoid state corruption.
+  # Runs in parallel with e2e-shard; cleanup waits for both.
+  e2e-locked:
+    needs: [unit-tests, e2e-setup]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
+      E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}
+      E2E_DISPOSABLE_TARGET: '1'
+      E2E_ADMIN_SEEDED: '1'
+      CI: 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build:core
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-
+
+      - name: Install matching Playwright browser and OS dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run @lock-* tagged E2E tests (serial — shared auth/plugin state)
+        timeout-minutes: 80
+        env:
+          PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
+          PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-logs
+          # workers=1 serialises all @lock-* tests — the same lock tag can appear in
+          # multiple spec files, and concurrent workers on this runner would still race.
+          npx playwright test --config=tests/playwright.config.ts \
+            --grep "@lock-" \
+            --workers 1 \
+            2>&1 | tee e2e-logs/playwright-locked.log
+
+      - name: Upload @lock-* test results to stats
+        if: always()
+        env:
+          PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
+          PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+        run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
+
+      - name: Upload @lock-* E2E reports, traces and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-locked-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             playwright-report/
             test-results/
@@ -373,10 +456,11 @@ jobs:
           if-no-files-found: warn
 
   # ── Cleanup: delete all run-owned CF resources ───────────────────────────────
-  # Runs after all shards complete (success or failure) but only when e2e-setup
+  # Runs after all E2E jobs complete (success or failure) but only when e2e-setup
   # actually allocated resources. Resource identifiers come from e2e-setup job outputs.
+  # Each deletion step uses always() so a failure in one does not skip the others.
   cleanup:
-    needs: [e2e-setup, e2e-shard]
+    needs: [e2e-setup, e2e-shard, e2e-locked]
     if: always() && needs.e2e-setup.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -414,7 +498,7 @@ jobs:
         run: npx wrangler delete "$WORKER_NAME" --force
 
       - name: Delete run-owned D1 database
-        if: needs.e2e-setup.outputs.db_name != ''
+        if: always() && needs.e2e-setup.outputs.db_name != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -423,7 +507,7 @@ jobs:
         run: npx wrangler d1 delete "$DB_NAME" --skip-confirmation
 
       - name: Delete run-owned R2 bucket
-        if: needs.e2e-setup.outputs.r2_name != ''
+        if: always() && needs.e2e-setup.outputs.r2_name != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -431,7 +515,7 @@ jobs:
         run: npx wrangler r2 bucket delete "${{ needs.e2e-setup.outputs.r2_name }}"
 
       - name: Delete run-owned KV namespace
-        if: needs.e2e-setup.outputs.kv_id != ''
+        if: always() && needs.e2e-setup.outputs.kv_id != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

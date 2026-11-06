@@ -30,15 +30,17 @@ test('all non-reporting production configuration bytes match Task2', async () =>
   const { execFileSync } = await import('node:child_process')
   const { readFileSync } = await import('node:fs')
   const { repositoryRoot } = await import('./options')
+  const stripReporting = (s: string) => s
+    .replace("import { cmsReportingTarget, playwrightReporting } from './reporting/options'\n", '')
+    .replace("import { playwrightReporting } from './reporting/options'\n", '')
+    .replace(/^    \.\.\.playwrightReporting\(.+\),\n/gm, '')
+    .replace("reporter: [['list'], ...playwrightReporting('runner-contracts', 'none')],", "reporter: [['list']],")
+    .replace("reporter: [['html'], ...playwrightReporting('www-e2e', 'www')],", "reporter: 'html',")
   for (const file of ['playwright.config.ts', 'playwright-no-server.config.ts', 'playwright.smoke.config.ts', 'playwright.www.config.ts', 'playwright.infrastructure.config.ts']) {
     const path = `tests/${file}`
-    const original = execFileSync('git', ['show', `4498f0126:${path}`], { cwd: repositoryRoot, encoding: 'utf8' })
-    const current = readFileSync(`${repositoryRoot}/${path}`, 'utf8')
-      .replace("import { cmsReportingTarget, playwrightReporting } from './reporting/options'\n", '')
-      .replace("import { playwrightReporting } from './reporting/options'\n", '')
-      .replace(/^    \.\.\.playwrightReporting\(.+\),\n/gm, '')
-      .replace("reporter: [['list'], ...playwrightReporting('runner-contracts', 'none')],", "reporter: [['list']],")
-      .replace("reporter: [['html'], ...playwrightReporting('www-e2e', 'www')],", "reporter: 'html',")
+    // 0ab047e45 is the latest main commit before this PR (includes PR #1164 smoke comment update)
+    const original = stripReporting(execFileSync('git', ['show', `0ab047e45:${path}`], { cwd: repositoryRoot, encoding: 'utf8' }))
+    const current = stripReporting(readFileSync(`${repositoryRoot}/${path}`, 'utf8'))
     expect(current, path).toBe(original)
   }
 })

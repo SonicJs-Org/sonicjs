@@ -387,3 +387,237 @@ and attempt and exclude fixture reports, not blindly upload the shared report ro
 Existing native GitHub artifact paths remain unchanged in this additive PR; adding
 retention for the new report root and its trusted handoff belongs to the publishing
 stage. Local reports are not proof of hosted delivery.
+
+### Task5 native artifact boundary (offline layer)
+
+`scripts/testing/validate-flakiness-artifacts.mjs` now exposes
+`validateArtifactPayload({ input: { kind: 'directory' | 'zip', path }, stagingParent, trusted })`,
+`validateNativeReport(bytes)`, and `verifyUploadSnapshots(snapshots)` with adjacent
+`.d.mts` declarations. This layer performs no authentication, network requests,
+CLI execution, uploads, workflow activation, or service configuration.
+
+Task6 must supply normalized **trusted** GitHub adapter context. Validation calls
+`validateProducerProvenance` internally; producer manifests never authenticate
+that context. `jobs` means only declared **producing** jobs (currently `test`),
+filtered and keyed by the trusted adapter. It does not mean the complete raw API
+job list: authorization/approval jobs are not producer jobs. Original PR-head
+snapshot acquisition, fresh current-PR comparison inputs, and API authentication
+remain Task6 responsibilities. Pure provenance checks still reject stale heads.
+
+Canonical directory payload, also used verbatim as ZIP entry paths:
+
+```text
+<root>/
+  core-unit/<invocation>/
+    invocation.json
+    vendor/report.json
+    vendor/attachments/<lowercase-sha1>   # optional, direct files only
+  cms-e2e/<invocation>/
+    invocation.json
+    vendor/report.json
+    vendor/attachments/<lowercase-sha1>   # optional, direct files only
+```
+
+The ZIP has no enclosing `flakiness-reports/` directory. Task6's producer must
+preserve this exact layout, native report bytes, and lifecycle manifest; archive
+only actual current CI invocations. No layout discovery or arbitrary path
+normalization occurs. One invocation per ran suite is required; skipped suite
+steps require no invocation. UUID invocation names must match the stage1
+`test-local-<attempt>-<uuid>` convention (no current shards) and manifest identity. Current
+CI accepts only `core-unit` (`vitest`, environment `vitest`, target `none`) and
+`cms-e2e` (`playwright`, environment `chromium`, target `local-worker` or
+`preview-worker`). Optional target URLs must already be canonical sanitized HTTP(S)
+URLs, with no credentials, query, or fragment. Loopback hosts (`localhost`,
+`127.0.0.1`, `[::1]`) agree with `local-worker`; other hosts agree with
+`preview-worker`. Core target remains `none` without a target URL. URLs are
+metadata only: validation makes no target requests and changes no deployment policy. Each has
+exactly one environment with metadata `{ suite, target, source: 'ci' }`.
+Environment `userSuppliedData` is explicitly forbidden until a reviewed use exists;
+other native metadata remains bounded schema data. New suites, shards, targets,
+environment dimensions, or repeated invocations need a separate reviewed policy.
+
+Manifest SHA/run/attempt/job/workflow/PR/source, report SHA/category/source, and
+trusted current suite step must agree. Producer run failure does not invalidate a
+successful earlier suite. Failed native reports can publish with failed manifests
+and failed steps. Final expected status determines test success; recovered retries
+retain every original attempt and remain recovered successes. Skips remain skips;
+empty/all-skipped/no-attempt/interrupted/missing evidence rejects explicitly.
+Exception: zero native tests with genuine root `unattributedErrors`, failed
+manifest, and trusted failed suite step preserve an explicit failed invocation.
+Every snapshot returns `outcome` (`passed` or `failed`) and `counts.suiteErrors`;
+error-only failures retain zero tests/attempts rather than fabricating test cases.
+Runner errors can also substantiate failed outcomes when test assertions pass.
+This establishes consistency, not proof that producer tests honestly ran or that
+self-reported test counts are complete.
+
+Producer source links may retain the canonical GitHub run URL or the exact
+`/attempts/N` URL. The native reporter's optional `attempt=N` and
+`check_suite_focus=true` query parameters are accepted with no duplicates/foreign
+parameters; any supplied attempt must match. Consumer provenance returns an
+attempt-specific source URL without rewriting original report/manifest bytes.
+Embedded source/config/location/stack/title paths are metadata, never filesystem
+read instructions. Project is absent or exactly `SonicJs/sonicjs`; unknown report
+fields (including endpoint/CLI/hooks overrides) reject. Future uploader must force
+literal project `SonicJs/sonicjs` and endpoint `https://flakiness.io` from trusted
+configuration.
+
+Native validation uses public `Schema.Report.safeParse` from exact version
+0.36.0 after iterative JSON preflight. Any stripped/changed parsed fields reject.
+Fixed budgets provide headroom above measured largest report 3,186,602 bytes and
+invocation 3,188,147 bytes/23 files:
+
+| Boundary | Limit |
+| --- | --- |
+| Native report / lifecycle manifest | 16 MiB / 64 KiB |
+| Single regular file / ZIP entry | 32 MiB |
+| Total input bytes / declared decompressed / actual decompressed | 128 MiB each |
+| Tree entries / ZIP entries | 2,048 |
+| JSON depth / nodes / single string | 64 / 1,000,000 / 8 MiB |
+| Payload path segments / path length | 6 / 512 characters |
+| Current invocations | 2 maximum, one per ran allowlisted suite |
+| ZIP expansion ratio | max(1 MiB, compressed bytes × 1,000) per entry |
+
+Oversize evidence rejects visibly; no truncation or automatic cap increases.
+Prototype-dangerous keys and nonfinite numbers reject, including schema-any
+metadata. Every root/nested test attempt and recursively nested step attachment
+must resolve to a direct SHA1-named file whose bytes match its content hash.
+Missing/unreferenced attachments, ambiguous names, extra files, symlinks,
+hardlinks, executable/special/FIFO files, and unexpected empty directories reject.
+
+All directory, ZIP-source, and snapshot verification reads use the fixed trusted
+`scripts/testing/read-flakiness-artifacts.py` bridge. It opens `/`, holds directory
+FDs, and opens every path component relative to held FDs with `O_NOFOLLOW`,
+`O_DIRECTORY` for directories and `O_NONBLOCK` for files. Regular type, nlink,
+permissions, size, and stat identity are checked before bytes; identity and
+bindings are rechecked after bounded reads. An ancestor replacement cannot
+redirect a file read through the replacement path. Directory scans repeat before
+staging; handle cleanup runs on success and rejection.
+
+Mac/Linux require trusted `/usr/bin/python3` (Python 3.9+), POSIX `dir_fd` support
+for `os.open`/`os.stat`, streaming `os.scandir(fd)`, and no-follow/directory/nonblocking flags.
+Missing interpreter/capabilities fail closed; no path-based fallback. Node retains
+schema, ZIP, policy, and snapshot logic. Python only performs narrow OS intake
+using system stdlib, never artifact code. The interpreter receives `-I -S -B`,
+neutral cwd `/`, and only the trusted owned staging-parent `TMPDIR` (contains macOS
+interpreter startup cache writes and avoids a temporary fallback); no inherited credentials,
+Python hooks, user site, or bytecode writes. Request JSON is capped at 8 KiB,
+stdout at 180 MiB (bounded base64 bytes plus paths), stderr at 4 KiB before kill,
+and each child at 30 seconds with SIGKILL. Bounded interpreter startup warnings
+are discarded on exit 0 with valid protocol (macOS xcrun can emit them on cold
+startup); nonzero exit, malformed protocol, or stderr overflow still reject.
+Errors crossing Node are generic and
+omit raw child stderr, file bytes, and paths. Helper/interpreter and their ancestry
+must be trusted and kept outside artifact control. ZIP intake uses reviewed
+`yauzl@3.4.0` with strict filenames, decoded names, and entry-size validation.
+All central entries are preflighted before decompression: paths, case/duplicate
+and prefix collisions, encryption, methods, modes, declared/compressed budgets.
+Bounded streams verify actual sizes and CRC32. ZIP bytes stay in bounded owned
+memory; archive links/modes are never materialized or executed.
+
+`validateArtifactPayload` accepts its existing single `input` or an array of
+one/two `{ kind: 'directory' | 'zip', path }` inputs. This composes per-suite ZIPs
+without extracting unvalidated archives or weakening full trusted run context.
+Every ZIP receives complete central-directory preflight before its decompression.
+Entry count, raw intake bytes, declared/compressed bytes, actual payload bytes,
+and invocation limits apply across the entire batch; JSON depth/nodes/string
+limits apply per JSON document. Cross-input duplicate, case, and file/directory
+prefix collisions reject. All actually ran suites must be present. A malformed
+member or missing suite returns no snapshots, even if another member is valid.
+Complete single-input payloads and failed core with genuinely skipped CMS remain
+supported. All reports validate before snapshot creation. An existing trusted owned staging
+parent outside input is mandatory; there is no temporary fallback. Unique private
+snapshot roots contain only newly created regular non-executable read-only files
+(mode 0400; private directories). Partial staging is removed on failure. Returned
+objects and digest manifests are recursively frozen. Each snapshot ID binds
+producer repository/run/attempt/job/suite/invocation and sorted content digests;
+ZIP ordering cannot change identity. Original artifacts are never upload inputs.
+The owner can still chmod/replace its files; immutable ownership here combines
+private copies, read-only permissions, frozen metadata, and mandatory digest/tree
+revalidation. Task6 must call `verifyUploadSnapshots` immediately before each
+child read and keep staging private for the child's lifetime. Caller owns cleanup
+of successful snapshot roots after all reads finish.
+
+Offline tests use sanitized synthetic GitHub context, actual public schema,
+actual network-denied native reporter subprocess output, and locally constructed
+hostile ZIP/filesystem fixtures. They are not captured real GitHub authentication
+or live service provenance evidence. `npm run test:reporting` covers this boundary;
+no application server or full application E2E campaign is needed for this layer.
+Standalone pinned CLI runtime, uploader/child isolation, delivery ledger and API
+adapter are later reviewed layers. Task7 service/privacy/retention/readback
+approval, hosted delivery verification, and dashboard cutover remain outstanding.
+
+Task5 correction evidence lives in the owned stage2 evidence directory under
+`task5-corrections/`: separate P2/R1/R2/R3 RED and GREEN logs. P2 RED counted two
+outside-file reads despite eventual rejection; GREEN syscall instrumentation of
+the trusted Python helper swaps real owned ancestors/leaves, counts reads of the
+outside sentinel inode, checks original byte preservation and closes every FD.
+The harness is test-owned and is never loaded by production intake. R1 uses
+actual network-denied Playwright output with local/preview metadata; R2 combines
+actual Vitest and Playwright per-suite ZIPs; R3 uses actual native import-error
+reporter output. Pinned interruption omissions remain cutover blockers. These are
+offline contract results, not authenticated or hosted provenance claims. Parent
+still owns fresh install, final application E2E, independent spec review, and
+subsequent quality review; this correction does not approve or start the uploader.
+
+
+Task5 quality regressions use instrumented FD-scandir iterators to assert root and
+nested enumeration consume at most remaining global entry budget plus one, close
+the iterator and held descriptors, and reject without eager enumeration. Pending
+sibling names reserve entry budget before descent. Python capability checks
+require `os.scandir in os.supports_fd`; no pathname enumeration fallback exists.
+Ancestor, leaf-symlink, and leaf-FIFO syscall swaps assert their trigger fired,
+zero outside reads, and descriptor cleanup.
+
+Synthetic schema-valid stress reports use 140,000 nested suites, tests, or steps
+(the step fanout sits under twelve nested steps). They pass native schema and
+budget preflight before exercising recursive collection, default passed/env0
+counts, nested attachment resolution, and original report-byte preservation.
+These fixtures are synthetic validation cases, not live producer evidence.
+
+## Upload Orchestration (Task 5)
+
+`scripts/testing/upload-flakiness.mjs` provides the durable delivery layer that sits
+between validated private snapshots and the pinned CLI runtime.
+
+**Entry points:**
+- `validateOnly(snapshots)` — always safe; verifies snapshot integrity, returns
+  `state:'validation-only'` for all invocations. No auth, CLI, or ledger access.
+- `executeUpload(snapshots, config, auth, { enableUpload: true })` — executes CLI with
+  isolated environment and durable per-logical-key ledger. Without `enableUpload:true`,
+  behaves identically to `validateOnly`.
+
+**Logical key vs content digest:** The ledger key encodes
+`repo/runId/runAttempt/jobId/suite/invocation`. Content changes under the same key are
+rejected (blocked). Real reconciliation and delivery verification are Task 7.
+
+**Delivery states:** `validation-only` | `blocked` | `failed` | `ambiguous` |
+`accepted-unverified`. Never retry `ambiguous` automatically; a lost response is not
+proof of no remote effect.
+
+**CLI execution invariants:**
+- Verifies all snapshots before accessing auth or spawning any child
+- Fixed literal `--project SonicJs/sonicjs --endpoint https://flakiness.io`
+- Isolated HOME and TMPDIR per child; stripped env (no FLAKINESS_*, NODE_OPTIONS, etc.)
+- Bounded stdout (64 KB); finite timeout (default 120 s); SIGTERM + SIGKILL escalation
+- One valid `https://flakiness.io/...` URL required for `accepted-unverified`; zero or
+  multiple is `ambiguous`; non-zero exit or signal is `failed`
+
+**Independent CLI runtime** (`scripts/testing/flakiness-runtime/`): pinned
+`flakiness@0.327.0`, `@flakiness/sdk@3.6.0`, `@flakiness/flakiness-report@0.36.0`,
+`zod@4.4.3`, `yauzl@3.4.0`. Install with `npm ci --ignore-scripts` outside the PR
+checkout before credentials. Node 22.23.1 engine compatible; all 44 package
+integrities verified against official npm tarballs by parent.
+
+**Test coverage:** 23 contracts in `tests/reporting/upload-orchestration.test.ts` using
+fake CLI scripts (`fixtures/fake-cli-*.mjs`). Tests verify: validation-only default,
+auth lazy-read (never accessed on snapshot failure), fixed args/env isolation, testedSha
+pass-through, all receipt URL states, timeout/overflow/signal, partial batch independent
+recording, ledger blocking (started/ambiguous/accepted-unverified/changed-content), and
+corrupt/unsafe key rejection.
+
+**Not yet implemented:** real auth acquisition (Task 6), service delivery verification
+and reconciliation (Task 7). `accepted-unverified` is not proof of hosted delivery.
+Hosted setup, privacy/retention decisions, OIDC, and cutover remain separate gates.
+
+**Linux execution:** Python FD bridge has been exercised on macOS. Linux verification
+is pending published CI (see `docs/testing/reporting-contracts-ci.md`).

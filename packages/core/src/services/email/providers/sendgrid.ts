@@ -23,7 +23,7 @@ export class SendGridProvider implements EmailProvider {
   constructor(options: SendGridProviderOptions = {}) {
     this.apiKey = options.apiKey
     this.endpoint = options.endpoint ?? SENDGRID_ENDPOINT
-    this.fetchImpl = options.fetchImpl ?? fetch
+    this.fetchImpl = options.fetchImpl ?? fetch.bind(globalThis)
   }
 
   isConfigured(): boolean {

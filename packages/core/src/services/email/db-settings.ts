@@ -1,12 +1,19 @@
 /**
  * Admin-UI email settings (DB-backed)
  *
- * SonicJS lets operators configure email from the admin Plugins page, which
- * persists an API key + from-identity as JSON in `plugins.settings` for the
- * `email` plugin. Historically each send path read this row itself (OTP, the
- * test button) and called Resend directly. The provider-agnostic EmailService
- * consolidates that: when no provider is configured via `config.email` or env,
- * the app falls back to these DB settings so existing installs keep delivering.
+ * SonicJS stores email plugin settings in two places depending on which admin
+ * path was used to save them:
+ *
+ *   1. `documents` table (v3 primary) — the general plugin settings page uses
+ *      `PluginService.updatePluginSettings`, which writes via
+ *      `json_set(data, '$.settings', json(?))`. Read with `json_extract`.
+ *
+ *   2. `plugins` table (legacy fallback) — the dedicated email admin route
+ *      (`POST /admin/email/settings`) writes to `plugins.settings` directly.
+ *
+ * We try the `documents` path first and fall back to `plugins` so both storage
+ * paths remain functional. Both queries return a column named `settings`
+ * containing a JSON string, so the parsing logic is identical.
  */
 
 import type { EmailLogDb } from './email-service'
@@ -31,16 +38,42 @@ interface SettingsDb {
 /**
  * Load the admin-UI email settings, or null if the row is absent/unparseable.
  * Never throws — a bad settings blob just yields null.
+ *
+ * Tries the v3 `documents` table first (primary storage written by the plugin
+ * settings page), then falls back to the legacy `plugins` table (written by
+ * the dedicated email admin route).
  */
 export async function loadDbEmailSettings(db: SettingsDb | EmailLogDb | undefined): Promise<DbEmailSettings | null> {
   if (!db || typeof (db as SettingsDb).prepare !== 'function') return null
+  const tryParse = (settings: string | null | undefined): DbEmailSettings | null => {
+    if (!settings) return null
+    try {
+      const parsed = JSON.parse(settings) as DbEmailSettings
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  }
   try {
-    const row = await (db as SettingsDb)
+    // Primary: v3 documents table — settings saved via the plugin settings admin page.
+    const docRow = await (db as SettingsDb)
+      .prepare(
+        `SELECT json_extract(data, '$.settings') AS settings
+         FROM documents
+         WHERE type_id = 'plugin' AND slug = 'email'
+           AND is_current_draft = 1 AND deleted_at IS NULL
+         LIMIT 1`
+      )
+      .first()
+    const fromDoc = tryParse(docRow?.settings)
+    if (fromDoc) return fromDoc
+  } catch { /* documents table absent or json_extract unsupported — fall through */ }
+  try {
+    // Fallback: legacy plugins table — settings saved via POST /admin/email/settings.
+    const pluginRow = await (db as SettingsDb)
       .prepare(`SELECT settings FROM plugins WHERE id = 'email'`)
       .first()
-    if (!row?.settings) return null
-    const parsed = JSON.parse(row.settings) as DbEmailSettings
-    return parsed && typeof parsed === 'object' ? parsed : null
+    return tryParse(pluginRow?.settings)
   } catch {
     return null
   }

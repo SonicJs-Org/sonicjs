@@ -1,0 +1,95 @@
+name: Flakiness Upload
+
+on:
+  workflow_run:
+    workflows: ['PR Tests']
+    types: [completed]
+
+# Consumer only — no deployment secrets, no PR checkout, no test execution.
+permissions:
+  actions: read
+  contents: read
+  id-token: write  # GitHub OIDC → Flakiness (no stored token needed)
+
+jobs:
+  upload:
+    name: Upload to Flakiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only run for the trusted repository; publish both success and failure so
+    # failed-test evidence reaches the dashboard. Skip cancelled/skipped runs.
+    if: |
+      github.event.workflow_run.repository.full_name == 'SonicJs-Org/sonicjs' &&
+      github.event.workflow_run.workflow_id == 207092903 &&
+      (github.event.workflow_run.conclusion == 'success' ||
+       github.event.workflow_run.conclusion == 'failure')
+    env:
+      PRODUCER_RUN_ID: ${{ github.event.workflow_run.id }}
+      PRODUCER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+      FLAKINESS_PROJECT: ${{ vars.FLAKINESS_PROJECT }}
+      CI: 'true'
+      SONICJS_TEST_UPLOAD: '0'
+    steps:
+      - name: Checkout default branch (helpers only — never PR code)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.23.1'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install pinned Flakiness CLI runtime
+        run: |
+          npm ci --prefix scripts/testing/flakiness-runtime --ignore-scripts --no-audit --no-fund
+
+      - name: Download core-unit artifact
+        id: dl-core
+        uses: actions/download-artifact@fa0a91b85d4f404e444306525a0d33dbfca8c79d
+        continue-on-error: true
+        with:
+          name: flakiness-core-unit-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}
+          path: ${{ runner.temp }}/artifacts/core-unit
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.PRODUCER_RUN_ID }}
+
+      - name: Download cms-e2e artifact
+        id: dl-cms
+        uses: actions/download-artifact@fa0a91b85d4f404e444306525a0d33dbfca8c79d
+        continue-on-error: true
+        with:
+          name: flakiness-cms-e2e-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}
+          path: ${{ runner.temp }}/artifacts/cms-e2e
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.PRODUCER_RUN_ID }}
+
+      - name: Validate and upload core-unit
+        if: steps.dl-core.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts/core-unit
+          STAGING_DIR: ${{ runner.temp }}/staging/core-unit
+          LEDGER_DIR: ${{ runner.temp }}/ledger
+          RUNTIME_DIR: scripts/testing/flakiness-runtime
+        run: node scripts/testing/run-flakiness-upload.mjs
+
+      - name: Validate and upload cms-e2e
+        if: steps.dl-cms.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts/cms-e2e
+          STAGING_DIR: ${{ runner.temp }}/staging/cms-e2e
+          LEDGER_DIR: ${{ runner.temp }}/ledger
+          RUNTIME_DIR: scripts/testing/flakiness-runtime
+        run: node scripts/testing/run-flakiness-upload.mjs
+
+      - name: Warn if no artifacts found
+        if: steps.dl-core.outcome == 'failure' && steps.dl-cms.outcome == 'failure'
+        run: |
+          echo "::warning::No Flakiness artifacts found for run $PRODUCER_RUN_ID attempt $PRODUCER_RUN_ATTEMPT. The producer may have failed before generating reports."
+          exit 0

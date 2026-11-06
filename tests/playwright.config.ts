@@ -1,3 +1,4 @@
+import { cmsReportingTarget, playwrightReporting } from './reporting/options'
 import { defineConfig, devices } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
@@ -30,6 +31,7 @@ export default defineConfig({
     ['junit', { outputFile: resolve(here, '../test-results/junit.xml') }],
     // Live stats reporter — self-disables when PLAYWRIGHT_STATS_API_KEY is not set
     [resolve(here, './e2e/stats-live-reporter.ts')],
+    ...playwrightReporting('cms-e2e', cmsReportingTarget(process.env)),
   ],
   globalSetup: resolve(here, './e2e/global-setup.ts'),
   globalTeardown: resolve(here, './e2e/global-teardown.ts'),

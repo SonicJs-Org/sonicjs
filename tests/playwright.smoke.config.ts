@@ -1,3 +1,4 @@
+import { cmsReportingTarget, playwrightReporting } from './reporting/options'
 import { defineConfig } from '@playwright/test';
 import baseConfig from './playwright.config';
 
@@ -27,6 +28,7 @@ export default defineConfig({
     ['html', { outputFolder: 'playwright-report-smoke', open: 'never' }],
     ['json', { outputFile: 'test-results/smoke-results.json' }],
     ['junit', { outputFile: 'test-results/smoke-junit.xml' }],
+    ...playwrightReporting('cms-smoke', cmsReportingTarget(process.env)),
   ],
 
   use: {

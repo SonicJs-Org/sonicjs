@@ -42,7 +42,7 @@ npm run e2e -- 39-slug-generation --grep 'detect duplicate slugs' --repeat-each=
 
 # Full suite, not smoke; three consecutive clean runs are the acceptance target
 npm run e2e -- --workers=2 --retries=0
-# CI policy: two workers, one diagnostic retry, retry recoveries also fail CI
+# CI policy: two workers; remote retries 3, local CI retries 1; retry-green permitted
 CI=true npm run e2e
 
 # Use an ALREADY RUNNING, owned server (BASE_URL is honored)
@@ -135,9 +135,41 @@ Artifacts `e2e-<run_id>-<attempt>` include:
 
 Open traces with `npx playwright show-trace path/to/trace.zip`. Diagnose the **first**
 attempt and distinguish setup from assertion failures. A retry recovery is not an
-infrastructure diagnosis. CI fails on recovered flakes as well as final failures.
+infrastructure diagnosis. Current CI permits retry-green (remote retries 3, local CI retries 1); final failures fail CI.
 Artifacts upload under `always()`; hard runner termination can still prevent final
 report creation/upload. Traces can contain disposable session cookies and test data:
 retain briefly, restrict artifact access and never add `.dev.vars` or raw credentials.
 See the [infrastructure audit](../../docs/testing/e2e-infrastructure-audit.md) for
 measured evidence and limitations.
+
+
+## Staged Flakiness reporting
+
+Official reporters now generate local reports alongside existing terminal/native
+outputs for core, SDK, root, reporting contracts, Playwright, sample and CLI
+verification. Run `npm run test:reporting`, `npm test -- --run`, `npm run test:cov`,
+`(cd packages/sdk && npx --no-install vitest run --config vitest.config.ts)`,
+`(cd my-sonicjs-app && npm test)` or `(cd packages/create-app && npm test)` from
+repository root. Root direct Vitest has zero tests/exit 1; sample still fails on
+Playwright-import collection. CLI retains its genuine verifier and currently
+fails on a missing local execa dependency. These failures are not green coverage.
+
+Outputs: `flakiness-reports/<suite>/<invocation>/vendor/report.json` plus attachments;
+completed lifecycle metadata is `<invocation>/invocation.json`. Archive the invocation
+root (`invocationFolder`) for both; `outputFolder` denotes only its `vendor/` child.
+Native Playwright report/trace viewing and coverage HTML stay unchanged. Vendor
+output prints `npx flakiness show <folder>` for a separately installed viewer;
+this phase adds no viewer installation or uploader.
+
+Upload defaults off and always stays off in CI; no OIDC integration. Direct local
+upload needs `SONICJS_TEST_UPLOAD=1`, `FLAKINESS_ACCESS_TOKEN` and `FLAKINESS_PROJECT`
+in environment, with external account/project setup handled separately. No account
+setup or credentials are included. Hosted privacy/access/retention approval remains
+pending. No live Flakiness progress or history import exists. Legacy dashboard,
+stats credentials, scripts and live reporting remain active unchanged.
+
+Playwright 2.0.3 omits interrupted attempts; native JSON and sidecar preserve the
+interruption. Vitest SIGINT can prevent vendor output; sidecar records exit 130.
+Publishing and dashboard retirement require separate roll-forward PRs gated on
+real service evidence and explicit user decisions; historical plans are not yet
+superseded. See [coverage, exact commands, blockers and future gates](../../docs/testing/flakiness-coverage.md).

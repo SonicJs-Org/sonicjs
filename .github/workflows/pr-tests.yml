@@ -62,6 +62,15 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:cov
 
+      - name: Upload core-unit Flakiness reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flakiness-core-unit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/core-unit/
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Upload coverage to Codecov
         if: env.TRUSTED_PREVIEW == 'true'
         uses: codecov/codecov-action@v4
@@ -197,6 +206,15 @@ jobs:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
         run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
+
+      - name: Upload cms-e2e Flakiness reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flakiness-cms-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/cms-e2e/
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload E2E reports, failed-attempt traces and logs
         if: always()

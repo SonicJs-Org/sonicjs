@@ -19,7 +19,8 @@ async function aclAllowsRead(
 ): Promise<boolean> {
   const docType = preloadedType ?? await new DocumentTypeRegistry(db).findById(row.type_id)
   if (!docType) return false
-  return createDocumentReadAccess(db, principalSet, requestTenant).canRead(row.root_id, docType, docTenant)
+  // Callers select only published, undeleted rows inside their schedule window.
+  return createDocumentReadAccess(db, principalSet, requestTenant).canRead(row.root_id, docType, docTenant, true)
 }
 
 const apiDocumentsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -104,12 +105,12 @@ apiDocumentsRoutes.get('/', async (c) => {
       data: d.data,
     }))
 
-    // ACL: published reads still flow through isAllowed as the resolved principal (public for anon),
-    // so a published-but-restricted document is hidden (D5). nextCursor is computed from the RAW page
+    // Published reads still pass the per-document read check (public principal for anon), so a
+    // published-but-restricted document is hidden (D5). nextCursor is computed from the RAW page
     // so pagination advances even when some rows are filtered out by ACL.
     const access = createDocumentReadAccess(db, principalSet, tenantId)
     const docTenant = effectiveTenantForType(tenantId, docType.settings)
-    const allowed = await Promise.all(items.map(it => access.canRead(it.rootId, docType, docTenant)))
+    const allowed = await Promise.all(items.map(it => access.canRead(it.rootId, docType, docTenant, true)))
     const visible = items.filter((_, i) => allowed[i])
 
     const lastItem = items[items.length - 1]

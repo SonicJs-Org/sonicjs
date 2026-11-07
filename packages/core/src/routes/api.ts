@@ -34,14 +34,14 @@ async function typeReadAllowed(
   principalSet: PrincipalRef[],
   docType: { settings?: any } | null | undefined,
   typeName: string,
-  heldRoleIds: string[],
+  held: string[],
 ): Promise<boolean> {
   const perms = new DocumentPermissionsService(db)
   if (perms.isAllowedSync(principalSet, [], 'read', docType?.settings ?? {})) return true
   const rbac = new RbacService(db)
   const roleIds = principalSet.filter((p) => p.type === 'role').map((p) => p.id)
   let anyRbacRoleFound = false
-  for (const id of new Set([...roleIds, ...heldRoleIds])) {
+  for (const id of new Set([...roleIds, ...held])) {
     if (!(await rbac.hasRbacRole(id))) continue  // role not in RBAC → skip (legacy roles default to allow)
     anyRbacRoleFound = true
     if (await rbac.isGrantedForRole(id, `document_type:${typeName}`, 'read')) return true

@@ -14,6 +14,7 @@ import { createDocumentReadAccess } from '../../services/document-read-access'
 import apiDocumentsRoutes from '../../routes/api-documents'
 import { execList, execGet } from '../../plugins/core-plugins/mcp-plugin/tools/documents'
 import { AISearchService } from '../../plugins/core-plugins/ai-search-plugin/services/ai-search'
+import siteSettings from '../../collections/site-settings.collection'
 
 describe('document reads use every held RBAC role', () => {
   let db: any
@@ -25,9 +26,9 @@ describe('document reads use every held RBAC role', () => {
   const get = (path: string, userId?: string) => app.request(path, { headers: userId ? { 'x-test-user': userId } : {} })
   const listSlugs = async (type: string, userId?: string) => (await (await get(`/api/documents?type=${type}`, userId)).json()).data.map((d: any) => d.slug)
   const mcpCtx = (id: string) => ({ db, tenantId: 'default', principalSet: principals(id), listLimit: 50, redactFields: [] })
-  const search = (id: string) =>
+  const search = (id: string, query = 'Note one') =>
     new AISearchService(db, undefined, undefined, 'default')
-      .searchKeyword({ query: 'Note one', mode: 'keyword' }, { enabled: true, selected_collections: [], results_limit: 20 }, principals(id))
+      .searchKeyword({ query, mode: 'keyword' }, { enabled: true, selected_collections: [], results_limit: 20 }, principals(id))
       .then((r: any) => r.results.map((x: any) => x.title))
 
   beforeEach(async () => {
@@ -123,11 +124,38 @@ describe('document reads use every held RBAC role', () => {
     await new DocumentsService(db).publish(plain.id)
     const access = (id: string) => createDocumentReadAccess(db, principals(id), 'default')
     const type = async (id: string) => new DocumentTypeRegistry(db).findById(id)
-    expect(await access('AdminId').canRead(plain.rootId, await type('plain_thing'), 'default')).toBe(true)
-    expect(await access('Authd').canRead(plain.rootId, await type('plain_thing'), 'default')).toBe(false)
+    expect(await access('AdminId').canRead(plain.rootId, await type('plain_thing'), 'default', true)).toBe(true)
+    expect(await access('Authd').canRead(plain.rootId, await type('plain_thing'), 'default', true)).toBe(false)
 
     getCollectionRegistry().getByName('notes').isActive = false
-    expect(await access('Multi').canRead(rootId, await type('notes'), 'default')).toBe(false)
+    expect(await access('Multi').canRead(rootId, await type('notes'), 'default', true)).toBe(false)
+  })
+
+  it('a role grant never opens an internal, pii, auth or deactivated type', async () => {
+    const notes = await new DocumentTypeRegistry(db).findById('notes')
+    const can = (t: any) => createDocumentReadAccess(db, principals('Multi'), 'default').canRead(rootId, t, 'default', true)
+    expect(await can(notes)).toBe(true)
+    expect(await can({ ...notes, settings: { ...notes.settings, internal: true } })).toBe(false)
+    expect(await can({ ...notes, settings: { ...notes.settings, pii: true } })).toBe(false)
+    expect(await can({ ...notes, isAuth: true })).toBe(false)
+    expect(await can({ ...notes, isActive: false })).toBe(false)
+  })
+
+  it('document_type:* does not open site settings, an internal collection', async () => {
+    getCollectionRegistry().register([siteSettings])
+    const doc = await new DocumentsService(db).create({ typeId: 'site_settings', title: 'General', slug: 'general', data: {} })
+    await new DocumentsService(db).publish(doc.id)
+    expect(await listSlugs('site_settings', 'AdminId')).toEqual(['general'])
+    expect(await listSlugs('site_settings', 'Authd')).toEqual([])
+  })
+
+  it('a role grant does not open an expired row through MCP or search', async () => {
+    const docs = new DocumentsService(db)
+    const old = await docs.create({ typeId: 'notes', title: 'Old note', slug: 'old', data: {}, expiresAt: 1 })
+    await docs.publish(old.id)
+    await expect(execGet(mcpCtx('Multi'), 'notes', { id: old.rootId })).rejects.toThrow(/not found/i)
+    expect(await search('Multi', 'Old note')).toEqual([])
+    expect((await execGet(mcpCtx('Multi'), 'notes', { id: rootId })).slug).toBe('n1')
   })
 
   it('a read grant scoped to own rows does not open every row', async () => {
@@ -144,13 +172,13 @@ describe('document reads use every held RBAC role', () => {
     expect(await listSlugs('notes', 'Authd')).toEqual(['n1'])
     const row = db.raw.prepare("SELECT root_id FROM documents WHERE type_id='rbac_user_roles' AND slug='Authd'").get()
     const type = await new DocumentTypeRegistry(db).findById('rbac_user_roles')
-    expect(await createDocumentReadAccess(db, principals('Authd'), 'default').canRead(row.root_id, type, 'default')).toBe(false)
-    expect(await createDocumentReadAccess(db, principals('AdminId'), 'default').canRead(row.root_id, type, 'default')).toBe(true)
+    expect(await createDocumentReadAccess(db, principals('Authd'), 'default').canRead(row.root_id, type, 'default', true)).toBe(false)
+    expect(await createDocumentReadAccess(db, principals('AdminId'), 'default').canRead(row.root_id, type, 'default', true)).toBe(true)
   })
 
   it('outside the default tenant held roles do not count', async () => {
     const type = await new DocumentTypeRegistry(db).findById('notes')
-    expect(await createDocumentReadAccess(db, principals('Multi'), 'default').canRead(rootId, type, 'default')).toBe(true)
-    expect(await createDocumentReadAccess(db, principals('Multi'), 'acme').canRead(rootId, type, 'default')).toBe(false)
+    expect(await createDocumentReadAccess(db, principals('Multi'), 'default').canRead(rootId, type, 'default', true)).toBe(true)
+    expect(await createDocumentReadAccess(db, principals('Multi'), 'acme').canRead(rootId, type, 'default', true)).toBe(false)
   })
 })

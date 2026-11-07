@@ -35,12 +35,15 @@ export function createDocumentReadAccess(db: D1Database, principalSet: Principal
   }
 
   return {
-    /** `docTenant` is where the row lives (the global pool for `settings.global` types). */
-    async canRead(rootId: string, docType: DocumentType, docTenant: string, published = true): Promise<boolean> {
+    /**
+     * `docTenant` is where the row lives (the global pool for `settings.global` types). `live`: the row is
+     * published, not deleted, and inside its schedule window; role grants open nothing else.
+     */
+    async canRead(rootId: string, docType: DocumentType, docTenant: string, live: boolean): Promise<boolean> {
       const ps = await allPrincipals()
       const overrides = await perms.getDocumentPermissions(rootId, ps, 'read', docTenant)
       if (perms.isAllowedSync(ps, overrides, 'read', docType.settings)) return true
-      if (!published || overrides.some((o) => o.effect === 'deny')) return false
+      if (!live || overrides.some((o) => o.effect === 'deny')) return false
       const s = docType.settings
       const collection = getCollectionRegistry().getByName(docType.id)
       if (!collection || collection.isActive === false || !docType.isActive || s.internal || s.pii || docType.isAuth) return false

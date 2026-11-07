@@ -72,7 +72,7 @@ async function formRoleFor(rbac: RbacService, userId: string, label: string | nu
   const held = new Set((await rbac.getRolesForUser(userId)).map((r) => r.id))
   const heldRoles = roles.filter((r) => held.has(r.id))
   if (heldRoles.length) return (heldRoles.find((r) => r.id === label || r.name === label) ?? heldRoles[0]!).id
-  // Repair users the old form saved, but never into an admin role: it also relabelled users 'role-admin'.
+  // A role-id label without membership is offered for repair, but never an admin role.
   const legacy = roles.find((r) => r.id === label)
   if (!legacy) return ''
   const admin = (await rbac.isGrantedForRole(legacy.id, 'users', 'manage')) || (await rbac.isGrantedForRole(legacy.id, 'rbac', 'manage'))

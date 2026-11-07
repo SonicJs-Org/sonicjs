@@ -346,9 +346,8 @@ export class AISearchService {
    *
    * Only the published axis is searched. `/api/search` is mounted unauthenticated, so matching
    * current drafts would hand anonymous callers unpublished content; an editor's own drafts stay
-   * reachable through /admin/content. Published-but-restricted documents are then dropped by the
-   * same per-document `isAllowed` filter the public document API applies, so there is no
-   * is_published-only fast path here either (D5).
+   * reachable through /admin/content. Scheduled and expired rows are left out, and restricted ones
+   * are dropped by the same read check the public document API applies (D5).
    */
   private async searchKeyword(
     query: SearchQuery,
@@ -359,8 +358,12 @@ export class AISearchService {
 
     try {
       // R3: every document query is tenant-scoped.
-      const conditions: string[] = ['d.tenant_id = ?', 'd.deleted_at IS NULL', 'd.is_published = 1']
-      const params: Array<string | number> = [this.tenantId]
+      const now = Math.floor(Date.now() / 1000)
+      const conditions: string[] = [
+        'd.tenant_id = ?', 'd.deleted_at IS NULL', 'd.is_published = 1',
+        '(d.scheduled_at IS NULL OR d.scheduled_at <= ?)', '(d.expires_at IS NULL OR d.expires_at > ?)',
+      ]
+      const params: Array<string | number> = [this.tenantId, now, now]
 
       if (query.query) {
         conditions.push('(d.title LIKE ? OR d.slug LIKE ? OR d.data LIKE ?)')
@@ -452,7 +455,7 @@ export class AISearchService {
       const allowed = await Promise.all(
         rows.map((row) => {
           const docType = types.get(row.type_id)
-          return docType ? access.canRead(row.root_id, docType, this.tenantId) : Promise.resolve(false)
+          return docType ? access.canRead(row.root_id, docType, this.tenantId, true) : Promise.resolve(false)
         })
       )
 

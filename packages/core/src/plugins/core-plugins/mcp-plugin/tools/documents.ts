@@ -82,7 +82,8 @@ export async function execList(
   // happens post-fetch, so the returned count can be < limit even when more readable
   // docs exist beyond it; restricted rows consume slots. Same tradeoff as /api/documents.
   const access = createDocumentReadAccess(ctx.db, ctx.principalSet, ctx.tenantId)
-  const allowed = await Promise.all(docs.map((d) => access.canRead(d.rootId, docType, effTenant, status === 'published')))
+  const live = status === 'published' // the list applied the schedule window
+  const allowed = await Promise.all(docs.map((d) => access.canRead(d.rootId, docType, effTenant, live)))
   return docs.filter((_, i) => allowed[i]).map((d) => shapeDocument(d, ctx.redactFields))
 }
 
@@ -108,7 +109,11 @@ export async function execGet(
 
   if (!doc || doc.typeId !== typeId) throw new McpToolError('Document not found')
 
-  const ok = await createDocumentReadAccess(ctx.db, ctx.principalSet, ctx.tenantId).canRead(doc.rootId, docType, effTenant, doc.isPublished && !doc.deletedAt)
+  const now = Math.floor(Date.now() / 1000)
+  const live = doc.isPublished && !doc.deletedAt &&
+    (doc.scheduledAt == null || doc.scheduledAt <= now) && (doc.expiresAt == null || doc.expiresAt > now)
+  const access = createDocumentReadAccess(ctx.db, ctx.principalSet, ctx.tenantId)
+  const ok = await access.canRead(doc.rootId, docType, effTenant, live)
   if (!ok) throw new McpToolError('Document not found') // do not leak existence of restricted docs
 
   return shapeDocument(doc, ctx.redactFields)

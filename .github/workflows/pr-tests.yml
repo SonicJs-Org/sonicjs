@@ -310,9 +310,10 @@ jobs:
   # state. File-level sharding (--shard) can place them on different runners where
   # the filesystem-based locks cannot coordinate. These tests MUST run on one runner
   # with workers: 1 to avoid state corruption.
-  # Runs in parallel with e2e-shard; cleanup waits for both.
+  # Runs after e2e-shard; running locked tests concurrently with shards causes
+  # registration-disabled failures in unrelated Better Auth signup specs.
   e2e-locked:
-    needs: [unit-tests, e2e-setup]
+    needs: [unit-tests, e2e-setup, e2e-shard]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -479,14 +480,14 @@ jobs:
         run: npm ci
 
       - name: Clean run-owned R2 storage via preview handler
-        if: needs.e2e-setup.outputs.base_url != ''
+        if: always() && needs.e2e-setup.outputs.base_url != ''
         run: |
           curl --fail --silent --show-error -X DELETE \
             -H "X-E2E-Run-Key: ${{ needs.e2e-setup.outputs.e2e_run_key }}" \
             "${{ needs.e2e-setup.outputs.base_url }}/__e2e__/storage" || true
 
       - name: Delete run-owned Worker
-        if: needs.e2e-setup.outputs.worker_name != ''
+        if: always() && needs.e2e-setup.outputs.worker_name != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

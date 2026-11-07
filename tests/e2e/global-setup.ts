@@ -40,6 +40,12 @@ export async function prepareEnvironment(baseURL: string): Promise<void> {
   }
 }
 
+/**
+ * Playwright global setup: seeds the admin DB and verifies readiness before any test runs.
+ * In sharded CI the setup job calls `prepareEnvironment` once; shard jobs set
+ * `E2E_ADMIN_SEEDED=1` so this function skips the seed while still enforcing the
+ * disposable-target safety guard.
+ */
 export default async function globalSetup(config: FullConfig): Promise<void> {
   // In sharded CI runs, the setup job already ran e2e-readiness.ts which calls
   // prepareEnvironment once before all shards start. Skip the seed mutations here to

@@ -9,11 +9,11 @@ import type {
 } from '../types'
 import { CustomRAGService } from './custom-rag.service'
 import { getCollectionRegistry } from '../../../../services/collection-registry'
-import { DocumentRepository } from '../../../../services/document-repository'
+import { createDocumentReadAccess } from '../../../../services/document-read-access'
 import { DocumentTypeRegistry } from '../../../../services/document-type-registry'
 import { documentSecondsToMs } from '../../../../services/documents'
 import { PluginService } from '../../../../services/plugin-service'
-import type { DocumentTypeSettings, PrincipalRef } from '../../../../schemas/document'
+import type { DocumentType, PrincipalRef } from '../../../../schemas/document'
 
 /**
  * AI Search Service
@@ -441,21 +441,18 @@ export class AISearchService {
 
       const rows = listed.results ?? []
 
-      // One type lookup per distinct type on the page (the registry caches), then isAllowed per row.
-      // A type with no public base grant — contact_message, say — resolves to false and never
-      // surfaces in search results.
+      // One type lookup per distinct type on the page, then the shared read check per row. A type the
+      // caller has no grant on — contact_message, say — never surfaces in search results.
       const typeRegistry = new DocumentTypeRegistry(this.db)
-      const repo = new DocumentRepository(this.db, this.tenantId)
-      const typeSettings = new Map<string, DocumentTypeSettings | undefined>()
+      const access = createDocumentReadAccess(this.db, principalSet, this.tenantId)
+      const types = new Map<string, DocumentType | null>()
       for (const typeId of new Set(rows.map((r) => r.type_id))) {
-        typeSettings.set(typeId, (await typeRegistry.findById(typeId))?.settings)
+        types.set(typeId, await typeRegistry.findById(typeId))
       }
       const allowed = await Promise.all(
         rows.map((row) => {
-          const docTypeSettings = typeSettings.get(row.type_id)
-          return docTypeSettings
-            ? repo.isAllowed(principalSet, row.root_id, 'read', docTypeSettings)
-            : Promise.resolve(false)
+          const docType = types.get(row.type_id)
+          return docType ? access.canRead(row.root_id, docType, this.tenantId) : Promise.resolve(false)
         })
       )
 

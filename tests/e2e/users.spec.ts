@@ -867,4 +867,45 @@ test.describe('Admin user roles @auth @lock-auth-registration', () => {
     expect(['admin', 'role-admin']).not.toContain((await (await member.get('/auth/get-session')).json()).user.role)
     await member.dispose()
   })
+
+  test('a custom role that may read blog posts can read them through /api/documents', async ({ page, playwright }) => {
+    const unique = Date.now()
+    const roleId = `role-reader${unique}`
+    const email = `roles-reader-${unique}@example.com`
+    const password = `RolesReader${unique}!`
+    const anon = await playwright.request.newContext({ baseURL: TEST_ORIGIN, extraHTTPHeaders: { Origin: TEST_ORIGIN } })
+    const signUp = await anon.post('/auth/sign-up/email', { data: { email, password, name: 'Role Reader' } })
+    expect(signUp.ok()).toBeTruthy()
+    const userId = (await signUp.json()).user.id
+
+    await loginAsAdmin(page)
+    const headers = { 'X-CSRF-Token': (await getCsrfTokenFromPage(page)) ?? '' }
+    const role = await page.request.post('/admin/rbac/roles', { headers, form: { name: `reader${unique}`, display_name: `Reader ${unique}` } })
+    expect(role.ok(), await role.text()).toBeTruthy()
+    const grant = await page.request.post('/admin/rbac/grants', { headers, form: { save_roles: roleId, [`g|${roleId}|document_type:blog_post|read`]: 'any' } })
+    expect(grant.ok(), await grant.text()).toBeTruthy()
+    const created = await page.request.post('/api/content', {
+      headers,
+      data: { collectionId: 'blog_post', title: `Reader post ${unique}`, slug: `reader-post-${unique}`, status: 'published', data: { content: 'x' } },
+    })
+    expect(created.ok(), await created.text()).toBeTruthy()
+    const rootId = (await created.json()).data.id
+
+    await page.goto(`/admin/users/${userId}/edit`)
+    await page.locator('#user-edit-form select[name="role"]').selectOption(roleId)
+    await submitAndWaitForXhr(page, 'PUT', `/admin/users/${userId}`, () =>
+      page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()
+    )
+    await expect(page.locator('#form-messages')).toContainText('User updated successfully')
+
+    // Visitors can read it, so a signed-in reader must too.
+    expect((await anon.get(`/api/documents/root/${rootId}`)).status()).toBe(200)
+    const reader = await signIn(playwright, email, password)
+    expect((await (await reader.get('/auth/get-session')).json()).user.role).toBe(roleId)
+    expect((await reader.get(`/api/documents/root/${rootId}`)).status()).toBe(200)
+    const list = await (await reader.get('/api/documents?type=blog_post&limit=200')).json()
+    expect(list.data.map((d: any) => d.rootId)).toContain(rootId)
+    await reader.dispose()
+    await anon.dispose()
+  })
 })

@@ -2,7 +2,7 @@
  * Read executors for per-type document tools (`list_*`, `get_*`).
  *
  * Every read flows through the tenant-scoped DocumentRepository chokepoint (R4) and
- * is filtered per document by `isAllowed` against the caller's principal set — the
+ * is filtered per document by the shared read check (services/document-read-access) — the
  * same path the public `/api/documents` route uses. The MCP layer never bypasses
  * document ACL. Write executors live in ./mutations.ts (Phase 2).
  */
@@ -11,6 +11,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 import { DocumentRepository } from '../../../../services/document-repository'
 import { DocumentTypeRegistry } from '../../../../services/document-type-registry'
 import { effectiveTenantForType } from '../../../../services/document-request-context'
+import { createDocumentReadAccess } from '../../../../services/document-read-access'
 import type { Document, PrincipalRef } from '../../../../schemas/document'
 import { McpToolError } from '../jsonrpc'
 
@@ -56,7 +57,7 @@ async function resolveType(ctx: McpReadCtx, typeId: string) {
   if (!docType || !docType.isActive) throw new McpToolError(`Unknown document type: ${typeId}`)
   const effTenant = effectiveTenantForType(ctx.tenantId, docType.settings)
   const repo = new DocumentRepository(ctx.db, effTenant)
-  return { docType, repo }
+  return { docType, repo, effTenant }
 }
 
 export async function execList(
@@ -64,7 +65,7 @@ export async function execList(
   typeId: string,
   args: { status?: string; limit?: number },
 ): Promise<ReturnType<typeof shapeDocument>[]> {
-  const { docType, repo } = await resolveType(ctx, typeId)
+  const { docType, repo, effTenant } = await resolveType(ctx, typeId)
   const status = args.status === 'draft' ? 'draft' : 'published'
   const limit = Math.min(Math.max(1, args.limit ?? ctx.listLimit), ctx.listLimit)
   const now = Math.floor(Date.now() / 1000)
@@ -80,9 +81,8 @@ export async function execList(
   // Per-document ACL — a published-but-restricted doc is hidden (D5). ACL filtering
   // happens post-fetch, so the returned count can be < limit even when more readable
   // docs exist beyond it; restricted rows consume slots. Same tradeoff as /api/documents.
-  const allowed = await Promise.all(
-    docs.map((d) => repo.isAllowed(ctx.principalSet, d.rootId, 'read', docType.settings)),
-  )
+  const access = createDocumentReadAccess(ctx.db, ctx.principalSet, ctx.tenantId)
+  const allowed = await Promise.all(docs.map((d) => access.canRead(d.rootId, docType, effTenant, status === 'published')))
   return docs.filter((_, i) => allowed[i]).map((d) => shapeDocument(d, ctx.redactFields))
 }
 
@@ -91,7 +91,7 @@ export async function execGet(
   typeId: string,
   args: { id?: string; slug?: string },
 ): Promise<ReturnType<typeof shapeDocument>> {
-  const { docType, repo } = await resolveType(ctx, typeId)
+  const { docType, repo, effTenant } = await resolveType(ctx, typeId)
 
   let doc: Document | null = null
   if (args.id) {
@@ -108,7 +108,7 @@ export async function execGet(
 
   if (!doc || doc.typeId !== typeId) throw new McpToolError('Document not found')
 
-  const ok = await repo.isAllowed(ctx.principalSet, doc.rootId, 'read', docType.settings)
+  const ok = await createDocumentReadAccess(ctx.db, ctx.principalSet, ctx.tenantId).canRead(doc.rootId, docType, effTenant, doc.isPublished && !doc.deletedAt)
   if (!ok) throw new McpToolError('Document not found') // do not leak existence of restricted docs
 
   return shapeDocument(doc, ctx.redactFields)

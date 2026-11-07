@@ -3,21 +3,23 @@ import type { Bindings, Variables } from '../app'
 import { DocumentRepository } from '../services/document-repository'
 import { DocumentTypeRegistry } from '../services/document-type-registry'
 import { getDocumentRequestContext, effectiveTenantForType } from '../services/document-request-context'
+import { createDocumentReadAccess } from '../services/document-read-access'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { PrincipalRef } from '../schemas/document'
 
-// Resolve the row's type and evaluate read ACL for the given principal set. A published-but-restricted
+// Resolve the row's type and evaluate read access for the given principal set. A published-but-restricted
 // document (or a non-public type like contact_message) returns false → caller responds 404 (D5).
 async function aclAllowsRead(
   db: D1Database,
-  tenantId: string,
+  requestTenant: string,
+  docTenant: string,
   principalSet: PrincipalRef[],
   row: { type_id: string; root_id: string },
   preloadedType?: any,
 ): Promise<boolean> {
   const docType = preloadedType ?? await new DocumentTypeRegistry(db).findById(row.type_id)
   if (!docType) return false
-  return new DocumentRepository(db, tenantId).isAllowed(principalSet, row.root_id, 'read', docType.settings)
+  return createDocumentReadAccess(db, principalSet, requestTenant).canRead(row.root_id, docType, docTenant)
 }
 
 const apiDocumentsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -105,9 +107,9 @@ apiDocumentsRoutes.get('/', async (c) => {
     // ACL: published reads still flow through isAllowed as the resolved principal (public for anon),
     // so a published-but-restricted document is hidden (D5). nextCursor is computed from the RAW page
     // so pagination advances even when some rows are filtered out by ACL.
-    const allowed = await Promise.all(
-      items.map(it => repo.isAllowed(principalSet, it.rootId, 'read', docType.settings)),
-    )
+    const access = createDocumentReadAccess(db, principalSet, tenantId)
+    const docTenant = effectiveTenantForType(tenantId, docType.settings)
+    const allowed = await Promise.all(items.map(it => access.canRead(it.rootId, docType, docTenant)))
     const visible = items.filter((_, i) => allowed[i])
 
     const lastItem = items[items.length - 1]
@@ -144,7 +146,7 @@ apiDocumentsRoutes.get('/root/:rootId', async (c) => {
     const docType = await new DocumentTypeRegistry(db).findById(row.type_id)
     const effTenant = effectiveTenantForType(tenantId, docType?.settings)
     if (row.tenant_id !== effTenant) return c.json({ error: 'Not found' }, 404) // isolation guard
-    if (!(await aclAllowsRead(db, effTenant, principalSet, row, docType))) {
+    if (!(await aclAllowsRead(db, tenantId, effTenant, principalSet, row, docType))) {
       return c.json({ error: 'Not found' }, 404)
     }
 
@@ -180,7 +182,7 @@ apiDocumentsRoutes.get('/:id', async (c) => {
     const docType = await new DocumentTypeRegistry(db).findById(row.type_id)
     const effTenant = effectiveTenantForType(tenantId, docType?.settings)
     if (row.tenant_id !== effTenant) return c.json({ error: 'Not found' }, 404) // isolation guard
-    if (!(await aclAllowsRead(db, effTenant, principalSet, row, docType))) {
+    if (!(await aclAllowsRead(db, tenantId, effTenant, principalSet, row, docType))) {
       return c.json({ error: 'Not found' }, 404)
     }
 

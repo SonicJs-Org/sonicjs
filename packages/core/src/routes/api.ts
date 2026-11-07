@@ -16,6 +16,7 @@ import { getDocumentRequestContext } from '../services/document-request-context'
 import { DocumentRepository } from '../services/document-repository'
 import { DocumentPermissionsService } from '../services/document-permissions'
 import { RbacService } from '../services/rbac'
+import { heldRoleIds } from '../services/document-read-access'
 import { recordCatalogRequest, scheduleKvWrite } from '../plugins/cache/services/catalog'
 import { getAndConsumeStale } from '../plugins/cache/services/swr'
 
@@ -47,13 +48,6 @@ async function typeReadAllowed(
   }
   // No RBAC role found in principal set → legacy/unknown role → default allow
   return !anyRbacRoleFound
-}
-
-// The role principal is one projected label; RBAC assignments are global, so only the default tenant uses them.
-async function heldRoleIds(db: any, principalSet: PrincipalRef[], tenantId: string): Promise<string[]> {
-  const user = principalSet.find((p) => p.type === 'user')
-  if (!user || tenantId !== 'default') return []
-  return (await new RbacService(db).getRolesForUser(user.id)).map((r) => r.id)
 }
 
 // Document columns the public list is allowed to ORDER BY. The legacy `content` table exposed

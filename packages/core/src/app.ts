@@ -85,6 +85,7 @@ import { setAppInstance } from './services/route-metadata'
 import { setPluginMenu } from './services/plugin-menu-singleton'
 import { PLUGIN_REGISTRY } from './plugins/manifest-registry'
 import { setPluginDefinitions } from './services/plugin-definition-registry'
+import { resolveMigrationTableName, type MigrationServiceOptions } from './services/migrations'
 
 // ============================================================================
 // Type Definitions
@@ -129,6 +130,8 @@ export interface Variables {
   requestId?: string
   startTime?: number
   appVersion?: string
+  /** Validated deployment-runner ledger options, captured when the app is created. */
+  migrationOptions?: Readonly<MigrationServiceOptions>
   csrfToken?: string
   pluginMenuItems?: Array<{ label: string; path: string; icon: string }>
   /**
@@ -160,6 +163,9 @@ export interface Variables {
 }
 
 export interface SonicJSConfig {
+  /** Migration status ledger. Match the deployment runner's migrations_table setting. */
+  migrations?: MigrationServiceOptions
+
   // Collections configuration
   collections?: {
     directory?: string
@@ -282,6 +288,8 @@ export type SonicJSApp = Hono<{ Bindings: Bindings; Variables: Variables }> & {
  * ```
  */
 export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
+  // Validate before startup side effects and snapshot caller-owned configuration.
+  const migrationOptions = Object.freeze({ tableName: resolveMigrationTableName(config.migrations) })
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
   // Set app metadata
@@ -404,6 +412,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // App version middleware
   app.use('*', async (c, next) => {
     c.set('appVersion', appVersion)
+    c.set('migrationOptions', migrationOptions)
     await next()
   })
 

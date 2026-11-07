@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 // import { html } from 'hono/html'
 import { requireAuth } from '../middleware'
 import { renderSettingsPage, SettingsPageData } from '../templates/pages/admin-settings.template'
-import { MigrationService } from '../services/migrations'
+import { MigrationService, type MigrationServiceOptions } from '../services/migrations'
 import { SettingsService } from '../services/settings'
 
 type Bindings = {
@@ -29,6 +29,7 @@ type Variables = {
   requestId?: string
   startTime?: number
   appVersion?: string
+  migrationOptions?: Readonly<MigrationServiceOptions>
 }
 
 export const adminSettingsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -158,7 +159,7 @@ adminSettingsRoutes.get('/database-tools', (c) => {
 adminSettingsRoutes.get('/api/migrations/status', async (c) => {
   try {
     const db = c.env.DB
-    const migrationService = new MigrationService(db)
+    const migrationService = new MigrationService(db, c.get('migrationOptions'))
     const status = await migrationService.getMigrationStatus()
 
     return c.json({

@@ -33,19 +33,27 @@ async function typeReadAllowed(
   principalSet: PrincipalRef[],
   docType: { settings?: any } | null | undefined,
   typeName: string,
+  heldRoleIds: string[],
 ): Promise<boolean> {
   const perms = new DocumentPermissionsService(db)
   if (perms.isAllowedSync(principalSet, [], 'read', docType?.settings ?? {})) return true
   const rbac = new RbacService(db)
+  const roleIds = principalSet.filter((p) => p.type === 'role').map((p) => p.id)
   let anyRbacRoleFound = false
-  for (const p of principalSet) {
-    if (p.type !== 'role') continue
-    if (!(await rbac.hasRbacRole(p.id))) continue  // role not in RBAC → skip (legacy roles default to allow)
+  for (const id of new Set([...roleIds, ...heldRoleIds])) {
+    if (!(await rbac.hasRbacRole(id))) continue  // role not in RBAC → skip (legacy roles default to allow)
     anyRbacRoleFound = true
-    if (await rbac.isGrantedForRole(p.id, `document_type:${typeName}`, 'read')) return true
+    if (await rbac.isGrantedForRole(id, `document_type:${typeName}`, 'read')) return true
   }
   // No RBAC role found in principal set → legacy/unknown role → default allow
   return !anyRbacRoleFound
+}
+
+// The role principal is one projected label; RBAC assignments are global, so only the default tenant uses them.
+async function heldRoleIds(db: any, principalSet: PrincipalRef[], tenantId: string): Promise<string[]> {
+  const user = principalSet.find((p) => p.type === 'user')
+  if (!user || tenantId !== 'default') return []
+  return (await new RbacService(db).getRolesForUser(user.id)).map((r) => r.id)
 }
 
 // Document columns the public list is allowed to ORDER BY. The legacy `content` table exposed
@@ -863,6 +871,7 @@ scheduleKvWrite(cacheKey, () => c.executionCtx)
       const typeReg = new DocumentTypeRegistry(db)
       const repo = new DocumentRepository(db, cTenantId)
       const uniqueTypeIds = [...new Set((results as any[]).map((r: any) => r.type_id as string))]
+      const cHeld = await heldRoleIds(db, cPrincipalSet, cTenantId)
       const typeSettingsMap = new Map<string, any>()
       const typeRbacOnlyMap = new Map<string, boolean>()
       const typeDeniedMap = new Map<string, boolean>()
@@ -870,7 +879,7 @@ scheduleKvWrite(cacheKey, () => c.executionCtx)
         const dt = await typeReg.findById(tid)
         const settings = dt?.settings ?? {}
         typeSettingsMap.set(tid, settings)
-        const allowed = await typeReadAllowed(db, cPrincipalSet, dt, tid)
+        const allowed = await typeReadAllowed(db, cPrincipalSet, dt, tid, cHeld)
         if (!allowed) { typeDeniedMap.set(tid, true); return }
         const perms = new DocumentPermissionsService(db)
         typeRbacOnlyMap.set(tid, !perms.isAllowedSync(cPrincipalSet, [], 'read', settings))
@@ -948,7 +957,7 @@ apiRoutes.get('/collections/:collection/content', optionalAuth(), async (c) => {
     let ccDocType: Awaited<ReturnType<DocumentTypeRegistry['findById']>> | undefined
     if (ccNeedsAcl) {
       ccDocType = await new DocumentTypeRegistry(db).findById(record.name)
-      if (!(await typeReadAllowed(db, ccPrincipalSet, ccDocType, record.name))) {
+      if (!(await typeReadAllowed(db, ccPrincipalSet, ccDocType, record.name, await heldRoleIds(db, ccPrincipalSet, ccTenantId)))) {
         return c.json({ error: 'Forbidden' }, 403)
       }
     }
@@ -1121,7 +1130,7 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     let docTypeForCheck: Awaited<ReturnType<DocumentTypeRegistry['findById']>> | undefined
     if (needsAcl) {
       docTypeForCheck = await new DocumentTypeRegistry(db).findById(record.name)
-      if (!(await typeReadAllowed(db, principalSet, docTypeForCheck, record.name))) {
+      if (!(await typeReadAllowed(db, principalSet, docTypeForCheck, record.name, await heldRoleIds(db, principalSet, tenantId)))) {
         return c.json({ error: 'Forbidden' }, 403)
       }
     }
@@ -1257,7 +1266,7 @@ apiRoutes.get('/:collection/:id', optionalAuth(), async (c) => {
     if (colNeedsAcl) {
       const docType = await new DocumentTypeRegistry(db).findById(record.name)
       // Check both baseGrants and RBAC grants (same two-system approach as the list routes).
-      if (!(await typeReadAllowed(db, colPrincipalSet, docType, record.name))) {
+      if (!(await typeReadAllowed(db, colPrincipalSet, docType, record.name, await heldRoleIds(db, colPrincipalSet, colTenantId)))) {
         return c.json({ error: 'Content not found' }, 404)
       }
       // If baseGrants granted it, also honour per-doc deny overrides.

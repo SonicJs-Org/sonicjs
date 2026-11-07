@@ -67,6 +67,18 @@ async function fetchRoleOptions(db: any): Promise<Array<{ value: string; label: 
   return roles.map((r) => ({ value: r.id, label: r.display_name }))
 }
 
+async function formRoleFor(rbac: RbacService, userId: string, label: string | null): Promise<string> {
+  const roles = await rbac.getRoles()
+  const held = new Set((await rbac.getRolesForUser(userId)).map((r) => r.id))
+  const heldRoles = roles.filter((r) => held.has(r.id))
+  if (heldRoles.length) return (heldRoles.find((r) => r.id === label || r.name === label) ?? heldRoles[0]!).id
+  // Repair users the old form saved, but never into an admin role: it also relabelled users 'role-admin'.
+  const legacy = roles.find((r) => r.id === label)
+  if (!legacy) return ''
+  const admin = (await rbac.isGrantedForRole(legacy.id, 'users', 'manage')) || (await rbac.isGrantedForRole(legacy.id, 'rbac', 'manage'))
+  return admin ? '' : legacy.id
+}
+
 /**
  * GET /admin/profile - Show user profile page
  */
@@ -680,9 +692,11 @@ userRoutes.post('/users/new', async (c) => {
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
     const bio = sanitizeInput(formData.get('bio')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || ''
-    const validRoles = (await new RbacService(db).getRoles()).map((r) => r.id)
-    const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'admin')
+    const role = formData.get('role')?.toString() || ''
+    const rbac = new RbacService(db, c.env.CACHE_KV)
+    if (!(await rbac.getRoles()).some((r) => r.id === role)) {
+      return c.html(renderAlert({ type: 'error', message: 'Please choose a valid role.', dismissible: true }))
+    }
     const password = formData.get('password')?.toString() || ''
     const confirmPassword = formData.get('confirm_password')?.toString() || ''
     const isActive = formData.get('is_active') === '1'
@@ -780,13 +794,23 @@ userRoutes.post('/users/new', async (c) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         userId, email, firstName, lastName, phone, bio,
-        passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
+        passwordHash, 'viewer', isActive ? 1 : 0, emailVerified ? 1 : 0,
         nowMs, nowMs
       ),
       db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
         VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
         .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
     ])
+    try {
+      await rbac.setUserRoles(userId, [role])
+    } catch (err) {
+      // Don't leave a user behind without the role it was created for.
+      await db.batch([
+        db.prepare('DELETE FROM auth_account WHERE user_id = ?').bind(userId),
+        db.prepare('DELETE FROM auth_user WHERE id = ?').bind(userId),
+      ])
+      return c.html(renderAlert({ type: 'error', message: err instanceof Error ? err.message : 'Could not assign the role.', dismissible: true }))
+    }
 
     // Save registration profile fields if profile plugin is configured
     if (sanitizedRegistrationCustom !== null && Object.keys(sanitizedRegistrationCustom).length > 0) {
@@ -942,7 +966,7 @@ userRoutes.get('/users/:id/edit', async (c) => {
       lastName: userToEdit.last_name || '',
       phone: userToEdit.phone,
       avatarUrl: userToEdit.avatar,
-      role: userToEdit.role,
+      role: await formRoleFor(new RbacService(db), userToEdit.id, userToEdit.role),
       isActive: Boolean(userToEdit.is_active),
       emailVerified: Boolean(userToEdit.email_verified),
       twoFactorEnabled: Boolean(userToEdit.two_factor_enabled),
@@ -1029,9 +1053,12 @@ userRoutes.put('/users/:id', async (c) => {
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
-    const roleInput = formData.get('role')?.toString() || ''
-    const validRoles = (await new RbacService(db).getRoles()).map((r) => r.id)
-    const role = validRoles.includes(roleInput) ? roleInput : (validRoles[0] ?? 'admin')
+    // '' is the form's "No role".
+    const role = formData.get('role')?.toString() || ''
+    const rbac = new RbacService(db, c.env.CACHE_KV)
+    if (role && !(await rbac.getRoles()).some((r) => r.id === role)) {
+      return c.html(renderAlert({ type: 'error', message: 'Please choose a valid role.', dismissible: true }))
+    }
     const isActive = formData.get('is_active') === '1'
     const emailVerified = formData.get('email_verified') === '1'
 
@@ -1114,18 +1141,30 @@ userRoutes.put('/users/:id', async (c) => {
       }))
     }
 
+    // The form edits one role: swap the one it showed and keep the user's others.
+    const target = await db.prepare('SELECT role FROM auth_user WHERE id = ?').bind(userId).first() as { role: string | null } | null
+    if (!target) return c.html(renderAlert({ type: 'error', message: 'User not found.', dismissible: true }), 404)
+    const label = target.role
+    const shown = await formRoleFor(rbac, userId, label)
+    const held = (await rbac.getRolesForUser(userId)).map((r) => r.id).filter((id) => id !== shown)
+    try {
+      await rbac.setUserRoles(userId, role ? [...new Set([...held, role])] : held)
+    } catch (err) {
+      return c.html(renderAlert({ type: 'error', message: err instanceof Error ? err.message : 'Could not update roles.', dismissible: true }))
+    }
+
     // Update user (removed bio - now in profile)
     const updateStmt = db.prepare(`
       UPDATE auth_user SET
         first_name = ?, last_name = ?, email = ?,
-        phone = ?, role = ?, is_active = ?, email_verified = ?,
+        phone = ?, is_active = ?, email_verified = ?,
         updated_at = ?
       WHERE id = ?
     `)
 
     await updateStmt.bind(
       firstName, lastName, email,
-      phone, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
+      phone, isActive ? 1 : 0, emailVerified ? 1 : 0,
       Date.now(), userId
     ).run()
 
@@ -1314,13 +1353,17 @@ userRoutes.post('/invite-user', async (c) => {
 
     // Sanitize all user inputs to prevent XSS attacks
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
-    const role = formData.get('role')?.toString()?.trim() || 'viewer'
+    const role = formData.get('role')?.toString()?.trim() || ''
     const firstName = sanitizeInput(formData.get('first_name')?.toString())
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
 
     // Validate input
     if (!email || !firstName || !lastName) {
       return c.json({ error: 'Email, first name, and last name are required' }, 400)
+    }
+    const rbac = new RbacService(db, c.env.CACHE_KV)
+    if (role && !(await rbac.getRoles()).some((r) => r.id === role)) {
+      return c.json({ error: 'Unknown role' }, 400)
     }
 
     // Validate email format
@@ -1354,10 +1397,18 @@ userRoutes.post('/invite-user', async (c) => {
     `)
 
     await createUserStmt.bind(
-      userId, email, firstName, lastName, role,
+      userId, email, firstName, lastName, 'viewer',
       invitationToken, user!.userId, Date.now(),
       0, 0, Date.now(), Date.now()
     ).run()
+    if (role) {
+      try {
+        await rbac.setUserRoles(userId, [role])
+      } catch (err) {
+        await db.prepare('DELETE FROM auth_user WHERE id = ?').bind(userId).run()
+        return c.json({ error: err instanceof Error ? err.message : 'Could not assign the role' }, 400)
+      }
+    }
 
     // Log the activity
     await logActivity(

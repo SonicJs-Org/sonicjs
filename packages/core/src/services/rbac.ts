@@ -429,14 +429,18 @@ export class RbacService {
   /**
    * Replace a user's RBAC role assignments. The `rbac_user_roles` document is the
    * single source of truth for authorization; the legacy `auth_user.role` column
-   * is kept as a derived projection (highest-precedence system role, else
-   * 'viewer') so the two never diverge.
+   * is kept as a derived projection (admin, else editor, else viewer, else the
+   * lowest other role id, else 'viewer') so the two never diverge.
    */
   async setUserRoles(userId: string, roleIds: string[]): Promise<void> {
     const allRoles = await this.listDocs<RoleData>(T_ROLE)
     const byId = new Map(allRoles.map((r) => [r.slug, r.data]))
     const names = roleIds.map((id) => byId.get(id)?.name).filter((n): n is string => !!n)
-    const primaryRole = RbacService.LEGACY_ROLE_PRECEDENCE.find((r) => names.includes(r)) || 'viewer'
+    // Other roles project their id, so they match neither a requireRole label nor the role-keyed baseGrants.
+    const primaryRole =
+      RbacService.LEGACY_ROLE_PRECEDENCE.find((r) => names.includes(r)) ||
+      (names.includes('viewer') ? 'viewer' : roleIds.filter((id) => byId.has(id)).sort()[0]) ||
+      'viewer'
 
     // Self-lockout guard: never leave zero active users who can BOTH enter the
     // portal and manage RBAC (the minimum needed to recover).

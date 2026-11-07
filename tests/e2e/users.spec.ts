@@ -820,14 +820,21 @@ test.describe('Admin user roles @auth @lock-auth-registration', () => {
 
   test('an editor created in the Users screen can use the admin', async ({ page, playwright }) => {
     await loginAsAdmin(page)
-    const csrf = await getCsrfTokenFromPage(page)
     const email = `roles-editor-${Date.now()}@example.com`
     const password = `RolesEditor${Date.now()}!`
-    const created = await page.request.post('/admin/users/new', {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
-      form: { email, first_name: 'Role', last_name: 'Editor', password, confirm_password: password, role: 'role-editor', is_active: '1', email_verified: '1' },
-    })
-    expect(await created.text()).not.toContain('bg-error/10')
+    await page.goto('/admin/users/new')
+    const form = page.locator('#user-new-form')
+    await form.locator('input[name="first_name"]').fill('Role')
+    await form.locator('input[name="last_name"]').fill('Editor')
+    await form.locator('input[name="email"]').fill(email)
+    await form.locator('select[name="role"]').selectOption('role-editor')
+    await form.locator('input[name="password"]').fill(password)
+    await form.locator('input[name="confirm_password"]').fill(password)
+    await form.locator('input[name="email_verified"]').check()
+    await submitAndWaitForXhr(page, 'POST', '/admin/users/new', () =>
+      page.locator('button[form="user-new-form"]').click()
+    )
+    await expect(page).toHaveURL(/\/admin\/users\?success=/)
 
     const editor = await signIn(playwright, email, password)
     expect((await (await editor.get('/auth/get-session')).json()).user.role).toBe('editor')
@@ -851,6 +858,10 @@ test.describe('Admin user roles @auth @lock-auth-registration', () => {
     await submitAndWaitForXhr(page, 'PUT', `/admin/users/${userId}`, () =>
       page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()
     )
+    // A rejected save would also leave the role unchanged, so prove this one landed.
+    await expect(page.locator('#form-messages')).toContainText('User updated successfully')
+    await page.reload()
+    await expect(page.locator('#user-edit-form input[name="phone"]')).toHaveValue('555-0100')
 
     const member = await signIn(playwright, email, password)
     expect(['admin', 'role-admin']).not.toContain((await (await member.get('/auth/get-session')).json()).user.role)

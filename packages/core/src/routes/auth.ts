@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 // import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { getCookie, setCookie } from 'hono/cookie'
+import { clearUiLanguageCookie } from '../i18n/middleware'
 import { html } from 'hono/html'
 import { AuthManager, requireAuth, generateCsrfToken, rateLimit } from '../middleware'
 import { getJwtExpirySecondsFromDb, getJwtRefreshGraceSecondsFromDb } from '../middleware/auth'
@@ -397,6 +398,7 @@ authRoutes.post('/logout', async (c) => {
   const isSecure = new URL(c.req.url).protocol === 'https:'
   setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
   clearCsrfCookie(c)
+  clearUiLanguageCookie(c)
   return c.json({ message: 'Logged out successfully' })
 })
 
@@ -416,6 +418,7 @@ authRoutes.get('/logout', async (c) => {
   const isSecure = new URL(c.req.url).protocol === 'https:'
   setCookie(c, 'better-auth.session_token', '', { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 0, secure: isSecure })
   clearCsrfCookie(c)
+  clearUiLanguageCookie(c)
   return c.redirect('/auth/login?message=You have been logged out successfully')
 })
 

@@ -1,4 +1,5 @@
 import { renderAlert } from '../alert.template'
+import { getUiLanguage } from '../../i18n'
 
 export interface RegisterPageData {
   error?: string
@@ -7,7 +8,7 @@ export interface RegisterPageData {
 export function renderRegisterPage(data: RegisterPageData): string {
   return `
     <!DOCTYPE html>
-    <html lang="en" class="h-full dark">
+    <html lang="${getUiLanguage()}" class="h-full dark">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">

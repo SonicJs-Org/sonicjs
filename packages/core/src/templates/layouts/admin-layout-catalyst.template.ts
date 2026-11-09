@@ -1,5 +1,6 @@
 import { HtmlEscapedString } from "hono/utils/html";
 import { renderLogo } from "../components/logo.template";
+import { t, getUiLanguage } from "../../i18n";
 
 // Dev-only branch label — set via setBranchLabel() at bootstrap when BRANCH_LABEL env var is present
 let _branchLabel: string | undefined;
@@ -197,7 +198,7 @@ export function renderAdminLayoutCatalyst(
   data: AdminLayoutCatalystData
 ): string {
   return `<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="${getUiLanguage()}" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -655,21 +656,21 @@ function renderCatalystSidebar(
 
   let baseMenuItems = [
     {
-      label: "Content",
+      label: t("nav.content"),
       path: "/admin/content",
       icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
         <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
       </svg>`,
     },
     {
-      label: "Collections",
+      label: t("nav.collections"),
       path: "/admin/collections",
       icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
         <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"/>
       </svg>`,
     },
     ...(canManageUsers ? [{
-      label: "Users",
+      label: t("nav.users"),
       path: "/admin/users",
       icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
         <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
@@ -682,7 +683,7 @@ function renderCatalystSidebar(
   </svg>`;
 
   const settingsMenuItem = {
-    label: "Settings",
+    label: t("nav.settings"),
     path: "/admin/settings",
     icon: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
       <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
@@ -727,11 +728,11 @@ function renderCatalystSidebar(
   const closeButton = isMobile
     ? `
     <div class="-mb-3 px-4 pt-3">
-      <button onclick="closeMobileSidebar()" class="relative flex w-full items-center gap-3 rounded-lg p-2 text-left text-base/6 font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5 sm:text-sm/5" aria-label="Close navigation">
+      <button onclick="closeMobileSidebar()" class="relative flex w-full items-center gap-3 rounded-lg p-2 text-left text-base/6 font-medium text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5 sm:text-sm/5" aria-label="${t("nav.closeNavigation")}">
         <svg class="h-5 w-5 shrink-0 fill-zinc-500 dark:fill-zinc-400" viewBox="0 0 20 20">
           <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
         </svg>
-        <span>Close menu</span>
+        <span>${t("nav.closeMenu")}</span>
       </button>
     </div>
   `
@@ -808,12 +809,12 @@ function renderCatalystSidebar(
                 <span class="shrink-0 ${isPluginsActive ? "fill-zinc-950 dark:fill-white" : "fill-zinc-500 dark:fill-zinc-400"}">
                   ${pluginsIcon}
                 </span>
-                <span class="truncate">Plugins</span>
+                <span class="truncate">${t("nav.plugins")}</span>
               </a>
               <button
                 onclick="togglePluginsMenu(this)"
                 class="flex items-center justify-center rounded-lg p-2 text-zinc-500 hover:bg-zinc-950/5 dark:text-zinc-400 dark:hover:bg-white/5 flex-shrink-0"
-                aria-label="Toggle plugins submenu"
+                aria-label="${t("nav.togglePluginsSubmenu")}"
               >
                 <svg data-plugins-chevron class="h-4 w-4 rotate-180 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -839,7 +840,7 @@ function renderCatalystSidebar(
             <svg class="h-5 w-5 shrink-0 fill-zinc-500 dark:fill-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
             </svg>
-            <span class="flex-1 truncate">Docs</span>
+            <span class="flex-1 truncate">${t("nav.docs")}</span>
             <svg class="h-4 w-4 shrink-0 fill-zinc-500 dark:fill-zinc-400" viewBox="0 0 20 20">
               <path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" />
             </svg>
@@ -850,19 +851,19 @@ function renderCatalystSidebar(
                 <svg class="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
                 </svg>
-                API Docs
+                ${t("nav.apiDocs")}
               </a>
               <a href="https://sonicjs.com" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">
                 <svg class="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/>
                 </svg>
-                Developer Docs
+                ${t("nav.developerDocs")}
               </a>
               <a href="/api" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-950 hover:bg-zinc-950/5 dark:text-white dark:hover:bg-white/5">
                 <svg class="h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
                 </svg>
-                OpenAPI
+                ${t("nav.openApi")}
               </a>
             </div>
           </div>
@@ -928,7 +929,7 @@ function renderCatalystSidebar(
                   .toUpperCase()}</span>
               </div>
               <span class="flex-1 truncate">${
-                user.name || user.email || "User"
+                user.name || user.email || t("nav.userFallback")
               }</span>
               <svg class="h-4 w-4 shrink-0 fill-zinc-500 dark:fill-zinc-400" viewBox="0 0 20 20">
                 <path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" />
@@ -940,7 +941,7 @@ function renderCatalystSidebar(
               <div class="p-2">
                 <div class="px-3 py-2 border-b border-zinc-950/5 dark:border-white/5">
                   <p class="text-sm font-medium text-zinc-950 dark:text-white">${
-                    user.name || user.email || "User"
+                    user.name || user.email || t("nav.userFallback")
                   }</p>
                   <p class="text-xs text-zinc-500 dark:text-zinc-400">${
                     user.email || ""
@@ -950,13 +951,13 @@ function renderCatalystSidebar(
                   <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                   </svg>
-                  My Profile
+                  ${t("nav.myProfile")}
                 </a>
                 <a href="/auth/logout" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
                   <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                   </svg>
-                  Sign Out
+                  ${t("nav.signOut")}
                 </a>
               </div>
             </div>

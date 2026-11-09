@@ -430,7 +430,7 @@ test.describe('Health Checks', () => {
 
 ### Authentication Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/02-authentication.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/auth-ui.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -499,7 +499,7 @@ test.describe('Authentication', () => {
 
 ### Content Management Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/05-content.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/content-crud.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -561,7 +561,7 @@ test.describe('Content Management', () => {
 
 ### Media Management Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/06-media.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/media-core.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -745,7 +745,7 @@ test.describe('Collections API', () => {
 
 ### Plugin Tests
 
-From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/15-plugins.spec.ts`:
+From `/Users/lane/Dev/refs/sonicjs-ai/tests/e2e/plugin-core.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -816,14 +816,14 @@ test.describe('Plugin Management', () => {
 ├── tests/
 │   └── e2e/                           # End-to-end tests
 │       ├── 01-health.spec.ts          # Health check tests
-│       ├── 02-authentication.spec.ts  # Auth flow tests
+│       ├── auth-ui.spec.ts            # Auth flow tests
 │       ├── 03-admin-dashboard.spec.ts # Dashboard tests
 │       ├── 04-collections.spec.ts     # Collection tests
-│       ├── 05-content.spec.ts         # Content management tests
-│       ├── 06-media.spec.ts           # Media upload tests
+│       ├── content-crud.spec.ts       # Content management tests
+│       ├── media-core.spec.ts         # Media upload tests
 │       ├── 07-api.spec.ts             # API endpoint tests
 │       ├── 08-collections-api.spec.ts # Collections API tests
-│       ├── 15-plugins.spec.ts         # Plugin tests
+│       ├── plugin-core.spec.ts        # Plugin tests
 │       └── utils/
 │           └── test-helpers.ts        # Shared test utilities
 ├── src/
@@ -838,7 +838,7 @@ test.describe('Plugin Management', () => {
 ### Test Naming Convention
 
 - **Unit tests**: `*.test.ts` or `*.spec.ts`
-- **E2E tests**: `##-feature.spec.ts` (numbered for execution order)
+- **E2E tests**: named category suites plus retained numbered standalone specs; file names do not guarantee execution order
 
 ## Running Tests
 
@@ -871,7 +871,7 @@ npm run test:e2e
 npm run test:e2e:ui
 
 # Run specific test file
-npx playwright test tests/e2e/02-authentication.spec.ts
+npm run e2e -- auth-ui.spec.ts
 
 # Run tests in headed mode (see browser)
 npx playwright test --headed
@@ -890,7 +890,7 @@ npx vitest src/plugins/cache/tests/cache.test.ts
 npx vitest --grep "CacheService"
 
 # Run E2E tests for specific feature
-npx playwright test tests/e2e/05-content.spec.ts
+npx playwright test tests/e2e/content-crud.spec.ts
 ```
 
 ## Coverage Reporting
@@ -1475,3 +1475,35 @@ SonicJS AI uses a comprehensive testing strategy combining:
 - **CI/CD integration** for automated testing
 
 Follow the patterns and examples in this guide to write effective tests for your features and ensure the quality of the SonicJS AI platform.
+
+
+## Staged Flakiness reporting
+
+Official reporters now generate local reports alongside existing terminal/native
+outputs for core, SDK, root, reporting contracts, Playwright, sample and CLI
+verification. Run `npm run test:reporting`, `npm test -- --run`, `npm run test:cov`,
+`(cd packages/sdk && npx --no-install vitest run --config vitest.config.ts)`,
+`(cd my-sonicjs-app && npm test)` or `(cd packages/create-app && npm test)` from
+repository root. Root direct Vitest has zero tests/exit 1; sample still fails on
+Playwright-import collection. CLI retains its genuine verifier and currently
+fails on a missing local execa dependency. These failures are not green coverage.
+
+Outputs: `flakiness-reports/<suite>/<invocation>/vendor/report.json` plus attachments;
+completed lifecycle metadata is `<invocation>/invocation.json`. Archive the invocation
+root (`invocationFolder`) for both; `outputFolder` denotes only its `vendor/` child.
+Native Playwright report/trace viewing and coverage HTML stay unchanged. Vendor
+output prints `npx flakiness show <folder>` for a separately installed viewer;
+this phase adds no viewer installation or uploader.
+
+Upload defaults off and always stays off in CI; no OIDC integration. Direct local
+upload needs `SONICJS_TEST_UPLOAD=1`, `FLAKINESS_ACCESS_TOKEN` and `FLAKINESS_PROJECT`
+in environment, with external account/project setup handled separately. No account
+setup or credentials are included. Hosted privacy/access/retention approval remains
+pending. No live Flakiness progress or history import exists. Legacy dashboard,
+stats credentials, scripts and live reporting remain active unchanged.
+
+Playwright 2.0.3 omits interrupted attempts; native JSON and sidecar preserve the
+interruption. Vitest SIGINT can prevent vendor output; sidecar records exit 130.
+Publishing and dashboard retirement require separate roll-forward PRs gated on
+real service evidence and explicit user decisions; historical plans are not yet
+superseded. See [coverage, exact commands, blockers and future gates](testing/flakiness-coverage.md).

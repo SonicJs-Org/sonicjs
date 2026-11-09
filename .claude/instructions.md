@@ -23,9 +23,9 @@ When implementing features or fixes:
 ## E2E Test Guidelines
 
 ### File Naming
-- Use descriptive names: `##-feature-description.spec.ts`
-- Number sequentially based on existing tests
-- Example: `36-easymde-plugin-visible.spec.ts`
+- Group related coverage in descriptive concern/category suites: `feature.spec.ts`
+- Retain standalone regression specs where appropriate; filenames do not define execution order
+- Example: `richtext.spec.ts`
 
 ### Test Structure
 ```typescript

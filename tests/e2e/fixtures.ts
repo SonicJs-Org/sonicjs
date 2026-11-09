@@ -1,9 +1,11 @@
 import { test as base } from '@playwright/test'
-import type { Browser, BrowserContext, Page } from '@playwright/test'
+import type { APIRequestContext, Browser, BrowserContext, Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { acquireTestLock, uniqueTestId } from './utils/test-runtime'
+import { prepareLocalRequest } from './utils/local-client'
+import { cacheVendorAssets } from './utils/vendor-cache'
 
 export * from '@playwright/test'
 export { uniqueTestId } from './utils/test-runtime'
@@ -14,7 +16,8 @@ const HARDENED_CONTEXT = Symbol('sonicjs.e2e.context')
 /** Default to parsed document; readiness belongs to locator assertions.
  * Explicit waitUntil/timeout contracts are never downgraded, swallowed, or retried.
  * Reload may resubmit a POST, so must not be replayed automatically. */
-function preparePage(page: Page): Page {
+function preparePage(page: Page, headers?: Record<string, string>): Page {
+  prepareLocalRequest(page.request, process.env.BASE_URL || 'http://localhost:8787', base.info().file, headers)
   const marked = page as unknown as Record<symbol, boolean>
   if (marked[HARDENED]) return page
   marked[HARDENED] = true
@@ -25,12 +28,14 @@ function preparePage(page: Page): Page {
   return page
 }
 
-function prepareContext(context: BrowserContext): BrowserContext {
+async function prepareContext(context: BrowserContext, headers?: Record<string, string>, vendorClient?: APIRequestContext): Promise<BrowserContext> {
+  prepareLocalRequest(context.request, process.env.BASE_URL || 'http://localhost:8787', base.info().file, headers)
+  await cacheVendorAssets(context, process.env.BASE_URL || 'http://localhost:8787', vendorClient)
   const marked = context as unknown as Record<symbol, boolean>
   if (marked[HARDENED_CONTEXT]) return context
   marked[HARDENED_CONTEXT] = true
   const newPage = context.newPage.bind(context)
-  context.newPage = async () => preparePage(await newPage())
+  context.newPage = async () => preparePage(await newPage(), headers)
   return context
 }
 
@@ -43,6 +48,9 @@ export const test = base.extend<
   { page: Page; context: BrowserContext; exclusiveLocks: void; resourceId: string },
   { browser: Browser }
 >({
+  request: async ({ request, baseURL, extraHTTPHeaders }, use, testInfo) => {
+    await use(prepareLocalRequest(request, baseURL || 'http://localhost:8787', testInfo.file, extraHTTPHeaders))
+  },
   resourceId: async ({}, use) => { await use(uniqueTestId()) },
   exclusiveLocks: [async ({}, use, testInfo) => {
     const names = [...new Set(testInfo.tags.filter(tag => tag.startsWith('@lock-'))
@@ -74,16 +82,22 @@ export const test = base.extend<
       if (errors.length) throw new AggregateError(errors, 'E2E lock release failed')
     }
   }, { auto: true }],
-  browser: [async ({ browser }, use) => {
+  browser: [async ({ browser, playwright }, use) => {
+    const vendorClient = await playwright.request.newContext()
     const newPage = browser.newPage.bind(browser)
     const newContext = browser.newContext.bind(browser)
-    browser.newPage = async options => preparePage(await newPage(options))
-    browser.newContext = async options => prepareContext(await newContext(options))
+    browser.newPage = async options => {
+      const page = await newPage(options)
+      await cacheVendorAssets(page.context(), process.env.BASE_URL || 'http://localhost:8787', vendorClient)
+      return preparePage(page, options?.extraHTTPHeaders)
+    }
+    browser.newContext = async options => prepareContext(await newContext(options), options?.extraHTTPHeaders, vendorClient)
     try { await use(browser) } finally {
       browser.newPage = newPage
       browser.newContext = newContext
+      await vendorClient.dispose()
     }
   }, { scope: 'worker' }],
-  context: async ({ context }, use) => { await use(prepareContext(context)) },
+  context: async ({ context, extraHTTPHeaders }, use) => { await use(await prepareContext(context, extraHTTPHeaders)) },
   page: async ({ page }, use) => { await use(preparePage(page)) },
 })

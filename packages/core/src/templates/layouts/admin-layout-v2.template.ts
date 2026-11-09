@@ -1,5 +1,6 @@
 import { HtmlEscapedString } from "hono/utils/html";
 import { renderLogo } from "../components/logo.template";
+import { getUiLanguage } from "../../i18n";
 
 export interface AdminLayoutData {
   title: string;
@@ -32,7 +33,7 @@ export function renderAdminLayout(data: AdminLayoutData): string {
 
 export function adminLayoutV2(data: AdminLayoutData): string {
   return `<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="${getUiLanguage()}" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

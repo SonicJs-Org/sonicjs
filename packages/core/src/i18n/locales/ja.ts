@@ -1,0 +1,110 @@
+import type { LocaleMessages } from '../types'
+
+/**
+ * Japanese admin UI messages. Keys missing here fall back to English.
+ */
+export const ja: LocaleMessages = {
+  common: {
+    cancel: 'キャンセル',
+    enabled: '有効',
+    disabled: '無効',
+  },
+  nav: {
+    content: 'コンテンツ',
+    collections: 'コレクション',
+    users: 'ユーザー',
+    plugins: 'プラグイン',
+    settings: '設定',
+    docs: 'ドキュメント',
+    apiDocs: 'API ドキュメント',
+    developerDocs: '開発者ドキュメント',
+    openApi: 'OpenAPI',
+    myProfile: 'マイプロフィール',
+    signOut: 'ログアウト',
+    closeMenu: 'メニューを閉じる',
+    closeNavigation: 'ナビゲーションを閉じる',
+    togglePluginsSubmenu: 'プラグインのサブメニューを開閉',
+    userFallback: 'ユーザー',
+  },
+  auth: {
+    login: {
+      pageTitle: 'ログイン',
+      heading: 'おかえりなさい',
+      subheading: '続行するにはアカウントにログインしてください',
+      email: 'メールアドレス',
+      emailPlaceholder: 'メールアドレスを入力',
+      password: 'パスワード',
+      passwordPlaceholder: 'パスワードを入力',
+      submit: 'ログイン',
+      noAccount: 'アカウントをお持ちでないですか？',
+      createAccount: '新規登録はこちら',
+    },
+  },
+  profile: {
+    pageTitle: 'ユーザープロフィール',
+    breadcrumb: 'プロフィール',
+    description: 'アカウント設定と各種環境設定を管理します',
+    info: {
+      heading: 'プロフィール情報',
+      description: 'アカウントの詳細を更新します',
+    },
+    fields: {
+      firstName: '名',
+      firstNamePlaceholder: '名を入力',
+      lastName: '姓',
+      lastNamePlaceholder: '姓を入力',
+      email: 'メールアドレス',
+      emailPlaceholder: 'メールアドレスを入力',
+      phone: '電話番号',
+      phonePlaceholder: '電話番号を入力',
+      bio: '自己紹介',
+      bioPlaceholder: '自己紹介を入力してください...',
+    },
+    preferences: {
+      heading: '環境設定',
+      timezone: 'タイムゾーン',
+      language: '言語',
+    },
+    notifications: {
+      heading: '通知',
+      email: 'メール通知',
+      emailDescription: '新機能や製品のお知らせをメールで受け取ります。',
+    },
+    submit: 'プロフィールを更新',
+    picture: {
+      heading: 'プロフィール画像',
+      alt: 'プロフィール画像',
+      change: '画像を変更',
+    },
+    account: {
+      heading: 'アカウント情報',
+      role: 'ロール',
+      memberSince: '登録日',
+      lastLogin: '最終ログイン',
+      twoFactor: '二要素認証',
+    },
+    security: {
+      heading: 'セキュリティ',
+      changePassword: 'パスワードを変更',
+      manageTwoFactor: '二要素認証を管理',
+      enableTwoFactor: '二要素認証を有効化',
+    },
+    password: {
+      current: '現在のパスワード',
+      currentPlaceholder: '現在のパスワードを入力',
+      new: '新しいパスワード',
+      newPlaceholder: '新しいパスワードを入力',
+      minLength: '8 文字以上で入力してください',
+      confirm: '新しいパスワード（確認）',
+      confirmPlaceholder: '新しいパスワードを再入力',
+      submit: 'パスワードを更新',
+    },
+    messages: {
+      requiredFields: '名・姓・メールアドレスは必須です。',
+      invalidEmail: '有効なメールアドレスを入力してください。',
+      emailTaken: 'このメールアドレスは他のユーザーが使用しています。',
+      updated: 'プロフィールを更新しました。',
+      updateFailed: 'プロフィールの更新に失敗しました。もう一度お試しください。',
+    },
+  },
+}

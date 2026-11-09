@@ -6,6 +6,7 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { contextStorage } from 'hono/context-storage'
 import type { Context } from 'hono'
 import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-types'
 import {
@@ -32,6 +33,8 @@ import { bootstrapMiddleware } from './middleware/bootstrap'
 import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
+import { uiLanguageMiddleware, userUiLanguagePreference } from './i18n/middleware'
+import type { UiLanguage } from './i18n/types'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { emailPluginV3 as emailPlugin } from './plugins/core-plugins/email-plugin'
 import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconciliation'
@@ -157,6 +160,10 @@ export interface Variables {
   tenantId?: string
   /** The authed user's role IN the resolved tenant (per-tenant RBAC); global role for 'default'. */
   tenantRole?: string
+  /** Admin UI language for this request (see i18n/middleware). Not the content locale. */
+  uiLanguage?: UiLanguage
+  /** Raw result of hono/language's detector; prefer `uiLanguage`. */
+  language?: string
 }
 
 export interface SonicJSConfig {
@@ -401,6 +408,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     setEmailService(new EmailService({ provider, defaultFrom, defaultReplyTo, db: env.DB as never }))
   }
 
+  // Request-scoped context storage — lets plain template functions call i18n `t()` without
+  // threading the Hono context through every render call. Must run before anything renders.
+  app.use('*', contextStorage())
+
+  // Admin UI language detection (?lang= → cookie → Accept-Language → en). Sets c.get('uiLanguage').
+  app.use('*', uiLanguageMiddleware())
+
   // App version middleware
   app.use('*', async (c, next) => {
     c.set('appVersion', appVersion)
@@ -581,6 +595,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // access. Legacy `users.role` no longer decides who can enter /admin/*.
   app.use('/admin/*', requireAuth())
   app.use('/admin/*', requireRbac('portal', 'access'))
+
+  // Apply the signed-in user's saved UI language when the browser has no explicit choice yet.
+  app.use('/admin/*', userUiLanguagePreference())
 
   // Plugin dynamic menu items for admin sidebar
   app.use('/admin/*', pluginMenuMiddleware())

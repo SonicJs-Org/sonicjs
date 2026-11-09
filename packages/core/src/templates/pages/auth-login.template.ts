@@ -1,4 +1,5 @@
 import { renderAlert } from '../alert.template'
+import { t, getUiLanguage } from '../../i18n'
 
 export interface LoginPageData {
   error?: string
@@ -10,11 +11,11 @@ export interface LoginPageData {
 export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = false): string {
   return `
     <!DOCTYPE html>
-    <html lang="en" class="h-full dark">
+    <html lang="${getUiLanguage()}" class="h-full dark">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Login - SonicJS AI</title>
+      <title>${t('auth.login.pageTitle')} - SonicJS AI</title>
       <link rel="icon" type="image/svg+xml" href="/favicon.svg">
       <script src="https://unpkg.com/htmx.org@2.0.3"></script>
       <script src="https://cdn.tailwindcss.com"></script>
@@ -55,8 +56,8 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
               <path fill="#06b6d4" d="M854.024,1585.195l20.001-16.028c16.616-13.507,33.04-27.265,50.086-40.251    c1.13-0.861,2.9-1.686,2.003-3.516c-0.843-1.716-2.481-2.302-4.484-2.123c-8.514,0.765-17.016-0.538-25.537-0.353    c-1.124,0.024-2.768,0.221-3.163-1.25c-0.371-1.369,1.088-2.063,1.919-2.894c6.26-6.242,12.574-12.43,18.816-18.691    c9.303-9.327,18.565-18.714,27.851-28.066c1.848-1.859,3.701-3.713,5.549-5.572c2.655-2.661,5.309-5.315,7.958-7.982    c0.574-0.579,1.259-1.141,1.246-1.94c-0.004-0.257-0.078-0.538-0.254-0.853c-0.556-0.981-1.441-1.1-2.469-0.957    c-0.658,0.096-1.315,0.185-1.973,0.275c-3.844,0.538-7.689,1.076-11.533,1.608c-3.641,0.505-7.281,1.02-10.922,1.529    c-4.162,0.582-8.324,1.158-12.486,1.748c-1.142,0.161-2.409,1.662-3.354,0.508c-0.419-0.508-0.431-1.028-0.251-1.531    c0.269-0.741,0.957-1.441,1.387-2.021c3.414-4.58,6.882-9.124,10.356-13.662c1.74-2.272,3.48-4.544,5.214-6.822    c4.682-6.141,9.369-12.281,14.051-18.422c0.09-0.119,0.181-0.237,0.271-0.355c6.848-8.98,13.7-17.958,20.553-26.936    c0.488-0.64,0.977-1.28,1.465-1.92c2.159-2.828,4.315-5.658,6.476-8.486c4.197-5.501,8.454-10.954,12.67-16.442    c0.263-0.347,0.538-0.718,0.717-1.106c0.269-0.586,0.299-1.196-0.335-1.776c-0.825-0.753-1.8-0.15-2.595,0.419    c-0.67,0.472-1.333,0.957-1.955,1.489c-2.206,1.889-4.401,3.797-6.595,5.698c-3.958,3.438-7.922,6.876-11.976,10.194    c-2.443,2.003-4.865,4.028-7.301,6.038c-18.689-10.581-39.53-15.906-62.549-15.906c-35.54,0-65.911,12.607-91.125,37.82    c-25.214,25.215-37.821,55.592-37.821,91.126c0,35.54,12.607,65.91,37.821,91.125c4.146,4.146,8.445,7.916,12.87,11.381    c-9.015,11.14-18.036,22.277-27.034,33.429c-1.208,1.489-3.755,3.151-2.745,4.891c0.078,0.144,0.173,0.281,0.305,0.425    c1.321,1.429,3.492-1.303,4.933-2.457c6.673-5.333,13.333-10.685,19.982-16.042c3.707-2.984,7.417-5.965,11.124-8.952    c1.474-1.188,2.951-2.373,4.425-3.561c6.41-5.164,12.816-10.333,19.238-15.481L854.024,1585.195z M797.552,1498.009    c0-26.243,9.29-48.728,27.868-67.459c18.579-18.723,40.987-28.089,67.238-28.089c12.273,0,23.712,2.075,34.34,6.171    c-3.37,2.905-6.734,5.816-10.069,8.762c-6.075,5.351-12.365,10.469-18.667,15.564c-4.179,3.378-8.371,6.744-12.514,10.164    c-7.54,6.23-15.037,12.52-22.529,18.804c-7.091,5.955-14.182,11.904-21.19,17.949c-1.136,0.974-3.055,1.907-2.135,3.94    c0.831,1.836,2.774,1.417,4.341,1.578l12.145-0.599l14.151-0.698c1.031-0.102,2.192-0.257,2.89,0.632    c0.034,0.044,0.073,0.078,0.106,0.127c1.017,1.561-0.67,2.105-1.387,2.942c-6.308,7.318-12.616,14.637-18.978,21.907    c-8.161,9.339-16.353,18.649-24.544,27.958c-2.146,2.433-4.275,4.879-6.422,7.312c-1.034,1.172-2.129,2.272-1.238,3.922    c0.933,1.728,2.685,1.752,4.323,1.602c4.134-0.367,8.263-0.489,12.396-0.492c0.242,0,0.485-0.005,0.728-0.004    c2.711,0.009,5.422,0.068,8.134,0.145c2.582,0.074,5.166,0.165,7.752,0.249c0.275,1.62-0.879,2.356-1.62,3.259    c-1.333,1.626-2.667,3.247-4,4.867c-4.315,5.252-8.62,10.514-12.928,15.772c-3.562-2.725-7.007-5.733-10.324-9.051    C806.842,1546.667,797.552,1524.26,797.552,1498.009z"></path>
             </svg>
           </div>
-          <h2 class="mt-6 text-xl font-medium text-white">Welcome Back</h2>
-          <p class="mt-2 text-sm text-zinc-400">Sign in to your account to continue</p>
+          <h2 class="mt-6 text-xl font-medium text-white">${t('auth.login.heading')}</h2>
+          <p class="mt-2 text-sm text-zinc-400">${t('auth.login.subheading')}</p>
         </div>
 
         <!-- Form Container -->
@@ -82,7 +83,7 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
               <!-- Email -->
               <div>
                 <label for="email" class="block text-sm font-medium text-white mb-2">
-                  Email Address
+                  ${t('auth.login.email')}
                 </label>
                 <input
                   id="email"
@@ -91,14 +92,14 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
                   autocomplete="email"
                   required
                   class="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white shadow-sm ring-1 ring-inset ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white transition-shadow"
-                  placeholder="Enter your email"
+                  placeholder="${t('auth.login.emailPlaceholder')}"
                 >
               </div>
 
               <!-- Password -->
               <div>
                 <label for="password" class="block text-sm font-medium text-white mb-2">
-                  Password
+                  ${t('auth.login.password')}
                 </label>
                 <input
                   id="password"
@@ -107,7 +108,7 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
                   autocomplete="current-password"
                   required
                   class="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white shadow-sm ring-1 ring-inset ring-white/10 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white transition-shadow"
-                  placeholder="Enter your password"
+                  placeholder="${t('auth.login.passwordPlaceholder')}"
                 >
               </div>
 
@@ -116,15 +117,15 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
                 type="submit"
                 class="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-zinc-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-zinc-900 transition-colors"
               >
-                Sign In
+                ${t('auth.login.submit')}
               </button>
             </form>
 
             <!-- Links -->
             <div class="mt-6 text-center">
               <p class="text-sm text-zinc-400">
-                Don't have an account?
-                <a href="/auth/register" class="font-semibold text-white hover:text-zinc-300 transition-colors">Create one here</a>
+                ${t('auth.login.noAccount')}
+                <a href="/auth/register" class="font-semibold text-white hover:text-zinc-300 transition-colors">${t('auth.login.createAccount')}</a>
               </p>
             </div>
           </div>

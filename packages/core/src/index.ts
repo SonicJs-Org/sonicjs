@@ -23,6 +23,18 @@
 export { createSonicJSApp, setupCoreMiddleware, setupCoreRoutes } from './app'
 export type { SonicJSConfig, SonicJSApp, Bindings, Variables, BootIsolateFn } from './app'
 
+// Admin UI i18n — translate admin strings and let plugins ship their own dictionaries.
+export {
+  t,
+  translate,
+  getUiLanguage,
+  registerMessages,
+  isSupportedUiLanguage,
+  SUPPORTED_UI_LANGUAGES,
+  DEFAULT_UI_LANGUAGE,
+} from './i18n'
+export type { UiLanguage, MessageKey, CoreMessageKey, MessageTree, LocaleMessages } from './i18n'
+
 // Plugin cron surface + trigger codegen
 export {
   createScheduledHandler,

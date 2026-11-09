@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { requireAuth, requireRole, logActivity, AuthManager } from '../middleware'
 import { sanitizeInput } from '../utils/sanitize'
+import { t, translate, getUiLanguage, toUiLanguage } from '../i18n'
+import { setUiLanguageCookie } from '../i18n/middleware'
 import { renderProfilePage, renderAvatarImage, type UserProfile, type ProfilePageData } from '../templates/pages/admin-profile.template'
 import { renderAlert } from '../templates/components/alert.template'
 import { renderActivityLogsPage, type ActivityLogsPageData, type ActivityLog } from '../templates/pages/admin-activity-logs.template'
@@ -170,7 +172,7 @@ userRoutes.put('/profile', async (c) => {
     if (!firstName || !lastName || !email) {
       return c.html(renderAlert({
         type: 'error',
-        message: 'First name, last name, and email are required.',
+        message: t('profile.messages.requiredFields'),
         dismissible: true
       }))
     }
@@ -180,7 +182,7 @@ userRoutes.put('/profile', async (c) => {
     if (!emailRegex.test(email)) {
       return c.html(renderAlert({ 
         type: 'error', 
-        message: 'Please enter a valid email address.',
+        message: t('profile.messages.invalidEmail'),
         dismissible: true 
       }))
     }
@@ -195,7 +197,7 @@ userRoutes.put('/profile', async (c) => {
     if (existingUser) {
       return c.html(renderAlert({
         type: 'error',
-        message: 'Email is already taken by another user.',
+        message: t('profile.messages.emailTaken'),
         dismissible: true
       }))
     }
@@ -237,9 +239,17 @@ userRoutes.put('/profile', async (c) => {
       c.req.header('user-agent')
     )
 
+    // Remember the chosen UI language in the browser and, if it changed, re-render the whole
+    // page so the sidebar and every label switch over (the form only swaps #form-messages).
+    const uiLanguage = toUiLanguage(language)
+    setUiLanguageCookie(c, uiLanguage)
+    if (uiLanguage !== getUiLanguage()) {
+      c.header('HX-Refresh', 'true')
+    }
+
     return c.html(renderAlert({
-      type: 'success', 
-      message: 'Profile updated successfully!',
+      type: 'success',
+      message: translate(uiLanguage, 'profile.messages.updated'),
       dismissible: true 
     }))
 
@@ -247,7 +257,7 @@ userRoutes.put('/profile', async (c) => {
     console.error('Profile update error:', error)
     return c.html(renderAlert({ 
       type: 'error', 
-      message: 'Failed to update profile. Please try again.',
+      message: t('profile.messages.updateFailed'),
       dismissible: true 
     }))
   }

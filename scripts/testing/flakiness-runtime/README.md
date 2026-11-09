@@ -1,6 +1,6 @@
 # Flakiness Upload Runtime
 
-Pinned independent CLI runtime for Flakiness upload orchestration (Task 5).
+Pinned independent CLI runtime for Flakiness upload orchestration (Tasks 5–6).
 
 ## Purpose
 
@@ -15,7 +15,7 @@ credential-bearing upload step.
 | `flakiness` | 0.327.0 | Upload CLI |
 | `@flakiness/sdk` | 3.6.0 | SDK used by CLI |
 | `@flakiness/flakiness-report` | 0.36.0 | Report schema |
-| `zod` | 4.4.3 | Schema runtime |
+| `zod` | 4.6.7 | Schema runtime |
 | `yauzl` | 3.4.0 | ZIP archive reading |
 
 The `package-lock.json` pins all 44 transitive dependencies to exact registry-verified
@@ -40,18 +40,21 @@ runtime. It resolves the CLI binary as:
 {runtimeDir}/node_modules/.bin/flakiness
 ```
 
-## Helper module copy
+## Trusted helper copy
 
-Before executing uploads, the operator must copy the reviewed helper modules into the
-runtime prefix so they resolve as normal Node modules:
+The main-only consumer copies this fixed allowlist into the runtime prefix so
+Node resolves validator dependencies from the independent locked install:
 
-Allowed copy list:
-- `scripts/testing/validate-flakiness-artifacts.mjs`
-- `scripts/testing/validate-flakiness-artifacts.d.mts`
-- `scripts/testing/read-flakiness-artifacts.py`
+- `validate-flakiness-artifacts.mjs`
+- `read-flakiness-artifacts.py`
+- `upload-flakiness.mjs`
+- `fetch-producer-provenance.mjs`
+- `run-flakiness-upload.mjs`
+- `delivery-ledger.mjs`
 
-No other source files should be copied. These modules have been independently reviewed
-and do not execute code from artifact input.
+No artifact code or PR hooks are copied or executed. See
+[the publishing contract](../../../docs/testing/flakiness-publishing.md) for
+identity, completeness and upload-only rerun policy.
 
 ## Prerequisites
 

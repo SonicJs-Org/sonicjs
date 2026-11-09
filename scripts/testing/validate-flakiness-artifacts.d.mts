@@ -7,9 +7,9 @@ export interface ProducerProvenanceInput {
     event: string; status: string; conclusion: string | null;
     headBranch: string; headSha: string;
   };
-  /** Only declared producing jobs (currently test), filtered by trusted adapter; not all API jobs. */
+  /** Only declared producing jobs (unit-tests, e2e-local, e2e-shard, e2e-locked; legacy test supported), filtered by trusted adapter; not all API jobs. */
   jobs: Array<{
-    id: number; key: string; runId: number; runAttempt: number; status: string;
+    id: number; key: string; runId: number; runAttempt: number; status: string; conclusion?: string; shard?: string;
     steps: Array<{ number: number; name: string; status: string; conclusion: string | null }>;
   }>;
   /** Exactly one original-run association, persisted from trusted original-run metadata. */
@@ -29,7 +29,7 @@ export interface ValidatedProducerProvenance {
   event: 'push' | 'pull_request_target'; conclusion: 'success' | 'failure';
   testedSha: string; branch: string; pullRequest: PullRequestIdentity | null;
   suites: Array<{
-    suite: 'core-unit' | 'cms-e2e'; jobId: number; stepNumber: number;
+    suite: 'core-unit' | 'cms-e2e'; jobId: number; stepNumber: number; jobKey?: string; shard?: string;
     conclusion: 'success' | 'failure' | 'skipped'; ran: boolean;
   }>;
   sourceUrl: string;
@@ -44,6 +44,8 @@ export interface ArtifactValidationInput {
   /** Existing private, owned directory outside the input; no temporary fallback. */
   stagingParent: string;
   trusted: ProducerProvenanceInput;
+  /** Trusted configuration only; artifact fields cannot select destination. */
+  project?: string;
 }
 export interface SnapshotFile { readonly path: string; readonly bytes: number; readonly sha256: string }
 export interface UploadSnapshot {

@@ -491,3 +491,24 @@ test('upload module loads without affecting existing test infrastructure', async
   expect(typeof validateOnly).toBe('function')
   expect(typeof executeUpload).toBe('function')
 })
+
+/** Real upload subcommand is required even when a fake executable is used offline. */
+test('CLI command invokes upload before trusted project and endpoint options', async () => {
+  const snap = makeSnapRoot(scratch)
+  const snapshots = { root: snap.root, provenance: makeProvenance(), invocations: [makeInvocationSnap(snap)] }
+  const { config, cleanup } = makeConfig(join(fixturesDir, 'fake-cli-upload-command.mjs'))
+  try {
+    const r = await executeUpload(snapshots, config, fakeAuth, { enableUpload: true })
+    expect(r.results[0]!.state).toBe('accepted-unverified')
+  } finally { cleanup() }
+})
+
+test('CLI receives trusted configured project with fixed endpoint and isolated env', async () => {
+  const snap = makeSnapRoot(scratch)
+  const snapshots = { root: snap.root, provenance: makeProvenance(), invocations: [makeInvocationSnap(snap)] }
+  const { config, cleanup } = makeConfig(join(fixturesDir, 'fake-cli-upload-command.mjs'), { project: 'Configured/project' })
+  try {
+    const r = await executeUpload(snapshots, config, fakeAuth, { enableUpload: true })
+    expect(r.results[0]!.receiptUrl).toBe('https://flakiness.io/r/configured')
+  } finally { cleanup() }
+})

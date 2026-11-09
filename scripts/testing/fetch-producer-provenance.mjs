@@ -1,106 +1,73 @@
-/**
- * Fetch GitHub API metadata for a workflow_run and build a ProducerProvenanceInput.
- * Uses the GITHUB_TOKEN (actions: read) — no Flakiness credentials needed here.
- *
- * Handles both push (headSha = run head_sha) and pull_request_target
- * (headSha = PR head from original PR snapshot; run head_sha is the merge commit).
- */
+import { validateProducerProvenance } from './validate-flakiness-artifacts.mjs';
 
-const GITHUB_API = 'https://api.github.com';
-
-/**
- * @param {string} path
- * @param {string} token
- * @returns {Promise<unknown>}
- */
+/** Fetch bounded, trusted API metadata; never derive history from report artifacts. */
 async function ghApi(path, token) {
-  const res = await fetch(`${GITHUB_API}${path}`, {
+  const res = await fetch(`https://api.github.com${path}`, {
+    signal: AbortSignal.timeout(30_000),
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
   });
-  if (!res.ok) throw new Error(`GitHub API ${path} → ${res.status} ${res.statusText}: ${await res.text().catch(() => '')}`);
+  if (!res.ok) throw new Error(`GitHub metadata request failed: ${res.status}`);
   return res.json();
 }
 
 /**
- * Build ProducerProvenanceInput from a completed workflow_run event context.
- * @param {{
- *   repository: string,
- *   runId: number,
- *   runAttempt: number,
- *   token: string,
- * }} options
+ * Acquire exact-attempt jobs and immutable authorization-job identity. That job
+ * executes only a fixed echo, no checkout, artifacts, dependencies or PR hooks.
+ * Its API job name contains the original event's head repository/SHA/PR number,
+ * including fork events whose run.pull_requests array is empty. Live PR data is
+ * only a consistency check; missing historical identity always fails closed.
+ * @param {{repository: string, runId: number, runAttempt: number, token: string}} options
  * @returns {Promise<import('./validate-flakiness-artifacts.mjs').ProducerProvenanceInput>}
  */
 export async function fetchProducerProvenance({ repository, runId, runAttempt, token }) {
-  const run = /** @type {any} */ (await ghApi(`/repos/${repository}/actions/runs/${runId}`, token));
-  if (run.run_attempt !== runAttempt) throw new Error(`Run attempt mismatch: expected ${runAttempt}, got ${run.run_attempt}`);
-
-  const jobsResp = /** @type {any} */ (await ghApi(`/repos/${repository}/actions/runs/${runId}/attempts/${runAttempt}/jobs`, token));
-  const allJobs = /** @type {any[]} */ (jobsResp.jobs ?? []);
-
-  // Find the 'test' job (YAML job key; display name matches key when no 'name:' override)
-  const testJob = allJobs.find(j => j.name === 'test');
-  if (!testJob) throw new Error(`No 'test' job found in run ${runId} attempt ${runAttempt}. Jobs: ${allJobs.map(j => j.name).join(', ')}`);
-
-  const steps = /** @type {any[]} */ (testJob.steps ?? []).map(s => ({
-    number: s.number,
-    name: s.name,
-    status: s.status,
-    conclusion: s.conclusion ?? null,
-  }));
-
-  const producerJob = {
-    id: testJob.id,
-    key: 'test',
-    runId,
-    runAttempt,
-    status: testJob.status,
-    steps,
-  };
-
-  // For pull_request_target, resolve the actual tested PR head SHA from the PR list.
-  // workflow_run.head_sha for pull_request_target is the merge commit, not the PR head.
-  let originalPullRequests;
-  let currentPullRequest;
-
-  if (run.event === 'pull_request_target') {
-    const prs = /** @type {any[]} */ (run.pull_requests ?? []);
-    if (prs.length !== 1) throw new Error(`Expected exactly 1 PR association for pull_request_target run ${runId}, got ${prs.length}`);
-    const pr = prs[0];
-    const prNumber = pr.number;
-    // Fetch current live PR state for consistency check
-    const livePr = /** @type {any} */ (await ghApi(`/repos/${repository}/pulls/${prNumber}`, token));
-    const prIdentity = {
-      number: prNumber,
-      baseRepository: repository,
-      headRepository: livePr.head.repo?.full_name ?? repository,
-      headSha: pr.head.sha, // from run.pull_requests (original association)
-    };
-    originalPullRequests = [prIdentity];
-    currentPullRequest = {
-      number: prNumber,
-      baseRepository: repository,
-      headRepository: livePr.head.repo?.full_name ?? repository,
-      headSha: livePr.head.sha, // current live head
-    };
+  if (repository !== 'SonicJs-Org/sonicjs' || !Number.isSafeInteger(runId) || runId <= 0 || !Number.isSafeInteger(runAttempt) || runAttempt <= 0) throw new Error('Invalid producer identity');
+  const base = `/repos/${repository}/actions/runs/${runId}`;
+  const run = await ghApi(`${base}/attempts/${runAttempt}`, token);
+  if (run.id !== runId || run.run_attempt !== runAttempt || run.repository?.full_name !== repository) throw new Error('Run binding mismatch');
+  const allJobs = [];
+  for (let page = 1; page <= 10; page++) {
+    const response = await ghApi(`${base}/attempts/${runAttempt}/jobs?per_page=100&page=${page}`, token);
+    if (!Array.isArray(response.jobs) || !Number.isSafeInteger(response.total_count) || response.total_count > 1000) throw new Error('Invalid jobs page');
+    allJobs.push(...response.jobs);
+    if (allJobs.length === response.total_count) break;
+    if (allJobs.length > response.total_count || response.jobs.length === 0 || page === 10) throw new Error('Incomplete jobs metadata');
   }
-
-  return {
+  if (new Set(allJobs.map(j => j.id)).size !== allJobs.length) throw new Error('Duplicate API jobs');
+  for (const job of allJobs) if (job.run_id !== runId || job.run_attempt !== runAttempt) throw new Error('Job attempt mismatch');
+  const authorization = allJobs.filter(j => j.name.startsWith('authorize:'));
+  if (authorization.length !== 1 || authorization[0].status !== 'completed' || authorization[0].conclusion !== 'success') throw new Error('Missing immutable authorization identity');
+  const match = /^authorize:([1-9]\d*):([1-9]\d*):(push|pull_request_target):(0|[1-9]\d*):([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+):([a-f0-9]{40})$/.exec(authorization[0].name);
+  if (!match || Number(match[1]) !== runId || Number(match[2]) !== runAttempt || match[3] !== run.event) throw new Error('Authorization identity mismatch');
+  const [, , , event, number, headRepository, headSha] = match;
+  let originalPullRequests, currentPullRequest;
+  if (event === 'push') {
+    if (number !== '0' || headRepository !== repository || headSha !== run.head_sha) throw new Error('Push authorization mismatch');
+  } else {
+    if (number === '0') throw new Error('Missing historical PR number');
+    const original = { number: Number(number), baseRepository: repository, headRepository, headSha };
+    // Associations, when available, must agree; never substitute live head fields.
+    const associations = run.pull_requests;
+    if (!Array.isArray(associations) || associations.length > 1) throw new Error('Ambiguous PR association');
+    for (const pr of associations) {
+      if (pr.number !== original.number || pr.head?.sha !== headSha ||
+          (pr.head?.repo?.full_name && pr.head.repo.full_name !== headRepository)) throw new Error('Historical PR association mismatch');
+    }
+    const live = await ghApi(`/repos/${repository}/pulls/${number}`, token);
+    originalPullRequests = [original];
+    currentPullRequest = { number: live.number, baseRepository: live.base?.repo?.full_name ?? '', headRepository: live.head?.repo?.full_name ?? '', headSha: live.head?.sha ?? '' };
+  }
+  const jobs = [];
+  for (const j of allJobs) {
+    const shard = /^e2e-shard \(([1-4])\)$/.exec(j.name);
+    if (!shard && !['unit-tests', 'e2e-local', 'e2e-locked', 'e2e-shard'].includes(j.name)) continue;
+    jobs.push({ id: j.id, key: shard ? 'e2e-shard' : j.name, ...(shard ? { shard: `${shard[1]}-of-4` } : {}), runId, runAttempt, status: j.status, conclusion: j.conclusion, steps: j.steps ?? [] });
+  }
+  const input = {
     trigger: { repository, runId, runAttempt },
-    producer: {
-      repository,
-      runId,
-      runAttempt,
-      workflowId: run.workflow_id,
-      workflowPath: run.path,
-      workflowName: run.name,
-      event: run.event,
-      status: run.status,
-      conclusion: run.conclusion ?? null,
-      headBranch: run.head_branch ?? '',
-      headSha: run.head_sha,
-    },
-    jobs: [producerJob],
+    producer: { repository: run.repository.full_name, runId: run.id, runAttempt: run.run_attempt, workflowId: run.workflow_id, workflowPath: run.path, workflowName: run.name, event: run.event, status: run.status, conclusion: run.conclusion, headBranch: run.head_branch, headSha: run.head_sha },
+    jobs,
     ...(originalPullRequests ? { originalPullRequests, currentPullRequest } : {}),
   };
+  validateProducerProvenance(input);
+  return input;
 }

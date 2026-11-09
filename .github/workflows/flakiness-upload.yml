@@ -5,24 +5,28 @@ on:
     workflows: ['PR Tests']
     types: [completed]
 
-# Consumer only — no deployment secrets, no PR checkout, no test execution.
 permissions:
-  actions: read
   contents: read
-  id-token: write  # GitHub OIDC → Flakiness (no stored token needed)
+
+# Serialize upload-only reruns for exactly one producer attempt.
+concurrency:
+  group: flakiness-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+  cancel-in-progress: false
 
 jobs:
   upload:
     name: Upload to Flakiness
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Only run for the trusted repository; publish both success and failure so
-    # failed-test evidence reaches the dashboard. Skip cancelled/skipped runs.
-    if: |
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    # Interrupted producers enter the helper too, yielding explicit missing-evidence
+    # status. They cannot pass provenance validation or reach authenticated upload.
+    if: >-
       github.event.workflow_run.repository.full_name == 'SonicJs-Org/sonicjs' &&
-      github.event.workflow_run.workflow_id == 207092903 &&
-      (github.event.workflow_run.conclusion == 'success' ||
-       github.event.workflow_run.conclusion == 'failure')
+      github.event.workflow_run.workflow_id == 207092903
     env:
       PRODUCER_RUN_ID: ${{ github.event.workflow_run.id }}
       PRODUCER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
@@ -41,55 +45,55 @@ jobs:
         with:
           node-version: '22.23.1'
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install pinned Flakiness CLI runtime
+      - name: Install independent pinned runtime without lifecycle scripts
         run: |
           npm ci --prefix scripts/testing/flakiness-runtime --ignore-scripts --no-audit --no-fund
+          # Fixed trusted helper allowlist; no PR dependency graph or executable hooks.
+          cp scripts/testing/validate-flakiness-artifacts.mjs scripts/testing/read-flakiness-artifacts.py scripts/testing/upload-flakiness.mjs scripts/testing/fetch-producer-provenance.mjs scripts/testing/run-flakiness-upload.mjs scripts/testing/delivery-ledger.mjs scripts/testing/flakiness-runtime/
 
-      - name: Download core-unit artifact
-        id: dl-core
-        uses: actions/download-artifact@fa0a91b85d4f404e444306525a0d33dbfca8c79d
+      - name: Select previous consumer attempt
+        id: previous
+        if: github.run_attempt > 1
+        run: echo "attempt=$((GITHUB_RUN_ATTEMPT - 1))" >> "$GITHUB_OUTPUT"
+
+      # Absent/expired history is ambiguous. Download failure blocks the helper via
+      # its required checkpoint check; never treat an empty new runner as undelivered.
+      - name: Restore previous consumer ledger
+        if: github.run_attempt > 1
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: flakiness-delivery-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}-${{ steps.previous.outputs.attempt }}
+          path: ${{ runner.temp }}/ledger
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.run_id }}
+
+      - name: Download all producer reports with suite prefixes intact
+        id: reports
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         continue-on-error: true
         with:
-          name: flakiness-core-unit-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}
-          path: ${{ runner.temp }}/artifacts/core-unit
+          pattern: flakiness-*-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ env.PRODUCER_RUN_ID }}
 
-      - name: Download cms-e2e artifact
-        id: dl-cms
-        uses: actions/download-artifact@fa0a91b85d4f404e444306525a0d33dbfca8c79d
-        continue-on-error: true
+      - name: Validate complete attempt and upload independently
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
+          STAGING_DIR: ${{ runner.temp }}/staging
+          LEDGER_DIR: ${{ runner.temp }}/ledger
+          RUNTIME_DIR: ${{ github.workspace }}/scripts/testing/flakiness-runtime
+        run: node scripts/testing/flakiness-runtime/run-flakiness-upload.mjs
+
+      - name: Preserve delivery ledger
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: flakiness-cms-e2e-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}
-          path: ${{ runner.temp }}/artifacts/cms-e2e
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ env.PRODUCER_RUN_ID }}
-
-      - name: Validate and upload core-unit
-        if: steps.dl-core.outcome == 'success'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ARTIFACT_DIR: ${{ runner.temp }}/artifacts/core-unit
-          STAGING_DIR: ${{ runner.temp }}/staging/core-unit
-          LEDGER_DIR: ${{ runner.temp }}/ledger
-          RUNTIME_DIR: scripts/testing/flakiness-runtime
-        run: node scripts/testing/run-flakiness-upload.mjs
-
-      - name: Validate and upload cms-e2e
-        if: steps.dl-cms.outcome == 'success'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ARTIFACT_DIR: ${{ runner.temp }}/artifacts/cms-e2e
-          STAGING_DIR: ${{ runner.temp }}/staging/cms-e2e
-          LEDGER_DIR: ${{ runner.temp }}/ledger
-          RUNTIME_DIR: scripts/testing/flakiness-runtime
-        run: node scripts/testing/run-flakiness-upload.mjs
-
-      - name: Warn if no artifacts found
-        if: steps.dl-core.outcome == 'failure' && steps.dl-cms.outcome == 'failure'
-        run: |
-          echo "::warning::No Flakiness artifacts found for run $PRODUCER_RUN_ID attempt $PRODUCER_RUN_ATTEMPT. The producer may have failed before generating reports."
-          exit 0
+          name: flakiness-delivery-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ledger/
+          retention-days: 7
+          if-no-files-found: error

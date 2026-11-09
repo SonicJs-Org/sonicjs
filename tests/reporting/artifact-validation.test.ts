@@ -443,6 +443,14 @@ test('whole-batch composes two actual native per-suite ZIPs offline', async () =
   const result = await validateArtifactPayload({ input: [zipInput(core), zipInput(cmsEntries)], stagingParent: scratch, trusted })
   expect(result.invocations).toHaveLength(2); await verifyUploadSnapshots(result)
   for (const invocation of result.invocations) expect(readFileSync(invocation.reportPath)).toEqual(readFileSync(join(p.root, invocation.suite, invocation.invocation, 'vendor/report.json')))
+  // Exercise native vendor reports, attachments and actual upload command together.
+  const runtimeDir = mkdtempSync(join(scratch, 'native-runtime-'))
+  mkdirSync(join(runtimeDir, 'node_modules/.bin'), { recursive: true })
+  writeFileSync(join(runtimeDir, 'package-lock.json'), '{}')
+  writeFileSync(join(runtimeDir, 'node_modules/.bin/flakiness'), `#!/bin/sh\nexec "${process.execPath}" "${join(repositoryRoot, 'tests/reporting/fixtures/fake-cli-upload-command.mjs')}" "$@"\n`, { mode: 0o755 })
+  const { executeUpload } = await import('../../scripts/testing/upload-flakiness.mjs')
+  const uploaded = await executeUpload(result, { runtimeDir, ledgerDir: mkdtempSync(join(scratch, 'native-ledger-')) }, { accessToken: 'fake' }, { enableUpload: true })
+  expect(uploaded.results.map(r => r.state)).toEqual(['accepted-unverified', 'accepted-unverified'])
   rmSync(result.root, { recursive: true, force: true })
 })
 

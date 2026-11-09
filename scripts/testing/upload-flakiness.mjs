@@ -1,5 +1,5 @@
 /**
- * Offline upload orchestration with durable delivery ledger.
+ * Upload orchestration with a caller-persisted delivery ledger.
  * Consumes pre-validated private ArtifactSnapshots only; never re-reads inputs.
  * Does NOT authenticate; authentication is passed explicitly as `auth`.
  * Task 5 — no hosted delivery until Task 7 (privacy/OIDC/cutover) gates are met.
@@ -111,9 +111,10 @@ async function verifyInvocationFiles(snapshotRoot, snapshot) {
  * @param {string} tmp
  * @param {{accessToken: string} | {githubOidcUrl: string; githubOidcToken: string}} auth
  * @param {number} timeoutMs
+ * @param {string} project
  * @returns {Promise<{state: string; receiptUrl?: string; error?: string}>}
  */
-function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs) {
+function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs, project) {
   return new Promise(resolvePromise => {
     // Explicit allowlist — strip all ambient env, Node options, session config, OIDC vars.
     // Include node binary dir so fake-CLI shell wrappers in tests can exec node.
@@ -133,7 +134,7 @@ function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs) {
       env.ACTIONS_ID_TOKEN_REQUEST_TOKEN = auth.githubOidcToken;
     }
 
-    const proc = spawn(cliBin, ['--project', FIXED_PROJECT, '--endpoint', FIXED_ENDPOINT, reportDir], {
+    const proc = spawn(cliBin, ['upload', '--project', project, '--endpoint', FIXED_ENDPOINT, reportDir], {
       env, cwd: tmp, stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -159,6 +160,12 @@ function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs) {
       stdoutBufs.push(chunk);
     });
     proc.stderr.on('data', () => {}); // discard; may contain credentials
+
+    proc.on('error', () => {
+      clearTimeout(timer);
+      // Spawn failure occurs before execution; keep diagnostics free of ambient paths.
+      resolvePromise({ state: 'failed', error: 'CLI could not start' });
+    });
 
     proc.on('close', (code, signal) => {
       clearTimeout(timer);
@@ -230,7 +237,9 @@ export async function executeUpload(snapshots, config, auth, options) {
   const { runtimeDir, ledgerDir, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid timeoutMs');
 
-  const cliBin = join(runtimeDir, 'node_modules', '.bin', 'flakiness');
+  const project = config.project ?? FIXED_PROJECT;
+  if (typeof project !== 'string' || project.length > 150 || !/^[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+$/.test(project)) throw new Error('Invalid trusted project');
+  const cliBin = join(resolve(runtimeDir), 'node_modules', '.bin', 'flakiness');
   await stat(cliBin);
   await stat(join(runtimeDir, 'package-lock.json'));
 
@@ -259,12 +268,16 @@ export async function executeUpload(snapshots, config, auth, options) {
       if (typeof existing.state !== 'string') throw new Error(`Corrupt ledger state for key: ${key}`);
       if (existing.contentDigest !== contentDigest(snapshot)) {
         summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'blocked', error: 'content mismatch: snapshot changed from prior ledger entry' });
+        summary.anyFailed = true;
         continue;
       }
-      if (existing.state === 'started' || existing.state === 'ambiguous' || existing.state === 'accepted-unverified') {
+      // Even nonzero exit can follow a successful remote submission. No blind retries.
+      if (['started', 'ambiguous', 'accepted-unverified', 'failed'].includes(existing.state)) {
         summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'blocked', error: `ledger state: ${existing.state}` });
+        summary.anyFailed = true;
         continue;
       }
+      throw new Error(`Unrecognized ledger state for key: ${key}`);
     }
 
     const digest = contentDigest(snapshot);
@@ -292,7 +305,7 @@ export async function executeUpload(snapshots, config, auth, options) {
     const tmp = await mkdtemp(join(ledgerDir, 'cli-tmp-'));
     let childResult;
     try {
-      childResult = await spawnCli(cliBin, dirname(snapshot.reportPath), home, tmp, auth, timeoutMs);
+      childResult = await spawnCli(cliBin, dirname(snapshot.reportPath), home, tmp, auth, timeoutMs, project);
     } finally {
       await rm(home, { recursive: true, force: true });
       await rm(tmp, { recursive: true, force: true });

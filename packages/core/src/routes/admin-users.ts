@@ -1068,9 +1068,10 @@ userRoutes.put('/users/:id', async (c) => {
     const lastName = sanitizeInput(formData.get('last_name')?.toString())
     const email = formData.get('email')?.toString()?.trim().toLowerCase() || ''
     const phone = sanitizeInput(formData.get('phone')?.toString()) || null
-    // '' is the form's "No role".
+    // '' is the form's "No role"; a request without the field leaves roles alone.
     const rbac = new RbacService(db, c.env.CACHE_KV)
-    const role = await resolveRole(rbac, formData.get('role')?.toString() || '')
+    const roleField = formData.get('role')
+    const role = roleField === null ? undefined : await resolveRole(rbac, roleField.toString())
     if (role === null) {
       return c.html(renderAlert({ type: 'error', message: 'Please choose a valid role.', dismissible: true }))
     }
@@ -1161,18 +1162,24 @@ userRoutes.put('/users/:id', async (c) => {
     if (!target) return c.html(renderAlert({ type: 'error', message: 'User not found.', dismissible: true }), 404)
     // The form names the role it showed, since a save can change the label it was derived from.
     const shownField = formData.get('shown_role')
-    const shown = shownField === null ? await formRoleFor(rbac, userId, target.role) : shownField.toString()
-    const current = (await rbac.getRolesForUser(userId)).map((r) => r.id)
-    const held = current.filter((id) => id !== shown)
-    const next = role ? [...new Set([...held, role])] : held
-    // Unchanged roles are left alone, so a label-only user (e.g. 'admin') keeps it; a role-id label the user
-    // doesn't hold is still repaired.
-    const idLabel = !current.includes(target.role ?? '') && (await rbac.getRoles()).some((r) => r.id === target.role)
-    if (idLabel || next.length !== current.length || next.some((id) => !current.includes(id))) {
-      try {
-        await rbac.setUserRoles(userId, next)
-      } catch (err) {
-        return c.html(renderAlert({ type: 'error', message: err instanceof Error ? err.message : 'Could not update roles.', dismissible: true }))
+    if (role !== undefined) {
+      const shown = shownField === null ? await formRoleFor(rbac, userId, target.role) : shownField.toString()
+      const current = (await rbac.getRolesForUser(userId)).map((r) => r.id)
+      // A shown role that is neither held nor the label was changed elsewhere; saving would restore it.
+      if (shown && !current.includes(shown) && target.role !== shown) {
+        return c.html(renderAlert({ type: 'error', message: "This user's roles changed since the form was opened. Reload the page and try again.", dismissible: true }))
+      }
+      const held = current.filter((id) => id !== shown)
+      const next = role ? [...new Set([...held, role])] : held
+      // Unchanged roles are left alone, so a label-only user (e.g. 'admin') keeps it; a role-id label the user
+      // doesn't hold is still repaired.
+      const idLabel = !current.includes(target.role ?? '') && (await rbac.getRoles()).some((r) => r.id === target.role)
+      if (idLabel || next.length !== current.length || next.some((id) => !current.includes(id))) {
+        try {
+          await rbac.setUserRoles(userId, next)
+        } catch (err) {
+          return c.html(renderAlert({ type: 'error', message: err instanceof Error ? err.message : 'Could not update roles.', dismissible: true }))
+        }
       }
     }
 
@@ -1227,7 +1234,7 @@ userRoutes.put('/users/:id', async (c) => {
       message: 'User updated successfully!',
       dismissible: true,
       className: 'mb-4'
-    }) + (shownField === null ? '' : `<input type="hidden" id="shown_role" name="shown_role" value="${escapeHtml(role)}" hx-swap-oob="true">`))
+    }) + (shownField === null ? '' : `<input type="hidden" id="shown_role" name="shown_role" value="${escapeHtml(role ?? shownField.toString())}" hx-swap-oob="true">`))
 
   } catch (error) {
     console.error('User update error:', error)

@@ -910,4 +910,31 @@ test.describe('Admin user roles @auth @lock-auth-registration', () => {
     await reader.dispose()
     await anon.dispose()
   })
+
+  test('a form left open while another admin removes the role does not restore it', async ({ page, playwright }) => {
+    const email = `roles-stale-${Date.now()}@example.com`
+    const anon = await playwright.request.newContext({ baseURL: TEST_ORIGIN, extraHTTPHeaders: { Origin: TEST_ORIGIN } })
+    const signUp = await anon.post('/auth/sign-up/email', { data: { email, password: `RolesStale${Date.now()}!`, name: 'Role Stale' } })
+    expect(signUp.ok()).toBeTruthy()
+    const userId = (await signUp.json()).user.id
+    await anon.dispose()
+
+    await loginAsAdmin(page)
+    const headers = { 'X-CSRF-Token': (await getCsrfTokenFromPage(page)) ?? '' }
+    const put = (form: Record<string, string>) =>
+      page.request.put(`/admin/users/${userId}`, { headers, form: { first_name: 'Role', last_name: 'Stale', email, is_active: '1', ...form } })
+    expect(await (await put({ role: 'role-editor' })).text()).toContain('User updated successfully')
+    await page.goto(`/admin/users/${userId}/edit`)
+    await expect(page.locator('#user-edit-form select[name="role"]')).toHaveValue('role-editor')
+
+    // Another admin removes the role while this form is still open.
+    expect(await (await put({ role: '', shown_role: 'role-editor' })).text()).toContain('User updated successfully')
+    await page.fill('input[name="phone"]', '555-0101')
+    await submitAndWaitForXhr(page, 'PUT', `/admin/users/${userId}`, () =>
+      page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()
+    )
+    await expect(page.locator('#form-messages')).toContainText('changed since the form was opened')
+    await page.reload()
+    await expect(page.locator('#user-edit-form select[name="role"]')).toHaveValue('')
+  })
 })

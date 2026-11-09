@@ -198,6 +198,33 @@ describe('admin users assign RBAC roles', () => {
     expect(await rolesOf('Twice')).toEqual(['role-custom', 'role-x'])
   })
 
+  it('a form opened before another admin changed the roles is refused, not replayed', async () => {
+    await rbac.createRole('x', 'X')
+    addUser('Demoted', 'admin')
+    await rbac.setUserRoles('Demoted', ['role-admin'])
+    const stale = shownRole(await editPage('Demoted'))
+    expect(stale).toBe('role-admin')
+    await save('Demoted', 'role-editor', { shown_role: shownRole(await editPage('Demoted')) })
+    for (const role of ['role-admin', 'role-x']) {
+      const res = await save('Demoted', role, { shown_role: stale, first_name: 'Stale' })
+      expect(await res.text()).toContain('changed since the form was opened')
+    }
+    expect(await rolesOf('Demoted')).toEqual(['role-editor'])
+    expect(db.raw.prepare("SELECT first_name FROM auth_user WHERE id='Demoted'").get().first_name).toBe('F')
+  })
+
+  it('a request without a role field leaves roles alone', async () => {
+    addUser('Partial', 'editor')
+    await rbac.setUserRoles('Partial', ['role-editor'])
+    const res = await app.request('/admin/users/Partial', {
+      method: 'PUT',
+      body: form({ first_name: 'P', last_name: 'L', email: 'partial@x.y', is_active: '1' }),
+    })
+    expect(await res.text()).toContain('updated successfully')
+    expect(await rolesOf('Partial')).toEqual(['role-editor'])
+    expect(db.raw.prepare("SELECT first_name FROM auth_user WHERE id='Partial'").get().first_name).toBe('P')
+  })
+
   it('a user labelled admin with no RBAC role keeps the label when another field is saved', async () => {
     addUser('LabelAdmin', 'admin')
     expect(await editPage('LabelAdmin')).toContain('Legacy label: admin.')

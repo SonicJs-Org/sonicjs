@@ -260,7 +260,9 @@ export class RbacService {
     if (roleIdsOrNames.length === 0) return false
     const want = new Set(roleIdsOrNames)
     const roles = await this.listDocs<RoleData>(T_ROLE)
-    return roles.some((r) => (want.has(r.slug) || want.has(r.data.name)) &&
+    // A role id names only that role; another role whose name equals it doesn't match.
+    const ids = new Set(roles.map((r) => r.slug))
+    return roles.some((r) => (want.has(r.slug) || (want.has(r.data.name) && !ids.has(r.data.name))) &&
       (r.data.grants ?? []).some((g) => g.scope !== 'own' && this.grantMatches(g, resource, verb)))
   }
 

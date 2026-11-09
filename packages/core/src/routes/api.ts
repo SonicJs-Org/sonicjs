@@ -16,7 +16,7 @@ import { getDocumentRequestContext } from '../services/document-request-context'
 import { DocumentRepository } from '../services/document-repository'
 import { DocumentPermissionsService } from '../services/document-permissions'
 import { RbacService } from '../services/rbac'
-import { heldRoleIds } from '../services/document-read-access'
+import { heldRoleIds, roleGrantsApply } from '../services/document-read-access'
 import { recordCatalogRequest, scheduleKvWrite } from '../plugins/cache/services/catalog'
 import { getAndConsumeStale } from '../plugins/cache/services/swr'
 
@@ -32,7 +32,7 @@ function isAnonPrincipal(principalSet: PrincipalRef[]): boolean {
 async function typeReadAllowed(
   db: any,
   principalSet: PrincipalRef[],
-  docType: { settings?: any } | null | undefined,
+  docType: { settings?: any; isActive?: boolean; isAuth?: boolean } | null | undefined,
   typeName: string,
   held: string[],
 ): Promise<boolean> {
@@ -41,11 +41,12 @@ async function typeReadAllowed(
   const rbac = new RbacService(db)
   const roleIds = principalSet.filter((p) => p.type === 'role').map((p) => p.id)
   let anyRbacRoleFound = false
+  const grantsApply = roleGrantsApply(typeName, docType)
   for (const id of new Set([...roleIds, ...held])) {
     if (!(await rbac.hasRbacRole(id))) continue  // role not in RBAC → skip (legacy roles default to allow)
     anyRbacRoleFound = true
     // An `own`-scoped grant can't open the whole type: these routes have no per-owner filter.
-    if (await rbac.anyRoleGrants([id], `document_type:${typeName}`, 'read')) return true
+    if (grantsApply && await rbac.anyRoleGrants([id], `document_type:${typeName}`, 'read')) return true
   }
   // No RBAC role found in principal set → legacy/unknown role → default allow
   return !anyRbacRoleFound

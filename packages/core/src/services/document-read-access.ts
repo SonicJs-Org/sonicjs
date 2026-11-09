@@ -11,8 +11,17 @@ export async function heldRoleIds(db: D1Database, principalSet: PrincipalRef[], 
   return (await new RbacService(db).getRolesForUser(user.id)).map((r) => r.id)
 }
 
-// Document ACL first, then a `document_type:<type>` read grant on any role the caller holds. RBAC grants
-// open published rows of active collections only, since the seeded roles grant `document_type:*`.
+// The seeded roles grant `document_type:*`, so a role grant opens active collections only, never internal,
+// pii or auth types.
+export function roleGrantsApply(typeId: string, docType: { settings?: any; isActive?: boolean; isAuth?: boolean } | null | undefined): boolean {
+  const collection = getCollectionRegistry().getByName(typeId)
+  const s = docType?.settings ?? {}
+  return !!collection && collection.isActive !== false && !collection.internal &&
+    docType?.isActive !== false && !s.internal && !s.pii && !docType?.isAuth
+}
+
+// Document ACL first, then a `document_type:<type>` read grant on any role the caller holds (default tenant
+// only: RBAC roles are global). Role grants open live rows of the types `roleGrantsApply` allows.
 export function createDocumentReadAccess(db: D1Database, principalSet: PrincipalRef[], requestTenant: string) {
   const perms = new DocumentPermissionsService(db)
   let principals: Promise<PrincipalRef[]> | undefined
@@ -43,11 +52,8 @@ export function createDocumentReadAccess(db: D1Database, principalSet: Principal
       const ps = await allPrincipals()
       const overrides = await perms.getDocumentPermissions(rootId, ps, 'read', docTenant)
       if (perms.isAllowedSync(ps, overrides, 'read', docType.settings)) return true
-      if (!live || overrides.some((o) => o.effect === 'deny')) return false
-      const s = docType.settings
-      const collection = getCollectionRegistry().getByName(docType.id)
-      if (!collection || collection.isActive === false || !docType.isActive || s.internal || s.pii || docType.isAuth) return false
-      return rbacGrants(docType.id)
+      if (!live || requestTenant !== 'default' || overrides.some((o) => o.effect === 'deny')) return false
+      return roleGrantsApply(docType.id, docType) && rbacGrants(docType.id)
     },
   }
 }

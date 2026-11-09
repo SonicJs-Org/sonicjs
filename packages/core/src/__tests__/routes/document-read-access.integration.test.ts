@@ -181,4 +181,33 @@ describe('document reads use every held RBAC role', () => {
     expect(await createDocumentReadAccess(db, principals('Multi'), 'default').canRead(rootId, type, 'default', true)).toBe(true)
     expect(await createDocumentReadAccess(db, principals('Multi'), 'acme').canRead(rootId, type, 'default', true)).toBe(false)
   })
+
+  it('outside the default tenant a role label does not pick up the global role of that name', async () => {
+    const notes = await new DocumentTypeRegistry(db).findById('notes')
+    const closed = { ...notes, settings: { ...notes.settings, baseGrants: { admin: ['read'] } } }
+    const editor = [{ type: 'user', id: 'Ed' }, { type: 'role', id: 'editor' }]
+    expect(await createDocumentReadAccess(db, editor, 'default').canRead(rootId, closed, 'default', true)).toBe(true)
+    expect(await createDocumentReadAccess(db, editor, 'acme').canRead(rootId, closed, 'acme', true)).toBe(false)
+  })
+
+  it('a held role id does not pick up the grants of another role named after it', async () => {
+    const rbac = new RbacService(db)
+    await rbac.createRole('zeta', 'Zeta')
+    await rbac.createRole('q', 'Q')
+    await rbac.updateRole('role-q', 'Q', '', 'role-zeta')
+    await rbac.setRoleGrants('role-q', [{ resource: 'document_type:notes', verb: 'read' }])
+    addUser('Zeta', 'viewer')
+    await rbac.setUserRoles('Zeta', ['role-zeta'])
+    expect(await listSlugs('notes', 'Zeta')).toEqual([])
+  })
+
+  it('MCP get by root id returns the published version when old versions are kept', async () => {
+    const docs = new DocumentsService(db, { versioning: true })
+    const v1 = await docs.create({ typeId: 'notes', title: 'Kept v1', slug: 'kept', data: {} })
+    await docs.publish(v1.id)
+    const v2 = await docs.saveDraft(v1.rootId, { title: 'Kept v2', data: {} })
+    await docs.publish(v2.id)
+    expect(db.raw.prepare('SELECT COUNT(*) n FROM documents WHERE root_id=?').get(v1.rootId).n).toBe(2)
+    expect((await execGet(mcpCtx('Multi'), 'notes', { id: v1.rootId })).title).toBe('Kept v2')
+  })
 })

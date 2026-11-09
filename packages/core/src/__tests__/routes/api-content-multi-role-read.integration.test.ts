@@ -85,6 +85,19 @@ describe('content API reads use every held RBAC role', () => {
     expect((await read('/api/collections/notes/content', 'OwnOnly')).status).toBe(403)
   })
 
+  it('a held document_type:* grant does not open an internal collection', async () => {
+    const schema = { type: 'object', properties: {} }
+    getCollectionRegistry().register([
+      { name: 'members', displayName: 'Members', schema, access: { viewer: [] } },
+      { name: 'secrets', displayName: 'Secrets', schema, access: { viewer: [] }, internal: true },
+    ])
+    addUser('Authd', 'viewer')
+    await rbac.setUserRoles('Authd', ['role-a', 'role-authenticated'])
+    expect((await read('/api/members', 'Authd')).status).toBe(200)
+    expect((await read('/api/secrets', 'Authd')).status).toBe(403)
+    expect((await read('/api/collections/secrets/content', 'Authd')).status).toBe(403)
+  })
+
   it('a user without the grant is still refused', async () => {
     expect((await read('/api/collections/notes/content', 'OnlyA')).status).toBe(403)
     expect((await read('/api/notes', 'OnlyA')).status).toBe(403)

@@ -96,10 +96,10 @@ export async function execGet(
 
   let doc: Document | null = null
   if (args.id) {
-    // Accept either a version id or a root id: try the exact-id lookup first, then
-    // fall back to the published / current-draft row of that root.
-    doc = (await repo.getById(args.id))
-      ?? (await repo.getPublished(args.id))
+    // Accept either a root id or a version id. A root id means its published row: with versioning on, the
+    // root's own row is an old version.
+    doc = (await repo.getPublished(args.id))
+      ?? (await repo.getById(args.id))
       ?? (await repo.getCurrentDraft(args.id))
   } else if (args.slug) {
     doc = await repo.getBySlug(typeId, args.slug)

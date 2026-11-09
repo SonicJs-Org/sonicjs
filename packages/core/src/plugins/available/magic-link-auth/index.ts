@@ -212,8 +212,24 @@ export function createMagicLinkAuthPlugin(): Plugin {
         tokenTtl
       )
 
-      // Set auth cookie
-      AuthManager.setAuthCookie(c, jwtToken, { maxAge: tokenTtl })
+      // Set auth cookie.
+      // Use c.header('set-cookie', ..., { append: true }) instead of setAuthCookie
+      // to avoid the Hono res-setter cookie-merge bug (#1101): when csrfProtection()
+      // has already queued a csrf_token Set-Cookie on this context (GET from a fresh
+      // browser), Hono's c.res merger keeps the OLD cookies and drops the NEW
+      // response's cookies.  Appending directly onto c's header set before
+      // returning the redirect ensures both cookies survive — same fix applied to
+      // the Better Auth handler in app.ts.
+      const isDev = (c.env as any)?.ENVIRONMENT === 'development'
+      const cookieParts = [
+        `auth_token=${jwtToken}`,
+        'HttpOnly',
+        isDev ? '' : 'Secure',
+        'SameSite=Strict',
+        `Max-Age=${tokenTtl}`,
+        'Path=/',
+      ].filter(Boolean).join('; ')
+      c.header('set-cookie', cookieParts, { append: true })
 
       // Update last login
       await db.prepare(`

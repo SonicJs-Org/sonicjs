@@ -27,6 +27,8 @@ export interface UserEditData {
   createdAt: number
   lastLoginAt?: number
   profile?: UserProfileData
+  /** A label such as 'admin' with no RBAC role behind it; it still passes requireRole. */
+  legacyRoleLabel?: string
 }
 
 export interface UserEditPageData {
@@ -321,6 +323,7 @@ export function renderUserEditPage(data: UserEditPageData): string {
                   <div>
                     <label for="role" class="block text-sm/6 font-medium text-zinc-950 dark:text-white">Role</label>
                     <div class="mt-2 grid grid-cols-1">
+                      <input type="hidden" id="shown_role" name="shown_role" value="${escapeHtml(data.userToEdit.role || '')}">
                       <select
                         id="role"
                         name="role"
@@ -335,6 +338,7 @@ export function renderUserEditPage(data: UserEditPageData): string {
                         <path d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
                       </svg>
                     </div>
+                    ${data.userToEdit.legacyRoleLabel ? `<p class="mt-2 text-sm/6 text-zinc-500 dark:text-zinc-400">Legacy label: ${escapeHtml(data.userToEdit.legacyRoleLabel)}. Choose a role to replace it.</p>` : ''}
                   </div>
                 </div>
               </div>

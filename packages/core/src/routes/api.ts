@@ -44,7 +44,8 @@ async function typeReadAllowed(
   for (const id of new Set([...roleIds, ...held])) {
     if (!(await rbac.hasRbacRole(id))) continue  // role not in RBAC → skip (legacy roles default to allow)
     anyRbacRoleFound = true
-    if (await rbac.isGrantedForRole(id, `document_type:${typeName}`, 'read')) return true
+    // An `own`-scoped grant can't open the whole type: these routes have no per-owner filter.
+    if (await rbac.anyRoleGrants([id], `document_type:${typeName}`, 'read')) return true
   }
   // No RBAC role found in principal set → legacy/unknown role → default allow
   return !anyRbacRoleFound

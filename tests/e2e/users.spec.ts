@@ -897,6 +897,8 @@ test.describe('Admin user roles @auth @lock-auth-registration', () => {
       page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()
     )
     await expect(page.locator('#form-messages')).toContainText('User updated successfully')
+    // The form stays open and must know it now shows the new role.
+    await expect(page.locator('#shown_role')).toHaveValue(roleId)
 
     // Visitors can read it, so a signed-in reader must too.
     expect((await anon.get(`/api/documents/root/${rootId}`)).status()).toBe(200)

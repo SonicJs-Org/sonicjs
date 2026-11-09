@@ -76,6 +76,15 @@ describe('content API reads use every held RBAC role', () => {
     expect(res.status).toBe(403)
   })
 
+  it('an own-scoped grant on a held role does not open the type', async () => {
+    await rbac.createRole('own', 'Own')
+    await rbac.setRoleGrants('role-own', [{ resource: 'document_type:notes', verb: 'read', scope: 'own' }])
+    addUser('OwnOnly', 'viewer')
+    await rbac.setUserRoles('OwnOnly', ['role-a', 'role-own'])
+    expect((await read('/api/notes', 'OwnOnly')).status).toBe(403)
+    expect((await read('/api/collections/notes/content', 'OwnOnly')).status).toBe(403)
+  })
+
   it('a user without the grant is still refused', async () => {
     expect((await read('/api/collections/notes/content', 'OnlyA')).status).toBe(403)
     expect((await read('/api/notes', 'OnlyA')).status).toBe(403)

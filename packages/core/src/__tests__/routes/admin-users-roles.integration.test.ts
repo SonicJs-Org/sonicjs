@@ -38,11 +38,12 @@ describe('admin users assign RBAC roles', () => {
     db.raw.prepare("INSERT INTO auth_user (id, email, created_at, updated_at, first_name, last_name, role, is_active) VALUES (?, ?, 0, 0, 'F', 'L', ?, 1)").run(id, `${id}@x.y`, role)
   const editPage = async (id: string) => (await app.request(`/admin/users/${id}/edit`)).text()
   const selected = (html: string) => html.match(/<option value="([^"]*)"\s*selected>/)?.[1]
-  const save = (id: string, role: string) =>
+  const save = (id: string, role: string, extra: Record<string, string> = {}) =>
     app.request(`/admin/users/${id}`, {
       method: 'PUT',
-      body: form({ first_name: 'F', last_name: 'L', email: `${id}@x.y`, phone: '555', role, is_active: '1' }),
+      body: form({ first_name: 'F', last_name: 'L', email: `${id}@x.y`, phone: '555', role, is_active: '1', ...extra }),
     })
+  const shownRole = (html: string) => html.match(/name="shown_role" value="([^"]*)"/)?.[1]
 
   beforeEach(async () => {
     db = createTestD1()
@@ -184,8 +185,61 @@ describe('admin users assign RBAC roles', () => {
     expect(kv.has('rbac:perms:Demoted')).toBe(false)
   })
 
+  it('saving the open form a second time keeps the user’s other roles', async () => {
+    await rbac.createRole('custom', 'Custom')
+    await rbac.createRole('x', 'X')
+    addUser('Twice', 'editor')
+    await rbac.setUserRoles('Twice', ['role-custom', 'role-editor'])
+    const first = await (await save('Twice', 'role-x', { shown_role: shownRole(await editPage('Twice')) })).text()
+    expect(await rolesOf('Twice')).toEqual(['role-custom', 'role-x'])
+    expect(shownRole(first)).toBe('role-x')
+    // The label is now role-custom; the form, still open, says it shows role-x.
+    await save('Twice', 'role-x', { shown_role: shownRole(first) })
+    expect(await rolesOf('Twice')).toEqual(['role-custom', 'role-x'])
+  })
+
+  it('a user labelled admin with no RBAC role keeps the label when another field is saved', async () => {
+    addUser('LabelAdmin', 'admin')
+    expect(await editPage('LabelAdmin')).toContain('Legacy label: admin.')
+    expect(await (await save('LabelAdmin', '')).text()).toContain('updated successfully')
+    expect(label('LabelAdmin')).toBe('admin')
+  })
+
+  it('API clients may send role names', async () => {
+    const inv = await app.request('/admin/invite-user', { method: 'POST', body: form({ email: 'n1@x.y', first_name: 'I', last_name: 'N', role: 'editor' }) })
+    expect(await rolesOf((await inv.json()).user.id)).toEqual(['role-editor'])
+    addUser('Named', 'viewer')
+    await save('Named', 'editor')
+    expect(await rolesOf('Named')).toEqual(['role-editor'])
+    await app.request('/admin/users/new', {
+      method: 'POST',
+      body: form({ first_name: 'V', last_name: 'W', email: 'vw@x.y', password: 'Password123!', confirm_password: 'Password123!', role: 'viewer', is_active: '1' }),
+    })
+    const vw = db.raw.prepare("SELECT id, role FROM auth_user WHERE email='vw@x.y'").get()
+    expect(vw.role).toBe('viewer')
+    expect(db.raw.prepare("SELECT COUNT(*) n FROM documents WHERE type_id='rbac_user_roles' AND slug=?").get(vw.id).n).toBe(0)
+  })
+
+  it('saving a custom-role user without a role change leaves their roles untouched', async () => {
+    await rbac.createRole('author', 'Author')
+    addUser('Steady', 'viewer')
+    await rbac.setUserRoles('Steady', ['role-author'])
+    kv.set('rbac:perms:Steady', '["x"]')
+    await save('Steady', 'role-author')
+    expect(kv.has('rbac:perms:Steady')).toBe(true)
+  })
+
+  it('a role id wins over another role whose name matches it', async () => {
+    await rbac.createRole('zeta', 'Zeta')
+    await rbac.createRole('q', 'Q')
+    await rbac.updateRole('role-q', 'Q', '', 'role-zeta')
+    addUser('Picked', 'viewer')
+    await save('Picked', 'role-zeta')
+    expect(await rolesOf('Picked')).toEqual(['role-zeta'])
+  })
+
   it('invite validates the role and assigns it', async () => {
-    const bad = await app.request('/admin/invite-user', { method: 'POST', body: form({ email: 'i1@x.y', first_name: 'I', last_name: 'N', role: 'admin' }) })
+    const bad = await app.request('/admin/invite-user', { method: 'POST', body: form({ email: 'i1@x.y', first_name: 'I', last_name: 'N', role: 'nope' }) })
     expect(bad.status).toBe(400)
     const ok = await app.request('/admin/invite-user', { method: 'POST', body: form({ email: 'i2@x.y', first_name: 'I', last_name: 'N', role: 'role-editor' }) })
     expect(ok.status).toBe(200)

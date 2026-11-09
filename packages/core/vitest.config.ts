@@ -1,7 +1,9 @@
+import { vitestReporting } from '../../tests/reporting/vitest-integration'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    ...vitestReporting('core-unit'),
     globals: true,
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,ts}'],

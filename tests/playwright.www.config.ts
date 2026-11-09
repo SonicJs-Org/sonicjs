@@ -1,3 +1,4 @@
+import { playwrightReporting } from './reporting/options'
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -24,7 +25,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   timeout: 60 * 1000,
   workers: process.env.CI ? 4 : 1,
-  reporter: 'html',
+  reporter: [['html'], ...playwrightReporting('www-e2e', 'www')],
   use: {
     baseURL: process.env.WWW_BASE_URL || 'http://localhost:3010',
     trace: 'on-first-retry',

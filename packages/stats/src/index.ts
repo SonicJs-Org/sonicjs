@@ -21,10 +21,6 @@ import { playwrightDashboardPlugin } from './plugins/playwright-dashboard'
 // Import routes
 import { playwrightIngest } from './routes/playwright-ingest'
 
-// Shared sidebar menu — injected on every /admin/* request so both links
-// appear regardless of plugin active-status checks in pluginMenuMiddleware.
-import { STATS_ADMIN_MENU } from './admin-menu'
-
 // Register collections
 registerCollections([
   installsCollection,

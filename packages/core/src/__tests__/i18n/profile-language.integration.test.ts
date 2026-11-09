@@ -57,13 +57,16 @@ describe('PUT /admin/profile — UI language (real SQLite)', () => {
   afterEach(() => db.close())
 
   it('switching en → ja saves it, sets the cookie, reloads, and answers in Japanese', async () => {
-    const res = await buildApp(db).request('/admin/profile', profileForm('ja'))
+    const res = await buildApp(db).request('/admin/profile', {
+      ...profileForm('ja'),
+      headers: { 'HX-Current-URL': 'http://localhost/admin/profile' },
+    })
     expect(res.status).toBe(200)
 
     const row = await db.prepare('SELECT language FROM auth_user WHERE id = ?').bind('u1').first()
     expect(row.language).toBe('ja')
     expect(res.headers.getSetCookie().some((c) => c.startsWith(`${UI_LANGUAGE_COOKIE}=ja`))).toBe(true)
-    expect(res.headers.get('HX-Refresh')).toBe('true')
+    expect(res.headers.get('HX-Redirect')).toBe('/admin/profile')
     expect(await res.text()).toContain('プロフィールを更新しました。')
   })
 
@@ -73,7 +76,30 @@ describe('PUT /admin/profile — UI language (real SQLite)', () => {
       headers: { Cookie: `${UI_LANGUAGE_COOKIE}=ja` },
     })
     expect(res.status).toBe(200)
-    expect(res.headers.get('HX-Refresh')).toBeNull()
+    expect(res.headers.get('HX-Redirect')).toBeNull()
+  })
+
+  // Codex review on #1174: HX-Refresh reloaded `/admin/profile?lang=en`, and the stale query
+  // then overrode the just-saved `ja` and wrote `en` back into the cookie.
+  it('reloads without a stale ?lang= so the saved choice is not overridden', async () => {
+    const res = await buildApp(db).request('/admin/profile?lang=en', {
+      ...profileForm('ja'),
+      headers: { 'HX-Current-URL': 'http://localhost/admin/profile?lang=en&tab=prefs#top' },
+    })
+    expect(res.headers.get('HX-Redirect')).toBe('/admin/profile?tab=prefs#top')
+
+    const follow = await buildApp(db).request('/admin/profile?tab=prefs', {
+      headers: { Cookie: `${UI_LANGUAGE_COOKIE}=ja` },
+    })
+    expect(follow.headers.getSetCookie().some((c) => c.startsWith(`${UI_LANGUAGE_COOKIE}=en`))).toBe(false)
+  })
+
+  it('never redirects off-origin from a forged HX-Current-URL', async () => {
+    const res = await buildApp(db).request('/admin/profile', {
+      ...profileForm('ja'),
+      headers: { 'HX-Current-URL': 'https://evil.example/phish?lang=en' },
+    })
+    expect(res.headers.get('HX-Redirect')).toBe('/admin/profile')
   })
 
   it('an unsupported language is stored as chosen but the UI cookie falls back to en', async () => {
@@ -81,7 +107,7 @@ describe('PUT /admin/profile — UI language (real SQLite)', () => {
     const row = await db.prepare('SELECT language FROM auth_user WHERE id = ?').bind('u1').first()
     expect(row.language).toBe('fr')
     expect(res.headers.getSetCookie().some((c) => c.startsWith(`${UI_LANGUAGE_COOKIE}=en`))).toBe(true)
-    expect(res.headers.get('HX-Refresh')).toBeNull()
+    expect(res.headers.get('HX-Redirect')).toBeNull()
     expect(await res.text()).toContain('Profile updated successfully!')
   })
 

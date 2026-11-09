@@ -31,6 +31,48 @@ export function clearUiLanguageCookie(c: Context): void {
 }
 
 /**
+ * Same as `clearUiLanguageCookie`, for a `Response` built outside Hono's context (e.g. the
+ * one Better Auth's handler returns, whose headers `c.header()` would never reach).
+ */
+export function withUiLanguageCookieCleared(res: Response): Response {
+  const cleared = new Response(res.body, res)
+  cleared.headers.append('Set-Cookie', `${UI_LANGUAGE_COOKIE}=; Max-Age=0; Path=/`)
+  return cleared
+}
+
+/**
+ * Map a BCP 47 tag to a supported UI language: exact match first, then the primary subtag
+ * (`ja-JP` → `ja`). Done here rather than relying on Hono, because `hono/language` only
+ * gained prefix matching after 4.11 while our peer range starts at 4.7.
+ */
+export function normalizeUiLanguageTag(tag: string | null | undefined): UiLanguage | undefined {
+  if (!tag) return undefined
+  const lower = tag.trim().toLowerCase().replace(/_/g, '-')
+  if (isSupportedUiLanguage(lower)) return lower
+  const primary = lower.split('-')[0]
+  return isSupportedUiLanguage(primary) ? primary : undefined
+}
+
+/**
+ * Where to send the browser after the UI language changed: the page it was on (HTMX's
+ * `HX-Current-URL`), minus a stale `?lang=` that would otherwise override the new choice.
+ * Anything that is not same-origin falls back to `fallbackPath`.
+ */
+export function reloadUrlWithoutUiLanguage(c: Context, fallbackPath: string): string {
+  const current = c.req.header('HX-Current-URL')
+  if (!current) return fallbackPath
+  try {
+    const origin = new URL(c.req.url).origin
+    const url = new URL(current, origin)
+    if (url.origin !== origin) return fallbackPath
+    url.searchParams.delete(UI_LANGUAGE_QUERY)
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return fallbackPath
+  }
+}
+
+/**
  * Detects the UI language for every request and exposes it as `c.get('uiLanguage')`.
  *
  * Order: `?lang=` → `sonicjs_ui_lang` cookie → `Accept-Language` → `en`.
@@ -44,13 +86,15 @@ export function uiLanguageMiddleware(): MiddlewareHandler {
     lookupQueryString: UI_LANGUAGE_QUERY,
     lookupCookie: UI_LANGUAGE_COOKIE,
     caches: false,
+    // Unsupported tags pass through unchanged so Hono falls back to the next detector.
+    convertDetectedLanguage: (tag) => normalizeUiLanguageTag(tag) ?? tag,
   })
 
   return async (c, next) => {
     return detect(c, async () => {
       c.set('uiLanguage', toUiLanguage(c.get('language')))
-      const fromQuery = c.req.query(UI_LANGUAGE_QUERY)
-      if (isSupportedUiLanguage(fromQuery)) {
+      const fromQuery = normalizeUiLanguageTag(c.req.query(UI_LANGUAGE_QUERY))
+      if (fromQuery) {
         setUiLanguageCookie(c, fromQuery)
       }
       await next()
@@ -70,7 +114,7 @@ export function userUiLanguagePreference(): MiddlewareHandler {
     if (
       user?.userId &&
       getCookie(c, UI_LANGUAGE_COOKIE) === undefined &&
-      !isSupportedUiLanguage(c.req.query(UI_LANGUAGE_QUERY))
+      !normalizeUiLanguageTag(c.req.query(UI_LANGUAGE_QUERY))
     ) {
       try {
         const row = await (c.env as { DB: D1Database }).DB

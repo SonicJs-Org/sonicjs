@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { requireAuth, requireRole, logActivity, AuthManager } from '../middleware'
 import { sanitizeInput } from '../utils/sanitize'
 import { t, translate, getUiLanguage, toUiLanguage } from '../i18n'
-import { setUiLanguageCookie } from '../i18n/middleware'
+import { setUiLanguageCookie, reloadUrlWithoutUiLanguage } from '../i18n/middleware'
 import { renderProfilePage, renderAvatarImage, type UserProfile, type ProfilePageData } from '../templates/pages/admin-profile.template'
 import { renderAlert } from '../templates/components/alert.template'
 import { renderActivityLogsPage, type ActivityLogsPageData, type ActivityLog } from '../templates/pages/admin-activity-logs.template'
@@ -239,12 +239,13 @@ userRoutes.put('/profile', async (c) => {
       c.req.header('user-agent')
     )
 
-    // Remember the chosen UI language in the browser and, if it changed, re-render the whole
-    // page so the sidebar and every label switch over (the form only swaps #form-messages).
+    // Remember the chosen UI language in the browser and, if it changed, reload the page so the
+    // sidebar and every label switch over (the form only swaps #form-messages). A redirect, not
+    // HX-Refresh: refreshing `/admin/profile?lang=en` would let the stale query win again.
     const uiLanguage = toUiLanguage(language)
     setUiLanguageCookie(c, uiLanguage)
     if (uiLanguage !== getUiLanguage()) {
-      c.header('HX-Refresh', 'true')
+      c.header('HX-Redirect', reloadUrlWithoutUiLanguage(c, '/admin/profile'))
     }
 
     return c.html(renderAlert({

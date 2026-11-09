@@ -77,6 +77,21 @@ describe('UI language middleware (real SQLite)', () => {
     expect(setCookies(byQuery).some((c) => c.startsWith(`${UI_LANGUAGE_COOKIE}=ja`))).toBe(true)
   })
 
+  // Codex review on #1174: hono < 4.12 matches tags exactly, so `ja-JP` alone fell back to en
+  // across most of the supported peer range. Normalization is ours now, not Hono's.
+  it('matches regional tags (ja-JP, JA_jp) to their primary language', async () => {
+    for (const header of ['ja-JP', 'ja-JP,en-US;q=0.9', 'JA_jp']) {
+      const res = await buildApp(db).request('/admin/probe', { headers: { 'Accept-Language': header } })
+      expect(await res.text(), header).toBe('ja|コンテンツ')
+    }
+  })
+
+  it('persists a regional ?lang= as its primary language', async () => {
+    const res = await buildApp(db).request('/admin/probe?lang=ja-JP')
+    expect(await res.text()).toBe('ja|コンテンツ')
+    expect(setCookies(res).some((c) => c.startsWith(`${UI_LANGUAGE_COOKIE}=ja;`))).toBe(true)
+  })
+
   it('ignores an unsupported ?lang= value', async () => {
     const res = await buildApp(db).request('/admin/probe?lang=xx')
     expect(await res.text()).toBe('en|Content')

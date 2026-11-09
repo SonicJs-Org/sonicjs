@@ -33,7 +33,7 @@ import { bootstrapMiddleware } from './middleware/bootstrap'
 import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
-import { uiLanguageMiddleware, userUiLanguagePreference } from './i18n/middleware'
+import { uiLanguageMiddleware, userUiLanguagePreference, withUiLanguageCookieCleared } from './i18n/middleware'
 import type { UiLanguage } from './i18n/types'
 import { createDatabaseToolsAdminRoutes } from './plugins/core-plugins/database-tools-plugin/admin-routes'
 import { emailPluginV3 as emailPlugin } from './plugins/core-plugins/email-plugin'
@@ -807,7 +807,11 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     const reqUrl = new URL(c.req.url)
     const requestBaseURL = `${reqUrl.protocol}//${reqUrl.host}`
     const auth = createAuth(c.env, config.auth?.extendBetterAuth, requestBaseURL)
-    return auth.handler(c.req.raw)
+    const res = await auth.handler(c.req.raw)
+    // Signing out through Better Auth's own endpoint bypasses authRoutes' /logout handlers, so
+    // drop the UI-language choice here too — the next person on this browser starts fresh.
+    if (reqUrl.pathname === '/auth/sign-out') return withUiLanguageCookieCleared(res)
+    return res
   })
 
   // Test cleanup routes (only for development/test environments)

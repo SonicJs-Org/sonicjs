@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures'
-import { loginAsAdmin } from './utils/test-helpers'
+import { loginAsAdmin, TEST_ORIGIN } from './utils/test-helpers'
 
 /**
  * Admin UI i18n (#363) — UI language detection and switching.
@@ -81,5 +81,26 @@ test.describe('Admin UI i18n — admin shell @smoke', () => {
     await expect(page).toHaveURL(/\/auth\/login/)
     const cookies = await page.context().cookies()
     expect(cookies.find((c) => c.name === 'sonicjs_ui_lang')).toBeUndefined()
+  })
+
+  test("Better Auth's POST /auth/sign-out also clears the UI language choice", async ({ page }) => {
+    await page.goto('/admin/profile?lang=ja', { waitUntil: 'domcontentloaded' })
+    expect((await page.context().cookies()).find((c) => c.name === 'sonicjs_ui_lang')?.value).toBe('ja')
+
+    const res = await page.request.post('/auth/sign-out', {
+      headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+      data: {},
+    })
+    expect(res.ok(), await res.text()).toBeTruthy()
+    expect((await page.context().cookies()).find((c) => c.name === 'sonicjs_ui_lang')).toBeUndefined()
+  })
+})
+
+test.describe('Admin UI i18n — regional Accept-Language @smoke', () => {
+  test('a regional tag alone (ja-JP) selects Japanese', async ({ page }) => {
+    await page.context().clearCookies()
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja-JP' })
+    await page.goto('/auth/login')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
   })
 })

@@ -1,0 +1,59 @@
+name: Reporting Contracts
+
+on:
+  pull_request:
+    branches: [main, v3]
+  push:
+    branches: [main, v3, ci/flakiness-artifact-validation]
+
+permissions:
+  contents: read
+
+jobs:
+  reporting-contracts:
+    name: Reporting Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      SONICJS_TEST_UPLOAD: '0'
+      FLAKINESS_DISABLE_UPLOAD: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.23.1'
+
+      - name: Verify Python FD capabilities
+        run: |
+          /usr/bin/python3 -I -S -B -c "
+          import sys, os, stat
+          assert sys.version_info >= (3, 9), f'Python {sys.version} < 3.9 required'
+          assert hasattr(os, 'O_DIRECTORY'), 'O_DIRECTORY missing'
+          d = os.open('.', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+          try:
+              entries = list(os.scandir(d))
+              s = os.stat('.github', dir_fd=d)
+              assert stat.S_ISDIR(s.st_mode)
+          finally:
+              os.close(d)
+          print(f'Python {sys.version_info.major}.{sys.version_info.minor} FD capabilities: OK ({len(entries)} root entries)')
+          "
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run reporting contracts
+        run: npm run test:reporting
+
+      - name: Upload reporting artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: reporting-contracts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/reporting-contracts/
+          retention-days: 7

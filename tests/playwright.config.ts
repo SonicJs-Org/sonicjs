@@ -1,3 +1,4 @@
+import { cmsReportingTarget, playwrightReporting } from './reporting/options'
 import { defineConfig, devices } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
@@ -15,12 +16,16 @@ export default defineConfig({
   forbidOnly: ci,
   // Remote previews need more retries to absorb transient CF Worker cold-start / network flakiness.
   // Local runs use 1 retry as a diagnostic signal, not a green-by-retry policy.
+  // Measured runs confirm some tail-exhaustion tests need retry #3; keep at 3 for the
+  // remote-preview path. Per-shard suites are smaller so total retry cost is still lower.
   retries: ci ? (remotePreview ? 3 : 1) : 0,
   // TODO: enable once the remaining flaky tests are stabilized.
   // failOnFlakyTests: ci && !remotePreview,
   maxFailures: ci ? 25 : 0,
   timeout: ci ? 120_000 : 90_000,
-  // Retain the measured existing concurrency until full-suite comparisons justify changing it.
+  // Playwright workers are I/O-bound on HTTP responses, but CF preview Workers have
+  // limited concurrency headroom. Measured runs show 3 workers causes early timeouts
+  // from Worker overload; keep 2 workers for the remote-preview path.
   workers: ci ? 2 : 1,
   outputDir: resolve(here, '../test-results'),
   reporter: [
@@ -28,6 +33,9 @@ export default defineConfig({
     ['html', { outputFolder: resolve(here, '../playwright-report'), open: 'never' }],
     ['json', { outputFile: resolve(here, '../test-results/results.json') }],
     ['junit', { outputFile: resolve(here, '../test-results/junit.xml') }],
+    // Live stats reporter — self-disables when PLAYWRIGHT_STATS_API_KEY is not set
+    [resolve(here, './e2e/stats-live-reporter.ts')],
+    ...playwrightReporting('cms-e2e', cmsReportingTarget(process.env)),
   ],
   globalSetup: resolve(here, './e2e/global-setup.ts'),
   globalTeardown: resolve(here, './e2e/global-teardown.ts'),

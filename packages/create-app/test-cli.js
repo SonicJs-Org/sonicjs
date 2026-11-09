@@ -25,7 +25,7 @@ async function runTest() {
 
     console.log('📦 Running create-sonicjs-app...')
     console.log(`   Command: node bin/create-sonicjs-app.js ${TEST_PROJECT}`)
-    console.log('   Flags: --template=starter --database=test-db --bucket=test-media --include-example --skip-install --skip-git --skip-cloudflare\n')
+    console.log('   Flags: --template=starter --database=test-db --bucket=test-media --include-example --skip-install --skip-git --skip-cloudflare --admin-email=public-cli-fixture@example.invalid --admin-password=PublicDisposableFixture123!\n')
 
     // Run the CLI with all flags to skip interactive prompts entirely
     const { stdout, stderr } = await execa('node', [
@@ -37,9 +37,13 @@ async function runTest() {
       '--include-example',
       '--skip-install',
       '--skip-git',
-      '--skip-cloudflare'
+      '--skip-cloudflare',
+      // Public disposable test credentials; never use for a real deployment.
+      '--admin-email=public-cli-fixture@example.invalid',
+      '--admin-password=PublicDisposableFixture123!'
     ], {
       cwd: process.cwd(),
+      env: { SONICJS_TELEMETRY: 'false' },
       timeout: 60000 // 60 second timeout
     })
 

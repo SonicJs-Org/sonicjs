@@ -101,6 +101,12 @@ export default class StatsLiveReporter implements Reporter {
     }
     countTests(rootSuite)
 
+    // Calculate expected total tests
+    let expectedTotal = 0
+    for (const count of this.filePendingCount.values()) {
+      expectedTotal += count
+    }
+
     const isCI = process.env.GITHUB_ACTIONS === 'true'
     const branch = isCI
       ? (process.env.GITHUB_REF_NAME || 'unknown')
@@ -111,6 +117,22 @@ export default class StatsLiveReporter implements Reporter {
     const commitMessage = isCI
       ? ''
       : getGitValue('git log -1 --format=%s', '')
+
+    // Extract PR number from GITHUB_REF_NAME (e.g., "123/merge") or branch patterns like "fix/issue-123"
+    let prNumber: number | null = null
+    if (isCI && process.env.GITHUB_REF_NAME) {
+      const prMatch = process.env.GITHUB_REF_NAME.match(/^(\d+)\/merge$/)
+      if (prMatch) {
+        prNumber = parseInt(prMatch[1], 10)
+      }
+    }
+    if (!prNumber && branch) {
+      // Try to extract from branch name patterns like fix/issue-123, feature/pr-456
+      const branchMatch = branch.match(/(?:issue-|pr-|#)(\d+)/i)
+      if (branchMatch) {
+        prNumber = parseInt(branchMatch[1], 10)
+      }
+    }
 
     const startPost = this.postJson('/v1/playwright-runs/start', {
       run_id: this.runId,
@@ -125,6 +147,9 @@ export default class StatsLiveReporter implements Reporter {
       triggered_by: process.env.GITHUB_EVENT_NAME || 'manual',
       source: isCI ? 'ci' : 'local',
       started_at: new Date().toISOString(),
+      expected_total: expectedTotal,
+      pr_number: prNumber,
+      base_url: process.env.BASE_URL || null,
     }).catch(err => console.warn('[stats-reporter] onBegin POST failed:', err))
     this.pendingPosts.push(startPost)
   }

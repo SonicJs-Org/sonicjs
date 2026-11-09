@@ -18,13 +18,13 @@ npm run e2e
 
 # Forms tests specifically
 npm test -- forms.test.ts
-npx playwright test 50-forms.spec.ts
+npx playwright test tests/e2e/forms.spec.ts
 
 # With UI (interactive)
-npx playwright test 50-forms.spec.ts --ui
+npx playwright test tests/e2e/forms.spec.ts --ui
 
 # Debug mode
-npx playwright test 50-forms.spec.ts --debug
+npx playwright test tests/e2e/forms.spec.ts --debug
 ```
 
 ---
@@ -39,7 +39,7 @@ npx playwright test 50-forms.spec.ts --debug
 - Submission handling
 - Wizard logic
 
-**E2E Tests** (`50-forms.spec.ts`)
+**E2E Tests** (`forms.spec.ts`)
 - Form CRUD operations
 - Builder UI interactions
 - Public form rendering
@@ -141,7 +141,7 @@ Before launch, verify:
 
 - **Testing Suite Overview:** `/docs/FORMS_TESTING_SUITE.md`
 - **Manual Testing Scenarios:** `/docs/FORMS_TESTING_SCENARIOS.md`
-- **E2E Test File:** `/tests/e2e/50-forms.spec.ts`
+- **E2E Test File:** `/tests/e2e/forms.spec.ts`
 - **Unit Test File:** `/packages/core/src/__tests__/services/forms.test.ts`
 
 ---

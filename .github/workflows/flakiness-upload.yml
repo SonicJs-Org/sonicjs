@@ -1,0 +1,112 @@
+name: Flakiness Upload
+
+on:
+  workflow_run:
+    workflows: ['PR Tests']
+    types: [completed]
+
+permissions:
+  contents: read
+
+# Serialize upload-only reruns for exactly one producer attempt.
+concurrency:
+  group: flakiness-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Upload to Flakiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    # Interrupted producers enter the helper too, yielding explicit missing-evidence
+    # status. They cannot pass provenance validation or reach authenticated upload.
+    if: >-
+      github.event.workflow_run.repository.full_name == 'SonicJs-Org/sonicjs' &&
+      github.event.workflow_run.workflow_id == 207092903 &&
+      contains(fromJSON('["push","pull_request_target"]'), github.event.workflow_run.event) &&
+      vars.FLAKINESS_UPLOAD_ENABLED == 'true'
+    env:
+      PRODUCER_RUN_ID: ${{ github.event.workflow_run.id }}
+      PRODUCER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+      FLAKINESS_PROJECT: ${{ vars.FLAKINESS_PROJECT }}
+      CI: 'true'
+      SONICJS_TEST_UPLOAD: '0'
+    steps:
+      - name: Checkout default branch (helpers only — never PR code)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.23.1'
+
+      - name: Install independent pinned runtime without lifecycle scripts
+        run: |
+          npm ci --prefix scripts/testing/flakiness-runtime --ignore-scripts --no-audit --no-fund
+          # Fixed trusted helper allowlist; no PR dependency graph or executable hooks.
+          cp scripts/testing/validate-flakiness-artifacts.mjs scripts/testing/read-flakiness-artifacts.py scripts/testing/upload-flakiness.mjs scripts/testing/fetch-producer-provenance.mjs scripts/testing/run-flakiness-upload.mjs scripts/testing/delivery-ledger.mjs scripts/testing/export-flakiness-ledger.mjs scripts/testing/flakiness-runtime/
+
+      - name: Select previous consumer attempt
+        id: previous
+        if: github.run_attempt > 1
+        run: echo "attempt=$((GITHUB_RUN_ATTEMPT - 1))" >> "$GITHUB_OUTPUT"
+
+      # Absent/expired/partial history is ambiguous. Both the restore outcome and
+      # exact checkpoint inventory must succeed before a rerun can start delivery.
+      - name: Restore previous consumer ledger
+        id: restore
+        if: github.run_attempt > 1
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: flakiness-delivery-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}-${{ steps.previous.outputs.attempt }}
+          path: ${{ runner.temp }}/ledger
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.run_id }}
+
+      - name: Download all producer reports with suite prefixes intact
+        id: reports
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        continue-on-error: true
+        with:
+          pattern: flakiness-*-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.PRODUCER_RUN_ID }}
+
+      - name: Validate complete attempt and upload independently
+        if: ${{ !cancelled() && (github.run_attempt == 1 || steps.restore.outcome == 'success') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
+          STAGING_DIR: ${{ runner.temp }}/staging
+          LEDGER_DIR: ${{ runner.temp }}/ledger
+          CLI_SCRATCH_DIR: ${{ runner.temp }}/cli-private
+          RUNTIME_DIR: ${{ github.workspace }}/scripts/testing/flakiness-runtime
+        run: node scripts/testing/flakiness-runtime/run-flakiness-upload.mjs
+
+      # Export runs even if upload is killed before finally. Never archive HOME/tmp
+      # caches, partial writes or arbitrary ledger files, including restored ones.
+      - name: Export safe delivery records
+        if: always()
+        env:
+          LEDGER_DIR: ${{ runner.temp }}/ledger
+          LEDGER_EXPORT_DIR: ${{ runner.temp }}/ledger-export
+        run: node scripts/testing/flakiness-runtime/export-flakiness-ledger.mjs
+
+      - name: Preserve delivery ledger
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flakiness-delivery-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ledger-export/
+          retention-days: 7
+          if-no-files-found: error

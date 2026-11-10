@@ -1,13 +1,13 @@
 /**
- * Offline upload orchestration with durable delivery ledger.
+ * Upload orchestration with a caller-persisted delivery ledger.
  * Consumes pre-validated private ArtifactSnapshots only; never re-reads inputs.
  * Does NOT authenticate; authentication is passed explicitly as `auth`.
  * Task 5 — no hosted delivery until Task 7 (privacy/OIDC/cutover) gates are met.
  */
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { readFile, writeFile, rename, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
+import { readFile, writeFile, rename, mkdir, mkdtemp, rm, stat, realpath } from 'node:fs/promises';
+import { join, dirname, resolve, relative, isAbsolute, sep } from 'node:path';
 import { verifyUploadSnapshots } from './validate-flakiness-artifacts.mjs';
 
 const FIXED_PROJECT = 'SonicJs/sonicjs';
@@ -111,9 +111,10 @@ async function verifyInvocationFiles(snapshotRoot, snapshot) {
  * @param {string} tmp
  * @param {{accessToken: string} | {githubOidcUrl: string; githubOidcToken: string}} auth
  * @param {number} timeoutMs
+ * @param {string} project
  * @returns {Promise<{state: string; receiptUrl?: string; error?: string}>}
  */
-function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs) {
+function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs, project) {
   return new Promise(resolvePromise => {
     // Explicit allowlist — strip all ambient env, Node options, session config, OIDC vars.
     // Include node binary dir so fake-CLI shell wrappers in tests can exec node.
@@ -124,7 +125,6 @@ function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs) {
       TMPDIR: tmp,
       CI: '1',
       SONICJS_TEST_UPLOAD: '0',
-      FLAKINESS_DISABLE_UPLOAD: '1',
     });
     if ('accessToken' in auth) {
       env.FLAKINESS_ACCESS_TOKEN = auth.accessToken;
@@ -133,7 +133,7 @@ function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs) {
       env.ACTIONS_ID_TOKEN_REQUEST_TOKEN = auth.githubOidcToken;
     }
 
-    const proc = spawn(cliBin, ['--project', FIXED_PROJECT, '--endpoint', FIXED_ENDPOINT, reportDir], {
+    const proc = spawn(cliBin, ['upload', '--project', project, '--endpoint', FIXED_ENDPOINT, reportDir], {
       env, cwd: tmp, stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -159,6 +159,16 @@ function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs) {
       stdoutBufs.push(chunk);
     });
     proc.stderr.on('data', () => {}); // discard; may contain credentials
+
+    let spawned = false;
+    proc.on('spawn', () => { spawned = true; });
+    proc.on('error', () => {
+      clearTimeout(timer);
+      // Only an error before spawn proves non-submission; later errors are unknown.
+      // Keep diagnostics free of ambient paths and child output.
+      resolvePromise(spawned ? { state: 'ambiguous', error: 'CLI process error after start' }
+        : { state: 'not-started', error: 'CLI could not start' });
+    });
 
     proc.on('close', (code, signal) => {
       clearTimeout(timer);
@@ -227,16 +237,27 @@ export async function executeUpload(snapshots, config, auth, options) {
   if (!options || options.enableUpload !== true) return validateOnly(snapshots);
 
   const { provenance, invocations } = snapshots;
-  const { runtimeDir, ledgerDir, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
+  const { runtimeDir, ledgerDir, privateScratchDir, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid timeoutMs');
 
-  const cliBin = join(runtimeDir, 'node_modules', '.bin', 'flakiness');
+  const project = config.project ?? FIXED_PROJECT;
+  if (typeof project !== 'string' || project.length > 150 || !/^[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+$/.test(project)) throw new Error('Invalid trusted project');
+  const cliBin = join(resolve(runtimeDir), 'node_modules', '.bin', 'flakiness');
   await stat(cliBin);
   await stat(join(runtimeDir, 'package-lock.json'));
 
   // Verify ALL snapshots before ANY auth or child access.
   // If this throws, nothing else runs — including auth property access.
   await verifyUploadSnapshots(snapshots);
+
+  // Caller-owned credential scratch is never part of the durable artifact. Resolve
+  // symlinks too: lexical sibling paths alone do not establish isolation.
+  if (typeof privateScratchDir !== 'string' || !isAbsolute(privateScratchDir)) throw new Error('Absolute private scratch directory required');
+  await mkdir(privateScratchDir, { recursive: true, mode: 0o700 });
+  const privateRoot = await realpath(privateScratchDir);
+  const durableRoot = await realpath(ledgerDir);
+  const overlaps = (a, b) => { const rel = relative(a, b); return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`)); };
+  if (overlaps(durableRoot, privateRoot) || overlaps(privateRoot, durableRoot)) throw new Error('Private scratch must be separate from ledger');
 
   const summary = /** @type {import('./upload-flakiness.mjs').UploadSummary} */ ({
     provenance: {
@@ -259,43 +280,55 @@ export async function executeUpload(snapshots, config, auth, options) {
       if (typeof existing.state !== 'string') throw new Error(`Corrupt ledger state for key: ${key}`);
       if (existing.contentDigest !== contentDigest(snapshot)) {
         summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'blocked', error: 'content mismatch: snapshot changed from prior ledger entry' });
+        summary.anyFailed = true;
         continue;
       }
-      if (existing.state === 'started' || existing.state === 'ambiguous' || existing.state === 'accepted-unverified') {
+      // Even nonzero exit can follow a successful remote submission. No blind retries.
+      if (['started', 'ambiguous', 'accepted-unverified', 'failed'].includes(existing.state)) {
         summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'blocked', error: `ledger state: ${existing.state}` });
+        summary.anyFailed = true;
         continue;
       }
+      // Only an OS spawn error proves no child executed or submitted anything.
+      if (existing.state !== 'not-started') throw new Error(`Unrecognized ledger state for key: ${key}`);
     }
 
     const digest = contentDigest(snapshot);
-    // Write 'started' atomically BEFORE spawning; crash-restart leaves this as ambiguous.
-    await writeLedger(lPath, {
-      logicalKey: key, invocationId: snapshot.id, contentDigest: digest,
-      suite: snapshot.suite, outcome: snapshot.outcome,
-      counts: { ...snapshot.counts },
-      state: 'started', startedAt: new Date().toISOString(),
-    });
-
-    // Narrow per-invocation pre-spawn re-verify (Node read, not Python bridge)
-    try {
-      await verifyInvocationFiles(snapshots.root, snapshot);
-    } catch (err) {
-      const entry = await readLedger(lPath);
-      await writeLedger(lPath, { ...entry, state: 'ambiguous', error: 'snapshot changed before spawn', finishedAt: new Date().toISOString() });
-      summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'ambiguous', error: 'snapshot changed before spawn' });
-      summary.anyAmbiguous = true;
-      continue;
-    }
-
-    // Create isolated HOME and tmpdir; clean up in finally.
-    const home = await mkdtemp(join(ledgerDir, 'cli-home-'));
-    const tmp = await mkdtemp(join(ledgerDir, 'cli-tmp-'));
+    /** @type {string | undefined} */ let home;
+    /** @type {string | undefined} */ let tmp;
     let childResult;
     try {
-      childResult = await spawnCli(cliBin, dirname(snapshot.reportPath), home, tmp, auth, timeoutMs);
+      // Allocation cannot submit anything. Complete both before recording started,
+      // and clean up HOME even if allocating TMPDIR fails.
+      home = await mkdtemp(join(privateRoot, 'cli-home-'));
+      tmp = await mkdtemp(join(privateRoot, 'cli-tmp-'));
+
+      // Write 'started' atomically BEFORE spawning; crash-restart leaves this as ambiguous.
+      await writeLedger(lPath, {
+        logicalKey: key, invocationId: snapshot.id, contentDigest: digest,
+        suite: snapshot.suite, outcome: snapshot.outcome,
+        counts: { ...snapshot.counts },
+        state: 'started', startedAt: new Date().toISOString(),
+      });
+
+      // Narrow per-invocation pre-spawn re-verify (Node read, not Python bridge)
+      try {
+        await verifyInvocationFiles(snapshots.root, snapshot);
+      } catch (err) {
+        const entry = await readLedger(lPath);
+        await writeLedger(lPath, { ...entry, state: 'ambiguous', error: 'snapshot changed before spawn', finishedAt: new Date().toISOString() });
+        summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'ambiguous', error: 'snapshot changed before spawn' });
+        summary.anyAmbiguous = true;
+        continue;
+      }
+
+      childResult = await spawnCli(cliBin, dirname(snapshot.reportPath), home, tmp, auth, timeoutMs, project);
     } finally {
-      await rm(home, { recursive: true, force: true });
-      await rm(tmp, { recursive: true, force: true });
+      // Attempt both removals even if either fails; neither belongs in the ledger.
+      await Promise.all([
+        ...(home ? [rm(home, { recursive: true, force: true })] : []),
+        ...(tmp ? [rm(tmp, { recursive: true, force: true })] : []),
+      ]);
     }
 
     const startedEntry = await readLedger(lPath);
@@ -317,7 +350,7 @@ export async function executeUpload(snapshots, config, auth, options) {
       ...(childResult.error != null ? { error: childResult.error } : {}),
     });
     if (childResult.state === 'ambiguous') summary.anyAmbiguous = true;
-    if (childResult.state === 'failed') summary.anyFailed = true;
+    if (['failed', 'not-started'].includes(childResult.state)) summary.anyFailed = true;
   }
 
   return summary;

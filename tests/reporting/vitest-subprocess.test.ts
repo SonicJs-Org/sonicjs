@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { repositoryRoot } from './options'
+import { reportingScratch } from './scratch'
 const fixture = join(repositoryRoot, 'tests/reporting/fixtures')
 export function runVitest(mode: string) {
   const result = spawnSync(process.execPath, [join(repositoryRoot, 'node_modules/vitest/vitest.mjs'), 'run', '--config', join(fixture, 'vitest-semantics.config.ts')], {
@@ -41,9 +42,7 @@ test.each(['pass', 'fail', 'retry', 'skip', 'import', 'setup', 'duplicate', 'emp
 
 test('same title in different filenames remains distinct vendor identity', async () => {
   const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs')
-  const evidenceRoot = process.env.SONICJS_REPORTING_EVIDENCE ?? join(repositoryRoot, 'flakiness-reports/fixture-evidence')
-  mkdirSync(evidenceRoot, { recursive: true })
-  const folder = mkdtempSync(join(evidenceRoot, 'identities-'))
+  const folder = reportingScratch('identities-')
   for (const name of ['a', 'b']) writeFileSync(join(folder, `${name}.case.ts`), `import { test } from '${repositoryRoot}/node_modules/vitest/dist/index.js'; test('same title', () => {})`)
   // One explicit glob collects both real files; no synthetic report records.
   const result = spawnSync(process.execPath, [join(repositoryRoot, 'node_modules/vitest/vitest.mjs'), 'run', '--config', join(fixture, 'vitest-semantics.config.ts')], {

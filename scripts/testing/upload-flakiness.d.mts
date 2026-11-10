@@ -1,10 +1,14 @@
 import type { ArtifactSnapshots, ValidatedProducerProvenance, UploadSnapshot } from './validate-flakiness-artifacts.mjs';
 
 export interface UploadConfig {
-  /** Absolute path to installed independent CLI runtime (must have node_modules/.bin/flakiness and package-lock.json). */
+  /** Trusted workflow project slug. Never copied from artifact fields. */
+  project?: string;
+  /** Path to installed independent CLI runtime; resolved before the child changes cwd (must have node_modules/.bin/flakiness and package-lock.json). */
   runtimeDir: string;
   /** Absolute private path for durable ledger entries; must already exist and be outside any snapshot dir. */
   ledgerDir: string;
+  /** Absolute caller-owned private scratch root, separate from ledgerDir (including symlinks). No system temp fallback. */
+  privateScratchDir: string;
   /** Max milliseconds per CLI child. Defaults to 120000. Must be a positive finite number. */
   timeoutMs?: number;
 }
@@ -12,7 +16,8 @@ export interface UploadConfig {
 export type UploadState =
   | 'validation-only'   // No CLI or auth attempted; returned when enableUpload is not true
   | 'blocked'           // Prior ledger state prevents re-upload (ambiguous, started, accepted-unverified, or content mismatch)
-  | 'failed'            // CLI exited non-zero; this invocation was not delivered
+  | 'not-started'       // OS spawn error proves no child ran; sealed consumer rerun may retry identical content
+  | 'failed'            // CLI exited non-zero; delivery not established; may have reached server; no automatic retry
   | 'ambiguous'         // Lost response or timeout; delivery status unknown; DO NOT retry automatically
   | 'accepted-unverified'; // CLI exited 0 with valid receipt URL; not independently verified
 
@@ -43,7 +48,7 @@ export interface UploadSummary {
 }
 
 /**
- * Validate-only: verifies snapshots are intact, returns validation-only results.
+ * Validate-only: returns validation-only results for previously validated snapshots.
  * No auth, CLI, or ledger access; always safe to call.
  */
 export function validateOnly(snapshots: ArtifactSnapshots): Promise<UploadSummary>;

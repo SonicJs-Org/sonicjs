@@ -55,28 +55,53 @@ export function validateProducerProvenance(input) {
   requireValid(validSha(p.headSha), 'invalid producer SHA');
   requireValid(typeof p.headBranch === 'string' && p.headBranch.length > 0, 'missing branch');
   requireValid(p.event !== 'push' || ['main', 'v3', 'test/e2e-infrastructure-hardening'].includes(p.headBranch), 'forbidden push branch');
-  requireValid(Array.isArray(jobs) && jobs.length === 1 && jobs[0]?.key === 'test', 'missing, duplicate or unknown job');
-  const job = jobs[0];
-  requireValid(job, 'missing job');
-  requireValid(validId(job.id) && job.runId === p.runId && job.runAttempt === p.runAttempt
-    && job.status === 'completed', 'job binding/status mismatch');
-  requireValid(Array.isArray(job.steps), 'missing steps');
-  /** @type {Set<number>} */ const numbers = new Set();
-  /** @type {Set<string>} */ const names = new Set();
-  for (const step of job.steps) {
-    requireValid(validId(step.number) && typeof step.name === 'string' && step.name.length > 0
-      && !numbers.has(step.number) && !names.has(step.name), 'invalid or duplicate step identity');
-    numbers.add(step.number);
-    names.add(step.name);
+  requireValid(Array.isArray(jobs) && jobs.length > 0, 'missing jobs');
+  const legacy = jobs.length === 1 && jobs[0]?.key === 'test';
+  const identities = new Set();
+  const jobIds = new Set();
+  const suites = [];
+  for (const job of jobs) {
+    const identity = `${job.key}/${job.shard ?? ''}`;
+    requireValid(!identities.has(identity) && !jobIds.has(job.id), 'duplicate job');
+    identities.add(identity); jobIds.add(job.id);
+    requireValid(validId(job.id) && job.runId === p.runId && job.runAttempt === p.runAttempt
+      && job.status === 'completed', 'job binding/status mismatch');
+    requireValid(Array.isArray(job.steps), 'missing steps');
+    const numbers = new Set(); const names = new Set();
+    for (const step of job.steps) {
+      requireValid(validId(step.number) && typeof step.name === 'string' && step.name.length > 0
+        && !numbers.has(step.number) && !names.has(step.name), 'invalid or duplicate step identity');
+      numbers.add(step.number); names.add(step.name);
+    }
+    let expected;
+    if (legacy) expected = suiteSteps;
+    else if (job.key === 'unit-tests' && job.shard === undefined) expected = [suiteSteps[0]];
+    else if (job.key === 'e2e-local' && job.shard === undefined) expected = [suiteSteps[1]];
+    else if (job.key === 'e2e-locked' && job.shard === undefined) expected = [['cms-e2e', 'Run @lock-* tagged E2E tests (serial — shared auth/plugin state)']];
+    else if (job.key === 'e2e-shard' && /^[1-4]-of-4$/.test(job.shard ?? '')) expected = [['cms-e2e', `Run E2E regression suite — shard ${job.shard[0]}/4 (non-locked tests)`]];
+    else if (job.key === 'e2e-shard' && job.shard === undefined && job.conclusion === 'skipped') expected = [['cms-e2e', 'skipped matrix']];
+    else throw new Error('Non-publishable producer: unknown job/shard');
+    for (const [suite, name] of expected) {
+      const step = job.steps.find(candidate => candidate.name === name);
+      if (!legacy && job.conclusion === 'skipped') {
+        requireValid(!step || step.conclusion === 'skipped', 'skipped job with executed step');
+        suites.push({ suite, jobId: job.id, jobKey: job.key, ...(job.shard ? { shard: job.shard } : {}), stepNumber: 0, conclusion: 'skipped', ran: false });
+        continue;
+      }
+      requireValid(step && step.status === 'completed'
+        && ['success', 'failure', 'skipped'].includes(step.conclusion), `missing or non-publishable suite: ${suite}`);
+      suites.push({ suite, jobId: job.id, ...(!legacy ? { jobKey: job.key, ...(job.shard ? { shard: job.shard } : {}) } : {}), stepNumber: step.number,
+        conclusion: step.conclusion, ran: step.conclusion !== 'skipped' });
+    }
   }
-  /** @type {import('./validate-flakiness-artifacts.mjs').ValidatedProducerProvenance['suites']} */
-  const suites = suiteSteps.map(([suite, name]) => {
-    const step = job.steps.find(candidate => candidate.name === name);
-    requireValid(step && step.status === 'completed'
-      && (step.conclusion === 'success' || step.conclusion === 'failure' || step.conclusion === 'skipped'), `missing or non-publishable suite: ${suite}`);
-    return { suite, jobId: job.id, stepNumber: step.number,
-      conclusion: step.conclusion, ran: step.conclusion !== 'skipped' };
-  });
+  if (!legacy) {
+    for (const key of ['unit-tests/', 'e2e-local/', 'e2e-locked/']) requireValid(identities.has(key), 'missing producing job');
+    const shards = jobs.filter(j => j.key === 'e2e-shard');
+    requireValid(shards.length === 1 && shards[0].shard === undefined && shards[0].conclusion === 'skipped'
+      || shards.length === 4 && ['1', '2', '3', '4'].every(n => identities.has(`e2e-shard/${n}-of-4`)), 'missing shard metadata');
+    const local = suites.find(s => s.jobKey === 'e2e-local');
+    requireValid(!local.ran || !suites.some(s => ['e2e-shard', 'e2e-locked'].includes(s.jobKey) && s.ran), 'conflicting E2E execution paths');
+  }
   let pullRequest = null;
   let testedSha = p.headSha;
   if (p.event === 'pull_request_target') {
@@ -110,7 +135,7 @@ export function validateProducerProvenance(input) {
 /** Conservative fixed intake budgets; never raised from artifact input. */
 export const ARTIFACT_LIMITS = Object.freeze({ reportBytes: 16 * 1024 * 1024, manifestBytes: 64 * 1024,
   fileBytes: 32 * 1024 * 1024, totalBytes: 128 * 1024 * 1024, files: 2048,
-  depth: 64, nodes: 1_000_000, stringBytes: 8 * 1024 * 1024, invocations: 2 });
+  depth: 64, nodes: 1_000_000, stringBytes: 8 * 1024 * 1024, invocations: 6 });
 /** @param {unknown} condition @param {string} reason @returns {asserts condition} */
 function check(condition, reason) { if (!condition) throw new Error(`Invalid artifact: ${reason}`); }
 /** JSON-only bounded policy applies even to schema-any metadata. @param {Buffer} bytes @param {number} limit */
@@ -118,7 +143,9 @@ function parseBounded(bytes, limit) {
   check(bytes.length <= limit, 'JSON bytes budget');
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   /** @type {unknown} */
-  const value = JSON.parse(text);
+  let value;
+  try { value = JSON.parse(text); }
+  catch { throw new Error('Invalid artifact: JSON syntax'); }
   const stack = [{ value, depth: 0 }];
   let nodes = 0;
   while (stack.length) {
@@ -246,14 +273,14 @@ function sourceLink(value, p) {
     seen.add(key);
   }
 }
-/** @param {Map<string, Buffer>} files @param {import('./validate-flakiness-artifacts.mjs').ValidatedProducerProvenance} p */
-function validateContents(files, p) {
+/** @param {Map<string, Buffer>} files @param {import('./validate-flakiness-artifacts.mjs').ValidatedProducerProvenance} p @param {string} project */
+function validateContents(files, p, project) {
   /** @type {Map<string, {suite: 'core-unit' | 'cms-e2e', invocation: string}>} */ const groups = new Map();
   for (const name of files.keys()) {
     safeName(name);
     const parts = name.split('/'); const [suite, invocation] = parts;
     check((suite === 'core-unit' || suite === 'cms-e2e') && invocation
-      && invocation.length <= 160 && /^test-[A-Za-z0-9_-]+-[1-9]\d*-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(invocation), 'unknown suite/invocation layout');
+      && invocation.length <= 160 && /^[A-Za-z0-9_-]+-[1-9]\d*-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(invocation), 'unknown suite/invocation layout');
     const prefix = `${suite}/${invocation}`;
     check(name === `${prefix}/invocation.json` || name === `${prefix}/vendor/report.json`
       || (parts.length === 5 && parts[2] === 'vendor' && parts[3] === 'attachments' && /^[a-f0-9]{40}$/.test(parts[4] ?? '')), 'unexpected payload file');
@@ -263,16 +290,17 @@ function validateContents(files, p) {
   /** @type {Set<string>} */ const suites = new Set();
   const results = [];
   for (const [prefix, identity] of groups) {
-    check(!suites.has(identity.suite), 'duplicate suite invocation'); suites.add(identity.suite);
-    const step = p.suites.find(s => s.suite === identity.suite);
-    check(step?.ran, 'unexpected/not-run suite');
     const manifestBytes = files.get(`${prefix}/invocation.json`); const reportBytes = files.get(`${prefix}/vendor/report.json`);
     check(manifestBytes && reportBytes, 'missing native report/manifest evidence');
     const m = onlyKeys(parseBounded(manifestBytes, ARTIFACT_LIMITS.manifestBytes), ['suite', 'target', 'source', 'invocation', 'commit', 'startedAt', 'endedAt', 'outcome', 'runId', 'attempt', 'job', 'shard', 'pullRequest', 'pullRequestStatus', 'pullRequestSource', 'workflow', 'runURL', 'targetURL']);
+    const step = p.suites.find(s => s.suite === identity.suite && (s.jobKey ?? 'test') === m.job && s.shard === m.shard);
+    check(step?.ran, 'unexpected/not-run suite');
+    const evidenceKey = `${step.jobId}/${step.suite}`;
+    check(!suites.has(evidenceKey), 'duplicate suite invocation'); suites.add(evidenceKey);
     check(m.suite === identity.suite && m.invocation === identity.invocation && m.source === 'ci'
-      && m.runId === String(p.runId) && m.attempt === String(p.runAttempt) && m.job === 'test'
+      && m.runId === String(p.runId) && m.attempt === String(p.runAttempt) && m.job === (step.jobKey ?? 'test')
       && m.workflow === p.workflowName && m.commit === p.testedSha, 'manifest provenance mismatch');
-    check(m.shard === undefined && identity.invocation.startsWith(`test-local-${p.runAttempt}-`), 'unexpected shard/invocation identity');
+    check(m.shard === step.shard && identity.invocation.startsWith(`${step.jobKey ?? 'test'}-${step.shard ?? 'local'}-${p.runAttempt}-`), 'unexpected shard/invocation identity');
     check(typeof m.startedAt === 'string' && typeof m.endedAt === 'string' && Number.isFinite(Date.parse(m.startedAt))
       && Date.parse(m.endedAt) >= Date.parse(m.startedAt), 'missing/invalid completion time');
     check(m.outcome === 'passed' || m.outcome === 'failed', 'interrupted/incomplete outcome');
@@ -294,7 +322,7 @@ function validateContents(files, p) {
     sourceLink(m.runURL, p);
     const r = validateNativeReport(reportBytes);
     check(r.commitId === p.testedSha && r.category === (identity.suite === 'core-unit' ? 'vitest' : 'playwright'), 'native category/commit mismatch');
-    check(r.flakinessProject === undefined || r.flakinessProject === 'SonicJs/sonicjs', 'hostile project');
+    check(r.flakinessProject === undefined || r.flakinessProject === project, 'hostile project');
     sourceLink(r.url, p);
     check(r.environments.length === 1 && r.environments[0]?.name === (identity.suite === 'core-unit' ? 'vitest' : 'chromium'), 'environment name/count mismatch');
     for (const env of r.environments) {
@@ -344,7 +372,7 @@ function validateContents(files, p) {
     const outcome = /** @type {'passed' | 'failed'} */ (m.outcome);
     results.push({ prefix, ...identity, step, counts, outcome });
   }
-  for (const step of p.suites) check(!step.ran || suites.has(step.suite), 'missing suite evidence');
+  for (const step of p.suites) check(!step.ran || suites.has(`${step.jobId}/${step.suite}`), 'missing suite evidence');
   return results;
 }
 /** @template T @param {T} value @returns {Readonly<T>} */
@@ -386,7 +414,9 @@ export async function validateArtifactPayload(input) {
     }
     batches.push({ source, batch });
   }
-  const contents = validateContents(files, provenance);
+  const project = input.project ?? 'SonicJs/sonicjs';
+  check(typeof project === 'string' && project.length <= 150 && /^[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+$/.test(project), 'invalid trusted project');
+  const contents = validateContents(files, provenance, project);
   // Re-read directories using anchored intake to catch changes spanning validation.
   for (const { source, batch } of batches) if (source.kind === 'directory') {
     const again = await readDirectory(source.path, parent);

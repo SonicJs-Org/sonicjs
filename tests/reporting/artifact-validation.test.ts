@@ -22,9 +22,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSyn
 import { join } from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
 import { validateArtifactPayload, verifyUploadSnapshots, type ProducerProvenanceInput } from '../../scripts/testing/validate-flakiness-artifacts.mjs'
-const scratchParent = process.env.SONICJS_REPORTING_EVIDENCE ?? join(repositoryRoot, 'flakiness-reports/fixture-evidence')
-mkdirSync(scratchParent, { recursive: true })
-const scratch = mkdtempSync(join(scratchParent, 'artifact-validation-'))
+import { reportingScratch } from './scratch'
+const scratch = reportingScratch('artifact-validation-')
 function context(): ProducerProvenanceInput {
   return { trigger: { repository: 'SonicJs-Org/sonicjs', runId: 123, runAttempt: 2 }, producer: { repository: 'SonicJs-Org/sonicjs', runId: 123, runAttempt: 2, workflowId: 207092903, workflowName: 'PR Tests', workflowPath: '.github/workflows/pr-tests.yml', event: 'push', status: 'completed', conclusion: 'failure', headBranch: 'main', headSha: sha }, jobs: [{ id: 456, key: 'test', runId: 123, runAttempt: 2, status: 'completed', steps: [{ number: 4, name: 'Run unit tests with coverage', status: 'completed', conclusion: 'success' }, { number: 7, name: 'Run full E2E regression suite', status: 'completed', conclusion: 'skipped' }] }] }
 }
@@ -443,6 +442,14 @@ test('whole-batch composes two actual native per-suite ZIPs offline', async () =
   const result = await validateArtifactPayload({ input: [zipInput(core), zipInput(cmsEntries)], stagingParent: scratch, trusted })
   expect(result.invocations).toHaveLength(2); await verifyUploadSnapshots(result)
   for (const invocation of result.invocations) expect(readFileSync(invocation.reportPath)).toEqual(readFileSync(join(p.root, invocation.suite, invocation.invocation, 'vendor/report.json')))
+  // Exercise native vendor reports, attachments and actual upload command together.
+  const runtimeDir = mkdtempSync(join(scratch, 'native-runtime-'))
+  mkdirSync(join(runtimeDir, 'node_modules/.bin'), { recursive: true })
+  writeFileSync(join(runtimeDir, 'package-lock.json'), '{}')
+  writeFileSync(join(runtimeDir, 'node_modules/.bin/flakiness'), `#!/bin/sh\nexec "${process.execPath}" --require "${join(repositoryRoot, 'tests/reporting/fixtures/deny-network.cjs')}" "${join(repositoryRoot, 'tests/reporting/fixtures/fake-cli-upload-command.mjs')}" "$@"\n`, { mode: 0o755 })
+  const { executeUpload } = await import('../../scripts/testing/upload-flakiness.mjs')
+  const uploaded = await executeUpload(result, { runtimeDir, ledgerDir: mkdtempSync(join(scratch, 'native-ledger-')), privateScratchDir: join(runtimeDir, 'cli-private') }, { accessToken: 'fake' }, { enableUpload: true })
+  expect(uploaded.results.map(r => r.state)).toEqual(['accepted-unverified', 'accepted-unverified'])
   rmSync(result.root, { recursive: true, force: true })
 })
 

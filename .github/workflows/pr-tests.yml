@@ -20,11 +20,23 @@ jobs:
       - name: Authorize
         run: echo 'Workflow authorized; fork code never receives deployment secrets.'
 
+  # Stable authorize check remains required by branch protection. Capture the
+  # immutable identity separately after approval, before either PR-code job.
+  producer-identity:
+    # Immutable job name captures original event identity before any PR checkout.
+    name: "authorize:${{ github.run_id }}:${{ github.run_attempt }}:${{ github.event_name }}:${{ github.event.pull_request.number || 0 }}:${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || (github.event_name == 'push' && github.repository) || 'missing' }}:${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || (github.event_name == 'push' && github.sha) || 'missing' }}"
+    needs: authorize
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Record producer identity
+        run: echo 'Original producer identity recorded.'
+
   # ── Unit tests ───────────────────────────────────────────────────────────────
   # Runs in parallel with e2e-setup so CF resource allocation and unit tests
   # overlap rather than running serially on the critical path (saves ~2–3 min).
   unit-tests:
-    needs: authorize
+    needs: producer-identity
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -61,6 +73,16 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:cov
 
+      - name: Upload core-unit Flakiness reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flakiness-core-unit-unit-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Upload coverage to Codecov
         if: env.TRUSTED_PREVIEW == 'true'
         uses: codecov/codecov-action@v4
@@ -75,7 +97,7 @@ jobs:
   # get the e2e-local path instead (no secrets required).
   # Runs in parallel with unit-tests; e2e-shard waits for both.
   e2e-setup:
-    needs: authorize
+    needs: producer-identity
     if: >
       github.actor != 'dependabot[bot]' &&
       !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') &&
@@ -240,6 +262,7 @@ jobs:
       # e2e-setup already seeded admin via e2e-readiness.ts; skip globalSetup seed
       # in every shard to avoid 4 concurrent seed calls on the same DB.
       E2E_ADMIN_SEEDED: '1'
+      SONICJS_TEST_SHARD: '${{ matrix.shard }}-of-4'
       CI: 'true'
     steps:
       - name: Checkout code
@@ -292,6 +315,17 @@ jobs:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
         run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
+
+      - name: Upload cms-e2e Flakiness reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flakiness-cms-e2e-e2e-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          # Preserve suite prefix; each job has its own workspace/report root.
+          path: flakiness-reports/
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload E2E shard ${{ matrix.shard }} reports, traces and logs
         if: always()
@@ -374,6 +408,17 @@ jobs:
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
         run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
 
+      - name: Upload cms-e2e Flakiness reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flakiness-cms-e2e-e2e-locked-${{ github.run_id }}-${{ github.run_attempt }}
+          # Preserve suite prefix; each job has its own workspace/report root.
+          path: flakiness-reports/
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Upload @lock-* E2E reports, traces and logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -440,6 +485,17 @@ jobs:
           set -euo pipefail
           mkdir -p e2e-logs
           npx playwright test --config=tests/playwright.config.ts 2>&1 | tee e2e-logs/playwright.log
+
+      - name: Upload cms-e2e Flakiness reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: flakiness-cms-e2e-e2e-local-${{ github.run_id }}-${{ github.run_attempt }}
+          # Preserve suite prefix; each job has its own workspace/report root.
+          path: flakiness-reports/
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload E2E reports, failed-attempt traces and logs
         if: always()
@@ -519,3 +575,46 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler kv namespace delete --namespace-id="${{ needs.e2e-setup.outputs.kv_id }}"
+
+  # Preserve the classic required `test` context with a real full-path aggregate.
+  # Immutable scheduler results only: no PR outputs, dependencies or checkout.
+  test:
+    name: test
+    needs: [authorize, producer-identity, unit-tests, e2e-setup, e2e-shard, e2e-locked, e2e-local, cleanup]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require one complete successful test path
+        env:
+          AUTHORIZE_RESULT: ${{ needs.authorize.result }}
+          IDENTITY_RESULT: ${{ needs.producer-identity.result }}
+          UNIT_RESULT: ${{ needs.unit-tests.result }}
+          SETUP_RESULT: ${{ needs.e2e-setup.result }}
+          SHARD_RESULT: ${{ needs.e2e-shard.result }}
+          LOCKED_RESULT: ${{ needs.e2e-locked.result }}
+          LOCAL_RESULT: ${{ needs.e2e-local.result }}
+          CLEANUP_RESULT: ${{ needs.cleanup.result }}
+        run: |
+          node <<'NODE'
+          const needs = {
+            authorize: process.env.AUTHORIZE_RESULT,
+            'producer-identity': process.env.IDENTITY_RESULT,
+            'unit-tests': process.env.UNIT_RESULT,
+            'e2e-setup': process.env.SETUP_RESULT,
+            'e2e-shard': process.env.SHARD_RESULT,
+            'e2e-locked': process.env.LOCKED_RESULT,
+            'e2e-local': process.env.LOCAL_RESULT,
+            cleanup: process.env.CLEANUP_RESULT,
+          };
+          const succeeded = key => needs[key] === 'success';
+          const skipped = key => needs[key] === 'skipped';
+          const common = ['authorize', 'producer-identity', 'unit-tests'].every(succeeded);
+          const remote = ['e2e-setup', 'e2e-shard', 'e2e-locked', 'cleanup'];
+          const remotePassed = remote.every(succeeded) && skipped('e2e-local');
+          const localPassed = succeeded('e2e-local') && remote.every(skipped);
+          if (!common || !(remotePassed || localPassed)) {
+            console.error('Required test path incomplete or unsuccessful.');
+            process.exitCode = 1;
+          }
+          NODE

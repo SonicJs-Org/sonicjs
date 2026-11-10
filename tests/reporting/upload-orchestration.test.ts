@@ -7,9 +7,8 @@ import { validateOnly, executeUpload, type UploadConfig, type UploadSummary } fr
 import type { ArtifactSnapshots, ValidatedProducerProvenance, UploadSnapshot } from '../../scripts/testing/validate-flakiness-artifacts.mjs'
 import { repositoryRoot } from './options'
 
-const scratchParent = join(repositoryRoot, 'flakiness-reports/fixture-evidence')
-mkdirSync(scratchParent, { recursive: true })
-const scratch = mkdtempSync(join(scratchParent, 'upload-orchestration-'))
+import { reportingScratch } from './scratch'
+const scratch = reportingScratch('upload-orchestration-')
 
 const fixturesDir = fileURLToPath(new URL('fixtures', import.meta.url))
 
@@ -98,7 +97,7 @@ function makeFakeRuntime(scriptPath: string): { runtimeDir: string; cleanup: () 
   const binDir = join(runtimeDir, 'node_modules', '.bin')
   mkdirSync(binDir, { recursive: true })
   // Shell wrapper so the fake .mjs script is invoked correctly
-  const wrapper = `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`
+  const wrapper = `#!/bin/sh\nexec "${process.execPath}" --require "${join(fixturesDir, 'deny-network.cjs')}" "${scriptPath}" "$@"\n`
   writeFileSync(join(binDir, 'flakiness'), wrapper, { mode: 0o755 })
   writeFileSync(join(runtimeDir, 'package-lock.json'), '{"lockfileVersion":3,"packages":{"":{}}}')
   return { runtimeDir, cleanup: () => rmSync(runtimeDir, { recursive: true, force: true }) }
@@ -113,7 +112,7 @@ function makeConfig(scriptPath: string, extraOpts: Partial<UploadConfig> = {}): 
   const { runtimeDir, cleanup: cleanRuntime } = makeFakeRuntime(scriptPath)
   const { ledgerDir, cleanup: cleanLedger } = makeLedgerDir()
   return {
-    config: { runtimeDir, ledgerDir, ...extraOpts },
+    config: { runtimeDir, ledgerDir, privateScratchDir: join(runtimeDir, 'cli-private'), ...extraOpts },
     cleanup: () => { cleanRuntime(); cleanLedger() },
   }
 }
@@ -191,8 +190,8 @@ test('CLI receives fixed args; no ambient FLAKINESS or NODE_OPTIONS env leaks', 
     expect(result.results[0]!.state).toBe('accepted-unverified')
     // Read what the fake CLI recorded in the isolated HOME
     const ledger = JSON.parse(readFileSync(join(config.ledgerDir, createHash('sha256').update(result.results[0]!.logicalKey).digest('hex') + '.json'), 'utf8'))
-    // Find the cli-home-* dir in ledgerDir and read received.json from it (already cleaned up after child exits)
-    // Instead, we know the state is accepted-unverified so the args were right (fake CLI only records if it ran)
+    // Credential scratch was cleaned; the durable record retains only safe delivery data.
+    expect(ledger.state).toBe('accepted-unverified')
     expect(result.results[0]!.receiptUrl).toContain('https://flakiness.io/')
   } finally { cleanup() }
 })
@@ -432,7 +431,7 @@ test('pre-written ledger state=started (process restart) → blocked', async () 
 })
 
 // ─── Test 20: changed content → blocked with mismatch error ──────────────────
-test('changed content digest in ledger → blocked with content mismatch', async () => {
+test.each(['accepted-unverified', 'not-started'])('changed content digest in %s ledger → blocked with content mismatch', async state => {
   const snapshots = makeSnapshots()
   const { config, cleanup } = makeConfig(join(fixturesDir, 'fake-cli-url.mjs'))
   try {
@@ -444,7 +443,7 @@ test('changed content digest in ledger → blocked with content mismatch', async
     const key = r1.results[0]!.logicalKey
     const lPath = join(config.ledgerDir, createHash('sha256').update(key).digest('hex') + '.json')
     const entry = JSON.parse(readFileSync(lPath, 'utf8'))
-    writeFileSync(lPath, JSON.stringify({ ...entry, contentDigest: 'x'.repeat(64), state: 'accepted-unverified' }))
+    writeFileSync(lPath, JSON.stringify({ ...entry, contentDigest: 'x'.repeat(64), state }))
 
     // Second call with same snapshots → blocked due to content mismatch
     const r2 = await executeUpload(snapshots, config, fakeAuth, { enableUpload: true })
@@ -490,4 +489,41 @@ test('upload module loads without affecting existing test infrastructure', async
   // Just verify imports work and the module exposes the expected API shape
   expect(typeof validateOnly).toBe('function')
   expect(typeof executeUpload).toBe('function')
+})
+
+/** Real upload subcommand is required even when a fake executable is used offline. */
+test('CLI command invokes upload before trusted project and endpoint options', async () => {
+  const snap = makeSnapRoot(scratch)
+  const snapshots = { root: snap.root, provenance: makeProvenance(), invocations: [makeInvocationSnap(snap)] }
+  const { config, cleanup } = makeConfig(join(fixturesDir, 'fake-cli-upload-command.mjs'))
+  try {
+    const r = await executeUpload(snapshots, config, fakeAuth, { enableUpload: true })
+    expect(r.results[0]!.state).toBe('accepted-unverified')
+  } finally { cleanup() }
+})
+
+test('CLI receives trusted configured project with fixed endpoint and isolated env', async () => {
+  const snap = makeSnapRoot(scratch)
+  const snapshots = { root: snap.root, provenance: makeProvenance(), invocations: [makeInvocationSnap(snap)] }
+  const { config, cleanup } = makeConfig(join(fixturesDir, 'fake-cli-upload-command.mjs'), { project: 'Configured/project' })
+  try {
+    const r = await executeUpload(snapshots, config, fakeAuth, { enableUpload: true })
+    expect(r.results[0]!.receiptUrl).toBe('https://flakiness.io/r/configured')
+  } finally { cleanup() }
+})
+
+test('credential scratch overlapping ledger directly or via symlink fails before auth', async () => {
+  const { symlinkSync } = await import('node:fs')
+  const { config, cleanup } = makeConfig(join(fixturesDir, 'fake-cli-url.mjs'))
+  const snapshots = makeSnapshots()
+  let accessed = false
+  const auth = { get accessToken() { accessed = true; return 'fake' } }
+  const alias = join(config.runtimeDir, 'ledger-alias')
+  symlinkSync(config.ledgerDir, alias)
+  try {
+    for (const root of [config.ledgerDir, join(config.ledgerDir, 'private'), alias]) {
+      await expect(executeUpload(snapshots, { ...config, privateScratchDir: root }, auth, { enableUpload: true })).rejects.toThrow(/scratch.*ledger/i)
+    }
+    expect(accessed).toBe(false)
+  } finally { cleanup() }
 })

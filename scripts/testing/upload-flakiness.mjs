@@ -6,8 +6,8 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { readFile, writeFile, rename, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
+import { readFile, writeFile, rename, mkdir, mkdtemp, rm, stat, realpath } from 'node:fs/promises';
+import { join, dirname, resolve, relative, isAbsolute, sep } from 'node:path';
 import { verifyUploadSnapshots } from './validate-flakiness-artifacts.mjs';
 
 const FIXED_PROJECT = 'SonicJs/sonicjs';
@@ -125,7 +125,6 @@ function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs, project) {
       TMPDIR: tmp,
       CI: '1',
       SONICJS_TEST_UPLOAD: '0',
-      FLAKINESS_DISABLE_UPLOAD: '1',
     });
     if ('accessToken' in auth) {
       env.FLAKINESS_ACCESS_TOKEN = auth.accessToken;
@@ -161,10 +160,14 @@ function spawnCli(cliBin, reportDir, home, tmp, auth, timeoutMs, project) {
     });
     proc.stderr.on('data', () => {}); // discard; may contain credentials
 
+    let spawned = false;
+    proc.on('spawn', () => { spawned = true; });
     proc.on('error', () => {
       clearTimeout(timer);
-      // Spawn failure occurs before execution; keep diagnostics free of ambient paths.
-      resolvePromise({ state: 'failed', error: 'CLI could not start' });
+      // Only an error before spawn proves non-submission; later errors are unknown.
+      // Keep diagnostics free of ambient paths and child output.
+      resolvePromise(spawned ? { state: 'ambiguous', error: 'CLI process error after start' }
+        : { state: 'not-started', error: 'CLI could not start' });
     });
 
     proc.on('close', (code, signal) => {
@@ -234,7 +237,7 @@ export async function executeUpload(snapshots, config, auth, options) {
   if (!options || options.enableUpload !== true) return validateOnly(snapshots);
 
   const { provenance, invocations } = snapshots;
-  const { runtimeDir, ledgerDir, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
+  const { runtimeDir, ledgerDir, privateScratchDir, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid timeoutMs');
 
   const project = config.project ?? FIXED_PROJECT;
@@ -246,6 +249,15 @@ export async function executeUpload(snapshots, config, auth, options) {
   // Verify ALL snapshots before ANY auth or child access.
   // If this throws, nothing else runs — including auth property access.
   await verifyUploadSnapshots(snapshots);
+
+  // Caller-owned credential scratch is never part of the durable artifact. Resolve
+  // symlinks too: lexical sibling paths alone do not establish isolation.
+  if (typeof privateScratchDir !== 'string' || !isAbsolute(privateScratchDir)) throw new Error('Absolute private scratch directory required');
+  await mkdir(privateScratchDir, { recursive: true, mode: 0o700 });
+  const privateRoot = await realpath(privateScratchDir);
+  const durableRoot = await realpath(ledgerDir);
+  const overlaps = (a, b) => { const rel = relative(a, b); return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`)); };
+  if (overlaps(durableRoot, privateRoot) || overlaps(privateRoot, durableRoot)) throw new Error('Private scratch must be separate from ledger');
 
   const summary = /** @type {import('./upload-flakiness.mjs').UploadSummary} */ ({
     provenance: {
@@ -277,7 +289,8 @@ export async function executeUpload(snapshots, config, auth, options) {
         summary.anyFailed = true;
         continue;
       }
-      throw new Error(`Unrecognized ledger state for key: ${key}`);
+      // Only an OS spawn error proves no child executed or submitted anything.
+      if (existing.state !== 'not-started') throw new Error(`Unrecognized ledger state for key: ${key}`);
     }
 
     const digest = contentDigest(snapshot);
@@ -300,9 +313,9 @@ export async function executeUpload(snapshots, config, auth, options) {
       continue;
     }
 
-    // Create isolated HOME and tmpdir; clean up in finally.
-    const home = await mkdtemp(join(ledgerDir, 'cli-home-'));
-    const tmp = await mkdtemp(join(ledgerDir, 'cli-tmp-'));
+    // Private caller-owned scratch survives abrupt termination outside the ledger.
+    const home = await mkdtemp(join(privateRoot, 'cli-home-'));
+    const tmp = await mkdtemp(join(privateRoot, 'cli-tmp-'));
     let childResult;
     try {
       childResult = await spawnCli(cliBin, dirname(snapshot.reportPath), home, tmp, auth, timeoutMs, project);
@@ -330,7 +343,7 @@ export async function executeUpload(snapshots, config, auth, options) {
       ...(childResult.error != null ? { error: childResult.error } : {}),
     });
     if (childResult.state === 'ambiguous') summary.anyAmbiguous = true;
-    if (childResult.state === 'failed') summary.anyFailed = true;
+    if (['failed', 'not-started'].includes(childResult.state)) summary.anyFailed = true;
   }
 
   return summary;

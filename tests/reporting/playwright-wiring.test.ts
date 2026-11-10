@@ -26,7 +26,16 @@ test('inherits CMS reporter once; infrastructure owns no application lifecycle',
   expect(infra.globalTeardown).toBeUndefined()
 })
 
-test('all non-reporting production configuration bytes match Task2', async () => {
+// PR #1170's merged main commit is reachable in a fresh full-history CI checkout.
+const preservationBaseline = '1dea9731f87a869fd2a46170c20cf8ba5aec4048'
+
+test('preservation baseline belongs to recorded main history', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { repositoryRoot } = await import('./options')
+  expect(() => execFileSync('git', ['merge-base', '--is-ancestor', preservationBaseline, 'refs/remotes/origin/main'], { cwd: repositoryRoot })).not.toThrow()
+})
+
+test('all non-reporting production configuration bytes match merged main baseline', async () => {
   const { execFileSync } = await import('node:child_process')
   const { readFileSync } = await import('node:fs')
   const { repositoryRoot } = await import('./options')
@@ -38,9 +47,7 @@ test('all non-reporting production configuration bytes match Task2', async () =>
     .replace("reporter: [['html'], ...playwrightReporting('www-e2e', 'www')],", "reporter: 'html',")
   for (const file of ['playwright.config.ts', 'playwright-no-server.config.ts', 'playwright.smoke.config.ts', 'playwright.www.config.ts', 'playwright.infrastructure.config.ts']) {
     const path = `tests/${file}`
-    // 797c9554b is the last commit in this PR that changed playwright config files
-    // (reverted retries 2→3 with explanatory comments; non-functional, comment-only update)
-    const original = stripReporting(execFileSync('git', ['show', `797c9554b:${path}`], { cwd: repositoryRoot, encoding: 'utf8' }))
+    const original = stripReporting(execFileSync('git', ['show', `${preservationBaseline}:${path}`], { cwd: repositoryRoot, encoding: 'utf8' }))
     const current = stripReporting(readFileSync(`${repositoryRoot}/${path}`, 'utf8'))
     expect(current, path).toBe(original)
   }

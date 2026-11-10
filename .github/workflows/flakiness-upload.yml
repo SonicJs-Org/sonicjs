@@ -26,7 +26,8 @@ jobs:
     # status. They cannot pass provenance validation or reach authenticated upload.
     if: >-
       github.event.workflow_run.repository.full_name == 'SonicJs-Org/sonicjs' &&
-      github.event.workflow_run.workflow_id == 207092903
+      github.event.workflow_run.workflow_id == 207092903 &&
+      vars.FLAKINESS_UPLOAD_ENABLED == 'true'
     env:
       PRODUCER_RUN_ID: ${{ github.event.workflow_run.id }}
       PRODUCER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
@@ -49,7 +50,7 @@ jobs:
         run: |
           npm ci --prefix scripts/testing/flakiness-runtime --ignore-scripts --no-audit --no-fund
           # Fixed trusted helper allowlist; no PR dependency graph or executable hooks.
-          cp scripts/testing/validate-flakiness-artifacts.mjs scripts/testing/read-flakiness-artifacts.py scripts/testing/upload-flakiness.mjs scripts/testing/fetch-producer-provenance.mjs scripts/testing/run-flakiness-upload.mjs scripts/testing/delivery-ledger.mjs scripts/testing/flakiness-runtime/
+          cp scripts/testing/validate-flakiness-artifacts.mjs scripts/testing/read-flakiness-artifacts.py scripts/testing/upload-flakiness.mjs scripts/testing/fetch-producer-provenance.mjs scripts/testing/run-flakiness-upload.mjs scripts/testing/delivery-ledger.mjs scripts/testing/export-flakiness-ledger.mjs scripts/testing/flakiness-runtime/
 
       - name: Select previous consumer attempt
         id: previous
@@ -86,14 +87,24 @@ jobs:
           ARTIFACT_DIR: ${{ runner.temp }}/artifacts
           STAGING_DIR: ${{ runner.temp }}/staging
           LEDGER_DIR: ${{ runner.temp }}/ledger
+          CLI_SCRATCH_DIR: ${{ runner.temp }}/cli-private
           RUNTIME_DIR: ${{ github.workspace }}/scripts/testing/flakiness-runtime
         run: node scripts/testing/flakiness-runtime/run-flakiness-upload.mjs
+
+      # Export runs even if upload is killed before finally. Never archive HOME/tmp
+      # caches, partial writes or arbitrary ledger files, including restored ones.
+      - name: Export safe delivery records
+        if: always()
+        env:
+          LEDGER_DIR: ${{ runner.temp }}/ledger
+          LEDGER_EXPORT_DIR: ${{ runner.temp }}/ledger-export
+        run: node scripts/testing/flakiness-runtime/export-flakiness-ledger.mjs
 
       - name: Preserve delivery ledger
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: flakiness-delivery-${{ env.PRODUCER_RUN_ID }}-${{ env.PRODUCER_RUN_ATTEMPT }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ledger/
+          path: ${{ runner.temp }}/ledger-export/
           retention-days: 7
           if-no-files-found: error

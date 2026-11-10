@@ -98,3 +98,6 @@ test-install/my-sonicjs-app/package-lock.json
 
 # Flakiness reporter artifacts
 /flakiness-reports/
+
+# Reporting contract test scratch (never producer evidence)
+/.cache/reporting-contracts/

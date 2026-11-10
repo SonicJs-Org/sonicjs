@@ -3,12 +3,11 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'nod
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { repositoryRoot } from './options'
+import { reportingScratch } from './scratch'
 
 // Change a real imported test file. No replay of vendor callbacks or reports.
 test.each(['vendor', 'integrated'])('real watch lifecycle: %s', async mode => {
-  const evidenceRoot = process.env.SONICJS_REPORTING_EVIDENCE ?? join(repositoryRoot, 'flakiness-reports/fixture-evidence')
-  mkdirSync(evidenceRoot, { recursive: true })
-  const evidence = mkdtempSync(join(evidenceRoot, 'watch-'))
+  const evidence = reportingScratch('watch-')
   const work = mkdtempSync(join(repositoryRoot, 'tests/reporting/fixtures/watch-'))
   const file = join(work, 'watch.case.ts')
   const source = (pass: boolean) => `import { test, expect } from '${repositoryRoot}/node_modules/vitest/dist/index.js'; test('watch identity', () => expect(${pass}).toBe(true))\n`

@@ -7,8 +7,12 @@ import { fetchProducerProvenance } from '../../scripts/testing/fetch-producer-pr
 import { validateArtifactPayload } from '../../scripts/testing/validate-flakiness-artifacts.mjs'
 import { executeUpload } from '../../scripts/testing/upload-flakiness.mjs'
 import { repositoryRoot } from './options'
+import { reportingScratch } from './scratch'
+import { spawnSync } from 'node:child_process'
+import { symlinkSync, chmodSync } from 'node:fs'
+import { resolve } from 'node:path'
 
-const scratch = mkdtempSync(join(process.env.TMPDIR!, 'publishing-'))
+const scratch = reportingScratch('publishing-')
 const repo = 'SonicJs-Org/sonicjs'
 const sha = 'a'.repeat(40)
 const apiRoot = `/repos/${repo}`
@@ -83,14 +87,14 @@ function runtime(script: string) {
   const root = mkdtempSync(join(scratch, 'runtime-'))
   mkdirSync(join(root, 'node_modules/.bin'), { recursive: true })
   writeFileSync(join(root, 'package-lock.json'), '{}')
-  writeFileSync(join(root, 'node_modules/.bin/flakiness'), `#!/bin/sh\nexec "${process.execPath}" "${fileURLToPath(new URL(`fixtures/${script}`, import.meta.url))}" "$@"\n`, { mode: 0o755 })
+  writeFileSync(join(root, 'node_modules/.bin/flakiness'), `#!/bin/sh\nexec "${process.execPath}" --require "${join(repositoryRoot, 'tests/reporting/fixtures/deny-network.cjs')}" "${fileURLToPath(new URL(`fixtures/${script}`, import.meta.url))}" "$@"\n`, { mode: 0o755 })
   return relative(repositoryRoot, root)
 }
 test('actual artifact layout → complete validation → relative runtime CLI; rerun blocks duplicate', async () => {
   apiFixture()
   const snapshots = await validateArtifactPayload({ input: { kind: 'directory', path: artifactTree() }, stagingParent: scratch, trusted: await provenance() })
   const ledgerDir = mkdtempSync(join(scratch, 'ledger-'))
-  const config = { runtimeDir: runtime('fake-cli-url.mjs'), ledgerDir }
+  const config = { runtimeDir: runtime('fake-cli-url.mjs'), ledgerDir, privateScratchDir: join(scratch, 'cli-private') }
   const result = await executeUpload(snapshots, config, { accessToken: 'fake' }, { enableUpload: true })
   expect(result.results.map(r => r.state)).toEqual(['accepted-unverified', 'accepted-unverified'])
   const rerun = await executeUpload(snapshots, config, { accessToken: 'fake' }, { enableUpload: true })
@@ -108,7 +112,7 @@ test('missing executed suite fails closed before any delivery', async () => {
 test('first CLI failure does not suppress second suite; failed delivery cannot be blindly retried', async () => {
   apiFixture()
   const snapshots = await validateArtifactPayload({ input: { kind: 'directory', path: artifactTree() }, stagingParent: scratch, trusted: await provenance() })
-  const config = { runtimeDir: runtime('fake-cli-core-fail.mjs'), ledgerDir: mkdtempSync(join(scratch, 'independent-')) }
+  const config = { runtimeDir: runtime('fake-cli-core-fail.mjs'), ledgerDir: mkdtempSync(join(scratch, 'independent-')), privateScratchDir: join(scratch, 'cli-private') }
   const ordered = { ...snapshots, invocations: [...snapshots.invocations].sort((a, b) => a.suite === 'core-unit' ? -1 : 1) }
   const r = await executeUpload(ordered, config, { accessToken: 'fake' }, { enableUpload: true })
   expect(r.results.map(x => x.state)).toEqual(['failed', 'accepted-unverified'])
@@ -199,22 +203,24 @@ test('metadata pagination is complete and unrelated jobs never become suites', a
   expect((await provenance()).jobs).toHaveLength(4)
 })
 
-test('main-only copied entrypoint executes both suites, persists history and refuses fresh-runner resubmission', async () => {
-  const { spawnSync } = await import('node:child_process')
-  const { symlinkSync } = await import('node:fs')
-  const { resolve } = await import('node:path')
-  const f = apiFixture()
+function entrypointFixture(script = 'fake-cli-upload-command.mjs', event = 'push') {
+  const f = apiFixture(event)
   const dir = mkdtempSync(join(scratch, 'entrypoint-'))
   const apiPath = join(dir, 'api.json'); writeFileSync(apiPath, JSON.stringify(f.responses))
-  const runtimeDir = resolve(repositoryRoot, runtime('fake-cli-upload-command.mjs'))
-  for (const name of ['validate-flakiness-artifacts.mjs', 'read-flakiness-artifacts.py', 'upload-flakiness.mjs', 'fetch-producer-provenance.mjs', 'run-flakiness-upload.mjs', 'delivery-ledger.mjs']) cpSync(join(repositoryRoot, 'scripts/testing', name), join(runtimeDir, name))
+  const runtimeDir = resolve(repositoryRoot, runtime(script))
+  for (const name of ['validate-flakiness-artifacts.mjs', 'read-flakiness-artifacts.py', 'upload-flakiness.mjs', 'fetch-producer-provenance.mjs', 'run-flakiness-upload.mjs', 'delivery-ledger.mjs', 'export-flakiness-ledger.mjs']) cpSync(join(repositoryRoot, 'scripts/testing', name), join(runtimeDir, name))
   // Use existing pinned validator dependencies; never install or execute package hooks.
   mkdirSync(join(runtimeDir, 'node_modules/@flakiness'), { recursive: true })
   symlinkSync(join(repositoryRoot, 'node_modules/@flakiness/flakiness-report'), join(runtimeDir, 'node_modules/@flakiness/flakiness-report'))
   symlinkSync(join(repositoryRoot, 'node_modules/yauzl'), join(runtimeDir, 'node_modules/yauzl'))
   const ledger = mkdtempSync(join(dir, 'ledger-'))
   const env = { PATH: process.env.PATH, TMPDIR: scratch, GITHUB_REPOSITORY: repo, GITHUB_TOKEN: 'fake', GITHUB_RUN_ID: '900', GITHUB_RUN_ATTEMPT: '1', PRODUCER_RUN_ID: '123', PRODUCER_RUN_ATTEMPT: '2', FLAKINESS_PROJECT: 'Configured/project', ARTIFACT_DIR: artifactTree(), STAGING_DIR: join(dir, 'staging'), LEDGER_DIR: ledger, RUNTIME_DIR: runtimeDir, ACTIONS_ID_TOKEN_REQUEST_URL: 'https://oidc.invalid', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fake', PUBLISH_API_FIXTURE: apiPath, GITHUB_STEP_SUMMARY: join(dir, 'summary.md') }
-  const args = ['--import', fileURLToPath(new URL('fixtures/fake-github-api.mjs', import.meta.url)), join(runtimeDir, 'run-flakiness-upload.mjs')]
+  const args = ['--require', join(repositoryRoot, 'tests/reporting/fixtures/deny-network.cjs'), '--import', fileURLToPath(new URL('fixtures/fake-github-api.mjs', import.meta.url)), join(runtimeDir, 'run-flakiness-upload.mjs')]
+  return { f, dir, runtimeDir, ledger, env: { ...env, CLI_SCRATCH_DIR: join(dir, 'cli-private') }, args }
+}
+
+test('main-only copied entrypoint executes both suites, persists history and refuses fresh-runner resubmission', async () => {
+  const { dir, ledger, env, args } = entrypointFixture()
   const first = spawnSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8', timeout: 15000 })
   expect(first.error).toBeUndefined(); expect(first.status, first.stdout + first.stderr).toBe(0)
   expect(first.stdout.match(/accepted-unverified/g)).toHaveLength(2)
@@ -229,4 +235,61 @@ test('main-only copied entrypoint executes both suites, persists history and ref
   const third = spawnSync(process.execPath, args, { cwd: dir, env: { ...env, LEDGER_DIR: empty, GITHUB_RUN_ATTEMPT: '3' }, encoding: 'utf8', timeout: 15000 })
   expect(third.status, third.stdout + third.stderr).toBe(1)
   expect(readdirSync(empty)).toEqual([])
+})
+
+test('spawn EACCES is not-started; sealed exported ledger permits corrected runtime on fresh runner', async () => {
+  const { dir, runtimeDir, ledger, env, args } = entrypointFixture()
+  const cli = join(runtimeDir, 'node_modules/.bin/flakiness')
+  chmodSync(cli, 0o600) // Real spawn error, not a fake nonzero child exit.
+  const first = spawnSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8', timeout: 15000 })
+  expect(first.error).toBeUndefined(); expect(first.status, first.stdout + first.stderr).toBe(1)
+  expect(first.stdout.match(/: not-started/g)).toHaveLength(2)
+  expect(JSON.parse(readFileSync(join(ledger, 'checkpoint.json'), 'utf8')).consumerAttempt).toBe(1)
+  const { exportDeliveryLedger } = await import('../../scripts/testing/export-flakiness-ledger.mjs')
+  const restored = join(dir, 'restored')
+  await exportDeliveryLedger(ledger, restored)
+  chmodSync(cli, 0o755)
+  const second = spawnSync(process.execPath, args, { cwd: dir, env: { ...env, LEDGER_DIR: restored, GITHUB_RUN_ATTEMPT: '2' }, encoding: 'utf8', timeout: 15000 })
+  expect(second.status, second.stdout + second.stderr).toBe(0)
+  expect(second.stdout.match(/accepted-unverified/g)).toHaveLength(2)
+  expect(JSON.parse(readFileSync(join(restored, 'checkpoint.json'), 'utf8')).consumerAttempt).toBe(2)
+})
+
+test('abrupt uploader SIGKILL preserves started record, exports no credential caches before cleanup', async () => {
+  const { dir, runtimeDir, ledger, env, args } = entrypointFixture('fake-cli-kill-parent.mjs')
+  const killed = spawnSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8', timeout: 15000 })
+  expect(killed.error).toBeUndefined(); expect(killed.signal).toBe('SIGKILL')
+  // Caches survived because finally never ran; must be outside durable ledger.
+  const cachePaths = readdirSync(dir, { recursive: true }).map(String).filter(p => p.endsWith('cached-token.json'))
+  expect(cachePaths).toHaveLength(2)
+  expect(cachePaths.every(p => p.startsWith('cli-private/'))).toBe(true)
+  const records = readdirSync(ledger)
+  expect(records).toHaveLength(1)
+  expect(records[0]).toMatch(/^[a-f0-9]{64}\.json$/)
+  expect(JSON.parse(readFileSync(join(ledger, records[0]!), 'utf8')).state).toBe('started')
+  const exported = join(dir, 'exported')
+  const exportedRun = spawnSync(process.execPath, [join(runtimeDir, 'export-flakiness-ledger.mjs')], { cwd: dir, env: { LEDGER_DIR: ledger, LEDGER_EXPORT_DIR: exported }, encoding: 'utf8', timeout: 15000 })
+  expect(exportedRun.status, exportedRun.stdout + exportedRun.stderr).toBe(0)
+  expect(readdirSync(exported, { recursive: true })).toEqual(records)
+  expect(readFileSync(join(exported, records[0]!), 'utf8')).not.toContain('FAKE-NO-NETWORK-CREDENTIAL')
+  const retry = spawnSync(process.execPath, args, { cwd: dir, env: { ...env, LEDGER_DIR: exported, GITHUB_RUN_ATTEMPT: '2' }, encoding: 'utf8', timeout: 15000 })
+  expect(retry.status, retry.stdout + retry.stderr).toBe(1)
+  expect(retry.stderr).toContain('Prior delivery checkpoint unavailable')
+})
+
+test.each(['valid', 'cancelled', 'stale', 'unauthorized'])('no executed suites: %s provenance controls full entrypoint before artifacts or CLI/auth', mode => {
+  const { f, dir, env, args } = entrypointFixture('fake-cli-upload-command.mjs', 'pull_request_target')
+  f.run.conclusion = mode === 'cancelled' ? 'cancelled' : 'failure'
+  for (const j of f.jobs.slice(1)) { j.conclusion = 'skipped'; j.steps = [] }
+  if (mode === 'stale') f.pr.head.sha = 'c'.repeat(40)
+  if (mode === 'unauthorized') f.jobs[0]!.conclusion = 'failure'
+  writeFileSync(env.PUBLISH_API_FIXTURE, JSON.stringify(f.responses))
+  const safeEnv: Record<string, string | undefined> = { ...env }
+  for (const key of ['ARTIFACT_DIR', 'STAGING_DIR', 'RUNTIME_DIR', 'CLI_SCRATCH_DIR', 'FLAKINESS_PROJECT', 'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN']) delete safeEnv[key]
+  const result = spawnSync(process.execPath, args, { cwd: dir, env: safeEnv, encoding: 'utf8', timeout: 15000 })
+  expect(result.error).toBeUndefined(); expect(result.status, result.stdout + result.stderr).toBe(mode === 'valid' ? 0 : 1)
+  const summary = readFileSync(env.GITHUB_STEP_SUMMARY, 'utf8')
+  if (mode === 'valid') expect(summary).toContain('nothing to publish; suites not run')
+  else { expect(summary).toContain('Publishing failed'); expect(summary).not.toContain('nothing to publish') }
+  expect(readdirSync(env.LEDGER_DIR)).toEqual(['checkpoint.json'])
 })

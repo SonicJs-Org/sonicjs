@@ -2,6 +2,7 @@ import { expect, test } from 'vitest'
 import { parse } from 'yaml'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { validateProducerProvenance, type ProducerProvenanceInput } from '../../scripts/testing/validate-flakiness-artifacts.mjs'
 
 /** Load checked-in workflow; parser must also catch unresolved merge markers. */
 function workflow(name: string) { return parse(readFileSync(fileURLToPath(new URL(`../../.github/workflows/${name}.yml`, import.meta.url)), 'utf8')) }
@@ -91,4 +92,57 @@ test('producer preserves main parallel unit, four shards, serial locks, local pa
   expect(w.jobs['e2e-shard'].env.SONICJS_TEST_SHARD).toContain('matrix.shard')
   expect(w.jobs['e2e-shard'].steps.some((s: any) => s.run?.includes('--grep-invert "@lock-"'))).toBe(true)
   expect(w.jobs['e2e-locked'].steps.some((s: any) => s.run?.includes('--workers 1'))).toBe(true)
+})
+
+/** Exact fail-closed activation clause; absent/false vars cannot enter privileged job. */
+function assertActivation(job: any) {
+  expect(job.if).toMatch(/&&\s*vars\.FLAKINESS_UPLOAD_ENABLED == 'true'\s*$/)
+}
+test('upload requires explicit approval switch; removal or false comparison fails contract', () => {
+  const job = workflow('flakiness-upload').jobs.upload
+  assertActivation(job)
+  for (const condition of [job.if.replace(/&&\s*vars\.FLAKINESS_UPLOAD_ENABLED == 'true'/, ''), job.if.replace("== 'true'", "== 'false'")]) {
+    expect(() => assertActivation({ ...job, if: condition })).toThrow()
+  }
+})
+test('ledger publication uses only filtered export even after failure or cancellation', () => {
+  const steps = workflow('flakiness-upload').jobs.upload.steps
+  const stage = steps.find((s: any) => s.name === 'Export safe delivery records')
+  const artifact = steps.find((s: any) => s.name === 'Preserve delivery ledger')
+  expect(stage?.if).toBe('always()')
+  expect(stage?.run).toBe('node scripts/testing/flakiness-runtime/export-flakiness-ledger.mjs')
+  expect(stage?.env.LEDGER_DIR).toBe('${{ runner.temp }}/ledger')
+  expect(stage?.env.LEDGER_EXPORT_DIR).toBe('${{ runner.temp }}/ledger-export')
+  expect(artifact.with.path).toBe('${{ runner.temp }}/ledger-export/')
+  expect(steps.indexOf(stage)).toBeLessThan(steps.indexOf(artifact))
+  const upload = steps.find((s: any) => s.run === 'node scripts/testing/flakiness-runtime/run-flakiness-upload.mjs')
+  expect(upload.env.CLI_SCRATCH_DIR).toBe('${{ runner.temp }}/cli-private')
+  expect(steps.find((s: any) => s.run?.includes('npm ci')).run).toContain('scripts/testing/export-flakiness-ledger.mjs')
+})
+
+/** Feed actual rendered workflow names through production provenance policy. */
+function assertRenderedSuiteNames(w: any) {
+  const sha = 'a'.repeat(40)
+  const step = (key: string, shard?: number) => {
+    const s = w.jobs[key].steps.find((s: any) => s.run?.includes(key === 'unit-tests' ? 'npm run test:cov' : 'npx playwright test'))
+    return { number: 4, name: s.name.replace('${{ matrix.shard }}', String(shard)), status: 'completed', conclusion: 'success' }
+  }
+  for (const local of [false, true]) {
+    const job = (id: number, key: string, ran: boolean, shard?: number) => ({ id, key, ...(shard ? { shard: `${shard}-of-4` } : {}), runId: 123, runAttempt: 2, status: 'completed', conclusion: ran ? 'success' : 'skipped', steps: ran ? [step(key, shard)] : [] })
+    const input: ProducerProvenanceInput = {
+      trigger: { repository: 'SonicJs-Org/sonicjs', runId: 123, runAttempt: 2 },
+      producer: { repository: 'SonicJs-Org/sonicjs', runId: 123, runAttempt: 2, workflowId: 207092903, workflowName: 'PR Tests', workflowPath: '.github/workflows/pr-tests.yml', event: 'push', status: 'completed', conclusion: 'success', headBranch: 'main', headSha: sha },
+      jobs: [job(10, 'unit-tests', true), job(11, 'e2e-local', local), job(12, 'e2e-locked', !local), ...w.jobs['e2e-shard'].strategy.matrix.shard.map((n: number) => job(20 + n, 'e2e-shard', !local, n))],
+    }
+    const result = validateProducerProvenance(input)
+    expect(result.suites.filter(s => s.ran).map(s => s.jobId).sort((a, b) => a - b)).toEqual(local ? [10, 11] : [10, 12, 21, 22, 23, 24])
+  }
+}
+test('workflow-rendered unit, local, locked and all four shard names match validator', () => {
+  assertRenderedSuiteNames(workflow('pr-tests'))
+})
+test.each(['unit-tests', 'e2e-local', 'e2e-locked', 'e2e-shard'])('renaming actual %s test step fails workflow-derived contract', key => {
+  const w = workflow('pr-tests')
+  w.jobs[key].steps.find((s: any) => s.run?.includes(key === 'unit-tests' ? 'npm run test:cov' : 'npx playwright test')).name += ' renamed'
+  expect(() => assertRenderedSuiteNames(w)).toThrow(/missing or non-publishable suite/)
 })

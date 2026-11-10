@@ -7,7 +7,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fetchProducerProvenance } from './fetch-producer-provenance.mjs';
-import { validateArtifactPayload } from './validate-flakiness-artifacts.mjs';
+import { validateArtifactPayload, validateProducerProvenance } from './validate-flakiness-artifacts.mjs';
 import { executeUpload } from './upload-flakiness.mjs';
 import { beginDeliveryAttempt, finishDeliveryAttempt } from './delivery-ledger.mjs';
 
@@ -34,13 +34,18 @@ async function main() {
   try {
     const trusted = await fetchProducerProvenance({ repository: required('GITHUB_REPOSITORY'), runId: options.producerRunId,
       runAttempt: options.producerAttempt, token: required('GITHUB_TOKEN') });
+    const provenance = validateProducerProvenance(trusted);
+    if (provenance.suites.every(suite => !suite.ran)) {
+      summary('nothing to publish; suites not run. Trusted producer provenance validated.');
+      return;
+    }
     const project = required('FLAKINESS_PROJECT');
     const stagingParent = resolve(required('STAGING_DIR'));
     mkdirSync(stagingParent, { recursive: true, mode: 0o700 });
     const snapshots = await validateArtifactPayload({ input: { kind: 'directory', path: resolve(required('ARTIFACT_DIR')) }, stagingParent, trusted, project });
     const skipped = snapshots.provenance.suites.filter(s => !s.ran).length;
     summary(`Validated ${snapshots.invocations.length} complete invocation(s); ${skipped} producer suite job(s) did not run. Missing/interrupted evidence is never counted as success.`);
-    const result = await executeUpload(snapshots, { runtimeDir: resolve(required('RUNTIME_DIR')), ledgerDir: options.ledgerDir, project, timeoutMs: 180_000 },
+    const result = await executeUpload(snapshots, { runtimeDir: resolve(required('RUNTIME_DIR')), ledgerDir: options.ledgerDir, privateScratchDir: resolve(required('CLI_SCRATCH_DIR')), project, timeoutMs: 180_000 },
       { githubOidcUrl: required('ACTIONS_ID_TOKEN_REQUEST_URL'), githubOidcToken: required('ACTIONS_ID_TOKEN_REQUEST_TOKEN') }, { enableUpload: true });
     for (const r of result.results) summary(`- ${r.suite}: ${r.state}${r.receiptUrl ? ` — ${r.receiptUrl}` : ''}`);
     summary('CLI acceptance is not dashboard verification. Hosted OIDC delivery and read-back remain unproven.');

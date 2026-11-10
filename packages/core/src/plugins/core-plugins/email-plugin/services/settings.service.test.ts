@@ -47,11 +47,25 @@ describe('EmailSettingsService.load', () => {
     expect(await svc.load()).toEqual({})
   })
 
-  it('queries the email plugin settings row with the right SQL', async () => {
+  it('queries the canonical global email document before legacy settings', async () => {
     const prepare = vi.fn(() => ({ first: vi.fn(async () => ({ settings: '{}' })) }))
     const db = { prepare } as unknown as D1Database
     await new EmailSettingsService(db).load()
     const sql = prepare.mock.calls[0]?.[0] as string
-    expect(sql).toMatch(/SELECT settings FROM plugins WHERE id = 'email'/)
+    expect(sql).toContain('FROM documents')
+    expect(sql).toContain("slug = 'email' AND tenant_id = 'default'")
+    expect(sql).toContain("locale = 'default' AND parent_root_id = ''")
+    expect(sql).toContain('is_current_draft = 1 AND deleted_at IS NULL')
+    expect(prepare).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the legacy query when no canonical document exists', async () => {
+    const prepare = vi.fn((sql: string) => ({
+      first: vi.fn(async () => sql.includes('FROM documents') ? null : { settings: '{"fromEmail":"legacy@example.com"}' }),
+    }))
+    const settings = await new EmailSettingsService({ prepare } as unknown as D1Database).load()
+    expect(settings).toEqual({ fromEmail: 'legacy@example.com' })
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(prepare.mock.calls[1]?.[0]).toBe("SELECT settings FROM plugins WHERE id = 'email'")
   })
 })

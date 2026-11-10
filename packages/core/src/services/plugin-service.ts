@@ -1,4 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types'
+import { loadDbEmailSettings } from './email/db-settings'
+import { PLUGIN_REGISTRY } from '../plugins/manifest-registry'
 import { invalidateTenantCache } from '../middleware/tenant'
 import { invalidatePluginStatusCache } from '../middleware/plugin-middleware'
 import { TWO_FACTOR_PLUGIN_ID, refreshTwoFactorPolicy } from '../auth/two-factor-settings'
@@ -84,22 +86,6 @@ export class PluginService {
     const slug = pluginData.id || pluginData.name || `plugin-${Date.now()}`
     const docId = crypto.randomUUID()
     const now = Math.floor(Date.now() / 1000)
-    const data = JSON.stringify({
-      name: slug,
-      displayName: pluginData.display_name || 'Unnamed Plugin',
-      description: pluginData.description || '',
-      version: pluginData.version || '1.0.0',
-      author: pluginData.author || 'Unknown',
-      category: pluginData.category || 'utilities',
-      icon: pluginData.icon || '🔌',
-      status: 'active',
-      isCore: pluginData.is_core || false,
-      settings: pluginData.settings || {},
-      permissions: pluginData.permissions || [],
-      dependencies: pluginData.dependencies || [],
-      downloadCount: pluginData.download_count || 0,
-      rating: pluginData.rating || 0,
-    })
     // Re-installing something that is already there used to hit `idx_documents_unique_slug`
     // and bubble the raw D1 constraint text out of the route as a 400. Treat it as a
     // re-install instead: refresh the manifest fields and put the plugin back in the active
@@ -136,6 +122,33 @@ export class PluginService {
       return reinstalled
     }
 
+    // Empty settings or the exact manifest defaults are an unconfigured seed. Copy
+    // legacy email settings only when creating the first document; an existing
+    // document (including deliberately cleared {}) always won the branch above.
+    let settings = pluginData.settings || {}
+    const emailDefaults = PLUGIN_REGISTRY.email?.defaultSettings ?? {}
+    const isEmailSeed = !Array.isArray(settings) && (Object.keys(settings).length === 0 ||
+      (Object.keys(settings).length === Object.keys(emailDefaults).length &&
+        Object.entries(emailDefaults).every(([key, value]) => settings[key] === value)))
+    if (slug === 'email' && isEmailSeed) {
+      settings = await loadDbEmailSettings(this.db) ?? settings
+    }
+    const data = JSON.stringify({
+      name: slug,
+      displayName: pluginData.display_name || 'Unnamed Plugin',
+      description: pluginData.description || '',
+      version: pluginData.version || '1.0.0',
+      author: pluginData.author || 'Unknown',
+      category: pluginData.category || 'utilities',
+      icon: pluginData.icon || '🔌',
+      status: 'active',
+      isCore: pluginData.is_core || false,
+      settings,
+      permissions: pluginData.permissions || [],
+      dependencies: pluginData.dependencies || [],
+      downloadCount: pluginData.download_count || 0,
+      rating: pluginData.rating || 0,
+    })
     // R5: 17 columns / 9 ? / 8 literals — verified
     await this.db.prepare(`
       INSERT INTO documents (

@@ -10,41 +10,42 @@
  * Extend via config.auth.extendBetterAuth in createSonicJSApp() to add social
  * providers, magic link, 2FA, etc.
  */
-/** Send an email via the SonicJS email plugin (Resend).
- *  Loads apiKey/fromEmail/fromName from the `plugins` table at runtime.
- *  Falls back to console.log when the plugin is unconfigured (local dev). */
+/** Send auth email through the supported Resend transport.
+ *  Respect the selected provider: other transports must fail explicitly until
+ *  supported here. An unconfigured plugin retains the development log fallback. */
 async function sendViaEmailPlugin(
   db: D1Database,
   to: string,
   subject: string,
   html: string
 ): Promise<void> {
-  try {
-    const row = (await db
-      .prepare("SELECT settings FROM plugins WHERE id = 'email'")
-      .first()) as { settings: string } | null
-    if (row?.settings) {
-      const { apiKey, fromEmail, fromName } = JSON.parse(row.settings) as {
-        apiKey?: string; fromEmail?: string; fromName?: string
-      }
-      if (apiKey && fromEmail) {
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: `${fromName ?? 'SonicJS'} <${fromEmail}>`,
-            to: [to],
-            subject,
-            html,
-          }),
-        })
-        return
-      }
+  const settings = await loadDbEmailSettings(db)
+  if (settings) {
+    const { provider, apiKey, resendApiKey, fromEmail, fromName, cfAccountId, cfEmailApiToken } = settings
+    const key = resendApiKey || apiKey
+    // Registry defaults select Cloudflare before any transport is configured.
+    if (provider !== undefined && provider !== 'resend' && (key || cfAccountId || cfEmailApiToken)) {
+      throw new Error(`Auth email does not support the selected provider: ${provider}`)
     }
-  } catch { /* fall through to dev log */ }
+    if (key && fromEmail) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: `${fromName ?? 'SonicJS'} <${fromEmail}>`,
+          to: [to],
+          subject,
+          html,
+        }),
+      })
+      if (!response.ok) throw new Error(`Auth email delivery failed (Resend HTTP ${response.status})`)
+      return
+    }
+  }
   console.log(`[email-dev] To:${to} | Subject:${subject}`)
 }
 
+import { loadDbEmailSettings } from '../services/email/db-settings'
 import { betterAuth } from 'better-auth'
 import { withCloudflare } from 'better-auth-cloudflare'
 import { hashPassword as baHashPassword, verifyPassword as baVerifyPassword } from 'better-auth/crypto'

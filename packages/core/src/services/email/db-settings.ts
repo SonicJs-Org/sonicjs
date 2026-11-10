@@ -26,6 +26,9 @@ export interface DbEmailSettings {
   apiKey?: string
   /** Current Resend key field from the provider selector UI. */
   resendApiKey?: string
+  /** Cloudflare credentials distinguish configured transport from blank seed defaults. */
+  cfAccountId?: string
+  cfEmailApiToken?: string
   fromEmail?: string
   fromName?: string
   replyTo?: string

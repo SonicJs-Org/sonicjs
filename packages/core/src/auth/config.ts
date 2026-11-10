@@ -10,35 +10,38 @@
  * Extend via config.auth.extendBetterAuth in createSonicJSApp() to add social
  * providers, magic link, 2FA, etc.
  */
-/** Send an email via the SonicJS email plugin (Resend).
- *  Tries the v3 `documents` table first (primary), falls back to `plugins`
- *  (legacy). Falls back to console.log when the plugin is unconfigured. */
+/** Send auth email through the supported Resend transport.
+ *  Respect the selected provider: other transports must fail explicitly until
+ *  supported here. An unconfigured plugin retains the development log fallback. */
 async function sendViaEmailPlugin(
   db: D1Database,
   to: string,
   subject: string,
   html: string
 ): Promise<void> {
-  try {
-    const settings = await loadDbEmailSettings(db)
-    if (settings) {
-      const { apiKey, resendApiKey, fromEmail, fromName } = settings
-      const key = resendApiKey || apiKey
-      if (key && fromEmail) {
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: `${fromName ?? 'SonicJS'} <${fromEmail}>`,
-            to: [to],
-            subject,
-            html,
-          }),
-        })
-        return
-      }
+  const settings = await loadDbEmailSettings(db)
+  if (settings) {
+    const { provider, apiKey, resendApiKey, fromEmail, fromName, cfAccountId, cfEmailApiToken } = settings
+    const key = resendApiKey || apiKey
+    // Registry defaults select Cloudflare before any transport is configured.
+    if (provider !== undefined && provider !== 'resend' && (key || cfAccountId || cfEmailApiToken)) {
+      throw new Error(`Auth email does not support the selected provider: ${provider}`)
     }
-  } catch { /* fall through to dev log */ }
+    if (key && fromEmail) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: `${fromName ?? 'SonicJS'} <${fromEmail}>`,
+          to: [to],
+          subject,
+          html,
+        }),
+      })
+      if (!response.ok) throw new Error(`Auth email delivery failed (Resend HTTP ${response.status})`)
+      return
+    }
+  }
   console.log(`[email-dev] To:${to} | Subject:${subject}`)
 }
 

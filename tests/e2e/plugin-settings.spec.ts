@@ -13,20 +13,41 @@ test.describe("Source: 29-email-plugin-settings.spec.ts", () => {
    * detail page with an Install button. Core plugins are not installed on a greenfield database,
    * so make that a precondition of the spec rather than an assumption about the environment.
    */
-  async function ensureEmailPluginInstalled(page: Page) {
-    await page.request
-      .post('/admin/plugins/install', {
-        headers: { 'Content-Type': 'application/json' },
-        data: { name: 'email' },
-      })
-      // Already installed → 400 from installPlugin; that is the state we want anyway.
-      .catch(() => {})
+  async function ensureEmailPluginInstalled(page: Page): Promise<Record<string, unknown>> {
+    const response = await page.request.post('/admin/plugins/install', {
+      headers: { 'Content-Type': 'application/json' },
+      data: { name: 'email' },
+    })
+    // PluginService preserves settings on an idempotent reinstall.
+    expect(response.status()).toBe(200)
+    const body = await response.json()
+    expect(body.success).toBe(true)
+    expect(body.plugin.settings).toBeTruthy()
+    expect(Array.isArray(body.plugin.settings)).toBe(false)
+    expect(typeof body.plugin.settings).toBe('object')
+    return body.plugin.settings
   }
 
-  test.describe('Email Plugin Settings @plugins', () => {
+  test.describe('Email Plugin Settings @plugins @lock-plugin-email', () => {
+    let originalSettings: Record<string, unknown> | undefined
+
     test.beforeEach(async ({ page }) => {
+      originalSettings = undefined
       await loginAsAdmin(page)
-      await ensureEmailPluginInstalled(page)
+      originalSettings = await ensureEmailPluginInstalled(page)
+    })
+
+    test.afterEach(async ({ page }) => {
+      if (originalSettings === undefined) return // Snapshot failed before test could mutate settings.
+      // Dedicated POST replaces settings, while the generic endpoint merges. Clear
+      // first, then restore the complete snapshot (including legacy/internal keys).
+      const cleared = await page.request.post('/admin/email/settings', { data: {} })
+      expect(cleared.status()).toBe(200)
+      expect(await cleared.json()).toEqual({ success: true, settings: {} })
+      const restored = await page.request.post('/admin/plugins/email/settings', { data: originalSettings })
+      expect(restored.status()).toBe(200)
+      expect(await restored.json()).toEqual({ success: true })
+      expect(await ensureEmailPluginInstalled(page)).toEqual(originalSettings)
     })
 
     test('should navigate to email plugin settings from plugins page', async ({ page }) => {
@@ -62,10 +83,8 @@ test.describe("Source: 29-email-plugin-settings.spec.ts", () => {
       await expect(provider).toBeVisible()
       await expect(provider.locator('option')).toHaveText(['Cloudflare Email Service', 'Resend'])
 
-      // The form renders whichever transport is currently saved, and the sibling "should save
-      // email settings successfully" test persists Resend — so select the transport explicitly
-      // rather than assuming a default. What is under test is that the selector drives which
-      // transport-specific block is shown.
+      // Select explicitly: the test verifies transport-specific field visibility
+      // regardless of the original settings restored after each test.
       await provider.selectOption('cloudflare')
       await expect(page.locator('input#setting_cfAccountId')).toBeVisible()
       await expect(page.locator('input#setting_cfEmailApiToken')).toBeVisible()

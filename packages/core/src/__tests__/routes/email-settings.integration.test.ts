@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { createAuth } from '../../auth/config'
+import { PluginService } from '../../services/plugin-service'
+import { PLUGIN_REGISTRY } from '../../plugins/manifest-registry'
+import { csrfProtection, generateCsrfToken } from '../../middleware/csrf'
 import type { Bindings, Variables } from '../../app'
 import { adminRoutes } from '../../plugins/core-plugins/email-plugin/routes/admin'
 import { EmailSettingsService } from '../../plugins/core-plugins/email-plugin/services/settings.service'
@@ -25,7 +28,7 @@ function data(id: string) {
   return JSON.parse(row.data)
 }
 
-function postSettings(body: unknown, role = 'admin') {
+function postSettings(body: unknown, role = 'admin', headers: Record<string, string> = {}) {
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
   app.use('*', async (c, next) => {
     c.set('user', { userId: 'admin', role, email: 'admin@sonic.test', exp: 9999999999, iat: 0 })
@@ -33,13 +36,14 @@ function postSettings(body: unknown, role = 'admin') {
     c.set('tenantId', 'tenant-a')
     await next()
   })
+  app.use('*', csrfProtection())
   app.route('/admin/email', adminRoutes)
   return app.request('/admin/email/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }, { DB: db } as unknown as Bindings)
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+  }, { DB: db, JWT_SECRET: 'csrf-integration-secret' } as unknown as Bindings)
 }
 
-async function magicLink() {
+async function magicLink(expectedStatus = 200) {
   const auth = createAuth({
     DB: db, BETTER_AUTH_SECRET: 'test-better-auth-secret-at-least-32-chars', BETTER_AUTH_URL: 'https://sonic.test',
   } as unknown as Bindings)
@@ -47,7 +51,7 @@ async function magicLink() {
     method: 'POST', headers: { Origin: 'https://sonic.test', 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'recipient@sonic.test', callbackURL: '/admin' }),
   }))
-  expect(response.status, await response.text()).toBe(200)
+  expect(response.status, await response.text()).toBe(expectedStatus)
 }
 
 beforeEach(() => {
@@ -65,6 +69,101 @@ afterEach(() => {
 })
 
 describe('global email settings consumers', () => {
+  it.each([undefined, {}, PLUGIN_REGISTRY.email!.defaultSettings])('migrates legacy settings when first installation receives seed %j', async settings => {
+    const service = new PluginService(db as unknown as D1Database)
+    const installed = await service.installPlugin({ id: 'email', settings })
+    expect(PLUGIN_REGISTRY.email!.defaultSettings).toMatchObject({ provider: 'cloudflare', resendApiKey: '' })
+    expect(installed.settings).toEqual(legacySettings)
+    expect(await loadDbEmailSettings(db)).toEqual(legacySettings)
+  })
+
+  it.each([{}, PLUGIN_REGISTRY.email!.defaultSettings])('does not resurrect legacy credentials when reinstalling deliberately cleared %j', async clearedSettings => {
+    const service = new PluginService(db as unknown as D1Database)
+    await service.installPlugin({ id: 'email' })
+    await service.updatePluginSettings('email', clearedSettings)
+    const installed = await service.installPlugin({ id: 'email', settings: PLUGIN_REGISTRY.email!.defaultSettings })
+    expect(installed.settings).toEqual(clearedSettings)
+    expect(await loadDbEmailSettings(db)).toEqual(clearedSettings)
+  })
+
+  it('preserves explicitly supplied installation settings over legacy credentials', async () => {
+    const installed = await new PluginService(db as unknown as D1Database).installPlugin({ id: 'email', settings: newSettings })
+    expect(installed.settings).toEqual(newSettings)
+    expect(await loadDbEmailSettings(db)).toEqual(newSettings)
+  })
+
+  it('preserves a deliberate legacy clear during first document installation', async () => {
+    db.raw.prepare("UPDATE plugins SET settings = '{}' WHERE id = 'email'").run()
+    const installed = await new PluginService(db as unknown as D1Database).installPlugin({ id: 'email' })
+    expect(installed.settings).toEqual({})
+    expect(await loadDbEmailSettings(db)).toEqual({})
+  })
+
+  it.each(['document', 'legacy'])('auth uses development logging for exact registry seed defaults in %s storage', async storage => {
+    const defaults = PLUGIN_REGISTRY.email!.defaultSettings
+    expect(defaults).toEqual({
+      provider: 'cloudflare', resendApiKey: '', fromEmail: '', fromName: '',
+      replyTo: '', logoUrl: '', cfAccountId: '', cfEmailApiToken: '',
+    })
+    if (storage === 'document') {
+      db.raw.exec("DELETE FROM plugins WHERE id = 'email'")
+      const installed = await new PluginService(db as unknown as D1Database).installPlugin({ id: 'email', settings: defaults })
+      expect(installed.settings).toEqual(defaults)
+    } else {
+      db.raw.prepare("UPDATE plugins SET settings = ? WHERE id = 'email'").run(JSON.stringify(defaults))
+    }
+    expect(await loadDbEmailSettings(db)).toEqual(defaults)
+    const fetchImpl = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchImpl)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await magicLink()
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(console.log).toHaveBeenCalledWith('[email-dev] To:recipient@sonic.test | Subject:Your sign-in link')
+  })
+
+  it.each(['', 'stale-resend-key'])('auth rejects configured Cloudflare without a wrong transport fetch (Resend key: %j)', async resendApiKey => {
+    document({
+      ...PLUGIN_REGISTRY.email!.defaultSettings, resendApiKey,
+      cfAccountId: 'configured-account', cfEmailApiToken: 'configured-token',
+    })
+    const fetchImpl = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchImpl)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await magicLink(500)
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('[email-dev]'))
+  })
+
+  it.each(['cloudflare', 'invalid-provider'])('auth refuses selected %s instead of using a stale Resend key', async provider => {
+    document({ ...oldSettings, provider })
+    const fetchImpl = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchImpl)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await magicLink(500)
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('[email-dev]'))
+  })
+
+  it.each([401, 503])('auth surfaces Resend HTTP %s failures', async status => {
+    document(newSettings)
+    const fetchImpl = vi.fn(async () => new Response('delivery failed', { status }))
+    vi.stubGlobal('fetch', fetchImpl)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await magicLink(500)
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('[email-dev]'))
+  })
+
+  it('auth surfaces a transport exception instead of reporting a dev send', async () => {
+    document(newSettings)
+    const fetchImpl = vi.fn(async () => { throw new Error('network unavailable') })
+    vi.stubGlobal('fetch', fetchImpl)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await magicLink(500)
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('[email-dev]'))
+  })
+
   it('reads only the default tenant, locale and root plugin document', async () => {
     document({ resendApiKey: 'tenant-key' }, 'tenant-a')
     document({ resendApiKey: 'translated-key' }, 'default', 'fr')
@@ -119,6 +218,30 @@ describe('global email settings consumers', () => {
 })
 
 describe('POST /admin/email/settings storage round trip', () => {
+  it('uses schema seconds for both document and legacy updated_at', async () => {
+    const now = Math.floor(Date.now() / 1000)
+    vi.spyOn(Date, 'now').mockReturnValue(now * 1000 + 123)
+    expect((await postSettings(newSettings)).status).toBe(200)
+    expect(db.raw.prepare("SELECT updated_at FROM plugins WHERE id = 'email'").get()).toEqual({ updated_at: now })
+    const id = document(oldSettings)
+    expect((await postSettings(newSettings)).status).toBe(200)
+    expect(db.raw.prepare('SELECT updated_at FROM documents WHERE id = ?').get(id)).toEqual({ updated_at: now })
+  })
+
+  it('existing CSRF middleware rejects missing/mismatched cookie-auth tokens and accepts a signed token', async () => {
+    const id = document(oldSettings)
+    const cookie = 'auth_token=session; csrf_token=unsigned'
+    expect((await postSettings(newSettings, 'admin', { Cookie: cookie })).status).toBe(403)
+    expect((await postSettings(newSettings, 'admin', { Cookie: cookie, 'X-CSRF-Token': 'different' })).status).toBe(403)
+    expect(data(id).settings).toEqual(oldSettings)
+    const token = await generateCsrfToken('csrf-integration-secret')
+    const response = await postSettings(newSettings, 'admin', {
+      Cookie: `auth_token=session; csrf_token=${token}`, 'X-CSRF-Token': token,
+    })
+    expect(response.status).toBe(200)
+    expect(data(id).settings).toEqual(newSettings)
+  })
+
   it('updates the authoritative document and preserves status, history and tenant ownership', async () => {
     const foreign = document({ resendApiKey: 'tenant-key' }, 'tenant-a')
     const translated = document({ resendApiKey: 'translated-key' }, 'default', 'fr')

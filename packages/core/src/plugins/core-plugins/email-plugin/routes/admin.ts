@@ -78,7 +78,7 @@ adminRoutes.post('/settings', async (c) => {
   if (!document) {
     await c.env.DB
       .prepare(`UPDATE plugins SET settings = ?, updated_at = ? WHERE id = 'email'`)
-      .bind(json, Date.now())
+      .bind(json, Math.floor(Date.now() / 1000))
       .run()
   }
 

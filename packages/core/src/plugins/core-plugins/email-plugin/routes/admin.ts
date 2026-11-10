@@ -44,7 +44,7 @@ adminRoutes.post('/settings', async (c) => {
   }
 
   const body = (await c.req.json().catch(() => null)) as SettingsBody | null
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return c.json({ error: 'invalid JSON body' }, 400)
   }
 
@@ -59,10 +59,28 @@ adminRoutes.post('/settings', async (c) => {
   if (typeof body.cfEmailApiToken === 'string') cleaned.cfEmailApiToken = body.cfEmailApiToken.trim()
 
   const json = JSON.stringify(cleaned)
-  await c.env.DB
-    .prepare(`UPDATE plugins SET settings = ?, updated_at = ? WHERE id = 'email'`)
-    .bind(json, Date.now())
-    .run()
+  // Match PluginService's global configuration, never a request tenant's document.
+  // Replace settings so clearing credentials cannot merge an old API key back in.
+  let document: { id: string } | null = null
+  try {
+    document = await c.env.DB.prepare(`
+      UPDATE documents SET data = json_set(data, '$.settings', json(?)), updated_at = ?
+      WHERE type_id = 'plugin' AND slug = 'email' AND tenant_id = 'default'
+        AND locale = 'default' AND parent_root_id = ''
+        AND is_current_draft = 1 AND deleted_at IS NULL
+      RETURNING id
+    `).bind(json, Math.floor(Date.now() / 1000)).first<{ id: string }>()
+  } catch (error) {
+    // Only a pre-document schema may fall back on a failed query. Never hide a
+    // document write failure by reporting success from a legacy-only write.
+    if (!(error instanceof Error) || !/no such table: (?:main\.)?documents\b/i.test(error.message)) throw error
+  }
+  if (!document) {
+    await c.env.DB
+      .prepare(`UPDATE plugins SET settings = ?, updated_at = ? WHERE id = 'email'`)
+      .bind(json, Date.now())
+      .run()
+  }
 
   return c.json({ success: true, settings: cleaned })
 })

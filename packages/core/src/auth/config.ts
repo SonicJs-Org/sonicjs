@@ -19,38 +19,8 @@ async function sendViaEmailPlugin(
   subject: string,
   html: string
 ): Promise<void> {
-  type SettingsRow = { settings: string | null } | null
-  const loadSettings = async (): Promise<{ apiKey?: string; resendApiKey?: string; fromEmail?: string; fromName?: string } | null> => {
-    // Primary: v3 documents table (written by the plugin settings admin page).
-    try {
-      const docRow = (await db
-        .prepare(
-          `SELECT json_extract(data, '$.settings') AS settings
-           FROM documents
-           WHERE type_id = 'plugin' AND slug = 'email'
-             AND is_current_draft = 1 AND deleted_at IS NULL
-           LIMIT 1`
-        )
-        .first()) as SettingsRow
-      if (docRow?.settings) {
-        const parsed = JSON.parse(docRow.settings)
-        if (parsed && typeof parsed === 'object') return parsed
-      }
-    } catch { /* documents table absent — fall through */ }
-    // Fallback: legacy plugins table (written by POST /admin/email/settings).
-    try {
-      const pluginRow = (await db
-        .prepare("SELECT settings FROM plugins WHERE id = 'email'")
-        .first()) as SettingsRow
-      if (pluginRow?.settings) {
-        const parsed = JSON.parse(pluginRow.settings)
-        if (parsed && typeof parsed === 'object') return parsed
-      }
-    } catch { /* plugins table absent */ }
-    return null
-  }
   try {
-    const settings = await loadSettings()
+    const settings = await loadDbEmailSettings(db)
     if (settings) {
       const { apiKey, resendApiKey, fromEmail, fromName } = settings
       const key = resendApiKey || apiKey
@@ -72,6 +42,7 @@ async function sendViaEmailPlugin(
   console.log(`[email-dev] To:${to} | Subject:${subject}`)
 }
 
+import { loadDbEmailSettings } from '../services/email/db-settings'
 import { betterAuth } from 'better-auth'
 import { withCloudflare } from 'better-auth-cloudflare'
 import { hashPassword as baHashPassword, verifyPassword as baVerifyPassword } from 'better-auth/crypto'

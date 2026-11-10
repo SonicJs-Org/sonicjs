@@ -137,6 +137,40 @@ test.describe("Source: 29-email-plugin-settings.spec.ts", () => {
       await expect(page.locator('input#setting_fromName')).toHaveValue('Test App')
     })
 
+    test('dedicated email POST persists to the plugin settings form and can clear credentials', async ({ page }) => {
+      const settings = {
+        provider: 'resend', resendApiKey: 're_dedicated_post_test',
+        fromEmail: 'dedicated@example.com', fromName: 'Dedicated POST', replyTo: 'reply@example.com',
+      }
+      const saved = await page.request.post('/admin/email/settings', { data: settings })
+      expect(saved.status()).toBe(200)
+      expect(await saved.json()).toEqual({ success: true, settings })
+      await page.goto('/admin/plugins/email')
+      await expect(page.locator('#setting_provider')).toHaveValue('resend')
+      await expect(page.locator('#setting_resendApiKey')).toHaveValue(settings.resendApiKey)
+      await expect(page.locator('#setting_fromEmail')).toHaveValue(settings.fromEmail)
+      await expect(page.locator('#setting_fromName')).toHaveValue(settings.fromName)
+
+      const cleared = await page.request.post('/admin/email/settings', { data: {} })
+      expect(cleared.status()).toBe(200)
+      expect(await cleared.json()).toEqual({ success: true, settings: {} })
+      await page.reload()
+      await page.selectOption('#setting_provider', 'resend')
+      await expect(page.locator('#setting_resendApiKey')).toHaveValue('')
+      await expect(page.locator('#setting_fromEmail')).toHaveValue('')
+    })
+
+    test('dedicated email POST rejects arrays without clearing saved settings', async ({ page }) => {
+      const settings = { provider: 'resend', resendApiKey: 're_preserved_test', fromEmail: 'preserved@example.com' }
+      expect((await page.request.post('/admin/email/settings', { data: settings })).status()).toBe(200)
+      const invalid = await page.request.post('/admin/email/settings', { data: [] })
+      expect(invalid.status()).toBe(400)
+      expect(await invalid.json()).toEqual({ error: 'invalid JSON body' })
+      await page.goto('/admin/plugins/email')
+      await expect(page.locator('#setting_resendApiKey')).toHaveValue(settings.resendApiKey)
+      await expect(page.locator('#setting_fromEmail')).toHaveValue(settings.fromEmail)
+    })
+
     test('should validate required fields', async ({ page }) => {
       await page.goto('/admin/plugins/email')
       await page.waitForLoadState('domcontentloaded')

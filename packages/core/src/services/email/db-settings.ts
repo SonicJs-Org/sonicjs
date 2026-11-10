@@ -8,12 +8,13 @@
  *      `PluginService.updatePluginSettings`, which writes via
  *      `json_set(data, '$.settings', json(?))`. Read with `json_extract`.
  *
- *   2. `plugins` table (legacy fallback) — the dedicated email admin route
- *      (`POST /admin/email/settings`) writes to `plugins.settings` directly.
+ *   2. `plugins` table (legacy fallback) — used on older installs without
+ *      a canonical email plugin document.
  *
  * We try the `documents` path first and fall back to `plugins` so both storage
- * paths remain functional. Both queries return a column named `settings`
- * containing a JSON string, so the parsing logic is identical.
+ * paths remain functional. An empty object is authoritative: never revive a
+ * legacy key merely because the document has no credentials. Both queries return
+ * a column named `settings` containing JSON, so parsing is identical.
  */
 
 import type { EmailLogDb } from './email-service'
@@ -40,8 +41,7 @@ interface SettingsDb {
  * Never throws — a bad settings blob just yields null.
  *
  * Tries the v3 `documents` table first (primary storage written by the plugin
- * settings page), then falls back to the legacy `plugins` table (written by
- * the dedicated email admin route).
+ * settings page), then falls back to the legacy `plugins` table.
  */
 export async function loadDbEmailSettings(db: SettingsDb | EmailLogDb | undefined): Promise<DbEmailSettings | null> {
   if (!db || typeof (db as SettingsDb).prepare !== 'function') return null
@@ -49,18 +49,20 @@ export async function loadDbEmailSettings(db: SettingsDb | EmailLogDb | undefine
     if (!settings) return null
     try {
       const parsed = JSON.parse(settings) as DbEmailSettings
-      return parsed && typeof parsed === 'object' ? parsed : null
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
     } catch {
       return null
     }
   }
   try {
-    // Primary: v3 documents table — settings saved via the plugin settings admin page.
+    // PluginService installs global plugin documents at the default locale/root.
+    // Together with the live-draft predicate, this key is unique in the schema.
     const docRow = await (db as SettingsDb)
       .prepare(
         `SELECT json_extract(data, '$.settings') AS settings
          FROM documents
-         WHERE type_id = 'plugin' AND slug = 'email'
+         WHERE type_id = 'plugin' AND slug = 'email' AND tenant_id = 'default'
+           AND locale = 'default' AND parent_root_id = ''
            AND is_current_draft = 1 AND deleted_at IS NULL
          LIMIT 1`
       )

@@ -16,12 +16,12 @@ afterEach(() => {
 function storage() {
   const raw = new Database(':memory:')
   databases.push(raw)
-  raw.exec(`CREATE TABLE documents (type_id TEXT, slug TEXT, is_current_draft INTEGER, deleted_at INTEGER, data TEXT);
+  raw.exec(`CREATE TABLE documents (type_id TEXT, slug TEXT, tenant_id TEXT DEFAULT 'default', locale TEXT DEFAULT 'default', parent_root_id TEXT DEFAULT '', is_current_draft INTEGER, deleted_at INTEGER, data TEXT);
     CREATE TABLE plugins (id TEXT, settings TEXT);`)
   raw.prepare('INSERT INTO plugins VALUES (?, ?)').run('email', JSON.stringify({ apiKey: 'legacy' }))
   const db = { prepare: (sql: string) => ({ first: async () => raw.prepare(sql).get() as { settings: string | null } | null }) }
   const document = (settings: unknown, draft = 1, deleted: number | null = null) => {
-    raw.prepare('INSERT INTO documents VALUES (?, ?, ?, ?, ?)').run('plugin', 'email', draft, deleted, JSON.stringify({ settings }))
+    raw.prepare('INSERT INTO documents (type_id, slug, is_current_draft, deleted_at, data) VALUES (?, ?, ?, ?, ?)').run('plugin', 'email', draft, deleted, JSON.stringify({ settings }))
   }
   return { raw, db, document }
 }
@@ -40,6 +40,26 @@ describe('email settings storage precedence', () => {
     const { db, document } = storage()
     document(settings)
     expect(await loadDbEmailSettings(db)).toEqual({ apiKey: 'legacy' })
+  })
+
+  it.each([{ name: 'empty', settings: [] }, { name: 'nonempty', settings: ['invalid'] }])(
+    'falls back when document settings are a $name array', async ({ settings }) => {
+      const { db, document } = storage()
+      document(settings)
+      expect(await loadDbEmailSettings(db)).toEqual({ apiKey: 'legacy' })
+    },
+  )
+
+  it('keeps an authoritative empty object without reviving a legacy key', async () => {
+    const { db, document } = storage()
+    document({})
+    expect(await loadDbEmailSettings(db)).toEqual({})
+  })
+
+  it('rejects arrays in legacy settings too', async () => {
+    const { raw, db } = storage()
+    raw.prepare('UPDATE plugins SET settings = ?').run('[]')
+    expect(await loadDbEmailSettings(db)).toBeNull()
   })
 
   it('falls back when documents table is absent', async () => {

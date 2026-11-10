@@ -143,7 +143,9 @@ function parseBounded(bytes, limit) {
   check(bytes.length <= limit, 'JSON bytes budget');
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   /** @type {unknown} */
-  const value = JSON.parse(text);
+  let value;
+  try { value = JSON.parse(text); }
+  catch { throw new Error('Invalid artifact: JSON syntax'); }
   const stack = [{ value, depth: 0 }];
   let nodes = 0;
   while (stack.length) {

@@ -19,9 +19,10 @@ test('restore failure blocks helper; removing restore outcome gate fails contrac
 })
 
 const needed = ['authorize', 'producer-identity', 'unit-tests', 'e2e-setup', 'e2e-shard', 'e2e-locked', 'e2e-local', 'cleanup']
+const resultEnv = { authorize: 'AUTHORIZE_RESULT', 'producer-identity': 'IDENTITY_RESULT', 'unit-tests': 'UNIT_RESULT', 'e2e-setup': 'SETUP_RESULT', 'e2e-shard': 'SHARD_RESULT', 'e2e-locked': 'LOCKED_RESULT', 'e2e-local': 'LOCAL_RESULT', cleanup: 'CLEANUP_RESULT' }
 function aggregateStatus(job: any, needs: any) {
   const result = spawnSync('bash', ['--noprofile', '--norc', '-euo', 'pipefail', '-c', job.steps[0].run], {
-    cwd: repositoryRoot, env: { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, NEEDS_JSON: JSON.stringify(needs) }, encoding: 'utf8', timeout: 5000,
+    cwd: repositoryRoot, env: { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, ...Object.fromEntries(Object.entries(resultEnv).map(([key, env]) => [env, needs[key]?.result ?? ''])) }, encoding: 'utf8', timeout: 5000,
   })
   expect(result.error).toBeUndefined()
   return result.status
@@ -33,7 +34,7 @@ function assertAggregate(job: any) {
   expect(job.if).toBe('always()')
   expect(job.needs).toEqual(needed)
   expect(job.steps).toHaveLength(1)
-  expect(job.steps[0].env).toEqual({ NEEDS_JSON: '${{ toJSON(needs) }}' })
+  expect(job.steps[0].env).toEqual(Object.fromEntries(Object.entries(resultEnv).map(([key, env]) => [env, '${{ needs.' + key + '.result }}'])))
   expect(JSON.stringify(job)).not.toMatch(/uses|checkout|secrets|outputs|id-token/)
   for (const local of [true, false]) {
     const needs = Object.fromEntries(needed.map(key => [key, { result: ['authorize', 'producer-identity', 'unit-tests'].includes(key) || (local ? key === 'e2e-local' : key !== 'e2e-local') ? 'success' : 'skipped' }]))
@@ -48,14 +49,14 @@ function assertAggregate(job: any) {
   }
   expect(aggregateStatus(job, Object.fromEntries(needed.map(k => [k, { result: 'skipped' }])))).not.toBe(0)
 }
-test('fixed required test executes strict full-path matrix using immutable needs JSON', () => {
+test('fixed required test executes strict full-path matrix using individual immutable result values', () => {
   assertAggregate(workflow('pr-tests').jobs.test)
 }, 30000)
 test('aggregate mutation permitting arbitrary outcomes is rejected by executable matrix', () => {
   const job = workflow('pr-tests').jobs.test
   expect(job).toBeDefined()
   for (const script of [
-    'node -e "JSON.parse(process.env.NEEDS_JSON)"',
+    'node -e "process.exit(0)"',
     job.steps[0].run.replace("'e2e-locked', 'cleanup'", "'e2e-locked'"),
     job.steps[0].run.replace("['authorize', 'producer-identity', 'unit-tests']", "['authorize', 'unit-tests']"),
   ]) {
@@ -83,7 +84,7 @@ function assertBestEffort(w: any) {
     expect(job['continue-on-error']).toBeUndefined()
     for (const step of job.steps) {
       const vendor = /Upload (core-unit|cms-e2e) Flakiness reports/.test(step.name ?? '')
-      if (vendor) { expect(step['continue-on-error']).toBe(true); count++ }
+      if (vendor) { expect(step['continue-on-error']).toBe(true); expect(step.if).toBe('always()'); count++ }
       else expect(step['continue-on-error']).toBeUndefined()
     }
   }
@@ -157,4 +158,27 @@ test('head validation contracts reject trigger, privilege, command and failure m
     (x: any) => { x.jobs.test.steps.find((s: any) => s.name === 'Run full E2E regression suite')['continue-on-error'] = true },
     (x: any) => { x.jobs.test.steps.find((s: any) => s.name === 'Run full E2E regression suite').run += '\ntrue' },
   ]) { const bad = structuredClone(w); mutate(bad); expect(() => assertHead(bad)).toThrow() }
+})
+
+test('vendor isolation rejects missing or changed always guard in each job', () => {
+  for (const key of ['unit-tests', 'e2e-shard', 'e2e-locked', 'e2e-local']) for (const condition of [undefined, 'success()']) {
+    const bad = workflow('pr-tests')
+    const vendor = bad.jobs[key].steps.find((s: any) => /Upload (core-unit|cms-e2e) Flakiness reports/.test(s.name ?? ''))
+    if (condition === undefined) delete vendor.if
+    else vendor.if = condition
+    expect(() => assertBestEffort(bad)).toThrow()
+  }
+})
+test('aggregate never renders job outputs or unexpected result strings', () => {
+  const job = workflow('pr-tests').jobs.test
+  const marker = 'UNTRUSTED_OUTPUT_SENTINEL\n::error::injected'
+  const needs = Object.fromEntries(needed.map(key => [key, { result: marker, outputs: { payload: marker } }]))
+  const result = spawnSync('bash', ['--noprofile', '--norc', '-euo', 'pipefail', '-c', job.steps[0].run], {
+    cwd: repositoryRoot, env: { PATH: process.env.PATH, ...Object.fromEntries(Object.values(resultEnv).map(key => [key, marker])) }, encoding: 'utf8', timeout: 5000,
+  })
+  expect(result.error).toBeUndefined()
+  expect(result.status).toBe(1)
+  expect(result.stdout + result.stderr).not.toContain(marker)
+  expect(result.stderr).toContain('Required test path incomplete or unsuccessful')
+  expect(aggregateStatus(job, needs)).toBe(1)
 })

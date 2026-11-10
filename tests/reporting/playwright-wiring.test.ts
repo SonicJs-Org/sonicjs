@@ -61,21 +61,53 @@ test('all non-reporting production configuration bytes match merged main baselin
   await assertConfigurationBytes(repositoryRoot)
 })
 
-test('full-history remote-less checkout preserves pinned history and configuration; invalid baselines fail', async () => {
+// The callback permits an assertion-failure regression against the same owner.
+async function withRemoteLessCheckout(assertions: (cwd: string) => Promise<void>) {
   const { execFileSync } = await import('node:child_process')
   const { repositoryRoot } = await import('./options')
   const { reportingScratch } = await import('./scratch')
   const cwd = reportingScratch('remote-less-')
-  execFileSync('git', ['clone', '--no-hardlinks', '--quiet', repositoryRoot, cwd])
-  execFileSync('git', ['remote', 'remove', 'origin'], { cwd })
-  expect(execFileSync('git', ['remote'], { cwd, encoding: 'utf8' })).toBe('')
-  expect(execFileSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes'], { cwd, encoding: 'utf8' })).toBe('')
-  expect(execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd, encoding: 'utf8' }).trim()).toBe('false')
-  await assertBaselineHistory(cwd)
-  await assertConfigurationBytes(cwd)
-  await expect(assertBaselineHistory(cwd, '0'.repeat(40))).rejects.toThrow()
-  const obsolete = execFileSync('git', ['rev-list', '--max-parents=0', 'HEAD'], { cwd, encoding: 'utf8' }).trim().split('\n')[0]!
-  await expect(assertConfigurationBytes(cwd, obsolete)).rejects.toThrow()
+  const { rmSync } = await import('node:fs')
+  try {
+    execFileSync('git', ['clone', '--no-hardlinks', '--quiet', repositoryRoot, cwd])
+    execFileSync('git', ['remote', 'remove', 'origin'], { cwd })
+    await assertions(cwd)
+    return cwd
+  } finally { rmSync(cwd, { recursive: true, force: true }) }
+}
+
+test('full-history remote-less checkout preserves pinned history and configuration; invalid baselines fail', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { existsSync } = await import('node:fs')
+  const cwd = await withRemoteLessCheckout(async cwd => {
+    expect(execFileSync('git', ['remote'], { cwd, encoding: 'utf8' })).toBe('')
+    expect(execFileSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes'], { cwd, encoding: 'utf8' })).toBe('')
+    expect(execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd, encoding: 'utf8' }).trim()).toBe('false')
+    await assertBaselineHistory(cwd)
+    await assertConfigurationBytes(cwd)
+    await expect(assertBaselineHistory(cwd, '0'.repeat(40))).rejects.toThrow()
+    const obsolete = execFileSync('git', ['rev-list', '--max-parents=0', 'HEAD'], { cwd, encoding: 'utf8' }).trim().split('\n')[0]!
+    await expect(assertConfigurationBytes(cwd, obsolete)).rejects.toThrow()
+  })
+  expect(existsSync(cwd)).toBe(false)
+})
+
+test('remote-less checkout removes only its owned directory after assertion failure', async () => {
+  const { existsSync, writeFileSync, readFileSync, rmSync } = await import('node:fs')
+  const { reportingScratch } = await import('./scratch')
+  const sibling = reportingScratch('preserved-evidence-')
+  writeFileSync(`${sibling}/sentinel`, 'preserve')
+  let owned = ''
+  try {
+    await expect(withRemoteLessCheckout(async cwd => {
+      owned = cwd
+      expect(existsSync(`${cwd}/.git`)).toBe(true)
+      expect('actual').toBe('forced assertion failure')
+    })).rejects.toThrow()
+    expect(owned).not.toBe('')
+    expect(existsSync(owned)).toBe(false)
+    expect(readFileSync(`${sibling}/sentinel`, 'utf8')).toBe('preserve')
+  } finally { rmSync(sibling, { recursive: true, force: true }) }
 })
 
 test('list mode never registers vendor or changes environment', async () => {

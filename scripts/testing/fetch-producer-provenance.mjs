@@ -47,11 +47,13 @@ export async function fetchProducerProvenance({ repository, runId, runAttempt, t
     const original = { number: Number(number), baseRepository: repository, headRepository, headSha };
     // Associations are dynamic branch matches, not a historical snapshot. Only
     // matching original PR numbers are consistency checks; identity above is authority.
+    // Hosted associations expose repo {id, name, url}, not live PR full_name.
+    // Exact URL equality rejects credentials, query strings and alternate hosts.
     const associations = run.pull_requests;
     if (!Array.isArray(associations)) throw new Error('Invalid PR associations');
     for (const pr of associations.filter(pr => pr.number === original.number)) {
       if (pr.head?.sha !== headSha ||
-          (pr.head?.repo?.full_name && pr.head.repo.full_name !== headRepository)) throw new Error('Historical PR association mismatch');
+          pr.head?.repo?.url !== `https://api.github.com/repos/${headRepository}`) throw new Error('Historical PR association mismatch');
     }
     const live = await ghApi(`/repos/${repository}/pulls/${number}`, token);
     originalPullRequests = [original];

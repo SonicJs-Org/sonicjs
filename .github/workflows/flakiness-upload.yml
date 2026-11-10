@@ -27,6 +27,7 @@ jobs:
     if: >-
       github.event.workflow_run.repository.full_name == 'SonicJs-Org/sonicjs' &&
       github.event.workflow_run.workflow_id == 207092903 &&
+      contains(fromJSON('["push","pull_request_target"]'), github.event.workflow_run.event) &&
       vars.FLAKINESS_UPLOAD_ENABLED == 'true'
     env:
       PRODUCER_RUN_ID: ${{ github.event.workflow_run.id }}

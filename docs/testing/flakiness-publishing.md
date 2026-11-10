@@ -29,6 +29,13 @@ ID/path and repository, and compares a live PR against this historical identity.
 Run PR associations are dynamic branch matches, not historical snapshots. Only
 entries matching the recorded original PR number are checked for SHA/repository
 consistency; unrelated PRs, including PRs to other base branches, are ignored.
+Hosted workflow-run association repositories expose `{id, name, url}`, not
+`full_name` (see the captured `real-pr-metadata.json` review evidence). Matching
+associations require the recorded SHA and exactly
+`https://api.github.com/repos/<immutable-head-repository>`; credentials, query
+strings and other hosts fail closed. Fixtures model that observed repository
+shape, not a full API response or every hosted event variant. The separate live
+PR response still binds `head.repo.full_name` against immutable identity.
 This supports fork runs with empty `pull_requests` arrays. Live PR data never
 supplies missing history. Missing authorization metadata, changed repositories,
 stale heads, cancelled runs and incomplete rerun metadata fail closed. Older
@@ -42,7 +49,9 @@ installs the independent locked runtime with lifecycle scripts disabled and
 copies a fixed helper allowlist into that prefix. It does not install root/PR
 dependencies or execute report hooks. Only this consumer job has `actions: read`
 and `id-token: write`. `vars.FLAKINESS_UPLOAD_ENABLED == 'true'` is an additional fail-closed job gate;
-missing, false or other values leave the consumer disabled. Parent/user must
+missing, false or other values leave the consumer disabled. The complete job
+condition also requires the fixed repository, workflow ID and producer event
+`push` or `pull_request_target`, before artifact download or the job's OIDC scope. Parent/user must
 separately approve privacy/project and the Task 7 rollout gates before setting
 this variable. Merging this additive PR does not authorize activation or complete
 the migration. No repository variable changes are part of this implementation.
@@ -52,6 +61,9 @@ variable naming the approved project. The endpoint is fixed to
 uses absolute paths, a private working directory, a fresh HOME and an explicit
 environment allowlist. Untrusted schema/path/attachment inputs are validated and
 copied into immutable private snapshots before credentials reach the CLI.
+Malformed JSON raises the fixed `Invalid artifact: JSON syntax` reason. The
+entrypoint prints fixed diagnostic categories only, never upstream error text,
+artifact snippets or stacks, including on unexpected exceptions.
 The CLI uses only explicit access-token auth or the two GitHub OIDC request
 variables; it receives no ambient `GITHUB_*` context or producer upload opt-out.
 Pinned CLI 0.327.0 / SDK 3.6.0 source and isolated SDK initialization confirm this
@@ -85,7 +97,10 @@ retried with identical content from a restored completed checkpoint after fixing
 the runtime. Errors after spawn remain ambiguous; nonzero exits remain blocked. Do not delete ledger entries
 to force a retry; reconcile against the service first. Concurrency serializes
 consumers for each producer run/attempt. This is not a claim of server-side
-idempotency.
+idempotency. Mixed recovery means only previously `not-started` invocations may
+be delivered; matching `accepted-unverified` entries remain blocked and keep the
+rerun red even if the remaining invocations are accepted. This conservative policy
+is intentional until independent service read-back reconciles acceptance.
 
 Consumer reruns use the original run's workflow YAML but check out the current
 `main` helpers. This intentionally permits fixing the runtime and recovering a
@@ -120,7 +135,11 @@ It requires authorization, producer identity and unit success plus exactly one
 complete path: remote setup, shards, locked tests and cleanup all successful with
 local skipped; or local successful with the entire remote path skipped. Missing,
 failed, cancelled and all-skipped paths fail. It runs fixed inline code with
-`permissions: {}` and no checkout or PR-controlled outputs. No protection settings
+`permissions: {}` and no checkout or PR-controlled outputs. Eight individual
+`needs.<job>.result` values enter the fixed script; no whole `needs` object,
+job outputs or arbitrary result strings are rendered. Remote cleanup success is
+intentionally mandatory: even teardown failures block merge under the explicit
+all-CI-green policy. No protection settings
 or status synthesis are involved. Only the four new vendor artifact upload steps
 are best effort; native coverage, E2E, type checks and legacy uploads retain their
 existing failure behaviour. Missing vendor evidence still fails the consumer.
@@ -140,6 +159,12 @@ are used. Native/vendor evidence is always archived under `head-validation-*`,
 which cannot match the consumer's `flakiness-*` pattern. Full suite exit codes
 gate this check; it is not an alias for reporting-only contracts. Parent CI must
 still verify genuine exact-head local and existing remote PR Tests results.
+This branch-only `test` context is temporary rollout coverage. Before cutover,
+`pull_request_target` executes base YAML without the new aggregate; it does not
+create a second aggregate from this head. After merge, the main push runs the
+production aggregate and cannot trigger this branch-only workflow. Retire
+`flakiness-head-validation.yml` after cutover; preserve the existing required
+`test` context during rollout. No protection/status configuration changes here.
 
 Local verification:
 
@@ -170,6 +195,14 @@ partial-publish policy is approved here. Representative hosted sizes and failed-
 count/attachment parity must be checked while the activation switch remains off;
 these are Task 7 gates, not claims that full migration is complete.
 
+Task 7 must explicitly approve the producer YAML trust boundary while publishing
+remains default-off. Pushes to exactly `main`, `v3` and
+`test/e2e-infrastructure-hardening` are currently allowlisted; each uses that
+branch's YAML. `pull_request_target` uses its base branch's YAML, including `v3`.
+Writers able to modify those workflows can author authorization metadata and
+fabricate evidence. This is writer/workflow trust, not proof of report honesty.
+No reachability restriction or branch allowlist change is introduced here.
+
 PR code can falsify evidence, including evidence attributed to another producing
 job in the merged artifact tree. There is no per-job cryptographic honesty proof.
 Strict content/provenance checks prevent privilege escalation and unauthorized
@@ -182,3 +215,15 @@ RUNNER_TEMP or test-owned `.cache/reporting-contracts`, outside `flakiness-repor
 The selected parent is created then resolved with `realpath` before allocating a
 fixture, preserving this precedence while avoiding macOS `/var` symlink ancestry.
 No discovery/skips or producer uploads were changed for this separation.
+
+Allocation failure contracts exercise actual POSIX `mkdtemp` EACCES on non-root
+runners by making only a freshly owned fixture directory read-only. UID 0 may
+bypass those permissions through `CAP_DAC_OVERRIDE`, so that branch explicitly
+injects EACCES at the OS allocation boundary and labels it synthetic; no CLI exit
+is faked. A fixture-only temporary `process.getuid` stub selects that branch on
+non-root runners, then restores the actual UID before consumer validation. Both
+branches retain first/second allocation cleanup, empty sealed inventory, fresh
+runner recovery and accepted-state blocking assertions, without skips or privilege
+changes. Full-history preservation clones remove only their own created directory
+in `finally`, including on assertion failure; pinned ancestry and byte comparisons
+remain mandatory.

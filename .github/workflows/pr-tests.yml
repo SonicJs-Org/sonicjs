@@ -587,18 +587,34 @@ jobs:
     steps:
       - name: Require one complete successful test path
         env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
+          AUTHORIZE_RESULT: ${{ needs.authorize.result }}
+          IDENTITY_RESULT: ${{ needs.producer-identity.result }}
+          UNIT_RESULT: ${{ needs.unit-tests.result }}
+          SETUP_RESULT: ${{ needs.e2e-setup.result }}
+          SHARD_RESULT: ${{ needs.e2e-shard.result }}
+          LOCKED_RESULT: ${{ needs.e2e-locked.result }}
+          LOCAL_RESULT: ${{ needs.e2e-local.result }}
+          CLEANUP_RESULT: ${{ needs.cleanup.result }}
         run: |
           node <<'NODE'
-          const needs = JSON.parse(process.env.NEEDS_JSON);
-          const succeeded = key => needs[key]?.result === 'success';
-          const skipped = key => needs[key]?.result === 'skipped';
+          const needs = {
+            authorize: process.env.AUTHORIZE_RESULT,
+            'producer-identity': process.env.IDENTITY_RESULT,
+            'unit-tests': process.env.UNIT_RESULT,
+            'e2e-setup': process.env.SETUP_RESULT,
+            'e2e-shard': process.env.SHARD_RESULT,
+            'e2e-locked': process.env.LOCKED_RESULT,
+            'e2e-local': process.env.LOCAL_RESULT,
+            cleanup: process.env.CLEANUP_RESULT,
+          };
+          const succeeded = key => needs[key] === 'success';
+          const skipped = key => needs[key] === 'skipped';
           const common = ['authorize', 'producer-identity', 'unit-tests'].every(succeeded);
           const remote = ['e2e-setup', 'e2e-shard', 'e2e-locked', 'cleanup'];
           const remotePassed = remote.every(succeeded) && skipped('e2e-local');
           const localPassed = succeeded('e2e-local') && remote.every(skipped);
           if (!common || !(remotePassed || localPassed)) {
-            console.error('Required test path incomplete or unsuccessful:', needs);
+            console.error('Required test path incomplete or unsuccessful.');
             process.exitCode = 1;
           }
           NODE

@@ -193,7 +193,7 @@ test('failed unit with all E2E jobs skipped retains failure and not-run outcomes
 })
 test('historical association repository is checked independently of live PR identity', async () => {
   const f = apiFixture('pull_request_target', 'Contributor/sonicjs')
-  f.run.pull_requests = [{ number: 42, head: { sha, repo: { full_name: 'Other/sonicjs' } } }] as any
+  f.run.pull_requests = [{ number: 42, head: { sha, repo: { id: 2, name: 'sonicjs', url: 'https://api.github.com/repos/Other/sonicjs' } } }] as any
   await expect(provenance()).rejects.toThrow('Historical PR association mismatch')
 })
 test('metadata pagination is complete and unrelated jobs never become suites', async () => {
@@ -255,17 +255,17 @@ test('spawn EACCES is not-started; sealed exported ledger permits corrected runt
   expect(JSON.parse(readFileSync(join(restored, 'checkpoint.json'), 'utf8')).consumerAttempt).toBe(2)
 })
 
-test.each(['first', 'second'])('POSIX %s scratch allocation EACCES leaves no started record; sealed fresh-runner retry is safe', async allocation => {
+test.each([['first', false], ['second', false], ['first', true], ['second', true]])('POSIX %s scratch allocation EACCES (controlled UID 0=%s) leaves no started record; sealed fresh-runner retry is safe', async (allocation, controlledRoot) => {
   const { dir, ledger, env, args } = entrypointFixture()
   mkdirSync(env.CLI_SCRATCH_DIR, { mode: 0o700 })
-  if (allocation === 'first') chmodSync(env.CLI_SCRATCH_DIR, 0o500) // Owned scratch only.
   let first: ReturnType<typeof spawnSync>
   try {
-    const failingArgs = allocation === 'first' ? args : ['--import', fileURLToPath(new URL('fixtures/scratch-allocation-eacces.mjs', import.meta.url)), ...args]
-    first = spawnSync(process.execPath, failingArgs, { cwd: dir, env, encoding: 'utf8', timeout: 15000 })
+    const failingArgs = ['--import', fileURLToPath(new URL('fixtures/scratch-allocation-eacces.mjs', import.meta.url)), ...args]
+    first = spawnSync(process.execPath, failingArgs, { cwd: dir, env: { ...env, SCRATCH_FAIL_ALLOCATION: allocation as string, ...(controlledRoot ? { SCRATCH_TEST_UID_ZERO: '1' } : {}) }, encoding: 'utf8', timeout: 15000 })
   } finally { chmodSync(env.CLI_SCRATCH_DIR, 0o700) }
   expect(first.error).toBeUndefined(); expect(first.status, String(first.stdout) + first.stderr).toBe(1)
   expect(String(first.stderr)).toMatch(/EACCES.*mkdtemp/)
+  expect(String(first.stderr)).toContain(controlledRoot || process.getuid?.() === 0 ? 'Test-only boundary: synthetic UID 0 allocation EACCES' : 'Test-only boundary: real POSIX allocation EACCES')
   expect(String(first.stdout)).not.toMatch(/accepted-unverified|: not-started|: blocked/)
   expect(readdirSync(env.CLI_SCRATCH_DIR)).toEqual([])
   expect(readdirSync(ledger)).toEqual(['checkpoint.json'])
@@ -327,13 +327,13 @@ test.each(['valid', 'cancelled', 'stale', 'unauthorized'])('no executed suites: 
 
 test.each([false, true])('dynamic unrelated PR associations ignored; matching association included=%s', async matching => {
   const f = apiFixture('pull_request_target', 'Contributor/sonicjs')
-  const unrelated = [43, 44].map(number => ({ number, head: { sha: 'c'.repeat(40), repo: { full_name: 'Other/sonicjs' } } }))
-  f.run.pull_requests = [...unrelated, ...(matching ? [{ number: 42, head: { sha, repo: { full_name: 'Contributor/sonicjs' } } }] : [])] as any
+  const unrelated = [43, 44].map(number => ({ number, head: { sha: 'c'.repeat(40), repo: { id: 2, name: 'sonicjs', url: 'https://api.github.com/repos/Other/sonicjs' } } }))
+  f.run.pull_requests = [...unrelated, ...(matching ? [{ number: 42, head: { sha, repo: { id: 3, name: 'sonicjs', url: 'https://api.github.com/repos/Contributor/sonicjs' } } }] : [])] as any
   expect((await provenance()).originalPullRequests?.[0]?.number).toBe(42)
 })
 test.each(['sha', 'repo'])('matching dynamic association with wrong %s rejects even beside unrelated PRs', async field => {
   const f = apiFixture('pull_request_target', 'Contributor/sonicjs')
-  f.run.pull_requests = [{ number: 43 }, { number: 42, head: { sha: field === 'sha' ? 'c'.repeat(40) : sha, repo: { full_name: field === 'repo' ? 'Other/sonicjs' : 'Contributor/sonicjs' } } }] as any
+  f.run.pull_requests = [{ number: 43 }, { number: 42, head: { sha: field === 'sha' ? 'c'.repeat(40) : sha, repo: { id: 3, name: 'sonicjs', url: `https://api.github.com/repos/${field === 'repo' ? 'Other/sonicjs' : 'Contributor/sonicjs'}` } } }] as any
   await expect(provenance()).rejects.toThrow('Historical PR association mismatch')
 })
 test.each(['deleted', 'modified', 'added'])('copied entrypoint partial restore %s fails before CLI or auth', mode => {
@@ -361,4 +361,41 @@ test('fixed authorize check coexists with immutable producer metadata job withou
   const p = await provenance()
   expect(p.originalPullRequests?.[0]?.headRepository).toBe('Contributor/sonicjs')
   expect(p.jobs.map(j => j.id)).toEqual([10, 11, 12, 13])
+})
+
+test.each(['invocation.json', 'vendor/report.json'].flatMap(file => ['::error::', '::add-mask::', '::stop-commands::'].map(command => [file, command])))('malformed hostile %s with %s never reaches entrypoint logs or summary', async (file, command) => {
+  const { dir, ledger, env, args } = entrypointFixture()
+  const invocation = readdirSync(join(env.ARTIFACT_DIR, 'core-unit'))[0]!
+  const hostile = `\n${command}S\nINJECTION_SENTINEL`
+  writeFileSync(join(env.ARTIFACT_DIR, 'core-unit', invocation, file), hostile)
+  const { validateNativeReport } = await import('../../scripts/testing/validate-flakiness-artifacts.mjs')
+  const safeEnv: Record<string, string | undefined> = { ...env }
+  delete safeEnv.ACTIONS_ID_TOKEN_REQUEST_URL; delete safeEnv.ACTIONS_ID_TOKEN_REQUEST_TOKEN
+  const result = spawnSync(process.execPath, args, { cwd: dir, env: safeEnv, encoding: 'utf8', timeout: 15000 })
+  expect(result.error).toBeUndefined(); expect(result.status).toBe(1)
+  const rendered = result.stdout + result.stderr + readFileSync(env.GITHUB_STEP_SUMMARY, 'utf8')
+  for (const value of ['INJECTION_SENTINEL', '::error::', '::add-mask::', '::stop-commands::', 'SyntaxError', 'at JSON.parse']) expect(rendered).not.toContain(value)
+  expect(result.stderr).toBe('Invalid artifact: JSON syntax\n')
+  expect(() => validateNativeReport(Buffer.from(hostile))).toThrow('Invalid artifact: JSON syntax')
+  expect(readdirSync(ledger)).toEqual(['checkpoint.json'])
+  expect(JSON.parse(readFileSync(join(ledger, 'checkpoint.json'), 'utf8')).records).toEqual([])
+  expect(readdirSync(dir)).not.toContain('cli-private')
+})
+
+test.each(['https://api.github.com/repos/Other/sonicjs', 'https://user@api.github.com/repos/Contributor/sonicjs', 'https://api.github.com/repos/Contributor/sonicjs?auth=1', 'https://evil.invalid/repos/Contributor/sonicjs'])('matching association repo URL %s fails closed with valid SHA', async url => {
+  const f = apiFixture('pull_request_target', 'Contributor/sonicjs')
+  f.run.pull_requests = [{ number: 42, head: { sha, repo: { id: 3, name: 'sonicjs', url } } }] as any
+  await expect(provenance()).rejects.toThrow('Historical PR association mismatch')
+})
+
+test('top-level catch emits fixed category for unexpected upstream text, never raw error or stack', () => {
+  const { dir, env, args } = entrypointFixture()
+  const hostile = 'Unexpected upstream\n::error::UPSTREAM_SENTINEL\n::add-mask::UPSTREAM_SENTINEL\n::stop-commands::UPSTREAM_SENTINEL'
+  const result = spawnSync(process.execPath, [...args.slice(0, -1), '--import', fileURLToPath(new URL('fixtures/hostile-consumer-error.mjs', import.meta.url)), args.at(-1)!], {
+    cwd: dir, env: { ...env, PUBLISH_UNTRUSTED_ERROR: hostile }, encoding: 'utf8', timeout: 15000,
+  })
+  expect(result.error).toBeUndefined(); expect(result.status).toBe(1)
+  const rendered = result.stdout + result.stderr + readFileSync(env.GITHUB_STEP_SUMMARY, 'utf8')
+  for (const marker of ['UPSTREAM_SENTINEL', '::error::', '::add-mask::', '::stop-commands::', 'at globalThis.fetch']) expect(rendered).not.toContain(marker)
+  expect(result.stderr).toBe('Publishing operation failed.\n')
 })

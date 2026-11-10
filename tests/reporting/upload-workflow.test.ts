@@ -101,6 +101,7 @@ function assertActivation(job: any) {
   expect(normalized).toBe([
     "github.event.workflow_run.repository.full_name == 'SonicJs-Org/sonicjs'",
     'github.event.workflow_run.workflow_id == 207092903',
+    "contains(fromJSON('[\"push\",\"pull_request_target\"]'), github.event.workflow_run.event)",
     "vars.FLAKINESS_UPLOAD_ENABLED == 'true'",
   ].join(' && '))
 }
@@ -115,6 +116,8 @@ test('upload requires explicit approval switch; bypass, removal or false compari
     job.if.replace(' && ', ' || '),
     job.if.replace('SonicJs-Org/sonicjs', 'Other/sonicjs'),
     job.if.replace('207092903', '1'),
+    job.if.replace(/&&\s*contains\([^\n]+/, ''),
+    job.if.replace('pull_request_target', 'pull_request'),
   ]) {
     expect(() => assertActivation({ ...job, if: condition })).toThrow()
   }
@@ -159,4 +162,18 @@ test.each(['unit-tests', 'e2e-local', 'e2e-locked', 'e2e-shard'])('renaming actu
   const w = workflow('pr-tests')
   w.jobs[key].steps.find((s: any) => s.run?.includes(key === 'unit-tests' ? 'npm run test:cov' : 'npx playwright test')).name += ' renamed'
   expect(() => assertRenderedSuiteNames(w)).toThrow(/missing or non-publishable suite/)
+})
+
+// Evaluate the actual fixed GitHub expression over permitted and hostile events.
+test('privileged activation rejects other events before job downloads or OIDC scope', () => {
+  const job = workflow('flakiness-upload').jobs.upload
+  assertActivation(job)
+  const expression = job.if.replace(/github\.event\.workflow_run\./g, 'run.').replace('vars.FLAKINESS_UPLOAD_ENABLED', 'flag')
+  const active = new Function('run', 'flag', 'contains', 'fromJSON', `return (${expression})`)
+  for (const event of ['push', 'pull_request_target', 'pull_request', 'workflow_dispatch', 'workflow_run', '', undefined]) {
+    for (const repository of ['SonicJs-Org/sonicjs', 'Other/sonicjs']) for (const workflow_id of [207092903, 1]) for (const flag of ['true', 'false', '', undefined]) {
+      expect(active({ event, repository: { full_name: repository }, workflow_id }, flag, (xs: unknown[], x: unknown) => xs.includes(x), JSON.parse))
+        .toBe(['push', 'pull_request_target'].includes(event as string) && repository === 'SonicJs-Org/sonicjs' && workflow_id === 207092903 && flag === 'true')
+    }
+  }
 })

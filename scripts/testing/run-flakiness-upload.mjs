@@ -56,8 +56,25 @@ async function main() {
   }
 }
 
+/** Fixed diagnostics only. Never interpolate upstream error messages or stacks. */
+function safeFailureCategory(error) {
+  const message = error?.message;
+  if (message === 'Invalid artifact: JSON syntax') return 'Invalid artifact: JSON syntax';
+  if (message === 'Prior delivery checkpoint unavailable; rerun blocked to prevent duplicate submission') return 'Prior delivery checkpoint unavailable; rerun blocked to prevent duplicate submission';
+  if (message === 'Prior delivery checkpoint record inventory mismatch') return 'Prior delivery checkpoint record inventory mismatch';
+  if (message === 'Prior delivery checkpoint mismatch') return 'Prior delivery checkpoint mismatch';
+  if (error?.code === 'EACCES' && error?.syscall === 'mkdtemp') return 'Private scratch allocation failed: EACCES during mkdtemp';
+  if (typeof message === 'string') {
+    if (message.startsWith('Invalid artifact:')) return 'Invalid artifact: validation failed';
+    if (message.startsWith('Non-publishable producer:')) return 'Producer provenance validation failed.';
+    if (message.startsWith('Missing required environment variable:')) return 'Required runtime configuration missing.';
+    if (message.startsWith('GitHub metadata request failed:')) return 'GitHub metadata request failed.';
+  }
+  return 'Publishing operation failed.';
+}
+
 main().catch(error => {
   summary('Publishing failed or evidence is missing/interrupted. Delivery is not verified; inspect native producer artifacts.');
-  console.error(error.message);
+  console.error(safeFailureCategory(error));
   process.exitCode = 1;
 });

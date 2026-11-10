@@ -13,8 +13,6 @@ permissions:
 
 jobs:
   authorize:
-    # Immutable job name captures original event identity before any PR checkout.
-    name: "authorize:${{ github.run_id }}:${{ github.run_attempt }}:${{ github.event_name }}:${{ github.event.pull_request.number || 0 }}:${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || (github.event_name == 'push' && github.repository) || 'missing' }}:${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || (github.event_name == 'push' && github.sha) || 'missing' }}"
     runs-on: ubuntu-latest
     environment:
       name: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && 'external' || 'internal' }}
@@ -22,11 +20,23 @@ jobs:
       - name: Authorize
         run: echo 'Workflow authorized; fork code never receives deployment secrets.'
 
+  # Stable authorize check remains required by branch protection. Capture the
+  # immutable identity separately after approval, before either PR-code job.
+  producer-identity:
+    # Immutable job name captures original event identity before any PR checkout.
+    name: "authorize:${{ github.run_id }}:${{ github.run_attempt }}:${{ github.event_name }}:${{ github.event.pull_request.number || 0 }}:${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || (github.event_name == 'push' && github.repository) || 'missing' }}:${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || (github.event_name == 'push' && github.sha) || 'missing' }}"
+    needs: authorize
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Record producer identity
+        run: echo 'Original producer identity recorded.'
+
   # ── Unit tests ───────────────────────────────────────────────────────────────
   # Runs in parallel with e2e-setup so CF resource allocation and unit tests
   # overlap rather than running serially on the critical path (saves ~2–3 min).
   unit-tests:
-    needs: authorize
+    needs: producer-identity
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -65,6 +75,7 @@ jobs:
 
       - name: Upload core-unit Flakiness reports
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: flakiness-core-unit-unit-tests-${{ github.run_id }}-${{ github.run_attempt }}
@@ -86,7 +97,7 @@ jobs:
   # get the e2e-local path instead (no secrets required).
   # Runs in parallel with unit-tests; e2e-shard waits for both.
   e2e-setup:
-    needs: authorize
+    needs: producer-identity
     if: >
       github.actor != 'dependabot[bot]' &&
       !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') &&
@@ -307,6 +318,7 @@ jobs:
 
       - name: Upload cms-e2e Flakiness reports
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: flakiness-cms-e2e-e2e-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -398,6 +410,7 @@ jobs:
 
       - name: Upload cms-e2e Flakiness reports
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: flakiness-cms-e2e-e2e-locked-${{ github.run_id }}-${{ github.run_attempt }}
@@ -475,6 +488,7 @@ jobs:
 
       - name: Upload cms-e2e Flakiness reports
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: flakiness-cms-e2e-e2e-local-${{ github.run_id }}-${{ github.run_attempt }}
@@ -561,3 +575,30 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler kv namespace delete --namespace-id="${{ needs.e2e-setup.outputs.kv_id }}"
+
+  # Preserve the classic required `test` context with a real full-path aggregate.
+  # Immutable scheduler results only: no PR outputs, dependencies or checkout.
+  test:
+    name: test
+    needs: [authorize, producer-identity, unit-tests, e2e-setup, e2e-shard, e2e-locked, e2e-local, cleanup]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require one complete successful test path
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          node <<'NODE'
+          const needs = JSON.parse(process.env.NEEDS_JSON);
+          const succeeded = key => needs[key]?.result === 'success';
+          const skipped = key => needs[key]?.result === 'skipped';
+          const common = ['authorize', 'producer-identity', 'unit-tests'].every(succeeded);
+          const remote = ['e2e-setup', 'e2e-shard', 'e2e-locked', 'cleanup'];
+          const remotePassed = remote.every(succeeded) && skipped('e2e-local');
+          const localPassed = succeeded('e2e-local') && remote.every(skipped);
+          if (!common || !(remotePassed || localPassed)) {
+            console.error('Required test path incomplete or unsuccessful:', needs);
+            process.exitCode = 1;
+          }
+          NODE

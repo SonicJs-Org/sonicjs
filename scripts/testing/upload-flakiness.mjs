@@ -294,34 +294,41 @@ export async function executeUpload(snapshots, config, auth, options) {
     }
 
     const digest = contentDigest(snapshot);
-    // Write 'started' atomically BEFORE spawning; crash-restart leaves this as ambiguous.
-    await writeLedger(lPath, {
-      logicalKey: key, invocationId: snapshot.id, contentDigest: digest,
-      suite: snapshot.suite, outcome: snapshot.outcome,
-      counts: { ...snapshot.counts },
-      state: 'started', startedAt: new Date().toISOString(),
-    });
-
-    // Narrow per-invocation pre-spawn re-verify (Node read, not Python bridge)
-    try {
-      await verifyInvocationFiles(snapshots.root, snapshot);
-    } catch (err) {
-      const entry = await readLedger(lPath);
-      await writeLedger(lPath, { ...entry, state: 'ambiguous', error: 'snapshot changed before spawn', finishedAt: new Date().toISOString() });
-      summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'ambiguous', error: 'snapshot changed before spawn' });
-      summary.anyAmbiguous = true;
-      continue;
-    }
-
-    // Private caller-owned scratch survives abrupt termination outside the ledger.
-    const home = await mkdtemp(join(privateRoot, 'cli-home-'));
-    const tmp = await mkdtemp(join(privateRoot, 'cli-tmp-'));
+    /** @type {string | undefined} */ let home;
+    /** @type {string | undefined} */ let tmp;
     let childResult;
     try {
+      // Allocation cannot submit anything. Complete both before recording started,
+      // and clean up HOME even if allocating TMPDIR fails.
+      home = await mkdtemp(join(privateRoot, 'cli-home-'));
+      tmp = await mkdtemp(join(privateRoot, 'cli-tmp-'));
+
+      // Write 'started' atomically BEFORE spawning; crash-restart leaves this as ambiguous.
+      await writeLedger(lPath, {
+        logicalKey: key, invocationId: snapshot.id, contentDigest: digest,
+        suite: snapshot.suite, outcome: snapshot.outcome,
+        counts: { ...snapshot.counts },
+        state: 'started', startedAt: new Date().toISOString(),
+      });
+
+      // Narrow per-invocation pre-spawn re-verify (Node read, not Python bridge)
+      try {
+        await verifyInvocationFiles(snapshots.root, snapshot);
+      } catch (err) {
+        const entry = await readLedger(lPath);
+        await writeLedger(lPath, { ...entry, state: 'ambiguous', error: 'snapshot changed before spawn', finishedAt: new Date().toISOString() });
+        summary.results.push({ invocationId: snapshot.id, suite: snapshot.suite, logicalKey: key, state: 'ambiguous', error: 'snapshot changed before spawn' });
+        summary.anyAmbiguous = true;
+        continue;
+      }
+
       childResult = await spawnCli(cliBin, dirname(snapshot.reportPath), home, tmp, auth, timeoutMs, project);
     } finally {
-      await rm(home, { recursive: true, force: true });
-      await rm(tmp, { recursive: true, force: true });
+      // Attempt both removals even if either fails; neither belongs in the ledger.
+      await Promise.all([
+        ...(home ? [rm(home, { recursive: true, force: true })] : []),
+        ...(tmp ? [rm(tmp, { recursive: true, force: true })] : []),
+      ]);
     }
 
     const startedEntry = await readLedger(lPath);

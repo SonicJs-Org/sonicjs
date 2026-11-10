@@ -18,9 +18,9 @@ const sha = 'a'.repeat(40)
 const apiRoot = `/repos/${repo}`
 /** Exact, synthetic GitHub API fixtures; no network or credentials. */
 function apiFixture(event = 'push', headRepo = repo) {
-  const authName = `authorize:123:2:${event}:${event === 'push' ? 0 : 42}:${headRepo}:${sha}`
+  const identityName = `authorize:123:2:${event}:${event === 'push' ? 0 : 42}:${headRepo}:${sha}`
   const job = (name: string, id: number, step: string, conclusion = 'success') => ({ name, id, run_id: 123, run_attempt: 2, status: 'completed', conclusion, steps: step ? [{ number: 4, name: step, status: 'completed', conclusion }] : [] })
-  const jobs = [job(authName, 1, ''), job('unit-tests', 10, 'Run unit tests with coverage'), job('e2e-local', 11, 'Run full E2E regression suite'), job('e2e-shard', 12, '', 'skipped'), job('e2e-locked', 13, '', 'skipped')]
+  const jobs = [job(identityName, 1, ''), job('unit-tests', 10, 'Run unit tests with coverage'), job('e2e-local', 11, 'Run full E2E regression suite'), job('e2e-shard', 12, '', 'skipped'), job('e2e-locked', 13, '', 'skipped')]
   const run = { id: 123, run_attempt: 2, repository: { full_name: repo }, workflow_id: 207092903, path: '.github/workflows/pr-tests.yml', name: 'PR Tests', event, status: 'completed', conclusion: 'success', head_branch: 'main', head_sha: event === 'push' ? sha : 'b'.repeat(40), pull_requests: [] }
   const pr = { number: 42, base: { repo: { full_name: repo } }, head: { sha, repo: { full_name: headRepo } } }
   const responses: Record<string, unknown> = { [`${apiRoot}/actions/runs/123/attempts/2`]: run, [`${apiRoot}/actions/runs/123`]: run, [`${apiRoot}/actions/runs/123/attempts/2/jobs?per_page=100&page=1`]: { jobs, total_count: jobs.length }, [`${apiRoot}/actions/runs/123/attempts/2/jobs`]: { jobs, total_count: jobs.length }, [`${apiRoot}/pulls/42`]: pr }
@@ -255,6 +255,37 @@ test('spawn EACCES is not-started; sealed exported ledger permits corrected runt
   expect(JSON.parse(readFileSync(join(restored, 'checkpoint.json'), 'utf8')).consumerAttempt).toBe(2)
 })
 
+test.each(['first', 'second'])('POSIX %s scratch allocation EACCES leaves no started record; sealed fresh-runner retry is safe', async allocation => {
+  const { dir, ledger, env, args } = entrypointFixture()
+  mkdirSync(env.CLI_SCRATCH_DIR, { mode: 0o700 })
+  if (allocation === 'first') chmodSync(env.CLI_SCRATCH_DIR, 0o500) // Owned scratch only.
+  let first: ReturnType<typeof spawnSync>
+  try {
+    const failingArgs = allocation === 'first' ? args : ['--import', fileURLToPath(new URL('fixtures/scratch-allocation-eacces.mjs', import.meta.url)), ...args]
+    first = spawnSync(process.execPath, failingArgs, { cwd: dir, env, encoding: 'utf8', timeout: 15000 })
+  } finally { chmodSync(env.CLI_SCRATCH_DIR, 0o700) }
+  expect(first.error).toBeUndefined(); expect(first.status, String(first.stdout) + first.stderr).toBe(1)
+  expect(String(first.stderr)).toMatch(/EACCES.*mkdtemp/)
+  expect(String(first.stdout)).not.toMatch(/accepted-unverified|: not-started|: blocked/)
+  expect(readdirSync(env.CLI_SCRATCH_DIR)).toEqual([])
+  expect(readdirSync(ledger)).toEqual(['checkpoint.json'])
+  const seal = JSON.parse(readFileSync(join(ledger, 'checkpoint.json'), 'utf8'))
+  expect(seal.consumerAttempt).toBe(1)
+  expect(seal.records).toEqual([])
+  const { exportDeliveryLedger } = await import('../../scripts/testing/export-flakiness-ledger.mjs')
+  const restored = join(dir, 'restored')
+  await exportDeliveryLedger(ledger, restored)
+  const freshPrivate = join(dir, 'fresh-runner-private')
+  const second = spawnSync(process.execPath, args, { cwd: dir, env: { ...env, LEDGER_DIR: restored, CLI_SCRATCH_DIR: freshPrivate, GITHUB_RUN_ATTEMPT: '2' }, encoding: 'utf8', timeout: 15000 })
+  expect(second.error).toBeUndefined(); expect(second.status, second.stdout + second.stderr).toBe(0)
+  expect(second.stdout.match(/accepted-unverified/g)).toHaveLength(2)
+  expect(readdirSync(freshPrivate)).toEqual([])
+  expect(JSON.parse(readFileSync(join(restored, 'checkpoint.json'), 'utf8')).consumerAttempt).toBe(2)
+  const third = spawnSync(process.execPath, args, { cwd: dir, env: { ...env, LEDGER_DIR: restored, CLI_SCRATCH_DIR: freshPrivate, GITHUB_RUN_ATTEMPT: '3' }, encoding: 'utf8', timeout: 15000 })
+  expect(third.status, third.stdout + third.stderr).toBe(1)
+  expect(third.stdout.match(/: blocked/g)).toHaveLength(2)
+})
+
 test('abrupt uploader SIGKILL preserves started record, exports no credential caches before cleanup', async () => {
   const { dir, runtimeDir, ledger, env, args } = entrypointFixture('fake-cli-kill-parent.mjs')
   const killed = spawnSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8', timeout: 15000 })
@@ -292,4 +323,42 @@ test.each(['valid', 'cancelled', 'stale', 'unauthorized'])('no executed suites: 
   if (mode === 'valid') expect(summary).toContain('nothing to publish; suites not run')
   else { expect(summary).toContain('Publishing failed'); expect(summary).not.toContain('nothing to publish') }
   expect(readdirSync(env.LEDGER_DIR)).toEqual(['checkpoint.json'])
+})
+
+test.each([false, true])('dynamic unrelated PR associations ignored; matching association included=%s', async matching => {
+  const f = apiFixture('pull_request_target', 'Contributor/sonicjs')
+  const unrelated = [43, 44].map(number => ({ number, head: { sha: 'c'.repeat(40), repo: { full_name: 'Other/sonicjs' } } }))
+  f.run.pull_requests = [...unrelated, ...(matching ? [{ number: 42, head: { sha, repo: { full_name: 'Contributor/sonicjs' } } }] : [])] as any
+  expect((await provenance()).originalPullRequests?.[0]?.number).toBe(42)
+})
+test.each(['sha', 'repo'])('matching dynamic association with wrong %s rejects even beside unrelated PRs', async field => {
+  const f = apiFixture('pull_request_target', 'Contributor/sonicjs')
+  f.run.pull_requests = [{ number: 43 }, { number: 42, head: { sha: field === 'sha' ? 'c'.repeat(40) : sha, repo: { full_name: field === 'repo' ? 'Other/sonicjs' : 'Contributor/sonicjs' } } }] as any
+  await expect(provenance()).rejects.toThrow('Historical PR association mismatch')
+})
+test.each(['deleted', 'modified', 'added'])('copied entrypoint partial restore %s fails before CLI or auth', mode => {
+  const { dir, ledger, env, args } = entrypointFixture()
+  const first = spawnSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8', timeout: 15000 })
+  expect(first.status, first.stdout + first.stderr).toBe(0)
+  const restored = mkdtempSync(join(dir, 'partial-')); cpSync(ledger, restored, { recursive: true })
+  const record = readdirSync(restored).find(n => /^[a-f0-9]{64}\.json$/.test(n))!
+  if (mode === 'deleted') rmSync(join(restored, record))
+  if (mode === 'modified') writeFileSync(join(restored, record), '{"state":"not-started"}')
+  if (mode === 'added') writeFileSync(join(restored, `${'f'.repeat(64)}.json`), '{}')
+  const before = readFileSync(join(restored, 'checkpoint.json'), 'utf8')
+  // Real spawn EACCES would be reported as not-started if ledger preflight were bypassed.
+  chmodSync(join(env.RUNTIME_DIR, 'node_modules/.bin/flakiness'), 0o600)
+  const result = spawnSync(process.execPath, args, { cwd: dir, env: { ...env, LEDGER_DIR: restored, GITHUB_RUN_ATTEMPT: '2' }, encoding: 'utf8', timeout: 15000 })
+  expect(result.status, result.stdout + result.stderr).toBe(1)
+  expect(result.stderr).toMatch(/checkpoint.*(inventory|record)/i)
+  expect(result.stdout).not.toMatch(/accepted-unverified|: not-started|: blocked/)
+  expect(readFileSync(join(restored, 'checkpoint.json'), 'utf8')).toBe(before)
+})
+
+test('fixed authorize check coexists with immutable producer metadata job without becoming suite evidence', async () => {
+  const f = apiFixture('pull_request_target', 'Contributor/sonicjs')
+  f.jobs.push({ name: 'authorize', id: 80, run_id: 123, run_attempt: 2, status: 'completed', conclusion: 'success', steps: [] })
+  const p = await provenance()
+  expect(p.originalPullRequests?.[0]?.headRepository).toBe('Contributor/sonicjs')
+  expect(p.jobs.map(j => j.id)).toEqual([10, 11, 12, 13])
 })

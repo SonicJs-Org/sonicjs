@@ -11,7 +11,7 @@ async function ghApi(path, token) {
 }
 
 /**
- * Acquire exact-attempt jobs and immutable authorization-job identity. That job
+ * Acquire exact-attempt jobs and immutable producer-identity job name. That job
  * executes only a fixed echo, no checkout, artifacts, dependencies or PR hooks.
  * Its API job name contains the original event's head repository/SHA/PR number,
  * including fork events whose run.pull_requests array is empty. Live PR data is
@@ -45,11 +45,12 @@ export async function fetchProducerProvenance({ repository, runId, runAttempt, t
   } else {
     if (number === '0') throw new Error('Missing historical PR number');
     const original = { number: Number(number), baseRepository: repository, headRepository, headSha };
-    // Associations, when available, must agree; never substitute live head fields.
+    // Associations are dynamic branch matches, not a historical snapshot. Only
+    // matching original PR numbers are consistency checks; identity above is authority.
     const associations = run.pull_requests;
-    if (!Array.isArray(associations) || associations.length > 1) throw new Error('Ambiguous PR association');
-    for (const pr of associations) {
-      if (pr.number !== original.number || pr.head?.sha !== headSha ||
+    if (!Array.isArray(associations)) throw new Error('Invalid PR associations');
+    for (const pr of associations.filter(pr => pr.number === original.number)) {
+      if (pr.head?.sha !== headSha ||
           (pr.head?.repo?.full_name && pr.head.repo.full_name !== headRepository)) throw new Error('Historical PR association mismatch');
     }
     const live = await ghApi(`/repos/${repository}/pulls/${number}`, token);

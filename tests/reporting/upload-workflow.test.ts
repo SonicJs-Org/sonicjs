@@ -66,14 +66,15 @@ test('producer preserves main parallel unit, four shards, serial locks, local pa
   const w = workflow('pr-tests')
   expect(w.permissions).toEqual({ contents: 'read' })
   for (const job of Object.values(w.jobs)) expect(JSON.stringify(job)).not.toMatch(/id-token|FLAKINESS_ACCESS_TOKEN|ACTIONS_ID_TOKEN/)
-  expect(w.jobs['unit-tests'].needs).toBe('authorize')
-  expect(w.jobs['e2e-setup'].needs).toBe('authorize')
+  expect(w.jobs['unit-tests'].needs).toBe('producer-identity')
+  expect(w.jobs['e2e-setup'].needs).toBe('producer-identity')
   expect(w.jobs['e2e-shard'].strategy.matrix.shard).toEqual([1, 2, 3, 4])
   expect(w.jobs['e2e-shard'].strategy['fail-fast']).toBe(false)
   expect(w.jobs['e2e-locked'].needs).toEqual(['unit-tests', 'e2e-setup', 'e2e-shard'])
   expect(w.jobs.cleanup.needs).toEqual(['e2e-setup', 'e2e-shard', 'e2e-locked'])
-  expect(w.jobs.authorize.name).toContain('authorize:')
-  expect(w.jobs.authorize.name).toContain('pull_request.head.repo.full_name')
+  expect(w.jobs.authorize.name ?? 'authorize').toBe('authorize')
+  expect(w.jobs['producer-identity'].name).toContain('authorize:')
+  expect(w.jobs['producer-identity'].name).toContain('pull_request.head.repo.full_name')
   expect(w.jobs.authorize.steps).toHaveLength(1)
   for (const [key, suite] of [['unit-tests', 'core-unit'], ['e2e-shard', 'cms-e2e'], ['e2e-locked', 'cms-e2e'], ['e2e-local', 'cms-e2e']]) {
     const job = w.jobs[key!]
@@ -96,12 +97,25 @@ test('producer preserves main parallel unit, four shards, serial locks, local pa
 
 /** Exact fail-closed activation clause; absent/false vars cannot enter privileged job. */
 function assertActivation(job: any) {
-  expect(job.if).toMatch(/&&\s*vars\.FLAKINESS_UPLOAD_ENABLED == 'true'\s*$/)
+  const normalized = job.if.replace(/\s+/g, ' ').trim()
+  expect(normalized).toBe([
+    "github.event.workflow_run.repository.full_name == 'SonicJs-Org/sonicjs'",
+    'github.event.workflow_run.workflow_id == 207092903',
+    "vars.FLAKINESS_UPLOAD_ENABLED == 'true'",
+  ].join(' && '))
 }
-test('upload requires explicit approval switch; removal or false comparison fails contract', () => {
+test('upload requires explicit approval switch; bypass, removal or false comparison fails contract', () => {
   const job = workflow('flakiness-upload').jobs.upload
   assertActivation(job)
-  for (const condition of [job.if.replace(/&&\s*vars\.FLAKINESS_UPLOAD_ENABLED == 'true'/, ''), job.if.replace("== 'true'", "== 'false'")]) {
+  for (const condition of [
+    `true || ${job.if}`, `${job.if} || true`,
+    `true || (${job.if})`, `(${job.if}) || true`,
+    job.if.replace(/&&\s*vars\.FLAKINESS_UPLOAD_ENABLED == 'true'/, ''),
+    job.if.replace("== 'true'", "== 'false'"),
+    job.if.replace(' && ', ' || '),
+    job.if.replace('SonicJs-Org/sonicjs', 'Other/sonicjs'),
+    job.if.replace('207092903', '1'),
+  ]) {
     expect(() => assertActivation({ ...job, if: condition })).toThrow()
   }
 })

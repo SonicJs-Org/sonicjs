@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { statSync } from 'node:fs'
+import { statSync, symlinkSync, realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { repositoryRoot } from './options'
 import { reportingScratch, reportingScratchParent } from './scratch'
@@ -34,4 +34,16 @@ test('explicit evidence and TMPDIR take precedence over RUNNER_TEMP', () => {
 test('without environment hints scratch stays outside producer report tree in owned test cache', () => {
   for (const key of ['SONICJS_REPORTING_EVIDENCE', 'TMPDIR', 'RUNNER_TEMP']) vi.stubEnv(key, undefined)
   expect(reportingScratchParent()).toBe(join(repositoryRoot, '.cache/reporting-contracts'))
+})
+
+test('owned symlink scratch parent resolves ancestry while preserving environment precedence', () => {
+  const owner = reportingScratch('symlink-parent-')
+  const alias = join(owner, 'alias'); symlinkSync(owner, alias)
+  for (const selected of ['SONICJS_REPORTING_EVIDENCE', 'TMPDIR', 'RUNNER_TEMP']) {
+    for (const key of ['SONICJS_REPORTING_EVIDENCE', 'TMPDIR', 'RUNNER_TEMP']) vi.stubEnv(key, undefined)
+    vi.stubEnv(selected, alias)
+    const result = reportingScratch('fixture-')
+    expect(dirname(result)).toBe(realpathSync(owner))
+    expect(realpathSync(result)).toBe(result)
+  }
 })

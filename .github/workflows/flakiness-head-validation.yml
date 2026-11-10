@@ -1,0 +1,89 @@
+name: Flakiness Head Validation
+
+# pull_request_target uses base YAML. This narrow push path supplies genuine
+# exact-head rollout evidence until the production aggregate reaches main.
+on:
+  push:
+    branches: [ci/flakiness-publishing]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      SONICJS_TEST_UPLOAD: '0'
+      FLAKINESS_DISABLE_UPLOAD: '1'
+      E2E_DISPOSABLE_TARGET: '1'
+      BASE_URL: ''
+      E2E_REUSE_SERVER: '0'
+    steps:
+      - name: Checkout exact push head with history for reporting contracts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.23.1'
+
+      - name: Initialize isolated E2E state path
+        run: echo "E2E_PERSIST_DIR=$RUNNER_TEMP/sonicjs-head-validation-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint E2E skip patterns and tags
+        run: |
+          bash scripts/lint-e2e-no-skip.sh
+          bash scripts/lint-e2e-tags.sh
+
+      - name: Run unit tests with coverage
+        run: npm run test:cov
+
+      - name: Run reporting contracts
+        run: npm run test:reporting
+
+      - name: Build core package
+        run: npm run build:core
+
+      - name: Install matching Playwright browser and OS dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare isolated local D1 for rollout, forks and Dependabot
+        working-directory: my-sonicjs-app
+        run: npx wrangler d1 migrations apply DB --local --persist-to "$E2E_PERSIST_DIR"
+
+      - name: Run full E2E regression suite
+        timeout-minutes: 140
+        env:
+          E2E_DISPOSABLE_TARGET: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-logs
+          npx playwright test --config=tests/playwright.config.ts 2>&1 | tee e2e-logs/playwright.log
+
+      - name: Preserve native and vendor head validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: head-validation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            flakiness-reports/
+            packages/core/coverage/
+            playwright-report/
+            test-results/
+            e2e-logs/
+          retention-days: 7
+          if-no-files-found: warn

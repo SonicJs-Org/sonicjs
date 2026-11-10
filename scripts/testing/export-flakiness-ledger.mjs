@@ -1,11 +1,11 @@
 /** Export durable records only; credential-bearing scratch is never an artifact. */
-import { constants } from 'node:fs';
-import { open, readdir, mkdir, mkdtemp, rm, realpath, lstat, writeFile, rename } from 'node:fs/promises';
+import { readdir, mkdir, mkdtemp, rm, realpath, lstat, writeFile, rename } from 'node:fs/promises';
 import { join, resolve, relative, isAbsolute, sep, dirname, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readLedgerFile, ledgerInventory, verifyLedgerInventory } from './delivery-ledger.mjs';
 
 /**
- * Fresh flat export, not a recursive copy. Refuse symlinks and hardlinks, ignore
+ * Fresh flat export, not a recursive copy. Reject unsafe recognized records; ignore
  * checkpoint temporary writes and unknown names. Source records remain intact.
  * @param {string} ledgerDir
  * @param {string} exportDir
@@ -25,15 +25,16 @@ export async function exportDeliveryLedger(ledgerDir, exportDir) {
   // must never expose a checkpoint without all delivery records beside it.
   const staged = await mkdtemp(join(parent, '.ledger-export-'));
   try {
-    for (const entry of await readdir(source, { withFileTypes: true })) {
-      if (!/^(?:checkpoint|[a-f0-9]{64})\.json$/.test(entry.name) || !entry.isFile()) continue;
-      const file = await open(join(source, entry.name), constants.O_RDONLY | constants.O_NOFOLLOW);
-      try {
-        const info = await file.stat();
-        if (!info.isFile() || info.nlink !== 1) continue;
-        await writeFile(join(staged, entry.name), await file.readFile(), { flag: 'wx', mode: 0o600 });
-      } finally { await file.close(); }
+    for (const name of await readdir(source)) {
+      if (!/^(?:checkpoint|[a-f0-9]{64})\.json$/.test(name)) continue;
+      // Any error on a recognized name invalidates the entire export, including
+      // nonregular entries, symlinks and hardlinks; never silently drop history.
+      await writeFile(join(staged, name), await readLedgerFile(join(source, name)), { flag: 'wx', mode: 0o600 });
     }
+    const seal = await readLedgerFile(join(staged, 'checkpoint.json')).catch(error => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+    if (seal) verifyLedgerInventory(JSON.parse(seal), await ledgerInventory(staged));
     await rename(staged, target);
   } finally { await rm(staged, { recursive: true, force: true }); }
 }

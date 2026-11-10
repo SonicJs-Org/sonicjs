@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { repositoryRoot } from './options'
 
@@ -11,5 +11,5 @@ export function reportingScratchParent(): string {
 export function reportingScratch(prefix: string): string {
   const parent = reportingScratchParent()
   mkdirSync(parent, { recursive: true })
-  return mkdtempSync(join(parent, prefix))
+  return mkdtempSync(join(realpathSync(parent), prefix))
 }

@@ -57,9 +57,10 @@ jobs:
         if: github.run_attempt > 1
         run: echo "attempt=$((GITHUB_RUN_ATTEMPT - 1))" >> "$GITHUB_OUTPUT"
 
-      # Absent/expired history is ambiguous. Download failure blocks the helper via
-      # its required checkpoint check; never treat an empty new runner as undelivered.
+      # Absent/expired/partial history is ambiguous. Both the restore outcome and
+      # exact checkpoint inventory must succeed before a rerun can start delivery.
       - name: Restore previous consumer ledger
+        id: restore
         if: github.run_attempt > 1
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
@@ -81,7 +82,7 @@ jobs:
           run-id: ${{ env.PRODUCER_RUN_ID }}
 
       - name: Validate complete attempt and upload independently
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (github.run_attempt == 1 || steps.restore.outcome == 'success') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_DIR: ${{ runner.temp }}/artifacts

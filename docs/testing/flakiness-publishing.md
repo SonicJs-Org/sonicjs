@@ -12,18 +12,23 @@ producer run ID and attempt. The consumer merges these artifacts into one root
 and validates the complete attempt before any upload. An executed suite/shard
 with missing, invalid, interrupted or empty evidence fails publishing explicitly;
 other evidence is not used to declare that attempt complete. Skipped producer
-jobs are recorded as not run. After complete trusted provenance validation, an
-attempt with no executed suites succeeds explicitly with "nothing to publish;
-suites not run", without requiring artifacts, a CLI runtime or upload auth. This
-never bypasses cancelled, stale-head or unauthorized producer rejection. A failure after upload starts does not prevent the
-remaining validated invocations from being attempted. Publishing cannot change
+jobs are recorded as not run. After the pinned runtime and helper dependencies
+are installed, complete trusted provenance validation allows an attempt with no
+executed suites to succeed explicitly with "nothing to publish; suites not run",
+without producer report artifacts, CLI invocation or OIDC upload authentication.
+Setup or installation failures still fail the consumer job. This never bypasses
+cancelled, stale-head or unauthorized producer rejection. A failure after upload
+starts does not prevent the remaining validated invocations from being attempted. Publishing cannot change
 the producer's test conclusions.
 
-The authorization job's name records run ID, attempt, event, PR number, original
-head repository and tested SHA. This is immutable GitHub job metadata from a job
+The separate `producer-identity` job's `authorize:...` name records run ID,
+attempt, event, PR number, original head repository and tested SHA. This is immutable GitHub job metadata from a job
 that executes a fixed echo, with no checkout or dependencies. The consumer reads
 exact-attempt run/jobs API metadata, including every page, checks the workflow
 ID/path and repository, and compares a live PR against this historical identity.
+Run PR associations are dynamic branch matches, not historical snapshots. Only
+entries matching the recorded original PR number are checked for SHA/repository
+consistency; unrelated PRs, including PRs to other base branches, are ignored.
 This supports fork runs with empty `pull_requests` arrays. Live PR data never
 supplies missing history. Missing authorization metadata, changed repositories,
 stale heads, cancelled runs and incomplete rerun metadata fail closed. Older
@@ -57,13 +62,20 @@ consumer artifact. Credential-bearing HOME/TMPDIR caches use an explicit private
 caller-owned root outside the ledger, with no OS-temp fallback. Cleanup after
 normal execution is best effort for credential retention, never an artifact
 boundary. An always-run exporter stages only flat regular `checkpoint.json` and
-`<64 lowercase hex>.json` records; it excludes directories, symlinks, hardlinks,
-unknown files and temporary writes. The whole filtered export is published
+`<64 lowercase hex>.json` records. Recognized names that are directories, symlinks,
+hardlinks or unreadable cause the entire export to fail; unknown names and
+temporary writes are excluded. The whole filtered export is published
 atomically so an interrupted export cannot expose a checkpoint without all
 records. Only that export is archived, including when the uploader is killed
 before cleanup. Credential scratch is never archived. Upload-only reruns restore the previous consumer attempt's
-ledger and require its completed checkpoint. Missing/expired history or an abrupt
-termination without a checkpoint blocks reruns. Started, ambiguous, accepted and
+ledger and require a successful restore action plus its completed version-2
+checkpoint. The seal contains the exact sorted set of recognized record names
+and each file's SHA256 of bytes. Before unsealing, the helper verifies the exact
+set and digests, rejecting missing, extra, changed, linked or nonregular records.
+The exporter also verifies the staged inventory against any seal, so a partial
+export cannot publish a usable seal. Version 1 is rejected: the consumer has never
+been activated and no production legacy ledger exists. Missing/expired history
+or an abrupt termination without a checkpoint blocks reruns. Started, ambiguous, accepted and
 nonzero-exit deliveries are never automatically resubmitted: a CLI failure can
 occur after remote acceptance. Content changes under an existing identity also
 block delivery. A rerun can safely retry an ordinary preflight failure that
@@ -74,6 +86,14 @@ the runtime. Errors after spawn remain ambiguous; nonzero exits remain blocked. 
 to force a retry; reconcile against the service first. Concurrency serializes
 consumers for each producer run/attempt. This is not a claim of server-side
 idempotency.
+
+Consumer reruns use the original run's workflow YAML but check out the current
+`main` helpers. This intentionally permits fixing the runtime and recovering a
+sealed preflight or `not-started` delivery without re-executing producer tests.
+Helper changes must keep the existing workflow environment contract backward
+compatible. Incompatible environment/contract changes require a full new producer
+attempt and a new consumer run with matching YAML; do not rerun an old consumer
+with incompatible helpers or pin an unreviewed helper SHA to force recovery.
 
 CLI receipt URLs are reported as `accepted-unverified`; ambiguous/failed/blocked
 results fail the publishing job. Task 7 still requires hosted OIDC delivery,
@@ -87,12 +107,47 @@ authentication to test jobs to work around staged rollout. Full deployment/E2E
 acceptance remains a separate hosted check. Existing legacy stats reporting stays
 for the bounded comparison period; its removal is a later cutover task.
 
+Classic main protection requires GitHub Actions checks named `authorize` and
+`test` (app 15368). Keep the authorization job key and check name fixed. After its
+approval, the separate secret-free `producer-identity` job emits the immutable
+name before unit tests and preview setup run in parallel. Its only step is a
+fixed echo; it has no checkout, permissions, OIDC, secrets or approval environment.
+The existing adapter continues matching the `authorize:` prefix on this metadata
+job, without a live-head fallback.
+
+The fixed `test` aggregate in `pr-tests.yml` uses only scheduler `needs` results.
+It requires authorization, producer identity and unit success plus exactly one
+complete path: remote setup, shards, locked tests and cleanup all successful with
+local skipped; or local successful with the entire remote path skipped. Missing,
+failed, cancelled and all-skipped paths fail. It runs fixed inline code with
+`permissions: {}` and no checkout or PR-controlled outputs. No protection settings
+or status synthesis are involved. Only the four new vendor artifact upload steps
+are best effort; native coverage, E2E, type checks and legacy uploads retain their
+existing failure behaviour. Missing vendor evidence still fails the consumer.
+
+Because `pull_request_target` uses base YAML, that aggregate cannot run from this
+head until main contains it. `flakiness-head-validation.yml` therefore triggers
+only on pushes to `ci/flakiness-publishing`, with job/check name `test`. This
+narrow rollout path executes actual exact-head locked install, type checks, E2E
+skip/tag lint, core coverage, reporting contracts, core build, matching Chromium
+and OS dependency install, local D1 migrations and the full CMS suite under the
+existing Playwright-owned wrangler server. It uses the same local E2E commands,
+150/140-minute job/step limits and existing workers/retries configuration. State
+is owned by runner temp plus run ID and attempt; remote `BASE_URL` and server
+reuse are disabled. SHA-pinned actions, read-only contents, no credential
+persistence, caches, stored-secret references, OIDC, deployment or upload service
+are used. Native/vendor evidence is always archived under `head-validation-*`,
+which cannot match the consumer's `flakiness-*` pattern. Full suite exit codes
+gate this check; it is not an alias for reporting-only contracts. Parent CI must
+still verify genuine exact-head local and existing remote PR Tests results.
+
 Local verification:
 
 ```sh
 npm run test:reporting
 npm run type-check
-actionlint .github/workflows/pr-tests.yml .github/workflows/flakiness-upload.yml
+actionlint .github/workflows/pr-tests.yml .github/workflows/flakiness-upload.yml \
+  .github/workflows/reporting-contracts.yml .github/workflows/flakiness-head-validation.yml
 ```
 
 Reporting contracts use fake GitHub API fixtures and fake CLI execution without
@@ -124,4 +179,6 @@ Production `test:cov` delegates to the core workspace, whose Vitest include is
 `src/**/*.{test,spec}.{js,ts}`. It does not discover root reporting contracts.
 Reporting fixture scratch nevertheless uses an explicit evidence root, TMPDIR,
 RUNNER_TEMP or test-owned `.cache/reporting-contracts`, outside `flakiness-reports/`.
+The selected parent is created then resolved with `realpath` before allocating a
+fixture, preserving this precedence while avoiding macOS `/var` symlink ancestry.
 No discovery/skips or producer uploads were changed for this separation.

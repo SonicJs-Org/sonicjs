@@ -621,3 +621,19 @@ Hosted setup, privacy/retention decisions, OIDC, and cutover remain separate gat
 
 **Linux execution:** Python FD bridge has been exercised on macOS. Linux verification
 is pending published CI (see `docs/testing/reporting-contracts-ci.md`).
+
+## Hosted upload (flakiness.io)
+
+Trusted unit and CMS E2E jobs archive native reports and attachments as
+run/attempt-specific artifacts retained for seven days, including on test failure.
+Reporters keep CI uploads disabled. The separate, non-blocking
+`flakiness-upload` job runs only after trusted `e2e-setup` succeeds, downloads
+these artifacts, removes symlinks, and uploads each `vendor/report.json` directory
+to `SonicJs/sonicjs`. Run URLs appear in its Flakiness.io step summary.
+
+The upload job checks out the trusted default event commit (base commit for
+`pull_request_target`) with only the pinned CLI runtime, installs it without
+lifecycle scripts, and exposes `FLAKINESS_ACCESS_TOKEN` only to the upload step.
+It executes no artifact or PR checkout code, has read-only contents/actions
+permissions, and never runs for forks. Missing reports produce a warning;
+authentication or service failures remain non-blocking for PR checks.

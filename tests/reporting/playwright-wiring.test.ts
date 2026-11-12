@@ -38,9 +38,9 @@ test('all non-reporting production configuration bytes match Task2', async () =>
     .replace("reporter: [['html'], ...playwrightReporting('www-e2e', 'www')],", "reporter: 'html',")
   for (const file of ['playwright.config.ts', 'playwright-no-server.config.ts', 'playwright.smoke.config.ts', 'playwright.www.config.ts', 'playwright.infrastructure.config.ts']) {
     const path = `tests/${file}`
-    // 797c9554b is the last commit in this PR that changed playwright config files
-    // (reverted retries 2→3 with explanatory comments; non-functional, comment-only update)
-    const original = stripReporting(execFileSync('git', ['show', `797c9554b:${path}`], { cwd: repositoryRoot, encoding: 'utf8' }))
+    // 1dea9731f (#1170, squash-merged on main) is the last commit that changed playwright config files;
+    // baseline must be reachable from main, not a pre-squash branch commit
+    const original = stripReporting(execFileSync('git', ['show', `1dea9731f:${path}`], { cwd: repositoryRoot, encoding: 'utf8' }))
     const current = stripReporting(readFileSync(`${repositoryRoot}/${path}`, 'utf8'))
     expect(current, path).toBe(original)
   }

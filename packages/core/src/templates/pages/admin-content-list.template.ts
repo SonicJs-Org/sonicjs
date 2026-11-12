@@ -32,6 +32,8 @@ export interface ContentListPageData {
   }>
   contentItems: ContentItem[]
   totalItems: number
+  /** True when totalItems is a lower bound (capped count) rather than an exact total. */
+  totalItemsCapped?: boolean
   itemsPerPage: number
   user?: {
     name: string
@@ -205,6 +207,7 @@ export function renderContentListPage(data: ContentListPageData): string {
     currentPage: data.page,
     totalPages,
     totalItems: data.totalItems,
+    totalItemsCapped: data.totalItemsCapped,
     itemsPerPage: data.itemsPerPage,
     startItem,
     endItem,

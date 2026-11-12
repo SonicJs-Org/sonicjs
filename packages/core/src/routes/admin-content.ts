@@ -20,6 +20,9 @@ import { createDocumentSchema } from '../schemas/document'
 import type { QueryableField } from '../schemas/document'
 import { loadCollectionConfigs, getVisibleCollections } from '../services/collection-loader'
 
+// All-view count cap: count at most this many pages beyond the current offset (see the All-view branch).
+const ALL_VIEW_COUNT_WINDOW_PAGES = 10
+
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 type ContentRouteContext<P extends string = string> = Context<{ Bindings: Bindings; Variables: Variables }, P>
@@ -599,7 +602,9 @@ adminContentRoutes.get('/', async (c) => {
       const docParams: any[] = [reqTenant(c)]
       if (allTypeIds.length > 0) {
         const ph = allTypeIds.map(() => '?').join(',')
-        docConds.push(`d.type_id IN (${ph})`)
+        // Unary `+` keeps type_id from driving index choice: with a multi-type IN list the planner
+        // otherwise picks idx_documents_drafts (tenant,type) and temp-sorts everything by updated_at.
+        docConds.push(`+d.type_id IN (${ph})`)
         docParams.push(...allTypeIds)
       }
       if (status === 'deleted') docConds.push('d.deleted_at IS NOT NULL')
@@ -610,19 +615,30 @@ adminContentRoutes.get('/', async (c) => {
       }
       if (like) { docConds.push("(d.title LIKE ? OR json_extract(d.data,'$.author') LIKE ?)"); docParams.push(like, like) }
 
+      // Sort on the raw `d.updated_at` column (seconds) — NOT a computed alias — so SQLite can walk
+      // idx_docs_tenant_draft_updated in order and stop after LIMIT rows instead of reading and
+      // temp-sorting every document. Seconds → ms conversion happens in JS below.
       const unionSql = `
         SELECT d.root_id AS id, d.title AS title, d.slug AS slug,
                CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
-               d.updated_at * 1000 AS updated_at,
+               d.updated_at AS updated_at_s,
                dt.display_name AS cdisplay, COALESCE(u.email, d.created_by, 'System') AS author_label
         FROM documents d JOIN document_types dt ON dt.id = d.type_id LEFT JOIN auth_user u ON u.id = d.created_by
         WHERE ${docConds.join(' AND ')}
-        ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+        ORDER BY d.updated_at DESC LIMIT ? OFFSET ?`
       const { results: unionRows } = await db.prepare(unionSql).bind(...docParams, limit, offset).all()
 
+      // Capped count: an exact COUNT(*) scans every document on each page load (hundreds of thousands
+      // of rows on telemetry-heavy installs, enough to trip D1's per-10s resource limit). Count at most
+      // a window ahead of the current page; when the cap is hit the UI shows "N+" results and the
+      // window grows as the user pages forward.
+      const countCap = offset + limit * ALL_VIEW_COUNT_WINDOW_PAGES
       const countRow = await db.prepare(
-        `SELECT COUNT(*) AS count FROM documents d WHERE ${docConds.join(' AND ')}`,
-      ).bind(...docParams).first() as any
+        `SELECT COUNT(*) AS count FROM (SELECT 1 FROM documents d WHERE ${docConds.join(' AND ')} LIMIT ?)`,
+      ).bind(...docParams, countCap + 1).first() as any
+      const rawCount = Number(countRow?.count ?? 0)
+      const totalItemsCapped = rawCount > countCap
+      const totalItems = totalItemsCapped ? countCap : rawCount
 
       const badge: Record<string, string> = {
         published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',
@@ -636,13 +652,14 @@ adminContentRoutes.get('/', async (c) => {
         modelName: row.cdisplay,
         statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${badge[row.status] ?? badge.draft}">${row.status}</span>`,
         authorName: row.author_label,
-        formattedDate: new Date(row.updated_at ?? 0).toLocaleDateString(),
+        formattedDate: new Date((row.updated_at_s ?? 0) * 1000).toLocaleDateString(),
         availableActions: [],
       }))
 
       return c.html(renderContentListPage({
         modelName, status, page, search, models, newContentCollections, contentItems,
-        totalItems: countRow?.count ?? 0,
+        totalItems,
+        totalItemsCapped,
         itemsPerPage: limit,
         user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
         version: c.get('appVersion'),

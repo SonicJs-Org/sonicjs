@@ -404,7 +404,7 @@ adminApiRoutes.get('/migrations/status', async (c) => {
   try {
     const { MigrationService } = await import('../services/migrations')
     const db = c.env.DB
-    const migrationService = new MigrationService(db)
+    const migrationService = new MigrationService(db, c.get('migrationOptions'))
     const status = await migrationService.getMigrationStatus()
 
     return c.json({

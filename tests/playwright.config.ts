@@ -36,6 +36,7 @@ export default defineConfig({
     // Live stats reporter — self-disables when PLAYWRIGHT_STATS_API_KEY is not set
     [resolve(here, './e2e/stats-live-reporter.ts')],
     ...playwrightReporting('cms-e2e', cmsReportingTarget(process.env)),
+    ['@testdino/playwright', { token: process.env.TESTDINO_TOKEN }],
   ],
   globalSetup: resolve(here, './e2e/global-setup.ts'),
   globalTeardown: resolve(here, './e2e/global-teardown.ts'),

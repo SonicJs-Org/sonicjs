@@ -288,6 +288,10 @@ jobs:
           # reaching the step env even if workflow authorization rules change.
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+          # TestDino streams results live from the reporter in tests/playwright.config.ts.
+          # A shared CI run id groups all 4 shards into one TestDino run.
+          TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+          TESTDINO_CI_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           mkdir -p e2e-logs
@@ -377,6 +381,8 @@ jobs:
         env:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+          # Not sharded, so this job reports to TestDino as its own run.
+          TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p e2e-logs

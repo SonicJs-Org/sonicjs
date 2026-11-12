@@ -34,6 +34,7 @@ test('all non-reporting production configuration bytes match Task2', async () =>
     .replace("import { cmsReportingTarget, playwrightReporting } from './reporting/options'\n", '')
     .replace("import { playwrightReporting } from './reporting/options'\n", '')
     .replace(/^    \.\.\.playwrightReporting\(.+\),\n/gm, '')
+    .replace(/^    \['@testdino\/playwright', .+\],\n/gm, '')
     .replace("reporter: [['list'], ...playwrightReporting('runner-contracts', 'none')],", "reporter: [['list']],")
     .replace("reporter: [['html'], ...playwrightReporting('www-e2e', 'www')],", "reporter: 'html',")
   for (const file of ['playwright.config.ts', 'playwright-no-server.config.ts', 'playwright.smoke.config.ts', 'playwright.www.config.ts', 'playwright.infrastructure.config.ts']) {

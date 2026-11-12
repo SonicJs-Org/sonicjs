@@ -6,7 +6,8 @@ on:
   push:
     # PR1146 rollout: verify the head workflow with the secret-free local full suite.
     # Keep remote previews limited to trusted PRs and main/v3 pushes.
-    branches: [main, v3, test/e2e-infrastructure-hardening]
+    # TEMP (#1177): verify TestDino CI streaming from the branch's own workflow. Remove before merge.
+    branches: [main, v3, test/e2e-infrastructure-hardening, ci/testdino-reporter]
 
 permissions:
   contents: read

@@ -6,7 +6,7 @@ on:
   push:
     # PR1146 rollout: verify the head workflow with the secret-free local full suite.
     # Keep remote previews limited to trusted PRs and main/v3 pushes.
-    branches: [main, v3, test/e2e-infrastructure-hardening]
+    branches: [main, v3, test/e2e-infrastructure-hardening, ci/flakiness-upload]  # TEMP: ci/flakiness-upload exercises the new upload job pre-merge; remove before merge
 
 permissions:
   contents: read

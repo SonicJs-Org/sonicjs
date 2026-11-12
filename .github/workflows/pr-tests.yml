@@ -70,6 +70,16 @@ jobs:
           flags: unittests
           fail_ci_if_error: false
 
+      - name: Upload Flakiness core-unit report artifact
+        if: always() && env.TRUSTED_PREVIEW == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-core-unit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/core-unit/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
   # ── Trusted E2E: allocate CF resources and deploy preview Worker ─────────────
   # Only runs for internal PRs and direct pushes to main/v3; forks/Dependabot/rollout
   # get the e2e-local path instead (no secrets required).
@@ -305,6 +315,16 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Upload Flakiness CMS E2E shard report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-cms-e2e-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/cms-e2e/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
   # ── Trusted E2E: @lock-* tests (serial, single runner) ───────────────────────
   # @lock-* tags appear in MULTIPLE spec files sharing global auth/plugin/registration
   # state. File-level sharding (--shard) can place them on different runners where
@@ -386,6 +406,16 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Upload Flakiness CMS E2E locked report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-cms-e2e-locked-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/cms-e2e/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
   # ── Untrusted E2E: forks, Dependabot, rollout-branch push ────────────────────
   # Runs the full suite locally with wrangler dev (no CF secrets required).
   # Waits for unit-tests to gate on type-check/lint/coverage first.
@@ -452,6 +482,78 @@ jobs:
             e2e-logs/
           retention-days: 7
           if-no-files-found: warn
+
+  # Upload data with a trusted CLI; never execute the producer checkout or artifacts.
+  flakiness-upload:
+    needs: [unit-tests, e2e-setup, e2e-shard, e2e-locked]
+    if: always() && needs.e2e-setup.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout trusted CLI runtime
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: scripts/testing/flakiness-runtime
+          sparse-checkout-cone-mode: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned Flakiness CLI
+        working-directory: scripts/testing/flakiness-runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download Flakiness report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: flakiness-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flakiness-artifacts
+          merge-multiple: false
+
+      - name: Upload reports to Flakiness.io
+        shell: bash
+        env:
+          FLAKINESS_ACCESS_TOKEN: ${{ secrets.FLAKINESS_ACCESS_TOKEN }}
+          FLAKINESS_PROJECT: SonicJs/sonicjs
+        run: |
+          set -euo pipefail
+          CLI="$GITHUB_WORKSPACE/scripts/testing/flakiness-runtime/node_modules/.bin/flakiness"
+          if ! "$CLI" access --project "$FLAKINESS_PROJECT"; then
+            echo "::error::Flakiness.io authentication denied for $FLAKINESS_PROJECT"
+            exit 1
+          fi
+
+          ARTIFACTS="$RUNNER_TEMP/flakiness-artifacts"
+          dirs=()
+          if [ -d "$ARTIFACTS" ]; then
+            while IFS= read -r -d '' link; do
+              echo "::warning::Removing symlink from Flakiness artifacts"
+              rm -- "$link"
+            done < <(find "$ARTIFACTS" -type l -print0)
+            while IFS= read -r -d '' report; do
+              dirs+=("${report%/report.json}")
+            done < <(find "$ARTIFACTS" -type f -name report.json -path '*/vendor/report.json' -print0)
+          fi
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "::warning::No Flakiness reports found"
+            exit 0
+          fi
+
+          OUTPUT="$RUNNER_TEMP/flakiness-upload.log"
+          "$CLI" upload --project "$FLAKINESS_PROJECT" "${dirs[@]}" 2>&1 | tee "$OUTPUT"
+          {
+            echo "## Flakiness.io"
+            echo
+            grep -oE 'https://flakiness[.]io/[^[:space:][:cntrl:]]+' "$OUTPUT" | sort -u || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ── Cleanup: delete all run-owned CF resources ───────────────────────────────
   # Runs after all E2E jobs complete (success or failure) but only when e2e-setup

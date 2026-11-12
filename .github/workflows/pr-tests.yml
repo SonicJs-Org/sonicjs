@@ -486,7 +486,10 @@ jobs:
   # Upload data with a trusted CLI; never execute the producer checkout or artifacts.
   flakiness-upload:
     needs: [unit-tests, e2e-setup, e2e-shard, e2e-locked]
-    if: always() && needs.e2e-setup.result == 'success'
+    # Upload only main history: pushes to main and PRs targeting main.
+    if: >
+      always() && needs.e2e-setup.result == 'success' &&
+      (github.ref == 'refs/heads/main' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true

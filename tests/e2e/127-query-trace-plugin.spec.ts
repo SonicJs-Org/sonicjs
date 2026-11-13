@@ -84,8 +84,16 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
 
   test('?trace=1 redirects clean and panel is collapsed with a summary', async () => {
     await expectPanel('/admin/dashboard', false)
-    await page.goto('/admin/dashboard?trace=1')
-    await expect(page).toHaveURL(/\/admin\/dashboard$/)
+    // Another isolate may still hold the pre-install cached state (30s TTL); retry until one that sees it serves us.
+    await expect
+      .poll(
+        async () => {
+          await page.goto('/admin/dashboard?trace=1')
+          return (await page.locator(PANEL).count()) > 0 && !page.url().includes('trace=')
+        },
+        { timeout: 45_000, intervals: [500, 1000, 2000] }
+      )
+      .toBe(true)
     const panel = page.locator(PANEL)
     await expect(panel).toBeAttached()
     await expect(panel).not.toHaveAttribute('open', '')
@@ -122,15 +130,30 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
   })
 
   test('?trace=0 removes the panel; deactivating disables ?trace=1', async () => {
-    await page.goto('/admin/dashboard?trace=1')
-    await expect(page.locator(PANEL)).toBeAttached()
+    await expect
+      .poll(
+        async () => {
+          await page.goto('/admin/dashboard?trace=1')
+          return (await page.locator(PANEL).count()) > 0
+        },
+        { timeout: 45_000, intervals: [500, 1000, 2000] }
+      )
+      .toBe(true)
     await page.goto('/admin/dashboard?trace=0')
     await expect(page.locator(PANEL)).toHaveCount(0)
 
     const res = await page.request.post(`/admin/plugins/${PLUGIN}/deactivate`, { headers: { Origin: TEST_ORIGIN } })
     expect(res.ok()).toBe(true)
-    await page.goto('/admin/dashboard?trace=1')
-    await expect(page.locator(PANEL)).toHaveCount(0)
+    // Deactivation only invalidates the serving isolate's cache; others converge within the 30s TTL.
+    await expect
+      .poll(
+        async () => {
+          await page.goto('/admin/dashboard?trace=1')
+          return await page.locator(PANEL).count()
+        },
+        { timeout: 45_000, intervals: [500, 1000, 2000] }
+      )
+      .toBe(0)
     await expectPanel('/admin/dashboard', false)
   })
 

@@ -47,6 +47,7 @@ export { mcpPlugin, createMcpPlugin } from './mcp-plugin'
 export type { McpConfigInput, McpConfig } from './mcp-plugin'
 export { menuPlugin, createMenuPlugin } from './menu-plugin'
 export { twoFactorAuthPlugin, createTwoFactorAuthPlugin } from './two-factor-auth'
+export { queryTracePlugin, createQueryTracePlugin } from './query-trace-plugin'
 
 // Core plugins list - now imported from auto-generated registry
 export const CORE_PLUGIN_IDS = [
@@ -72,6 +73,7 @@ export const CORE_PLUGIN_IDS = [
   'versioning',
   'menu',
   'two-factor-auth',
+  'query-trace',
 ] as const
 
 export type CorePluginNames = (typeof CORE_PLUGIN_IDS)[number]

@@ -825,7 +825,10 @@ test.describe("Source: 99-rbac-grant-api-access.spec.ts", () => {
     await loginAsAdmin(page)
     await page.goto(`/admin/users/${userId}/edit`)
     await page.waitForLoadState('networkidle')
-    await page.locator('select[name="role"]').selectOption(roleValue)
+    // The edit page now also renders a per-tenant role <select name="role"> inside the
+    // "Tenant memberships" <details> section (implicit ARIA role "group"), so the plain
+    // CSS selector is no longer unique. Target the main form's labeled "Role" field instead.
+    await page.getByLabel('Role').selectOption(roleValue)
     // The user form is a `PUT`, so htmx sends it as an XHR and swaps an alert in — there is no
     // navigation, and `networkidle` can go true before htmx has issued the request at all. The
     // very next thing this spec does is `page.goto`, which would cancel the save in flight and

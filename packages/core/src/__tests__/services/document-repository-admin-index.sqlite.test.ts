@@ -70,6 +70,25 @@ describe('DocumentRepository admin "All" index — real SQLite', () => {
     expect(await repo.countAdminIndex({ typeIds: TYPES }, 100)).toEqual({ count: 12, capped: false })
   })
 
+  it('stops counting after cap + 1 matches (bounded subquery, not an exact COUNT(*))', async () => {
+    seed(db, 12)
+    const calls: Array<{ sql: string; binds: unknown[] }> = []
+    const origPrepare = db.prepare.bind(db)
+    db.prepare = (sql: string) => {
+      const stmt = origPrepare(sql)
+      const origBind = stmt.bind.bind(stmt)
+      stmt.bind = (...binds: unknown[]) => { calls.push({ sql, binds }); return origBind(...binds) }
+      return stmt
+    }
+    await repo.countAdminIndex({ typeIds: TYPES }, 5)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].sql).toMatch(/FROM \(SELECT 1 FROM documents d WHERE .* LIMIT \?\)/s)
+    expect(calls[0].binds.at(-1)).toBe(6)
+    // And SQLite really reads no more than cap + 1 matching rows: the subquery yields exactly 6.
+    const inner = calls[0].sql.replace(/^SELECT COUNT\(\*\) AS count FROM \((.*)\)$/s, '$1')
+    expect(db.raw.prepare(inner).all(...calls[0].binds)).toHaveLength(6)
+  })
+
   it('serves the default list from idx_docs_tenant_draft_updated without a temp sort', async () => {
     seed(db, 50, { type: 'article' })
     seed(db, 50, { type: 'event' })

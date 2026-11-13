@@ -1759,6 +1759,15 @@ test.describe("Source: 126-content-all-view-capped-count.spec.ts", () => {
       const res = await page.goto(`/admin/content?model=all&search=${stamp}&limit=-1&page=-3`)
       expect(res?.status()).toBe(200)
       await expect(footer(page)).toContainText(/Showing\s*1\s*to\s*1\s*of\s*2\s*results/)
+
+      // A page far past the All view's depth cap is clamped (no 10M-row OFFSET) and renders cleanly.
+      // With only 2 matches every deep page is empty, so assert the offset itself: clamped to page 101
+      // → "Showing 10001…", whereas the unclamped page 100000 would render "Showing 9999901…".
+      const deep = await page.goto(`/admin/content?model=all&search=${stamp}&limit=100&page=100000`)
+      expect(deep?.status()).toBe(200)
+      await expect(footer(page)).toContainText(/Showing\s*10001\s*to/)
+      await expect(footer(page)).not.toContainText('9999901')
+      await expect(page.locator('a[href*="page=100000"]')).toHaveCount(0)
     })
 
     test('shows a lower bound "N+" past the window and grows it when paging forward', async ({ page }) => {

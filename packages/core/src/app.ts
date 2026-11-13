@@ -58,6 +58,7 @@ import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { menuMiddleware } from './middleware/menu'
 import { menuPlugin } from './plugins/core-plugins/menu-plugin'
+import { queryTracePlugin } from './plugins/core-plugins/query-trace-plugin'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
@@ -327,6 +328,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     lexicalEditorPlugin,
     versioningPlugin,
     menuPlugin,
+    queryTracePlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 

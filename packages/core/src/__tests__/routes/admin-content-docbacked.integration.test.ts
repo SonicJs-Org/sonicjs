@@ -209,7 +209,7 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
       const html = await list('&limit=100') // cap = 1000
       const total = footerTotal(html)
       expect(total).toMatch(/^\d+$/)
-      expect(Number(total)).toBeGreaterThanOrEqual(25)
+      expect(Number(total)).toBe(25)
       expect(badgeTotal(html)).toBe(total)
     })
 
@@ -239,6 +239,26 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
       expect(footerTotal(await list('&limit=2&page=-5'))).toBe('20+')
       expect(footerTotal(await list('&limit=2&page=0'))).toBe('20+')
     })
+
+    it('clamps very deep pages to the max offset instead of skipping millions of rows', async () => {
+      // limit=100 → last allowed page = 10_000 / 100 + 1 = 101; page=100000 clamps there.
+      const html = await list('&limit=100&page=100000')
+      expect(html).toContain('No content found') // offset 10_000 > 25 posts → empty page, not an error
+      // Footer "Showing 10001 to …": page clamped to 101 (offset 10_000), not 100000 (offset 9,999,900).
+      expect(html).toMatch(/Showing <span[^>]*>10001<\/span>/)
+    })
+
+    it('all-view lists nothing when no visible document types remain (never internal ones)', async () => {
+    await createPost('hidden-when-internal')
+    // Mark every type internal: the registry then yields no visible types. An empty type filter used
+    // to mean "unrestricted" and listed every document, internal/auth-owned ones included.
+    db.raw.prepare(`UPDATE document_types SET settings = json_set(COALESCE(settings,'{}'), '$.internal', json('true'))`).run()
+    const res = await app.request('/admin/content?model=all')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('Post hidden-when-internal')
+    expect(html).toContain('No content found')
+  })
   })
 
   it('does NOT offer internal/auth-owned types as content models in the filter dropdown', async () => {

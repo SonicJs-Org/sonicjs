@@ -25,6 +25,8 @@ import { loadCollectionConfigs, getVisibleCollections } from '../services/collec
 const ALL_VIEW_COUNT_WINDOW_PAGES = 10
 // Largest page size the list UI offers (pageSizeOptions in admin-content-list.template.ts).
 const MAX_PAGE_SIZE = 100
+// Deepest row offset a list page may request (OFFSET cost is linear in rows skipped).
+const MAX_LIST_OFFSET = 10_000
 
 /** Parse an integer query param, falling back on garbage and clamping to [min, max]. */
 function clampInt(raw: string | null | undefined, fallback: number, min: number, max: number): number {
@@ -484,9 +486,10 @@ adminContentRoutes.get('/', async (c) => {
 
     // Get query parameters
     // Clamp paging input: a non-positive or huge `limit`/`page` would otherwise produce a negative
-    // offset / count cap (an unbounded count) or an arbitrarily large page.
-    const page = clampInt(url.searchParams.get('page'), 1, 1, 100_000)
+    // offset / count cap (an unbounded count), or an OFFSET deep enough that SQLite skips millions
+    // of rows and the count window grows to match. Pages past MAX_LIST_OFFSET clamp to the last one.
     const limit = clampInt(url.searchParams.get('limit'), 20, 1, MAX_PAGE_SIZE)
+    const page = clampInt(url.searchParams.get('page'), 1, 1, Math.floor(MAX_LIST_OFFSET / limit) + 1)
     // The filter dropdown posts `model`, but the content form's cancel link and the
     // post-save redirects below send `collection` instead. Accept both, or saving an item
     // drops the user on an unfiltered list rather than the collection they were editing.
@@ -618,9 +621,14 @@ adminContentRoutes.get('/', async (c) => {
         status: (['published', 'draft', 'deleted'].includes(status) ? status : 'all') as 'all' | 'published' | 'draft' | 'deleted',
         search: search || undefined,
       }
-      const indexRows = await repo.listAdminIndex({ ...indexOpts, limit, offset })
-      const { count: totalItems, capped: totalItemsCapped } =
-        await repo.countAdminIndex(indexOpts, offset + limit * ALL_VIEW_COUNT_WINDOW_PAGES)
+      // docTypes is already filtered to visible (non-internal, non-auth) types. The repository treats
+      // an empty typeIds list as "no type filter", so with nothing visible we must not query at all —
+      // otherwise internal/auth-owned documents would be listed.
+      const hasVisibleTypes = indexOpts.typeIds.length > 0
+      const indexRows = hasVisibleTypes ? await repo.listAdminIndex({ ...indexOpts, limit, offset }) : []
+      const { count: totalItems, capped: totalItemsCapped } = hasVisibleTypes
+        ? await repo.countAdminIndex(indexOpts, offset + limit * ALL_VIEW_COUNT_WINDOW_PAGES)
+        : { count: 0, capped: false }
 
       const badge: Record<string, string> = {
         published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',

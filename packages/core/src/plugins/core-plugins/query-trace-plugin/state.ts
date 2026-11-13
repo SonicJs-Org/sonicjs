@@ -13,10 +13,12 @@ export interface QueryTraceState {
 }
 
 let cached: QueryTraceState | null = null
+let inflight: Promise<QueryTraceState> | null = null
 
 /** Drop the per-isolate cache. Call after install/uninstall/activate/deactivate/settings changes. */
 export function invalidateQueryTraceState(): void {
   cached = null
+  inflight = null
 }
 
 function inactive(now: number): QueryTraceState {
@@ -50,6 +52,18 @@ function parseSettings(raw: unknown): QueryTraceSettings {
  */
 export async function getQueryTraceState(db: D1Database, now: number = Date.now()): Promise<QueryTraceState> {
   if (cached && now - cached.fetchedAt < QUERY_TRACE_STATE_TTL_MS) return cached
+  // Concurrent requests at TTL expiry share one read instead of each hitting D1.
+  if (inflight) return inflight
+  const p = load(db, now)
+  inflight = p
+  try {
+    return await p
+  } finally {
+    if (inflight === p) inflight = null
+  }
+}
+
+async function load(db: D1Database, now: number): Promise<QueryTraceState> {
   let next: QueryTraceState
   try {
     const row = (await db
@@ -67,6 +81,7 @@ export async function getQueryTraceState(db: D1Database, now: number = Date.now(
   } catch {
     next = inactive(now)
   }
+  // An invalidation during the read nulls `inflight`; don't let this stale result repopulate the cache.
   cached = next
   return next
 }

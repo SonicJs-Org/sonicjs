@@ -86,3 +86,27 @@ describe('getQueryTraceState (real SQLite)', () => {
     expect((await getQueryTraceState(broken)).active).toBe(false)
   })
 })
+
+describe('getQueryTraceState concurrency', () => {
+  it('concurrent callers at cold/expired cache share one DB read', async () => {
+    invalidateQueryTraceState()
+    let calls = 0
+    const db = {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => {
+            calls++
+            await new Promise((r) => setTimeout(r, 5))
+            return null
+          },
+        }),
+      }),
+    }
+    const results = await Promise.all(Array.from({ length: 50 }, () => getQueryTraceState(db, 1000)))
+    expect(calls).toBe(1)
+    expect(results.every((r) => r.active === false)).toBe(true)
+    await getQueryTraceState(db, 1000 + 1000)
+    expect(calls).toBe(1)
+    invalidateQueryTraceState()
+  })
+})

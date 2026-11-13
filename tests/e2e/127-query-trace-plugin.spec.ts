@@ -12,6 +12,8 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
 
   let page: Page
   let installedByTest = false
+  // Install state before the suite ran: 'uninstalled' | 'inactive' | 'active' (card data-status).
+  let originalStatus = 'uninstalled'
 
   async function setVisibility(visibility: 'opt-in' | 'all-admins') {
     const csrf = await getCsrfTokenFromPage(page)
@@ -50,13 +52,32 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
     const ctx = await browser.newContext()
     page = await ctx.newPage()
     await loginAsAdmin(page)
+    // Snapshot whatever state existed before the suite so afterAll can restore it.
+    await page.goto('/admin/plugins')
+    originalStatus = (await page.locator('.plugin-card[data-name="Query Trace"]').first().getAttribute('data-status')) ?? 'uninstalled'
     // Start from the fresh-install state: not installed.
-    await page.request.post(`/admin/plugins/${PLUGIN}/uninstall`, { headers: { Origin: TEST_ORIGIN } })
+    if (originalStatus !== 'uninstalled') {
+      const res = await page.request.post(`/admin/plugins/${PLUGIN}/uninstall`, { headers: { Origin: TEST_ORIGIN } })
+      expect(res.ok(), `initial uninstall failed: ${res.status()}`).toBe(true)
+    }
   })
 
   test.afterAll(async () => {
     try {
-      await page.request.post(`/admin/plugins/${PLUGIN}/uninstall`, { headers: { Origin: TEST_ORIGIN } })
+      const un = await page.request.post(`/admin/plugins/${PLUGIN}/uninstall`, { headers: { Origin: TEST_ORIGIN } })
+      // Uninstalling something already gone may legitimately fail; only a failure while installed matters.
+      expect(un.ok() || !installedByTest, `final uninstall failed: ${un.status()}`).toBe(true)
+      if (originalStatus !== 'uninstalled') {
+        const inst = await page.request.post('/admin/plugins/install', {
+          data: { name: PLUGIN, id: PLUGIN },
+          headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
+        })
+        expect(inst.ok(), `restore install failed: ${inst.status()}`).toBe(true)
+        if (originalStatus === 'inactive') {
+          const off = await page.request.post(`/admin/plugins/${PLUGIN}/deactivate`, { headers: { Origin: TEST_ORIGIN } })
+          expect(off.ok(), `restore deactivate failed: ${off.status()}`).toBe(true)
+        }
+      }
     } finally {
       await page.context().close()
     }
@@ -139,8 +160,17 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
         { timeout: 45_000, intervals: [500, 1000, 2000] }
       )
       .toBe(true)
-    await page.goto('/admin/dashboard?trace=0')
-    await expect(page.locator(PANEL)).toHaveCount(0)
+    // ?trace=0 clears the cookie; retry with a fresh load so a lagging isolate can't flake this.
+    await expect
+      .poll(
+        async () => {
+          await page.goto('/admin/dashboard?trace=0')
+          await page.reload()
+          return await page.locator(PANEL).count()
+        },
+        { timeout: 45_000, intervals: [500, 1000, 2000] }
+      )
+      .toBe(0)
 
     const res = await page.request.post(`/admin/plugins/${PLUGIN}/deactivate`, { headers: { Origin: TEST_ORIGIN } })
     expect(res.ok()).toBe(true)
@@ -154,7 +184,8 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
         { timeout: 45_000, intervals: [500, 1000, 2000] }
       )
       .toBe(0)
-    await expectPanel('/admin/dashboard', false)
+    // Same URL as the poll above: without ?trace=1 opt-in visibility makes "absent" trivially true.
+    await expectPanel('/admin/dashboard?trace=1', false)
   })
 
   test('anonymous request gets no Server-Timing even in all-admins mode', async ({ playwright }) => {

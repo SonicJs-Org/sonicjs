@@ -6,8 +6,9 @@
  *   account schema (1.7.0–1.7.2 required `account.issuer`) and new startup checks (1.7.3+).
  * - ONE version across the family: `better-auth` and the `@better-auth/*` packages it composes
  *   must move together, or the adapter and core disagree about the schema contract.
- * - Floor 1.7.7: every release below it is affected by GHSA-965c-763c-88jm (critical — an OAuth
- *   state redeemable as a magic-link token), and SonicJS always composes the magic-link plugin.
+ * - Floor 1.7.16: every release below it is affected by GHSA-2f9c-7xj7-gh55 (email OTP attempt
+ *   limit can be raced) and GHSA-fvxx-76fc-893x (revoked sessions stay valid with secondary
+ *   storage). SonicJS always composes email OTP and keeps sessions in KV.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -42,8 +43,8 @@ describe('Better Auth dependency declaration', () => {
     expect(new Set(family.map(([, v]) => v)).size).toBe(1)
   })
 
-  it('is at or above 1.7.7 (GHSA-965c-763c-88jm)', () => {
-    expect(atLeast('1.7.6', '1.7.7')).toBe(false)
-    expect(atLeast(pkg.dependencies['better-auth']!, '1.7.7')).toBe(true)
+  it('is at or above 1.7.16 (GHSA-2f9c-7xj7-gh55, GHSA-fvxx-76fc-893x)', () => {
+    expect(atLeast('1.7.15', '1.7.16')).toBe(false)
+    expect(atLeast(pkg.dependencies['better-auth']!, '1.7.16')).toBe(true)
   })
 })

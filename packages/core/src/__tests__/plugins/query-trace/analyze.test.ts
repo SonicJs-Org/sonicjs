@@ -79,6 +79,50 @@ describe('analyze', () => {
     expect(analyze(t, S, 1000).findings.find((f) => f.rule === 'cache-miss-db')?.message).toMatch(/Cache miss on `content:list:<n>` → 1 query/)
   })
 
+  it('cache-miss-db: attributes queries per miss, stops at next cache op or span change', () => {
+    t = new RequestTrace('GET', '/')
+    const cache = (cacheOutcome: 'miss' | 'hit', label: string) =>
+      t.record({ kind: 'cache', op: 'get', label, fingerprint: 'get', tables: [], params: [], startMs: 0, durationMs: 1, cache: cacheOutcome })
+    cache('miss', 'k1'); q({ durationMs: 4 }); q({ durationMs: 6, fingerprint: 'x' })
+    cache('miss', 'k2') // no queries before next cache op
+    cache('hit', 'k3'); q({ fingerprint: 'y' }) // after a hit: not attributed
+    cache('miss', 'k4'); t.spanStack.push('other'); q({ fingerprint: 'z' }) // span changed: not attributed
+    const found = analyze(t, S, 1000).findings.filter((f) => f.rule === 'cache-miss-db')
+    expect(found).toHaveLength(1)
+    expect(found[0]!.message).toMatch(/`k1` → 2 queries/)
+    expect(found[0]!.impactMs).toBe(10)
+  })
+
+  it('cache-miss-db analysis is linear (5000 misses)', () => {
+    t = new RequestTrace('GET', '/', 5000)
+    for (let i = 0; i < 2500; i++) {
+      t.record({ kind: 'cache', op: 'get', label: `k${i}`, fingerprint: 'get', tables: [], params: [], startMs: i, durationMs: 1, cache: 'miss' })
+      q({ startMs: i, fingerprint: `f${i}` })
+    }
+    const t0 = performance.now()
+    analyze(t, S, 1000)
+    expect(performance.now() - t0).toBeLessThan(500)
+  })
+
+  it('missing-index heuristic applies to reads only', () => {
+    t = new RequestTrace('POST', '/')
+    q({ op: 'UPDATE run', rowsRead: 18400, rowsWritten: 1, tables: ['documents'] })
+    expect(rules()).not.toContain('missing-index')
+  })
+
+  it('cold-bootstrap uses bootstrap self time, not inclusive duration', () => {
+    t = new RequestTrace('GET', '/')
+    t.spans.push({ name: 'bootstrap', startMs: 0, durationMs: 900, selfMs: 20 }) // warm: slow downstream, cheap bootstrap
+    const a = analyze(t, S, 1000)
+    expect(a.findings.map((f) => f.rule)).not.toContain('cold-bootstrap')
+    expect(a.summary.coldBootstrap).toBe(false)
+    t = new RequestTrace('GET', '/')
+    t.spans.push({ name: 'bootstrap', startMs: 0, durationMs: 900, selfMs: 600 })
+    const b = analyze(t, S, 1000)
+    expect(b.findings.find((f) => f.rule === 'cold-bootstrap')).toMatchObject({ impactMs: 600 })
+    expect(b.summary.coldBootstrap).toBe(true)
+  })
+
   it('flags write on GET only for GET', () => {
     t = new RequestTrace('GET', '/')
     q({ op: 'UPDATE run', rowsWritten: 3, tables: ['users'] })

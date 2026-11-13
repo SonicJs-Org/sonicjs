@@ -62,6 +62,8 @@ export interface Analysis {
   spans: SpanSummary[]
 }
 
+const COLD_BOOTSTRAP_MS = 200
+
 const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10
@@ -110,7 +112,8 @@ export function summarize(trace: RequestTrace, totalMs: number = trace.now()): S
     slowestMs: r1(statements.reduce((m, e) => Math.max(m, e.costMs ?? e.durationMs), 0)),
     middlewareMs: r1(nonHandlerSelf),
     dropped: trace.dropped,
-    coldBootstrap: !!boot && boot.durationMs > 200,
+    // selfMs, not durationMs: bootstrap's duration includes everything downstream via next().
+    coldBootstrap: !!boot && boot.selfMs > COLD_BOOTSTRAP_MS,
   }
 }
 
@@ -153,8 +156,9 @@ export function findOpportunities(trace: RequestTrace, settings: QueryTraceSetti
     }
   }
 
-  // Missing index suspect
+  // Missing index suspect (reads only: for writes rowsRead includes index maintenance and nothing is "returned")
   for (const s of statements) {
+    if (!s.op.startsWith('SELECT')) continue
     const read = s.rowsRead ?? 0
     if (read >= 1000 && read / Math.max(s.rowsReturned ?? 0, 1) >= 20) {
       add({
@@ -222,27 +226,31 @@ export function findOpportunities(trace: RequestTrace, settings: QueryTraceSetti
   }
   flush()
 
-  // Cache miss → DB (same span, before the next cache op)
-  entries.forEach((e, i) => {
-    if (e.kind !== 'cache' || e.cache !== 'miss') return
-    let n = 0
-    let ms = 0
-    for (const next of entries.slice(i + 1)) {
-      if (next.kind === 'cache' || next.span !== e.span) break
-      if (isTopLevelD1(next)) {
-        n++
-        ms += next.durationMs
-      }
-    }
-    if (n > 0) {
+  // Cache miss → DB (same span, before the next cache op). Single linear pass.
+  let miss: { entry: TraceEntry; n: number; ms: number } | null = null
+  const flushMiss = () => {
+    if (miss && miss.n > 0) {
       add({
         rule: 'cache-miss-db',
         severity: 'low',
-        impactMs: ms,
-        message: `Cache miss on \`${trunc(e.label, 60)}\` → ${n} ${n === 1 ? 'query' : 'queries'}. Check TTL/warming.`,
+        impactMs: miss.ms,
+        message: `Cache miss on \`${trunc(miss.entry.label, 60)}\` → ${miss.n} ${miss.n === 1 ? 'query' : 'queries'}. Check TTL/warming.`,
       })
     }
-  })
+    miss = null
+  }
+  for (const e of entries) {
+    if (e.kind === 'cache') {
+      flushMiss()
+      if (e.cache === 'miss') miss = { entry: e, n: 0, ms: 0 }
+    } else if (miss && e.span !== miss.entry.span) {
+      flushMiss()
+    } else if (miss && isTopLevelD1(e)) {
+      miss.n++
+      miss.ms += e.durationMs
+    }
+  }
+  flushMiss()
 
   // Write on GET
   if (trace.method === 'GET') {
@@ -271,12 +279,12 @@ export function findOpportunities(trace: RequestTrace, settings: QueryTraceSetti
 
   // Cold bootstrap
   const boot = trace.spans.find((s) => s.name === 'bootstrap')
-  if (boot && boot.durationMs > 200) {
+  if (boot && boot.selfMs > COLD_BOOTSTRAP_MS) {
     add({
       rule: 'cold-bootstrap',
       severity: 'low',
-      impactMs: boot.durationMs,
-      message: `Cold-start bootstrap (${Math.round(boot.durationMs)} ms). Isolate warm-up, not page cost.`,
+      impactMs: boot.selfMs,
+      message: `Cold-start bootstrap (${Math.round(boot.selfMs)} ms). Isolate warm-up, not page cost.`,
     })
   }
 

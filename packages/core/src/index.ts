@@ -124,7 +124,7 @@ export {
   PluginBootstrapService,
 } from './services'
 
-export type { Migration, MigrationStatus, LogLevel, LogCategory, LogEntry, LogFilter, CorePlugin } from './services'
+export type { Migration, MigrationStatus, MigrationServiceOptions, LogLevel, LogCategory, LogEntry, LogFilter, CorePlugin } from './services'
 
 // Collections - Code-defined managed collections
 export { default as siteSettingsCollection } from './collections/site-settings.collection'

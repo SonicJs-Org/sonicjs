@@ -24,7 +24,7 @@ export type { CollectionRecord, CollectionRowShape } from './collection-registry
 
 // Database Migrations
 export { MigrationService } from './migrations'
-export type { Migration, MigrationStatus } from './migrations'
+export type { Migration, MigrationStatus, MigrationServiceOptions } from './migrations'
 
 // Logging
 export { Logger, getLogger, initLogger } from './logger'

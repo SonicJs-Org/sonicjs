@@ -3,7 +3,7 @@
 > **For Hermes:** Delegate to a Sonnet subagent, task-by-task (subagent-driven-development). Plan only — no code has been written.
 > **Rev 2:** Delivered as a plugin, so it can be turned on and off per installation from Admin → Plugins.
 
-**Goal:** Ship a `query-trace` core plugin. When it is active, every `/admin/*` HTML page gets a collapsible "Performance Trace" panel at the bottom. The panel lists every D1 query, KV op, and cache lookup in the request, slowest first, with enough context to see where admin pages can get faster: cached or not, rows read vs returned, duplicates, which middleware ran it, network vs SQL time, and a waterfall. When the plugin is inactive there is no panel, no wrapping, and no measurable overhead.
+**Goal:** Ship a `query-trace` core plugin. When it is active, every `/admin/*` HTML page gets a collapsible "Performance Trace" panel at the bottom. The panel lists every D1 query, KV op, and cache lookup in the request, slowest first, with enough context to see where admin pages can get faster: cached or not, rows read vs returned, duplicates, which middleware ran it, network vs SQL time, and a waterfall. When the plugin is inactive there is no panel, no recording, no headers, and no measurable overhead. The bindings are still wrapped in passthrough proxies so singletons stay traceable (§1).
 
 **Architecture:**
 - **Plugin** (`plugins/core-plugins/query-trace-plugin/`) owns everything feature-specific:
@@ -39,7 +39,7 @@
 | Existing core-mounted plugin middleware that short-circuits when inactive: `securityAuditMiddleware`, `tenantMiddleware`, `enforceTwoFactorEnrolment` | `app.ts:578,662,713` | Same pattern for `queryTraceMiddleware()`. |
 | `c.env.DB` is used directly in **354** places (raw D1 + Drizzle via `drizzle(env.DB)`) | `packages/core/src/**` | Wrap the **binding** with a proxy and don't touch call sites. Drizzle's D1 driver goes through `prepare/bind/all/raw/run/first/batch`, so it's covered. |
 | `c.env` is a writable field on the Hono Context | `node_modules/hono/dist/context.js:28` | Per-request `c.env = { ...c.env, DB: traced }` without mutating the shared isolate env. |
-| Singletons capture env on the first request (`firstRequestEnv`, `EmailService({db})`, `setGlobalKVNamespace`) | `app.ts:401,423`, `middleware/bootstrap.ts:466` | Proxies must **not** hold a trace. They look it up through ALS on each call and are cached per raw binding in a WeakMap. A proxy captured by a singleton then attributes correctly (or no-ops) on later requests. |
+| Singletons capture env on the first request (`firstRequestEnv`, `EmailService({db})`, `setGlobalKVNamespace`) | `app.ts:401,423`, `middleware/bootstrap.ts:466` | Proxies must **not** hold a trace. They look it up through ALS on each call and are cached per raw binding in a WeakMap. **The proxies must also be installed on every request, before bootstrap, whatever the plugin state or path.** Otherwise an earlier untraced request (plugin inactive, or a non-admin path) seeds those singletons with *raw* bindings, and their later D1/KV calls bypass tracing. A passthrough proxy with no active trace costs one ALS lookup per call and records nothing (see Task 10). |
 | Better Auth already loads ALS via `import(/* webpackIgnore */ 'node:async_hooks')` with a `globalThis.AsyncLocalStorage` fallback | `packages/core/node_modules/@better-auth/core/dist/async_hooks/index.mjs` | Copy that exact pattern. No new hard dependency; the starter and sample app ship `nodejs_compat`. |
 | Cache plugin tiers: memory → KV → miss | `plugins/cache/services/cache.ts` `get` ~L185, `getWithSource` ~L229, `set` ~L288, `getMany` | Memory hits never touch KV, so instrument here for the "cached?" column. |
 | The nav-strip middleware already rewrites admin HTML bodies | `app.ts:606-649` | Copy the pattern, but note the pitfall: Hono's `c.res` setter copies the old headers, **including `content-length`**, onto the new Response (`context.js:111-125`). Set `c.res = undefined` before assigning. (The nav-strip likely has this latent bug. Flag it in the PR, don't fix it here.) |
@@ -54,8 +54,12 @@
 ## 2. Feature spec
 
 ### 2.1 On/off per installation (plugin lifecycle)
-- **Installed but inactive by default** (`defaultActive: false`). It appears in Admin → Plugins, and an admin activates or deactivates it there. Each installation has its own D1, so on/off is per installation automatically.
-- **Inactive** → `queryTraceMiddleware` returns `next()` after one cached in-memory check, refreshed from D1 at most every 30 s per isolate. No proxies, no ALS, no body rewrite.
+- **Off by default = available but not installed.** The plugin is listed in the registry (`is_core: false`, `defaultActive: false`) and shows under Admin → Plugins as available. It has no `documents` row, which `state.ts` treats as inactive.
+  - It must **not** go through `PluginBootstrapService`: that only auto-installs `is_core` / `defaultActive` plugins, and it force-activates every bootstrapped plugin that's inactive (`services/plugin-bootstrap.ts:121-131`).
+- **On** = an admin clicks **Install** (the existing install handler creates the row as active) or **Activate**.
+- **Off again** = **Deactivate** (row status `inactive`) or **Uninstall** (row removed).
+- Each installation has its own D1, so on/off is per installation automatically.
+- **Inactive / not installed** → after wrapping the bindings in passthrough proxies (see 1. and Task 10), `queryTraceMiddleware` returns `next()` following one cached in-memory check, refreshed from D1 at most every 30 s per isolate. No recording, no ALS load, no body rewrite, no headers.
 - **Active** → behavior is driven by the plugin settings (`configSchema`):
 
 | Key | Type | Default | Meaning |
@@ -68,8 +72,8 @@
 | `maxEntries` | number (100–5000) | 1000 | Per-request cap |
 
 - **Opt-in toggle:** `?trace=1` / `?trace=0` on any admin URL sets or clears the cookie `sjs_trace=1` (path `/admin`, HttpOnly, SameSite=Lax, Secure on https, 7 days), then redirects to the same URL without the param. The plugin page `/admin/plugins/query-trace` also has "Enable for me / Disable for me" buttons and shows the current state.
-- A trace is **collected** when: the plugin is active, the path starts with `/admin`, and (`visibility=all-admins` or the cookie is present).
-- The panel is **rendered** only when the request ends with `c.get('user')?.role === 'admin'`, the response is `text/html` and non-redirect, the body has `</body>`, and the request is **not** an `HX-Request`.
+- A trace is **collected** when: the plugin is active, the path is `/admin` or starts with `/admin/`, and (`visibility=all-admins` or the cookie is present).
+- The `Server-Timing` header and the panel are both emitted only when the request ends with `c.get('user')?.role === 'admin'`. The panel additionally requires that the response is `text/html` and non-redirect, the body has `</body>`, and the request is **not** an `HX-Request`.
 - **ALS unavailable** (no `nodejs_compat`): the plugin activates but logs one warning, and the plugin page shows a yellow notice "Tracing unavailable: enable nodejs_compat".
 
 ### 2.2 Recorded per entry (`TraceEntry`)
@@ -78,11 +82,14 @@
 | `seq` | counter | Execution order |
 | `kind` | `d1 \| kv \| cache` | Type column |
 | `op` | D1: `SELECT/INSERT/UPDATE/DELETE/PRAGMA/OTHER` + method (`all/first/run/raw/batch/exec`). KV: `get/getWithMetadata/put/delete/list`. Cache: `get/getWithSource/set/getMany` | |
-| `label` | collapsed SQL (≤2,000 chars) or KV/cache key | |
+| `label` | **Redacted** at record time; the raw text is never stored. **SQL:** collapsed whitespace, then every string literal (`'…'`), numeric literal, and blob literal (`X'…'`) replaced with `?`, case preserved, ≤2,000 chars. **KV/cache keys:** `redactKey()` splits on `:`, `/`, `\|` and keeps segments matching `/^[a-z][a-z0-9_-]{0,31}$/i` (e.g. `settings`, `rbac`, `perms`). Other segments become `<uuid>`, `<email>`, `<n>` (all digits) or `<redacted:LEN>`. The panel and Copy JSON only ever see the redacted label | SQL literals and keys can carry tokens, emails, and user/session IDs |
 | `fingerprint` | SQL with literals/params → `?`, `IN (?, ?, …)` → `IN (?…)`, lowercased | Groups duplicates and N+1 patterns |
 | `tables` | regex on `FROM/JOIN/INTO/UPDATE` | |
 | `params` | **masked**: `string(36)`, `number`, `null`, `bool` | Session tokens and hashes get bound |
-| `startMs` / `durationMs` | `performance.now()` relative to trace start, wall time around the awaited call | Waterfall + default sort |
+| *(private)* `identityKey` | salted per-request hash of `fingerprint` + the **raw** bound values (FNV-1a over `JSON.stringify(values)`). Kept in a `Map<seq, string>` on `RequestTrace` that is **never** rendered or exported; `toJSON()` excludes it | Lets "identical repeat" compare actual values without exposing them |
+| `startMs` / `durationMs` | `performance.now()` relative to trace start, wall time around the awaited call. **Batch members:** see `parentSeq` | Waterfall + default sort |
+| `parentSeq` | set on statements recorded from a `batch()` call; points at the batch's parent entry. The parent (`op: 'batch'`, `label: 'batch(N)'`) holds the one shared wall time. Each member gets `durationMs = meta.duration ?? 0` (its own server time), never the shared wall time | Stops a 10-statement batch from showing the batch time ten times |
+| `costMs` | derived: `durationMs` for standalone entries and batch members, **excluded** for batch parents in per-statement aggregations | The single field every per-statement aggregation uses (see 2.5 note) |
 | `d1DurationMs` | `meta.duration` | **wall − d1 = network/RPC overhead.** A large gap means latency is the cost: batch or cache. A small gap means SQL is slow: index |
 | `rowsReturned` | `results.length` / first = 1·0 / writes = `meta.changes` | |
 | `rowsRead` / `rowsWritten` | `meta.rows_read` / `meta.rows_written` | Read much greater than returned → missing index |
@@ -125,9 +132,9 @@ Trace JSON is embedded in `<script type="application/json" id="sjs-trace-data">`
 | Rule | Trigger | Message |
 |---|---|---|
 | N+1 / repeated fingerprint | ≥3× same fingerprint | "`select … from users where id = ?` ran 12× (148 ms). Batch with `IN (…)` or memoize per request." |
-| Identical repeat | same fingerprint + masked-param signature ≥2× | "Identical query repeated 4×. Cache it in request context." |
+| Identical repeat | same private `identityKey` (fingerprint + raw bound values) ≥2×. Masked params are **not** used: distinct IDs all mask to `string(36)`/`number` | "Identical query repeated 4×. Cache it in request context." |
 | Missing index suspect | `rowsRead ≥ 1000` and `rowsRead/max(rowsReturned,1) ≥ 20` | "Read 18,400 rows to return 20. Check the index on `<tables>`." |
-| Slow query | `durationMs ≥ slowQueryMs` | "Slow query (230 ms)." |
+| Slow query | `costMs ≥ slowQueryMs` (statements), or a batch parent's `durationMs ≥ slowQueryMs` reported as "slow batch" | "Slow query (230 ms)." / "Slow batch of 10 (230 ms)." |
 | Latency-bound | ≥5 D1 calls with `(wall−d1)/wall > 0.8` | "Network overhead is X% of DB time. Batch with `db.batch()` or cache." |
 | Serial chain | ≥3 consecutive non-overlapping D1 calls in the same span | "4 sequential queries in `handler` (60 ms). `Promise.all`/`batch` if independent." (hint) |
 | Cache miss → DB | cache `miss` followed by D1 in the same span | "Cache miss on `settings:general` → 3 queries. Check TTL/warming." |
@@ -135,7 +142,14 @@ Trace JSON is embedded in `<script type="application/json" id="sjs-trace-data">`
 | Middleware-heavy | non-handler span self time > 50% of total | "Middleware is 63% of server time; top: `requireRbac` 120 ms." |
 | Cold bootstrap | `bootstrap` span > 200 ms | "Cold-start bootstrap (840 ms). Isolate warm-up, not page cost." |
 
-### 2.6 `Server-Timing` (all traced responses, including HTMX partials, when the setting is on)
+**Which field each aggregation uses:**
+- **DB Σ (summary + `Server-Timing db`):** sum of `durationMs` over *top-level* D1 entries, i.e. standalone statements plus batch parents. Batch members are excluded, so the shared wall time counts once.
+- **Query counts (`N D1`, unique, dupes):** statements only. Batch members count, batch parents don't.
+- **Default table sort:** top-level entries by `durationMs` desc. Batch members render indented under their parent.
+- **Fingerprint groups, N+1, identical repeat, slow query:** `costMs` over statements.
+- **Latency-bound:** top-level entries only (`durationMs` vs `d1DurationMs`, where a parent's `d1DurationMs` is the sum of its members).
+
+### 2.6 `Server-Timing` (traced responses for **admin users only**, including HTMX partials, when the setting is on)
 `total;dur=412, db;dur=288;desc="37 q", cache;desc="4 hit/3 miss", mw;dur=130`. This shows up in DevTools → Network → Timing.
 
 ---
@@ -240,9 +254,15 @@ export function getCurrentTrace(): RequestTrace | undefined {
 ### Task 2: Plugin skeleton + manifest + registry
 - `manifest.json`: `id: "query-trace"`, `name: "Query Trace"`, description "Per-request D1/KV/cache tracing panel for admin performance tuning.", `category` (use an existing value from other manifests, e.g. `developer` or `utilities`), `iconEmoji: "⚡"`, `is_core: false`, `defaultActive: false`, `dependencies: []`, `permissions: {}`, and `defaultSettings` per 2.1. Check other manifests to see whether `adminMenu` is required. If a sidebar entry would be noise, omit it and rely on the Plugins page.
 - `index.ts`: `definePlugin({ id: 'query-trace', version: '1.0.0', name: 'Query Trace', configSchema: {...2.1}, register(app){ app.route('/admin/plugins/query-trace', queryTraceAdminRoutes) }, activate, deactivate })`.
+- Do **not** add it to any bootstrap list (see 2.1: bootstrap force-activates). On a fresh install it must show as available-but-not-installed.
 - Run `npm run plugins:generate` and commit the regenerated `manifest-registry.ts`.
 - Add it to `core-plugins/index.ts` exports + `CORE_PLUGIN_IDS`, and to `corePluginsBeforeCatchAll` in `app.ts`.
-- Test: the plugin appears in `PLUGIN_REGISTRY`, and `configSchema` defaults equal the manifest's `defaultSettings`.
+- Tests:
+  - the plugin appears in `PLUGIN_REGISTRY`, and `configSchema` defaults equal the manifest's `defaultSettings`
+  - on a fresh DB, `PluginBootstrapService` does not install it
+  - `getQueryTraceState()` reports inactive
+  - install via `PluginService.installPlugin` → active
+  - `deactivatePlugin` → inactive
 
 ### Task 3: `state.ts`
 One query against the **raw** (unwrapped) DB, before tracing starts:
@@ -268,24 +288,36 @@ Tests first:
 - `sqlOp`, where `WITH` maps to SELECT
 - `extractTables` handles quoted/backticked names and joins, and dedupes
 - `maskParams(['abc', 5, null, true])` → `['string(3)','number','null','bool']`
+- `redactSql("SELECT * FROM t WHERE token = 'abc123' AND n = 5 AND b = X'00ff'")` → `SELECT * FROM t WHERE token = ? AND n = ? AND b = ?`. Escaped quotes (`'it''s'`) are handled.
+- `redactKey` examples:
+  - `settings:general` → `settings:general`
+  - `rbac:perms:3f2b…-uuid` → `rbac:perms:<uuid>`
+  - `session:abcdef0123456789abcdef` → `session:<redacted:22>`
+  - `user:jane@x.com` → `user:<email>`
+  - `page:42` → `page:<n>`
+- `identityKey(fp, ['a'])` ≠ `identityKey(fp, ['b'])`; same values → same key; different trace salt → different key
 
 ### Task 5: `traced-d1.ts`
 - `getTracedD1(raw)`: one proxy per raw binding (WeakMap). Falsy → passthrough. Every call checks `getCurrentTrace()`; if there is none, call straight through with no timing.
 - `prepare(sql)` → wrapper. `bind(...args)` → new wrapper carrying sql + args. `all/first/run/raw` time the call, record, and return the **unchanged** result. Errors are recorded and rethrown. `first(col)` and `raw({columnNames})` keep their semantics.
-- **`batch(stmts)` must unwrap** each wrapper to the real `D1PreparedStatement` (hidden `RAW` symbol) before calling `raw.batch`, because workerd type-checks batch members. Record one entry per statement (`op` suffix `:batch`, shared wall time, per-result `meta`).
+- **`batch(stmts)` must unwrap** each wrapper to the real `D1PreparedStatement` (hidden `RAW` symbol) before calling `raw.batch`, because workerd type-checks batch members. Record **one parent entry** (`op: 'batch'`, `label: 'batch(N)'`, the shared wall `durationMs`, `d1DurationMs` = Σ member `meta.duration`). Record **one member entry per statement** with `parentSeq` set, `durationMs = d1DurationMs = meta.duration ?? 0`, and per-result rows. Members never get the shared wall time.
 - `exec` is recorded. `dump`/unknown pass through via the Proxy `get` trap. `withSession(...)` → `getTracedD1(raw.withSession(...))`.
+- The label goes through `redactSql` and `identityKey` is computed from the raw args **before** they are discarded. Raw SQL and raw args are never stored on the entry.
 - Caller only when `trace.captureCallers`: `new Error().stack`, skipping frames that contain `request-trace`, `query-trace-plugin`, or `node_modules`.
 - Tests (d1-sqlite harness + a mock D1 that returns `meta`):
   - `drizzle(getTracedD1(db))` select/insert inside `runWithTrace` → correct op, tables, and rows
   - `batch` with wrappers succeeds
+  - a 10-statement batch gives 1 parent + 10 members, and member `durationMs` ≠ the parent wall time
+  - DB Σ counts the parent once
+  - labels contain no literals (`WHERE email = 'x@y.com'` → `WHERE email = ?`)
   - no trace → no records and an identical result
   - errors are recorded and rethrown
 
 ### Task 6: `traced-kv.ts`
-Same WeakMap pattern. `get`/`getWithMetadata` record `cache: hit|miss`. `put`/`delete`/`list` are recorded without a cache outcome. Tests mirror Task 5.
+Same WeakMap pattern. Keys go through `redactKey`. `get`/`getWithMetadata` record `cache: hit|miss`. `put`/`delete`/`list` are recorded without a cache outcome. Tests mirror Task 5.
 
 ### Task 7: Cache plugin instrumentation
-In `plugins/cache/services/cache.ts`, `get`, `getWithSource`, `set`, and `getMany` call `getCurrentTrace()?.record({ kind:'cache', … })` with key, outcome, and duration. This imports from `utils/request-trace` only. Extend `plugins/cache/tests/cache.test.ts`: inside `runWithTrace` it records memory hit, KV hit, and miss; outside a trace it records nothing.
+In `plugins/cache/services/cache.ts`, `get`, `getWithSource`, `set`, and `getMany` call `getCurrentTrace()?.record({ kind:'cache', … })` with the `redactKey`-ed key, outcome, and duration. Export `redactKey` from `utils/request-trace` so the cache plugin doesn't import the query-trace plugin. This imports from `utils/request-trace` only. Extend `plugins/cache/tests/cache.test.ts`: inside `runWithTrace` it records memory hit, KV hit, and miss; outside a trace it records nothing.
 
 ### Task 8: `analyze.ts`
 Pure functions for 2.5 + `summarize()` + `groupByFingerprint()` + `serverTimingValue()`. Thresholds come from settings. One fixture test per rule, plus ordering by severity and impact.
@@ -301,9 +333,15 @@ Pure functions for 2.5 + `summarize()` + `groupByFingerprint()` + `serverTimingV
 ### Task 10: `queryTraceMiddleware()`
 ```ts
 export const queryTraceMiddleware = (): MiddlewareHandler => async (c, next) => {
+  const rawDb = c.env.DB
+  // 1. ALWAYS install passthrough proxies (every path, plugin active or not), before bootstrap,
+  //    so singletons seeded by ANY request (EmailService, cache plugin KV, firstRequestEnv) hold
+  //    proxies, not raw bindings. With no active trace a proxy call = one ALS lookup, no recording.
+  c.env = { ...c.env, DB: getTracedD1(rawDb), CACHE_KV: getTracedKV(c.env.CACHE_KV) } as typeof c.env
   const url = new URL(c.req.url)
-  if (!url.pathname.startsWith('/admin')) return next()
-  const state = await getQueryTraceState(c.env.DB)          // 30s TTL, raw DB
+  const p = url.pathname
+  if (p !== '/admin' && !p.startsWith('/admin/')) return next()   // not '/administrator', '/admin-foo'
+  const state = await getQueryTraceState(rawDb)             // 30s TTL, raw DB (never traced)
   if (!state.active) return next()
   const t = url.searchParams.get('trace')
   if (t === '1' || t === '0') { /* set/delete cookie; url.searchParams.delete('trace'); return c.redirect(url.pathname + url.search) */ }
@@ -311,15 +349,15 @@ export const queryTraceMiddleware = (): MiddlewareHandler => async (c, next) => 
   if (state.settings.visibility !== 'all-admins' && !optedIn) return next()
   if (!(await loadAsyncLocalStorage())) return next()      // warned once in loader
   const trace = new RequestTrace(c.req.method, url.pathname, state.settings.maxEntries, state.settings.captureCallers)
-  c.env = { ...c.env, DB: getTracedD1(c.env.DB), CACHE_KV: getTracedKV(c.env.CACHE_KV) } as typeof c.env
   await runWithTrace(trace, () => next())
   trace.closed = true
+  const user = c.get('user') as { role?: string } | undefined
+  if (user?.role !== 'admin') return                         // no header, no panel for non-admins / anonymous
   const analysis = analyze(trace, state.settings)
   if (state.settings.serverTimingHeader) c.header('Server-Timing', serverTimingValue(analysis))
-  const user = c.get('user') as { role?: string } | undefined
   const ct = c.res.headers.get('content-type') ?? ''
   const s = c.res.status
-  if (user?.role !== 'admin' || !ct.includes('text/html') || (s >= 300 && s < 400) || c.req.header('HX-Request')) return
+  if (!ct.includes('text/html') || (s >= 300 && s < 400) || c.req.header('HX-Request')) return
   const body = await c.res.text()
   const i = body.lastIndexOf('</body>')
   const out = i === -1 ? body : body.slice(0, i) + renderTracePanel(trace, analysis, state.settings) + body.slice(i)
@@ -330,12 +368,15 @@ export const queryTraceMiddleware = (): MiddlewareHandler => async (c, next) => 
 ```
 - Note: a `?trace=` toggle from a non-admin sets a cookie that does nothing, which is harmless. The panel still requires the admin role.
 - Tests (`app.request()` on a minimal Hono app with mock DB/KV and a stubbed state + user):
-  - plugin inactive → untouched, and `c.env.DB` is not wrapped
+  - plugin inactive → response untouched, no header. `c.env.DB` **is** a passthrough proxy and records nothing.
+  - **singleton regression:** request 1 (plugin inactive) has a stub module-level service capture `c.env.DB` / `c.env.CACHE_KV`. Request 2 (active + opted-in admin) calls that captured service, and its D1/KV calls appear in request 2's trace.
+  - `/administrator` and `/admin-foo` → not traced. `/admin` and `/admin/x` → traced.
+  - `all-admins` + anonymous or non-admin request → **no `Server-Timing` header** and no panel
   - active + opt-in + no cookie → untouched
   - active + cookie + admin + HTML → panel + `Server-Timing` + no stale `content-length`
   - `all-admins` without cookie → panel
-  - non-admin → no panel
-  - `HX-Request` → header only
+  - non-admin → no panel and no header
+  - admin `HX-Request` → header only
   - JSON → untouched
   - redirect → untouched
   - `?trace=1` → `Set-Cookie` + 302 to the clean URL
@@ -352,19 +393,20 @@ export const queryTraceMiddleware = (): MiddlewareHandler => async (c, next) => 
 Gate it the same way other plugin admin pages are gated (admin role or `plugins:manage`). Route tests.
 
 ### Task 12: Wire `app.ts`
-1. `app.use('*', queryTraceMiddleware())` **immediately before** the appVersion middleware (L405).
+1. `if (!config.plugins?.disableAll) app.use('*', queryTraceMiddleware())` **immediately before** the appVersion middleware (L405). Under `disableAll` it isn't mounted at all: no proxies, no tracing, no response rewrite. That matches how `app.ts:721-722` gates plugin routes. Test: a `disableAll` app never wraps bindings and never adds the panel or header, even when a `query-trace` row is active.
 2. Wrap the existing middleware with `traceSpan(...)` per 2.3, **behavior otherwise identical**. Example: `app.use('*', traceSpan('bootstrap', bootstrapMiddleware(...)))`, `app.use('/admin/*', traceSpan('requireAuth', requireAuth()))`.
 3. `npm run type-check && npm test`. The full suite must stay green (main pipeline touched).
 
 ### Task 13: E2E `tests/e2e/127-query-trace-plugin.spec.ts`
 Use the existing login and plugin helpers in `tests/e2e/utils` (look for how other specs activate plugins). Restore plugin state in `afterAll` so other specs aren't affected.
-1. Plugin inactive (default) → `/admin/dashboard?trace=1` → no `#sjs-trace-panel`, no `Server-Timing`.
-2. Activate via Admin → Plugins → visit `/admin/dashboard` without the cookie → no panel (opt-in default).
+1. Fresh install (default) → Admin → Plugins lists Query Trace as available, not installed. `/admin/dashboard?trace=1` → no `#sjs-trace-panel`, no `Server-Timing`.
+2. Install it from Admin → Plugins (that makes it active) → visit `/admin/dashboard` without the cookie → no panel (opt-in default).
 3. `/admin/dashboard?trace=1` → redirected to the clean URL. The panel exists and is collapsed, and the summary matches `/\d+ ms server/` and `/\d+ D1/`.
 4. Expand it → the queries table has ≥1 row, row[0] ms ≥ row[1] ms, and the Cached column has a value matching `not cached|hit|miss`.
 5. `/admin/content` and `/admin/users` → the panel persists, and the response has a `Server-Timing` header.
 6. Settings → `visibility = all-admins` → clear the cookie → the panel shows without opt-in. Reset to `opt-in`.
-7. `?trace=0` → the panel is gone. Deactivate the plugin → `?trace=1` has no effect.
+7. `?trace=0` → the panel is gone. Deactivate the plugin → `?trace=1` has no effect. `afterAll`: uninstall to restore the fresh-install state.
+8. Anonymous request to `/admin/dashboard` while active + `all-admins` → no `Server-Timing` header.
 
 `npm run e2e` must pass in full (Lane's rule: never merge unless **all** checks including e2e pass).
 
@@ -397,14 +439,19 @@ Push and open a PR to `main` with screenshots (dashboard + content list, panel e
 1. **Visibility default:** `opt-in` (cookie) vs `all-admins`. The plan defaults to opt-in so activating it in prod doesn't surprise other admins. Switchable in settings.
 2. **Cross-isolate lag:** activate, deactivate, and settings changes propagate to other isolates within ≤30 s (TTL). Acceptable for a dev tool.
 3. **ALS:** loaded the same way Better Auth does it. Without `nodejs_compat`, it's a graceful no-op with a notice.
-4. **Core touch points:** these are kept minimal and no-op when idle: `getCurrentTrace()` (one property read), `traceSpan` (one check), one cache-service call per op, and one middleware with a cached boolean check. Inactive overhead ≈ one in-memory read per admin request (plus one D1 read per isolate per 30 s).
+4. **Core touch points:** these are kept minimal and no-op when idle: `getCurrentTrace()` (one property read), `traceSpan` (one check), one cache-service call per op, and one middleware.
+   - Inactive overhead per request: an env spread + two WeakMap lookups. Per DB/KV call: one Proxy hop + one ALS lookup, and while ALS has never been loaded that's a null check.
+   - Admin requests add one in-memory state read (plus one D1 read per isolate per 30 s).
+   - Proxies are always on (unless `disableAll`) so that the full E2E suite exercises them on every run.
 5. **Masked params:** values are never shown. A `showParamValues` setting could come later for local dev.
 6. **Possible nav-strip `content-length` bug** (`app.ts:637-645`). Note it in the PR and fix separately.
 
 ## 7. Done criteria
-- [ ] `Query Trace` appears in Admin → Plugins, inactive by default, and can be activated and deactivated per installation. Settings are editable.
-- [ ] Inactive: zero behavior change, no wrapped bindings, no panel or header.
+- [ ] `Query Trace` appears in Admin → Plugins as available (not installed) on a fresh install. Install or activate turns it on; deactivate or uninstall turns it off, per installation. Settings are editable.
+- [ ] Inactive: zero behavior change. Bindings are passthrough proxies that record nothing, and there's no panel or header. Under `disableAll` the middleware isn't mounted.
+- [ ] Labels, keys, and exported JSON contain no SQL literals, raw key identifiers, or bound values. Identical-repeat detection uses only the private per-request key.
+- [ ] Batch wall time is counted once. Singleton-held bindings are traced.
 - [ ] Active: the panel is at the bottom of every full admin page for eligible admins, collapsed, slowest first.
 - [ ] Every D1 query (raw + Drizzle, including `batch`), KV op, and cache lookup is listed with cached status, D1 vs wall time, rows, dupes, span, and caller. Opportunities, fingerprint groups, spans, Copy JSON, and `Server-Timing` are all present.
-- [ ] Non-admins never see it.
+- [ ] Non-admins and anonymous requests never get the panel or the `Server-Timing` header. Only `/admin` and `/admin/*` are traced.
 - [ ] `npm run type-check`, `npm test`, `npm run e2e` green in CI. PR open and not merged.

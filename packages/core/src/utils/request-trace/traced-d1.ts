@@ -6,7 +6,7 @@
  * active trace a call is one ALS lookup and nothing else.
  */
 import { getCurrentTrace, type RequestTrace } from './trace-context'
-import { extractTables, fingerprintSql, identityKey, maskParams, redactSql, sqlOp } from './sql-fingerprint'
+import { extractTables, fingerprintSql, identityKey, maskParams, redactErrorMessage, redactSql, sqlOp } from './sql-fingerprint'
 
 /** Hidden symbol exposing the underlying (unwrapped) binding / statement. */
 export const RAW = Symbol.for('sonicjs.request-trace.raw')
@@ -56,7 +56,7 @@ function baseEntry(trace: RequestTrace, sql: string, args: readonly unknown[], o
       cache: null,
       caller: trace.captureCallers ? captureCaller() : undefined,
     },
-    identity: identityKey(fingerprint, args, trace.salt),
+    identity: identityKey(fingerprint, args, trace.salt, sql),
   }
 }
 
@@ -81,7 +81,7 @@ async function traceStatement<T>(
         d1DurationMs: meta?.duration,
         rowsReturned: returned,
         rowsRead: meta?.rows_read,
-        rowsWritten: meta?.rows_written,
+        rowsWritten: meta?.rows_written ?? meta?.changes,
         servedBy: servedBy(meta),
       },
       identity
@@ -89,7 +89,7 @@ async function traceStatement<T>(
     return res
   } catch (err) {
     trace.record(
-      { ...entry, startMs, durationMs: trace.now() - startMs, error: err instanceof Error ? err.message : String(err) },
+      { ...entry, startMs, durationMs: trace.now() - startMs, error: redactErrorMessage(err) },
       identity
     )
     throw err
@@ -125,7 +125,7 @@ class TracedStatement {
   }
 
   run(): Promise<Any> {
-    return traceStatement(this, 'run', () => this.stmt.run(), (r: Any) => ({ meta: r?.meta, returned: r?.meta?.changes }))
+    return traceStatement(this, 'run', () => this.stmt.run(), (r: Any) => ({ meta: r?.meta, returned: undefined }))
   }
 
   raw(options?: { columnNames?: boolean }): Promise<Any> {
@@ -185,9 +185,9 @@ function makeProxy(rawDb: Any): Any {
             startMs,
             durationMs: meta?.duration ?? 0,
             d1DurationMs: meta?.duration ?? 0,
-            rowsReturned: res?.results ? res.results.length : meta?.changes,
+            rowsReturned: res?.results?.length ? res.results.length : undefined,
             rowsRead: meta?.rows_read,
-            rowsWritten: meta?.rows_written,
+            rowsWritten: meta?.rows_written ?? meta?.changes,
             servedBy: servedBy(meta),
           },
           identity
@@ -199,7 +199,7 @@ function makeProxy(rawDb: Any): Any {
         ...parentBase,
         startMs,
         durationMs: trace.now() - startMs,
-        error: err instanceof Error ? err.message : String(err),
+        error: redactErrorMessage(err),
       })
       throw err
     }
@@ -216,7 +216,7 @@ function makeProxy(rawDb: Any): Any {
       return res
     } catch (err) {
       trace.record(
-        { ...entry, startMs, durationMs: trace.now() - startMs, error: err instanceof Error ? err.message : String(err) },
+        { ...entry, startMs, durationMs: trace.now() - startMs, error: redactErrorMessage(err) },
         identity
       )
       throw err

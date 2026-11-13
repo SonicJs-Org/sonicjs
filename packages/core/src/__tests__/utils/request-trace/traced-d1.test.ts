@@ -70,7 +70,8 @@ describe('getTracedD1', () => {
     })
     expect(trace.entries.map((e) => e.op)).toEqual(['SELECT first', 'UPDATE run', 'SELECT raw'])
     expect(trace.entries[0].rowsReturned).toBe(1)
-    expect(trace.entries[1]).toMatchObject({ rowsReturned: 1, rowsWritten: 1 })
+    expect(trace.entries[1].rowsReturned).toBeUndefined() // run(): changes are rows written, not returned
+    expect(trace.entries[1].rowsWritten).toBe(1)
   })
 
   it('records nothing and returns identical results with no trace', async () => {
@@ -91,6 +92,31 @@ describe('getTracedD1', () => {
     expect(trace.entries[0].error).toBe('boom')
   })
 
+  it('redacts literals echoed in recorded errors but rethrows the original', async () => {
+    const { db } = mockD1()
+    db.prepare = () => ({ bind() { return this }, all: async () => { throw new Error("syntax error near 'alice@x.com' in SELECT 'tok123'") } })
+    const p = getTracedD1(db)
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, async () => {
+      await expect(p.prepare('select 1').all()).rejects.toThrow('alice@x.com')
+    })
+    expect(trace.entries[0].error).not.toContain('alice')
+    expect(trace.entries[0].error).not.toContain('tok123')
+  })
+
+  it('same fingerprint, different inline literals => different identity', async () => {
+    const { db } = mockD1()
+    const p = getTracedD1(db)
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, async () => {
+      await p.prepare('select a from t where id = 1').all()
+      await p.prepare('select a from t where id = 2').all()
+      await p.prepare('select a from t where id = 1').all()
+    })
+    expect(trace.getIdentityKey(1)).not.toBe(trace.getIdentityKey(2))
+    expect(trace.getIdentityKey(1)).toBe(trace.getIdentityKey(3))
+  })
+
   it('batch unwraps statements and records 1 parent + N members with own durations', async () => {
     const { db, seen } = mockD1()
     const p = getTracedD1(db)
@@ -109,6 +135,8 @@ describe('getTracedD1', () => {
     expect(members.every((m) => m.parentSeq === parent.seq)).toBe(true)
     expect(members.every((m) => m.durationMs !== parent.durationMs && m.durationMs < 3)).toBe(true)
     expect(parent.d1DurationMs).toBeCloseTo(members.reduce((a, m) => a + m.d1DurationMs, 0))
+    // batch writes without RETURNING: results [] => rows written (changes), nothing returned
+    expect(members.every((m) => m.rowsReturned === undefined && m.rowsWritten === 1)).toBe(true)
     // DB Σ over top-level entries counts the batch wall time once
     const top = trace.entries.filter((e) => e.parentSeq === undefined)
     expect(top).toHaveLength(1)

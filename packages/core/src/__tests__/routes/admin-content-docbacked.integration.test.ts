@@ -248,6 +248,34 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
       expect(html).toMatch(/Showing <span[^>]*>10001<\/span>/)
     })
 
+    it('at the depth cap the pager offers no pages beyond the last reachable one; per-type lists are not capped', async () => {
+      // 10,150 more blog posts, inserted directly (the form path is too slow at this scale).
+      const ins = db.raw.prepare(
+        `INSERT INTO documents (id, root_id, type_id, type_version, version_number, is_current_draft, is_published, status,
+           parent_root_id, title, slug, tenant_id, locale, translation_group_id, data, metadata, created_at, updated_at)
+         VALUES (?, ?, 'blog_post', 1, 1, 1, 1, 'published', '', ?, ?, 'default', 'en', ?, '{}', '{}', ?, ?)`,
+      )
+      db.raw.transaction(() => {
+        for (let i = 0; i < 10_150; i++) {
+          const id = `bulk-${i}`
+          ins.run(id, id, `Bulk ${i}`, id, id, 1_000 + i, 1_000 + i)
+        }
+      })()
+
+      // limit=100 → last reachable All-view page = 10_000/100 + 1 = 101.
+      const html = await list('&limit=100&page=100000')
+      expect(html).toMatch(/Showing <span[^>]*>10001<\/span>/)
+      expect(footerTotal(html)).toBe('10100+') // count stops at the last reachable row
+      expect(html).not.toMatch(/[?&]page=10[2-9]\b/) // no Next / numbered links past page 101
+      expect(html).not.toMatch(/[?&]page=1[1-9]\d\b/)
+      expect(html).toMatch(/[?&]page=100\b/) // Previous still works
+
+      // The depth cap is All-view only: a per-type list still serves offset 10,100.
+      const typed = await (await app.request('/admin/content?model=blog_post&limit=100&page=102')).text()
+      expect(typed).toMatch(/Showing <span[^>]*>10101<\/span>/)
+      expect(typed).toContain('Bulk ')
+    })
+
     it('all-view lists nothing when no visible document types remain (never internal ones)', async () => {
     await createPost('hidden-when-internal')
     // Mark every type internal: the registry then yields no visible types. An empty type filter used

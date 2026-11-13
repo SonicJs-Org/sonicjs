@@ -1759,6 +1759,12 @@ test.describe("Source: 126-content-all-view-capped-count.spec.ts", () => {
       const res = await page.goto(`/admin/content?model=all&search=${stamp}&limit=-1&page=-3`)
       expect(res?.status()).toBe(200)
       await expect(footer(page)).toContainText(/Showing\s*1\s*to\s*1\s*of\s*2\s*results/)
+
+      // A page far past the All view's depth cap is clamped (no 10M-row OFFSET) and renders cleanly.
+      const deep = await page.goto(`/admin/content?model=all&search=${stamp}&limit=100&page=100000`)
+      expect(deep?.status()).toBe(200)
+      await expect(page.getByText('No content found')).toBeVisible()
+      await expect(page.locator('a[href*="page=100000"]')).toHaveCount(0)
     })
 
     test('shows a lower bound "N+" past the window and grows it when paging forward', async ({ page }) => {

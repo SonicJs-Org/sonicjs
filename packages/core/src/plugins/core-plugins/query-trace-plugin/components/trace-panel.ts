@@ -18,6 +18,8 @@ function msClass(v: number, s: QueryTraceSettings): string {
 }
 
 function entryRow(en: TraceEntry, total: number, dupes: number, child: boolean, s: QueryTraceSettings): string {
+  // data-parent marks batch members so the sort script keeps them attached to their parent row
+  const parentAttr = child ? ` data-parent="${en.parentSeq}"` : ''
   const pct = total > 0 ? Math.min(100, (en.startMs / total) * 100) : 0
   const w = total > 0 ? Math.max(0.5, Math.min(100 - pct, (en.durationMs / total) * 100)) : 0.5
   const rows = en.kind === 'd1' ? `${en.rowsReturned ?? '–'}/${en.rowsRead ?? '–'}/${en.rowsWritten ?? '–'}` : ''
@@ -28,7 +30,7 @@ function entryRow(en: TraceEntry, total: number, dupes: number, child: boolean, 
     en.servedBy ? `<div class="text-zinc-500">served by: ${e(en.servedBy)}</div>` : '',
     en.error ? `<div class="text-red-400">error: ${e(en.error)}</div>` : '',
   ].join('')
-  return `<tr class="border-t border-zinc-800 align-top" data-ms="${en.durationMs}">
+  return `<tr class="border-t border-zinc-800 align-top" data-ms="${en.durationMs}"${parentAttr}>
 <td class="px-2 py-1 text-right ${msClass(en.durationMs, s)}">${ms(en.durationMs)}</td>
 <td class="px-2 py-1 text-right text-zinc-400">${ms(en.d1DurationMs)}</td>
 <td class="px-2 py-1">${e(en.kind)}</td>
@@ -43,7 +45,28 @@ function entryRow(en: TraceEntry, total: number, dupes: number, child: boolean, 
 </tr>`
 }
 
-const SORT_SCRIPT = `(function(){var p=document.getElementById('sjs-trace-panel');if(!p)return;p.querySelectorAll('[data-testid=trace-queries] th[data-col]').forEach(function(th){th.addEventListener('click',function(){var tb=th.closest('table').tBodies[0],i=th.cellIndex,d=th.dataset.dir==='asc'?-1:1;th.dataset.dir=d===1?'asc':'desc';Array.prototype.slice.call(tb.rows).sort(function(a,b){var x=a.cells[i].textContent,y=b.cells[i].textContent,nx=parseFloat(x),ny=parseFloat(y);return(isNaN(nx)||isNaN(ny)?x.localeCompare(y):nx-ny)*d*-1}).forEach(function(r){tb.appendChild(r)})})});var b=p.querySelector('[data-testid=trace-copy-json]');if(b)b.addEventListener('click',function(){navigator.clipboard.writeText(document.getElementById('sjs-trace-data').textContent)})})();`
+/**
+ * Click-to-sort for the queries table. Sorts only top-level rows; each batch member row
+ * (`data-parent`) travels with its parent in original order. First click = ascending.
+ * Numeric cells ("12.5", "×10") compare numerically and sort before non-numeric text.
+ */
+export const TRACE_SORT_SCRIPT = `(function(){
+var p=document.getElementById('sjs-trace-panel');if(!p)return;
+function num(t){t=t.replace(/^\\s*×/,'').trim();if(t===''||t==='–')return NaN;return parseFloat(t)}
+function sortBy(th){
+var tb=th.closest('table').tBodies[0],i=th.cellIndex,d=th.dataset.dir==='asc'?-1:1;
+th.dataset.dir=d===1?'asc':'desc';th.setAttribute('aria-sort',d===1?'ascending':'descending');
+var groups=[],cur=null;
+Array.prototype.slice.call(tb.rows).forEach(function(r){
+if(r.dataset.parent!==undefined&&cur)cur.kids.push(r);else{cur={row:r,kids:[]};groups.push(cur)}});
+groups.sort(function(a,b){
+var x=a.row.cells[i].textContent,y=b.row.cells[i].textContent,nx=num(x),ny=num(y),nxo=isNaN(nx),nyo=isNaN(ny);
+if(!nxo&&!nyo)return(nx-ny)*d;
+if(nxo&&nyo)return x.localeCompare(y)*d;
+return nxo?1:-1});
+groups.forEach(function(g){tb.appendChild(g.row);g.kids.forEach(function(k){tb.appendChild(k)})})}
+p.querySelectorAll('[data-testid=trace-queries] th[data-col]').forEach(function(th){th.addEventListener('click',function(){sortBy(th)})});
+var b=p.querySelector('[data-testid=trace-copy-json]');if(b)b.addEventListener('click',function(){navigator.clipboard.writeText(document.getElementById('sjs-trace-data').textContent)})})();`
 
 export function renderTracePanel(trace: RequestTrace, analysis: Analysis, settings: QueryTraceSettings): string {
   const { summary: s } = analysis
@@ -53,10 +76,18 @@ export function renderTracePanel(trace: RequestTrace, analysis: Analysis, settin
 
   // Top-level by duration desc; batch members follow their parent.
   const top = entries.filter((x) => x.parentSeq === undefined).sort((a, b) => b.durationMs - a.durationMs)
+  // parentSeq → members, built once (a per-parent filter is O(n²) at the entry cap)
+  const children = new Map<number, TraceEntry[]>()
+  for (const en of entries) {
+    if (en.parentSeq === undefined) continue
+    const list = children.get(en.parentSeq)
+    if (list) list.push(en)
+    else children.set(en.parentSeq, [en])
+  }
   const rowsHtml = top
     .flatMap((en) => [
       entryRow(en, s.totalMs, dupeCount.get(en.fingerprint) ?? 1, false, settings),
-      ...entries.filter((m) => m.parentSeq === en.seq).map((m) => entryRow(m, s.totalMs, dupeCount.get(m.fingerprint) ?? 1, true, settings)),
+      ...(children.get(en.seq) ?? []).map((m) => entryRow(m, s.totalMs, dupeCount.get(m.fingerprint) ?? 1, true, settings)),
     ])
     .join('')
 
@@ -68,7 +99,7 @@ export function renderTracePanel(trace: RequestTrace, analysis: Analysis, settin
 
   const queries = entries.length
     ? `<table class="w-full text-xs"><thead class="text-zinc-400 text-left"><tr>${['ms', 'D1 ms', 'Type', 'Op', 'Query / key', 'Tables', 'Rows ret/read/wr', 'Cached', '×', 'Span', 'Start']
-        .map((h, i) => `<th data-col="${i}" class="px-2 py-1 cursor-pointer select-none">${e(h)}</th>`)
+        .map((h, i) => `<th data-col="${i}" class="px-2 py-1 select-none"><button type="button" class="cursor-pointer font-semibold">${e(h)}</button></th>`)
         .join('')}</tr></thead><tbody>${rowsHtml}</tbody></table>`
     : '<p class="text-zinc-500">No queries or cache operations recorded.</p>'
 
@@ -106,6 +137,6 @@ ${s.dropped > 0 ? `<span data-testid="trace-dropped">${s.dropped} entries droppe
 </footer>
 </div>
 <script type="application/json" id="sjs-trace-data">${json}</script>
-<script>${SORT_SCRIPT}</script>
+<script>${TRACE_SORT_SCRIPT}</script>
 </details>`
 }

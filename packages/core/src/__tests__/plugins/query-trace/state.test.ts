@@ -110,3 +110,31 @@ describe('getQueryTraceState concurrency', () => {
     invalidateQueryTraceState()
   })
 })
+
+describe('getQueryTraceState invalidation race', () => {
+  it('a read in flight during invalidate() does not repopulate the cache with its stale value', async () => {
+    invalidateQueryTraceState()
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    let status: string | null = 'inactive'
+    const mkDb = (afterGate: boolean) => ({
+      prepare: () => ({
+        bind: () => ({
+          first: async () => {
+            const seen = status // value at read start
+            if (afterGate) await gate
+            return seen === 'active' ? { status: 'active', settings: null } : null
+          },
+        }),
+      }),
+    })
+    const stale = getQueryTraceState(mkDb(true), 1000) // read starts, sees inactive, blocks
+    status = 'active'
+    invalidateQueryTraceState() // plugin installed mid-flight
+    release()
+    expect((await stale).active).toBe(false) // the in-flight caller still gets its own value
+    // …but the cache must not hold it: next read (same `now`, within TTL) hits the DB and sees active
+    expect((await getQueryTraceState(mkDb(false), 1001)).active).toBe(true)
+    invalidateQueryTraceState()
+  })
+})

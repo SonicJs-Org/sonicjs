@@ -14,9 +14,12 @@ export interface QueryTraceState {
 
 let cached: QueryTraceState | null = null
 let inflight: Promise<QueryTraceState> | null = null
+/** Bumped on every invalidation; a read only populates the cache if no invalidation happened mid-flight. */
+let generation = 0
 
 /** Drop the per-isolate cache. Call after install/uninstall/activate/deactivate/settings changes. */
 export function invalidateQueryTraceState(): void {
+  generation++
   cached = null
   inflight = null
 }
@@ -54,7 +57,7 @@ export async function getQueryTraceState(db: D1Database, now: number = Date.now(
   if (cached && now - cached.fetchedAt < QUERY_TRACE_STATE_TTL_MS) return cached
   // Concurrent requests at TTL expiry share one read instead of each hitting D1.
   if (inflight) return inflight
-  const p = load(db, now)
+  const p = load(db, now, generation)
   inflight = p
   try {
     return await p
@@ -63,7 +66,7 @@ export async function getQueryTraceState(db: D1Database, now: number = Date.now(
   }
 }
 
-async function load(db: D1Database, now: number): Promise<QueryTraceState> {
+async function load(db: D1Database, now: number, startGeneration: number): Promise<QueryTraceState> {
   let next: QueryTraceState
   try {
     const row = (await db
@@ -81,7 +84,7 @@ async function load(db: D1Database, now: number): Promise<QueryTraceState> {
   } catch {
     next = inactive(now)
   }
-  // An invalidation during the read nulls `inflight`; don't let this stale result repopulate the cache.
-  cached = next
+  // An invalidation during the read bumps `generation`; don't let this stale result repopulate the cache.
+  if (startGeneration === generation) cached = next
   return next
 }

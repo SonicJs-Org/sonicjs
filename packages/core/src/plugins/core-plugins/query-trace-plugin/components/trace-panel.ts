@@ -36,7 +36,7 @@ function entryRow(en: TraceEntry, total: number, dupes: number, child: boolean, 
 <td class="px-2 py-1 ${child ? 'pl-6' : ''}"><details><summary class="cursor-pointer truncate max-w-xl font-mono">${e(en.label.slice(0, 120))}</summary>${detail}</details></td>
 <td class="px-2 py-1">${e(en.tables.join(', '))}</td>
 <td class="px-2 py-1 text-right">${e(rows)}</td>
-<td class="px-2 py-1">${e(en.cache ?? '')}</td>
+<td class="px-2 py-1">${e(en.cache ?? 'not cached')}</td>
 <td class="px-2 py-1 text-right">${dupes > 1 ? `×${dupes}` : ''}</td>
 <td class="px-2 py-1">${e(en.span)}</td>
 <td class="px-2 py-1 w-48"><div class="relative h-2 bg-zinc-800 rounded"><div class="absolute h-2 bg-sky-500 rounded" style="left:${pct.toFixed(1)}%;width:${w.toFixed(1)}%"></div></div><span class="text-zinc-500">${ms(en.startMs)}</span></td>

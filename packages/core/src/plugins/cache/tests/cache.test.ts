@@ -914,3 +914,63 @@ describe('CacheService - invalidatePattern alias', () => {
     expect(other).toBe('value3')
   })
 })
+
+describe('CacheService - request trace instrumentation', () => {
+  const baseConfig: CacheConfig = {
+    ttl: 60, kvEnabled: true, memoryEnabled: true, namespace: 'trace-test', invalidateOn: [], version: 'v1',
+  }
+  const makeKv = (store: Record<string, unknown> = {}) =>
+    ({
+      get: async (k: string) => (k in store ? store[k] : null),
+      put: async (k: string, v: string) => { store[k] = JSON.parse(v) },
+      delete: async () => {},
+      list: async () => ({ keys: [] }),
+    }) as any
+
+  it('records memory hit, KV hit and miss for get()', async () => {
+    const { RequestTrace, loadAsyncLocalStorage, runWithTrace } = await import('../../../utils/request-trace')
+    await loadAsyncLocalStorage()
+    const cache = createCacheService(baseConfig, makeKv({ 'kv-key': { a: 1 } }))
+    await cache.set('mem-key', 'v')
+    const trace = new RequestTrace('GET', '/admin/x')
+    await runWithTrace(trace, async () => {
+      await cache.get('mem-key')
+      await cache.get('kv-key')
+      await cache.get('nope')
+    })
+    const gets = trace.entries.filter((e) => e.op === 'get')
+    expect(gets.map((e) => e.cache)).toEqual(['hit:memory', 'hit:kv', 'miss'])
+    expect(trace.entries.every((e) => e.kind === 'cache')).toBe(true)
+  })
+
+  it('records getWithSource() and set()', async () => {
+    const { RequestTrace, loadAsyncLocalStorage, runWithTrace } = await import('../../../utils/request-trace')
+    await loadAsyncLocalStorage()
+    const cache = createCacheService(baseConfig, makeKv())
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, async () => {
+      await cache.set('k', 1)
+      await cache.getWithSource('k')
+      await cache.getWithSource('zzz')
+    })
+    expect(trace.entries.map((e) => [e.op, e.cache])).toEqual([
+      ['set', null], ['getWithSource', 'hit:memory'], ['getWithSource', 'miss'],
+    ])
+  })
+
+  it('getMany records exactly one entry per key (no double counting)', async () => {
+    const { RequestTrace, loadAsyncLocalStorage, runWithTrace } = await import('../../../utils/request-trace')
+    await loadAsyncLocalStorage()
+    const cache = createCacheService({ ...baseConfig, kvEnabled: false })
+    await cache.set('a', 1)
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, () => cache.getMany(['a', 'b', 'c']))
+    expect(trace.entries).toHaveLength(3)
+  })
+
+  it('records nothing outside a trace', async () => {
+    const cache = createCacheService({ ...baseConfig, kvEnabled: false })
+    await cache.set('a', 1)
+    expect(await cache.get('a')).toBe(1)
+  })
+})

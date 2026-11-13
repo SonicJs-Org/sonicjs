@@ -30,12 +30,17 @@ function castInt(v: unknown): number | null {
   return m ? parseInt(m[0], 10) : 0
 }
 
-/** JSON true/false come back from json_extract as 1/0. */
-function sqlNum(v: unknown): number | null {
+/**
+ * SQLite comparison of a json_extract() value against the integer 1, per SQLite's type rules
+ * (INTEGER/REAL compare numerically; TEXT and BLOB are never equal to a number, and a TEXT value
+ * always sorts greater than one; NULL compares as NULL → false). JSON true/false arrive as 1/0.
+ * A JS boolean is treated as the 1/0 json_extract would have produced.
+ */
+function sqlEqualsOne(v: unknown): boolean | null {
   if (v === null || v === undefined) return null
-  if (typeof v === 'boolean') return v ? 1 : 0
-  const n = Number(v)
-  return Number.isNaN(n) ? null : n
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'number') return v === 1
+  return false // TEXT (e.g. "1", "true") is never = 1 in SQLite
 }
 
 /**
@@ -65,12 +70,13 @@ export function finalAttempts<T extends TestAttemptRow>(rows: T[]): T[] {
 }
 
 // Status predicates — SQL three-valued logic: NULL comparisons are false.
+// `status = 'passed' AND is_flaky != 1` — NULL is_flaky makes the whole predicate NULL (excluded).
 const isPassed = (r: TestAttemptRow) => {
-  const f = sqlNum(r.is_flaky)
-  return r.status === 'passed' && f !== null && f !== 1
+  const eq = sqlEqualsOne(r.is_flaky)
+  return r.status === 'passed' && eq === false
 }
 const isFailed = (r: TestAttemptRow) => typeof r.status === 'string' && FAILED_STATUSES.has(r.status)
-const isFlaky = (r: TestAttemptRow) => sqlNum(r.is_flaky) === 1
+const isFlaky = (r: TestAttemptRow) => sqlEqualsOne(r.is_flaky) === true
 const isSkipped = (r: TestAttemptRow) => r.status === 'skipped'
 
 export function countByStatus(finals: TestAttemptRow[]) {
@@ -94,12 +100,26 @@ export function applyFilter<T extends TestAttemptRow>(finals: T[], filter: strin
   }
 }
 
-/** ORDER BY test_file, test_title — SQLite BINARY collation, NULLs first. */
+const utf8 = new TextEncoder()
+
+/**
+ * ORDER BY test_file, test_title — SQLite BINARY collation: NULLs first, then numbers, then text
+ * compared as UTF-8 bytes (memcmp). JS string `<` compares UTF-16 code units, which orders some
+ * astral-plane vs. high-BMP characters (e.g. emoji vs. fullwidth letters) differently.
+ */
 function cmp(a: unknown, b: unknown): number {
-  const an = a === null || a === undefined, bn = b === null || b === undefined
-  if (an || bn) return an === bn ? 0 : an ? -1 : 1
-  const as = String(a), bs = String(b)
-  return as < bs ? -1 : as > bs ? 1 : 0
+  const rank = (v: unknown) => (v === null || v === undefined ? 0 : typeof v === 'number' ? 1 : 2)
+  const ra = rank(a), rb = rank(b)
+  if (ra !== rb) return ra - rb
+  if (ra === 0) return 0
+  if (ra === 1) return (a as number) - (b as number)
+  const ab = utf8.encode(String(a)), bb = utf8.encode(String(b))
+  const n = Math.min(ab.length, bb.length)
+  for (let i = 0; i < n; i++) {
+    const d = ab[i]! - bb[i]!
+    if (d !== 0) return d
+  }
+  return ab.length - bb.length
 }
 
 export function sortTests<T extends TestAttemptRow>(rows: T[]): T[] {

@@ -24,7 +24,7 @@
 		"deploy:demo": "cd demos/employee-directory && npm run build && npx wrangler pages deploy dist --project-name sonicjs-sdk-demo --branch main",
 		"test": "npm run test --workspace=@sonicjs-cms/core",
 		"test:reporting": "vitest run --config tests/reporting/vitest.config.ts",
-		"test:cov": "npm run test:cov --workspace=@sonicjs-cms/core",
+		"test:cov": "npm run test:cov --workspace=@sonicjs-cms/core && npm run test --workspace=sonicjs-stats",
 		"test:watch": "npm run test:watch --workspace=@sonicjs-cms/core",
 		"e2e": "playwright test --config=tests/playwright.config.ts",
 		"e2e:report": "bash packages/stats/scripts/report-playwright.sh test-results/results.json",

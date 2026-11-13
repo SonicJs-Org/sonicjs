@@ -21,6 +21,7 @@ const DOC_MIGRATIONS = [
   '0003_session_org.sql',
   '0006_two_factor_lockout.sql',
   '0007_two_factor_required.sql',
+  '0008_documents_list_index.sql',
 ]
 
 // better-sqlite3 only accepts numbers/strings/bigints/buffers/null. Coerce the values the

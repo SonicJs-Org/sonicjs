@@ -14,7 +14,7 @@ function mockD1() {
     __args: args,
     bind: (...a: any[]) => stmt(sql, a),
     all: async () => ({ results: [{ a: 1 }, { a: 2 }], success: true, meta: { duration: 3, rows_read: 5000, rows_written: 0, served_by_region: 'ENAM', served_by_primary: true } }),
-    first: async () => ({ a: 1 }),
+    first: async (col?: string) => (col === undefined ? { a: 1 } : 1),
     run: async () => ({ success: true, meta: { duration: 2, changes: 1, rows_written: 1 } }),
     raw: async () => [[1], [2]],
   })
@@ -59,22 +59,23 @@ describe('getTracedD1', () => {
     expect(trace.getIdentityKey(1)).toBeTruthy()
   })
 
-  it('records first/run/raw and keeps first(col) semantics', async () => {
+  it('records first/run/raw and keeps first() / first(col) semantics', async () => {
     const { db } = mockD1()
     const p = getTracedD1(db)
     const trace = new RequestTrace('GET', '/')
     await runWithTrace(trace, async () => {
       expect(await p.prepare('select a from t').first()).toEqual({ a: 1 })
+      expect(await p.prepare('select a from t').first('a')).toBe(1)
       await p.prepare('update t set a = 1').run()
       expect(await p.prepare('select a from t').raw()).toEqual([[1], [2]])
     })
-    expect(trace.entries.map((e) => e.op)).toEqual(['SELECT first', 'UPDATE run', 'SELECT raw'])
+    expect(trace.entries.map((e) => e.op)).toEqual(['SELECT first', 'SELECT first', 'UPDATE run', 'SELECT raw'])
     expect(trace.entries[0].rowsReturned).toBe(1)
-    expect(trace.entries[1].rowsReturned).toBeUndefined() // run(): changes are rows written, not returned
-    expect(trace.entries[1].rowsWritten).toBe(1)
+    expect(trace.entries[2].rowsReturned).toBeUndefined() // run(): changes are rows written, not returned
+    expect(trace.entries[2].rowsWritten).toBe(1)
   })
 
-  it('records nothing and returns identical results with no trace', async () => {
+  it('returns identical results with no active trace (passthrough)', async () => {
     const { db } = mockD1()
     const p = getTracedD1(db)
     expect((await p.prepare('select a from t').all()).results).toHaveLength(2)

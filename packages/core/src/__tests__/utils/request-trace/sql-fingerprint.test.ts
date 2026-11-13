@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -119,19 +119,26 @@ describe('identityKey', () => {
 })
 
 describe('KNOWN_KEY_SEGMENTS', () => {
-  it('every entry still exists as a literal in packages/core/src', () => {
+  // Only the files that actually build cache/KV keys (CACHE_CONFIGS, generateKey, fixed prefixes).
+  // Searching the whole repo would pass vacuously for common words like "id" / "user" / "email".
+  const KEY_BUILDING_FILES = [
+    'services/cache.ts', // CACHE_CONFIGS namespaces + generateKey()
+    'plugins/cache/services/cache-config.ts',
+    'plugins/cache/services/cache-warming.ts',
+    'plugins/cache/services/catalog.ts', // _catalog
+    'services/rbac.ts', // rbac:perms
+    'plugins/core-plugins/security-audit-plugin/services/brute-force-detector.ts', // security:bf:*, locked, ip
+    'middleware/rate-limit.ts', // ratelimit
+    'middleware/bootstrap.ts', // _sonicjs_installation_id
+    'routes/api-system.ts', // __health_check__
+  ]
+  it('every entry still exists as a key segment in a key-building file', () => {
     const root = join(dirname(fileURLToPath(import.meta.url)), '../../..')
-    const files: string[] = []
-    const walk = (d: string) => {
-      for (const n of readdirSync(d)) {
-        const p = join(d, n)
-        if (statSync(p).isDirectory()) { if (n !== '__tests__' && n !== 'node_modules') walk(p) }
-        else if (p.endsWith('.ts') && !p.endsWith('.test.ts') && !p.endsWith('sql-fingerprint.ts')) files.push(p)
-      }
-    }
-    walk(root)
-    const corpus = files.map((f) => readFileSync(f, 'utf8')).join('\n')
-    const missing = [...KNOWN_KEY_SEGMENTS].filter((s) => !new RegExp(`['"\`]${s}['"\`:/]|[:'"\`]${s}[:'"\`]`).test(corpus))
+    const corpus = KEY_BUILDING_FILES.map((f) => readFileSync(join(root, f), 'utf8')).join('\n')
+    // a segment is "present" when it is a whole quoted string, or sits next to a ':' separator
+    const missing = [...KNOWN_KEY_SEGMENTS].filter(
+      (seg) => !new RegExp(`['"\`]${seg}['"\`]|[:'"\`]${seg}:|:${seg}['"\`$\\s]`).test(corpus)
+    )
     expect(missing).toEqual([])
   })
 })

@@ -213,7 +213,7 @@ export const KNOWN_KEY_SEGMENTS: ReadonlySet<string> = new Set([
   // cache namespaces
   'api', 'user', 'content', 'collection', 'config', 'media', 'session', 'plugin',
   // generateKey() "types"
-  'item', 'list', 'id', 'email', 'all', 'recent',
+  'item', 'list', 'email', 'all', 'recent',
   // fixed core prefixes
   'rbac', 'perms', 'security', 'bf', 'locked', 'ip', 'ratelimit', '_catalog',
   '_sonicjs_installation_id', '__health_check__',

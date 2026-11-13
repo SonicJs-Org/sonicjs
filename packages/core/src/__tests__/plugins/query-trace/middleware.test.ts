@@ -10,6 +10,7 @@ vi.mock('../../../plugins/core-plugins/query-trace-plugin/state', () => ({
 }))
 
 import { queryTraceMiddleware } from '../../../plugins/core-plugins/query-trace-plugin/middleware/query-trace-middleware'
+import { getCurrentTrace } from '../../../utils/request-trace/trace-context'
 import { RAW } from '../../../utils/request-trace/traced-d1'
 
 const mkDb = () => ({
@@ -54,6 +55,10 @@ describe('queryTraceMiddleware', () => {
     state.active = false
     let seen: any
     const app = mkApp({ handler: async (c) => { seen = c.env.DB; await seen.prepare('select 1').all(); return c.html('<body></body>') } })
+    let activeTrace: unknown = 'unset'
+    const app2 = mkApp({ handler: async (c) => { activeTrace = getCurrentTrace(); await c.env.DB.prepare('select 1').all(); return c.html('<body></body>') } })
+    await app2.request('/admin/x', cookie, env())
+    expect(activeTrace).toBeUndefined() // inactive plugin: no trace is ever started, so nothing can be recorded
     const res = await app.request('/admin/x', cookie, env())
     expect(seen[RAW]).toBeDefined()
     expect(res.headers.get('server-timing')).toBeNull()

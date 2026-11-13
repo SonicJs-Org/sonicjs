@@ -21,12 +21,25 @@ describe('app.ts query-trace wiring', () => {
     expect(seen.CACHE_KV[RAW]).toBe(raw.CACHE_KV)
   })
 
-  it('disableAll: boot does not wrap, middleware not mounted', async () => {
-    const app = createSonicJSApp({ plugins: { disableAll: true } })
-    const raw = stubEnv()
-    await app.boot(raw)
-    const res = await app.request('/health', {}, raw)
-    expect(res.headers.get('server-timing')).toBeNull()
-    expect(raw.DB[RAW]).toBeUndefined()
+  it('request handlers see wrapped bindings by default, and the raw bindings under disableAll', async () => {
+    const capture = async (disableAll: boolean) => {
+      let seen: any
+      const app = createSonicJSApp({
+        plugins: { disableAll },
+        middleware: { beforeAuth: [async (c: any) => { seen = c.env; return c.text('captured') }] },
+      })
+      const raw = stubEnv()
+      await app.boot(raw)
+      const res = await app.request('/admin/anything', {}, raw)
+      expect(await res.text()).toBe('captured') // the capturing middleware really ran
+      return { seen, raw }
+    }
+    const on = await capture(false)
+    expect(on.seen.DB).not.toBe(on.raw.DB)
+    expect(on.seen.DB[RAW]).toBe(on.raw.DB)
+    expect(on.seen.CACHE_KV[RAW]).toBe(on.raw.CACHE_KV)
+    const off = await capture(true)
+    expect(off.seen.DB).toBe(off.raw.DB)
+    expect(off.seen.CACHE_KV).toBe(off.raw.CACHE_KV)
   })
 })

@@ -61,6 +61,27 @@ export interface ListDocumentsOptions {
   timeWindow?: boolean
 }
 
+/** Options for the admin "All" content index (current drafts across many types, page-numbered). */
+export interface AdminIndexOptions {
+  /** Restrict to these document types (empty / omitted = no type restriction). */
+  typeIds?: string[]
+  /** 'deleted' lists soft-deleted roots; 'published'/'draft' refine by the published flag. */
+  status?: 'all' | 'published' | 'draft' | 'deleted'
+  /** Substring match on title or data.author. */
+  search?: string
+}
+
+/** Lightweight row for the admin "All" content index — no `data` blob. updated_at is in SECONDS. */
+export interface AdminIndexRow {
+  root_id: string
+  title: string | null
+  slug: string | null
+  is_published: number
+  updated_at: number
+  type_display_name: string
+  author_label: string
+}
+
 // Generated-column / sort identifiers are interpolated into SQL (column names cannot be bound), so
 // every interpolated identifier must match this before it reaches a query. Callers resolve them from
 // trusted queryableFields config; this is defense-in-depth against a raw user string slipping through.
@@ -177,6 +198,67 @@ export class DocumentRepository {
 
     const result = await this.db.prepare(sql).bind(...params).all<DocumentRow>()
     return (result.results ?? []).map(rowToDocument)
+  }
+
+  // ─── Admin "All" content index ────────────────────────────────────────────
+  // Page-numbered list of current drafts across many types for /admin/content?model=all. Built so the
+  // default view is served by idx_docs_tenant_draft_updated (migration 0008) without a temp sort —
+  // on telemetry-heavy installs the old inline query read ~785k rows per request and tripped D1's
+  // per-10s resource limit.
+
+  private adminIndexWhere(opts: AdminIndexOptions, forOrderedList: boolean): { where: string; params: (string | number)[] } {
+    const conds = ['d.is_current_draft = 1', 'd.tenant_id = ?']
+    const params: (string | number)[] = [this.tenantId]
+    const typeIds = opts.typeIds ?? []
+    if (typeIds.length > 0) {
+      // For the ordered list, unary `+` keeps the multi-value IN from steering the planner onto
+      // idx_documents_drafts (tenant, type) and temp-sorting every match by updated_at. The count
+      // has no ORDER BY, so it keeps the plain (indexable) predicate.
+      conds.push(`${forOrderedList ? '+' : ''}d.type_id IN (${typeIds.map(() => '?').join(',')})`)
+      params.push(...typeIds)
+    }
+    if (opts.status === 'deleted') conds.push('d.deleted_at IS NOT NULL')
+    else {
+      conds.push('d.deleted_at IS NULL')
+      if (opts.status === 'published') conds.push('d.is_published = 1')
+      else if (opts.status === 'draft') conds.push('d.is_published = 0')
+    }
+    if (opts.search) {
+      conds.push("(d.title LIKE ? OR json_extract(d.data,'$.author') LIKE ?)")
+      const like = `%${opts.search}%`
+      params.push(like, like)
+    }
+    return { where: conds.join(' AND '), params }
+  }
+
+  async listAdminIndex(opts: AdminIndexOptions & { limit: number; offset: number }): Promise<AdminIndexRow[]> {
+    const { where, params } = this.adminIndexWhere(opts, true)
+    const result = await this.db.prepare(
+      `SELECT d.root_id, d.title, d.slug, d.is_published, d.updated_at,
+              dt.display_name AS type_display_name,
+              COALESCE(u.email, d.created_by, 'System') AS author_label
+       FROM documents d
+       JOIN document_types dt ON dt.id = d.type_id
+       LEFT JOIN auth_user u ON u.id = d.created_by
+       WHERE ${where}
+       ORDER BY d.updated_at DESC
+       LIMIT ? OFFSET ?`,
+    ).bind(...params, opts.limit, opts.offset).all<AdminIndexRow>()
+    return result.results ?? []
+  }
+
+  /**
+   * Count matches, reading at most `cap + 1` of them. Returns `{ count, capped }` where `capped`
+   * means there are MORE than `cap` matches and `count === cap` is only a lower bound. An exact
+   * COUNT(*) here scans every document on each page load.
+   */
+  async countAdminIndex(opts: AdminIndexOptions, cap: number): Promise<{ count: number; capped: boolean }> {
+    const { where, params } = this.adminIndexWhere(opts, false)
+    const row = await this.db.prepare(
+      `SELECT COUNT(*) AS count FROM (SELECT 1 FROM documents d WHERE ${where} LIMIT ?)`,
+    ).bind(...params, cap + 1).first<{ count: number }>()
+    const raw = Number(row?.count ?? 0)
+    return raw > cap ? { count: cap, capped: true } : { count: raw, capped: false }
   }
 
   listPublished(opts: ListDocumentsOptions = {}): Promise<Document[]> {
